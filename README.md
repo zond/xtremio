@@ -30,6 +30,15 @@ The point of Xtremio is to go past what existing Stremio apps do:
   it so it is never evicted, and a library UI to manage what is saved. No
   transcoding is needed here either — playback is just libmpv decoding the
   original file bytes off disk, the same as any local video.
+- **Cloud storage sources** (e.g. Google Drive) — stream from a personal cloud
+  drive, most naturally via a Stremio addon that resolves cloud files to
+  playable URLs. Provider OAuth / API-key setup is the fiddly part.
+
+## Parity (what current Stremio clients already do)
+
+Xtremio also has to match what the official apps already offer. These are
+table stakes, not differentiators:
+
 - **Casting** to plain Chromecast / Cast-enabled TVs (the Cast *sender*
   protocol), in addition to running natively on Android TV devices. Where the
   receiver can already decode the source, this is a direct cast over the LAN —
@@ -39,11 +48,10 @@ The point of Xtremio is to go past what existing Stremio apps do:
   never pure-Rust software transcoding, so the pure-Rust core stays untouched.
   This is scoped to devices with a hardware encode path; where none exists,
   casting is limited to formats the receiver supports natively.
-- **Cloud storage sources** (e.g. Google Drive) — stream from a personal cloud
-  drive, most naturally via a Stremio addon that resolves cloud files to
-  playable URLs. Provider OAuth / API-key setup is the fiddly part.
+- **Android TV / Google TV** as a native, D-pad-driven app (see Platform
+  support below).
 
-These are roadmap, not built yet.
+All of the above is roadmap, not built yet.
 
 ## Architecture
 
@@ -179,8 +187,8 @@ flutter pub get
 flutter run -d linux      # or -d windows, -d macos, or an Android device
 ```
 
-Linux desktop needs `clang`, `cmake`, `ninja`, and GTK 3 dev libraries;
-Android needs the Android SDK/NDK.
+Linux desktop needs `clang`, `cmake`, `ninja`, GTK 3 dev libraries, and
+`libmpv-dev` (media_kit links libmpv); Android needs the Android SDK/NDK.
 
 ## License
 
