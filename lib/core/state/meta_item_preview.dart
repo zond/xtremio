@@ -1,6 +1,7 @@
 /// View over stremio-core's `MetaItemPreview` JSON as it appears in
 /// catalog pages. Only what the grids need; the raw map stays reachable.
-final class MetaItemPreview {
+/// `MetaItem` extends it with the full-item fields.
+class MetaItemPreview {
   const MetaItemPreview(this.json);
 
   final Map<String, dynamic> json;

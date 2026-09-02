@@ -3,19 +3,16 @@ import 'loadable.dart';
 import 'meta_item_preview.dart';
 
 /// One page of a catalog: stremio-core's `ResourceLoadable<Vec<T>>`.
-final class CatalogPage {
-  const CatalogPage({required this.request, required this.content});
+final class CatalogPage extends ResourceLoadable<List<MetaItemPreview>> {
+  const CatalogPage({required super.request, required super.content});
 
-  final ResourceRequest request;
-  final Loadable<List<MetaItemPreview>> content;
-
-  factory CatalogPage.fromJson(Map<String, dynamic> json) => CatalogPage(
-    request: ResourceRequest.fromJson(json['request'] as Map<String, dynamic>),
-    content: Loadable.fromJson(
-      json['content'] as Map<String, dynamic>?,
+  factory CatalogPage.fromJson(Map<String, dynamic> json) {
+    final loadable = ResourceLoadable.fromJson(
+      json,
       MetaItemPreview.listFromJson,
-    ),
-  );
+    );
+    return CatalogPage(request: loadable.request, content: loadable.content);
+  }
 }
 
 /// View over the `discover` field (`CatalogWithFilters<MetaItemPreview>`).
@@ -59,15 +56,13 @@ final class DiscoverState {
 
   /// Every item of every ready page.
   List<MetaItemPreview> get items => [
-    for (final page in pages) ...?page.content.contentOrNull,
+    for (final page in pages) ...?page.contentOrNull,
   ];
 
-  bool get isLoadingMore => pages.isNotEmpty && pages.last.content.isLoading;
+  bool get isLoadingMore => pages.isNotEmpty && pages.last.isLoading;
 
   LoadableError<List<MetaItemPreview>>? get lastError =>
-      pages.isNotEmpty && pages.last.content is LoadableError
-      ? pages.last.content as LoadableError<List<MetaItemPreview>>
-      : null;
+      pages.isNotEmpty ? pages.last.error : null;
 
   bool get hasNextPage => nextPage != null;
 }
