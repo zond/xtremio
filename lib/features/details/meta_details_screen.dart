@@ -8,10 +8,19 @@ import '../player/player_screen.dart';
 /// for the selected video (the movie itself, or the engine's guess of the
 /// episode to continue with). Tapping a playable stream opens the player.
 class MetaDetailsScreen extends StatefulWidget {
-  const MetaDetailsScreen({super.key, required this.type, required this.id});
+  const MetaDetailsScreen({
+    super.key,
+    required this.type,
+    required this.id,
+    this.videoId,
+  });
 
   final String type;
   final String id;
+
+  /// The video to show streams for straight away (the continue-watching
+  /// row knows it); without it the engine guesses.
+  final String? videoId;
 
   @override
   State<MetaDetailsScreen> createState() => _MetaDetailsScreenState();
@@ -30,7 +39,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
       _client = client;
       _details = CoreFieldNotifier(client, CoreField.metaDetails);
       client.dispatch(
-        CoreActions.loadMetaDetails(type: widget.type, id: widget.id),
+        CoreActions.loadMetaDetails(
+          type: widget.type,
+          id: widget.id,
+          videoId: widget.videoId,
+        ),
       );
     }
   }
