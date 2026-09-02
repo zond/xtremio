@@ -12,6 +12,7 @@ import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
 import 'track_menus.dart';
+import 'up_next_card.dart';
 
 /// Plays one stream.
 ///
@@ -23,8 +24,8 @@ import 'track_menus.dart';
 ///
 /// The controls are our own (media_kit's are switched off): a top bar with
 /// the track menus, a bottom bar with the seek bar, transport, time, volume
-/// and fullscreen, and keyboard shortcuts. They fade after
-/// [controlsTimeout] while playing.
+/// and fullscreen, keyboard shortcuts, and an up-next card when an episode
+/// ends. They fade after [controlsTimeout] while playing.
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -61,6 +62,9 @@ class PlayerScreen extends StatefulWidget {
   static const Duration seekStep = Duration(seconds: 10);
   static const Duration longSeekStep = Duration(seconds: 60);
 
+  /// How long the up-next card counts down before playing the next episode.
+  static const Duration upNextCountdown = Duration(seconds: 10);
+
   static const List<double> rates = [0.75, 1, 1.25, 1.5, 2];
 
   /// Below this width the transport sits in the middle of the video and
@@ -73,6 +77,15 @@ class PlayerScreen extends StatefulWidget {
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
+}
+
+/// Popped as the route result when the user asked for the next episode but
+/// the engine found no stream for it: the caller should show that video's
+/// streams.
+final class PlayerScreenResult {
+  const PlayerScreenResult({required this.selectVideoId});
+
+  final String selectVideoId;
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
@@ -102,6 +115,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _fullscreenOn = false;
   bool _showRemaining = false;
 
+  /// Set once the next episode's screen has been pushed in our place: this
+  /// screen then neither unloads the core's player nor reacts to its state.
+  bool _handedOver = false;
+
   /// Whether the session's subtitle preference has been applied to this
   /// media yet (once per `open`).
   bool _autoPickedSubtitles = false;
@@ -110,6 +127,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _controlsTimer;
   bool _menuOpen = false;
   bool _scrubbing = false;
+
+  /// Seconds left on the up-next card; null while it is not showing.
+  int? _upNextSecondsLeft;
+  Timer? _upNextTimer;
 
   /// Stats OSD visibility. Hover shows it until the pointer rests for
   /// [PlayerScreen.statsHoverTimeout]; Shift+I pins it on or off, after
@@ -163,7 +184,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onPlayerState() {
-    if (!mounted) return;
+    if (_handedOver || !mounted) return;
     final state = _state;
     final url = state?.streamingUrl;
     if (state == null || url == null || url == _opened) {
@@ -173,6 +194,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _opened = url;
     _autoPickedSubtitles = false;
+    _dismissUpNext();
     final progress = state.progress;
     final start = progress != null && progress.isResumable
         ? Duration(milliseconds: progress.timeOffset)
@@ -193,7 +215,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// it ask the subtitle addons (they want a filename, hash or size; we
   /// have at best the filename).
   void _reportVideoParams(PlayerState state, Uri url) {
-    if (!mounted || _opened != url) return;
+    if (!mounted || _handedOver || _opened != url) return;
     final segment = url.pathSegments.isEmpty ? null : url.pathSegments.last;
     final filename =
         state.convertedStream?.filename ??
@@ -206,6 +228,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String get _device => Platform.operatingSystem;
 
   void _onPosition(Duration position) {
+    if (_handedOver) return;
     _position.value = position;
     if (_opened == null || _duration == Duration.zero) return;
     final last = _lastReported;
@@ -224,6 +247,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onPlaying(bool playing) {
+    if (_handedOver) return;
     if (_playing != playing) {
       setState(() => _playing = playing);
       _showControls();
@@ -239,8 +263,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onCompleted(bool completed) {
-    if (!completed || _opened == null) return;
+    if (!completed || _opened == null || _handedOver) return;
     _client?.dispatch(CoreActions.playerEnded());
+    if (_state?.nextVideo != null) _startUpNext();
     _showControls();
   }
 
@@ -266,6 +291,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       !_menuOpen &&
       !_scrubbing &&
       _opened != null &&
+      _upNextSecondsLeft == null &&
       _statusText(_state) == null;
 
   bool get _controlsShown => _controlsVisible || !_canAutoHide;
@@ -297,6 +323,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onVideoTap() {
+    if (_upNextSecondsLeft != null) {
+      _dismissUpNext();
+      return;
+    }
     if (_controlsShown) {
       _hideControls();
     } else {
@@ -345,6 +375,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // throttle window: the core only moves time forward on TimeChanged and
     // relies on Seek/TimeChanged agreeing.
     _lastReported = null;
+    _dismissUpNext();
     _showControls();
   }
 
@@ -434,7 +465,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// language, from the preferred source first. Retried as tracks and
   /// addon results arrive until something matches.
   void _maybeAutoPickSubtitles() {
-    if (_autoPickedSubtitles || _opened == null) return;
+    if (_autoPickedSubtitles || _opened == null || _handedOver) return;
     final state = _state;
     final preference = state?.subtitlePreference;
     if (state == null || preference == null) return;
@@ -554,6 +585,64 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ),
   );
 
+  // --- Next episode --------------------------------------------------------
+
+  void _startUpNext() {
+    _upNextTimer?.cancel();
+    setState(() => _upNextSecondsLeft = PlayerScreen.upNextCountdown.inSeconds);
+    _upNextTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final left = _upNextSecondsLeft;
+      if (!mounted || left == null) return;
+      if (left <= 1) {
+        _playNext();
+      } else {
+        setState(() => _upNextSecondsLeft = left - 1);
+      }
+    });
+  }
+
+  void _dismissUpNext() {
+    _upNextTimer?.cancel();
+    _upNextTimer = null;
+    if (_upNextSecondsLeft != null && mounted) {
+      setState(() => _upNextSecondsLeft = null);
+    }
+  }
+
+  /// Moves on to the next episode: the engine advances the library item,
+  /// and either a new player takes this one's place with the stream the
+  /// engine found (same addon, same binge group), or we return to the
+  /// details screen pointing at the episode so its streams can be picked.
+  void _playNext() {
+    final state = _state;
+    final next = state?.nextVideo;
+    if (state == null || next == null || _handedOver) return;
+    _dismissUpNext();
+    _client?.dispatch(CoreActions.playerNextVideo());
+    final nextStream = state.nextStream;
+    final navigator = Navigator.of(context);
+    if (nextStream == null) {
+      navigator.pop(PlayerScreenResult(selectVideoId: next.id));
+      return;
+    }
+    _handedOver = true;
+    final streamRequest = state.streamRequest ?? widget.streamRequest;
+    final subtitlesPath = state.subtitlesPath ?? widget.subtitlesPath;
+    navigator.pushReplacement(
+      MaterialPageRoute<PlayerScreenResult>(
+        settings: const RouteSettings(name: 'player'),
+        builder: (_) => PlayerScreen(
+          stream: nextStream.json,
+          streamRequest: streamRequest?.copyWith(
+            path: streamRequest.path.copyWith(id: next.id),
+          ),
+          metaRequest: state.metaRequest ?? widget.metaRequest,
+          subtitlesPath: subtitlesPath?.copyWith(id: next.id),
+        ),
+      ),
+    );
+  }
+
   // --- Keyboard ------------------------------------------------------------
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
@@ -619,6 +708,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (event is KeyDownEvent && _tracks.value.audio.length > 1) {
           _openAudioMenu();
         }
+      case LogicalKeyboardKey.keyN:
+        if (event is KeyDownEvent && _state?.nextVideo != null) _playNext();
       default:
         return KeyEventResult.ignored;
     }
@@ -648,6 +739,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void dispose() {
     _statsHoverTimer?.cancel();
     _controlsTimer?.cancel();
+    _upNextTimer?.cancel();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -658,7 +750,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (engine != null) _disposeAfterFrame(engine);
     _player?.removeListener(_onPlayerState);
     _player?.dispose();
-    _client?.dispatch(CoreActions.unload(CoreField.player));
+    if (!_handedOver) _client?.dispatch(CoreActions.unload(CoreField.player));
     _position.dispose();
     _buffer.dispose();
     _tracks.dispose();
@@ -701,6 +793,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= PlayerScreen.wideBreakpoint;
     final shown = _controlsShown;
+    final nextVideo = state?.nextVideo;
+    final upNext = _upNextSecondsLeft;
     final hasVideo = engine != null && _opened != null;
     return Scaffold(
       backgroundColor: Colors.black,
@@ -779,7 +873,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           statsOn: _statsPinned ?? false,
                           onStats: _toggleStatsPinned,
                           onSettings: _openSettings,
-                          onNext: null,
+                          onNext: nextVideo == null ? null : _playNext,
                         ),
                         Expanded(
                           child: !wide && hasVideo && status == null
@@ -829,6 +923,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                 ),
               ),
+              if (upNext != null && nextVideo != null)
+                Positioned(
+                  right: 16,
+                  bottom: hasVideo ? 112 : 16,
+                  child: SafeArea(
+                    child: UpNextCard(
+                      label: nextVideo.seasonEpisodeLabel,
+                      title: nextVideo.title,
+                      secondsLeft: upNext,
+                      onPlay: _playNext,
+                      onDismiss: _dismissUpNext,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

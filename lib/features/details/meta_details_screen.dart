@@ -116,19 +116,42 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
 
   void _play(MetaDetailsState state, StreamGroup group, StreamInfo stream) {
     final videoId = state.streamPath?.id ?? state.meta?.id ?? widget.id;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'player'),
-        builder: (_) => PlayerScreen(
-          stream: stream.json,
-          streamRequest: group.request,
-          metaRequest: state.metaRequest,
-          subtitlesPath: ResourcePath(
-            resource: 'subtitles',
-            type: widget.type,
-            id: videoId,
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<PlayerScreenResult>(
+            settings: const RouteSettings(name: 'player'),
+            builder: (_) => PlayerScreen(
+              stream: stream.json,
+              streamRequest: group.request,
+              metaRequest: state.metaRequest,
+              subtitlesPath: ResourcePath(
+                resource: 'subtitles',
+                type: widget.type,
+                id: videoId,
+              ),
+            ),
           ),
-        ),
+        )
+        .then((result) {
+          // The player wanted the next episode but had no stream for it:
+          // show that episode's streams.
+          if (result != null && mounted) _selectVideoId(result.selectVideoId);
+        });
+  }
+
+  void _selectVideoId(String videoId) {
+    final json = _details?.value;
+    final meta = json == null ? null : MetaDetailsState.fromJson(json).meta;
+    final video = meta?.videoById(videoId);
+    if (video != null) {
+      _selectVideo(video);
+      return;
+    }
+    _client?.dispatch(
+      CoreActions.loadMetaDetails(
+        type: widget.type,
+        id: widget.id,
+        videoId: videoId,
       ),
     );
   }

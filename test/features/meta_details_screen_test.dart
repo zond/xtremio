@@ -206,6 +206,43 @@ void main() {
       );
     });
 
+    testWidgets('loads the episode the player hands back for the next one', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final fixture = loadSeriesEpisodeMetaDetailsFixture();
+      (fixture['streams'] as List<dynamic>).add(torrentGroup(pilotId));
+      // The player will know the next episode but have no stream for it.
+      final player = loadPlayerFixture();
+      player['nextVideo'] = {
+        'id': '$seriesId:1:2',
+        'title': "Cat's in the Bag...",
+        'season': 1,
+        'episode': 2,
+      };
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: fixture, CoreField.player: player},
+      );
+      await tester.pumpWidget(
+        harness(core, FakePlaybackEngine(), type: 'series', id: seriesId),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Torrentio\n1080p'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayerScreen), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Next episode (N)'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayerScreen), findsNothing);
+      expect(find.byType(MetaDetailsScreen), findsOneWidget);
+      // (The player's own Unload follows once its route is gone.)
+      final reload = core.dispatched.lastWhere(
+        (a) => a.field == CoreField.metaDetails,
+      );
+      expect(reload.action['action'], 'Load');
+      expect(loadArgs(reload)['streamPath']['id'], '$seriesId:1:2');
+    });
+
     testWidgets('a genre chip opens Discover on that genre', (tester) async {
       useWideViewport(tester);
       final core = FakeCoreClient(
