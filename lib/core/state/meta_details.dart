@@ -1,4 +1,5 @@
 import '../resource.dart';
+import 'library.dart';
 import 'loadable.dart';
 import 'meta_item.dart';
 import 'stream.dart';
@@ -42,7 +43,7 @@ final class MetaDetailsState {
     required this.metaStreamGroups,
     required this.streamGroups,
     required this.lastUsedStream,
-    required this.libraryVideoId,
+    required this.libraryItem,
     required this.watchedVideoIds,
   });
 
@@ -68,9 +69,11 @@ final class MetaDetailsState {
   /// binge-group sibling; null otherwise.
   final (StreamGroup, StreamInfo)? lastUsedStream;
 
-  /// `libraryItem.state.video_id`: the video the library is on (an episode
-  /// id for series), null before anything was played.
-  final String? libraryVideoId;
+  /// The title's library item: from the library bucket when it is or was
+  /// there, otherwise one the engine synthesises (`removed: true, temp:
+  /// true`) once the meta is Ready. Null while the model is unloaded or
+  /// before any meta addon answered.
+  final LibraryItemView? libraryItem;
 
   final List<String> watchedVideoIds;
 
@@ -99,10 +102,10 @@ final class MetaDetailsState {
       lastUsedStream: _lastUsedStream(
         json['lastUsedStream'] as Map<String, dynamic>?,
       ),
-      libraryVideoId:
-          ((json['libraryItem'] as Map<String, dynamic>?)?['state']
-                  as Map<String, dynamic>?)?['video_id']
-              as String?,
+      libraryItem: switch (json['libraryItem']) {
+        final Map<String, dynamic> item => LibraryItemView(item),
+        _ => null,
+      },
       watchedVideoIds: [
         ...?(json['watchedVideoIds'] as List<dynamic>?)?.whereType<String>(),
       ],
@@ -128,6 +131,15 @@ final class MetaDetailsState {
     );
     return (group, StreamInfo(stream));
   }
+
+  /// `libraryItem.state.video_id`: the video the library is on (an episode
+  /// id for series), null before anything was played.
+  String? get libraryVideoId => libraryItem?.videoId;
+
+  /// In the library proper: `libraryItem.removed == false`. A title that was
+  /// only played (or never touched) is a `removed` temp item, so this is
+  /// false until `AddToLibrary`.
+  bool get isInLibrary => libraryItem?.isInLibrary ?? false;
 
   /// The first meta addon that answered.
   ResourceLoadable<MetaItem>? get readyMeta {

@@ -434,6 +434,84 @@ void main() {
     );
   });
 
+  group('library bookmark', () {
+    testWidgets('a title outside the library offers Add and sends the meta', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final fixture = loadMetaDetailsFixture();
+      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
+      await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+      await tester.pumpAndSettle();
+
+      // The recorded item was only played: a removed temp item.
+      expect(MetaDetailsState.fromJson(fixture).isInLibrary, isFalse);
+      expect(find.byTooltip('Add to library'), findsOneWidget);
+      expect(find.byTooltip('Remove from library'), findsNothing);
+      expect(find.byIcon(Icons.bookmark_border), findsOneWidget);
+      expect(find.byIcon(Icons.bookmark), findsNothing);
+
+      await tester.tap(find.byTooltip('Add to library'));
+      await tester.pump();
+
+      final ctx = core.dispatched.where((a) => a.action['action'] == 'Ctx');
+      expect(ctx, hasLength(1));
+      expect(ctx.single.field, CoreField.ctx);
+      final meta = MetaDetailsState.fromJson(fixture).meta!;
+      expect(ctx.single.action, CoreActions.addToLibrary(meta.json).action);
+      expect(ctx.single.action['args']['args']['id'], 'tt0063350');
+      expect(ctx.single.action['args']['args']['videos'], isNotNull);
+    });
+
+    testWidgets('a title in the library offers Remove and sends the id', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final fixture = loadMetaDetailsFixture();
+      (fixture['libraryItem'] as Map<String, dynamic>)
+        ..['removed'] = false
+        ..['temp'] = false;
+      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
+      await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Remove from library'), findsOneWidget);
+      expect(find.byIcon(Icons.bookmark), findsOneWidget);
+      expect(find.byIcon(Icons.bookmark_border), findsNothing);
+
+      await tester.tap(find.byTooltip('Remove from library'));
+      await tester.pump();
+
+      final ctx = core.dispatched.where((a) => a.action['action'] == 'Ctx');
+      expect(ctx, hasLength(1));
+      expect(ctx.single.field, CoreField.ctx);
+      expect(
+        ctx.single.action,
+        CoreActions.removeFromLibrary('tt0063350').action,
+      );
+      expect(ctx.single.action['args']['args'], 'tt0063350');
+    });
+
+    testWidgets('the bookmark follows the engine after an add', (tester) async {
+      useWideViewport(tester);
+      final fixture = loadMetaDetailsFixture();
+      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
+      await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.bookmark_border), findsOneWidget);
+
+      final added = loadMetaDetailsFixture();
+      (added['libraryItem'] as Map<String, dynamic>)
+        ..['removed'] = false
+        ..['temp'] = false;
+      core.setState(CoreField.metaDetails, added);
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.bookmark), findsOneWidget);
+      expect(find.byIcon(Icons.bookmark_border), findsNothing);
+    });
+  });
+
   group('series', () {
     /// Mounts Breaking Bad with the guessing-load fixture.
     Future<FakeCoreClient> mountSeries(

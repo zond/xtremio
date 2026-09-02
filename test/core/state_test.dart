@@ -603,6 +603,30 @@ void main() {
     });
   });
 
+  group('MetaDetailsState.libraryItem', () {
+    test('the recorded played-only title is a removed temp item', () {
+      final state = MetaDetailsState.fromJson(loadMetaDetailsFixture());
+      final item = state.libraryItem;
+      expect(item, isNotNull);
+      expect(item!.id, 'tt0063350');
+      expect(item.removed, isTrue);
+      expect(item.temp, isTrue);
+      expect(state.isInLibrary, isFalse);
+      expect(state.libraryVideoId, item.videoId);
+    });
+
+    test('is in the library exactly when removed is false', () {
+      final json = loadSeriesMetaDetailsFixture();
+      (json['libraryItem'] as Map<String, dynamic>)['removed'] = false;
+      expect(MetaDetailsState.fromJson(json).isInLibrary, isTrue);
+      json['libraryItem'] = null;
+      final unloaded = MetaDetailsState.fromJson(json);
+      expect(unloaded.libraryItem, isNull);
+      expect(unloaded.isInLibrary, isFalse);
+      expect(unloaded.libraryVideoId, isNull);
+    });
+  });
+
   group('ContinueWatchingState', () {
     test('reads the recorded library item and its progress', () {
       final state = ContinueWatchingState.fromJson(

@@ -154,6 +154,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
     _load(video.id);
   }
 
+  /// Bookmark: `AddToLibrary` with the meta item as received, or
+  /// `RemoveFromLibrary` by id. The engine refreshes `libraryItem` itself.
+  void _toggleLibrary(MetaDetailsState state, MetaItem meta) {
+    _client?.dispatch(
+      state.isInLibrary
+          ? CoreActions.removeFromLibrary(meta.id)
+          : CoreActions.addToLibrary(meta.json),
+    );
+  }
+
   void _toggleWatched(MetaDetailsState state, VideoInfo video) {
     _client?.dispatch(
       CoreActions.markVideoAsWatched(
@@ -287,7 +297,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
         ),
       ),
       SliverToBoxAdapter(
-        child: _MetaHeader(meta: meta, isWide: isWide, onGenre: _openGenre),
+        child: _MetaHeader(
+          meta: meta,
+          isWide: isWide,
+          isInLibrary: state.isInLibrary,
+          onGenre: _openGenre,
+          onToggleLibrary: () => _toggleLibrary(state, meta),
+        ),
       ),
       if (state.hasVideos) ...[
         if (seasons.length > 1 && season != null)
@@ -419,12 +435,21 @@ class _MetaHeader extends StatelessWidget {
   const _MetaHeader({
     required this.meta,
     required this.isWide,
+    required this.isInLibrary,
     required this.onGenre,
+    required this.onToggleLibrary,
   });
 
   final MetaItem meta;
   final bool isWide;
+
+  /// `libraryItem.removed == false`: the bookmark is filled.
+  final bool isInLibrary;
   final ValueChanged<ResourceRequest> onGenre;
+  final VoidCallback onToggleLibrary;
+
+  static const String addTooltip = 'Add to library';
+  static const String removeTooltip = 'Remove from library';
 
   @override
   Widget build(BuildContext context) {
@@ -438,7 +463,24 @@ class _MetaHeader extends StatelessWidget {
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(facts, style: theme.textTheme.labelLarge),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(facts, style: theme.textTheme.labelLarge),
+              ),
+            ),
+            IconButton(
+              tooltip: isInLibrary ? removeTooltip : addTooltip,
+              isSelected: isInLibrary,
+              icon: const Icon(Icons.bookmark_border),
+              selectedIcon: const Icon(Icons.bookmark),
+              onPressed: onToggleLibrary,
+            ),
+          ],
+        ),
         if (rating != null) ...[
           const SizedBox(height: 4),
           Row(
