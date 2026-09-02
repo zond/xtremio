@@ -13,4 +13,11 @@ Glue that builds the `rust/` crate with Flutter. The FFI plugin skeleton
   `abiFilters` accordingly, so an i686 build would be compiled and then
   dropped from the APK. `android-x64` is kept for the emulator.
 
+- `cargokit/build_tool/lib/src/android_environment.dart`: additionally
+  exports `BINDGEN_EXTRA_CLANG_ARGS_<triple>` = `--target=<triple><minSdk>
+  --sysroot=<NDK sysroot>` next to `CC_<triple>`/`CFLAGS_<triple>`. Build
+  scripts that run bindgen (aws-lc-sys on x86_64/armv7 Android, which have
+  no pregenerated bindings) otherwise parse the host's `/usr/include` and
+  fail with `'bits/libc-header-start.h' file not found`.
+
 Re-apply these when re-copying cargokit from a newer FRB/cargokit release.

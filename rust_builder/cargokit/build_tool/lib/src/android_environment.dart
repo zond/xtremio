@@ -127,6 +127,15 @@ class AndroidEnvironment {
     final ranlibKey = 'RANLIB_${target.rust}';
     final ranlibValue = path.join(toolchainPath, 'llvm-ranlib$exe');
 
+    // Local patch (see rust_builder/README.md): build scripts that run
+    // bindgen (aws-lc-sys on targets without pregenerated bindings) would
+    // otherwise parse the host's /usr/include and fail on
+    // 'bits/libc-header-start.h'. Point libclang at the NDK sysroot.
+    final bindgenArgsKey =
+        'BINDGEN_EXTRA_CLANG_ARGS_${target.rust.replaceAll('-', '_')}';
+    final bindgenArgsValue =
+        '$targetArg --sysroot=${path.join(toolchainPath, '..', 'sysroot')}';
+
     final ndkVersionParsed = Version.parse(ndkVersion);
     final rustFlagsKey = 'CARGO_ENCODED_RUSTFLAGS';
     final rustFlagsValue = _libGccWorkaround(targetTempDir, ndkVersionParsed);
@@ -157,6 +166,7 @@ class AndroidEnvironment {
       cxxKey: cxxValue,
       cxxFlagsKey: cxxFlagsValue,
       ranlibKey: ranlibValue,
+      bindgenArgsKey: bindgenArgsValue,
       rustFlagsKey: rustFlagsValue,
       linkerKey: selfPath,
       // Recognized by main() so we know when we're acting as a wrapper

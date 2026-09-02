@@ -170,9 +170,11 @@ Gradle (`build.gradle.kts` calls `cargo metadata` to find the Kotlin half of
 `rustls-platform-verifier`). Builds for **x86_64 or armv7** additionally need
 **libclang** on the host: `aws-lc-sys` only ships pregenerated bindings for
 aarch64-linux-android, so those targets enable its `bindgen` feature
-(`rust/Cargo.toml`) and `rust/cargokit.yaml` forces its `cc` builder. If
-clang-sys cannot find libclang, `export LIBCLANG_PATH=/usr/lib/llvm-18/lib`
-(or wherever `libclang*.so` lives) before building.
+(`rust/Cargo.toml`), `rust/cargokit.yaml` forces its `cc` builder and the
+vendored cargokit is patched to point bindgen at the NDK sysroot
+(`rust_builder/README.md`). Verified with Ubuntu's `libclang-18`, found
+without any `LIBCLANG_PATH`; set it only if clang-sys cannot locate
+`libclang*.so` on your host.
 
 **Build.** Always redirect to a log and check the real exit code; the first
 Rust cross-compile takes several minutes per target.
