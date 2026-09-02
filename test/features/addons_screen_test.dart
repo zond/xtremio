@@ -253,6 +253,51 @@ void main() {
     );
   });
 
+  testWidgets('a tap during the pop of one details screen keeps the next', (
+    tester,
+  ) async {
+    useTallScreen(tester);
+    final core = fakeCore();
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+
+    // Open WatchHub, go back, and tap YouTube while WatchHub's route is
+    // still animating out (the list underneath is already tappable).
+    await tester.tap(find.text('WatchHub'));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byType(AddonDetailsScreen))).pop();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(
+      find.ancestor(of: find.text('YouTube'), matching: find.byType(AddonTile)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddonDetailsScreen), findsOneWidget);
+    // The popped screen's dispose must not unload the field the new one
+    // has just loaded: Load, Load, and nothing after.
+    expect(
+      [
+        for (final action in core.dispatched)
+          if (action.field == CoreField.addonDetails) action.action,
+      ],
+      [
+        CoreActions.loadAddonDetails('https://watchhub.strem.io/manifest.json')
+            .action,
+        CoreActions.loadAddonDetails(youtube).action,
+      ],
+    );
+
+    // The surviving screen still unloads on its own exit.
+    await tester.pumpWidget(const SizedBox());
+    expect(
+      core.dispatched
+          .where((a) => a.field == CoreField.addonDetails)
+          .map((a) => a.action)
+          .where((a) => a['action'] == 'Unload'),
+      hasLength(1),
+    );
+  });
+
   testWidgets('a configurable installed addon offers Configure', (
     tester,
   ) async {

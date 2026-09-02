@@ -9,7 +9,8 @@ import 'addon_widgets.dart';
 ///
 /// On mount it dispatches `Load AddonDetails {transportUrl}` (a `stremio://`
 /// URL is accepted; the engine reads it as `https://`) and unloads the field
-/// on dispose. The engine fills `localAddon` from the profile and
+/// on dispose, unless another details screen has loaded it since. The
+/// engine fills `localAddon` from the profile and
 /// `remoteAddon` from the fetch, and refreshes both after every mutation, so
 /// the buttons follow the state: Install while not installed, Update when
 /// the fetched version differs, Uninstall unless protected. A manifest that
@@ -31,6 +32,14 @@ class _AddonDetailsScreenState extends State<AddonDetailsScreen> {
   CoreFieldNotifier? _details;
   CoreFieldNotifier? _ctx;
 
+  /// The screen whose `Load` the shared `addon_details` field last served.
+  ///
+  /// A popping route stays in the tree for the length of its transition
+  /// while the list beneath is already tappable, so a second details screen
+  /// can dispatch its `Load` before the first one's dispose runs. Only the
+  /// owner unloads the field on dispose, as `meta_details` does.
+  static _AddonDetailsScreenState? _fieldOwner;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -47,14 +56,20 @@ class _AddonDetailsScreenState extends State<AddonDetailsScreen> {
 
   @override
   void dispose() {
-    _client?.dispatch(CoreActions.unload(CoreField.addonDetails));
+    if (_fieldOwner == this) {
+      _fieldOwner = null;
+      _client?.dispatch(CoreActions.unload(CoreField.addonDetails));
+    }
     _details?.dispose();
     _ctx?.dispose();
     super.dispose();
   }
 
-  void _load() =>
-      _client?.dispatch(CoreActions.loadAddonDetails(widget.transportUrl));
+  /// Dispatches `Load AddonDetails` for this URL and takes the field over.
+  void _load() {
+    _fieldOwner = this;
+    _client?.dispatch(CoreActions.loadAddonDetails(widget.transportUrl));
+  }
 
   /// The engine only fetches a manifest when the transport URL changes, so a
   /// retry of the same URL has to clear the field first.
