@@ -104,7 +104,7 @@ class NativeFullscreenController implements FullscreenController {
 /// Supplies what the player screen needs from the outside: the
 /// [PlaybackEngineFactory] (absent, the screen builds a [MediaKitEngine]),
 /// the [FullscreenController] and the [TorrentStatsClient] the start-up
-/// overlay polls the embedded server with (absent, plain HTTP). The
+/// overlay polls the embedded server with (absent, the FFI one). The
 /// subtitle style is not here: the screen derives it from the profile's
 /// settings in the `ctx` field.
 class PlaybackScope extends InheritedWidget {
@@ -130,7 +130,7 @@ class PlaybackScope extends InheritedWidget {
       _maybeOf(context)?.fullscreen ?? const NativeFullscreenController();
 
   static TorrentStatsClient torrentStatsOf(BuildContext context) =>
-      _maybeOf(context)?.torrentStats ?? const HttpTorrentStatsClient();
+      _maybeOf(context)?.torrentStats ?? const RustTorrentStatsClient();
 
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>

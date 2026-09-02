@@ -145,19 +145,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// auto-pick waits for this.
   bool _mediaLoaded = false;
 
-  /// The pre-playback overlay for torrents: while [_torrentStatsUrl] is set
-  /// the server's `stats.json` is polled every
+  /// The pre-playback overlay for torrents: while [_torrentStatsRequest]
+  /// is set the server's stats are polled every
   /// [PlayerScreen.torrentStatsInterval] and the latest answer shown (null
   /// until the server answers for this torrent). Cleared once the media
   /// loads, on an engine error and on dispose.
   ///
-  /// [_torrentStatsUrl] is the per-file `stats.json`, which focuses the
-  /// file and reports its initial window; it 404s while a magnet's
-  /// metadata is unresolved, and a poll then asks the torrent-level
-  /// [_torrentStatsFallbackUrl] instead, which reports that phase.
+  /// [_torrentStatsRequest] asks for the stream's file, which focuses it
+  /// and reports its initial window; when the server has no answer for
+  /// that (an index the torrent turns out not to have) a poll asks for the
+  /// torrent-level [_torrentStatsFallback] instead.
   TorrentStatsClient? _torrentStatsClient;
-  Uri? _torrentStatsUrl;
-  Uri? _torrentStatsFallbackUrl;
+  TorrentStatsRequest? _torrentStatsRequest;
+  TorrentStatsRequest? _torrentStatsFallback;
   Timer? _torrentStatsTimer;
   bool _torrentStatsFetching = false;
   TorrentStats? _torrentStats;
@@ -303,11 +303,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         .catchError((Object error) {
           if (mounted && _opened == url) _failPlayback('$error');
         });
-    // After `open` is on its way: a stats request the server sees first
-    // would make it create the torrent's engine from the bare info hash,
-    // without the trackers in the URL, and the stream request then reuses
-    // that engine.
-    _startTorrentStats(state, url);
+    // After `open` is on its way: the stream request creates the torrent's
+    // engine with everything the URL carries (its `f=` filters included);
+    // a stats request that got there first would create it from the bare
+    // hash and trackers, and the stream request would then reuse that.
+    _startTorrentStats(state);
     setState(() => _engineError = null);
     _restartControlsTimer();
   }
@@ -378,19 +378,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // --- Torrent start-up ----------------------------------------------------
 
-  /// Begins polling the server's `stats.json` for [url] when [state] plays a
-  /// torrent through the embedded server (see [TorrentStats.statsUrlFor]);
-  /// anything else (a direct HTTP stream) shows no overlay. The first
-  /// request goes out on the first tick, never before the engine's `open`
-  /// has been issued.
-  void _startTorrentStats(PlayerState state, Uri url) {
+  /// Begins polling the server's stats for the torrent [state] plays (see
+  /// [TorrentStatsRequest.forStream]); anything else (a direct HTTP stream)
+  /// shows no overlay. The first request goes out on the first tick, never
+  /// before the engine's `open` has been issued.
+  void _startTorrentStats(PlayerState state) {
     _stopTorrentStats();
-    if (state.selectedStream?.kind != StreamKind.torrent) return;
-    final statsUrl = TorrentStats.statsUrlFor(url);
-    if (statsUrl == null) return;
-    _torrentStatsUrl = statsUrl;
-    final fallbackUrl = TorrentStats.torrentStatsUrlFor(url);
-    _torrentStatsFallbackUrl = fallbackUrl == statsUrl ? null : fallbackUrl;
+    final stream = state.selectedStream;
+    if (stream?.kind != StreamKind.torrent) return;
+    final request = TorrentStatsRequest.forStream(stream);
+    if (request == null) return;
+    _torrentStatsRequest = request;
+    final fallback = request.torrentLevel;
+    _torrentStatsFallback = fallback == request ? null : fallback;
     _torrentStatsTimer = Timer.periodic(
       PlayerScreen.torrentStatsInterval,
       (_) => _pollTorrentStats(),
@@ -402,25 +402,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _stopTorrentStats() {
     _torrentStatsTimer?.cancel();
     _torrentStatsTimer = null;
-    _torrentStatsUrl = null;
-    _torrentStatsFallbackUrl = null;
+    _torrentStatsRequest = null;
+    _torrentStatsFallback = null;
     _torrentStats = null;
   }
 
   /// One poll: the per-file stats, or the torrent-level ones when the
-  /// per-file route has no answer (a 404 before the metadata is in; an
-  /// unreachable server fails the second ask as fast as the first).
+  /// server has no answer for the file (an index the torrent does not
+  /// have; a stopped server fails the second ask as fast as the first).
   Future<void> _pollTorrentStats() async {
-    final url = _torrentStatsUrl;
-    final fallbackUrl = _torrentStatsFallbackUrl;
+    final request = _torrentStatsRequest;
+    final fallback = _torrentStatsFallback;
     final client = _torrentStatsClient;
-    if (url == null || client == null || _torrentStatsFetching) return;
+    if (request == null || client == null || _torrentStatsFetching) return;
     _torrentStatsFetching = true;
     TorrentStats? stats;
     try {
-      stats = await client.fetch(url);
-      if (stats == null && fallbackUrl != null && _torrentStatsUrl == url) {
-        stats = await client.fetch(fallbackUrl);
+      stats = await client.fetch(request);
+      if (stats == null &&
+          fallback != null &&
+          _torrentStatsRequest == request) {
+        stats = await client.fetch(fallback);
       }
     } on Object {
       stats = null;
@@ -428,13 +430,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _torrentStatsFetching = false;
     }
     // Still the same torrent, still waiting for it, and something changed.
-    if (!mounted || _torrentStatsUrl != url || stats == _torrentStats) return;
+    if (!mounted || _torrentStatsRequest != request || stats == _torrentStats) {
+      return;
+    }
     setState(() => _torrentStats = stats);
   }
 
   /// The start-up overlay replaces the status text from `open` until the
   /// media loads, for torrents the server streams.
-  bool get _startupOverlayShown => _torrentStatsUrl != null && !_mediaLoaded;
+  bool get _startupOverlayShown =>
+      _torrentStatsRequest != null && !_mediaLoaded;
 
   void _onPlaying(bool playing) {
     if (_handedOver) return;

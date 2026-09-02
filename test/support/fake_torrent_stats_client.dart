@@ -1,7 +1,7 @@
 import 'package:xtremio/features/player/playback_engine.dart';
 
 /// [TorrentStatsClient] for widget tests: answers every poll with
-/// [response] and records the URLs asked for. No HTTP.
+/// [response] and records the requests made. No FFI.
 class FakeTorrentStatsClient implements TorrentStatsClient {
   /// What the next fetches return; null plays a server with nothing for the
   /// torrent yet (unreachable, or a 404).
@@ -16,22 +16,22 @@ class FakeTorrentStatsClient implements TorrentStatsClient {
     initialWindowBytes: 4194304,
   );
 
-  /// Answers for particular URLs, over [response]: a null value plays a
-  /// route the server answers 404 for (the per-file stats before a
-  /// magnet's metadata is in).
-  final Map<Uri, TorrentStats?> responses = {};
+  /// Answers for particular requests, over [response]: a null value plays
+  /// a request the server has no answer for (a file index the torrent does
+  /// not have).
+  final Map<TorrentStatsRequest, TorrentStats?> responses = {};
 
-  /// Every URL polled, in order.
-  final List<Uri> requests = [];
+  /// Every request made, in order.
+  final List<TorrentStatsRequest> requests = [];
 
   /// When set, `fetch` also appends `'stats'` here: a log shared with other
   /// fakes, for tests about the order of calls across them.
   List<String>? callLog;
 
   @override
-  Future<TorrentStats?> fetch(Uri statsUrl) async {
-    requests.add(statsUrl);
+  Future<TorrentStats?> fetch(TorrentStatsRequest request) async {
+    requests.add(request);
     callLog?.add('stats');
-    return responses.containsKey(statsUrl) ? responses[statsUrl] : response;
+    return responses.containsKey(request) ? responses[request] : response;
   }
 }

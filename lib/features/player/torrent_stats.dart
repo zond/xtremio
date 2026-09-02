@@ -1,5 +1,4 @@
-import 'dart:convert';
-import 'dart:io';
+import '../../core/core.dart';
 
 /// Where a torrent is in its start-up, as the embedded stream-server reports
 /// it in `stats.json` (`phase`).
@@ -89,6 +88,7 @@ final class TorrentStats {
     this.peerDiscovery = const PeerDiscovery(),
     this.downloadSpeed = 0,
     this.peers = 0,
+    this.error,
   });
 
   final TorrentPhase phase;
@@ -111,6 +111,10 @@ final class TorrentStats {
   /// Connected peers (`peers`).
   final int peers;
 
+  /// Why the phase is [TorrentPhase.error], when the server says (`error`:
+  /// a magnet whose add timed out or failed); null otherwise.
+  final String? error;
+
   factory TorrentStats.fromJson(Map<String, dynamic> json) {
     final discovery = json['peerDiscovery'];
     return TorrentStats(
@@ -124,6 +128,7 @@ final class TorrentStats {
           : const PeerDiscovery(),
       downloadSpeed: (json['downloadSpeed'] as num?)?.toDouble() ?? 0,
       peers: _int(json['peers']),
+      error: json['error'] as String?,
     );
   }
 
@@ -139,51 +144,6 @@ final class TorrentStats {
     return (part / total).clamp(0, 1).toDouble();
   }
 
-  /// The `stats.json` for a stream the embedded server serves: the core's
-  /// `<server>/{infoHash}/{fileIdx}?tr=…&f=…` becomes
-  /// `<server>/{infoHash}/{fileIdx}/stats.json?tr=…&f=…`. The second path
-  /// segment is kept verbatim, `-1` included: the server's per-file route
-  /// resolves it the way the stream route does (the `f=` filters pick the
-  /// file when the index is a guess) and focuses that file, which is what
-  /// makes it report the initial window. A path with only the hash yields
-  /// the torrent-level `<server>/{infoHash}/stats.json`. Null when
-  /// [streamingUrl] is not such a URL (a direct HTTP stream).
-  static Uri? statsUrlFor(Uri streamingUrl) {
-    final segments = _torrentSegments(streamingUrl);
-    if (segments == null) return null;
-    return _statsUrl(streamingUrl, segments.take(2));
-  }
-
-  /// The torrent-level `<server>/{infoHash}/stats.json` for the same
-  /// stream, with the same query: what the server can still answer while a
-  /// magnet's metadata is unresolved, when the per-file route has no files
-  /// to resolve the index against and answers 404. Null when
-  /// [streamingUrl] is not the server's torrent path.
-  static Uri? torrentStatsUrlFor(Uri streamingUrl) {
-    final segments = _torrentSegments(streamingUrl);
-    if (segments == null) return null;
-    return _statsUrl(streamingUrl, segments.take(1));
-  }
-
-  /// The non-empty path segments when the path starts with an info hash.
-  static List<String>? _torrentSegments(Uri streamingUrl) {
-    final segments = streamingUrl.pathSegments
-        .where((segment) => segment.isNotEmpty)
-        .toList();
-    if (segments.isEmpty || !_infoHash.hasMatch(segments.first)) return null;
-    return segments;
-  }
-
-  static Uri _statsUrl(Uri streamingUrl, Iterable<String> segments) => Uri(
-    scheme: streamingUrl.scheme,
-    host: streamingUrl.host,
-    port: streamingUrl.hasPort ? streamingUrl.port : null,
-    pathSegments: [...segments, 'stats.json'],
-    query: streamingUrl.hasQuery ? streamingUrl.query : null,
-  );
-
-  static final RegExp _infoHash = RegExp(r'^[0-9a-fA-F]{40}$');
-
   @override
   bool operator ==(Object other) =>
       other is TorrentStats &&
@@ -194,7 +154,8 @@ final class TorrentStats {
       other.initialWindowBytes == initialWindowBytes &&
       other.peerDiscovery == peerDiscovery &&
       other.downloadSpeed == downloadSpeed &&
-      other.peers == peers;
+      other.peers == peers &&
+      other.error == error;
 
   @override
   int get hashCode => Object.hash(
@@ -206,52 +167,105 @@ final class TorrentStats {
     peerDiscovery,
     downloadSpeed,
     peers,
+    error,
   );
 }
 
 int _int(Object? value) => (value as num?)?.toInt() ?? 0;
 int? _intOrNull(Object? value) => (value as num?)?.toInt();
 
+/// Which torrent's stats to ask the embedded server for: what the server's
+/// `/{infoHash}/{fileIdx}/stats.json?tr=…` route takes, minus the HTTP.
+/// The core builds the stream URL from the same three things
+/// (`infoHash`, `fileIdx`, `announce` → `tr=`), so the stats describe the
+/// torrent the player is opening.
+final class TorrentStatsRequest {
+  const TorrentStatsRequest({
+    required this.infoHash,
+    this.fileIdx,
+    this.trackers = const [],
+  });
+
+  final String infoHash;
+
+  /// The file within the torrent, or null for the torrent as a whole (the
+  /// stream had no `fileIdx`; the server picks the largest file, and the
+  /// core's URL carries `-1`).
+  final int? fileIdx;
+
+  /// The stream's `announce` list, passed on as is: the server needs the
+  /// trackers only when a stats request is what creates the engine.
+  final List<String> trackers;
+
+  /// The request for [stream], or null when it is not a torrent (nothing to
+  /// ask the server about a direct HTTP stream). A negative `fileIdx` means
+  /// none.
+  static TorrentStatsRequest? forStream(StreamInfo? stream) {
+    final infoHash = stream?.infoHash;
+    if (stream == null || infoHash == null) return null;
+    final fileIdx = stream.fileIdx;
+    return TorrentStatsRequest(
+      infoHash: infoHash,
+      fileIdx: fileIdx == null || fileIdx < 0 ? null : fileIdx,
+      trackers: [
+        for (final tracker
+            in (stream.json['announce'] as List<dynamic>? ?? const []))
+          if (tracker is String) tracker,
+      ],
+    );
+  }
+
+  /// The same torrent without the file: the torrent-level stats.
+  TorrentStatsRequest get torrentLevel => fileIdx == null
+      ? this
+      : TorrentStatsRequest(infoHash: infoHash, trackers: trackers);
+
+  @override
+  bool operator ==(Object other) =>
+      other is TorrentStatsRequest &&
+      other.infoHash == infoHash &&
+      other.fileIdx == fileIdx &&
+      other.trackers.length == trackers.length &&
+      Iterable.generate(trackers.length)
+          .every((i) => other.trackers[i] == trackers[i]);
+
+  @override
+  int get hashCode => Object.hash(infoHash, fileIdx, Object.hashAll(trackers));
+
+  @override
+  String toString() =>
+      'TorrentStatsRequest($infoHash, fileIdx: $fileIdx, trackers: $trackers)';
+}
+
 /// Fetches a torrent's `stats.json` from the embedded server. The player
 /// polls it while a torrent starts up; widget tests substitute a fake
 /// through `PlaybackScope`.
 abstract interface class TorrentStatsClient {
-  /// The stats at [statsUrl], or null when the server has nothing to say
-  /// yet: not reachable, a non-200 answer (404), or a body that is not the
-  /// expected JSON.
-  Future<TorrentStats?> fetch(Uri statsUrl);
+  /// The stats for [request], or null when the server has nothing to say:
+  /// not running, an index the torrent does not have, or an answer that is
+  /// not the expected JSON.
+  Future<TorrentStats?> fetch(TorrentStatsRequest request);
 }
 
-/// [TorrentStatsClient] over `dart:io`, like the rest of the Dart side's
-/// loopback traffic to the server. Never throws: every failure is "no
-/// stats yet".
-class HttpTorrentStatsClient implements TorrentStatsClient {
-  const HttpTorrentStatsClient();
+/// [TorrentStatsClient] over the embedded server's library API (FFI): the
+/// same function its `stats.json` routes run, without HTTP or the bearer
+/// token those routes require. Never throws: every failure is "no stats".
+class RustTorrentStatsClient implements TorrentStatsClient {
+  const RustTorrentStatsClient({this.server = const ServerClient()});
 
-  /// Short: the server is on loopback, and a poll that overruns the next
-  /// tick is worth less than the next tick.
-  static const Duration timeout = Duration(seconds: 2);
+  final ServerClient server;
 
   @override
-  Future<TorrentStats?> fetch(Uri statsUrl) async {
-    final client = HttpClient()..connectionTimeout = timeout;
+  Future<TorrentStats?> fetch(TorrentStatsRequest request) async {
     try {
-      final request = await client.getUrl(statsUrl).timeout(timeout);
-      final response = await request.close().timeout(timeout);
-      if (response.statusCode != HttpStatus.ok) {
-        await response.drain<void>();
-        return null;
-      }
-      final body = await response
-          .transform(utf8.decoder)
-          .join()
-          .timeout(timeout);
-      final json = jsonDecode(body);
-      return json is Map<String, dynamic> ? TorrentStats.fromJson(json) : null;
-    } on Exception {
+      final json = await server.torrentStats(
+        infoHash: request.infoHash,
+        fileIdx: request.fileIdx,
+        trackers: request.trackers,
+      );
+      return TorrentStats.fromJson(json);
+    } on Object {
       return null;
-    } finally {
-      client.close(force: true);
     }
   }
 }

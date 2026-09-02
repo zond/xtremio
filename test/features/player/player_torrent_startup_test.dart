@@ -13,6 +13,15 @@ import '../../support/player_harness.dart';
 void main() {
   final overlay = find.byType(TorrentStartupOverlay);
 
+  /// The recorded fixture's torrent: file 0, no trackers.
+  const perFile = TorrentStatsRequest(
+    infoHash: '11ea02584fa6351956f35671962ab46354d99060',
+    fileIdx: 0,
+  );
+  const torrentLevel = TorrentStatsRequest(
+    infoHash: '11ea02584fa6351956f35671962ab46354d99060',
+  );
+
   Finder overlayText(String text) =>
       find.descendant(of: overlay, matching: find.text(text));
 
@@ -64,59 +73,73 @@ void main() {
         TorrentStats.fromJson(const {'phase': 'buffering'}).peerDiscovery,
         const PeerDiscovery(),
       );
+      // The server's reason for a failure travels along; absent otherwise.
+      final failed = TorrentStats.fromJson(const {
+        'phase': 'error',
+        'error': 'metadata not received in time',
+      });
+      expect(failed.phase, TorrentPhase.error);
+      expect(failed.error, 'metadata not received in time');
+      expect(stats.error, isNull);
+      expect(failed, isNot(TorrentStats.fromJson(const {'phase': 'error'})));
     });
 
-    test('derives the stats URL from the stream URL', () {
-      const hash = '11ea02584fa6351956f35671962ab46354d99060';
-      // The query travels along: the server's per-file route takes the
-      // stream route's `tr=`/`f=` and focuses the file it resolves.
-      expect(
-        TorrentStats.statsUrlFor(
-          Uri.parse('http://127.0.0.1:11470/$hash/0?tr=udp%3A%2F%2Fa'),
-        ),
-        Uri.parse('http://127.0.0.1:11470/$hash/0/stats.json?tr=udp%3A%2F%2Fa'),
-      );
-      // The server's guessed index stays in the path; with `f=` filters the
-      // per-file route picks the same file the stream route does.
-      expect(
-        TorrentStats.statsUrlFor(
-          Uri.parse(
-            'http://127.0.0.1:11470/$hash/-1?tr=udp%3A%2F%2Fa&f=Movie.mkv',
+    test(
+      'derives the request from the stream the way the core builds its URL',
+      () {
+        const hash = '11ea02584fa6351956f35671962ab46354d99060';
+        // Hash, file index and the trackers the URL's `tr=` carries.
+        final request = TorrentStatsRequest.forStream(
+          StreamInfo({
+            'infoHash': hash,
+            'fileIdx': 2,
+            'announce': ['udp://a', 'udp://b'],
+          }),
+        );
+        expect(
+          request,
+          const TorrentStatsRequest(
+            infoHash: hash,
+            fileIdx: 2,
+            trackers: ['udp://a', 'udp://b'],
           ),
-        ),
-        Uri.parse(
-          'http://127.0.0.1:11470/$hash/-1/stats.json?tr=udp%3A%2F%2Fa&f=Movie.mkv',
-        ),
-      );
-      expect(
-        TorrentStats.statsUrlFor(Uri.parse('http://127.0.0.1:11470/$hash/-1')),
-        Uri.parse('http://127.0.0.1:11470/$hash/-1/stats.json'),
-      );
-      // Only the hash: the torrent-level stats.
-      expect(
-        TorrentStats.statsUrlFor(Uri.parse('http://127.0.0.1:11470/$hash')),
-        Uri.parse('http://127.0.0.1:11470/$hash/stats.json'),
-      );
-      // The torrent-level stats for any of them, query included.
-      expect(
-        TorrentStats.torrentStatsUrlFor(
-          Uri.parse('http://127.0.0.1:11470/$hash/-1?tr=udp%3A%2F%2Fa'),
-        ),
-        Uri.parse('http://127.0.0.1:11470/$hash/stats.json?tr=udp%3A%2F%2Fa'),
-      );
-      // Not the server's torrent path.
-      expect(
-        TorrentStats.statsUrlFor(
-          Uri.parse('https://test-videos.co.uk/big_buck_bunny.mp4'),
-        ),
-        isNull,
-      );
-      expect(TorrentStats.statsUrlFor(Uri.parse('http://127.0.0.1/')), isNull);
-      expect(
-        TorrentStats.torrentStatsUrlFor(Uri.parse('http://127.0.0.1/x.mp4')),
-        isNull,
-      );
-    });
+        );
+        // The torrent-level request keeps everything but the file.
+        expect(
+          request!.torrentLevel,
+          const TorrentStatsRequest(
+            infoHash: hash,
+            trackers: ['udp://a', 'udp://b'],
+          ),
+        );
+        // No index, or the server's "largest file" guess: torrent-level
+        // already, no trackers.
+        expect(
+          TorrentStatsRequest.forStream(StreamInfo({'infoHash': hash})),
+          const TorrentStatsRequest(infoHash: hash),
+        );
+        final guessed = TorrentStatsRequest.forStream(
+          StreamInfo({'infoHash': hash, 'fileIdx': -1}),
+        );
+        expect(guessed, const TorrentStatsRequest(infoHash: hash));
+        expect(guessed!.torrentLevel, same(guessed));
+        // Not a torrent.
+        expect(
+          TorrentStatsRequest.forStream(
+            StreamInfo(DevStreams.bigBuckBunnyHttp),
+          ),
+          isNull,
+        );
+        expect(TorrentStatsRequest.forStream(null), isNull);
+        // Equality is by value, trackers included.
+        expect(
+          const TorrentStatsRequest(infoHash: hash, trackers: ['udp://a']),
+          isNot(
+            const TorrentStatsRequest(infoHash: hash, trackers: ['udp://b']),
+          ),
+        );
+      },
+    );
   });
 
   group('TorrentStartupOverlay.describe', () {
@@ -186,6 +209,17 @@ void main() {
       );
       expect(failed.label, 'The torrent failed to start');
       expect(failed.failed, isTrue);
+      expect(failed.detail, isNull);
+      // The server's reason, when it gives one, is the detail line.
+      expect(
+        TorrentStartupOverlay.describe(
+          const TorrentStats(
+            phase: TorrentPhase.error,
+            error: 'metadata not received in time',
+          ),
+        ).detail,
+        'metadata not received in time',
+      );
 
       // Speed only shows when there is some.
       expect(
@@ -222,13 +256,8 @@ void main() {
     // Polled every interval, for this torrent's file, and while that has no
     // answer the torrent-level stats too; the same answer does not redraw
     // anything.
-    const base =
-        'http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060';
     await poll(tester);
-    expect(stats.requests, [
-      Uri.parse('$base/0/stats.json'),
-      Uri.parse('$base/stats.json'),
-    ]);
+    expect(stats.requests, [perFile, torrentLevel]);
     await poll(tester);
     expect(stats.requests, hasLength(4));
 
@@ -284,30 +313,24 @@ void main() {
     expect(overlay, findsNothing);
   });
 
-  testWidgets('reads the metadata phase off the torrent-level stats', (
+  testWidgets('falls back to the torrent-level stats for the phase', (
     tester,
   ) async {
-    // While a magnet's metadata is unresolved the per-file route has no
-    // file to resolve and answers 404; the torrent-level route still says
-    // what is going on.
-    const base =
-        'http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060';
+    // When the server has no answer for the file (an index the torrent
+    // does not have), the torrent-level stats still say what is going on.
     final harness = PlayerHarness();
     final stats = harness.torrentStats
       ..response = null
-      ..responses[Uri.parse('$base/stats.json')] = const TorrentStats(
+      ..responses[torrentLevel] = const TorrentStats(
         phase: TorrentPhase.resolvingMetadata,
       );
     await tester.pumpWidget(harness.build());
     await tester.pump();
     await poll(tester);
-    expect(stats.requests, [
-      Uri.parse('$base/0/stats.json'),
-      Uri.parse('$base/stats.json'),
-    ]);
+    expect(stats.requests, [perFile, torrentLevel]);
     expect(overlayText('Fetching torrent metadata…'), findsOneWidget);
 
-    // Once the per-file route answers, the torrent-level one is not asked.
+    // Once the file has an answer, the torrent-level one is not asked.
     stats.response = const TorrentStats(
       phase: TorrentPhase.buffering,
       initialWindowReadyBytes: 0,
@@ -315,8 +338,58 @@ void main() {
     );
     await poll(tester);
     expect(stats.requests, hasLength(3));
-    expect(stats.requests.last, Uri.parse('$base/0/stats.json'));
+    expect(stats.requests.last, perFile);
     expect(overlayText('Finding peers…'), findsOneWidget);
+  });
+
+  testWidgets('a failed torrent shows the server\'s reason', (tester) async {
+    final harness = PlayerHarness();
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.error,
+      error: 'metadata not received in time',
+    );
+    await harness.pump(tester);
+    expect(overlayText('The torrent failed to start'), findsOneWidget);
+    expect(overlayText('metadata not received in time'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: overlay,
+        matching: find.byType(LinearProgressIndicator),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('asks for the stream\'s trackers and file', (tester) async {
+    // The stream's `announce` list is what the core puts in the URL's
+    // `tr=`; the server needs it if the stats request creates the engine.
+    final harness = PlayerHarness(
+      player: {
+        'selected': {'stream': DevStreams.bigBuckBunnyTorrent},
+        'stream': {
+          'type': 'Ready',
+          'content': [
+            {
+              'streaming_url':
+                  'http://127.0.0.1:33759/${DevStreams.bigBuckBunnyTorrent['infoHash']}/-1',
+            },
+            DevStreams.bigBuckBunnyTorrent,
+          ],
+        },
+      },
+      stream: DevStreams.bigBuckBunnyTorrent,
+    );
+    await harness.pump(tester);
+    await poll(tester);
+    // No file index: torrent-level from the start, and no fallback.
+    expect(harness.torrentStats.requests.toSet(), {
+      TorrentStatsRequest(
+        infoHash: DevStreams.bigBuckBunnyTorrent['infoHash'] as String,
+        trackers: List<String>.from(
+          DevStreams.bigBuckBunnyTorrent['announce'] as List<dynamic>,
+        ),
+      ),
+    });
   });
 
   testWidgets('asks the server nothing before the engine is told to open', (

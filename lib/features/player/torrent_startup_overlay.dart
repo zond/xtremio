@@ -136,8 +136,11 @@ class TorrentStartupOverlay extends StatelessWidget {
           detail: detail,
         );
       case TorrentPhase.error:
-        return const TorrentStartupStatus(
+        // The server's reason (a magnet whose metadata never arrived, an
+        // add that failed) is the detail; nothing measurable follows.
+        return TorrentStartupStatus(
           label: 'The torrent failed to start',
+          detail: stats.error,
           failed: true,
         );
       case TorrentPhase.unknown:
