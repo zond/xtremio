@@ -518,7 +518,9 @@ class ChoiceTile<T> extends StatelessWidget {
 }
 
 /// An ISO 639-2 language setting: the player's default, or one of
-/// [languageOptions] (plus whatever code the profile holds already).
+/// [languageOptions] (plus whatever code the profile holds already; a
+/// synonym of a listed code, such as `fra` next to `fre`, is labelled with
+/// the code so the two are not both "French").
 class LanguageTile extends StatelessWidget {
   const LanguageTile({
     super.key,
@@ -547,7 +549,12 @@ class LanguageTile extends StatelessWidget {
       title: title,
       value: value,
       options: codes,
-      label: (code) => code == null ? defaultLabel : languageName(code),
+      label: (code) {
+        if (code == null) return defaultLabel;
+        final name = languageName(code);
+        if (codes.contains(code) || name == code) return name;
+        return '$name ($code)';
+      },
       onSetting: onSetting,
     );
   }

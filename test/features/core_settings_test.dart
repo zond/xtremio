@@ -203,6 +203,31 @@ void main() {
       await pick(tester, ProfileSettings.seekTimeDurationKey, '7 s');
       expect(core.dispatched, isEmpty);
     });
+    testWidgets('a synonym code outside the list is labelled with the code', (
+      tester,
+    ) async {
+      // The list keeps one code per name (`fre`, not `fra`); a profile
+      // holding the other must not show two identical "French" entries.
+      final core = await pumpSettings(
+        tester,
+        ctx: ctxWith({'subtitlesLanguage': 'fra'}),
+      );
+      final key = settingKey(ProfileSettings.subtitlesLanguageKey);
+      expect(
+        tester.widget<DropdownButton<String?>>(find.byKey(key)).value,
+        'fra',
+      );
+      expect(find.text('French (fra)'), findsOneWidget);
+      // Open: the button plus one menu entry each, `fre` as plain "French".
+      await tester.tap(find.byKey(key));
+      await tester.pumpAndSettle();
+      expect(find.text('French (fra)'), findsNWidgets(2));
+      expect(find.text('French'), findsOneWidget);
+      // Picking the held value again writes nothing.
+      await tester.tap(find.text('French (fra)').last);
+      await tester.pumpAndSettle();
+      expect(core.dispatched, isEmpty);
+    });
   });
 
   group('subtitle colours', () {
