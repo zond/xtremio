@@ -14,13 +14,15 @@ Rust engine for addons, catalogs, library, and playback state) and
 > shows a continue-watching row and one row per catalog of every
 > installed addon, Discover browses any catalog through the engine's
 > type/catalog/genre filters, Search asks every addon that supports it and
-> groups the hits per addon, tapping a title loads its meta details and
-> the streams every installed addon returns,
+> groups the hits per addon, tapping a title opens its details (facts,
+> genres, a season picker and episode list with watched state for series;
+> picking an episode loads that episode's streams) with the streams every
+> installed addon returns, quality hints parsed into chips,
 > and selecting a stream plays it with `media_kit` — torrents through the
 > embedded server, HTTP streams directly. A debug-only Settings entry
 > plays a public Big Buck Bunny torrent to prove the torrent path without
-> any addon. Ugly on purpose; Library, episode picking, subtitles and
-> settings are still to come.
+> any addon. Ugly on purpose; Library, subtitles and settings are still to
+> come.
 
 ## Goals (beyond current Stremio clients)
 
@@ -136,7 +138,7 @@ connection.
 # Rust crate
 cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cargo test --test cinemeta -- --ignored       # network: loads a Cinemeta catalog, refreshes the fixture
-cargo test --test meta_details -- --ignored   # network: meta + streams + Player + continue watching for a public-domain torrent, refreshes fixtures
+cargo test --test meta_details -- --ignored   # network: meta + streams + Player + continue watching for a public-domain torrent, plus a series (seasons, selected episode, watched), refreshes fixtures
 cargo test --test board -- --ignored          # network: Board rows + a search over the default addons, refreshes fixtures
 
 # Dart (FFI-backed tests load rust/target/debug/libxtremio_core.* directly)
