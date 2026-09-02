@@ -1,0 +1,16 @@
+# Options for cargokit (rust_builder/), read from the crate directory.
+#
+# cargokit runs cargo with the Gradle project as its cwd, so .cargo/config.toml
+# in this directory is not consulted; per-build environment for build scripts
+# has to be passed as cargo --config flags.
+#
+# AWS_LC_SYS_CMAKE_BUILDER=0: once aws-lc-sys needs bindgen (Android x86_64 /
+# armv7, see Cargo.toml) it would prefer its CMake builder, which on Android
+# expects an NDK toolchain file cargokit does not provide. The cc builder uses
+# the CC_<triple>/CFLAGS_<triple> cargokit already exports. Harmless on the
+# desktop targets, where cc is the default anyway.
+cargo:
+  debug:
+    extra_flags: ["--config", "env.AWS_LC_SYS_CMAKE_BUILDER=\"0\""]
+  release:
+    extra_flags: ["--config", "env.AWS_LC_SYS_CMAKE_BUILDER=\"0\""]

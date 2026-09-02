@@ -43,6 +43,13 @@ url = "2"
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# aws-lc-sys (rustls' crypto provider) only ships pregenerated bindings for
+# aarch64-linux-android; the emulator (x86_64) and armv7 builds must generate
+# them at build time, which needs libclang on the host. Desktop and arm64
+# builds are untouched.
+[target.'cfg(all(target_os = "android", not(target_arch = "aarch64")))'.dependencies]
+aws-lc-sys = { version = "0.45", features = ["bindgen"] }
+
 [dev-dependencies]
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 tempfile = "3"
