@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
@@ -85,7 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               initInfo == null ? 'unknown' : 'v${initInfo.schemaVersion}',
             ),
           ),
-          if (kDebugMode) ...[
+          if (!kReleaseMode) ...[
             const _SectionHeader('Developer'),
             _DevPlayTile(
               icon: Icons.cloud_download_outlined,
