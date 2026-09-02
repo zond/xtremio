@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  flutter:
+    name: Flutter (format, analyze, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.1
+
+      - run: flutter pub get
+
+      - run: dart format --set-exit-if-changed .
+
+      - run: flutter analyze
+
+      - run: flutter test
+
+      # Android build (Rust cross-compiled via the NDK) and the Rust
+      # crate's own cargo build/test/clippy are not gated here yet —
+      # there is no Rust bridge in this repo to build. Add an
+      # android/rust job once stremio-core + stream-server are wired
+      # in via FFI.
