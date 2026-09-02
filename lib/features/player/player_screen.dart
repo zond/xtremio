@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../../core/core.dart';
 import 'playback_engine.dart';
@@ -138,11 +139,38 @@ class _PlayerScreenState extends State<PlayerScreen> {
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
-    _engine?.dispose();
+    final engine = _engine;
+    _engine = null;
+    if (engine != null) _disposeAfterFrame(engine);
     _player?.removeListener(_onPlayerState);
     _player?.dispose();
     _client?.dispatch(CoreActions.unload(CoreField.player));
     super.dispose();
+  }
+
+  /// Releases [engine] two frames from now instead of synchronously here.
+  ///
+  /// This `dispose` runs while the frame that unmounts the video surface is
+  /// being built, and the raster thread may still be drawing the previous
+  /// frame, which references the video texture. media_kit unregisters and
+  /// frees that texture from the platform thread as soon as `Player.dispose`
+  /// reaches it, so disposing right away can free the texture under the
+  /// raster thread (a SIGSEGV inside the engine on Linux, seen with
+  /// media_kit's software-rendered texture).
+  ///
+  /// The engine's layer-tree pipeline holds at most two frames, so once the
+  /// UI thread has produced a second frame the raster thread has finished
+  /// the last one that showed the texture. [SchedulerBinding.endOfFrame]
+  /// schedules a frame when none is pending, so this also works when called
+  /// outside a frame.
+  static void _disposeAfterFrame(PlaybackEngine engine) {
+    Future<void> release() async {
+      await SchedulerBinding.instance.endOfFrame;
+      await SchedulerBinding.instance.endOfFrame;
+      await engine.dispose();
+    }
+
+    release().ignore();
   }
 
   @override

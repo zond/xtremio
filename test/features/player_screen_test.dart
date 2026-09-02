@@ -119,8 +119,12 @@ void main() {
       await tester.pump();
       expect(find.text('Buffering from the torrent…'), findsOneWidget);
 
-      // Leaving disposes the engine and unloads the field.
+      // Leaving unloads the field at once but releases the engine only two
+      // frames later, after the raster thread is done with the video texture.
       await tester.pumpWidget(const SizedBox());
+      expect(engine.disposed, isFalse);
+      await tester.pump();
+      await tester.pump();
       expect(engine.disposed, isTrue);
       expect(
         core.dispatched.last.action,
