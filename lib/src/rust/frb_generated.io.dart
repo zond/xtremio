@@ -3,6 +3,7 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/core.dart';
 import 'api/hello.dart';
 import 'api/server.dart';
 
@@ -26,19 +27,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
+  RustStreamSink<String> dco_decode_StreamSink_String_Sse(dynamic raw);
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  CoreConfig dco_decode_box_autoadd_core_config(dynamic raw);
+
+  @protected
   ServerConfig dco_decode_box_autoadd_server_config(dynamic raw);
+
+  @protected
+  CoreConfig dco_decode_core_config(dynamic raw);
+
+  @protected
+  CoreInitResult dco_decode_core_init_result(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  ServerConfig? dco_decode_opt_box_autoadd_server_config(dynamic raw);
 
   @protected
   ServerConfig dco_decode_server_config(dynamic raw);
@@ -59,10 +75,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<String> sse_decode_StreamSink_String_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  CoreConfig sse_decode_box_autoadd_core_config(SseDeserializer deserializer);
 
   @protected
   ServerConfig sse_decode_box_autoadd_server_config(
@@ -70,10 +94,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  CoreConfig sse_decode_core_config(SseDeserializer deserializer);
+
+  @protected
+  CoreInitResult sse_decode_core_init_result(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  ServerConfig? sse_decode_opt_box_autoadd_server_config(
+    SseDeserializer deserializer,
+  );
 
   @protected
   ServerConfig sse_decode_server_config(SseDeserializer deserializer);
@@ -100,14 +135,35 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_StreamSink_String_Sse(
+    RustStreamSink<String> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_core_config(
+    CoreConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_server_config(
     ServerConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_core_config(CoreConfig self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_core_init_result(
+    CoreInitResult self,
     SseSerializer serializer,
   );
 
@@ -119,6 +175,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_server_config(
+    ServerConfig? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_server_config(ServerConfig self, SseSerializer serializer);

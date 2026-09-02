@@ -1,0 +1,4688 @@
+{
+  "catalog": [
+    {
+      "content": {
+        "content": [
+          {
+            "background": "https://images.metahub.space/background/medium/tt11561116/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt11561116",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A grieving father and his young son relocate to the quiet town of Featherbank, which was terrorized by a serial killer known as The Whisper Man 15 years earlier, while rumors circulated that Whisper Man worked with an accomplice.",
+            "id": "tt11561116",
+            "links": [
+              {
+                "category": "share",
+                "name": "The Whisper Man",
+                "url": "https://www.strem.io/s/movie/the-whisper-man-11561116"
+              },
+              {
+                "category": "Genres",
+                "name": "Crime",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Cast",
+                "name": "Robert De Niro",
+                "url": "stremio:///search?search=Robert%20De%20Niro"
+              },
+              {
+                "category": "Cast",
+                "name": "Michelle Monaghan",
+                "url": "stremio:///search?search=Michelle%20Monaghan"
+              },
+              {
+                "category": "Cast",
+                "name": "Adam Scott",
+                "url": "stremio:///search?search=Adam%20Scott"
+              },
+              {
+                "category": "Writers",
+                "name": "Ben Jacoby",
+                "url": "stremio:///search?search=Ben%20Jacoby"
+              },
+              {
+                "category": "Writers",
+                "name": "Alex North",
+                "url": "stremio:///search?search=Alex%20North"
+              },
+              {
+                "category": "Writers",
+                "name": "Chase Palmer",
+                "url": "stremio:///search?search=Chase%20Palmer"
+              },
+              {
+                "category": "Directors",
+                "name": "James Ashcroft",
+                "url": "stremio:///search?search=James%20Ashcroft"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt11561116/img",
+            "name": "The Whisper Man",
+            "poster": "https://images.metahub.space/poster/small/tt11561116/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": null,
+            "runtime": "111 min",
+            "trailerStreams": [
+              {
+                "description": "The Whisper Man",
+                "ytId": "ZHRR-1CKYIQ"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt37287335/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt37287335",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Baron \"Bear\" Bailey breaks a novelty charm to force his co-worker Nikki Freeman to love him, but the supernatural compulsion warps her mind into violent obsession, trapping him in a nightmare he cannot wish away.",
+            "id": "tt37287335",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.9",
+                "url": "https://imdb.com/title/tt37287335"
+              },
+              {
+                "category": "share",
+                "name": "Obsession",
+                "url": "https://www.strem.io/s/movie/obsession-37287335"
+              },
+              {
+                "category": "Genres",
+                "name": "Horror",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+              },
+              {
+                "category": "Genres",
+                "name": "Romance",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Romance"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Cast",
+                "name": "Michael Johnston",
+                "url": "stremio:///search?search=Michael%20Johnston"
+              },
+              {
+                "category": "Cast",
+                "name": "Inde Navarrette",
+                "url": "stremio:///search?search=Inde%20Navarrette"
+              },
+              {
+                "category": "Cast",
+                "name": "Cooper Tomlinson",
+                "url": "stremio:///search?search=Cooper%20Tomlinson"
+              },
+              {
+                "category": "Writers",
+                "name": "Curry Barker",
+                "url": "stremio:///search?search=Curry%20Barker"
+              },
+              {
+                "category": "Directors",
+                "name": "Curry Barker",
+                "url": "stremio:///search?search=Curry%20Barker"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt37287335/img",
+            "name": "Obsession",
+            "poster": "https://images.metahub.space/poster/small/tt37287335/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-15T00:00:00Z",
+            "runtime": "109 min",
+            "trailerStreams": [
+              {
+                "description": "Obsession",
+                "ytId": "gMC8kkwbIQQ"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt37275992/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt37275992",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": null,
+            "id": "tt37275992",
+            "links": [
+              {
+                "category": "share",
+                "name": "The Secret Woman",
+                "url": "https://www.strem.io/s/movie/the-secret-woman-37275992"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Cast",
+                "name": "Claes Bang",
+                "url": "stremio:///search?search=Claes%20Bang"
+              },
+              {
+                "category": "Cast",
+                "name": "Ingrid Bolsø Berdal",
+                "url": "stremio:///search?search=Ingrid%20Bols%C3%B8%20Berdal"
+              },
+              {
+                "category": "Cast",
+                "name": "Pål Sverre Hagen",
+                "url": "stremio:///search?search=P%C3%A5l%20Sverre%20Hagen"
+              },
+              {
+                "category": "Writers",
+                "name": "Anna Ekberg",
+                "url": "stremio:///search?search=Anna%20Ekberg"
+              },
+              {
+                "category": "Writers",
+                "name": "Anders Rønnow Klarlund",
+                "url": "stremio:///search?search=Anders%20R%C3%B8nnow%20Klarlund"
+              },
+              {
+                "category": "Writers",
+                "name": "Jacob Weinreich",
+                "url": "stremio:///search?search=Jacob%20Weinreich"
+              },
+              {
+                "category": "Directors",
+                "name": "Barbara Topsøe-Rothenborg",
+                "url": "stremio:///search?search=Barbara%20Tops%C3%B8e-Rothenborg"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt37275992/img",
+            "name": "The Secret Woman",
+            "poster": "https://images.metahub.space/poster/small/tt37275992/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": null,
+            "runtime": "119 min",
+            "trailerStreams": [
+              {
+                "description": "The Secret Woman",
+                "ytId": "FldeGkt4e4k"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt14173636/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt14173636",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Joe and Angela's marriage is on thin ice. When they invite their enigmatic upstairs neighbors for a dinner party, the night spirals into unexpected places.",
+            "id": "tt14173636",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.8",
+                "url": "https://imdb.com/title/tt14173636"
+              },
+              {
+                "category": "share",
+                "name": "The Invite",
+                "url": "https://www.strem.io/s/movie/the-invite-14173636"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Romance",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Romance"
+              },
+              {
+                "category": "Cast",
+                "name": "Seth Rogen",
+                "url": "stremio:///search?search=Seth%20Rogen"
+              },
+              {
+                "category": "Cast",
+                "name": "Olivia Wilde",
+                "url": "stremio:///search?search=Olivia%20Wilde"
+              },
+              {
+                "category": "Cast",
+                "name": "Penélope Cruz",
+                "url": "stremio:///search?search=Pen%C3%A9lope%20Cruz"
+              },
+              {
+                "category": "Writers",
+                "name": "Cesc Gay",
+                "url": "stremio:///search?search=Cesc%20Gay"
+              },
+              {
+                "category": "Writers",
+                "name": "Will McCormack",
+                "url": "stremio:///search?search=Will%20McCormack"
+              },
+              {
+                "category": "Writers",
+                "name": "Rashida Jones",
+                "url": "stremio:///search?search=Rashida%20Jones"
+              },
+              {
+                "category": "Directors",
+                "name": "Olivia Wilde",
+                "url": "stremio:///search?search=Olivia%20Wilde"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt14173636/img",
+            "name": "The Invite",
+            "poster": "https://images.metahub.space/poster/small/tt14173636/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-07-10T00:00:00Z",
+            "runtime": "107 min",
+            "trailerStreams": [
+              {
+                "description": "The Invite",
+                "ytId": "nelkiuezJxg"
+              },
+              {
+                "description": "The Invite",
+                "ytId": "OJ19I9q_hOQ"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt12042730/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt12042730",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A science teacher wakes up alone on a spaceship. As his memory returns, he uncovers a mission to stop a mysterious substance killing Earth's sun, and realizes that an unexpected friendship may be the key.",
+            "id": "tt12042730",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.2",
+                "url": "https://imdb.com/title/tt12042730"
+              },
+              {
+                "category": "share",
+                "name": "Project Hail Mary",
+                "url": "https://www.strem.io/s/movie/project-hail-mary-12042730"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Cast",
+                "name": "Ryan Gosling",
+                "url": "stremio:///search?search=Ryan%20Gosling"
+              },
+              {
+                "category": "Cast",
+                "name": "Sandra Hüller",
+                "url": "stremio:///search?search=Sandra%20H%C3%BCller"
+              },
+              {
+                "category": "Cast",
+                "name": "James Ortiz",
+                "url": "stremio:///search?search=James%20Ortiz"
+              },
+              {
+                "category": "Writers",
+                "name": "Drew Goddard",
+                "url": "stremio:///search?search=Drew%20Goddard"
+              },
+              {
+                "category": "Writers",
+                "name": "Andy Weir",
+                "url": "stremio:///search?search=Andy%20Weir"
+              },
+              {
+                "category": "Directors",
+                "name": "Phil Lord",
+                "url": "stremio:///search?search=Phil%20Lord"
+              },
+              {
+                "category": "Directors",
+                "name": "Christopher Miller",
+                "url": "stremio:///search?search=Christopher%20Miller"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt12042730/img",
+            "name": "Project Hail Mary",
+            "poster": "https://images.metahub.space/poster/small/tt12042730/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-03-20T00:00:00Z",
+            "runtime": "157 min",
+            "trailerStreams": [
+              {
+                "description": "Project Hail Mary",
+                "ytId": "NKYea63tQmI"
+              },
+              {
+                "description": "Project Hail Mary",
+                "ytId": "P0XN3-n-2Lo"
+              },
+              {
+                "description": "Project Hail Mary",
+                "ytId": "tvd7UUHzdhA"
+              },
+              {
+                "description": "Project Hail Mary",
+                "ytId": "5VYsnngkS_U"
+              },
+              {
+                "description": "Project Hail Mary",
+                "ytId": "m08TxIsFTRI"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://live.metahub.space/background/medium/tt39390497/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt39390497",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Two Mexican officers must survive the final hours of their shift after crossing a ruthless cartel boss.",
+            "id": "tt39390497",
+            "links": [
+              {
+                "category": "Genres",
+                "name": "Crime",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              }
+            ],
+            "logo": "https://live.metahub.space/logo/medium/tt39390497/img",
+            "name": "Facing El Chapo",
+            "poster": "https://live.metahub.space/poster/small/tt39390497/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": null,
+            "runtime": "91 min",
+            "trailerStreams": [],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt26657236/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt26657236",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "After a therapist's patient disappears into a dimension beyond reality, she must venture into the unknown to save him.",
+            "id": "tt26657236",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.8",
+                "url": "https://imdb.com/title/tt26657236"
+              },
+              {
+                "category": "share",
+                "name": "Backrooms",
+                "url": "https://www.strem.io/s/movie/backrooms-26657236"
+              },
+              {
+                "category": "Genres",
+                "name": "Horror",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+              },
+              {
+                "category": "Genres",
+                "name": "Sci-Fi",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sci-Fi"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Cast",
+                "name": "Chiwetel Ejiofor",
+                "url": "stremio:///search?search=Chiwetel%20Ejiofor"
+              },
+              {
+                "category": "Cast",
+                "name": "Renate Reinsve",
+                "url": "stremio:///search?search=Renate%20Reinsve"
+              },
+              {
+                "category": "Cast",
+                "name": "Mark Duplass",
+                "url": "stremio:///search?search=Mark%20Duplass"
+              },
+              {
+                "category": "Writers",
+                "name": "Will Soodik",
+                "url": "stremio:///search?search=Will%20Soodik"
+              },
+              {
+                "category": "Writers",
+                "name": "Kane Parsons",
+                "url": "stremio:///search?search=Kane%20Parsons"
+              },
+              {
+                "category": "Directors",
+                "name": "Kane Parsons",
+                "url": "stremio:///search?search=Kane%20Parsons"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt26657236/img",
+            "name": "Backrooms",
+            "poster": "https://images.metahub.space/poster/small/tt26657236/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-29T00:00:00Z",
+            "runtime": "111 min",
+            "trailerStreams": [
+              {
+                "description": "Backrooms",
+                "ytId": "0HjdiohVOik"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt32333324/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt32333324",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "When the mysterious behemoth known only as Bane frees Batman's entire rogue's gallery from Arkham Asylum, the Caped Crusader is pushed to his mental and physical breaking point.",
+            "id": "tt32333324",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.1",
+                "url": "https://imdb.com/title/tt32333324"
+              },
+              {
+                "category": "share",
+                "name": "Batman: Knightfall - Part 1: Knightfall",
+                "url": "https://www.strem.io/s/movie/batman-knightfall-part-1-knightfall-32333324"
+              },
+              {
+                "category": "Genres",
+                "name": "Animation",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Animation"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Cast",
+                "name": "Luis Bermudez",
+                "url": "stremio:///search?search=Luis%20Bermudez"
+              },
+              {
+                "category": "Cast",
+                "name": "Bruce Boxleitner",
+                "url": "stremio:///search?search=Bruce%20Boxleitner"
+              },
+              {
+                "category": "Cast",
+                "name": "Bayardo De Murguia",
+                "url": "stremio:///search?search=Bayardo%20De%20Murguia"
+              },
+              {
+                "category": "Writers",
+                "name": "Jeremy Adams",
+                "url": "stremio:///search?search=Jeremy%20Adams"
+              },
+              {
+                "category": "Directors",
+                "name": "Jeff Wamester",
+                "url": "stremio:///search?search=Jeff%20Wamester"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt32333324/img",
+            "name": "Batman: Knightfall - Part 1: Knightfall",
+            "poster": "https://images.metahub.space/poster/small/tt32333324/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-08-25T00:00:00Z",
+            "runtime": "79 min",
+            "trailerStreams": [
+              {
+                "description": "Batman: Knightfall - Part 1: Knightfall",
+                "ytId": "90HAqMk7qv0"
+              },
+              {
+                "description": "Batman: Knightfall - Part 1: Knightfall",
+                "ytId": "9NApbwwm4aU"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0098384/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0098384",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A young beautician, newly arrived in a small Louisiana town, finds work at the local salon, where a small group of women share a close bond of friendship, and welcome her into the fold.",
+            "id": "tt0098384",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.3",
+                "url": "https://imdb.com/title/tt0098384"
+              },
+              {
+                "category": "share",
+                "name": "Steel Magnolias",
+                "url": "https://www.strem.io/s/movie/steel-magnolias-0098384"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Romance",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Romance"
+              },
+              {
+                "category": "Cast",
+                "name": "Shirley MacLaine",
+                "url": "stremio:///search?search=Shirley%20MacLaine"
+              },
+              {
+                "category": "Cast",
+                "name": "Olympia Dukakis",
+                "url": "stremio:///search?search=Olympia%20Dukakis"
+              },
+              {
+                "category": "Cast",
+                "name": "Sally Field",
+                "url": "stremio:///search?search=Sally%20Field"
+              },
+              {
+                "category": "Writers",
+                "name": "Robert Harling",
+                "url": "stremio:///search?search=Robert%20Harling"
+              },
+              {
+                "category": "Directors",
+                "name": "Herbert Ross",
+                "url": "stremio:///search?search=Herbert%20Ross"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0098384/img",
+            "name": "Steel Magnolias",
+            "poster": "https://images.metahub.space/poster/small/tt0098384/img",
+            "posterShape": "poster",
+            "releaseInfo": "1989",
+            "released": "1989-11-22T00:00:00Z",
+            "runtime": "117 min",
+            "trailerStreams": [
+              {
+                "description": "Steel Magnolias",
+                "ytId": "d8nojAKKijA"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0088930/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0088930",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Six guests are anonymously invited to a strange mansion for dinner, but after their host is killed, they must cooperate with the staff to identify the murderer as the bodies pile up.",
+            "id": "tt0088930",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.3",
+                "url": "https://imdb.com/title/tt0088930"
+              },
+              {
+                "category": "share",
+                "name": "Clue",
+                "url": "https://www.strem.io/s/movie/clue-0088930"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Crime",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+              },
+              {
+                "category": "Genres",
+                "name": "Mystery",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Mystery"
+              },
+              {
+                "category": "Cast",
+                "name": "Eileen Brennan",
+                "url": "stremio:///search?search=Eileen%20Brennan"
+              },
+              {
+                "category": "Cast",
+                "name": "Tim Curry",
+                "url": "stremio:///search?search=Tim%20Curry"
+              },
+              {
+                "category": "Cast",
+                "name": "Madeline Kahn",
+                "url": "stremio:///search?search=Madeline%20Kahn"
+              },
+              {
+                "category": "Writers",
+                "name": "John Landis",
+                "url": "stremio:///search?search=John%20Landis"
+              },
+              {
+                "category": "Writers",
+                "name": "Jonathan Lynn",
+                "url": "stremio:///search?search=Jonathan%20Lynn"
+              },
+              {
+                "category": "Writers",
+                "name": "Anthony E. Pratt",
+                "url": "stremio:///search?search=Anthony%20E.%20Pratt"
+              },
+              {
+                "category": "Directors",
+                "name": "Jonathan Lynn",
+                "url": "stremio:///search?search=Jonathan%20Lynn"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0088930/img",
+            "name": "Clue",
+            "poster": "https://images.metahub.space/poster/small/tt0088930/img",
+            "posterShape": "poster",
+            "releaseInfo": "1985",
+            "released": "1985-12-13T00:00:00Z",
+            "runtime": "94 min",
+            "trailerStreams": [
+              {
+                "description": "Clue",
+                "ytId": "KEXdWfsKZ1k"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt15047880/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt15047880",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "If you found out we weren't alone, if someone showed you, proved it to you, would that frighten you?",
+            "id": "tt15047880",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.4",
+                "url": "https://imdb.com/title/tt15047880"
+              },
+              {
+                "category": "share",
+                "name": "Disclosure Day",
+                "url": "https://www.strem.io/s/movie/disclosure-day-15047880"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Mystery",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Mystery"
+              },
+              {
+                "category": "Cast",
+                "name": "Emily Blunt",
+                "url": "stremio:///search?search=Emily%20Blunt"
+              },
+              {
+                "category": "Cast",
+                "name": "Josh O&apos;Connor",
+                "url": "stremio:///search?search=Josh%20O%26apos%3BConnor"
+              },
+              {
+                "category": "Cast",
+                "name": "Colin Firth",
+                "url": "stremio:///search?search=Colin%20Firth"
+              },
+              {
+                "category": "Writers",
+                "name": "David Koepp",
+                "url": "stremio:///search?search=David%20Koepp"
+              },
+              {
+                "category": "Writers",
+                "name": "Steven Spielberg",
+                "url": "stremio:///search?search=Steven%20Spielberg"
+              },
+              {
+                "category": "Directors",
+                "name": "Steven Spielberg",
+                "url": "stremio:///search?search=Steven%20Spielberg"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt15047880/img",
+            "name": "Disclosure Day",
+            "poster": "https://images.metahub.space/poster/small/tt15047880/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-06-12T00:00:00Z",
+            "runtime": "146 min",
+            "trailerStreams": [
+              {
+                "description": "Disclosure Day",
+                "ytId": "icDuEHSxE-w"
+              },
+              {
+                "description": "Disclosure Day",
+                "ytId": "SCYT8vb2siQ"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt32565993/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt32565993",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Every night a shepherd reads aloud a murder mystery, pretending his sheep can understand. When he is found dead, the sheep realize at once that it was a murder and think they know everything about how to go about solving it.",
+            "id": "tt32565993",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.5",
+                "url": "https://imdb.com/title/tt32565993"
+              },
+              {
+                "category": "share",
+                "name": "The Sheep Detectives",
+                "url": "https://www.strem.io/s/movie/the-sheep-detectives-32565993"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Family",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Family"
+              },
+              {
+                "category": "Genres",
+                "name": "Mystery",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Mystery"
+              },
+              {
+                "category": "Cast",
+                "name": "Hugh Jackman",
+                "url": "stremio:///search?search=Hugh%20Jackman"
+              },
+              {
+                "category": "Cast",
+                "name": "Brett Goldstein",
+                "url": "stremio:///search?search=Brett%20Goldstein"
+              },
+              {
+                "category": "Cast",
+                "name": "Patrick Stewart",
+                "url": "stremio:///search?search=Patrick%20Stewart"
+              },
+              {
+                "category": "Writers",
+                "name": "Craig Mazin",
+                "url": "stremio:///search?search=Craig%20Mazin"
+              },
+              {
+                "category": "Writers",
+                "name": "Leonie Swann",
+                "url": "stremio:///search?search=Leonie%20Swann"
+              },
+              {
+                "category": "Directors",
+                "name": "Kyle Balda",
+                "url": "stremio:///search?search=Kyle%20Balda"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt32565993/img",
+            "name": "The Sheep Detectives",
+            "poster": "https://images.metahub.space/poster/small/tt32565993/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-08T00:00:00Z",
+            "runtime": "109 min",
+            "trailerStreams": [
+              {
+                "description": "The Sheep Detectives",
+                "ytId": "826SRt1CFbg"
+              },
+              {
+                "description": "The Sheep Detectives",
+                "ytId": "pyZI5oM6hWk"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0073629/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0073629",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A rain-soaked couple take refuge in the castle of a transvestite mad scientist from outer space who is about to unveil his greatest creation.",
+            "id": "tt0073629",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.4",
+                "url": "https://imdb.com/title/tt0073629"
+              },
+              {
+                "category": "share",
+                "name": "The Rocky Horror Picture Show",
+                "url": "https://www.strem.io/s/movie/the-rocky-horror-picture-show-0073629"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Horror",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+              },
+              {
+                "category": "Genres",
+                "name": "Musical",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Musical"
+              },
+              {
+                "category": "Cast",
+                "name": "Tim Curry",
+                "url": "stremio:///search?search=Tim%20Curry"
+              },
+              {
+                "category": "Cast",
+                "name": "Susan Sarandon",
+                "url": "stremio:///search?search=Susan%20Sarandon"
+              },
+              {
+                "category": "Cast",
+                "name": "Barry Bostwick",
+                "url": "stremio:///search?search=Barry%20Bostwick"
+              },
+              {
+                "category": "Writers",
+                "name": "Richard O'Brien",
+                "url": "stremio:///search?search=Richard%20O'Brien"
+              },
+              {
+                "category": "Writers",
+                "name": "Jim Sharman",
+                "url": "stremio:///search?search=Jim%20Sharman"
+              },
+              {
+                "category": "Directors",
+                "name": "Jim Sharman",
+                "url": "stremio:///search?search=Jim%20Sharman"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0073629/img",
+            "name": "The Rocky Horror Picture Show",
+            "poster": "https://images.metahub.space/poster/small/tt0073629/img",
+            "posterShape": "poster",
+            "releaseInfo": "1975",
+            "released": "1975-09-29T00:00:00Z",
+            "runtime": "99 min",
+            "trailerStreams": [
+              {
+                "description": "The Rocky Horror Picture Show",
+                "ytId": "LnYBwampG8U"
+              },
+              {
+                "description": "The Rocky Horror Picture Show",
+                "ytId": "ldo_spDyLKc"
+              },
+              {
+                "description": "The Rocky Horror Picture Show",
+                "ytId": "4plqh6obZW4"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0427340/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0427340",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Prince Adam discovers that the strange memories shaping his life are real when the lost Sword of Power resurfaces, forcing him to return to Eternia and challenge the tyrant who shattered his family and kingdom.",
+            "id": "tt0427340",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.5",
+                "url": "https://imdb.com/title/tt0427340"
+              },
+              {
+                "category": "share",
+                "name": "Masters of the Universe",
+                "url": "https://www.strem.io/s/movie/masters-of-the-universe-0427340"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Fantasy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Fantasy"
+              },
+              {
+                "category": "Cast",
+                "name": "Nicholas Galitzine",
+                "url": "stremio:///search?search=Nicholas%20Galitzine"
+              },
+              {
+                "category": "Cast",
+                "name": "Camila Mendes",
+                "url": "stremio:///search?search=Camila%20Mendes"
+              },
+              {
+                "category": "Cast",
+                "name": "Idris Elba",
+                "url": "stremio:///search?search=Idris%20Elba"
+              },
+              {
+                "category": "Writers",
+                "name": "Chris Butler",
+                "url": "stremio:///search?search=Chris%20Butler"
+              },
+              {
+                "category": "Writers",
+                "name": "Aaron Nee",
+                "url": "stremio:///search?search=Aaron%20Nee"
+              },
+              {
+                "category": "Writers",
+                "name": "Adam Nee",
+                "url": "stremio:///search?search=Adam%20Nee"
+              },
+              {
+                "category": "Directors",
+                "name": "Travis Knight",
+                "url": "stremio:///search?search=Travis%20Knight"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0427340/img",
+            "name": "Masters of the Universe",
+            "poster": "https://images.metahub.space/poster/small/tt0427340/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-06-05T00:00:00Z",
+            "runtime": "141 min",
+            "trailerStreams": [
+              {
+                "description": "Masters of the Universe",
+                "ytId": "rJSmz-zhDxE"
+              },
+              {
+                "description": "Masters of the Universe",
+                "ytId": "RZ4dblwZ2TY"
+              },
+              {
+                "description": "Masters of the Universe",
+                "ytId": "X21JsHLHnY8"
+              },
+              {
+                "description": "Masters of the Universe",
+                "ytId": "ZmEx7wQI6RY"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt4154796/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt4154796",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "After the devastating events of Avengers: Infinity War (2018), the universe is in ruins. With the help of remaining allies, the Avengers assemble once more in order to reverse Thanos' actions and restore balance to the universe.",
+            "id": "tt4154796",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.4",
+                "url": "https://imdb.com/title/tt4154796"
+              },
+              {
+                "category": "share",
+                "name": "Avengers: Endgame",
+                "url": "https://www.strem.io/s/movie/avengers-endgame-4154796"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Sci-Fi",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sci-Fi"
+              },
+              {
+                "category": "Cast",
+                "name": "Robert Downey Jr.",
+                "url": "stremio:///search?search=Robert%20Downey%20Jr."
+              },
+              {
+                "category": "Cast",
+                "name": "Chris Evans",
+                "url": "stremio:///search?search=Chris%20Evans"
+              },
+              {
+                "category": "Cast",
+                "name": "Mark Ruffalo",
+                "url": "stremio:///search?search=Mark%20Ruffalo"
+              },
+              {
+                "category": "Writers",
+                "name": "Christopher Markus",
+                "url": "stremio:///search?search=Christopher%20Markus"
+              },
+              {
+                "category": "Writers",
+                "name": "Stephen McFeely",
+                "url": "stremio:///search?search=Stephen%20McFeely"
+              },
+              {
+                "category": "Writers",
+                "name": "Stan Lee",
+                "url": "stremio:///search?search=Stan%20Lee"
+              },
+              {
+                "category": "Directors",
+                "name": "Anthony Russo",
+                "url": "stremio:///search?search=Anthony%20Russo"
+              },
+              {
+                "category": "Directors",
+                "name": "Joe Russo",
+                "url": "stremio:///search?search=Joe%20Russo"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt4154796/img",
+            "name": "Avengers: Endgame",
+            "poster": "https://images.metahub.space/poster/small/tt4154796/img",
+            "posterShape": "poster",
+            "releaseInfo": "2019",
+            "released": "2019-04-26T00:00:00Z",
+            "runtime": "181 min",
+            "trailerStreams": [
+              {
+                "description": "Avengers: Endgame",
+                "ytId": "L2NAh3CIdig"
+              },
+              {
+                "description": "Avengers: Endgame",
+                "ytId": "AMSITikqKiM"
+              },
+              {
+                "description": "Avengers: Endgame",
+                "ytId": "TcMBFSGVi1c"
+              },
+              {
+                "description": "Avengers: Endgame",
+                "ytId": "hA6hldpSTF8"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt31195136/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt31195136",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Centers on a temporary small-town sheriff who uncovers dark mysteries after a local bank robbery.",
+            "id": "tt31195136",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.3",
+                "url": "https://imdb.com/title/tt31195136"
+              },
+              {
+                "category": "share",
+                "name": "Normal",
+                "url": "https://www.strem.io/s/movie/normal-31195136"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Crime",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Cast",
+                "name": "Bob Odenkirk",
+                "url": "stremio:///search?search=Bob%20Odenkirk"
+              },
+              {
+                "category": "Cast",
+                "name": "Ryan Allen",
+                "url": "stremio:///search?search=Ryan%20Allen"
+              },
+              {
+                "category": "Cast",
+                "name": "Billy MacLellan",
+                "url": "stremio:///search?search=Billy%20MacLellan"
+              },
+              {
+                "category": "Writers",
+                "name": "Derek Kolstad",
+                "url": "stremio:///search?search=Derek%20Kolstad"
+              },
+              {
+                "category": "Writers",
+                "name": "Bob Odenkirk",
+                "url": "stremio:///search?search=Bob%20Odenkirk"
+              },
+              {
+                "category": "Directors",
+                "name": "Ben Wheatley",
+                "url": "stremio:///search?search=Ben%20Wheatley"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt31195136/img",
+            "name": "Normal",
+            "poster": "https://images.metahub.space/poster/small/tt31195136/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-04-17T00:00:00Z",
+            "runtime": "91 min",
+            "trailerStreams": [
+              {
+                "description": "Normal",
+                "ytId": "5OndK0w1lYY"
+              },
+              {
+                "description": "Normal",
+                "ytId": "ivpW50xnvyc"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt11378946/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt11378946",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "The early life of musician Michael Jackson, from the discovery of his talent as the lead of the Jackson Five to the artist whose creative ambition fueled a pursuit to become the biggest entertainer in the world.",
+            "id": "tt11378946",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.5",
+                "url": "https://imdb.com/title/tt11378946"
+              },
+              {
+                "category": "share",
+                "name": "Michael",
+                "url": "https://www.strem.io/s/movie/michael-11378946"
+              },
+              {
+                "category": "Genres",
+                "name": "Biography",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Biography"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "History",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=History"
+              },
+              {
+                "category": "Cast",
+                "name": "Jaafar Jackson",
+                "url": "stremio:///search?search=Jaafar%20Jackson"
+              },
+              {
+                "category": "Cast",
+                "name": "Nia Long",
+                "url": "stremio:///search?search=Nia%20Long"
+              },
+              {
+                "category": "Cast",
+                "name": "Colman Domingo",
+                "url": "stremio:///search?search=Colman%20Domingo"
+              },
+              {
+                "category": "Writers",
+                "name": "John Logan",
+                "url": "stremio:///search?search=John%20Logan"
+              },
+              {
+                "category": "Directors",
+                "name": "Antoine Fuqua",
+                "url": "stremio:///search?search=Antoine%20Fuqua"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt11378946/img",
+            "name": "Michael",
+            "poster": "https://images.metahub.space/poster/small/tt11378946/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-04-24T00:00:00Z",
+            "runtime": "128 min",
+            "trailerStreams": [
+              {
+                "description": "Michael",
+                "ytId": "k-YAcjaLuSI"
+              },
+              {
+                "description": "Michael",
+                "ytId": "mbtgEE6rkxw"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt37969426/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt37969426",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Kermit and friends return in a modern take on their classic variety show format, mixing nostalgic charm with new comedy bits while staying true to the Muppets' timeless spirit.",
+            "id": "tt37969426",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.6",
+                "url": "https://imdb.com/title/tt37969426"
+              },
+              {
+                "category": "share",
+                "name": "The Muppet Show",
+                "url": "https://www.strem.io/s/movie/the-muppet-show-37969426"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Family",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Family"
+              },
+              {
+                "category": "Genres",
+                "name": "Music",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Music"
+              },
+              {
+                "category": "Cast",
+                "name": "Bill Barretta",
+                "url": "stremio:///search?search=Bill%20Barretta"
+              },
+              {
+                "category": "Cast",
+                "name": "Dave Goelz",
+                "url": "stremio:///search?search=Dave%20Goelz"
+              },
+              {
+                "category": "Cast",
+                "name": "Eric Jacobson",
+                "url": "stremio:///search?search=Eric%20Jacobson"
+              },
+              {
+                "category": "Writers",
+                "name": "Albertina Rizzo",
+                "url": "stremio:///search?search=Albertina%20Rizzo"
+              },
+              {
+                "category": "Writers",
+                "name": "Gabe Liedman",
+                "url": "stremio:///search?search=Gabe%20Liedman"
+              },
+              {
+                "category": "Writers",
+                "name": "Nedaa Sweiss",
+                "url": "stremio:///search?search=Nedaa%20Sweiss"
+              },
+              {
+                "category": "Directors",
+                "name": "Alex Timbers",
+                "url": "stremio:///search?search=Alex%20Timbers"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt37969426/img",
+            "name": "The Muppet Show",
+            "poster": "https://images.metahub.space/poster/small/tt37969426/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-02-04T00:00:00Z",
+            "runtime": "32 min",
+            "trailerStreams": [
+              {
+                "description": "The Muppet Show",
+                "ytId": "hSLE5Psfs6U"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0120791/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0120791",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Two witch sisters, raised by their eccentric aunts in a small town, face closed-minded prejudice and a curse which threatens to prevent them ever finding lasting love.",
+            "id": "tt0120791",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.4",
+                "url": "https://imdb.com/title/tt0120791"
+              },
+              {
+                "category": "share",
+                "name": "Practical Magic",
+                "url": "https://www.strem.io/s/movie/practical-magic-0120791"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Fantasy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Fantasy"
+              },
+              {
+                "category": "Cast",
+                "name": "Sandra Bullock",
+                "url": "stremio:///search?search=Sandra%20Bullock"
+              },
+              {
+                "category": "Cast",
+                "name": "Nicole Kidman",
+                "url": "stremio:///search?search=Nicole%20Kidman"
+              },
+              {
+                "category": "Cast",
+                "name": "Stockard Channing",
+                "url": "stremio:///search?search=Stockard%20Channing"
+              },
+              {
+                "category": "Writers",
+                "name": "Alice Hoffman",
+                "url": "stremio:///search?search=Alice%20Hoffman"
+              },
+              {
+                "category": "Writers",
+                "name": "Robin Swicord",
+                "url": "stremio:///search?search=Robin%20Swicord"
+              },
+              {
+                "category": "Writers",
+                "name": "Akiva Goldsman",
+                "url": "stremio:///search?search=Akiva%20Goldsman"
+              },
+              {
+                "category": "Directors",
+                "name": "Griffin Dunne",
+                "url": "stremio:///search?search=Griffin%20Dunne"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0120791/img",
+            "name": "Practical Magic",
+            "poster": "https://images.metahub.space/poster/small/tt0120791/img",
+            "posterShape": "poster",
+            "releaseInfo": "1998",
+            "released": "1998-10-16T00:00:00Z",
+            "runtime": "104 min",
+            "trailerStreams": [
+              {
+                "description": "Practical Magic",
+                "ytId": "R7uixLkpjPs"
+              },
+              {
+                "description": "Practical Magic",
+                "ytId": "_2Lbqu0MzXo"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt36590417/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt36590417",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Sophie Birenbaum gets the lead in her high school show, but at the same time, her mom's cancer comes back.",
+            "id": "tt36590417",
+            "links": [
+              {
+                "category": "share",
+                "name": "Don't Say Good Luck",
+                "url": "https://www.strem.io/s/movie/dont-say-good-luck-36590417"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Cast",
+                "name": "Jack Champion",
+                "url": "stremio:///search?search=Jack%20Champion"
+              },
+              {
+                "category": "Cast",
+                "name": "Melanie Lynskey",
+                "url": "stremio:///search?search=Melanie%20Lynskey"
+              },
+              {
+                "category": "Cast",
+                "name": "Stephanie Beatriz",
+                "url": "stremio:///search?search=Stephanie%20Beatriz"
+              },
+              {
+                "category": "Writers",
+                "name": "Laura Hankin",
+                "url": "stremio:///search?search=Laura%20Hankin"
+              },
+              {
+                "category": "Writers",
+                "name": "Julia Hart",
+                "url": "stremio:///search?search=Julia%20Hart"
+              },
+              {
+                "category": "Writers",
+                "name": "Jordan Horowitz",
+                "url": "stremio:///search?search=Jordan%20Horowitz"
+              },
+              {
+                "category": "Directors",
+                "name": "Julia Hart",
+                "url": "stremio:///search?search=Julia%20Hart"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt36590417/img",
+            "name": "Don't Say Good Luck",
+            "poster": "https://images.metahub.space/poster/small/tt36590417/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": null,
+            "runtime": "96 min",
+            "trailerStreams": [
+              {
+                "description": "Don't Say Good Luck",
+                "ytId": "bvWqHSFkO5s"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0099371/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0099371",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A young hot-shot stock car driver gets his chance to compete at the top level.",
+            "id": "tt0099371",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.1",
+                "url": "https://imdb.com/title/tt0099371"
+              },
+              {
+                "category": "share",
+                "name": "Days of Thunder",
+                "url": "https://www.strem.io/s/movie/days-of-thunder-0099371"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Sport",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sport"
+              },
+              {
+                "category": "Cast",
+                "name": "Tom Cruise",
+                "url": "stremio:///search?search=Tom%20Cruise"
+              },
+              {
+                "category": "Cast",
+                "name": "Nicole Kidman",
+                "url": "stremio:///search?search=Nicole%20Kidman"
+              },
+              {
+                "category": "Cast",
+                "name": "Robert Duvall",
+                "url": "stremio:///search?search=Robert%20Duvall"
+              },
+              {
+                "category": "Writers",
+                "name": "Robert Towne",
+                "url": "stremio:///search?search=Robert%20Towne"
+              },
+              {
+                "category": "Writers",
+                "name": "Tom Cruise",
+                "url": "stremio:///search?search=Tom%20Cruise"
+              },
+              {
+                "category": "Directors",
+                "name": "Tony Scott",
+                "url": "stremio:///search?search=Tony%20Scott"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0099371/img",
+            "name": "Days of Thunder",
+            "poster": "https://images.metahub.space/poster/small/tt0099371/img",
+            "posterShape": "poster",
+            "releaseInfo": "1990",
+            "released": "1990-06-27T00:00:00Z",
+            "runtime": "107 min",
+            "trailerStreams": [
+              {
+                "description": "Days of Thunder",
+                "ytId": "RU2tNPd8zJA"
+              },
+              {
+                "description": "Days of Thunder",
+                "ytId": "zyTrK5tqJg0"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt33071426/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt33071426",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A happily-engaged couple is put to the test when an unexpected turn sends their wedding week off the rails.",
+            "id": "tt33071426",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.2",
+                "url": "https://imdb.com/title/tt33071426"
+              },
+              {
+                "category": "share",
+                "name": "The Drama",
+                "url": "https://www.strem.io/s/movie/the-drama-33071426"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Romance",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Romance"
+              },
+              {
+                "category": "Cast",
+                "name": "Zendaya",
+                "url": "stremio:///search?search=Zendaya"
+              },
+              {
+                "category": "Cast",
+                "name": "Robert Pattinson",
+                "url": "stremio:///search?search=Robert%20Pattinson"
+              },
+              {
+                "category": "Cast",
+                "name": "Alana Haim",
+                "url": "stremio:///search?search=Alana%20Haim"
+              },
+              {
+                "category": "Writers",
+                "name": "Kristoffer Borgli",
+                "url": "stremio:///search?search=Kristoffer%20Borgli"
+              },
+              {
+                "category": "Directors",
+                "name": "Kristoffer Borgli",
+                "url": "stremio:///search?search=Kristoffer%20Borgli"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt33071426/img",
+            "name": "The Drama",
+            "poster": "https://images.metahub.space/poster/small/tt33071426/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-04-03T00:00:00Z",
+            "runtime": "105 min",
+            "trailerStreams": [
+              {
+                "description": "The Drama",
+                "ytId": "0ZDzsH3XGFA"
+              },
+              {
+                "description": "The Drama",
+                "ytId": "6zmKcUa4Xxk"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0111161/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0111161",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "After a banker is sentenced to life in Shawshank Prison, he forms an unlikely friendship with a seasoned inmate and clings to hope amid cruelty and corruption.",
+            "id": "tt0111161",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "9.3",
+                "url": "https://imdb.com/title/tt0111161"
+              },
+              {
+                "category": "share",
+                "name": "The Shawshank Redemption",
+                "url": "https://www.strem.io/s/movie/the-shawshank-redemption-0111161"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Cast",
+                "name": "Tim Robbins",
+                "url": "stremio:///search?search=Tim%20Robbins"
+              },
+              {
+                "category": "Cast",
+                "name": "Morgan Freeman",
+                "url": "stremio:///search?search=Morgan%20Freeman"
+              },
+              {
+                "category": "Cast",
+                "name": "Bob Gunton",
+                "url": "stremio:///search?search=Bob%20Gunton"
+              },
+              {
+                "category": "Writers",
+                "name": "Stephen King",
+                "url": "stremio:///search?search=Stephen%20King"
+              },
+              {
+                "category": "Writers",
+                "name": "Frank Darabont",
+                "url": "stremio:///search?search=Frank%20Darabont"
+              },
+              {
+                "category": "Directors",
+                "name": "Frank Darabont",
+                "url": "stremio:///search?search=Frank%20Darabont"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0111161/img",
+            "name": "The Shawshank Redemption",
+            "poster": "https://images.metahub.space/poster/small/tt0111161/img",
+            "posterShape": "poster",
+            "releaseInfo": "1994",
+            "released": "1994-10-14T00:00:00Z",
+            "runtime": "142 min",
+            "trailerStreams": [
+              {
+                "description": "The Shawshank Redemption",
+                "ytId": "PLl99DlL6b4"
+              },
+              {
+                "description": "The Shawshank Redemption",
+                "ytId": "xyXX8LXiNJ4"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt29355505/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt29355505",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Woody, Buzz, Jessie and the rest of the gang's jobs are challenged when they're introduced to electronics, a new threat to playtime.",
+            "id": "tt29355505",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.4",
+                "url": "https://imdb.com/title/tt29355505"
+              },
+              {
+                "category": "share",
+                "name": "Toy Story 5",
+                "url": "https://www.strem.io/s/movie/toy-story-5-29355505"
+              },
+              {
+                "category": "Genres",
+                "name": "Animation",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Animation"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Cast",
+                "name": "Tom Hanks",
+                "url": "stremio:///search?search=Tom%20Hanks"
+              },
+              {
+                "category": "Cast",
+                "name": "Tim Allen",
+                "url": "stremio:///search?search=Tim%20Allen"
+              },
+              {
+                "category": "Cast",
+                "name": "Joan Cusack",
+                "url": "stremio:///search?search=Joan%20Cusack"
+              },
+              {
+                "category": "Writers",
+                "name": "Andrew Stanton",
+                "url": "stremio:///search?search=Andrew%20Stanton"
+              },
+              {
+                "category": "Writers",
+                "name": "McKenna Harris",
+                "url": "stremio:///search?search=McKenna%20Harris"
+              },
+              {
+                "category": "Directors",
+                "name": "McKenna Harris",
+                "url": "stremio:///search?search=McKenna%20Harris"
+              },
+              {
+                "category": "Directors",
+                "name": "Andrew Stanton",
+                "url": "stremio:///search?search=Andrew%20Stanton"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt29355505/img",
+            "name": "Toy Story 5",
+            "poster": "https://images.metahub.space/poster/small/tt29355505/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-06-19T00:00:00Z",
+            "runtime": "102 min",
+            "trailerStreams": [
+              {
+                "description": "Toy Story 5",
+                "ytId": "QftAW9TTmuQ"
+              },
+              {
+                "description": "Toy Story 5",
+                "ytId": "c51ND9Hdbw0"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt1591095/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt1591095",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A family looks to prevent evil spirits from trapping their comatose child in a realm called The Further.",
+            "id": "tt1591095",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.8",
+                "url": "https://imdb.com/title/tt1591095"
+              },
+              {
+                "category": "share",
+                "name": "Insidious",
+                "url": "https://www.strem.io/s/movie/insidious-1591095"
+              },
+              {
+                "category": "Genres",
+                "name": "Horror",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+              },
+              {
+                "category": "Genres",
+                "name": "Mystery",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Mystery"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Cast",
+                "name": "Patrick Wilson",
+                "url": "stremio:///search?search=Patrick%20Wilson"
+              },
+              {
+                "category": "Cast",
+                "name": "Rose Byrne",
+                "url": "stremio:///search?search=Rose%20Byrne"
+              },
+              {
+                "category": "Cast",
+                "name": "Ty Simpkins",
+                "url": "stremio:///search?search=Ty%20Simpkins"
+              },
+              {
+                "category": "Writers",
+                "name": "Leigh Whannell",
+                "url": "stremio:///search?search=Leigh%20Whannell"
+              },
+              {
+                "category": "Directors",
+                "name": "James Wan",
+                "url": "stremio:///search?search=James%20Wan"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt1591095/img",
+            "name": "Insidious",
+            "poster": "https://images.metahub.space/poster/small/tt1591095/img",
+            "posterShape": "poster",
+            "releaseInfo": "2011",
+            "released": "2011-04-01T00:00:00Z",
+            "runtime": "102 min",
+            "trailerStreams": [
+              {
+                "description": "Insidious",
+                "ytId": "62rpZcMYa0A"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt27681354/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt27681354",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A covert team of elite operatives are living in the shadows. When a ruthless despot steals a billion-dollar fortune, they're sent to take it back-an impossible heist that erupts into a deadly game of strategy, deception and survival.",
+            "id": "tt27681354",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.6",
+                "url": "https://imdb.com/title/tt27681354"
+              },
+              {
+                "category": "share",
+                "name": "In the Grey",
+                "url": "https://www.strem.io/s/movie/in-the-grey-27681354"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Cast",
+                "name": "Henry Cavill",
+                "url": "stremio:///search?search=Henry%20Cavill"
+              },
+              {
+                "category": "Cast",
+                "name": "Jake Gyllenhaal",
+                "url": "stremio:///search?search=Jake%20Gyllenhaal"
+              },
+              {
+                "category": "Cast",
+                "name": "Eiza González",
+                "url": "stremio:///search?search=Eiza%20Gonz%C3%A1lez"
+              },
+              {
+                "category": "Writers",
+                "name": "Guy Ritchie",
+                "url": "stremio:///search?search=Guy%20Ritchie"
+              },
+              {
+                "category": "Directors",
+                "name": "Guy Ritchie",
+                "url": "stremio:///search?search=Guy%20Ritchie"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt27681354/img",
+            "name": "In the Grey",
+            "poster": "https://images.metahub.space/poster/small/tt27681354/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-15T00:00:00Z",
+            "runtime": "97 min",
+            "trailerStreams": [
+              {
+                "description": "In the Grey",
+                "ytId": "nufP15iN4GE"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0120903/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0120903",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "In a world where mutants (evolved super-powered humans) exist and are discriminated against, two groups form for an inevitable clash: the supremacist Brotherhood, and the pacifist X-Men.",
+            "id": "tt0120903",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.3",
+                "url": "https://imdb.com/title/tt0120903"
+              },
+              {
+                "category": "share",
+                "name": "X-Men",
+                "url": "https://www.strem.io/s/movie/x-men-0120903"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Sci-Fi",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sci-Fi"
+              },
+              {
+                "category": "Cast",
+                "name": "Patrick Stewart",
+                "url": "stremio:///search?search=Patrick%20Stewart"
+              },
+              {
+                "category": "Cast",
+                "name": "Hugh Jackman",
+                "url": "stremio:///search?search=Hugh%20Jackman"
+              },
+              {
+                "category": "Cast",
+                "name": "Ian McKellen",
+                "url": "stremio:///search?search=Ian%20McKellen"
+              },
+              {
+                "category": "Writers",
+                "name": "Tom DeSanto",
+                "url": "stremio:///search?search=Tom%20DeSanto"
+              },
+              {
+                "category": "Writers",
+                "name": "Bryan Singer",
+                "url": "stremio:///search?search=Bryan%20Singer"
+              },
+              {
+                "category": "Writers",
+                "name": "David Hayter",
+                "url": "stremio:///search?search=David%20Hayter"
+              },
+              {
+                "category": "Directors",
+                "name": "Bryan Singer",
+                "url": "stremio:///search?search=Bryan%20Singer"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0120903/img",
+            "name": "X-Men",
+            "poster": "https://images.metahub.space/poster/small/tt0120903/img",
+            "posterShape": "poster",
+            "releaseInfo": "2000",
+            "released": "2000-07-14T00:00:00Z",
+            "runtime": "104 min",
+            "trailerStreams": [
+              {
+                "description": "X-Men",
+                "ytId": "s4Wqw8tqgdM"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt31170389/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt31170389",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "After the loss of her husband, a woman seeks solace with her in-laws. As one by one they transform into deadites, she comes to discover that the vows she took in life - survive even in death.",
+            "id": "tt31170389",
+            "links": [
+              {
+                "category": "share",
+                "name": "Evil Dead Burn",
+                "url": "https://www.strem.io/s/movie/evil-dead-burn-31170389"
+              },
+              {
+                "category": "Genres",
+                "name": "Fantasy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Fantasy"
+              },
+              {
+                "category": "Genres",
+                "name": "Horror",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+              },
+              {
+                "category": "Genres",
+                "name": "Mystery",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Mystery"
+              },
+              {
+                "category": "Cast",
+                "name": "Souheila Yacoub",
+                "url": "stremio:///search?search=Souheila%20Yacoub"
+              },
+              {
+                "category": "Cast",
+                "name": "Hunter Doohan",
+                "url": "stremio:///search?search=Hunter%20Doohan"
+              },
+              {
+                "category": "Cast",
+                "name": "Luciane Buchanan",
+                "url": "stremio:///search?search=Luciane%20Buchanan"
+              },
+              {
+                "category": "Writers",
+                "name": "Florent Bernard",
+                "url": "stremio:///search?search=Florent%20Bernard"
+              },
+              {
+                "category": "Writers",
+                "name": "Sam Raimi",
+                "url": "stremio:///search?search=Sam%20Raimi"
+              },
+              {
+                "category": "Writers",
+                "name": "Sébastien Vanicek",
+                "url": "stremio:///search?search=S%C3%A9bastien%20Vanicek"
+              },
+              {
+                "category": "Directors",
+                "name": "Sébastien Vanicek",
+                "url": "stremio:///search?search=S%C3%A9bastien%20Vanicek"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt31170389/img",
+            "name": "Evil Dead Burn",
+            "poster": "https://images.metahub.space/poster/small/tt31170389/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-07-10T00:00:00Z",
+            "runtime": "110 min",
+            "trailerStreams": [
+              {
+                "description": "Evil Dead Burn",
+                "ytId": "RddZObTlmA8"
+              },
+              {
+                "description": "Evil Dead Burn",
+                "ytId": "TnHby2cxJzs"
+              },
+              {
+                "description": "Evil Dead Burn",
+                "ytId": "nMzhf6qYJ4I"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://live.metahub.space/background/medium/tt43749709/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt43749709",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "See the premiere of an extended look at Grand Theft Auto VI, the next evolution in the groundbreaking Grand Theft Auto series.",
+            "id": "tt43749709",
+            "links": [
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Crime",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+              }
+            ],
+            "logo": "https://live.metahub.space/logo/medium/tt43749709/img",
+            "name": "Grand Theft Auto VI: An Extended Look",
+            "poster": "https://live.metahub.space/poster/small/tt43749709/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": null,
+            "runtime": null,
+            "trailerStreams": [
+              {
+                "ytId": "qq76pQsI1iw"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt27543632/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt27543632",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Millie a struggling young woman becomes live in maid for a wealthy couple Nina and Andrew. She enters a mansion of secrets, manipulation, and escalating psychological games that pull her into a dangerous relationship dynamic.",
+            "id": "tt27543632",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.7",
+                "url": "https://imdb.com/title/tt27543632"
+              },
+              {
+                "category": "share",
+                "name": "The Housemaid",
+                "url": "https://www.strem.io/s/movie/the-housemaid-27543632"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Mystery",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Mystery"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Cast",
+                "name": "Sydney Sweeney",
+                "url": "stremio:///search?search=Sydney%20Sweeney"
+              },
+              {
+                "category": "Cast",
+                "name": "Amanda Seyfried",
+                "url": "stremio:///search?search=Amanda%20Seyfried"
+              },
+              {
+                "category": "Cast",
+                "name": "Brandon Sklenar",
+                "url": "stremio:///search?search=Brandon%20Sklenar"
+              },
+              {
+                "category": "Writers",
+                "name": "Rebecca Sonnenshine",
+                "url": "stremio:///search?search=Rebecca%20Sonnenshine"
+              },
+              {
+                "category": "Writers",
+                "name": "Freida McFadden",
+                "url": "stremio:///search?search=Freida%20McFadden"
+              },
+              {
+                "category": "Directors",
+                "name": "Paul Feig",
+                "url": "stremio:///search?search=Paul%20Feig"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt27543632/img",
+            "name": "The Housemaid",
+            "poster": "https://images.metahub.space/poster/small/tt27543632/img",
+            "posterShape": "poster",
+            "releaseInfo": "2025",
+            "released": "2025-12-19T00:00:00Z",
+            "runtime": "131 min",
+            "trailerStreams": [
+              {
+                "description": "The Housemaid",
+                "ytId": "BqWH0KDqm3U"
+              },
+              {
+                "description": "The Housemaid",
+                "ytId": "ZvFmElCcKVg"
+              },
+              {
+                "description": "The Housemaid",
+                "ytId": "48CtX6OgU3s"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0816692/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0816692",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "When Earth becomes uninhabitable in the future, a farmer and ex-NASA pilot, Joseph Cooper, is tasked to pilot a spacecraft, along with a team of researchers, to find a new planet for humans.",
+            "id": "tt0816692",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.7",
+                "url": "https://imdb.com/title/tt0816692"
+              },
+              {
+                "category": "share",
+                "name": "Interstellar",
+                "url": "https://www.strem.io/s/movie/interstellar-0816692"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Sci-Fi",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sci-Fi"
+              },
+              {
+                "category": "Cast",
+                "name": "Matthew McConaughey",
+                "url": "stremio:///search?search=Matthew%20McConaughey"
+              },
+              {
+                "category": "Cast",
+                "name": "Anne Hathaway",
+                "url": "stremio:///search?search=Anne%20Hathaway"
+              },
+              {
+                "category": "Cast",
+                "name": "Jessica Chastain",
+                "url": "stremio:///search?search=Jessica%20Chastain"
+              },
+              {
+                "category": "Writers",
+                "name": "Jonathan Nolan",
+                "url": "stremio:///search?search=Jonathan%20Nolan"
+              },
+              {
+                "category": "Writers",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              },
+              {
+                "category": "Directors",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0816692/img",
+            "name": "Interstellar",
+            "poster": "https://images.metahub.space/poster/small/tt0816692/img",
+            "posterShape": "poster",
+            "releaseInfo": "2014",
+            "released": "2014-11-07T00:00:00Z",
+            "runtime": "169 min",
+            "trailerStreams": [
+              {
+                "description": "Interstellar",
+                "ytId": "LY19rHKAaAg"
+              },
+              {
+                "description": "Interstellar",
+                "ytId": "R8teZZ-loaI"
+              },
+              {
+                "description": "Interstellar",
+                "ytId": "ePbKGoIGAXY"
+              },
+              {
+                "description": "Interstellar",
+                "ytId": "zSWdZVtXT7E"
+              },
+              {
+                "description": "Interstellar",
+                "ytId": "827FNDpQWrQ"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt33612209/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt33612209",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Andy Sachs reunites with Miranda Priestly as they navigate their careers amid the decline of traditional magazine publishing.",
+            "id": "tt33612209",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.4",
+                "url": "https://imdb.com/title/tt33612209"
+              },
+              {
+                "category": "share",
+                "name": "The Devil Wears Prada 2",
+                "url": "https://www.strem.io/s/movie/the-devil-wears-prada-2-33612209"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Cast",
+                "name": "Meryl Streep",
+                "url": "stremio:///search?search=Meryl%20Streep"
+              },
+              {
+                "category": "Cast",
+                "name": "Anne Hathaway",
+                "url": "stremio:///search?search=Anne%20Hathaway"
+              },
+              {
+                "category": "Cast",
+                "name": "Emily Blunt",
+                "url": "stremio:///search?search=Emily%20Blunt"
+              },
+              {
+                "category": "Writers",
+                "name": "Lauren Weisberger",
+                "url": "stremio:///search?search=Lauren%20Weisberger"
+              },
+              {
+                "category": "Writers",
+                "name": "Aline Brosh McKenna",
+                "url": "stremio:///search?search=Aline%20Brosh%20McKenna"
+              },
+              {
+                "category": "Directors",
+                "name": "David Frankel",
+                "url": "stremio:///search?search=David%20Frankel"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt33612209/img",
+            "name": "The Devil Wears Prada 2",
+            "poster": "https://images.metahub.space/poster/small/tt33612209/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-01T00:00:00Z",
+            "runtime": "119 min",
+            "trailerStreams": [
+              {
+                "description": "The Devil Wears Prada 2",
+                "ytId": "PMd1at7OwiE"
+              },
+              {
+                "description": "The Devil Wears Prada 2",
+                "ytId": "e9HXmMnUEdE"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt10872600/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt10872600",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "With Spider-Man's identity now revealed, Peter asks Doctor Strange for help. When a spell goes wrong, dangerous foes from other worlds start to appear.",
+            "id": "tt10872600",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.1",
+                "url": "https://imdb.com/title/tt10872600"
+              },
+              {
+                "category": "share",
+                "name": "Spider-Man: No Way Home",
+                "url": "https://www.strem.io/s/movie/spider-man-no-way-home-10872600"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Fantasy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Fantasy"
+              },
+              {
+                "category": "Cast",
+                "name": "Tom Holland",
+                "url": "stremio:///search?search=Tom%20Holland"
+              },
+              {
+                "category": "Cast",
+                "name": "Zendaya",
+                "url": "stremio:///search?search=Zendaya"
+              },
+              {
+                "category": "Cast",
+                "name": "Benedict Cumberbatch",
+                "url": "stremio:///search?search=Benedict%20Cumberbatch"
+              },
+              {
+                "category": "Writers",
+                "name": "Chris McKenna",
+                "url": "stremio:///search?search=Chris%20McKenna"
+              },
+              {
+                "category": "Writers",
+                "name": "Erik Sommers",
+                "url": "stremio:///search?search=Erik%20Sommers"
+              },
+              {
+                "category": "Writers",
+                "name": "Stan Lee",
+                "url": "stremio:///search?search=Stan%20Lee"
+              },
+              {
+                "category": "Directors",
+                "name": "Jon Watts",
+                "url": "stremio:///search?search=Jon%20Watts"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt10872600/img",
+            "name": "Spider-Man: No Way Home",
+            "poster": "https://images.metahub.space/poster/small/tt10872600/img",
+            "posterShape": "poster",
+            "releaseInfo": "2021",
+            "released": "2021-12-17T00:00:00Z",
+            "runtime": "148 min",
+            "trailerStreams": [
+              {
+                "description": "Spider-Man: No Way Home",
+                "ytId": "1mTjfMFyPi8"
+              },
+              {
+                "description": "Spider-Man: No Way Home",
+                "ytId": "pBvH8hvnJPk"
+              },
+              {
+                "description": "Spider-Man: No Way Home",
+                "ytId": "JfVOs4VSpmA"
+              },
+              {
+                "description": "Spider-Man: No Way Home",
+                "ytId": "WgU7P6o-GkM"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt34385135/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt34385135",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Professor Se Jeong attends a biotech conference, only to witness it spiral into catastrophe when a rapidly mutating virus is unleashed. As the outbreak spreads and the infected begin to transform, authorities seal off the entire f...",
+            "id": "tt34385135",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.5",
+                "url": "https://imdb.com/title/tt34385135"
+              },
+              {
+                "category": "share",
+                "name": "Colony",
+                "url": "https://www.strem.io/s/movie/colony-34385135"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Crime",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+              },
+              {
+                "category": "Cast",
+                "name": "Jun Ji-hyun",
+                "url": "stremio:///search?search=Jun%20Ji-hyun"
+              },
+              {
+                "category": "Cast",
+                "name": "Koo Kyo-hwan",
+                "url": "stremio:///search?search=Koo%20Kyo-hwan"
+              },
+              {
+                "category": "Cast",
+                "name": "Ji Chang-wook",
+                "url": "stremio:///search?search=Ji%20Chang-wook"
+              },
+              {
+                "category": "Writers",
+                "name": "Choi Kyu-seok",
+                "url": "stremio:///search?search=Choi%20Kyu-seok"
+              },
+              {
+                "category": "Writers",
+                "name": "Yeon Sang-ho",
+                "url": "stremio:///search?search=Yeon%20Sang-ho"
+              },
+              {
+                "category": "Directors",
+                "name": "Yeon Sang-ho",
+                "url": "stremio:///search?search=Yeon%20Sang-ho"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt34385135/img",
+            "name": "Colony",
+            "poster": "https://images.metahub.space/poster/small/tt34385135/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-21T00:00:00Z",
+            "runtime": "123 min",
+            "trailerStreams": [
+              {
+                "description": "Colony",
+                "ytId": "LW6dpj1uCK8"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://live.metahub.space/background/medium/tt43383343/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt43383343",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "The Soul Reapers and Quincies clash in a final battle as Yhwach breaches the Royal Palace. When the Soul King falls, reality begins collapsing. Former enemies unite to storm the transformed palace and face a threat to all existence. A theatrical screening of the first three episodes of the anime featuring an exclusive behind‑the‑scenes conversation with creator Tite Kubo, chief series director Tomohisa Taguchi, and series director Hikaru Murata about the production.",
+            "id": "tt43383343",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "9.1",
+                "url": "https://imdb.com/title/tt43383343"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Animation",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Animation"
+              }
+            ],
+            "logo": "https://live.metahub.space/logo/medium/tt43383343/img",
+            "name": "Bleach: Thousand-Year Blood War - The Calamity",
+            "poster": "https://live.metahub.space/poster/small/tt43383343/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": null,
+            "runtime": "80 min",
+            "trailerStreams": [
+              {
+                "ytId": "DKKZ10FsSBM"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt32273171/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt32273171",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Grappling with his past after a life of crime and murder, Robin Hood finds himself gravely injured after a battle he thought would be his last. In the hands of a mysterious woman, he is offered a chance at salvation.",
+            "id": "tt32273171",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.4",
+                "url": "https://imdb.com/title/tt32273171"
+              },
+              {
+                "category": "share",
+                "name": "The Death of Robin Hood",
+                "url": "https://www.strem.io/s/movie/the-death-of-robin-hood-32273171"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Cast",
+                "name": "Hugh Jackman",
+                "url": "stremio:///search?search=Hugh%20Jackman"
+              },
+              {
+                "category": "Cast",
+                "name": "Jodie Comer",
+                "url": "stremio:///search?search=Jodie%20Comer"
+              },
+              {
+                "category": "Cast",
+                "name": "Bill Skarsgård",
+                "url": "stremio:///search?search=Bill%20Skarsg%C3%A5rd"
+              },
+              {
+                "category": "Writers",
+                "name": "Michael Sarnoski",
+                "url": "stremio:///search?search=Michael%20Sarnoski"
+              },
+              {
+                "category": "Directors",
+                "name": "Michael Sarnoski",
+                "url": "stremio:///search?search=Michael%20Sarnoski"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt32273171/img",
+            "name": "The Death of Robin Hood",
+            "poster": "https://images.metahub.space/poster/small/tt32273171/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-06-19T00:00:00Z",
+            "runtime": "123 min",
+            "trailerStreams": [
+              {
+                "description": "The Death of Robin Hood",
+                "ytId": "tlSDDuWxO_0"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt32547691/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt32547691",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "In the tense 72 hours before D-Day, General Dwight D. Eisenhower and Captain James Stagg face an impossible choice--launch the most dangerous seaborne invasion in history or risk losing the war altogether.",
+            "id": "tt32547691",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.3",
+                "url": "https://imdb.com/title/tt32547691"
+              },
+              {
+                "category": "share",
+                "name": "Pressure",
+                "url": "https://www.strem.io/s/movie/pressure-32547691"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "History",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=History"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Cast",
+                "name": "Andrew Scott",
+                "url": "stremio:///search?search=Andrew%20Scott"
+              },
+              {
+                "category": "Cast",
+                "name": "Brendan Fraser",
+                "url": "stremio:///search?search=Brendan%20Fraser"
+              },
+              {
+                "category": "Cast",
+                "name": "Kerry Condon",
+                "url": "stremio:///search?search=Kerry%20Condon"
+              },
+              {
+                "category": "Writers",
+                "name": "David Haig",
+                "url": "stremio:///search?search=David%20Haig"
+              },
+              {
+                "category": "Writers",
+                "name": "Anthony Maras",
+                "url": "stremio:///search?search=Anthony%20Maras"
+              },
+              {
+                "category": "Directors",
+                "name": "Anthony Maras",
+                "url": "stremio:///search?search=Anthony%20Maras"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt32547691/img",
+            "name": "Pressure",
+            "poster": "https://images.metahub.space/poster/small/tt32547691/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-29T00:00:00Z",
+            "runtime": "101 min",
+            "trailerStreams": [
+              {
+                "description": "Pressure",
+                "ytId": "jjdOSchcobk"
+              },
+              {
+                "description": "Pressure",
+                "ytId": "EBh1LGRwiis"
+              },
+              {
+                "description": "Pressure",
+                "ytId": "urSij5ZVhBc"
+              },
+              {
+                "description": "Pressure",
+                "ytId": "xcPgrKoXe_c"
+              },
+              {
+                "description": "Pressure",
+                "ytId": "_gQwG9Xi13g"
+              },
+              {
+                "description": "Pressure",
+                "ytId": "zdM4tdLQBg0"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0468569/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0468569",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "When a menace known as the Joker wreaks havoc and chaos on the people of Gotham, Batman, James Gordon and Harvey Dent must work together to put an end to the madness.",
+            "id": "tt0468569",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "9.1",
+                "url": "https://imdb.com/title/tt0468569"
+              },
+              {
+                "category": "share",
+                "name": "The Dark Knight",
+                "url": "https://www.strem.io/s/movie/the-dark-knight-0468569"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Crime",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Cast",
+                "name": "Christian Bale",
+                "url": "stremio:///search?search=Christian%20Bale"
+              },
+              {
+                "category": "Cast",
+                "name": "Heath Ledger",
+                "url": "stremio:///search?search=Heath%20Ledger"
+              },
+              {
+                "category": "Cast",
+                "name": "Aaron Eckhart",
+                "url": "stremio:///search?search=Aaron%20Eckhart"
+              },
+              {
+                "category": "Writers",
+                "name": "Jonathan Nolan",
+                "url": "stremio:///search?search=Jonathan%20Nolan"
+              },
+              {
+                "category": "Writers",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              },
+              {
+                "category": "Writers",
+                "name": "David S. Goyer",
+                "url": "stremio:///search?search=David%20S.%20Goyer"
+              },
+              {
+                "category": "Directors",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0468569/img",
+            "name": "The Dark Knight",
+            "poster": "https://images.metahub.space/poster/small/tt0468569/img",
+            "posterShape": "poster",
+            "releaseInfo": "2008",
+            "released": "2008-07-18T00:00:00Z",
+            "runtime": "152 min",
+            "trailerStreams": [
+              {
+                "description": "The Dark Knight",
+                "ytId": "_PZpmTj1Q8Q"
+              },
+              {
+                "description": "The Dark Knight",
+                "ytId": "LDG9bisJEaI"
+              },
+              {
+                "description": "The Dark Knight",
+                "ytId": "jXAYAN6jO5k"
+              },
+              {
+                "description": "The Dark Knight",
+                "ytId": "TQfATDZY5Y4"
+              },
+              {
+                "description": "The Dark Knight",
+                "ytId": "kmJLuwP3MbY"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt17490712/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt17490712",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "The fan favorite champions -- now joined by Johnny Cage himself -- are pitted against one another in the ultimate battle to defeat the dark rule of Shao Kahn that threatens the very existence of the Earthrealm and its defenders.",
+            "id": "tt17490712",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.3",
+                "url": "https://imdb.com/title/tt17490712"
+              },
+              {
+                "category": "share",
+                "name": "Mortal Kombat II",
+                "url": "https://www.strem.io/s/movie/mortal-kombat-ii-17490712"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Fantasy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Fantasy"
+              },
+              {
+                "category": "Cast",
+                "name": "Adeline Rudolph",
+                "url": "stremio:///search?search=Adeline%20Rudolph"
+              },
+              {
+                "category": "Cast",
+                "name": "Karl Urban",
+                "url": "stremio:///search?search=Karl%20Urban"
+              },
+              {
+                "category": "Cast",
+                "name": "Martyn Ford",
+                "url": "stremio:///search?search=Martyn%20Ford"
+              },
+              {
+                "category": "Writers",
+                "name": "Jeremy Slater",
+                "url": "stremio:///search?search=Jeremy%20Slater"
+              },
+              {
+                "category": "Writers",
+                "name": "Ed Boon",
+                "url": "stremio:///search?search=Ed%20Boon"
+              },
+              {
+                "category": "Writers",
+                "name": "John Tobias",
+                "url": "stremio:///search?search=John%20Tobias"
+              },
+              {
+                "category": "Directors",
+                "name": "Simon McQuoid",
+                "url": "stremio:///search?search=Simon%20McQuoid"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt17490712/img",
+            "name": "Mortal Kombat II",
+            "poster": "https://images.metahub.space/poster/small/tt17490712/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-08T00:00:00Z",
+            "runtime": "116 min",
+            "trailerStreams": [
+              {
+                "description": "Mortal Kombat II",
+                "ytId": "qGyIEis2T2o"
+              },
+              {
+                "description": "Mortal Kombat II",
+                "ytId": "zva2PQ-ud5Y"
+              },
+              {
+                "description": "Mortal Kombat II",
+                "ytId": "b24oG7qCwp4"
+              },
+              {
+                "description": "Mortal Kombat II",
+                "ytId": "ZdC5mFHPldg"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt1375666/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt1375666",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A thief who steals corporate secrets through the use of dream-sharing technology is given the inverse task of planting an idea into the mind of a CEO, but his tragic past may doom the project and his team to disaster.",
+            "id": "tt1375666",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.8",
+                "url": "https://imdb.com/title/tt1375666"
+              },
+              {
+                "category": "share",
+                "name": "Inception",
+                "url": "https://www.strem.io/s/movie/inception-1375666"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Sci-Fi",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sci-Fi"
+              },
+              {
+                "category": "Cast",
+                "name": "Leonardo DiCaprio",
+                "url": "stremio:///search?search=Leonardo%20DiCaprio"
+              },
+              {
+                "category": "Cast",
+                "name": "Joseph Gordon-Levitt",
+                "url": "stremio:///search?search=Joseph%20Gordon-Levitt"
+              },
+              {
+                "category": "Cast",
+                "name": "Elliot Page",
+                "url": "stremio:///search?search=Elliot%20Page"
+              },
+              {
+                "category": "Writers",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              },
+              {
+                "category": "Directors",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt1375666/img",
+            "name": "Inception",
+            "poster": "https://images.metahub.space/poster/small/tt1375666/img",
+            "posterShape": "poster",
+            "releaseInfo": "2010",
+            "released": "2010-07-16T00:00:00Z",
+            "runtime": "148 min",
+            "trailerStreams": [
+              {
+                "description": "Inception",
+                "ytId": "cdx31ak4KbQ"
+              },
+              {
+                "description": "Inception",
+                "ytId": "JE9z-gy4De4"
+              },
+              {
+                "description": "Inception",
+                "ytId": "Jvurpf91omw"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt32332915/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt32332915",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Elliot lands a job for Erika Tracy as her sexual muse.",
+            "id": "tt32332915",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.4",
+                "url": "https://imdb.com/title/tt32332915"
+              },
+              {
+                "category": "share",
+                "name": "I Want Your Sex",
+                "url": "https://www.strem.io/s/movie/i-want-your-sex-32332915"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Romance",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Romance"
+              },
+              {
+                "category": "Cast",
+                "name": "Olivia Wilde",
+                "url": "stremio:///search?search=Olivia%20Wilde"
+              },
+              {
+                "category": "Cast",
+                "name": "Cooper Hoffman",
+                "url": "stremio:///search?search=Cooper%20Hoffman"
+              },
+              {
+                "category": "Cast",
+                "name": "Mason Gooding",
+                "url": "stremio:///search?search=Mason%20Gooding"
+              },
+              {
+                "category": "Writers",
+                "name": "Gregg Araki",
+                "url": "stremio:///search?search=Gregg%20Araki"
+              },
+              {
+                "category": "Writers",
+                "name": "Karley Sciortino",
+                "url": "stremio:///search?search=Karley%20Sciortino"
+              },
+              {
+                "category": "Directors",
+                "name": "Gregg Araki",
+                "url": "stremio:///search?search=Gregg%20Araki"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt32332915/img",
+            "name": "I Want Your Sex",
+            "poster": "https://images.metahub.space/poster/small/tt32332915/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-07-31T00:00:00Z",
+            "runtime": "90 min",
+            "trailerStreams": [
+              {
+                "description": "I Want Your Sex",
+                "ytId": "q5oWCPS3akw"
+              },
+              {
+                "description": "I Want Your Sex",
+                "ytId": "kjkTmTmC1iA"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt33296751/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt33296751",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A talented piano tuner who suffers from hyperacusis discovers an unexpected aptitude for cracking safes, turning his life upside down.",
+            "id": "tt33296751",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.2",
+                "url": "https://imdb.com/title/tt33296751"
+              },
+              {
+                "category": "share",
+                "name": "Tuner",
+                "url": "https://www.strem.io/s/movie/tuner-33296751"
+              },
+              {
+                "category": "Genres",
+                "name": "Crime",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Music",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Music"
+              },
+              {
+                "category": "Cast",
+                "name": "Leo Woodall",
+                "url": "stremio:///search?search=Leo%20Woodall"
+              },
+              {
+                "category": "Cast",
+                "name": "Dustin Hoffman",
+                "url": "stremio:///search?search=Dustin%20Hoffman"
+              },
+              {
+                "category": "Cast",
+                "name": "Alisen Richmond-Peck",
+                "url": "stremio:///search?search=Alisen%20Richmond-Peck"
+              },
+              {
+                "category": "Writers",
+                "name": "Daniel Roher",
+                "url": "stremio:///search?search=Daniel%20Roher"
+              },
+              {
+                "category": "Writers",
+                "name": "Robert Ramsey",
+                "url": "stremio:///search?search=Robert%20Ramsey"
+              },
+              {
+                "category": "Directors",
+                "name": "Daniel Roher",
+                "url": "stremio:///search?search=Daniel%20Roher"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt33296751/img",
+            "name": "Tuner",
+            "poster": "https://images.metahub.space/poster/small/tt33296751/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-29T00:00:00Z",
+            "runtime": "108 min",
+            "trailerStreams": [
+              {
+                "description": "Tuner",
+                "ytId": "HYxzyLVJORA"
+              },
+              {
+                "description": "Tuner",
+                "ytId": "XiehvETTjTQ"
+              },
+              {
+                "description": "Tuner",
+                "ytId": "zW1cRf5X8Hk"
+              },
+              {
+                "description": "Tuner",
+                "ytId": "rdlOZhl-nSA"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt1341338/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt1341338",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A \"Man From the Future\" arrives at a diner in Los Angeles where he must recruit the precise combination of disgruntled patrons to join him on a one-night quest to save the world from the terminal threat of a rogue artificial intel...",
+            "id": "tt1341338",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.0",
+                "url": "https://imdb.com/title/tt1341338"
+              },
+              {
+                "category": "share",
+                "name": "Good Luck, Have Fun, Don't Die",
+                "url": "https://www.strem.io/s/movie/good-luck-have-fun-dont-die-1341338"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Comedy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+              },
+              {
+                "category": "Cast",
+                "name": "Sam Rockwell",
+                "url": "stremio:///search?search=Sam%20Rockwell"
+              },
+              {
+                "category": "Cast",
+                "name": "Juno Temple",
+                "url": "stremio:///search?search=Juno%20Temple"
+              },
+              {
+                "category": "Cast",
+                "name": "Haley Lu Richardson",
+                "url": "stremio:///search?search=Haley%20Lu%20Richardson"
+              },
+              {
+                "category": "Writers",
+                "name": "Matthew Robinson",
+                "url": "stremio:///search?search=Matthew%20Robinson"
+              },
+              {
+                "category": "Directors",
+                "name": "Gore Verbinski",
+                "url": "stremio:///search?search=Gore%20Verbinski"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt1341338/img",
+            "name": "Good Luck, Have Fun, Don't Die",
+            "poster": "https://images.metahub.space/poster/small/tt1341338/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-02-13T00:00:00Z",
+            "runtime": "134 min",
+            "trailerStreams": [
+              {
+                "description": "Good Luck, Have Fun, Don't Die",
+                "ytId": "Nm4WbapDzDQ"
+              },
+              {
+                "description": "Good Luck, Have Fun, Don't Die",
+                "ytId": "CaSxNAZUKsM"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0482571/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0482571",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Two friends and fellow magicians become bitter enemies after a sudden tragedy. As they devote themselves to this rivalry, they make sacrifices that bring them fame but, with terrible consequences.",
+            "id": "tt0482571",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.5",
+                "url": "https://imdb.com/title/tt0482571"
+              },
+              {
+                "category": "share",
+                "name": "The Prestige",
+                "url": "https://www.strem.io/s/movie/the-prestige-0482571"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "Mystery",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Mystery"
+              },
+              {
+                "category": "Genres",
+                "name": "Sci-Fi",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sci-Fi"
+              },
+              {
+                "category": "Cast",
+                "name": "Christian Bale",
+                "url": "stremio:///search?search=Christian%20Bale"
+              },
+              {
+                "category": "Cast",
+                "name": "Hugh Jackman",
+                "url": "stremio:///search?search=Hugh%20Jackman"
+              },
+              {
+                "category": "Cast",
+                "name": "Scarlett Johansson",
+                "url": "stremio:///search?search=Scarlett%20Johansson"
+              },
+              {
+                "category": "Writers",
+                "name": "Jonathan Nolan",
+                "url": "stremio:///search?search=Jonathan%20Nolan"
+              },
+              {
+                "category": "Writers",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              },
+              {
+                "category": "Writers",
+                "name": "Christopher Priest",
+                "url": "stremio:///search?search=Christopher%20Priest"
+              },
+              {
+                "category": "Directors",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0482571/img",
+            "name": "The Prestige",
+            "poster": "https://images.metahub.space/poster/small/tt0482571/img",
+            "posterShape": "poster",
+            "releaseInfo": "2006",
+            "released": "2006-10-20T00:00:00Z",
+            "runtime": "130 min",
+            "trailerStreams": [
+              {
+                "description": "The Prestige",
+                "ytId": "ObGVA1WOqyE"
+              },
+              {
+                "description": "The Prestige",
+                "ytId": "ijXruSzfGEc"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt0089469/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt0089469",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A young man must stop the Lord of Darkness from destroying daylight and marrying the woman he loves.",
+            "id": "tt0089469",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "6.3",
+                "url": "https://imdb.com/title/tt0089469"
+              },
+              {
+                "category": "share",
+                "name": "Legend",
+                "url": "https://www.strem.io/s/movie/legend-0089469"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Fantasy",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Fantasy"
+              },
+              {
+                "category": "Genres",
+                "name": "Romance",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Romance"
+              },
+              {
+                "category": "Cast",
+                "name": "Tom Cruise",
+                "url": "stremio:///search?search=Tom%20Cruise"
+              },
+              {
+                "category": "Cast",
+                "name": "Mia Sara",
+                "url": "stremio:///search?search=Mia%20Sara"
+              },
+              {
+                "category": "Cast",
+                "name": "Tim Curry",
+                "url": "stremio:///search?search=Tim%20Curry"
+              },
+              {
+                "category": "Writers",
+                "name": "William Hjortsberg",
+                "url": "stremio:///search?search=William%20Hjortsberg"
+              },
+              {
+                "category": "Directors",
+                "name": "Ridley Scott",
+                "url": "stremio:///search?search=Ridley%20Scott"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt0089469/img",
+            "name": "Legend",
+            "poster": "https://images.metahub.space/poster/small/tt0089469/img",
+            "posterShape": "poster",
+            "releaseInfo": "1985",
+            "released": "1986-04-18T00:00:00Z",
+            "runtime": "94 min",
+            "trailerStreams": [
+              {
+                "description": "Legend",
+                "ytId": "ybnoJErfDas"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt35672862/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt35672862",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A horror writer visits an Irish inn to scatter his parents' ashes, unaware the property is said to be haunted by a witch.",
+            "id": "tt35672862",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.3",
+                "url": "https://imdb.com/title/tt35672862"
+              },
+              {
+                "category": "share",
+                "name": "Hokum",
+                "url": "https://www.strem.io/s/movie/hokum-35672862"
+              },
+              {
+                "category": "Genres",
+                "name": "Horror",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+              },
+              {
+                "category": "Genres",
+                "name": "Thriller",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+              },
+              {
+                "category": "Cast",
+                "name": "Adam Scott",
+                "url": "stremio:///search?search=Adam%20Scott"
+              },
+              {
+                "category": "Cast",
+                "name": "Peter Coonan",
+                "url": "stremio:///search?search=Peter%20Coonan"
+              },
+              {
+                "category": "Cast",
+                "name": "David Wilmot",
+                "url": "stremio:///search?search=David%20Wilmot"
+              },
+              {
+                "category": "Writers",
+                "name": "Damian McCarthy",
+                "url": "stremio:///search?search=Damian%20McCarthy"
+              },
+              {
+                "category": "Directors",
+                "name": "Damian McCarthy",
+                "url": "stremio:///search?search=Damian%20McCarthy"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt35672862/img",
+            "name": "Hokum",
+            "poster": "https://images.metahub.space/poster/small/tt35672862/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-05-01T00:00:00Z",
+            "runtime": "108 min",
+            "trailerStreams": [
+              {
+                "description": "Hokum",
+                "ytId": "qU_i5e48KzQ"
+              },
+              {
+                "description": "Hokum",
+                "ytId": "x94TNKhMN94"
+              },
+              {
+                "description": "Hokum",
+                "ytId": "jP2nDyQWBOU"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt15398776/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt15398776",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "A dramatization of the life story of J. Robert Oppenheimer, the physicist who had a large hand in the development of the atomic bombs that brought an end to World War II.",
+            "id": "tt15398776",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.2",
+                "url": "https://imdb.com/title/tt15398776"
+              },
+              {
+                "category": "share",
+                "name": "Oppenheimer",
+                "url": "https://www.strem.io/s/movie/oppenheimer-15398776"
+              },
+              {
+                "category": "Genres",
+                "name": "Biography",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Biography"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Genres",
+                "name": "History",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=History"
+              },
+              {
+                "category": "Cast",
+                "name": "Cillian Murphy",
+                "url": "stremio:///search?search=Cillian%20Murphy"
+              },
+              {
+                "category": "Cast",
+                "name": "Emily Blunt",
+                "url": "stremio:///search?search=Emily%20Blunt"
+              },
+              {
+                "category": "Cast",
+                "name": "Matt Damon",
+                "url": "stremio:///search?search=Matt%20Damon"
+              },
+              {
+                "category": "Writers",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              },
+              {
+                "category": "Writers",
+                "name": "Kai Bird",
+                "url": "stremio:///search?search=Kai%20Bird"
+              },
+              {
+                "category": "Writers",
+                "name": "Martin Sherwin",
+                "url": "stremio:///search?search=Martin%20Sherwin"
+              },
+              {
+                "category": "Directors",
+                "name": "Christopher Nolan",
+                "url": "stremio:///search?search=Christopher%20Nolan"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt15398776/img",
+            "name": "Oppenheimer",
+            "poster": "https://images.metahub.space/poster/small/tt15398776/img",
+            "posterShape": "poster",
+            "releaseInfo": "2023",
+            "released": "2023-07-21T00:00:00Z",
+            "runtime": "181 min",
+            "trailerStreams": [
+              {
+                "description": "Oppenheimer",
+                "ytId": "qiuSBWVdgLI"
+              },
+              {
+                "description": "Oppenheimer",
+                "ytId": "uYPbbksJxIg"
+              },
+              {
+                "description": "Oppenheimer",
+                "ytId": "bK6ldnjE3Y0"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt31514146/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt31514146",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "John Davidson: diagnosed with Tourette's syndrome at a young age which alienated him from his peers, he struggled with a condition few people had witnessed.",
+            "id": "tt31514146",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "8.4",
+                "url": "https://imdb.com/title/tt31514146"
+              },
+              {
+                "category": "share",
+                "name": "I Swear",
+                "url": "https://www.strem.io/s/movie/i-swear-31514146"
+              },
+              {
+                "category": "Genres",
+                "name": "Biography",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Biography"
+              },
+              {
+                "category": "Genres",
+                "name": "Drama",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+              },
+              {
+                "category": "Cast",
+                "name": "Robert Aramayo",
+                "url": "stremio:///search?search=Robert%20Aramayo"
+              },
+              {
+                "category": "Cast",
+                "name": "Maxine Peake",
+                "url": "stremio:///search?search=Maxine%20Peake"
+              },
+              {
+                "category": "Cast",
+                "name": "Somerled Campbell",
+                "url": "stremio:///search?search=Somerled%20Campbell"
+              },
+              {
+                "category": "Writers",
+                "name": "Kirk Jones",
+                "url": "stremio:///search?search=Kirk%20Jones"
+              },
+              {
+                "category": "Directors",
+                "name": "Kirk Jones",
+                "url": "stremio:///search?search=Kirk%20Jones"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt31514146/img",
+            "name": "I Swear",
+            "poster": "https://images.metahub.space/poster/small/tt31514146/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-04-24T00:00:00Z",
+            "runtime": "121 min",
+            "trailerStreams": [
+              {
+                "description": "I Swear",
+                "ytId": "10ynpduiRpM"
+              },
+              {
+                "description": "I Swear",
+                "ytId": "7vwC2GKi3iA"
+              },
+              {
+                "description": "I Swear",
+                "ytId": "oeWqQN3snCU"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt18259538/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt18259538",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "Avatar Aang, the world's last Airbender, learns of an ancient power that could save his culture from extinction. With the help of his friends, he embarks on a global quest to find it before it falls into the wrong hands.",
+            "id": "tt18259538",
+            "links": [
+              {
+                "category": "share",
+                "name": "Avatar Aang: The Last Airbender",
+                "url": "https://www.strem.io/s/movie/avatar-aang-the-last-airbender-18259538"
+              },
+              {
+                "category": "Genres",
+                "name": "Animation",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Animation"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Cast",
+                "name": "Eric Nam",
+                "url": "stremio:///search?search=Eric%20Nam"
+              },
+              {
+                "category": "Cast",
+                "name": "Dave Bautista",
+                "url": "stremio:///search?search=Dave%20Bautista"
+              },
+              {
+                "category": "Cast",
+                "name": "Jessica Matten",
+                "url": "stremio:///search?search=Jessica%20Matten"
+              },
+              {
+                "category": "Writers",
+                "name": "Kenneth Lin",
+                "url": "stremio:///search?search=Kenneth%20Lin"
+              },
+              {
+                "category": "Writers",
+                "name": "Michael Dante DiMartino",
+                "url": "stremio:///search?search=Michael%20Dante%20DiMartino"
+              },
+              {
+                "category": "Writers",
+                "name": "Tim Hedrick",
+                "url": "stremio:///search?search=Tim%20Hedrick"
+              },
+              {
+                "category": "Directors",
+                "name": "Steve Ahn",
+                "url": "stremio:///search?search=Steve%20Ahn"
+              },
+              {
+                "category": "Directors",
+                "name": "William Mata",
+                "url": "stremio:///search?search=William%20Mata"
+              },
+              {
+                "category": "Directors",
+                "name": "Lauren Montgomery",
+                "url": "stremio:///search?search=Lauren%20Montgomery"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt18259538/img",
+            "name": "Avatar Aang: The Last Airbender",
+            "poster": "https://images.metahub.space/poster/small/tt18259538/img",
+            "posterShape": "poster",
+            "releaseInfo": "2026",
+            "released": "2026-07-25T00:00:00Z",
+            "runtime": "99 min",
+            "trailerStreams": [
+              {
+                "description": "Avatar Aang: The Last Airbender",
+                "ytId": "7b20GRFZBFE"
+              }
+            ],
+            "type": "movie"
+          },
+          {
+            "background": "https://images.metahub.space/background/medium/tt20969586/img",
+            "behaviorHints": {
+              "defaultVideoId": "tt20969586",
+              "featuredVideoId": null,
+              "hasScheduledVideos": false
+            },
+            "description": "After finding themselves ensnared in a death trap, an unconventional team of antiheroes must go on a dangerous mission that will force them to confront the darkest corners of their pasts.",
+            "id": "tt20969586",
+            "links": [
+              {
+                "category": "imdb",
+                "name": "7.1",
+                "url": "https://imdb.com/title/tt20969586"
+              },
+              {
+                "category": "share",
+                "name": "Thunderbolts*",
+                "url": "https://www.strem.io/s/movie/thunderbolts-20969586"
+              },
+              {
+                "category": "Genres",
+                "name": "Action",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+              },
+              {
+                "category": "Genres",
+                "name": "Adventure",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+              },
+              {
+                "category": "Genres",
+                "name": "Crime",
+                "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Crime"
+              },
+              {
+                "category": "Cast",
+                "name": "Florence Pugh",
+                "url": "stremio:///search?search=Florence%20Pugh"
+              },
+              {
+                "category": "Cast",
+                "name": "Sebastian Stan",
+                "url": "stremio:///search?search=Sebastian%20Stan"
+              },
+              {
+                "category": "Cast",
+                "name": "Julia Louis-Dreyfus",
+                "url": "stremio:///search?search=Julia%20Louis-Dreyfus"
+              },
+              {
+                "category": "Writers",
+                "name": "Eric Pearson",
+                "url": "stremio:///search?search=Eric%20Pearson"
+              },
+              {
+                "category": "Writers",
+                "name": "Joanna Calo",
+                "url": "stremio:///search?search=Joanna%20Calo"
+              },
+              {
+                "category": "Writers",
+                "name": "Kurt Busiek",
+                "url": "stremio:///search?search=Kurt%20Busiek"
+              },
+              {
+                "category": "Directors",
+                "name": "Jake Schreier",
+                "url": "stremio:///search?search=Jake%20Schreier"
+              }
+            ],
+            "logo": "https://images.metahub.space/logo/medium/tt20969586/img",
+            "name": "Thunderbolts*",
+            "poster": "https://images.metahub.space/poster/small/tt20969586/img",
+            "posterShape": "poster",
+            "releaseInfo": "2025",
+            "released": "2025-05-02T00:00:00Z",
+            "runtime": "127 min",
+            "trailerStreams": [
+              {
+                "description": "Thunderbolts*",
+                "ytId": "7rs_HhSA7XY"
+              },
+              {
+                "description": "Thunderbolts*",
+                "ytId": "-sAOWhvheK8"
+              },
+              {
+                "description": "Thunderbolts*",
+                "ytId": "BJk4wYL-_Hw"
+              },
+              {
+                "description": "Thunderbolts*",
+                "ytId": "bqnRzjPfb5A"
+              },
+              {
+                "description": "Thunderbolts*",
+                "ytId": "hUUszE29jS0"
+              },
+              {
+                "description": "Thunderbolts*",
+                "ytId": "8IiAm7KUuoY"
+              },
+              {
+                "description": "Thunderbolts*",
+                "ytId": "v-94Snw-H4o"
+              }
+            ],
+            "type": "movie"
+          }
+        ],
+        "type": "Ready"
+      },
+      "request": {
+        "base": "https://v3-cinemeta.strem.io/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "top",
+          "resource": "catalog",
+          "type": "movie"
+        }
+      }
+    }
+  ],
+  "selectable": {
+    "catalogs": [
+      {
+        "catalog": "Popular",
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "top",
+            "resource": "catalog",
+            "type": "movie"
+          }
+        },
+        "selected": true
+      },
+      {
+        "catalog": "New",
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [
+              [
+                "genre",
+                "2026"
+              ]
+            ],
+            "id": "year",
+            "resource": "catalog",
+            "type": "movie"
+          }
+        },
+        "selected": false
+      },
+      {
+        "catalog": "Featured",
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "imdbRating",
+            "resource": "catalog",
+            "type": "movie"
+          }
+        },
+        "selected": false
+      },
+      {
+        "catalog": "publicdomainmovies",
+        "request": {
+          "base": "https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "publicdomainmovies",
+            "resource": "catalog",
+            "type": "movie"
+          }
+        },
+        "selected": false
+      }
+    ],
+    "extra": [
+      {
+        "isRequired": false,
+        "name": "genre",
+        "options": [
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": true,
+            "value": null
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Action"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Action"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Adventure"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Adventure"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Animation"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Animation"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Biography"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Biography"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Comedy"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Comedy"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Crime"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Crime"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Documentary"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Documentary"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Drama"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Drama"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Family"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Family"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Fantasy"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Fantasy"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "History"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "History"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Horror"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Horror"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Mystery"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Mystery"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Romance"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Romance"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Sci-Fi"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Sci-Fi"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Sport"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Sport"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Thriller"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Thriller"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "War"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "War"
+          },
+          {
+            "request": {
+              "base": "https://v3-cinemeta.strem.io/manifest.json",
+              "path": {
+                "extra": [
+                  [
+                    "genre",
+                    "Western"
+                  ]
+                ],
+                "id": "top",
+                "resource": "catalog",
+                "type": "movie"
+              }
+            },
+            "selected": false,
+            "value": "Western"
+          }
+        ]
+      }
+    ],
+    "nextPage": {
+      "request": {
+        "base": "https://v3-cinemeta.strem.io/manifest.json",
+        "path": {
+          "extra": [
+            [
+              "skip",
+              "50"
+            ]
+          ],
+          "id": "top",
+          "resource": "catalog",
+          "type": "movie"
+        }
+      }
+    },
+    "types": [
+      {
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "top",
+            "resource": "catalog",
+            "type": "movie"
+          }
+        },
+        "selected": true,
+        "type": "movie"
+      },
+      {
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "top",
+            "resource": "catalog",
+            "type": "series"
+          }
+        },
+        "selected": false,
+        "type": "series"
+      },
+      {
+        "request": {
+          "base": "https://v3-channels.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "top",
+            "resource": "catalog",
+            "type": "channel"
+          }
+        },
+        "selected": false,
+        "type": "channel"
+      }
+    ]
+  },
+  "selected": {
+    "request": {
+      "base": "https://v3-cinemeta.strem.io/manifest.json",
+      "path": {
+        "extra": [],
+        "id": "top",
+        "resource": "catalog",
+        "type": "movie"
+      }
+    }
+  }
+}
