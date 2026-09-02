@@ -971,6 +971,54 @@ void main() {
       expect(LibraryState.fromJson({}).isLoaded, isFalse);
     });
 
+    test('tells an empty type filter from an empty library', () {
+      expect(state.hasTypeFilter, isFalse);
+      expect(state.isFilteredEmpty, isFalse);
+      expect(state.isLibraryEmpty, isFalse);
+
+      final all = Map<String, dynamic>.from(json)..['catalog'] = <Object>[];
+      final libraryEmpty = LibraryState.fromJson(all);
+      expect(libraryEmpty.isEmpty, isTrue);
+      expect(libraryEmpty.isFilteredEmpty, isFalse);
+      expect(libraryEmpty.isLibraryEmpty, isTrue);
+
+      // The engine's state after the last movie was removed while the
+      // movie filter was loaded: nothing matches, the library still has
+      // series, and `selectable.types` lost the movie entry.
+      final filtered = LibraryState.fromJson({
+        ...json,
+        'selected': {
+          'request': {'type': 'movie', 'sort': 'lastwatched', 'page': 1},
+        },
+        'selectable': {
+          ...json['selectable'] as Map<String, dynamic>,
+          'types': [
+            {
+              'type': null,
+              'selected': false,
+              'request': {'type': null, 'sort': 'lastwatched', 'page': 1},
+            },
+            {
+              'type': 'series',
+              'selected': false,
+              'request': {'type': 'series', 'sort': 'lastwatched', 'page': 1},
+            },
+          ],
+        },
+        'catalog': <Object>[],
+      });
+      expect(filtered.hasTypeFilter, isTrue);
+      expect(filtered.isEmpty, isTrue);
+      expect(filtered.isFilteredEmpty, isTrue);
+      expect(filtered.isLibraryEmpty, isFalse);
+      expect(filtered.selectable.selectedType, isNull);
+
+      final unloaded = LibraryState.fromJson({'selected': null});
+      expect(unloaded.hasTypeFilter, isFalse);
+      expect(unloaded.isFilteredEmpty, isFalse);
+      expect(unloaded.isLibraryEmpty, isTrue);
+    });
+
     test('LibraryRequest defaults and round-trips the engine JSON', () {
       expect(
         LibraryRequest.fromJson({'type': 'movie'}),

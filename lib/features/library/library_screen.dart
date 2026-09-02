@@ -192,15 +192,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
             ],
           ),
+          // The filter row stays as long as the library has anything in it:
+          // a type filter that matches nothing must keep "All" one tap away.
           body: Column(
             children: [
-              if (state != null && state.isLoaded && !state.isEmpty)
+              if (state != null && state.isLoaded && !state.isLibraryEmpty)
                 _FilterRow(selectable: state.selectable, onSelect: _select),
-              if (!isLoggedIn && state != null && !state.isEmpty)
+              if (!isLoggedIn && state != null && !state.isLibraryEmpty)
                 const _SignInHint(),
               Expanded(
                 child: state == null || !state.isLoaded
                     ? const Center(child: CircularProgressIndicator())
+                    : state.isFilteredEmpty
+                    ? _EmptyFilter(type: state.selected!.type!)
                     : state.isEmpty
                     ? _EmptyLibrary(isLoggedIn: isLoggedIn)
                     : _buildGrid(state),
@@ -380,6 +384,53 @@ class _SignInHint extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown when the selected type matches nothing while the library is not
+/// empty; the filter row above it still offers "All".
+class _EmptyFilter extends StatelessWidget {
+  const _EmptyFilter({required this.type});
+
+  final String type;
+
+  /// The message for [type] (`'No movies in your library'`; an acronym
+  /// such as `TV` keeps its case).
+  static String message(String type) {
+    final label = contentTypeLabel(type);
+    final word = label == label.toUpperCase() ? label : label.toLowerCase();
+    return 'No $word in your library';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.filter_list_off_outlined,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(message(type), style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Pick "${LibraryScreen.allTypesLabel}" above to see every '
+              'title you have.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

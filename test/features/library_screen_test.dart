@@ -286,6 +286,102 @@ void main() {
     );
   });
 
+  /// The engine's state after the last title of [type] was removed while
+  /// that type was the filter: nothing matches, but the library still has
+  /// [remainingTypes], so `selectable.types` offers All plus those (none
+  /// selected, as `selectable_update` recomputes them from the items left).
+  Map<String, dynamic> emptyFilter(
+    String type, {
+    List<String> remainingTypes = const ['series'],
+  }) {
+    final fixture = loadLibraryFixture();
+    final request = LibraryRequest(type: type);
+    Map<String, dynamic> option(String? type) => {
+      'type': type,
+      'selected': false,
+      'request': LibraryRequest(type: type).toJson(),
+    };
+    return {
+      ...fixture,
+      'selected': {'request': request.toJson()},
+      'selectable': {
+        ...fixture['selectable'] as Map<String, dynamic>,
+        'types': [
+          option(null),
+          for (final type in remainingTypes) option(type),
+        ],
+      },
+      'catalog': <Object>[],
+    };
+  }
+
+  group('an empty type filter', () {
+    testWidgets('keeps the filter row and offers All', (tester) async {
+      final fixture = emptyFilter('movie');
+      final core = fakeCore(library: fixture);
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No movies in your library'), findsOneWidget);
+      expect(find.text('Your library is empty'), findsNothing);
+      expect(find.byType(LibraryItemTile), findsNothing);
+      final segments = find.byType(SegmentedButton<int>);
+      expect(segments, findsOneWidget);
+      for (final label in ['All', 'Series']) {
+        expect(
+          find.descendant(of: segments, matching: find.text(label)),
+          findsOneWidget,
+        );
+      }
+      expect(find.byType(DropdownMenu<int>), findsOneWidget);
+      // The anonymous library is not empty, so the inline hint stays.
+      expect(find.textContaining('Sign in to sync'), findsOneWidget);
+
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+
+      final types = LibraryState.fromJson(fixture).selectable.types;
+      expect(types[0].type, isNull);
+      expect(loads(core), hasLength(2));
+      expect(loads(core).last.field, CoreField.library);
+      expect(
+        loads(core).last.action,
+        CoreActions.loadLibrary(types[0].request).action,
+      );
+      expect(
+        loads(core).last.action['args']['args']['request'],
+        (fixture['selectable']['types'] as List)[0]['request'],
+      );
+    });
+
+    testWidgets('on a phone the chips stay too, and the label follows the '
+        'type', (tester) async {
+      useNarrowScreen(tester);
+      final fixture = emptyFilter('tv', remainingTypes: ['movie', 'series']);
+      final core = fakeCore(library: fixture);
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No TV in your library'), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNWidgets(3));
+      for (final chip in tester.widgetList<ChoiceChip>(
+        find.byType(ChoiceChip),
+      )) {
+        expect(chip.selected, isFalse);
+      }
+
+      await tester.tap(find.text('Series'));
+      await tester.pumpAndSettle();
+
+      final types = LibraryState.fromJson(fixture).selectable.types;
+      expect(loads(core), hasLength(2));
+      expect(
+        loads(core).last.action,
+        CoreActions.loadLibrary(types[2].request).action,
+      );
+    });
+  });
+
   testWidgets('shows progress, episode and watched mark per item', (
     tester,
   ) async {

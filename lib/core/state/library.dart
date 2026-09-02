@@ -277,7 +277,21 @@ final class LibraryState {
 
   bool get isLoaded => selected != null;
 
+  /// No item matches the loaded request.
   bool get isEmpty => items.isEmpty;
+
+  /// A type filter is loaded (`selected.request.type != null`).
+  bool get hasTypeFilter => selected?.type != null;
+
+  /// The type filter matches nothing while the library still holds titles
+  /// of other types: the engine recomputes `selectable.types` from the
+  /// remaining items, so the `null` (All) entry stays on offer.
+  bool get isFilteredEmpty => isEmpty && hasTypeFilter;
+
+  /// Nothing is in the library at all (or the model is unloaded): with no
+  /// type filter the catalog holds every item, so an empty one is the whole
+  /// library.
+  bool get isLibraryEmpty => isEmpty && !hasTypeFilter;
 
   LibraryRequest? get nextPage => selectable.nextPage;
 
