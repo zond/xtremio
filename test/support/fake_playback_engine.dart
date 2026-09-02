@@ -12,6 +12,14 @@ class FakePlaybackEngine implements PlaybackEngine {
   final _buffering = StreamController<bool>.broadcast();
   final _completed = StreamController<bool>.broadcast();
   final _errors = StreamController<String>.broadcast();
+  late final _stats = StreamController<PlaybackStats>.broadcast(
+    onListen: () => statsListeners++,
+    onCancel: () => statsListeners--,
+  );
+
+  /// Live subscribers to [stats]; > 0 means the screen is sampling.
+  int statsListeners = 0;
+  bool get sampling => statsListeners > 0;
 
   /// Every `open` call: the URL and the requested start position.
   final List<(Uri, Duration)> opened = [];
@@ -24,6 +32,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   void emitBuffering(bool buffering) => _buffering.add(buffering);
   void emitCompleted() => _completed.add(true);
   void emitError(String error) => _errors.add(error);
+  void emitStats(PlaybackStats stats) => _stats.add(stats);
 
   @override
   Stream<Duration> get position => _position.stream;
@@ -42,6 +51,9 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   @override
   Stream<String> get errors => _errors.stream;
+
+  @override
+  Stream<PlaybackStats> get stats => _stats.stream;
 
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {

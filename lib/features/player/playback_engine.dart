@@ -1,6 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+
+import 'playback_stats.dart';
+
+export 'playback_stats.dart';
 
 /// What the player screen needs from a video backend. `media_kit` is the
 /// real one; tests substitute a fake through [PlaybackScope] so the screen's
@@ -14,6 +20,14 @@ abstract interface class PlaybackEngine {
   /// Fires once when the media reaches its end.
   Stream<bool> get completed;
   Stream<String> get errors;
+
+  /// Performance samples for the stats OSD, about twice a second.
+  ///
+  /// Sampling costs something (property reads into the decoder), so it runs
+  /// only while this stream has a listener: the overlay subscribes when it
+  /// is shown and cancels when hidden, and an engine with nothing to report
+  /// simply never emits.
+  Stream<PlaybackStats> get stats;
 
   /// Opens [url] and starts playing from [start].
   Future<void> open(Uri url, {Duration start = Duration.zero});
@@ -60,6 +74,18 @@ class MediaKitEngine implements PlaybackEngine {
 
   final Player _player;
   late final VideoController _controller;
+  bool _disposed = false;
+
+  /// How often [stats] samples while listened to.
+  static const Duration statsInterval = Duration(milliseconds: 500);
+
+  late final StreamController<PlaybackStats> _stats =
+      StreamController<PlaybackStats>.broadcast(
+        onListen: _startStats,
+        onCancel: _stopStats,
+      );
+  Timer? _statsTimer;
+  bool _sampling = false;
 
   @override
   Stream<Duration> get position => _player.stream.position;
@@ -78,6 +104,47 @@ class MediaKitEngine implements PlaybackEngine {
 
   @override
   Stream<String> get errors => _player.stream.error;
+
+  @override
+  Stream<PlaybackStats> get stats => _stats.stream;
+
+  /// Polls [PlaybackStats.mpvProperties] through libmpv every
+  /// [statsInterval] while [stats] has a listener. Plain polling (rather
+  /// than `observeProperty` per property) keeps the cost bounded and
+  /// proportional to the OSD being on screen; a dozen
+  /// `mpv_get_property_string` calls twice a second is negligible.
+  void _startStats() {
+    final native = _player.platform;
+    // Only the native (libmpv) backend exposes raw properties.
+    if (native is! NativePlayer || _disposed) return;
+    _statsTimer?.cancel();
+    _statsTimer = Timer.periodic(statsInterval, (_) => _sampleStats(native));
+    _sampleStats(native);
+  }
+
+  void _stopStats() {
+    _statsTimer?.cancel();
+    _statsTimer = null;
+  }
+
+  Future<void> _sampleStats(NativePlayer native) async {
+    // One sample at a time; `getProperty` awaits the player's own
+    // initialisation, so a slow start must not pile requests up.
+    if (_sampling) return;
+    _sampling = true;
+    try {
+      final values = <String, String>{};
+      for (final property in PlaybackStats.mpvProperties) {
+        values[property] = await native.getProperty(property);
+        if (_disposed || !_stats.hasListener) return;
+      }
+      _stats.add(PlaybackStats.fromMpv(values));
+    } catch (_) {
+      // Unavailable property or a player torn down mid-sample: skip it.
+    } finally {
+      _sampling = false;
+    }
+  }
 
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) =>
@@ -123,6 +190,9 @@ class MediaKitEngine implements PlaybackEngine {
   /// to dispose on the `VideoController`).
   @override
   Future<void> dispose() async {
+    _disposed = true;
+    _stopStats();
+    await _stats.close();
     try {
       await _player.stop();
     } finally {
