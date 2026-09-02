@@ -9,10 +9,15 @@ with [`stremio-core`](https://github.com/Stremio/stremio-core) (the official
 Rust engine for addons, catalogs, library, and playback state) and
 [`media_kit`](https://pub.dev/packages/media_kit)/libmpv for playback.
 
-> **Status:** early. The Rust core is wired in: the app boots `stremio-core`
-> and the embedded `stream-server` at start-up, Settings shows the server
-> state, and Discover browses a Cinemeta catalog from core state. Meta
-> details, the player (media_kit) and everything else are still to come.
+> **Status:** early, but the vertical slice is in place: the app boots
+> `stremio-core` and the embedded `stream-server` at start-up, Discover
+> browses a Cinemeta catalog, tapping a title loads its meta details and
+> the streams every installed addon returns, and selecting a stream plays
+> it with `media_kit` — torrents through the embedded server, HTTP streams
+> directly. A debug-only Settings entry plays a public Big Buck Bunny
+> torrent to prove the torrent path without any addon. Ugly on purpose;
+> Board, Library, search, episode picking, subtitles and settings are
+> still to come.
 
 ## Goals (beyond current Stremio clients)
 
@@ -92,6 +97,17 @@ connection.
   when the persisted profile points at loopback (a remote server URL set by
   the user is left alone). Port 11470 is preferred, ephemeral is the
   fallback.
+- **Playback goes through the engine's `Player` model.** The UI dispatches
+  `Load Player` with the raw stream JSON (plus the stream/meta requests);
+  stremio-core converts the source and publishes `player.stream` as
+  `{StreamUrls, converted stream}` — its `streaming_url` is the direct URL
+  for `url` streams and `<server>/{infoHash}/{fileIdx}?tr=…` for torrents
+  (the server auto-creates the engine from the info hash on first GET). The
+  player opens whatever that URL is in `media_kit`/libmpv and reports
+  `TimeChanged`/`PausedChanged`/`Ended` back so the library follows along.
+  `StreamUrls` is snake_case on the wire, unlike the rest of the model.
+  `PlaybackEngine` (`lib/features/player/`) is the thin interface over
+  media_kit; widget tests swap in a fake through `PlaybackScope`.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
   with the `derive` + `env-future-send` features, `zond/stream-server` at a
   fixed rev. To bump: change the rev, `cargo update -p <crate>`, run
@@ -104,7 +120,8 @@ connection.
 ```bash
 # Rust crate
 cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
-cargo test --test cinemeta -- --ignored   # network: loads a Cinemeta catalog, refreshes the fixture
+cargo test --test cinemeta -- --ignored       # network: loads a Cinemeta catalog, refreshes the fixture
+cargo test --test meta_details -- --ignored   # network: meta + streams + Player for a public-domain torrent, refreshes fixtures
 
 # Dart (FFI-backed tests load rust/target/debug/libxtremio_core.* directly)
 cargo build --manifest-path rust/Cargo.toml
@@ -114,8 +131,22 @@ flutter pub get && dart format --set-exit-if-changed . && flutter analyze && flu
 flutter_rust_bridge_codegen generate && git diff --exit-code lib/src/rust rust/src/frb_generated.rs
 ```
 
-Not yet exercised on a device or desktop build: `flutter run -d linux`
-(needs clang/cmake/ninja/GTK; cargokit builds the crate through CMake) and
+### Seeing video play
+
+```bash
+sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev libmpv-dev
+flutter run -d linux
+```
+
+Then either **Discover → a title → a stream**, or **Settings → Developer →
+"Play test torrent"** (Big Buck Bunny from a public torrent through the
+embedded server; "Play test HTTP stream" is the direct-play path). The
+bottom of the player shows the URL libmpv is playing, so a torrent should
+read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
+
+Not yet exercised on a device or desktop build (this was developed on a
+host without the GTK toolchain): `flutter run -d linux` itself (cargokit
+builds the crate through CMake; `media_kit_libs_video` supplies libmpv) and
 `flutter build apk` (cargokit drives the NDK; the first cross-compile has
 to prove that aws-lc-sys/ring build under it). On **Android**, reqwest's
 rustls uses `rustls-platform-verifier`, which needs a one-time JNI init with
