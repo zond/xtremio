@@ -22,13 +22,13 @@ final class AddonDescriptor {
   bool get isProtected => _flags['protected'] as bool? ?? false;
 
   /// The addon's configuration page, when it has one: the manifest URL with
-  /// `manifest.json` replaced by `configure`, as the official clients open
-  /// it. Null when the manifest declares neither `configurable` nor
-  /// `configurationRequired`.
+  /// its first `manifest.json` replaced by `configure` (so a query string
+  /// after it survives), as stremio-web opens it. Null when the manifest
+  /// declares neither `configurable` nor `configurationRequired`.
   String? get configureUrl {
     final hints = manifest.behaviorHints;
     if (!hints.configurable && !hints.configurationRequired) return null;
-    return transportUrl.replaceFirst(RegExp(r'manifest\.json$'), 'configure');
+    return transportUrl.replaceFirst('manifest.json', 'configure');
   }
 
   /// Same addon: descriptors are keyed by manifest URL.

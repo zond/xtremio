@@ -832,6 +832,17 @@ void main() {
         'transportUrl': 'stremio://y.example/manifest.json',
       });
       expect(required.configureUrl, 'stremio://y.example/configure');
+      // A query string after the file name, as stremio-web: the first
+      // `manifest.json` is replaced wherever it sits.
+      expect(
+        const AddonDescriptor({
+          'manifest': {
+            'behaviorHints': {'configurable': true},
+          },
+          'transportUrl': 'https://q.example/abc/manifest.json?token=x',
+        }).configureUrl,
+        'https://q.example/abc/configure?token=x',
+      );
       expect(
         const AddonDescriptor({
           'manifest': <String, dynamic>{},
