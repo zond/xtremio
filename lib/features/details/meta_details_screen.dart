@@ -45,6 +45,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
   void _play(MetaDetailsState state, StreamGroup group, StreamInfo stream) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'player'),
         builder: (_) => PlayerScreen(
           stream: stream.json,
           streamRequest: group.request,

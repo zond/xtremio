@@ -1,9 +1,11 @@
 import 'dart:ui' show AppExitResponse;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'core/core.dart';
 import 'shell/root_shell.dart';
+import 'shell/route_log_observer.dart';
 
 /// Root of the Xtremio application.
 ///
@@ -31,6 +33,7 @@ class _XtremioAppState extends State<XtremioApp> {
   }
 
   Future<AppExitResponse> _onExitRequested() async {
+    if (kDebugMode) debugPrint('exit requested by platform');
     // Stop the engine and the embedded server before the process goes away
     // so library progress is flushed and the port is released.
     try {
@@ -65,6 +68,7 @@ class _XtremioAppState extends State<XtremioApp> {
           colorScheme: colorScheme,
           scaffoldBackgroundColor: const Color(0xFF0E0B16),
         ),
+        navigatorObservers: [if (kDebugMode) RouteLogObserver()],
         home: const RootShell(),
       ),
     );
