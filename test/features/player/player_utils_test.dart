@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/features/player/language_names.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/time_format.dart';
 
@@ -13,6 +14,15 @@ void main() {
       expect(formatTime(const Duration(minutes: -5, seconds: -7)), '-5:07');
     },
   );
+
+  test('languageName knows two- and three-letter codes, keeps the rest', () {
+    expect(languageName('eng'), 'English');
+    expect(languageName('en'), 'English');
+    expect(languageName('EN-US'), 'English');
+    expect(languageName('pob'), 'Portuguese (Brazil)');
+    expect(languageName('zh-TW'), 'Chinese (Traditional)');
+    expect(languageName('xx'), 'xx');
+  });
 
   test('PlaybackTracks.copyWith changes selections only', () {
     const tracks = PlaybackTracks(

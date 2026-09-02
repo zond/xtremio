@@ -1,6 +1,87 @@
 import 'package:flutter/material.dart';
 
+import '../../core/core.dart';
+import 'language_names.dart';
 import 'playback_engine.dart';
+
+/// The subtitle picker: off, the tracks embedded in the file, and the files
+/// the subtitle addons (or the stream itself) offer.
+class SubtitleMenu extends StatelessWidget {
+  const SubtitleMenu({
+    super.key,
+    required this.embedded,
+    required this.external,
+    required this.activeId,
+    required this.loading,
+    required this.onOff,
+    required this.onEmbedded,
+    required this.onExternal,
+  });
+
+  final List<TrackInfo> embedded;
+  final List<SubtitleInfo> external;
+
+  /// [TrackInfo.id] of the active embedded track, or the URL of the active
+  /// external one; null when subtitles are off.
+  final String? activeId;
+
+  /// Some subtitle addon has not answered yet.
+  final bool loading;
+  final VoidCallback onOff;
+  final ValueChanged<TrackInfo> onEmbedded;
+  final ValueChanged<SubtitleInfo> onExternal;
+
+  /// `title`, else the language, else a numbered fallback.
+  static String embeddedLabel(TrackInfo track, int index) =>
+      track.title ??
+      (track.language == null
+          ? 'Track ${index + 1}'
+          : languageName(track.language!));
+
+  static String externalLabel(SubtitleInfo subtitle) =>
+      subtitle.label ?? languageName(subtitle.lang);
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      shrinkWrap: true,
+      children: [
+        const _MenuHeader('Subtitles'),
+        _MenuTile(title: 'Off', selected: activeId == null, onTap: onOff),
+        if (embedded.isNotEmpty) const _SectionLabel('In this file'),
+        for (final (index, track) in embedded.indexed)
+          _MenuTile(
+            title: embeddedLabel(track, index),
+            subtitle: track.title != null && track.language != null
+                ? languageName(track.language!)
+                : null,
+            selected: activeId == track.id,
+            onTap: () => onEmbedded(track),
+          ),
+        if (external.isNotEmpty || loading) const _SectionLabel('From addons'),
+        for (final subtitle in external)
+          _MenuTile(
+            title: externalLabel(subtitle),
+            subtitle: subtitle.url.host,
+            selected: activeId == subtitle.url.toString(),
+            onTap: () => onExternal(subtitle),
+          ),
+        if (loading)
+          const ListTile(
+            leading: SizedBox(
+              width: 24,
+              height: 24,
+              child: Padding(
+                padding: EdgeInsets.all(2),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+            title: Text('Looking for subtitles…'),
+          ),
+      ],
+    );
+  }
+}
 
 /// Playback speed and subtitle appearance.
 class PlayerSettingsSheet extends StatelessWidget {
@@ -155,5 +236,30 @@ class _SectionLabel extends StatelessWidget {
       style: Theme.of(context).textTheme.labelMedium
           ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
     ),
+  );
+}
+
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({
+    required this.title,
+    this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String? subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: Icon(
+      selected ? Icons.radio_button_checked : Icons.radio_button_off,
+    ),
+    title: Text(title),
+    subtitle: subtitle == null ? null : Text(subtitle!),
+    selected: selected,
+    onTap: onTap,
   );
 }

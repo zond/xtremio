@@ -57,11 +57,23 @@ void main() {
       await tester.pumpAndSettle();
 
       // Load Player carried the raw stream and both requests.
-      final load = core.dispatched.single;
+      final load = core.dispatched.first;
       expect(load.field, CoreField.player);
       expect(argsOf(load)['stream'], stream);
       expect(argsOf(load)['streamRequest']['path']['id'], 'tt0063350');
       expect(argsOf(load)['metaRequest']['base'], kCinemetaManifestUrl);
+
+      // Once open, the video parameters go to the core so it asks the
+      // subtitle addons; the torrent URL's last segment is a file index, so
+      // the stream's name stands in for a filename.
+      expect(core.dispatched, hasLength(2));
+      final params = core.dispatched[1];
+      expect(params.action['args']['action'], 'VideoParamsChanged');
+      expect(argsOf(params)['videoParams'], {
+        'hash': null,
+        'size': null,
+        'filename': '1080p',
+      });
 
       // The torrent resolved to the embedded server; that is what got opened.
       final expectedUrl = Uri.parse(

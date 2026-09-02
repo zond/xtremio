@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
+import 'language_names.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
@@ -101,6 +102,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _fullscreenOn = false;
   bool _showRemaining = false;
 
+  /// Whether the session's subtitle preference has been applied to this
+  /// media yet (once per `open`).
+  bool _autoPickedSubtitles = false;
+
   bool _controlsVisible = true;
   Timer? _controlsTimer;
   bool _menuOpen = false;
@@ -163,19 +168,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final url = state?.streamingUrl;
     if (state == null || url == null || url == _opened) {
       setState(() {});
+      _maybeAutoPickSubtitles();
       return;
     }
     _opened = url;
+    _autoPickedSubtitles = false;
     final progress = state.progress;
     final start = progress != null && progress.isResumable
         ? Duration(milliseconds: progress.timeOffset)
         : Duration.zero;
     _position.value = start;
-    _engine?.open(url, start: start).catchError((Object error) {
-      if (mounted) setState(() => _engineError = '$error');
-    });
+    _engine
+        ?.open(url, start: start)
+        .then((_) => _reportVideoParams(state, url))
+        .catchError((Object error) {
+          if (mounted) setState(() => _engineError = '$error');
+        });
     setState(() => _engineError = null);
     _restartControlsTimer();
+    _maybeAutoPickSubtitles();
+  }
+
+  /// Tells the engine what it can know about the file, which is what makes
+  /// it ask the subtitle addons (they want a filename, hash or size; we
+  /// have at best the filename).
+  void _reportVideoParams(PlayerState state, Uri url) {
+    if (!mounted || _opened != url) return;
+    final segment = url.pathSegments.isEmpty ? null : url.pathSegments.last;
+    final filename =
+        state.convertedStream?.filename ??
+        state.selectedStream?.filename ??
+        (segment != null && segment.contains('.') ? segment : null) ??
+        state.selectedStream?.name;
+    _client?.dispatch(CoreActions.playerVideoParamsChanged(filename: filename));
   }
 
   String get _device => Platform.operatingSystem;
@@ -222,6 +247,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onTracks(PlaybackTracks tracks) {
     // The bars read the selection and the track count directly.
     setState(() => _tracks.value = tracks);
+    _maybeAutoPickSubtitles();
   }
 
   void _onSubtitleStyle() {
@@ -357,6 +383,93 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _toggleStatsPinned() =>
       setState(() => _statsPinned = !(_statsPinned ?? false));
 
+  // --- Tracks --------------------------------------------------------------
+
+  void _selectEmbeddedSubtitle(TrackInfo track) {
+    _tracks.value = _tracks.value.copyWith(activeSubtitleId: track.id);
+    _engine?.setSubtitleTrack(track.id);
+    _client?.dispatch(
+      CoreActions.playerSubtitlePreferenceChanged(
+        enabled: true,
+        source: 'embedded',
+        language: track.language,
+      ),
+    );
+  }
+
+  void _selectExternalSubtitle(SubtitleInfo subtitle) {
+    _tracks.value = _tracks.value.copyWith(
+      activeSubtitleId: subtitle.url.toString(),
+    );
+    _engine?.setExternalSubtitle(
+      subtitle.url,
+      title: SubtitleMenu.externalLabel(subtitle),
+      language: subtitle.lang.isEmpty ? null : subtitle.lang,
+    );
+    _client?.dispatch(
+      CoreActions.playerSubtitlePreferenceChanged(
+        enabled: true,
+        source: 'external',
+        language: subtitle.lang.isEmpty ? null : subtitle.lang,
+      ),
+    );
+  }
+
+  void _disableSubtitles() {
+    _tracks.value = _tracks.value.copyWith(clearSubtitle: true);
+    _engine?.disableSubtitles();
+    _client?.dispatch(
+      CoreActions.playerSubtitlePreferenceChanged(enabled: false),
+    );
+  }
+
+  /// Applies the session's subtitle preference (set by an earlier pick in
+  /// this Player session, e.g. the previous episode) to freshly opened
+  /// media: off stays off; otherwise the first track in the preferred
+  /// language, from the preferred source first. Retried as tracks and
+  /// addon results arrive until something matches.
+  void _maybeAutoPickSubtitles() {
+    if (_autoPickedSubtitles || _opened == null) return;
+    final state = _state;
+    final preference = state?.subtitlePreference;
+    if (state == null || preference == null) return;
+    if (!preference.enabled) {
+      _autoPickedSubtitles = true;
+      _tracks.value = _tracks.value.copyWith(clearSubtitle: true);
+      _engine?.disableSubtitles();
+      return;
+    }
+    final language = preference.language;
+    bool matches(String? candidate) =>
+        language == null ||
+        (candidate != null &&
+            languageName(candidate).toLowerCase() ==
+                languageName(language).toLowerCase());
+    final external = state.externalSubtitles
+        .where((s) => matches(s.lang))
+        .firstOrNull;
+    final embedded = _tracks.value.subtitle
+        .where((t) => matches(t.language))
+        .firstOrNull;
+    final externalFirst = preference.source != 'embedded';
+    if (externalFirst && external != null ||
+        embedded == null && external != null) {
+      _autoPickedSubtitles = true;
+      _tracks.value = _tracks.value.copyWith(
+        activeSubtitleId: external.url.toString(),
+      );
+      _engine?.setExternalSubtitle(
+        external.url,
+        title: SubtitleMenu.externalLabel(external),
+        language: external.lang.isEmpty ? null : external.lang,
+      );
+    } else if (embedded != null) {
+      _autoPickedSubtitles = true;
+      _tracks.value = _tracks.value.copyWith(activeSubtitleId: embedded.id);
+      _engine?.setSubtitleTrack(embedded.id);
+    }
+  }
+
   // --- Menus ---------------------------------------------------------------
 
   Future<void> _showSheet(WidgetBuilder builder) async {
@@ -377,6 +490,36 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _focusNode.requestFocus();
     _showControls();
   }
+
+  Future<void> _openSubtitleMenu() => _showSheet(
+    (context) => ValueListenableBuilder<Map<String, dynamic>?>(
+      valueListenable: _player!,
+      builder: (context, json, _) {
+        final state = json == null ? null : PlayerState.fromJson(json);
+        return ValueListenableBuilder<PlaybackTracks>(
+          valueListenable: _tracks,
+          builder: (context, tracks, _) => SubtitleMenu(
+            embedded: tracks.subtitle,
+            external: state?.externalSubtitles ?? const [],
+            activeId: tracks.activeSubtitleId,
+            loading: state?.subtitlesLoading ?? false,
+            onOff: () {
+              _disableSubtitles();
+              Navigator.of(context).pop();
+            },
+            onEmbedded: (track) {
+              _selectEmbeddedSubtitle(track);
+              Navigator.of(context).pop();
+            },
+            onExternal: (subtitle) {
+              _selectExternalSubtitle(subtitle);
+              Navigator.of(context).pop();
+            },
+          ),
+        );
+      },
+    ),
+  );
 
   Future<void> _openSettings() => _showSheet(
     (context) => StatefulBuilder(
@@ -451,6 +594,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         } else {
           Navigator.of(context).maybePop();
         }
+      case LogicalKeyboardKey.keyS:
+        if (event is KeyDownEvent) _openSubtitleMenu();
       default:
         return KeyEventResult.ignored;
     }
@@ -604,7 +749,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         PlayerTopBar(
                           title: state?.title ?? '',
                           subtitlesOn: _tracks.value.activeSubtitleId != null,
-                          onSubtitles: null,
+                          onSubtitles: _openSubtitleMenu,
                           onAudio: null,
                           statsOn: _statsPinned ?? false,
                           onStats: _toggleStatsPinned,
