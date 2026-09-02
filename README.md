@@ -9,23 +9,27 @@ with [`stremio-core`](https://github.com/Stremio/stremio-core) (the official
 Rust engine for addons, catalogs, library, and playback state) and
 [`media_kit`](https://pub.dev/packages/media_kit)/libmpv for playback.
 
-> **Status:** early, but the vertical slice is in place: the app boots
-> `stremio-core` and the embedded `stream-server` at start-up, the Board
-> shows a continue-watching row and one row per catalog of every
-> installed addon, Discover browses any catalog through the engine's
-> type/catalog/genre filters, Search asks every addon that supports it and
-> groups the hits per addon, tapping a title opens its details (facts,
-> genres, a season picker and episode list with watched state for series;
-> picking an episode loads that episode's streams) with the streams every
-> installed addon returns, quality hints parsed into chips,
-> and selecting a stream plays it with `media_kit` — torrents through the
-> embedded server, HTTP streams directly — in a player with its own
-> controls: seek bar with the buffered range, play/pause, ±10 s, volume,
-> fullscreen, keyboard shortcuts, playback speed, embedded and addon
-> subtitles with basic styling, audio track selection, and an up-next
-> countdown between episodes. A debug-only Settings entry plays a public
-> Big Buck Bunny torrent to prove the torrent path without any addon.
-> Library and settings are still to come.
+> **Status:** phase 2 (browse → details → play) is complete, and the
+> project is early beyond that. The app boots `stremio-core` and the
+> embedded `stream-server` at start-up. **Board** shows a continue-watching
+> row and one row per catalog of every installed addon; **Discover** browses
+> any catalog through the engine's type/catalog/genre filters; **Search**
+> asks every addon that supports it and groups the hits per addon.
+> **Details** shows facts and genres, a season picker and episode list with
+> watched state for series (picking an episode loads its streams), and the
+> streams every installed addon returns with quality hints parsed into
+> chips; details routes are video-aware, so coming back from the player
+> lands on the right episode. The **player** plays torrents through the
+> embedded server and HTTP streams directly, with its own controls (seek
+> bar with the buffered range, play/pause, ±10 s, volume, fullscreen,
+> keyboard shortcuts, playback speed), embedded and addon subtitles with
+> basic styling, audio track selection, a stats OSD, an up-next countdown
+> that hands off to the next episode, and a pre-playback progress overlay
+> for torrents that shows the server's start-up phase (checking existing
+> data, finding peers, buffering the start) with percentages and download
+> speed instead of a bare spinner. A debug-only Settings entry plays a
+> public Big Buck Bunny torrent to prove the torrent path without any
+> addon. Library and settings are still to come.
 
 ## Goals (beyond current Stremio clients)
 
@@ -168,6 +172,23 @@ connection.
   not drawn on this path; that needs `libass: true` and font shipping.
   The style lives in a `ValueNotifier` on `PlaybackScope` for now (a
   Settings entry and persistence come later).
+- **Torrent start-up overlay.** From `open` until the engine first reports
+  the media loaded (a duration, or playing), a torrent shows a card instead
+  of a spinner. The screen polls the embedded server's
+  `/{infoHash}/{fileIdx}/stats.json` every 500 ms (plain `dart:io` HTTP,
+  like the stream URL itself; `TorrentStats.statsUrlFor` derives it from
+  the core's streaming URL) and maps the server's `phase` to a label:
+  `resolvingMetadata` → "Fetching torrent metadata…", `checking` →
+  "Checking existing data…" with `checkedBytes/checkTotalBytes`,
+  `buffering` → "Finding peers…" with the `peerDiscovery` counts while no
+  peer is live, else "Buffering start…" with
+  `initialWindowReadyBytes/initialWindowBytes`, `ready` → "Starting
+  playback…", `error` → a failure; no answer yet (404, unreachable) →
+  "Connecting to server…". The bar is determinate whenever there is a
+  percentage; `downloadSpeed` and `peers` show when non-zero. Polling
+  stops when the media loads, on an engine error and on dispose; direct
+  HTTP streams get nothing extra. The `TorrentStatsClient` comes from
+  `PlaybackScope`, so tests feed phases through a fake.
 - **Next episode.** `player.nextVideo`/`nextStream` come from the core.
   On `Ended` an up-next card counts down 10 s; playing it dispatches
   `NextVideo` and either replaces the player route with one for the
