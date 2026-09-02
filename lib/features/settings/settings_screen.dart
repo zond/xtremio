@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../dev/dev_streams.dart';
+import '../player/player_screen.dart';
 
 /// Settings. For now: the state of the embedded streaming server and the
 /// core, straight from the `streaming_server` model field.
@@ -82,10 +85,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
               initInfo == null ? 'unknown' : 'v${initInfo.schemaVersion}',
             ),
           ),
+          if (kDebugMode) ...[
+            const _SectionHeader('Developer'),
+            _DevPlayTile(
+              icon: Icons.cloud_download_outlined,
+              title: 'Play test torrent',
+              stream: DevStreams.bigBuckBunnyTorrent,
+            ),
+            _DevPlayTile(
+              icon: Icons.link,
+              title: 'Play test HTTP stream',
+              stream: DevStreams.bigBuckBunnyHttp,
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+/// Debug-only: plays a hand-built stream through the same core Player path
+/// an addon stream takes, so playback can be proven without any addon.
+class _DevPlayTile extends StatelessWidget {
+  const _DevPlayTile({
+    required this.icon,
+    required this.title,
+    required this.stream,
+  });
+
+  final IconData icon;
+  final String title;
+  final Map<String, dynamic> stream;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: Icon(icon),
+    title: Text(title),
+    subtitle: Text(stream['description'] as String),
+    trailing: const Icon(Icons.play_arrow),
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => PlayerScreen(stream: stream)),
+    ),
+  );
 }
 
 class _SectionHeader extends StatelessWidget {
