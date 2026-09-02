@@ -6,6 +6,11 @@
 //! -> hydrate the persisted buckets -> retarget a loopback server URL at the
 //! embedded server -> build the model -> `Runtime::new` -> pump events.
 //!
+//! Login and logout replace the profile settings with stremio-core's
+//! defaults, which point the streaming server back at loopback:11470, so the
+//! pump re-applies the retarget when `UserAuthenticated` / `UserLoggedOut`
+//! come through.
+//!
 //! Events leave through an [`EventSink`] callback (installed by the FRB layer
 //! around a Dart `StreamSink`, or by tests around a channel). Events emitted
 //! before a sink exists are buffered, bounded, so nothing is lost across the
@@ -24,12 +29,12 @@ use stremio_core::constants::{
     NOTIFICATIONS_STORAGE_KEY, PROFILE_STORAGE_KEY, SCHEMA_VERSION, SEARCH_HISTORY_STORAGE_KEY,
     STREAMING_SERVER_URLS_STORAGE_KEY, STREAMS_STORAGE_KEY,
 };
-use stremio_core::runtime::msg::Action;
-use stremio_core::runtime::{Env, EnvError, Runtime, RuntimeAction};
+use stremio_core::runtime::msg::{Action, ActionCtx, Event};
+use stremio_core::runtime::{Env, EnvError, Runtime, RuntimeAction, RuntimeEvent};
 use stremio_core::types::events::DismissedEventsBucket;
 use stremio_core::types::library::LibraryBucket;
 use stremio_core::types::notifications::NotificationsBucket;
-use stremio_core::types::profile::Profile;
+use stremio_core::types::profile::{Profile, Settings};
 use stremio_core::types::search_history::SearchHistoryBucket;
 use stremio_core::types::server_urls::ServerUrlsBucket;
 use stremio_core::types::streams::StreamsBucket;
@@ -162,10 +167,44 @@ fn is_loopback(url: &Url) -> bool {
 /// it at the embedded server instead. A user-configured remote server URL is
 /// left alone.
 pub fn retarget_loopback_server(profile: &mut Profile, embedded: &Url) {
-    let current = &profile.settings.streaming_server_url;
+    retarget_loopback_settings(&mut profile.settings, embedded);
+}
+
+/// [`retarget_loopback_server`] on the settings alone; `true` when changed.
+fn retarget_loopback_settings(settings: &mut Settings, embedded: &Url) -> bool {
+    let current = &settings.streaming_server_url;
     if is_loopback(current) && current != embedded {
         tracing::info!(from = %current, to = %embedded, "retargeting streaming server URL at the embedded server");
-        profile.settings.streaming_server_url = embedded.clone();
+        settings.streaming_server_url = embedded.clone();
+        true
+    } else {
+        false
+    }
+}
+
+/// Re-applies the init-time retarget after stremio-core reset the settings
+/// (login and logout both replace them with `Settings::default()`, whose
+/// server URL is loopback:11470). Dispatches `UpdateSettings` with the
+/// retargeted copy when the current URL is loopback but not the embedded
+/// server; a remote URL, or no embedded server, leaves everything alone.
+fn reapply_loopback_retarget() {
+    let Some(embedded) = server::base_url() else {
+        return;
+    };
+    let guard = runtime_guard();
+    let Some(runtime) = guard.as_ref() else {
+        return;
+    };
+    let mut settings = match runtime.model() {
+        Ok(model) => model.ctx.profile.settings.clone(),
+        Err(_) => return,
+    };
+    // The model read guard is released; `dispatch` takes the write lock.
+    if retarget_loopback_settings(&mut settings, &embedded) {
+        runtime.dispatch(RuntimeAction {
+            field: Some(XtremioModelField::Ctx),
+            action: Action::Ctx(ActionCtx::UpdateSettings(settings)),
+        });
     }
 }
 
@@ -242,9 +281,20 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     // The pump must outlive every Runtime clone: a full channel panics inside
     // `Runtime::emit`. Per-event work is contained so the task never dies.
     XtremioEnv::exec_concurrent(events.for_each(|event| {
-        let _ = catch_unwind(AssertUnwindSafe(|| match serde_json::to_string(&event) {
-            Ok(json) => emit(json),
-            Err(error) => tracing::warn!(%error, "could not serialize runtime event"),
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            match serde_json::to_string(&event) {
+                Ok(json) => emit(json),
+                Err(error) => tracing::warn!(%error, "could not serialize runtime event"),
+            }
+            // After the event is out: Dart sees the login/logout first and the
+            // resulting `NewState`/`SettingsUpdated` behind it. The dispatch
+            // only queues into this channel, so it cannot block the pump.
+            if let RuntimeEvent::CoreEvent(
+                Event::UserAuthenticated { .. } | Event::UserLoggedOut { .. },
+            ) = &event
+            {
+                reapply_loopback_retarget();
+            }
         }));
         futures::future::ready(())
     }));

@@ -132,6 +132,94 @@ fn core_lifecycle() -> anyhow::Result<()> {
         assert!(state(field).is_object(), "{field}");
     }
 
+    // Login and logout reset the settings to stremio-core's defaults, whose
+    // server URL is loopback:11470; the pump must retarget them at the
+    // embedded (here: ephemeral-port) server again. Offline stand-in for the
+    // reset: UpdateSettings with the default URL, then a Logout while logged
+    // out, which still emits UserLoggedOut.
+    let mut settings = state("ctx")["profile"]["settings"].clone();
+    settings["streamingServerUrl"] = serde_json::json!("http://127.0.0.1:11470/");
+    core_dispatch(
+        serde_json::json!({
+            "field": "ctx",
+            "action": {
+                "action": "Ctx",
+                "args": { "action": "UpdateSettings", "args": settings },
+            },
+        })
+        .to_string(),
+    )?;
+    assert_eq!(
+        state("ctx")["profile"]["settings"]["streamingServerUrl"],
+        "http://127.0.0.1:11470/"
+    );
+    core_dispatch(
+        r#"{"field":"ctx","action":{"action":"Ctx","args":{"action":"Logout"}}}"#.into(),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let ctx = state("ctx");
+        if ctx["profile"]["settings"]["streamingServerUrl"] == url {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "settings were not retargeted after UserLoggedOut: {}",
+            ctx["profile"]["settings"]
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    // The streaming_server model follows the profile back to the embedded
+    // server (its detour to 11470 may have left an Err in between).
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let server = state("streaming_server");
+        if server["baseUrl"] == url && server["settings"]["type"] == "Ready" {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "streaming_server did not follow the retarget: {server}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    // The real thing: Logout from a non-default profile replaces the settings
+    // with stremio-core's defaults (a remote URL does not survive a logout),
+    // and the pump then retargets the default loopback URL at the embedded
+    // server.
+    let mut settings = state("ctx")["profile"]["settings"].clone();
+    settings["streamingServerUrl"] = serde_json::json!("http://192.168.1.20:11470/");
+    core_dispatch(
+        serde_json::json!({
+            "field": "ctx",
+            "action": {
+                "action": "Ctx",
+                "args": { "action": "UpdateSettings", "args": settings },
+            },
+        })
+        .to_string(),
+    )?;
+    assert_eq!(
+        state("ctx")["profile"]["settings"]["streamingServerUrl"],
+        "http://192.168.1.20:11470/"
+    );
+    core_dispatch(
+        r#"{"field":"ctx","action":{"action":"Ctx","args":{"action":"Logout"}}}"#.into(),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let ctx = state("ctx");
+        if ctx["profile"]["settings"]["streamingServerUrl"] == url {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "settings were not retargeted after a real logout reset: {}",
+            ctx["profile"]["settings"]
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
     // Idempotent init keeps the same server.
     let again = core_init(config(tmp.path()))?;
     assert_eq!(again.server_base_url.as_deref(), Some(url.as_str()));
