@@ -36,6 +36,9 @@ class FakeCoreClient implements CoreClient {
   /// Emits an arbitrary event.
   void emit(CoreEvent event) => _events.add(event);
 
+  /// The canned state of [field] right now, without the async round trip.
+  Map<String, dynamic>? stateOf(CoreField field) => _state[field];
+
   @override
   Future<CoreInitInfo> init({
     required Directory support,

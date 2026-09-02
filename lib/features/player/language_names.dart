@@ -7,6 +7,29 @@ String languageName(String code) {
   return _names[normalized] ?? _names[base] ?? code;
 }
 
+/// A language a setting such as `audioLanguage` can name: the ISO 639-2
+/// three-letter [code] stremio-core stores and its display [name].
+final class LanguageOption {
+  const LanguageOption(this.code, this.name);
+
+  final String code;
+  final String name;
+}
+
+/// The languages the Settings dropdowns offer, one per name (the
+/// bibliographic code where 639-2 has two, `fre` over `fra`, as
+/// OpenSubtitles uses), sorted by name. Only three-letter codes: that is
+/// what stremio-core's `Settings` carries.
+final List<LanguageOption> languageOptions = () {
+  final seen = <String>{};
+  final options = [
+    for (final MapEntry(key: code, value: name) in _names.entries)
+      if (code.length == 3 && code != 'und' && seen.add(name))
+        LanguageOption(code, name),
+  ]..sort((a, b) => a.name.compareTo(b.name));
+  return List<LanguageOption>.unmodifiable(options);
+}();
+
 const Map<String, String> _names = {
   'en': 'English',
   'eng': 'English',

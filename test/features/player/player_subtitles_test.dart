@@ -5,6 +5,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
+import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// Subtitles: the menu over embedded tracks and addon files, selection,
@@ -282,13 +283,13 @@ void main() {
     });
   });
 
-  testWidgets('settings change the speed and the subtitle style', (
-    tester,
-  ) async {
+  testWidgets('settings change the speed and write the subtitle style to '
+      'the profile', (tester) async {
     useWideViewport(tester);
     final harness = PlayerHarness();
     await harness.pump(tester);
     final engine = harness.engine;
+    // The anonymous profile's defaults: 100 %, white, no background box.
     expect(engine.subtitleStyle, const SubtitleStyle());
 
     await tester.tap(find.byTooltip('Playback settings'));
@@ -298,20 +299,94 @@ void main() {
     await tester.pump();
     expect(engine.rates, [1.5]);
 
-    await tester.tap(find.text('40'));
+    // A size pick is an UpdateSettings with the whole map and that one key
+    // changed; nothing changes locally until the engine reports it.
+    final before = harness.settings.json;
+    await tester.tap(find.text('150 %'));
     await tester.pump();
-    await tester.tap(find.text('Yellow'));
-    await tester.pump();
-    await tester.tap(find.byType(Switch));
-    await tester.pump();
+    expect(harness.settingsUpdates(), [
+      {...before, 'subtitlesSize': 150},
+    ]);
+    expect(engine.subtitleStyle, const SubtitleStyle());
+
+    final ctx = loadCtxLoggedOutFixture();
+    ctx['profile']['settings'] = {
+      ...before,
+      'subtitlesSize': 150,
+      'subtitlesTextColor': '#FFEB3BFF',
+      'subtitlesBackgroundColor': '#000000FF',
+    };
+    harness.core.setState(CoreField.ctx, ctx);
+    await tester.pumpAndSettle();
     expect(
-      harness.subtitleStyle.value,
+      engine.subtitleStyle,
       const SubtitleStyle(
-        fontSize: 40,
+        fontSize: 48,
         color: Color(0xFFFFEB3B),
-        background: false,
+        backgroundColor: Color(0xFF000000),
       ),
     );
-    expect(engine.subtitleStyle, harness.subtitleStyle.value);
+    ChoiceChip chip(String label) =>
+        tester.widget(find.widgetWithText(ChoiceChip, label));
+    expect(chip('150 %').selected, isTrue);
+    expect(chip('Yellow').selected, isTrue);
+    expect(chip('Black').selected, isTrue);
+
+    await tester.tap(find.text('Translucent'));
+    await tester.pump();
+    expect(harness.settingsUpdates().last, {
+      ...ctx['profile']['settings'] as Map<String, dynamic>,
+      'subtitlesBackgroundColor': '#000000AA',
+    });
+  });
+
+  testWidgets('a colour outside the palette shows as Custom', (tester) async {
+    useWideViewport(tester);
+    final ctx = loadCtxLoggedOutFixture();
+    ctx['profile']['settings']['subtitlesTextColor'] = '#FF00FFFF';
+    final harness = PlayerHarness(ctx: ctx);
+    await harness.pump(tester);
+    expect(harness.engine.subtitleStyle?.color, const Color(0xFFFF00FF));
+
+    await tester.tap(find.byTooltip('Playback settings'));
+    await tester.pumpAndSettle();
+    final custom = tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, 'Custom (#FF00FFFF)'),
+    );
+    expect(custom.selected, isTrue);
+    expect(
+      tester
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'White'))
+          .selected,
+      isFalse,
+    );
+  });
+
+  testWidgets('the style chips are disabled until the settings are known', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // A `ctx` without a profile: the settings map is empty, and a partial
+    // UpdateSettings would be rejected by the engine.
+    final harness = PlayerHarness(ctx: {});
+    await harness.pump(tester);
+    expect(harness.engine.subtitleStyle, const SubtitleStyle());
+
+    await tester.tap(find.byTooltip('Playback settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('150 %'));
+    await tester.tap(find.text('Yellow'));
+    await tester.pump();
+    expect(harness.settingsUpdates(), isEmpty);
+    expect(
+      tester
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '150 %'))
+          .onSelected,
+      isNull,
+    );
+    // Speed is local and still works.
+    await tester.tap(find.text('1.5×'));
+    await tester.pump();
+    expect(harness.engine.rates, [1.5]);
   });
 }

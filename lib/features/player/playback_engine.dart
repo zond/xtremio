@@ -103,29 +103,22 @@ class NativeFullscreenController implements FullscreenController {
 
 /// Supplies what the player screen needs from the outside: the
 /// [PlaybackEngineFactory] (absent, the screen builds a [MediaKitEngine]),
-/// the [FullscreenController], the [TorrentStatsClient] the start-up
-/// overlay polls the embedded server with (absent, plain HTTP), and the
-/// user's [SubtitleStyle], which lives in a notifier so it survives from one
-/// player to the next within a run. (A Settings entry and persistence come
-/// later.)
+/// the [FullscreenController] and the [TorrentStatsClient] the start-up
+/// overlay polls the embedded server with (absent, plain HTTP). The
+/// subtitle style is not here: the screen derives it from the profile's
+/// settings in the `ctx` field.
 class PlaybackScope extends InheritedWidget {
   const PlaybackScope({
     super.key,
     required this.createEngine,
     this.fullscreen,
-    this.subtitleStyle,
     this.torrentStats,
     required super.child,
   });
 
   final PlaybackEngineFactory createEngine;
   final FullscreenController? fullscreen;
-  final ValueNotifier<SubtitleStyle>? subtitleStyle;
   final TorrentStatsClient? torrentStats;
-
-  /// The app-wide subtitle style when no scope provides one.
-  static final ValueNotifier<SubtitleStyle> defaultSubtitleStyle =
-      ValueNotifier(const SubtitleStyle());
 
   static PlaybackScope? _maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlaybackScope>();
@@ -136,9 +129,6 @@ class PlaybackScope extends InheritedWidget {
   static FullscreenController fullscreenOf(BuildContext context) =>
       _maybeOf(context)?.fullscreen ?? const NativeFullscreenController();
 
-  static ValueNotifier<SubtitleStyle> subtitleStyleOf(BuildContext context) =>
-      _maybeOf(context)?.subtitleStyle ?? defaultSubtitleStyle;
-
   static TorrentStatsClient torrentStatsOf(BuildContext context) =>
       _maybeOf(context)?.torrentStats ?? const HttpTorrentStatsClient();
 
@@ -146,7 +136,6 @@ class PlaybackScope extends InheritedWidget {
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
       fullscreen != oldWidget.fullscreen ||
-      subtitleStyle != oldWidget.subtitleStyle ||
       torrentStats != oldWidget.torrentStats;
 }
 
@@ -459,10 +448,8 @@ class MediaKitEngine implements PlaybackEngine {
           color: style.color,
           height: 1.4,
           fontWeight: FontWeight.w500,
-          backgroundColor: style.background
-              ? const Color(0xAA000000)
-              : const Color(0x00000000),
-          shadows: style.background
+          backgroundColor: style.backgroundColor,
+          shadows: style.hasBackground
               ? null
               : const [
                   Shadow(color: Color(0xFF000000), blurRadius: 4),

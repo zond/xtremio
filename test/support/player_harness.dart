@@ -12,17 +12,24 @@ import 'fixtures.dart';
 
 /// A [PlayerScreen] over a fake core and a fake engine, as the widget tests
 /// mount it: scopes above `MaterialApp` (like the app), the recorded
-/// public-domain torrent as the `player` state unless given another.
+/// public-domain torrent as the `player` state and the anonymous profile
+/// (default settings) as `ctx` unless given others.
 class PlayerHarness {
   PlayerHarness({
     Map<String, dynamic>? player,
+    Map<String, dynamic>? ctx,
     this.stream,
     this.streamRequest,
     this.metaRequest,
     this.subtitlesPath,
     this.configureEngine,
   }) : fixture = player ?? loadPlayerFixture() {
-    core = FakeCoreClient(state: {CoreField.player: fixture});
+    core = FakeCoreClient(
+      state: {
+        CoreField.player: fixture,
+        CoreField.ctx: ctx ?? loadCtxLoggedOutFixture(),
+      },
+    );
   }
 
   final Map<String, dynamic> fixture;
@@ -41,9 +48,6 @@ class PlayerHarness {
   /// Engine opens (`'open'`) and stats fetches (`'stats'`), in the order
   /// they happened.
   final List<String> calls = [];
-  final ValueNotifier<SubtitleStyle> subtitleStyle = ValueNotifier(
-    const SubtitleStyle(),
-  );
 
   /// Applied to every engine before the screen gets it: how a test makes
   /// the first `open` fail, which happens during the first pump.
@@ -71,7 +75,6 @@ class PlayerHarness {
           return engine;
         },
         fullscreen: fullscreen,
-        subtitleStyle: subtitleStyle,
         torrentStats: torrentStats,
         child: MaterialApp(home: home ?? screen()),
       ),
@@ -96,6 +99,18 @@ class PlayerHarness {
     for (final action in core.dispatched)
       if (action.action['action'] == 'Player')
         action.action['args']['action'] as String,
+  ];
+
+  /// The current profile settings of the fake core's `ctx`.
+  ProfileSettings get settings =>
+      ProfileState.fromCtx(core.stateOf(CoreField.ctx) ?? const {}).settings;
+
+  /// Every dispatched `UpdateSettings` map, in order.
+  List<Map<String, dynamic>> settingsUpdates() => [
+    for (final action in core.dispatched)
+      if (action.field == CoreField.ctx &&
+          action.action['args']?['action'] == 'UpdateSettings')
+        action.action['args']['args'] as Map<String, dynamic>,
   ];
 
   /// The `args` of the last dispatched `Player` sub-action named [name].

@@ -132,28 +132,40 @@ class AudioMenu extends StatelessWidget {
   }
 }
 
-/// Playback speed and subtitle appearance.
+/// Playback speed and subtitle appearance. The appearance is the profile's
+/// `subtitlesSize` / `subtitlesTextColor` / `subtitlesBackgroundColor`, so
+/// a pick here is an `UpdateSettings` that every later player sees too.
 class PlayerSettingsSheet extends StatelessWidget {
   const PlayerSettingsSheet({
     super.key,
     required this.rate,
     required this.rates,
     required this.onRate,
-    required this.subtitleStyle,
+    required this.settings,
+    required this.onSetting,
   });
 
   final double rate;
   final List<double> rates;
   final ValueChanged<double> onRate;
 
-  /// Edited in place; the player listens and restyles the subtitles.
-  final ValueNotifier<SubtitleStyle> subtitleStyle;
+  /// The profile settings the style is read from.
+  final ProfileSettings settings;
+
+  /// Writes one setting; null while the settings are not known yet (the
+  /// `ctx` field has not arrived), which disables the style chips: a
+  /// partial map would be rejected by the engine.
+  final void Function(String key, Object? value)? onSetting;
 
   static String rateLabel(double rate) =>
       '${rate == rate.roundToDouble() ? rate.toInt() : rate}×';
 
+  static String sizeLabel(int percent) => '$percent %';
+
   @override
   Widget build(BuildContext context) {
+    final style = SubtitleStyle.fromSettings(settings);
+    final onSetting = this.onSetting;
     return ListView(
       shrinkWrap: true,
       padding: const EdgeInsets.only(bottom: 16),
@@ -174,88 +186,111 @@ class PlayerSettingsSheet extends StatelessWidget {
             ],
           ),
         ),
-        const _SectionLabel('Subtitle style'),
-        ValueListenableBuilder<SubtitleStyle>(
-          valueListenable: subtitleStyle,
-          builder: (context, style, _) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        const _SectionLabel('Subtitle size'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final size in SubtitleStyle.fontSizes)
-                      ChoiceChip(
-                        label: Text('${size.toInt()}'),
-                        tooltip: 'Font size ${size.toInt()}',
-                        selected: size == style.fontSize,
-                        onSelected: (_) => subtitleStyle.value = style.copyWith(
-                          fontSize: size,
-                        ),
-                      ),
-                  ],
+              for (final size in SubtitleStyle.sizes)
+                ChoiceChip(
+                  label: Text(sizeLabel(size)),
+                  selected: size == settings.subtitlesSize,
+                  onSelected: onSetting == null
+                      ? null
+                      : (_) =>
+                            onSetting(ProfileSettings.subtitlesSizeKey, size),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final entry in SubtitleStyle.colors.entries)
-                      ChoiceChip(
-                        avatar: CircleAvatar(
-                          backgroundColor: entry.value,
-                          radius: 8,
-                        ),
-                        label: Text(entry.key),
-                        selected: entry.value == style.color,
-                        onSelected: (_) => subtitleStyle.value = style.copyWith(
-                          color: entry.value,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              SwitchListTile(
-                title: const Text('Background box'),
-                subtitle: const Text('Easier to read over bright scenes'),
-                value: style.background,
-                onChanged: (value) =>
-                    subtitleStyle.value = style.copyWith(background: value),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  color: const Color(0xFF303030),
-                  child: Text(
-                    'Subtitle preview',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: style.fontSize * 0.6,
-                      color: style.color,
-                      backgroundColor: style.background
-                          ? const Color(0xAA000000)
-                          : null,
-                    ),
-                  ),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Text(
-                  'Text subtitles only (SRT, WebVTT, ASS text). Bitmap '
-                  'subtitles such as PGS or VobSub are listed but not drawn yet.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
             ],
           ),
         ),
+        const _SectionLabel('Subtitle colour'),
+        _ColorChips(
+          colors: SubtitleStyle.textColors,
+          selected: settings.subtitlesTextColor,
+          onSelected: onSetting == null
+              ? null
+              : (hex) => onSetting(ProfileSettings.subtitlesTextColorKey, hex),
+        ),
+        const _SectionLabel('Subtitle background'),
+        _ColorChips(
+          colors: SubtitleStyle.backgroundColors,
+          selected: settings.subtitlesBackgroundColor,
+          onSelected: onSetting == null
+              ? null
+              : (hex) =>
+                    onSetting(ProfileSettings.subtitlesBackgroundColorKey, hex),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            color: const Color(0xFF303030),
+            child: Text(
+              'Subtitle preview',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: style.fontSize * 0.6,
+                color: style.color,
+                backgroundColor: style.hasBackground
+                    ? style.backgroundColor
+                    : null,
+              ),
+            ),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Text(
+            'Text subtitles only (SRT, WebVTT, ASS text). Bitmap '
+            'subtitles such as PGS or VobSub are listed but not drawn yet.',
+            style: TextStyle(fontSize: 12),
+          ),
+        ),
       ],
+    );
+  }
+}
+
+/// Named colour swatches; the current value is selected by its hex string,
+/// and a value outside the palette shows as a "Custom" chip so the picker
+/// never claims a colour the user did not set.
+class _ColorChips extends StatelessWidget {
+  const _ColorChips({
+    required this.colors,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final Map<String, String> colors;
+  final String selected;
+  final ValueChanged<String>? onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = selected.toUpperCase();
+    final known = colors.values.any((hex) => hex.toUpperCase() == normalized);
+    final onSelected = this.onSelected;
+    Widget chip(String name, String hex) => ChoiceChip(
+      avatar: CircleAvatar(
+        backgroundColor:
+            SubtitleStyle.parseRgbaHex(hex) ?? const Color(0x00000000),
+        radius: 8,
+      ),
+      label: Text(name),
+      selected: hex.toUpperCase() == normalized,
+      onSelected: onSelected == null ? null : (_) => onSelected(hex),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          for (final entry in colors.entries) chip(entry.key, entry.value),
+          if (!known) chip('Custom ($selected)', selected),
+        ],
+      ),
     );
   }
 }

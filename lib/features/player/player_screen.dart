@@ -96,9 +96,12 @@ final class PlayerScreenResult {
 class _PlayerScreenState extends State<PlayerScreen> {
   CoreClient? _client;
   CoreFieldNotifier? _player;
+
+  /// The `ctx` field, for `profile.settings`: the subtitle style.
+  CoreFieldNotifier? _ctx;
   PlaybackEngine? _engine;
   FullscreenController? _fullscreen;
-  ValueNotifier<SubtitleStyle>? _subtitleStyle;
+  SubtitleStyle _subtitleStyle = const SubtitleStyle();
   final List<StreamSubscription<void>> _subscriptions = [];
   final FocusNode _focusNode = FocusNode(debugLabel: 'player');
 
@@ -178,6 +181,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _client = client;
     _player = CoreFieldNotifier(client, CoreField.player)
       ..addListener(_onPlayerState);
+    _ctx = CoreFieldNotifier(client, CoreField.ctx)..addListener(_onCtx);
     client.dispatch(
       CoreActions.loadPlayer(
         stream: widget.stream,
@@ -189,12 +193,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     _fullscreen = PlaybackScope.fullscreenOf(context);
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
-    final subtitleStyle = PlaybackScope.subtitleStyleOf(context);
-    _subtitleStyle = subtitleStyle..addListener(_onSubtitleStyle);
 
     final engine = PlaybackScope.of(context)();
     _engine = engine;
-    engine.setSubtitleStyle(subtitleStyle.value);
+    engine.setSubtitleStyle(_subtitleStyle);
     _subscriptions.addAll([
       engine.duration.listen(_onDuration),
       engine.position.listen(_onPosition),
@@ -211,6 +213,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
   PlayerState? get _state {
     final json = _player?.value;
     return json == null ? null : PlayerState.fromJson(json);
+  }
+
+  /// The profile settings; empty (every accessor at its default) until the
+  /// `ctx` field has been pulled.
+  ProfileSettings get _settings {
+    final json = _ctx?.value;
+    return json == null
+        ? const ProfileSettings({})
+        : ProfileState.fromCtx(json).settings;
+  }
+
+  void _onCtx() {
+    if (!mounted) return;
+    final style = SubtitleStyle.fromSettings(_settings);
+    if (style == _subtitleStyle) return;
+    _subtitleStyle = style;
+    _engine?.setSubtitleStyle(style);
+    setState(() {});
+  }
+
+  /// Writes one profile setting: the whole map with [key] changed, as the
+  /// engine has no per-field defaults. Never with unknown settings (see
+  /// [PlayerSettingsSheet.onSetting]).
+  void _updateSetting(String key, Object? value) {
+    final settings = _settings;
+    if (settings.isEmpty) return;
+    _client?.dispatch(
+      CoreActions.updateSettings(settings.withValue(key, value)),
+    );
   }
 
   void _onPlayerState() {
@@ -398,13 +429,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // The bars read the selection and the track count directly.
     setState(() => _tracks.value = tracks);
     _maybeAutoPickSubtitles();
-  }
-
-  void _onSubtitleStyle() {
-    final style = _subtitleStyle?.value;
-    if (style == null) return;
-    _engine?.setSubtitleStyle(style);
-    if (mounted) setState(() {});
   }
 
   // --- Controls visibility -------------------------------------------------
@@ -727,15 +751,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
   );
 
   Future<void> _openSettings() => _showSheet(
-    (context) => StatefulBuilder(
-      builder: (context, setSheetState) => PlayerSettingsSheet(
-        rate: _rate,
-        rates: PlayerScreen.rates,
-        onRate: (rate) {
-          _setRate(rate);
-          setSheetState(() {});
+    (context) => ValueListenableBuilder<Map<String, dynamic>?>(
+      valueListenable: _ctx!,
+      builder: (context, _, _) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final settings = _settings;
+          return PlayerSettingsSheet(
+            rate: _rate,
+            rates: PlayerScreen.rates,
+            onRate: (rate) {
+              _setRate(rate);
+              setSheetState(() {});
+            },
+            settings: settings,
+            onSetting: settings.isEmpty ? null : _updateSetting,
+          );
         },
-        subtitleStyle: _subtitleStyle!,
       ),
     ),
   );
@@ -921,13 +952,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
-    _subtitleStyle?.removeListener(_onSubtitleStyle);
     if (_fullscreenOn) _fullscreen?.exit().ignore();
     final engine = _engine;
     _engine = null;
     if (engine != null) _disposeAfterFrame(engine);
     _player?.removeListener(_onPlayerState);
     _player?.dispose();
+    _ctx?.removeListener(_onCtx);
+    _ctx?.dispose();
     if (!_handedOver) _client?.dispatch(CoreActions.unload(CoreField.player));
     _position.dispose();
     _buffer.dispose();

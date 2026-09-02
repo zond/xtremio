@@ -1,5 +1,7 @@
 import 'dart:ui' show Color;
 
+import '../../core/state/profile.dart';
+
 /// One selectable audio or subtitle track the engine found in the media.
 /// Our own value type so the [PlaybackEngine] interface stays free of
 /// `media_kit` types (and tests can build them by hand).
@@ -102,49 +104,105 @@ final class PlaybackTracks {
   }
 }
 
-/// How text subtitles are drawn.
+/// How text subtitles are drawn: `profile.settings.subtitlesSize` /
+/// `subtitlesTextColor` / `subtitlesBackgroundColor` turned into a text
+/// style (see [SubtitleStyle.fromSettings]).
 ///
 /// Rendered by Flutter (media_kit's `SubtitleView`), not by libass, so this
 /// is a text style rather than mpv `sub-*` properties. Bitmap subtitles
 /// (PGS, VobSub) are not drawn in this path at all.
 final class SubtitleStyle {
   const SubtitleStyle({
-    this.fontSize = 32,
+    this.fontSize = baseFontSize,
     this.color = const Color(0xFFFFFFFF),
-    this.background = true,
+    this.backgroundColor = const Color(0x00000000),
   });
+
+  /// [fontSize] is [baseFontSize] scaled by `subtitlesSize` (percent); the
+  /// colours are the settings' `#RRGGBBAA` strings, with the engine's
+  /// defaults (white on nothing) for anything unparsable.
+  factory SubtitleStyle.fromSettings(ProfileSettings settings) => SubtitleStyle(
+    fontSize: baseFontSize * settings.subtitlesSize / 100,
+    color: parseRgbaHex(settings.subtitlesTextColor) ?? const Color(0xFFFFFFFF),
+    backgroundColor:
+        parseRgbaHex(settings.subtitlesBackgroundColor) ??
+        const Color(0x00000000),
+  );
+
+  /// Logical pixels at `subtitlesSize` 100 %.
+  static const double baseFontSize = 32;
+
+  /// The `subtitlesSize` values offered, in percent (stremio-web's list).
+  static const List<int> sizes = [75, 100, 125, 150, 175, 200, 250];
+
+  /// Text colours offered, as the `#RRGGBBAA` the setting stores.
+  static const Map<String, String> textColors = {
+    'White': '#FFFFFFFF',
+    'Yellow': '#FFEB3BFF',
+    'Cyan': '#4DD0E1FF',
+    'Green': '#81C784FF',
+    'Orange': '#FFB74DFF',
+  };
+
+  /// Background colours offered; fully transparent means no box.
+  static const Map<String, String> backgroundColors = {
+    'None': '#00000000',
+    'Translucent': '#000000AA',
+    'Black': '#000000FF',
+    'Grey': '#424242FF',
+  };
 
   /// Logical pixels.
   final double fontSize;
   final Color color;
 
-  /// A translucent black box behind each line, for readability on bright
-  /// scenes.
-  final bool background;
+  /// A box behind each line; fully transparent (the engine's default) draws
+  /// none and the text gets a shadow for readability instead.
+  final Color backgroundColor;
 
-  static const List<double> fontSizes = [22, 28, 32, 40, 48];
+  bool get hasBackground => backgroundColor.a > 0;
 
-  static const Map<String, Color> colors = {
-    'White': Color(0xFFFFFFFF),
-    'Yellow': Color(0xFFFFEB3B),
-    'Cyan': Color(0xFF4DD0E1),
-    'Green': Color(0xFF81C784),
-  };
+  /// `#RRGGBB` or `#RRGGBBAA` (stremio-core's colour strings) to a [Color];
+  /// null for anything else.
+  static Color? parseRgbaHex(String hex) {
+    final digits = hex.startsWith('#') ? hex.substring(1) : hex;
+    if (digits.length != 6 && digits.length != 8) return null;
+    final value = int.tryParse(digits, radix: 16);
+    if (value == null) return null;
+    final rgb = digits.length == 6 ? value : value >> 8;
+    final alpha = digits.length == 6 ? 0xFF : value & 0xFF;
+    return Color((alpha << 24) | rgb);
+  }
 
-  SubtitleStyle copyWith({double? fontSize, Color? color, bool? background}) =>
-      SubtitleStyle(
-        fontSize: fontSize ?? this.fontSize,
-        color: color ?? this.color,
-        background: background ?? this.background,
-      );
+  /// The `#RRGGBBAA` form of [color], upper-case as stremio-core writes it.
+  static String toRgbaHex(Color color) {
+    final argb = color.toARGB32();
+    final rgba = ((argb & 0x00FFFFFF) << 8) | (argb >> 24);
+    return '#${rgba.toRadixString(16).padLeft(8, '0').toUpperCase()}';
+  }
+
+  SubtitleStyle copyWith({
+    double? fontSize,
+    Color? color,
+    Color? backgroundColor,
+  }) => SubtitleStyle(
+    fontSize: fontSize ?? this.fontSize,
+    color: color ?? this.color,
+    backgroundColor: backgroundColor ?? this.backgroundColor,
+  );
 
   @override
   bool operator ==(Object other) =>
       other is SubtitleStyle &&
       other.fontSize == fontSize &&
       other.color == color &&
-      other.background == background;
+      other.backgroundColor == backgroundColor;
 
   @override
-  int get hashCode => Object.hash(fontSize, color, background);
+  int get hashCode => Object.hash(fontSize, color, backgroundColor);
+
+  @override
+  String toString() =>
+      'SubtitleStyle($fontSize, ${toRgbaHex(color)} on '
+      '${toRgbaHex(backgroundColor)})';
 }
