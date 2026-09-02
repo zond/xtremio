@@ -72,15 +72,14 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
   Gradle locates it via `cargo metadata`, and
   `android/app/proguard-rules.pro` keeps it from being stripped by R8 in
   release builds.
-- **`HOME` for the embedded server.** Android app processes start with no
-  `HOME` environment variable. librqbit (the torrent engine `stream-server`
-  embeds) uses the `directories` crate to place its DHT routing-table dump,
-  which on Android resolves purely from `$HOME` — with none set it fails
-  with "cannot determine project directory for com.rqbit.dht" and the whole
-  embedded server refuses to start. `server::start` (`rust/src/server.rs`)
-  sets `HOME` to the server's own config directory before starting when the
-  process has none, so the dump lands at
-  `<files>/server/.cache/com.rqbit.dht/`.
+- **No `HOME` needed by the embedded server.** Android app processes start
+  with no `HOME` environment variable, and `dirs`/`directories` have no
+  passwd fallback there. `stream-server` therefore derives every path it
+  needs from the directories the app passes in `ServerConfig`
+  (`RustCoreClient.init(support, cache)` → `<files>/server` for settings
+  and logs, `<cache>/server` for the torrent session, its DHT routing-table
+  dump `dht.json` and the piece cache) and never consults the environment
+  on its startup path.
 - **Leanback entries** for Android TV / Google TV are already in
   `AndroidManifest.xml` (same APK runs on Android TV boxes, Chromecast with
   Google TV, and the Google TV Streamer — they're all just Android).
@@ -138,8 +137,9 @@ not yet exercised — the emulator run below stands in for it.
 ## What was verified
 
 Verified 2026-09-02 on an x86_64 Linux host (KVM available, user in the `kvm`
-group) against commit `a4b9327` (10 commits ahead of `origin/main`, includes
-the librqbit `HOME` fix above).
+group) against commit `a4b9327` (10 commits ahead of `origin/main`; at that
+commit the app still set `HOME` itself for librqbit, which the current
+`stream-server` no longer needs -- see above).
 
 **CI replication** (`.github/workflows/ci.yml`, run locally):
 
@@ -166,8 +166,7 @@ bottom of `ci.yml` — verified manually instead):
   (`android-36;google_apis;x86_64`, headless, `-gpu swiftshader_indirect`).
 - `adb logcat` showed: `NativeInit.initTlsVerifier` running before Flutter
   starts (no "Expect rustls-platform-verifier to be initialized" warning
-  anywhere in the log), `HOME unset; pointing it at the server config dir`
-  followed by the embedded `stream-server` starting and listening on
+  anywhere in the log), the embedded `stream-server` starting and listening on
   `127.0.0.1:11470`, the stremio-core runtime starting against that URL, and
   no `FATAL` or uncaught-exception lines for the run.
 - `adb forward tcp:11470 tcp:11470 && curl http://127.0.0.1:11470/heartbeat`

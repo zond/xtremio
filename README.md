@@ -267,12 +267,10 @@ main manifest declares `INTERNET` (Flutter's template only does so for
 debug/profile) and `usesCleartextTraffic="true"`: that flag only governs
 dart:io (`Image.network` posters from self-hosted http:// addons, calls to the
 loopback server), while Rust sockets and libmpv ignore the policy either way.
-`server::start` also sets `HOME` to the server config dir when the process
-has none (every Android app process): librqbit places its DHT routing-table
-dump through the `directories` crate, which on Android resolves purely from
-`$HOME`, and without it the torrent session -- and so the whole embedded
-server -- refuses to start ("cannot determine project directory for
-com.rqbit.dht"). The dump lands at `<files>/server/.cache/com.rqbit.dht/`.
+The embedded server needs no environment: Android app processes have no
+`HOME`, and `stream-server` derives every path (settings, logs, torrent
+session and DHT state) from the config and cache directories the app hands
+it (`<files>/server` and `<cache>/server`, from `path_provider`).
 
 **Emulator (headless, KVM).** The x86_64 `google_apis` image is the one that
 runs on an x86_64 Linux host (which is why the bindgen path above matters);
