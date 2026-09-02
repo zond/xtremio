@@ -76,7 +76,16 @@ abstract final class CoreActions {
     }),
   );
 
-  /// One catalog with its filters (the Discover screen).
+  /// The Discover screen with no catalog chosen: the engine picks the first
+  /// catalog of the highest-priority type (movie, then series, ...) across
+  /// the installed addons.
+  static CoreAction loadDiscoverDefault() => CoreAction(
+    field: CoreField.discover,
+    action: _load('CatalogWithFilters', null),
+  );
+
+  /// One catalog with its filters (the Discover screen). Every entry of
+  /// `discover.selectable` carries the exact request to pass here.
   static CoreAction loadDiscover(ResourceRequest request) => CoreAction(
     field: CoreField.discover,
     action: _load('CatalogWithFilters', {'request': request.toJson()}),

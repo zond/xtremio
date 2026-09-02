@@ -79,6 +79,18 @@ void main() {
     });
   });
 
+  test('loadDiscoverDefault passes no Selected so the engine picks one', () {
+    final action = CoreActions.loadDiscoverDefault();
+    expect(action.field, CoreField.discover);
+    // `ActionLoad::CatalogWithFilters(Option<Selected>)`: `args: null` is
+    // None, which `selected_update` resolves to the first selectable type.
+    expect(action.action, {
+      'action': 'Load',
+      'args': {'model': 'CatalogWithFilters', 'args': null},
+    });
+    expect(jsonEncode(action.action), contains('"args":null'));
+  });
+
   test('loadMetaDetails defaults to guessing the stream', () {
     final json = CoreActions.loadMetaDetails(type: 'series', id: 'tt0903747');
     expect(json.field, CoreField.metaDetails);
