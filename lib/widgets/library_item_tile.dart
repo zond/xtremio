@@ -4,16 +4,17 @@ import '../core/state/library.dart';
 import 'poster_tile.dart';
 
 /// A library item as a poster: the watched fraction of its current video
-/// along the bottom edge, a badge for unseen new episodes, a check mark once
-/// anything was watched to completion, and the name (plus the episode label
-/// for a series) underneath. Shared by the Board's continue-watching row and
-/// the Library grid.
+/// along the bottom edge, a badge for unseen new episodes, optionally a
+/// check mark once anything was watched to completion, and the name (plus
+/// the episode label for a series) underneath. Shared by the Board's
+/// continue-watching row and the Library grid.
 class LibraryItemTile extends StatelessWidget {
   const LibraryItemTile({
     super.key,
     required this.item,
     required this.onTap,
     this.onLongPress,
+    this.showWatchedMark = true,
   });
 
   final LibraryItemView item;
@@ -21,6 +22,11 @@ class LibraryItemTile extends StatelessWidget {
 
   /// Also fired by a secondary (right) click, for desktop.
   final VoidCallback? onLongPress;
+
+  /// Show the check mark when [LibraryItemView.isWatched]. The Library grid
+  /// wants it; a continue-watching row does not, since a series with one
+  /// finished episode is there to be resumed, not marked done.
+  final bool showWatchedMark;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +63,7 @@ class LibraryItemTile extends StatelessWidget {
                     right: 6,
                     child: Badge.count(count: item.notifications),
                   )
-                else if (item.isWatched)
+                else if (showWatchedMark && item.isWatched)
                   Positioned(
                     top: 6,
                     right: 6,

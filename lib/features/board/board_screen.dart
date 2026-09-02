@@ -316,7 +316,11 @@ class _ContinueWatchingRowView extends StatelessWidget {
               final item = state.items[index];
               return SizedBox(
                 width: layout.tileWidthFor(item.posterShape),
-                child: LibraryItemTile(item: item, onTap: () => onOpen(item)),
+                child: LibraryItemTile(
+                  item: item,
+                  onTap: () => onOpen(item),
+                  showWatchedMark: false,
+                ),
               );
             },
           ),

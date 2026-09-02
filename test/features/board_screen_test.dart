@@ -122,6 +122,22 @@ void main() {
     );
   });
 
+  testWidgets('continue watching never shows the watched mark', (tester) async {
+    // A series with one finished episode and the next one in progress is
+    // watched (timesWatched > 0) but sits in the row to be resumed.
+    final preview = loadContinueWatchingFixture();
+    final item =
+        (preview['items'] as List<dynamic>).single as Map<String, dynamic>;
+    (item['state'] as Map<String, dynamic>)['timesWatched'] = 1;
+    final core = fakeCore(continueWatching: preview);
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Night of the Living Dead'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.byIcon(Icons.check), findsNothing);
+  });
+
   testWidgets('the continue watching row disappears when the list empties', (
     tester,
   ) async {
