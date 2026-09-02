@@ -14,9 +14,9 @@ void main() {
 
   test('unknown fields are kept by name but skipped in the typed list', () {
     final event = CoreEvent.parse(
-      '{"name":"NewState","args":["search","board"]}',
+      '{"name":"NewState","args":["library_with_filters","board"]}',
     ) as NewStateEvent;
-    expect(event.fieldNames, ['search', 'board']);
+    expect(event.fieldNames, ['library_with_filters', 'board']);
     expect(event.fields, [CoreField.board]);
   });
 

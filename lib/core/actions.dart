@@ -41,9 +41,35 @@ abstract final class CoreActions {
     }),
   );
 
-  /// Loads pages [start, end) of the board's catalogs.
-  static CoreAction loadBoardRange(int start, int end) => CoreAction(
-    field: CoreField.board,
+  /// Fetches the first page of the board catalogs at indices
+  /// `start..=end`. The end is inclusive (the engine checks
+  /// `start <= index && index <= end`); already-loaded catalogs are kept,
+  /// so widening the range is idempotent.
+  static CoreAction loadBoardRange(int start, int end) =>
+      _catalogsWithExtraRange(CoreField.board, start, end);
+
+  /// Search: every catalog whose manifest supports the `search` extra. Each
+  /// Load also pushes [query] to the profile's search history, so callers
+  /// debounce.
+  static CoreAction loadSearch(String query) => CoreAction(
+    field: CoreField.search,
+    action: _load('CatalogsWithExtra', {
+      'type': null,
+      'extra': [ExtraValue('search', query).toJson()],
+    }),
+  );
+
+  /// Fetches the search catalogs at indices `start..=end` (inclusive end,
+  /// as [loadBoardRange]).
+  static CoreAction loadSearchRange(int start, int end) =>
+      _catalogsWithExtraRange(CoreField.search, start, end);
+
+  static CoreAction _catalogsWithExtraRange(
+    CoreField field,
+    int start,
+    int end,
+  ) => CoreAction(
+    field: field,
     action: _tagged('CatalogsWithExtra', {
       'action': 'LoadRange',
       'args': {'start': start, 'end': end},
@@ -62,21 +88,31 @@ abstract final class CoreActions {
     action: _tagged('CatalogWithFilters', {'action': 'LoadNextPage'}),
   );
 
-  /// Meta + streams for one item; [guessStream] lets the engine pick the
-  /// stream to resume for series.
+  /// Meta + streams for one item. With [videoId] the streams of that video
+  /// (an episode, or the movie itself) are requested and the engine does not
+  /// guess; otherwise [guessStream] lets it pick the stream to resume. An
+  /// explicit [streamPath] overrides [videoId].
   static CoreAction loadMetaDetails({
     required String type,
     required String id,
+    String? videoId,
     ResourcePath? streamPath,
-    bool guessStream = true,
-  }) => CoreAction(
-    field: CoreField.metaDetails,
-    action: _load('MetaDetails', {
-      'metaPath': ResourcePath(resource: 'meta', type: type, id: id).toJson(),
-      'streamPath': streamPath?.toJson(),
-      'guessStream': guessStream,
-    }),
-  );
+    bool? guessStream,
+  }) {
+    final path =
+        streamPath ??
+        (videoId == null
+            ? null
+            : ResourcePath(resource: 'stream', type: type, id: videoId));
+    return CoreAction(
+      field: CoreField.metaDetails,
+      action: _load('MetaDetails', {
+        'metaPath': ResourcePath(resource: 'meta', type: type, id: id).toJson(),
+        'streamPath': path?.toJson(),
+        'guessStream': guessStream ?? path == null,
+      }),
+    );
+  }
 
   /// Selects a stream for playback. [stream] is the raw stream JSON as it
   /// came out of `meta_details.streams`.

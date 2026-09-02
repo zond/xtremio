@@ -207,6 +207,118 @@ void main() {
     });
   });
 
+  group('CatalogsWithExtraState', () {
+    test('aligns labels with rows and tells planned from loaded rows', () {
+      final state = CatalogsWithExtraState.fromJson(loadBoardFixture());
+      expect(state.isLoaded, isTrue);
+      expect(state.selectedType, isNull);
+      expect(state.selectedExtra, isEmpty);
+      expect(state.rows, hasLength(6));
+      expect(state.isLoading, isFalse);
+
+      final popular = state.rows.first;
+      expect(popular.index, 0);
+      expect(popular.title, 'Popular');
+      expect(popular.subtitle, 'Cinemeta · movie');
+      expect(popular.firstRequest.base, kCinemetaManifestUrl);
+      expect(popular.firstRequest.path.id, 'top');
+      expect(popular.isPlanned, isFalse);
+      expect(popular.items, hasLength(50));
+      expect(popular.posterShape, 'poster');
+      expect(popular.error, isNull);
+
+      // A catalog without a manifest name is labelled by its addon.
+      final youtube = state.rows.firstWhere((r) => r.label?.type == 'channel');
+      expect(youtube.title, 'YouTube');
+      expect(youtube.subtitle, 'YouTube · channel');
+
+      // LoadRange {0, 2} left everything past index 2 unrequested.
+      for (final row in state.rows) {
+        expect(row.isPlanned, row.index > 2, reason: 'row ${row.index}');
+        expect(row.isEmpty, isFalse);
+      }
+      expect(state.visibleRows, hasLength(6));
+    });
+
+    test('drops EmptyContent rows from visibleRows, keeps failures', () {
+      final state = CatalogsWithExtraState.fromJson(loadSearchFixture());
+      expect(state.selectedExtra, const [
+        ExtraValue('search', 'night of the living dead'),
+      ]);
+      expect(state.rows, hasLength(5));
+      final failed = state.rows.where((r) => r.error != null).toList();
+      expect(failed, hasLength(2));
+      expect(failed.first.error?.kind, 'Env');
+      expect(failed.first.isEmpty, isFalse);
+      expect(state.rows.first.items.map((i) => i.id), contains('tt0063350'));
+
+      final json = loadSearchFixture();
+      final pages = json['catalogs'] as List<dynamic>;
+      (pages[1] as List<dynamic>)[0]['content'] = {
+        'type': 'Err',
+        'content': {'type': 'EmptyContent'},
+      };
+      final withEmpty = CatalogsWithExtraState.fromJson(json);
+      expect(withEmpty.rows[1].isEmpty, isTrue);
+      expect(withEmpty.visibleRows.map((r) => r.index), [0, 2, 3, 4]);
+    });
+
+    test('an unloaded model has no rows and is not loading', () {
+      final empty = CatalogsWithExtraState.fromJson({
+        'selected': null,
+        'catalogs': <Object>[],
+        'catalogLabels': <Object>[],
+      });
+      expect(empty.isLoaded, isFalse);
+      expect(empty.rows, isEmpty);
+      expect(empty.isLoading, isFalse);
+      expect(CatalogsWithExtraState.fromJson({}).rows, isEmpty);
+    });
+  });
+
+  group('ContinueWatchingState', () {
+    test('reads the recorded library item and its progress', () {
+      final state = ContinueWatchingState.fromJson(
+        loadContinueWatchingFixture(),
+      );
+      expect(state.isEmpty, isFalse);
+      final item = state.items.single;
+      expect(item.id, 'tt0063350');
+      expect(item.type, 'movie');
+      expect(item.name, 'Night of the Living Dead');
+      expect(item.poster, startsWith('https://'));
+      expect(item.posterShape, 'poster');
+      expect(item.videoId, 'tt0063350');
+      expect(item.timeOffset, 60000);
+      expect(item.duration, 5760000);
+      expect(item.progress, closeTo(60000 / 5760000, 1e-9));
+      expect(item.notifications, 0);
+      expect(item.seasonEpisodeLabel, '');
+    });
+
+    test('labels episodes and has no progress without a duration', () {
+      final episode = ContinueWatchingItem({
+        '_id': 'tt0903747',
+        'type': 'series',
+        'name': 'Breaking Bad',
+        'state': {'video_id': 'tt0903747:2:3', 'timeOffset': 10, 'duration': 0},
+        'notifications': 2,
+      });
+      expect(episode.seasonEpisodeLabel, 'S2E3');
+      expect(episode.progress, isNull);
+      expect(episode.notifications, 2);
+      expect(
+        ContinueWatchingItem({
+          '_id': 'yt:abc',
+          'type': 'channel',
+          'state': {'video_id': 'yt:abc:video'},
+        }).seasonEpisodeLabel,
+        '',
+      );
+      expect(ContinueWatchingState.fromJson({}).isEmpty, isTrue);
+    });
+  });
+
   group('ResourceLoadable', () {
     test('distinguishes not-yet-requested from loading, ready and error', () {
       final request = {

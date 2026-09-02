@@ -37,6 +37,28 @@ void main() {
     );
   });
 
+  test('board and search ranges are inclusive LoadRange actions', () {
+    // Byte-for-byte the actions dispatched in rust/tests/board.rs.
+    expect(
+      jsonDecode(jsonEncode(CoreActions.loadBoardRange(0, 2).toJson())),
+      jsonDecode('''
+        {"field":"board","action":{"action":"CatalogsWithExtra","args":{
+          "action":"LoadRange","args":{"start":0,"end":2}}}}'''),
+    );
+    expect(
+      jsonDecode(
+        jsonEncode(CoreActions.loadSearch('night of the living dead').toJson()),
+      ),
+      jsonDecode('''
+        {"field":"search","action":{"action":"Load","args":{
+          "model":"CatalogsWithExtra","args":{"type":null,
+          "extra":[["search","night of the living dead"]]}}}}'''),
+    );
+    final range = CoreActions.loadSearchRange(0, 4);
+    expect(range.field, CoreField.search);
+    expect(range.action, CoreActions.loadBoardRange(0, 4).action);
+  });
+
   test('loadDiscover matches the request shape the Rust network test uses', () {
     final action = CoreActions.loadDiscover(
       ResourceRequest.cinemetaCatalog(type: 'movie', id: 'top'),
@@ -76,6 +98,43 @@ void main() {
         },
       },
     });
+  });
+
+  test('loadMetaDetails with a video id asks for its streams, no guess', () {
+    final json = CoreActions.loadMetaDetails(
+      type: 'series',
+      id: 'tt0903747',
+      videoId: 'tt0903747:1:2',
+    );
+    expect(json.action['args']['args'], {
+      'metaPath': {
+        'resource': 'meta',
+        'type': 'series',
+        'id': 'tt0903747',
+        'extra': <Object>[],
+      },
+      'streamPath': {
+        'resource': 'stream',
+        'type': 'series',
+        'id': 'tt0903747:1:2',
+        'extra': <Object>[],
+      },
+      'guessStream': false,
+    });
+    // An explicit streamPath wins, and guessStream can be forced.
+    final explicit = CoreActions.loadMetaDetails(
+      type: 'movie',
+      id: 'tt1',
+      videoId: 'ignored',
+      streamPath: const ResourcePath(
+        resource: 'stream',
+        type: 'movie',
+        id: 'x',
+      ),
+      guessStream: true,
+    );
+    expect(explicit.action['args']['args']['streamPath']['id'], 'x');
+    expect(explicit.action['args']['args']['guessStream'], isTrue);
   });
 
   test('player actions nest under Player', () {

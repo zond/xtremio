@@ -47,6 +47,16 @@ final class LoadableError<T> extends Loadable<T> {
   /// `EnvError` (`{"code": .., "message": ..}`).
   final Object? error;
 
+  /// The `ResourceError` variant (`EmptyContent`, `UnexpectedResponse`,
+  /// `Env`), when the error is one.
+  String? get kind {
+    final error = this.error;
+    return error is Map<String, dynamic> ? error['type'] as String? : null;
+  }
+
+  /// The addon answered with zero items; not a failure worth showing.
+  bool get isEmptyContent => kind == 'EmptyContent';
+
   /// Best-effort human-readable message.
   String get message {
     final error = this.error;

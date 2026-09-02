@@ -2,7 +2,9 @@
 /// (`snake_case`, e.g. in `NewState` events and `core_get_state`).
 enum CoreField {
   ctx('ctx'),
+  continueWatchingPreview('continue_watching_preview'),
   board('board'),
+  search('search'),
   discover('discover'),
   metaDetails('meta_details'),
   streamingServer('streaming_server'),
