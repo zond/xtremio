@@ -12,6 +12,26 @@ Rust engine for addons, catalogs, library, and playback state) and
 > **Status:** early scaffold. Right now this is a responsive app shell; the
 > Rust integration and real screens are being built out.
 
+## Goals (beyond current Stremio clients)
+
+The point of Xtremio is to go past what existing Stremio apps do:
+
+- **Offline downloads** — cache a full episode or movie to the device and keep
+  watching with no connection (through a tunnel, on a plane), the way Netflix
+  does. This fits the architecture naturally: the torrent engine already writes
+  to a local cache; offline support means downloading the *whole* file, pinning
+  it so it is never evicted, and a library UI to manage what is saved.
+- **Casting** to plain Chromecast / Cast-enabled TVs (the Cast *sender*
+  protocol), in addition to running natively on Android TV devices. This works
+  for Chromecast-supported codecs served over the LAN; content in a codec the
+  receiver can't decode can't be cast, because the server intentionally does no
+  transcoding.
+- **Cloud storage sources** (e.g. Google Drive) — stream from a personal cloud
+  drive, most naturally via a Stremio addon that resolves cloud files to
+  playable URLs. Provider OAuth / API-key setup is the fiddly part.
+
+These are roadmap, not built yet.
+
 ## Architecture
 
 ```
