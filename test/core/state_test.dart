@@ -677,4 +677,518 @@ void main() {
       expect(failed.error?.message, 'boom');
     });
   });
+
+  group('ProfileState', () {
+    test('reads an anonymous profile: official addons, default settings', () {
+      final ctx = loadCtxLoggedOutFixture();
+      expect(ctx.keys, containsAll(['profile', 'notifications', 'events']));
+      expect(ctx['profile'], contains('addonsLocked'), reason: 'camelCase');
+      final profile = ProfileState.fromCtx(ctx);
+      expect(profile.isLoggedIn, isFalse);
+      expect(profile.user, isNull);
+      expect(profile.addonsLocked, isFalse);
+      expect(profile.addons, hasLength(6));
+      final cinemeta = profile.addons.first;
+      expect(cinemeta.transportUrl, kCinemetaManifestUrl);
+      expect(cinemeta.manifest.id, 'com.linvo.cinemeta');
+      expect(cinemeta.manifest.name, 'Cinemeta');
+      expect(cinemeta.isOfficial, isTrue);
+      expect(cinemeta.isProtected, isTrue);
+      expect(cinemeta.configureUrl, isNull);
+      expect(cinemeta.manifest.addonCatalogs, isNotEmpty);
+      expect(cinemeta.manifest.resourceNames, contains('catalog'));
+      expect(profile.isAddonInstalled(kCinemetaManifestUrl), isTrue);
+      expect(profile.isAddonInstalled('https://x/manifest.json'), isFalse);
+      expect(
+        profile.installedAddon(kCinemetaManifestUrl)?.manifest.name,
+        'Cinemeta',
+      );
+
+      final settings = profile.settings;
+      expect(settings.isEmpty, isFalse);
+      expect(settings.streamingServerUrl, 'http://127.0.0.1:11470/');
+      expect(settings.bingeWatching, isTrue);
+      expect(settings.nextVideoNotificationDuration, 35000);
+      expect(settings.seekTimeDuration, 10000);
+      expect(settings.seekShortTimeDuration, 3000);
+      expect(settings.pauseOnMinimize, isFalse);
+      expect(settings.hardwareDecoding, isTrue);
+      expect(settings.audioLanguage, 'eng');
+      expect(settings.subtitlesLanguage, 'eng');
+      expect(settings.subtitlesSize, 100);
+      expect(settings.subtitlesTextColor, '#FFFFFFFF');
+      expect(settings.subtitlesBackgroundColor, '#00000000');
+      expect(settings.quitOnClose, isTrue);
+      expect(settings.escExitFullscreen, isTrue);
+      expect(settings.hideSpoilers, isFalse);
+      expect(settings.interfaceLanguage, 'eng');
+    });
+
+    test('withValue keeps every other key for UpdateSettings', () {
+      final settings = ProfileState.fromCtx(loadCtxLoggedOutFixture()).settings;
+      final changed = settings.withValue(
+        ProfileSettings.bingeWatchingKey,
+        false,
+      );
+      expect(changed.length, settings.json.length);
+      expect(changed['bingeWatching'], isFalse);
+      expect(
+        Map.of(changed)..remove('bingeWatching'),
+        Map.of(settings.json)..remove('bingeWatching'),
+      );
+      expect(settings.json['bingeWatching'], isTrue, reason: 'a copy');
+      expect(ProfileSettings(changed).bingeWatching, isFalse);
+      expect(const ProfileSettings({}).isEmpty, isTrue);
+      expect(const ProfileSettings({}).seekTimeDuration, 10000);
+    });
+
+    test(
+      'reads the signed-in user (snake _id, premium_expire, gdpr_consent)',
+      () {
+        final ctx = loadCtxLoggedInFixture();
+        final auth = ctx['profile']['auth'] as Map<String, dynamic>;
+        expect(auth.keys, unorderedEquals(['key', 'user']));
+        expect(auth['user'], contains('_id'));
+        expect(auth['user'], contains('premium_expire'));
+        expect(auth['user'], contains('gdpr_consent'));
+        final profile = ProfileState.fromCtx(ctx);
+        expect(profile.isLoggedIn, isTrue);
+        final user = profile.user!;
+        expect(user.id, 'fake_user_id');
+        expect(user.email, 'user@example.com');
+        expect(user.avatar, isNull);
+        expect(user.fbId, isNull);
+        expect(user.premiumExpire, isNull);
+        expect(user.dateRegistered, DateTime.utc(2025, 6, 1, 8));
+        expect(user.lastModified, DateTime.utc(2026, 1, 15, 10, 30));
+        expect(user.gdprConsent.tos, isTrue);
+        expect(user.gdprConsent.marketing, isFalse);
+        expect(user.gdprConsent.from, 'xtremio');
+        // Same addons as the anonymous profile: only `auth` differs.
+        expect(
+          profile.addons.length,
+          ProfileState.fromCtx(loadCtxLoggedOutFixture()).addons.length,
+        );
+      },
+    );
+
+    test('tolerates a ctx that has not been pulled yet', () {
+      final empty = ProfileState.fromCtx({});
+      expect(empty.isLoggedIn, isFalse);
+      expect(empty.addons, isEmpty);
+      expect(empty.addonsLocked, isFalse);
+      expect(empty.settings.isEmpty, isTrue);
+      expect(empty.settings.streamingServerUrl, isNull);
+    });
+  });
+
+  group('AddonDescriptor', () {
+    test('derives the configure URL only for configurable addons', () {
+      final configurable = AddonDescriptor({
+        'manifest': {
+          'id': 'x',
+          'version': '1.2.3',
+          'name': 'X',
+          'behaviorHints': {'configurable': true},
+        },
+        'transportUrl': 'https://x.example/abc/manifest.json',
+      });
+      expect(configurable.configureUrl, 'https://x.example/abc/configure');
+      expect(configurable.manifest.version, '1.2.3');
+      expect(
+        configurable.manifest.behaviorHints.configurationRequired,
+        isFalse,
+      );
+      expect(configurable.isOfficial, isFalse);
+      expect(configurable.isProtected, isFalse);
+      final required = AddonDescriptor({
+        'manifest': {
+          'behaviorHints': {'configurationRequired': true},
+        },
+        'transportUrl': 'stremio://y.example/manifest.json',
+      });
+      expect(required.configureUrl, 'stremio://y.example/configure');
+      expect(
+        const AddonDescriptor({
+          'manifest': <String, dynamic>{},
+          'transportUrl': 'https://z/manifest.json',
+        }).configureUrl,
+        isNull,
+      );
+      expect(configurable.isSameAddon(required), isFalse);
+      expect(
+        configurable.isSameAddon(
+          const AddonDescriptor({
+            'transportUrl': 'https://x.example/abc/manifest.json',
+          }),
+        ),
+        isTrue,
+      );
+    });
+
+    test('reads resources in the short and the long form', () {
+      final manifest = AddonManifest({
+        'resources': [
+          'catalog',
+          {
+            'name': 'stream',
+            'types': ['movie'],
+          },
+          {'types': <Object>[]},
+        ],
+        'types': ['movie', 'series'],
+        'catalogs': [
+          {'id': 'top', 'type': 'movie', 'name': 'Top'},
+          {'id': 'x', 'type': 'series'},
+        ],
+      });
+      expect(manifest.resourceNames, ['catalog', 'stream']);
+      expect(manifest.types, ['movie', 'series']);
+      expect(manifest.catalogs.map((c) => c.name), ['Top', null]);
+      expect(manifest.catalogs.first.id, 'top');
+      expect(manifest.addonCatalogs, isEmpty);
+      expect(manifest.name, '');
+    });
+  });
+
+  group('LibraryState', () {
+    final json = loadLibraryFixture();
+    final state = LibraryState.fromJson(json);
+
+    test(
+      'reads the recorded library: selection, filters, next_page (snake)',
+      () {
+        final selectable = json['selectable'] as Map<String, dynamic>;
+        expect(
+          selectable.keys,
+          unorderedEquals(['types', 'sorts', 'next_page']),
+        );
+        expect(selectable, isNot(contains('nextPage')));
+        expect(state.isLoaded, isTrue);
+        expect(state.selected, const LibraryRequest());
+        expect(state.selected?.toJson(), {
+          'type': null,
+          'sort': 'lastwatched',
+          'page': 1,
+        });
+        expect(state.selectable.types.map((t) => t.type), [
+          null,
+          'movie',
+          'series',
+        ]);
+        expect(state.selectable.selectedType?.type, isNull);
+        expect(state.selectable.types[1].selected, isFalse);
+        expect(
+          state.selectable.types[1].request,
+          const LibraryRequest(type: 'movie'),
+        );
+        expect(state.selectable.sorts.map((s) => s.sort), [
+          LibrarySort.lastWatched,
+          LibrarySort.name,
+          LibrarySort.nameReverse,
+          LibrarySort.timesWatched,
+          LibrarySort.watched,
+          LibrarySort.notWatched,
+        ]);
+        expect(state.selectable.selectedSort?.sort, LibrarySort.lastWatched);
+        expect(
+          state.selectable.sorts[1].request,
+          const LibraryRequest(sort: LibrarySort.name),
+        );
+        expect(state.hasNextPage, isFalse);
+        expect(state.nextPage, isNull);
+      },
+    );
+
+    test('items are LibraryItems, newest first, without progress', () {
+      expect(state.isEmpty, isFalse);
+      expect(state.items.map((i) => i.id), ['tt26545992', 'tt11561116']);
+      final series = state.items.first;
+      expect(series.type, 'series');
+      expect(series.name, 'Lanterns');
+      expect(series.isInLibrary, isTrue);
+      expect(series.removed, isFalse);
+      expect(series.temp, isFalse);
+      expect(series.videoId, isNull);
+      expect(series.progress, isNull);
+      expect(series.isWatched, isFalse);
+      expect(series.timesWatched, 0);
+      expect(series.isInContinueWatching, isFalse);
+      expect(series.notificationsDisabled, isFalse);
+      expect(series.notifications, 0, reason: 'only the preview carries it');
+      expect(series.lastWatched, isNotNull, reason: 'added = watched now');
+      expect(series.modifiedAt, isNotNull);
+      expect(series.posterShape, 'poster');
+      expect(state.items.last.name, 'The Whisper Man');
+      expect(state.items.last.type, 'movie');
+    });
+
+    test('a next page carries its request and an unloaded model is empty', () {
+      json['selectable']['next_page'] = {
+        'request': {'type': null, 'sort': 'lastwatched', 'page': 2},
+      };
+      final paged = LibraryState.fromJson(json);
+      expect(paged.hasNextPage, isTrue);
+      expect(paged.nextPage, const LibraryRequest(page: 2));
+      expect(paged.nextPage?.page, 2);
+
+      final empty = LibraryState.fromJson({
+        'selected': null,
+        'selectable': {
+          'types': <Object>[],
+          'sorts': <Object>[],
+          'next_page': null,
+        },
+        'catalog': <Object>[],
+      });
+      expect(empty.isLoaded, isFalse);
+      expect(empty.isEmpty, isTrue);
+      expect(empty.selectable.selectedSort, isNull);
+      expect(LibraryState.fromJson({}).isLoaded, isFalse);
+    });
+
+    test('LibraryRequest defaults and round-trips the engine JSON', () {
+      expect(
+        LibraryRequest.fromJson({'type': 'movie'}),
+        const LibraryRequest(type: 'movie'),
+      );
+      expect(
+        LibraryRequest.fromJson({'type': null, 'sort': 'name', 'page': 3})
+            .toJson(),
+        {'type': null, 'sort': 'name', 'page': 3},
+      );
+      expect(
+        const LibraryRequest().hashCode,
+        const LibraryRequest(page: 1).hashCode,
+      );
+      expect(const LibraryRequest(), isNot(const LibraryRequest(page: 2)));
+    });
+  });
+
+  group('LibraryItemView', () {
+    test('derives continue-watching membership and the watched flag', () {
+      final played = LibraryItemView({
+        '_id': 'tt1',
+        'type': 'movie',
+        'removed': true,
+        'temp': true,
+        'state': {'timeOffset': 5000, 'duration': 10000, 'timesWatched': 1},
+      });
+      expect(played.isInLibrary, isFalse);
+      expect(played.isInContinueWatching, isTrue, reason: 'temp with offset');
+      expect(played.isWatched, isTrue);
+      expect(played.progress, 0.5);
+      final other = LibraryItemView({
+        '_id': 'x',
+        'type': 'other',
+        'removed': false,
+        'temp': false,
+        'state': {'timeOffset': 5000, 'duration': 10000},
+      });
+      expect(other.isInContinueWatching, isFalse);
+      expect(other.isInLibrary, isTrue);
+      final muted = LibraryItemView({
+        '_id': 'x',
+        'type': 'series',
+        'state': {'noNotif': true},
+      });
+      expect(muted.notificationsDisabled, isTrue);
+      expect(muted.lastWatched, isNull);
+      expect(muted.modifiedAt, isNull);
+    });
+  });
+
+  group('InstalledAddonsState', () {
+    test('reads the default profile with every type offered', () {
+      final json = loadInstalledAddonsFixture();
+      expect(json['selectable'], contains('types'));
+      expect(json['selected']['request'], {'type': null});
+      final state = InstalledAddonsState.fromJson(json);
+      expect(state.isLoaded, isTrue);
+      expect(state.selected, const InstalledAddonsRequest());
+      expect(state.types.map((t) => t.type), [
+        null,
+        'movie',
+        'series',
+        'channel',
+        'other',
+      ]);
+      expect(state.selectedType?.type, isNull);
+      expect(state.types[1].selected, isFalse);
+      expect(
+        state.types[1].request,
+        const InstalledAddonsRequest(type: 'movie'),
+      );
+      expect(state.types[1].request.toJson(), {'type': 'movie'});
+      expect(state.addons, hasLength(6));
+      expect(state.addons.first.manifest.name, 'Cinemeta');
+      expect(state.addons.first.isProtected, isTrue);
+      expect(state.addons.where((a) => !a.isProtected), isNotEmpty);
+      expect(state.addons.every((a) => a.isOfficial), isTrue);
+      expect(
+        state.addons.map((a) => a.transportUrl),
+        contains('https://opensubtitles-v3.strem.io/manifest.json'),
+      );
+    });
+
+    test('an unloaded model has no selection', () {
+      final empty = InstalledAddonsState.fromJson({
+        'selected': null,
+        'selectable': {'types': <Object>[]},
+        'catalog': <Object>[],
+      });
+      expect(empty.isLoaded, isFalse);
+      expect(empty.types, isEmpty);
+      expect(empty.addons, isEmpty);
+      expect(InstalledAddonsState.fromJson({}).selectedType, isNull);
+    });
+  });
+
+  group('AddonDetailsState', () {
+    test(
+      'reads Cinemeta: camel selected.transportUrl, snake transport_url',
+      () {
+        final json = loadAddonDetailsFixture();
+        expect(json['selected'], {'transportUrl': kCinemetaManifestUrl});
+        final remote = json['remoteAddon'] as Map<String, dynamic>;
+        expect(remote.keys, unorderedEquals(['transport_url', 'content']));
+        expect(remote, isNot(contains('transportUrl')));
+        final state = AddonDetailsState.fromJson(json);
+        expect(state.isLoaded, isTrue);
+        expect(state.transportUrl, kCinemetaManifestUrl);
+        expect(state.isInstalled, isTrue);
+        expect(state.localAddon?.manifest.name, 'Cinemeta');
+        expect(state.remoteAddon?.transportUrl, kCinemetaManifestUrl);
+        expect(state.isLoadingManifest, isFalse);
+        expect(state.manifestError, isNull);
+        final fetched = state.remoteDescriptor!;
+        expect(fetched.manifest.id, 'com.linvo.cinemeta');
+        expect(
+          fetched.isProtected,
+          isTrue,
+          reason: 'flags from OFFICIAL_ADDONS',
+        );
+        expect(fetched.isOfficial, isTrue);
+        expect(state.descriptor?.transportUrl, kCinemetaManifestUrl);
+        expect(state.hasUpgrade, isFalse, reason: 'same version');
+      },
+    );
+
+    test('a newer manifest offers an upgrade; a failed fetch is an error', () {
+      final json = loadAddonDetailsFixture();
+      json['remoteAddon']['content']['content']['manifest']['version'] =
+          '99.0.0';
+      final upgradable = AddonDetailsState.fromJson(json);
+      expect(upgradable.hasUpgrade, isTrue);
+      expect(upgradable.descriptor?.manifest.version, '99.0.0');
+
+      final failed = AddonDetailsState.fromJson({
+        'selected': {'transportUrl': 'https://x/manifest.json'},
+        'localAddon': null,
+        'remoteAddon': {
+          'transport_url': 'https://x/manifest.json',
+          'content': {
+            'type': 'Err',
+            'content': {'code': 3, 'message': 'Failed to fetch'},
+          },
+        },
+      });
+      expect(failed.isInstalled, isFalse);
+      expect(failed.isLoadingManifest, isFalse);
+      expect(failed.manifestError?.message, 'Failed to fetch');
+      expect(failed.remoteDescriptor, isNull);
+      expect(failed.descriptor, isNull);
+      expect(failed.hasUpgrade, isFalse);
+
+      final loading = AddonDetailsState.fromJson({
+        'selected': {'transportUrl': 'https://x/manifest.json'},
+        'localAddon': null,
+        'remoteAddon': {
+          'transport_url': 'https://x/manifest.json',
+          'content': {'type': 'Loading'},
+        },
+      });
+      expect(loading.isLoadingManifest, isTrue);
+      expect(loading.manifestError, isNull);
+
+      final unloaded = AddonDetailsState.fromJson({
+        'selected': null,
+        'localAddon': null,
+        'remoteAddon': null,
+      });
+      expect(unloaded.isLoaded, isFalse);
+      expect(unloaded.isLoadingManifest, isFalse);
+      expect(unloaded.descriptor, isNull);
+    });
+  });
+
+  group('RemoteAddonsState', () {
+    test('reads the community catalog with Discover\'s selectable shape', () {
+      final json = loadRemoteAddonsFixture();
+      expect(json['selectable'], contains('nextPage'), reason: 'camelCase');
+      final state = RemoteAddonsState.fromJson(json);
+      expect(state.isLoaded, isTrue);
+      expect(state.selected?.base, kCinemetaManifestUrl);
+      expect(state.selected?.path.resource, 'addon_catalog');
+      expect(state.selected?.path.id, 'community');
+      expect(state.selected?.path.type, 'all');
+      expect(state.selectable.catalogs.map((c) => c.label), [
+        'Official',
+        'Community',
+      ]);
+      expect(state.selectable.selectedCatalog?.label, 'Community');
+      expect(state.selectable.types.map((t) => t.label), contains('all'));
+      expect(state.selectable.selectedType?.label, 'all');
+      expect(
+        state.selectable.types.first.request.path.resource,
+        'addon_catalog',
+      );
+      expect(state.nextPage, isNull);
+      expect(state.isLoading, isFalse);
+      expect(state.lastError, isNull);
+      expect(state.pages, hasLength(1));
+      expect(state.addons, hasLength(20), reason: 'trimmed by the recorder');
+      for (final addon in state.addons) {
+        expect(addon.manifest.id, isNotEmpty);
+        expect(addon.transportUrl, startsWith('http'));
+        expect(addon.isOfficial, isFalse);
+      }
+      final configurable = state.addons.where(
+        (a) => a.manifest.behaviorHints.configurable,
+      );
+      expect(configurable, isNotEmpty);
+      for (final addon in configurable) {
+        expect(addon.configureUrl, endsWith('/configure'));
+        expect(addon.configureUrl, isNot(contains('manifest.json')));
+      }
+      expect(
+        state.addons.any((a) => a.manifest.behaviorHints.configurationRequired),
+        isTrue,
+        reason: 'the fixture carries a configuration-required template',
+      );
+      // Installed is not part of the model: the profile decides.
+      final profile = ProfileState.fromCtx(loadCtxLoggedOutFixture());
+      expect(
+        state.addons.where((a) => profile.isAddonInstalled(a.transportUrl)),
+        isEmpty,
+      );
+    });
+
+    test('an unloaded model has no pages', () {
+      final empty = RemoteAddonsState.fromJson({
+        'selected': null,
+        'selectable': {
+          'types': <Object>[],
+          'catalogs': <Object>[],
+          'extra': <Object>[],
+          'nextPage': null,
+        },
+        'catalog': <Object>[],
+      });
+      expect(empty.isLoaded, isFalse);
+      expect(empty.addons, isEmpty);
+      expect(empty.isLoading, isFalse);
+      expect(RemoteAddonsState.fromJson({}).selectable.isEmpty, isTrue);
+    });
+  });
 }
