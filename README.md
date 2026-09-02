@@ -150,7 +150,9 @@ connection.
   `ProfileSettings.withValue(key, value)` (`lib/core/state/profile.dart`)
   copies the map with one key changed, and every control in Settings and
   in the player's settings sheet writes exactly that; nothing writes while
-  the `ctx` field is still unknown. Settings are device-local (the API's
+  the `ctx` field is still unknown, and the map last sent is what the
+  controls show and the next write builds on until the following `ctx`
+  pull, so two quick changes do not revert each other. Settings are device-local (the API's
   `saveUser` carries only the user record). What the app reads: the player
   takes `seekTimeDuration` (arrows, the seek buttons, double-tap) and
   `seekShortTimeDuration` (Shift + arrows — the *short* seek, as

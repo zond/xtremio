@@ -100,6 +100,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// The `ctx` field, for `profile.settings`.
   CoreFieldNotifier? _ctx;
+
+  /// The settings map of the last `UpdateSettings` sent, until the next
+  /// `ctx` pull: what [_settings] answers and what the next write builds
+  /// on, so two chips in a row do not send the pre-first-change map.
+  Map<String, dynamic>? _pendingSettings;
   late final AppLifecycleListener _lifecycle;
   PlaybackEngine? _engine;
   FullscreenController? _fullscreen;
@@ -224,8 +229,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// The profile settings; empty (every accessor at its default) until the
-  /// `ctx` field has been pulled.
+  /// `ctx` field has been pulled, the last map sent while a write is in
+  /// flight.
   ProfileSettings get _settings {
+    final pending = _pendingSettings;
+    if (pending != null) return ProfileSettings(pending);
     final json = _ctx?.value;
     return json == null
         ? const ProfileSettings({})
@@ -234,6 +242,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onCtx() {
     if (!mounted) return;
+    // The engine's settings are the authority again.
+    _pendingSettings = null;
     final style = SubtitleStyle.fromSettings(_settings);
     if (style != _subtitleStyle) {
       _subtitleStyle = style;
@@ -264,9 +274,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _updateSetting(String key, Object? value) {
     final settings = _settings;
     if (settings.isEmpty) return;
-    _client?.dispatch(
-      CoreActions.updateSettings(settings.withValue(key, value)),
-    );
+    final next = settings.withValue(key, value);
+    _pendingSettings = next;
+    _client?.dispatch(CoreActions.updateSettings(next));
   }
 
   void _onPlayerState() {
@@ -790,7 +800,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
               setSheetState(() {});
             },
             settings: settings,
-            onSetting: settings.isEmpty ? null : _updateSetting,
+            onSetting: settings.isEmpty
+                ? null
+                : (key, value) {
+                    _updateSetting(key, value);
+                    setSheetState(() {});
+                  },
           );
         },
       ),

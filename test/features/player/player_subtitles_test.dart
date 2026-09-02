@@ -300,7 +300,7 @@ void main() {
     expect(engine.rates, [1.5]);
 
     // A size pick is an UpdateSettings with the whole map and that one key
-    // changed; nothing changes locally until the engine reports it.
+    // changed; the rendered style waits for the engine to report it.
     final before = harness.settings.json;
     await tester.tap(find.text('150 %'));
     await tester.pump();
@@ -338,6 +338,37 @@ void main() {
       ...ctx['profile']['settings'] as Map<String, dynamic>,
       'subtitlesBackgroundColor': '#000000AA',
     });
+  });
+
+  testWidgets('two chips in a row: the second write carries the first', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final harness = PlayerHarness();
+    await harness.pump(tester);
+    await tester.tap(find.byTooltip('Playback settings'));
+    await tester.pumpAndSettle();
+
+    // Nothing from the engine between the two taps.
+    final before = harness.settings.json;
+    await tester.tap(find.text('150 %'));
+    await tester.pump();
+    await tester.tap(find.text('Yellow'));
+    await tester.pump();
+    expect(harness.settingsUpdates(), [
+      {...before, 'subtitlesSize': 150},
+      {...before, 'subtitlesSize': 150, 'subtitlesTextColor': '#FFEB3BFF'},
+    ]);
+    ChoiceChip chip(String label) =>
+        tester.widget(find.widgetWithText(ChoiceChip, label));
+    expect(chip('150 %').selected, isTrue);
+    expect(chip('Yellow').selected, isTrue);
+
+    // The next `ctx` pull is the authority again.
+    harness.core.setState(CoreField.ctx, loadCtxLoggedOutFixture());
+    await tester.pumpAndSettle();
+    expect(chip('100 %').selected, isTrue);
+    expect(chip('White').selected, isTrue);
   });
 
   testWidgets('a colour outside the palette shows as Custom', (tester) async {

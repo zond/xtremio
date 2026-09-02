@@ -25,21 +25,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   CoreFieldNotifier? _server;
   CoreFieldNotifier? _ctx;
 
+  /// The settings map of the last `UpdateSettings` sent, until the next
+  /// `ctx` pull: what the controls show and what the next write builds on,
+  /// so two changes in a row do not send the pre-first-change map.
+  Map<String, dynamic>? _pending;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final client = CoreScope.of(context);
     if (_server?.client != client) {
       _server?.dispose();
+      _ctx?.removeListener(_onCtx);
       _ctx?.dispose();
       _server = CoreFieldNotifier(client, CoreField.streamingServer);
-      _ctx = CoreFieldNotifier(client, CoreField.ctx);
+      _ctx = CoreFieldNotifier(client, CoreField.ctx)..addListener(_onCtx);
     }
+  }
+
+  /// A `ctx` pull landed: the engine's settings are the authority again.
+  void _onCtx() {
+    if (mounted && _pending != null) setState(() => _pending = null);
   }
 
   @override
   void dispose() {
     _server?.dispose();
+    _ctx?.removeListener(_onCtx);
     _ctx?.dispose();
     super.dispose();
   }
@@ -52,10 +64,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// One setting changed: `UpdateSettings` with the whole map, as the
-  /// engine has no per-field defaults.
+  /// engine has no per-field defaults; the map sent is [_pending] until
+  /// the engine reports back.
   void _updateSetting(ProfileSettings settings, String key, Object? value) {
-    CoreScope.of(context)
-        .dispatch(CoreActions.updateSettings(settings.withValue(key, value)));
+    final next = settings.withValue(key, value);
+    setState(() => _pending = next);
+    CoreScope.of(context).dispatch(CoreActions.updateSettings(next));
   }
 
   /// [build] over the current settings, or the pending indicator until the
@@ -65,7 +79,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ) => ValueListenableBuilder<Map<String, dynamic>?>(
     valueListenable: _ctx!,
     builder: (context, ctx, _) {
-      final settings = _settingsOf(ctx);
+      final pending = _pending;
+      final settings = pending == null
+          ? _settingsOf(ctx)
+          : ProfileSettings(pending);
       if (settings == null) return const _SettingsPending();
       return build(
         settings,

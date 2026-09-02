@@ -105,6 +105,57 @@ void main() {
     }
   });
 
+  group('writes in a row', () {
+    testWidgets('the second carries the first before the engine reports it', (
+      tester,
+    ) async {
+      // Every write sends the whole map; a second control changed before the
+      // `ctx` round trip lands must not send the pre-first-change map.
+      final core = await pumpSettings(tester);
+      await tester.tap(
+        find.byKey(settingKey(ProfileSettings.bingeWatchingKey)),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(settingKey(ProfileSettings.pauseOnMinimizeKey)),
+      );
+      await tester.pump();
+      expect(core.dispatched, hasLength(2));
+      final sent = core.dispatched.last.action['args']['args'];
+      expect(sent, {
+        ...fixtureSettings(),
+        ProfileSettings.bingeWatchingKey: false,
+        ProfileSettings.pauseOnMinimizeKey: true,
+      });
+      // The controls show what was sent…
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(settingKey(ProfileSettings.bingeWatchingKey)),
+            )
+            .value,
+        isFalse,
+      );
+      // …until the next `ctx` pull, which is the authority again.
+      core.setState(CoreField.ctx, loadCtxLoggedOutFixture());
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(settingKey(ProfileSettings.bingeWatchingKey)),
+            )
+            .value,
+        isTrue,
+      );
+      await tester.tap(find.byKey(settingKey(ProfileSettings.hideSpoilersKey)));
+      await tester.pump();
+      expect(core.dispatched.last.action['args']['args'], {
+        ...fixtureSettings(),
+        ProfileSettings.hideSpoilersKey: true,
+      });
+    });
+  });
+
   group('dropdowns write the picked value', () {
     for (final (key, label, expected) in [
       (ProfileSettings.nextVideoNotificationDurationKey, 'Disabled', 0),
