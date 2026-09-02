@@ -6,7 +6,7 @@
 //! [`ServerHandle`] and expose start/stop/base_url around it.
 
 use std::net::{Ipv4Addr, SocketAddr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
 use anyhow::Context;
@@ -56,6 +56,27 @@ fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
     })
 }
 
+/// librqbit resolves its DHT persistence file through the `directories`
+/// crate, i.e. from `$HOME`. Android app processes have no `HOME` and
+/// `dirs-sys` has no `getpwuid` fallback there, so `ProjectDirs::from`
+/// fails and librqbit refuses to create its session at all ("cannot
+/// determine project directory for com.rqbit.dht"), which takes the whole
+/// server down with it. Give the process a home inside the app sandbox so
+/// the file lands at `<config_dir>/.cache/com.rqbit.dht/dht.json`.
+///
+/// Runs once, before the server threads exist; nothing else in the process
+/// reads `HOME` concurrently at that point.
+#[cfg(target_os = "android")]
+fn ensure_home(config_dir: &Path) {
+    if std::env::var_os("HOME").is_none_or(|home| home.is_empty()) {
+        tracing::info!(home = %config_dir.display(), "HOME unset; pointing it at the server config dir for librqbit");
+        std::env::set_var("HOME", config_dir);
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn ensure_home(_config_dir: &Path) {}
+
 /// Starts the server if it is not running and returns its base URL
 /// (`http://127.0.0.1:<port>/`). Idempotent: a running server's URL is
 /// returned as-is, regardless of the config passed.
@@ -69,6 +90,7 @@ pub fn start(config: StartConfig) -> anyhow::Result<Url> {
         .with_context(|| format!("create server config dir {:?}", config.config_dir))?;
     std::fs::create_dir_all(&config.cache_dir)
         .with_context(|| format!("create server cache dir {:?}", config.cache_dir))?;
+    ensure_home(&config.config_dir);
 
     let handle = match spawn(&config, config.port) {
         Ok(handle) => handle,
