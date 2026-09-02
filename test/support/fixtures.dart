@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 /// Model-field states recorded from the real core by the network tests in
-/// `rust/tests/` (`cinemeta.rs`, `meta_details.rs`, `board.rs`).
+/// `rust/tests/` (`cinemeta.rs`, `meta_details.rs`, `board.rs`,
+/// `library_addons.rs`), plus the hand-authored `ctx_logged_in.json`.
 Map<String, dynamic> loadFixture(String name) =>
     jsonDecode(File('rust/tests/fixtures/$name').readAsStringSync())
         as Map<String, dynamic>;
@@ -52,3 +53,42 @@ Map<String, dynamic> loadSeriesMetaDetailsFixture() =>
 /// holds the episode.
 Map<String, dynamic> loadSeriesEpisodeMetaDetailsFixture() =>
     loadFixture('meta_details_series_episode.json');
+
+/// `ctx` of a fresh anonymous profile (rust/tests/library_addons.rs): the
+/// bundled official addons, default settings (`streamingServerUrl` is
+/// stremio-core's loopback default; the recorder ran without the embedded
+/// server), `auth: null`, empty notifications, `events` still loading.
+Map<String, dynamic> loadCtxLoggedOutFixture() =>
+    loadFixture('ctx_logged_out.json');
+
+/// Hand-authored: the same profile with a fake account attached
+/// (`user@example.com`, id `fake_user_id`, a placeholder auth key), modelled
+/// on stremio-core's `unit_tests/ctx/authenticate.rs`. Never a real session.
+Map<String, dynamic> loadCtxLoggedInFixture() =>
+    loadFixture('ctx_logged_in.json');
+
+/// `installed_addons` over the default profile with `{type: null}` loaded
+/// (rust/tests/library_addons.rs): six official addons, types `null`,
+/// movie, series, channel, other.
+Map<String, dynamic> loadInstalledAddonsFixture() =>
+    loadFixture('installed_addons_default.json');
+
+/// `addon_details` for Cinemeta (rust/tests/library_addons.rs): installed
+/// (`localAddon`) and its manifest fetched (`remoteAddon` Ready, protected
+/// flag filled in from the official list).
+Map<String, dynamic> loadAddonDetailsFixture() =>
+    loadFixture('addon_details_cinemeta.json');
+
+/// `remote_addons` for Cinemeta's `community` addon catalog of type `all`
+/// (rust/tests/library_addons.rs), trimmed to 20 descriptors; the
+/// selectable lists every catalog (Official, Community) and type.
+Map<String, dynamic> loadRemoteAddonsFixture() =>
+    loadFixture('remote_addons_community.json');
+
+/// `library` with `{type: null, sort: lastwatched, page: 1}` loaded after a
+/// movie (The Whisper Man, tt11561116) and a series (Lanterns, tt26545992)
+/// were added through `AddToLibrary` (rust/tests/library_addons.rs): two
+/// items with no progress, types `null`/movie/series, six sorts, no
+/// `next_page`.
+Map<String, dynamic> loadLibraryFixture() =>
+    loadFixture('library_default.json');

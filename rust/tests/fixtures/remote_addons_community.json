@@ -1,0 +1,1680 @@
+{
+  "catalog": [
+    {
+      "content": {
+        "content": [
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": "https://i.imgur.com/ym4n96o.png",
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [
+                {
+                  "extraRequired": [],
+                  "extraSupported": [],
+                  "id": "kitsu-anime-trending",
+                  "name": "Kitsu Trending",
+                  "type": "anime"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "genre",
+                      "options": [
+                        "Action",
+                        "Adventure",
+                        "Comedy",
+                        "Drama",
+                        "Sci-Fi",
+                        "Space",
+                        "Mystery",
+                        "Magic",
+                        "Supernatural",
+                        "Police",
+                        "Fantasy",
+                        "Sports",
+                        "Romance",
+                        "Cars",
+                        "Slice of Life",
+                        "Racing",
+                        "Horror",
+                        "Psychological",
+                        "Thriller",
+                        "Martial Arts",
+                        "Super Power",
+                        "School",
+                        "Ecchi",
+                        "Vampire",
+                        "Historical",
+                        "Military",
+                        "Dementia",
+                        "Mecha",
+                        "Demons",
+                        "Samurai",
+                        "Harem",
+                        "Music",
+                        "Parody",
+                        "Shoujo Ai",
+                        "Game",
+                        "Shounen Ai",
+                        "Kids",
+                        "Hentai",
+                        "Yuri",
+                        "Yaoi",
+                        "Anime Influenced",
+                        "Gender Bender",
+                        "Doujinshi",
+                        "Mahou Shoujo",
+                        "Mahou Shounen",
+                        "Gore",
+                        "Law",
+                        "Cooking",
+                        "Mature",
+                        "Medical",
+                        "Political",
+                        "Tokusatsu",
+                        "Youth",
+                        "Workplace",
+                        "Crime",
+                        "Zombies",
+                        "Documentary",
+                        "Family",
+                        "Food",
+                        "Friendship",
+                        "Tragedy"
+                      ],
+                      "optionsLimit": 1
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "kitsu-anime-airing",
+                  "name": "Kitsu Top Airing",
+                  "type": "anime"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "genre",
+                      "options": [
+                        "Action",
+                        "Adventure",
+                        "Comedy",
+                        "Drama",
+                        "Sci-Fi",
+                        "Space",
+                        "Mystery",
+                        "Magic",
+                        "Supernatural",
+                        "Police",
+                        "Fantasy",
+                        "Sports",
+                        "Romance",
+                        "Cars",
+                        "Slice of Life",
+                        "Racing",
+                        "Horror",
+                        "Psychological",
+                        "Thriller",
+                        "Martial Arts",
+                        "Super Power",
+                        "School",
+                        "Ecchi",
+                        "Vampire",
+                        "Historical",
+                        "Military",
+                        "Dementia",
+                        "Mecha",
+                        "Demons",
+                        "Samurai",
+                        "Harem",
+                        "Music",
+                        "Parody",
+                        "Shoujo Ai",
+                        "Game",
+                        "Shounen Ai",
+                        "Kids",
+                        "Hentai",
+                        "Yuri",
+                        "Yaoi",
+                        "Anime Influenced",
+                        "Gender Bender",
+                        "Doujinshi",
+                        "Mahou Shoujo",
+                        "Mahou Shounen",
+                        "Gore",
+                        "Law",
+                        "Cooking",
+                        "Mature",
+                        "Medical",
+                        "Political",
+                        "Tokusatsu",
+                        "Youth",
+                        "Workplace",
+                        "Crime",
+                        "Zombies",
+                        "Documentary",
+                        "Family",
+                        "Food",
+                        "Friendship",
+                        "Tragedy"
+                      ],
+                      "optionsLimit": 1
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "kitsu-anime-popular",
+                  "name": "Kitsu Most Popular",
+                  "type": "anime"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "genre",
+                      "options": [
+                        "Action",
+                        "Adventure",
+                        "Comedy",
+                        "Drama",
+                        "Sci-Fi",
+                        "Space",
+                        "Mystery",
+                        "Magic",
+                        "Supernatural",
+                        "Police",
+                        "Fantasy",
+                        "Sports",
+                        "Romance",
+                        "Cars",
+                        "Slice of Life",
+                        "Racing",
+                        "Horror",
+                        "Psychological",
+                        "Thriller",
+                        "Martial Arts",
+                        "Super Power",
+                        "School",
+                        "Ecchi",
+                        "Vampire",
+                        "Historical",
+                        "Military",
+                        "Dementia",
+                        "Mecha",
+                        "Demons",
+                        "Samurai",
+                        "Harem",
+                        "Music",
+                        "Parody",
+                        "Shoujo Ai",
+                        "Game",
+                        "Shounen Ai",
+                        "Kids",
+                        "Hentai",
+                        "Yuri",
+                        "Yaoi",
+                        "Anime Influenced",
+                        "Gender Bender",
+                        "Doujinshi",
+                        "Mahou Shoujo",
+                        "Mahou Shounen",
+                        "Gore",
+                        "Law",
+                        "Cooking",
+                        "Mature",
+                        "Medical",
+                        "Political",
+                        "Tokusatsu",
+                        "Youth",
+                        "Workplace",
+                        "Crime",
+                        "Zombies",
+                        "Documentary",
+                        "Family",
+                        "Food",
+                        "Friendship",
+                        "Tragedy"
+                      ],
+                      "optionsLimit": 1
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "kitsu-anime-rating",
+                  "name": "Kitsu Highest Rated",
+                  "type": "anime"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": true,
+                      "name": "search",
+                      "options": [],
+                      "optionsLimit": 1
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "lastVideosIds",
+                      "options": [],
+                      "optionsLimit": 20
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "kitsu-anime-list",
+                  "name": "Kitsu",
+                  "type": "anime"
+                }
+              ],
+              "contactEmail": null,
+              "description": "Unofficial Kitsu.io anime catalog addon",
+              "id": "community.anime.kitsu",
+              "idPrefixes": [
+                "kitsu",
+                "mal",
+                "anilist",
+                "anidb"
+              ],
+              "logo": "https://i.imgur.com/7N6XGoO.png",
+              "name": "Anime Kitsu",
+              "resources": [
+                "catalog",
+                "meta",
+                "subtitles"
+              ],
+              "types": [
+                "anime",
+                "movie",
+                "series"
+              ],
+              "version": "0.0.10"
+            },
+            "transportUrl": "https://anime-kitsu.strem.fun/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Are there mid-credits or after credits scenes?",
+              "id": "com.almosteffective.aftercredits",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": null,
+              "name": "AfterCredits",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "movie"
+              ],
+              "version": "1.0.0"
+            },
+            "transportUrl": "https://aftercredits.almosteffective.com/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Makes cast members clickable and searchable on Android TV",
+              "id": "org.community.cast-search",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": null,
+              "name": "Cast Search",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "1.0.0"
+            },
+            "transportUrl": "https://stremio-cast-search.onrender.com/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": "https://via.placeholder.com/1920x1080/1a73e8/ffffff?text=Deep+Dive+Companion",
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "A comprehensive companion addon that provides detailed content information, cast details, reviews, and production insights for movies and series.",
+              "id": "org.stremio.deepdivecompanion",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": "https://stremio-content-deepdive-addon-dc8f7b513289.herokuapp.com/DeepDiveLogo.png",
+              "name": "Content Deep Dive Companion",
+              "resources": [
+                {
+                  "idPrefixes": [
+                    "tt"
+                  ],
+                  "name": "meta",
+                  "types": [
+                    "movie",
+                    "series"
+                  ]
+                },
+                {
+                  "idPrefixes": [
+                    "tt"
+                  ],
+                  "name": "stream",
+                  "types": [
+                    "movie",
+                    "series"
+                  ]
+                }
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "4.1.1"
+            },
+            "transportUrl": "https://stremio-content-deepdive-addon-dc8f7b513289.herokuapp.com/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Opens Google search for TV show episodes and movie discussions with one click. Simply select an episode or movie to search for its discussions online. \n\nHosted by ElfHosted!",
+              "id": "com.discussio",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": "https://api.logo.com/api/v2/images?design=lg_aiGdQc9PParm0yrELH&width=250&height=250&fit=contain&margin_ratio=0&background=%23294fff&u=2025-02-19T10%3A24%3A54.398Z&format=png&quality=30",
+              "name": "Discussio | ElfHosted",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "series",
+                "movie"
+              ],
+              "version": "1.0.3"
+            },
+            "transportUrl": "https://discussio.elfhosted.com/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Shows IMDb ratings for movies and individual TV episodes with a completely configurable format. Works with anime.",
+              "id": "imdb.ratings.local",
+              "idPrefixes": [
+                "tt",
+                "kitsu",
+                "tmdb"
+              ],
+              "logo": "https://raw.githubusercontent.com/kgenovz/stremio-ratings-v3/main/logo.png",
+              "name": "IMDb Ratings",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "1.0.0"
+            },
+            "transportUrl": "https://stremio-ratings-v3-production.up.railway.app/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "search",
+                      "options": [],
+                      "optionsLimit": 1
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "genre",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "radios",
+                  "name": "Radios",
+                  "type": "music"
+                }
+              ],
+              "contactEmail": null,
+              "description": "Over 93.000 radio stations from SHOUTcast.",
+              "id": "org.radios",
+              "idPrefixes": [
+                "radios:"
+              ],
+              "logo": "https://www.shareicon.net/data/128x128/2016/08/04/806702_music_512x512.png",
+              "name": "Radios",
+              "resources": [
+                "catalog",
+                "meta",
+                "stream"
+              ],
+              "types": [
+                "music",
+                "movie"
+              ],
+              "version": "1.0.0"
+            },
+            "transportUrl": "https://1fe84bc728af-stremio-radios.baby-beamup.club/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": "https://addon.peario.xyz/public/background.png",
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Watch movies with your all your friends in sync !",
+              "id": "community.peario",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": "https://addon.peario.xyz/public/icon.png",
+              "name": "Peario",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "0.1.0"
+            },
+            "transportUrl": "https://addon.peario.xyz/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Detects mid/post-credit scenes and optionally bloopers/outtakes and sequel setups. Powered by a multi-tiered scraping system including AfterCredits, MediaStinger, TMDB, and Wikipedia.",
+              "id": "org.stinger.pro",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": "https://github.com/schultz911/stremio-stinger-pro/blob/main/icon.png?raw=true",
+              "name": "Stremio Stinger Pro",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "movie"
+              ],
+              "version": "2.0.1"
+            },
+            "transportUrl": "https://stremio-stinger-pro.onrender.com/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Shows similar movies and series right below what you’re currently watching using TMDb recommendations.",
+              "id": "community.watch.next",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": "https://myth-115.github.io/Dummy1/logo.png",
+              "name": "Watch Next",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "0.0.1"
+            },
+            "transportUrl": "https://099757617587-watch-next.baby-beamup.club/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Adds jump scare information from DoesTheDogDie.com, with link to full page. Open source at <a href='https://github.com/neon-ninja/stremio_doesthedogdie'>https://github.com/neon-ninja/stremio_doesthedogdie</a>",
+              "id": "org.stremio.doesTheDogDie",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": null,
+              "name": "DoesTheDogDie (Jump Scares)",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "1.0.1"
+            },
+            "transportUrl": "https://a00f518e60ff-doesthedogdie.baby-beamup.club/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Adds jump scare information and subtitles from wheresthejump.com. Open source at <a href='https://github.com/neon-ninja/wheresthejump'>https://github.com/neon-ninja/wheresthejump</a>",
+              "id": "org.stremio.wheresthejump",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": null,
+              "name": "Where's The Jump",
+              "resources": [
+                "stream",
+                "subtitles"
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "1.0.1"
+            },
+            "transportUrl": "https://a00f518e60ff-wheresthejump.baby-beamup.club/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": "https://cdn.discordapp.com/attachments/1481712985213767760/1481720705606226072/online-premium.png?ex=69b45771&is=69b305f1&hm=6611c68586221c3d69e604cdb01982eec80fdc57e4cc68c557e3c48392d122b9&",
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": true,
+                "p2p": false
+              },
+              "catalogs": [
+                {
+                  "extraRequired": [],
+                  "extraSupported": [],
+                  "id": "debridstatus_catalog",
+                  "name": "AIO Service Status",
+                  "type": "other"
+                }
+              ],
+              "contactEmail": "fox@status.addon",
+              "description": "Track premium status, expiration dates & API quotas for 100+ Debrid, Usenet, Indexers, Subtitles, Metadata, and AI services.",
+              "id": "community.aiostatus",
+              "idPrefixes": null,
+              "logo": "https://i.ibb.co/v45ZwNHH/Vector-3.png",
+              "name": "AIOStatus",
+              "resources": [
+                {
+                  "idPrefixes": [
+                    "tt",
+                    "ds"
+                  ],
+                  "name": "stream",
+                  "types": [
+                    "movie",
+                    "series",
+                    "other"
+                  ]
+                },
+                {
+                  "idPrefixes": null,
+                  "name": "catalog",
+                  "types": [
+                    "movie",
+                    "other"
+                  ]
+                },
+                {
+                  "idPrefixes": [
+                    "ds"
+                  ],
+                  "name": "meta",
+                  "types": [
+                    "movie",
+                    "other"
+                  ]
+                }
+              ],
+              "types": [
+                "movie",
+                "series",
+                "other"
+              ],
+              "version": "2.3.0"
+            },
+            "transportUrl": "https://p01--status--sdfgdgfsgdfs--s2qq-tktv.code.run/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [
+                {
+                  "extraRequired": [],
+                  "extraSupported": [],
+                  "id": "tt0475900",
+                  "name": "Anthony Bourdain: No Reservations",
+                  "type": "series"
+                }
+              ],
+              "contactEmail": null,
+              "description": "Anthony Bourdain series at Dailymotion.com",
+              "id": "org.stremio.AnthonyBourdainFans",
+              "idPrefixes": null,
+              "logo": null,
+              "name": "Anthony Bourdain Fans",
+              "resources": [
+                "catalog",
+                {
+                  "idPrefixes": [
+                    "tt",
+                    "hpy"
+                  ],
+                  "name": "meta",
+                  "types": [
+                    "series"
+                  ]
+                },
+                {
+                  "idPrefixes": [
+                    "tt",
+                    "hpy"
+                  ],
+                  "name": "stream",
+                  "types": [
+                    "series"
+                  ]
+                }
+              ],
+              "types": [
+                "series"
+              ],
+              "version": "1.0.1"
+            },
+            "transportUrl": "https://ramonmedeiros.github.io/org.stremio.NoReservationDailyMotion/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": false,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "See if a movie is available on Internet Archive and play it instantly, directly from Stremio.",
+              "id": "org.stremio.internet-archive",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": "https://docs.elfhosted.com/images/logo.svg",
+              "name": "Archivio | ElfHosted",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "1.0.4"
+            },
+            "transportUrl": "https://archivio.elfhosted.com/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": true,
+                "p2p": false
+              },
+              "catalogs": [
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "genre",
+                      "options": [
+                        "Action",
+                        "Horror",
+                        "RPG",
+                        "Adventure",
+                        "Sci-Fi",
+                        "Story-Driven",
+                        "Souls-like",
+                        "Open World",
+                        "Stealth",
+                        "Survival"
+                      ],
+                      "optionsLimit": 1
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "search",
+                      "options": [],
+                      "optionsLimit": 1
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-catalog",
+                  "name": "Game Cinema",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-new",
+                  "name": "Game Cinema — New This Week",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-popular",
+                  "name": "Game Cinema — Most Watched",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "search",
+                      "options": [],
+                      "optionsLimit": 1
+                    },
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-series",
+                  "name": "Game Cinema — Series",
+                  "type": "series"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-ch-UCiZVMOinTQGb8HQu53VbV4Q",
+                  "name": "Gamer's Little Playground",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-ch-UC1bwliGvJogr7cWK0nT2Eag",
+                  "name": "MKIceAndFire",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-ch-UCj4lFy4F5PqXD7d41mCKVYw",
+                  "name": "GameClips",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-ch-UCMhDL-BLChwxDqvWCpoGVrQ",
+                  "name": "FluffyNinjaLlama",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-ch-UCCn0ID59OrBy7pDCyeVHkZg",
+                  "name": "Andy Gilleand",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-ch-UC7eAfUjR9gdIjoaoQaS0W-A",
+                  "name": "Shirrako",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-ch-UCfVhjM2_XVvO5eGbOK-MO0A",
+                  "name": "Zanar Aesthetics",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-ch-UCm4WlDrdOOSbht-NKQ0uTeg",
+                  "name": "RabidRetrospectGames",
+                  "type": "movie"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "skip",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "game-cinema-ch-UCVdg9q21qjYjBnxp8pMGKvw",
+                  "name": "Gamer Max Channel",
+                  "type": "movie"
+                }
+              ],
+              "contactEmail": null,
+              "description": "Watch full cinematic game playthroughs as movies inside Stremio. No commentary, just the story. 9 curated YouTube channels, genre filters, playlists as series with episodes, and chapter support. Requires your own free YouTube API key.",
+              "id": "community.game-cinema",
+              "idPrefixes": null,
+              "logo": "https://game-cinema.ip-checker.workers.dev/logo.svg",
+              "name": "Game Cinema",
+              "resources": [
+                "catalog",
+                {
+                  "idPrefixes": [
+                    "gc_yt:",
+                    "gc_pl:"
+                  ],
+                  "name": "meta",
+                  "types": [
+                    "movie",
+                    "series"
+                  ]
+                },
+                {
+                  "idPrefixes": [
+                    "gc_yt:",
+                    "gc_pl:"
+                  ],
+                  "name": "stream",
+                  "types": [
+                    "movie",
+                    "series"
+                  ]
+                }
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "0.2.0"
+            },
+            "transportUrl": "https://game-cinema.ip-checker.workers.dev/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": true,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": "support@plexio.stream",
+              "description": "Play movies and series from plex.tv.",
+              "id": "com.stremio.plexio",
+              "idPrefixes": [
+                "tt",
+                "plexio"
+              ],
+              "logo": null,
+              "name": "Plexio",
+              "resources": [
+                "stream",
+                "catalog",
+                {
+                  "idPrefixes": [
+                    "plexio"
+                  ],
+                  "name": "meta",
+                  "types": [
+                    "movie",
+                    "series"
+                  ]
+                }
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "0.1.15"
+            },
+            "transportUrl": "https://plexio.stream/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Shows premium status & days remaining across multiple debrid providers.",
+              "id": "a1337user.statusio.tv.compatible",
+              "idPrefixes": [
+                "tt"
+              ],
+              "logo": "https://raw.githubusercontent.com/ARandomAddonDev/Statusio/refs/heads/main/assets/logo.png",
+              "name": "Statusio",
+              "resources": [
+                "stream"
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "1.1.28"
+            },
+            "transportUrl": "https://statusio.elfhosted.com/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": null,
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": true,
+                "p2p": false
+              },
+              "catalogs": [],
+              "contactEmail": null,
+              "description": "Stream media from your Emby server using IMDb/TMDB/Tvdb/Anidb IDs.",
+              "id": "org.streambridge.embyresolver",
+              "idPrefixes": null,
+              "logo": null,
+              "name": "StreamBridge: Emby to Stremio",
+              "resources": [
+                {
+                  "idPrefixes": [
+                    "tt",
+                    "imdb:",
+                    "tmdb:"
+                  ],
+                  "name": "stream",
+                  "types": [
+                    "movie",
+                    "series"
+                  ]
+                }
+              ],
+              "types": [
+                "movie",
+                "series"
+              ],
+              "version": "1.2.3"
+            },
+            "transportUrl": "https://39427cdac546-streambridge.baby-beamup.club/manifest.json"
+          },
+          {
+            "flags": {
+              "official": false,
+              "protected": false
+            },
+            "manifest": {
+              "addonCatalogs": [],
+              "background": "https://github.com/youchi1/tmdb-collections/raw/main/Images/bg.png",
+              "behaviorHints": {
+                "adult": false,
+                "configurable": true,
+                "configurationRequired": false,
+                "p2p": false
+              },
+              "catalogs": [
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "genre",
+                      "options": [
+                        "Action",
+                        "Adventure",
+                        "Animation",
+                        "Comedy",
+                        "Crime",
+                        "Documentary",
+                        "Drama",
+                        "Family",
+                        "Fantasy",
+                        "History",
+                        "Horror",
+                        "Music",
+                        "Mystery",
+                        "Romance",
+                        "Science Fiction",
+                        "TV Movie",
+                        "Thriller",
+                        "War",
+                        "Western"
+                      ],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "ctmdb.popular",
+                  "name": "Popular",
+                  "type": "collections"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "genre",
+                      "options": [
+                        "Action",
+                        "Adventure",
+                        "Animation",
+                        "Comedy",
+                        "Crime",
+                        "Documentary",
+                        "Drama",
+                        "Family",
+                        "Fantasy",
+                        "History",
+                        "Horror",
+                        "Music",
+                        "Mystery",
+                        "Romance",
+                        "Science Fiction",
+                        "TV Movie",
+                        "Thriller",
+                        "War",
+                        "Western"
+                      ],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "ctmdb.topRated",
+                  "name": "Top Rated",
+                  "type": "collections"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": false,
+                      "name": "genre",
+                      "options": [
+                        "Action",
+                        "Adventure",
+                        "Animation",
+                        "Comedy",
+                        "Crime",
+                        "Documentary",
+                        "Drama",
+                        "Family",
+                        "Fantasy",
+                        "History",
+                        "Horror",
+                        "Music",
+                        "Mystery",
+                        "Romance",
+                        "Science Fiction",
+                        "TV Movie",
+                        "Thriller",
+                        "War",
+                        "Western"
+                      ],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "ctmdb.newReleases",
+                  "name": "New Releases",
+                  "type": "collections"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": true,
+                      "name": "genre",
+                      "options": [
+                        "United States",
+                        "United Kingdom",
+                        "France",
+                        "China",
+                        "India",
+                        "Germany",
+                        "Japan",
+                        "Italy",
+                        "South Korea",
+                        "Spain",
+                        "Canada",
+                        "Russia",
+                        "Turkey",
+                        "Australia",
+                        "Argentina",
+                        "Brazil",
+                        "Mexico",
+                        "Netherlands",
+                        "Hong Kong SAR China",
+                        "Czech Republic",
+                        "Poland",
+                        "Sweden",
+                        "Switzerland",
+                        "New Zealand",
+                        "Norway",
+                        "Portugal",
+                        "Romania",
+                        "Israel",
+                        "South Africa",
+                        "Slovakia",
+                        "Ukraine"
+                      ],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "ctmdb.topRatedByCountry",
+                  "name": "Top Rated By Country",
+                  "type": "collections"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": true,
+                      "name": "genre",
+                      "options": [
+                        "Walt Disney Studios",
+                        "Metro-Goldwyn-Mayer Studios",
+                        "Paramount Pictures",
+                        "Columbia Pictures",
+                        "Universal Pictures",
+                        "Warner Bros. Pictures",
+                        "Lionsgate",
+                        "20th Century Studios",
+                        "Amazon MGM Studios",
+                        "Sony Pictures Entertainment",
+                        "DreamWorks Pictures",
+                        "New Line Cinema",
+                        "Focus Features",
+                        "Summit Entertainment",
+                        "The Weinstein Company",
+                        "Marvel Studios",
+                        "DC Studios",
+                        "Toei Animation",
+                        "SUNRISE",
+                        "Studio Pierrot",
+                        "Pierrot",
+                        "Madhouse",
+                        "Studio Ghibli"
+                      ],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "ctmdb.topRatedByCompany",
+                  "name": "Top Rated By Company",
+                  "type": "collections"
+                },
+                {
+                  "extra": [
+                    {
+                      "isRequired": true,
+                      "name": "search",
+                      "options": [],
+                      "optionsLimit": 1
+                    }
+                  ],
+                  "id": "ctmdb.search",
+                  "name": "Search",
+                  "type": "collections"
+                }
+              ],
+              "contactEmail": null,
+              "description": "Addon lets you explore TMDB Collections, which are essentially grouped movie series. Discover collections featuring newly released movies or browse catalogs of popular and top-rated collections. You can filter by genre or search collections by actor, director, writer, movie or collection name in any language.",
+              "id": "org.stremio.tmdbcollections",
+              "idPrefixes": [
+                "ctmdb."
+              ],
+              "logo": "https://github.com/youchi1/tmdb-collections/raw/main/Images/logo.png",
+              "name": "TMDB Collections",
+              "resources": [
+                "catalog",
+                {
+                  "idPrefixes": [
+                    "ctmdb."
+                  ],
+                  "name": "meta",
+                  "types": [
+                    "movie"
+                  ]
+                },
+                {
+                  "idPrefixes": [
+                    "tt"
+                  ],
+                  "name": "stream",
+                  "types": [
+                    "movie"
+                  ]
+                }
+              ],
+              "types": [
+                "movie",
+                "collections"
+              ],
+              "version": "2.2.1"
+            },
+            "transportUrl": "https://61ab9c85a149-tmdb-collections.baby-beamup.club/manifest.json"
+          }
+        ],
+        "type": "Ready"
+      },
+      "request": {
+        "base": "https://v3-cinemeta.strem.io/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "community",
+          "resource": "addon_catalog",
+          "type": "all"
+        }
+      }
+    }
+  ],
+  "selectable": {
+    "catalogs": [
+      {
+        "catalog": "Official",
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "official",
+            "resource": "addon_catalog",
+            "type": "all"
+          }
+        },
+        "selected": false
+      },
+      {
+        "catalog": "Community",
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "community",
+            "resource": "addon_catalog",
+            "type": "all"
+          }
+        },
+        "selected": true
+      }
+    ],
+    "extra": [],
+    "nextPage": null,
+    "types": [
+      {
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "community",
+            "resource": "addon_catalog",
+            "type": "all"
+          }
+        },
+        "selected": true,
+        "type": "all"
+      },
+      {
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "community",
+            "resource": "addon_catalog",
+            "type": "movie"
+          }
+        },
+        "selected": false,
+        "type": "movie"
+      },
+      {
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "community",
+            "resource": "addon_catalog",
+            "type": "series"
+          }
+        },
+        "selected": false,
+        "type": "series"
+      },
+      {
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "community",
+            "resource": "addon_catalog",
+            "type": "channel"
+          }
+        },
+        "selected": false,
+        "type": "channel"
+      },
+      {
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "community",
+            "resource": "addon_catalog",
+            "type": "tv"
+          }
+        },
+        "selected": false,
+        "type": "tv"
+      },
+      {
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "community",
+            "resource": "addon_catalog",
+            "type": "Podcasts"
+          }
+        },
+        "selected": false,
+        "type": "Podcasts"
+      },
+      {
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [],
+            "id": "community",
+            "resource": "addon_catalog",
+            "type": "other"
+          }
+        },
+        "selected": false,
+        "type": "other"
+      }
+    ]
+  },
+  "selected": {
+    "request": {
+      "base": "https://v3-cinemeta.strem.io/manifest.json",
+      "path": {
+        "extra": [],
+        "id": "community",
+        "resource": "addon_catalog",
+        "type": "all"
+      }
+    }
+  }
+}

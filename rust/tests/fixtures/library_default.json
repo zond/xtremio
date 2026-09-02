@@ -1,0 +1,155 @@
+{
+  "catalog": [
+    {
+      "_ctime": "2026-09-02T20:51:12.897365027Z",
+      "_id": "tt26545992",
+      "_mtime": "2026-09-02T20:51:12.897372691Z",
+      "behaviorHints": {
+        "defaultVideoId": null,
+        "featuredVideoId": null,
+        "hasScheduledVideos": true
+      },
+      "name": "Lanterns",
+      "poster": "https://images.metahub.space/poster/small/tt26545992/img",
+      "posterShape": "poster",
+      "removed": false,
+      "state": {
+        "duration": 0,
+        "flaggedWatched": 0,
+        "lastWatched": "2026-09-02T20:51:12.897365427Z",
+        "noNotif": false,
+        "overallTimeWatched": 0,
+        "timeOffset": 0,
+        "timeWatched": 0,
+        "timesWatched": 0,
+        "video_id": null,
+        "watched": null
+      },
+      "temp": false,
+      "type": "series"
+    },
+    {
+      "_ctime": "2026-09-02T20:51:12.896535997Z",
+      "_id": "tt11561116",
+      "_mtime": "2026-09-02T20:51:12.896608734Z",
+      "behaviorHints": {
+        "defaultVideoId": "tt11561116",
+        "featuredVideoId": null,
+        "hasScheduledVideos": false
+      },
+      "name": "The Whisper Man",
+      "poster": "https://images.metahub.space/poster/small/tt11561116/img",
+      "posterShape": "poster",
+      "removed": false,
+      "state": {
+        "duration": 0,
+        "flaggedWatched": 0,
+        "lastWatched": "2026-09-02T20:51:12.896541859Z",
+        "noNotif": false,
+        "overallTimeWatched": 0,
+        "timeOffset": 0,
+        "timeWatched": 0,
+        "timesWatched": 0,
+        "video_id": null,
+        "watched": null
+      },
+      "temp": false,
+      "type": "movie"
+    }
+  ],
+  "selectable": {
+    "next_page": null,
+    "sorts": [
+      {
+        "request": {
+          "page": 1,
+          "sort": "lastwatched",
+          "type": null
+        },
+        "selected": true,
+        "sort": "lastwatched"
+      },
+      {
+        "request": {
+          "page": 1,
+          "sort": "name",
+          "type": null
+        },
+        "selected": false,
+        "sort": "name"
+      },
+      {
+        "request": {
+          "page": 1,
+          "sort": "namereverse",
+          "type": null
+        },
+        "selected": false,
+        "sort": "namereverse"
+      },
+      {
+        "request": {
+          "page": 1,
+          "sort": "timeswatched",
+          "type": null
+        },
+        "selected": false,
+        "sort": "timeswatched"
+      },
+      {
+        "request": {
+          "page": 1,
+          "sort": "watched",
+          "type": null
+        },
+        "selected": false,
+        "sort": "watched"
+      },
+      {
+        "request": {
+          "page": 1,
+          "sort": "notwatched",
+          "type": null
+        },
+        "selected": false,
+        "sort": "notwatched"
+      }
+    ],
+    "types": [
+      {
+        "request": {
+          "page": 1,
+          "sort": "lastwatched",
+          "type": null
+        },
+        "selected": true,
+        "type": null
+      },
+      {
+        "request": {
+          "page": 1,
+          "sort": "lastwatched",
+          "type": "movie"
+        },
+        "selected": false,
+        "type": "movie"
+      },
+      {
+        "request": {
+          "page": 1,
+          "sort": "lastwatched",
+          "type": "series"
+        },
+        "selected": false,
+        "type": "series"
+      }
+    ]
+  },
+  "selected": {
+    "request": {
+      "page": 1,
+      "sort": "lastwatched",
+      "type": null
+    }
+  }
+}
