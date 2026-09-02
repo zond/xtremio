@@ -3,15 +3,18 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 
-/// [PlaybackEngine] for widget tests: records `open` calls and lets the test
-/// feed position/playing/completed events. No libmpv.
+/// [PlaybackEngine] for widget tests: records every call and lets the test
+/// feed position/playing/tracks/... events. No libmpv.
 class FakePlaybackEngine implements PlaybackEngine {
   final _position = StreamController<Duration>.broadcast();
   final _duration = StreamController<Duration>.broadcast();
+  final _buffer = StreamController<Duration>.broadcast();
   final _playing = StreamController<bool>.broadcast();
   final _buffering = StreamController<bool>.broadcast();
   final _completed = StreamController<bool>.broadcast();
   final _errors = StreamController<String>.broadcast();
+  final _volume = StreamController<double>.broadcast();
+  final _tracks = StreamController<PlaybackTracks>.broadcast();
   late final _stats = StreamController<PlaybackStats>.broadcast(
     onListen: () => statsListeners++,
     onCancel: () => statsListeners--,
@@ -24,14 +27,30 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// Every `open` call: the URL and the requested start position.
   final List<(Uri, Duration)> opened = [];
   final List<Duration> seeks = [];
+  int playCalls = 0;
+  int pauseCalls = 0;
+  int playOrPauseCalls = 0;
+  final List<double> volumes = [];
+  final List<double> rates = [];
+  final List<String> setAudioTrackIds = [];
+  final List<String> setSubtitleTrackIds = [];
+
+  /// Every `setExternalSubtitle` call: URL, title, language.
+  final List<(Uri, String?, String?)> externalSubtitles = [];
+  int disableSubtitlesCalls = 0;
+  SubtitleStyle? subtitleStyle;
+  double? lastSubtitleBottomPadding;
   bool disposed = false;
 
   void emitPosition(Duration position) => _position.add(position);
   void emitDuration(Duration duration) => _duration.add(duration);
+  void emitBuffer(Duration buffer) => _buffer.add(buffer);
   void emitPlaying(bool playing) => _playing.add(playing);
   void emitBuffering(bool buffering) => _buffering.add(buffering);
   void emitCompleted() => _completed.add(true);
   void emitError(String error) => _errors.add(error);
+  void emitVolume(double volume) => _volume.add(volume);
+  void emitTracks(PlaybackTracks tracks) => _tracks.add(tracks);
   void emitStats(PlaybackStats stats) => _stats.add(stats);
 
   @override
@@ -39,6 +58,9 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   @override
   Stream<Duration> get duration => _duration.stream;
+
+  @override
+  Stream<Duration> get buffer => _buffer.stream;
 
   @override
   Stream<bool> get playing => _playing.stream;
@@ -51,6 +73,12 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   @override
   Stream<String> get errors => _errors.stream;
+
+  @override
+  Stream<double> get volume => _volume.stream;
+
+  @override
+  Stream<PlaybackTracks> get tracks => _tracks.stream;
 
   @override
   Stream<PlaybackStats> get stats => _stats.stream;
@@ -66,16 +94,86 @@ class FakePlaybackEngine implements PlaybackEngine {
   }
 
   @override
-  Future<void> playOrPause() async {}
+  Future<void> play() async {
+    playCalls++;
+  }
 
   @override
-  Widget buildVideo(BuildContext context) => const ColoredBox(
-    color: Color(0xFF000000),
-    child: Center(child: Text('video surface')),
-  );
+  Future<void> pause() async {
+    pauseCalls++;
+  }
+
+  @override
+  Future<void> playOrPause() async {
+    playOrPauseCalls++;
+  }
+
+  @override
+  Future<void> setVolume(double volume) async {
+    volumes.add(volume);
+  }
+
+  @override
+  Future<void> setRate(double rate) async {
+    rates.add(rate);
+  }
+
+  @override
+  Future<void> setAudioTrack(String id) async {
+    setAudioTrackIds.add(id);
+  }
+
+  @override
+  Future<void> setSubtitleTrack(String id) async {
+    setSubtitleTrackIds.add(id);
+  }
+
+  @override
+  Future<void> setExternalSubtitle(
+    Uri url, {
+    String? title,
+    String? language,
+  }) async {
+    externalSubtitles.add((url, title, language));
+  }
+
+  @override
+  Future<void> disableSubtitles() async {
+    disableSubtitlesCalls++;
+  }
+
+  @override
+  Future<void> setSubtitleStyle(SubtitleStyle style) async {
+    subtitleStyle = style;
+  }
+
+  @override
+  Widget buildVideo(BuildContext context, {double subtitleBottomPadding = 24}) {
+    lastSubtitleBottomPadding = subtitleBottomPadding;
+    return const ColoredBox(
+      color: Color(0xFF000000),
+      child: Center(child: Text('video surface')),
+    );
+  }
 
   @override
   Future<void> dispose() async {
     disposed = true;
+  }
+}
+
+/// Records fullscreen transitions instead of touching the window.
+class FakeFullscreenController implements FullscreenController {
+  int enters = 0;
+  int exits = 0;
+
+  @override
+  Future<void> enter() async {
+    enters++;
+  }
+
+  @override
+  Future<void> exit() async {
+    exits++;
   }
 }
