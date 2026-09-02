@@ -205,6 +205,23 @@ connection.
   screen then skips its `Unload` so the session's subtitle preference
   survives — or pops with a `PlayerScreenResult` so the details screen
   loads that episode's streams when the engine found no stream.
+- **Addons are three model fields and one external link.** The Addons
+  screen (Settings → Addons, or "Browse addons" on an empty board) reads
+  `installed_addons` (`InstalledAddonsWithFilters`, snake_case) and
+  `remote_addons` (`CatalogWithFilters<Descriptor>`, Discover's shape over
+  an `addon_catalog` resource); whether a community entry is installed is
+  not in the model and is computed from `ctx.profile.addons` by manifest
+  URL. "Add addon" and every tile open `AddonDetailsScreen`, which loads
+  `addon_details` for one manifest URL and offers Install (the fetched
+  descriptor), Update (`UpgradeAddon` when versions differ), Uninstall
+  (never for a protected addon) and Configure — the manifest URL with
+  `manifest.json` → `configure`, opened in the system browser through
+  `url_launcher` behind `ExternalLinkScope` so tests assert the URL. A
+  `configurationRequired` manifest cannot be installed (`Other` code 6),
+  so Configure is its primary action; `profile.addonsLocked` disables
+  every mutation behind a banner, and failed mutations (`Error` events
+  sourced from `AddonInstalled`/`AddonUninstalled`/`AddonUpgraded`) show
+  as a SnackBar.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
   with the `derive` + `env-future-send` features, `zond/stream-server` at a
   fixed rev. To bump: change the rev, `cargo update -p <crate>`, run
