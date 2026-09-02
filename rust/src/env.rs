@@ -2,7 +2,8 @@
 //! on. Modeled on stremio-core-kotlin's `AndroidEnv` and stremiox's `TvosEnv`.
 //!
 //! - **fetch**: reqwest + rustls; JSON bodies in, JSON out (errors name the
-//!   failing JSON path).
+//!   failing JSON path). A request to the embedded server carries its
+//!   bearer token (`crate::server::token_for`); no other host gets it.
 //! - **storage**: one JSON file per key under a directory Dart chooses;
 //!   writes are temp-then-fsync-then-rename so a crash can never leave a
 //!   half-written bucket.
@@ -20,6 +21,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use futures::future;
+use http::header::{HeaderValue, AUTHORIZATION};
 use http::{Method, Request};
 use reqwest::{Body, Client};
 use serde::{Deserialize, Serialize};
@@ -138,10 +140,24 @@ impl Env for XtremioEnv {
             Ok(_) => Body::from(Vec::<u8>::new()),
             Err(error) => return future::err(EnvError::Serde(error.to_string())).boxed_env(),
         };
-        let request = match reqwest::Request::try_from(Request::from_parts(parts, body)) {
+        let mut request = match reqwest::Request::try_from(Request::from_parts(parts, body)) {
             Ok(request) => request,
             Err(error) => return future::err(EnvError::Fetch(error.to_string())).boxed_env(),
         };
+        // The embedded server's control API (settings, stats, create, ...)
+        // requires its per-launch bearer token; no other host gets it.
+        if let Some(token) = crate::server::token_for(request.url()) {
+            match HeaderValue::from_str(&format!("Bearer {token}")) {
+                Ok(mut value) => {
+                    value.set_sensitive(true);
+                    request.headers_mut().insert(AUTHORIZATION, value);
+                }
+                Err(error) => {
+                    return future::err(EnvError::Fetch(format!("server token: {error}")))
+                        .boxed_env()
+                }
+            }
+        }
         async move {
             let response = CLIENT
                 .execute(request)
@@ -364,6 +380,8 @@ mod tests {
         })
         .expect("server start");
 
+        // The control API wants the per-launch bearer token; `fetch` adds it
+        // for the embedded server's URL, so a token-protected route answers.
         let request = Request::get(url.join("heartbeat").unwrap().as_str())
             .body(())
             .expect("request");
@@ -372,7 +390,7 @@ mod tests {
             .expect("fetch heartbeat");
         assert!(heartbeat.success);
 
-        // Wrong shape names the JSON path; a 404 is a Fetch error.
+        // Wrong shape names the JSON path.
         #[derive(Debug, Deserialize)]
         #[allow(dead_code)]
         struct Wrong {
@@ -388,6 +406,20 @@ mod tests {
             matches!(&error, EnvError::Serde(message) if message.contains("success")),
             "{error:?}"
         );
+
+        // Only the embedded server's authority gets the token: the same
+        // route on another port (a stranger's server, or nothing) is asked
+        // without credentials.
+        let mut other = url.clone();
+        other
+            .set_port(Some(if url.port() == Some(1) { 2 } else { 1 }))
+            .unwrap();
+        assert!(crate::server::token_for(&url).is_some());
+        assert_eq!(crate::server::token_for(&other), None);
+        assert!(crate::server::is_embedded_url(&url));
+        assert!(!crate::server::is_embedded_url(&other));
+
+        // A route the server does not have is a Fetch error.
         let request = Request::get(url.join("definitely-not-a-route").unwrap().as_str())
             .body(())
             .expect("request");

@@ -4,6 +4,7 @@
 //! The server is a process-wide singleton, so every scenario lives in one
 //! test function to keep them from interfering.
 
+use reqwest::StatusCode;
 use xtremio_core::api::server::{server_base_url, server_start, server_stop, ServerConfig};
 
 fn config(root: &std::path::Path) -> ServerConfig {
@@ -15,7 +16,10 @@ fn config(root: &std::path::Path) -> ServerConfig {
     }
 }
 
-async fn heartbeat(base_url: &str) -> anyhow::Result<serde_json::Value> {
+/// `GET /heartbeat` without credentials: the status the server answers with.
+/// The control API requires the per-launch bearer token, so a plain request
+/// is refused (401); the media routes players fetch stay open.
+async fn heartbeat_status(base_url: &str) -> anyhow::Result<StatusCode> {
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
         .build()?;
@@ -23,9 +27,7 @@ async fn heartbeat(base_url: &str) -> anyhow::Result<serde_json::Value> {
         .get(format!("{base_url}heartbeat"))
         .send()
         .await?
-        .error_for_status()?
-        .json()
-        .await?)
+        .status())
 }
 
 #[tokio::test]
@@ -50,8 +52,8 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         "cache dir created"
     );
 
-    let body = heartbeat(&url).await?;
-    assert_eq!(body["success"], true, "heartbeat body: {body}");
+    // Answering, and refusing a control request that carries no token.
+    assert_eq!(heartbeat_status(&url).await?, StatusCode::UNAUTHORIZED);
 
     // Idempotent: a second start returns the same URL without restarting.
     let again = tokio::task::spawn_blocking({
@@ -65,7 +67,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     tokio::task::spawn_blocking(server_stop).await??;
     assert_eq!(server_base_url()?, None);
     assert!(
-        heartbeat(&url).await.is_err(),
+        heartbeat_status(&url).await.is_err(),
         "server still answering after stop"
     );
 
@@ -76,7 +78,10 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         move || server_start(cfg)
     })
     .await??;
-    assert_eq!(heartbeat(&restarted).await?["success"], true);
+    assert_eq!(
+        heartbeat_status(&restarted).await?,
+        StatusCode::UNAUTHORIZED
+    );
     tokio::task::spawn_blocking(server_stop).await??;
     Ok(())
 }

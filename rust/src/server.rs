@@ -3,7 +3,9 @@
 //! `stream_server::start` runs the server on its own OS thread with its own
 //! tokio runtime, so torrent hashing and disk I/O never compete with the
 //! stremio-core runtime or FRB's thread pool. We keep a single global
-//! [`ServerHandle`] and expose start/stop/base_url around it.
+//! [`ServerHandle`] and expose start/stop/base_url around it, plus the
+//! bearer token its control API requires: `Env::fetch` attaches it to the
+//! engine's requests to the server, and nothing else ever sees it.
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -109,4 +111,72 @@ pub fn stop() -> anyhow::Result<()> {
 /// Base URL of the running server, if any.
 pub fn base_url() -> Option<Url> {
     lock().as_ref().and_then(|handle| url_of(handle).ok())
+}
+
+/// Whether `url` addresses the running embedded server: same scheme, host
+/// and (effective) port as [`base_url`]. False when no server runs.
+pub fn is_embedded_url(url: &Url) -> bool {
+    base_url().is_some_and(|base| same_authority(&base, url))
+}
+
+fn same_authority(a: &Url, b: &Url) -> bool {
+    a.scheme() == b.scheme()
+        && a.host() == b.host()
+        && a.port_or_known_default() == b.port_or_known_default()
+}
+
+/// The bearer token to send with a request to `url`: the running server's
+/// per-launch token when `url` is the embedded server's (see
+/// [`is_embedded_url`]), else nothing. Any other host, loopback or not, gets
+/// no credentials. Never log or serialize the token: it is what keeps other
+/// local processes out of the server's settings.
+pub fn token_for(url: &Url) -> Option<String> {
+    let guard = lock();
+    let handle = guard.as_ref()?;
+    let base = url_of(handle).ok()?;
+    if same_authority(&base, url) {
+        handle.auth_token().map(str::to_owned)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_authority_compares_scheme_host_and_effective_port() {
+        let a = Url::parse("http://127.0.0.1:43123/").unwrap();
+        assert!(same_authority(
+            &a,
+            &Url::parse("http://127.0.0.1:43123/settings").unwrap()
+        ));
+        assert!(same_authority(
+            &a,
+            &Url::parse("HTTP://127.0.0.1:43123").unwrap()
+        ));
+        // Another port, host or scheme is another server.
+        assert!(!same_authority(
+            &a,
+            &Url::parse("http://127.0.0.1:11470/settings").unwrap()
+        ));
+        assert!(!same_authority(
+            &a,
+            &Url::parse("http://localhost:43123/").unwrap()
+        ));
+        assert!(!same_authority(
+            &a,
+            &Url::parse("https://127.0.0.1:43123/").unwrap()
+        ));
+        assert!(!same_authority(
+            &a,
+            &Url::parse("http://192.168.1.20:43123/").unwrap()
+        ));
+        // Default ports compare by their effective value.
+        assert!(same_authority(
+            &Url::parse("http://example.com/").unwrap(),
+            &Url::parse("http://example.com:80/x").unwrap()
+        ));
+    }
 }
