@@ -116,6 +116,17 @@ class MediaKitEngine implements PlaybackEngine {
     );
   }
 
+  /// Stops playback before releasing the player. Once stopped, libmpv posts
+  /// no more frames to the video texture, so the texture is idle by the time
+  /// `Player.dispose` unregisters it (media_kit tears the native
+  /// `VideoOutput` down from `Player.dispose`, so there is nothing separate
+  /// to dispose on the `VideoController`).
   @override
-  Future<void> dispose() => _player.dispose();
+  Future<void> dispose() async {
+    try {
+      await _player.stop();
+    } finally {
+      await _player.dispose();
+    }
+  }
 }
