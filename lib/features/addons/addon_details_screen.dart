@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../widgets/content_type_label.dart';
+import '../../widgets/shared_field_screen.dart';
 import 'addon_widgets.dart';
 
 /// One addon by manifest URL (`addon_details`): the fetched manifest next
@@ -32,14 +33,6 @@ class _AddonDetailsScreenState extends State<AddonDetailsScreen> {
   CoreFieldNotifier? _details;
   CoreFieldNotifier? _ctx;
 
-  /// The screen whose `Load` the shared `addon_details` field last served.
-  ///
-  /// A popping route stays in the tree for the length of its transition
-  /// while the list beneath is already tappable, so a second details screen
-  /// can dispatch its `Load` before the first one's dispose runs. Only the
-  /// owner unloads the field on dispose, as `meta_details` does.
-  static _AddonDetailsScreenState? _fieldOwner;
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -56,10 +49,10 @@ class _AddonDetailsScreenState extends State<AddonDetailsScreen> {
 
   @override
   void dispose() {
-    if (_fieldOwner == this) {
-      _fieldOwner = null;
-      _client?.dispatch(CoreActions.unload(CoreField.addonDetails));
-    }
+    // A popping route stays in the tree for its transition while the list
+    // beneath is already tappable, so a second details screen can have
+    // loaded the field by now: only its owner unloads it.
+    SharedFieldOwnership.release(CoreField.addonDetails, this, _client);
     _details?.dispose();
     _ctx?.dispose();
     super.dispose();
@@ -67,7 +60,7 @@ class _AddonDetailsScreenState extends State<AddonDetailsScreen> {
 
   /// Dispatches `Load AddonDetails` for this URL and takes the field over.
   void _load() {
-    _fieldOwner = this;
+    SharedFieldOwnership.claim(CoreField.addonDetails, this);
     _client?.dispatch(CoreActions.loadAddonDetails(widget.transportUrl));
   }
 

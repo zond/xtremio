@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
+import '../../widgets/shared_field_screen.dart';
 import 'addon_details_screen.dart';
 import 'addon_tile.dart';
 import 'addon_widgets.dart';
@@ -47,14 +48,6 @@ class _AddonsScreenState extends State<AddonsScreen> {
   CoreFieldNotifier? _installed;
   CoreFieldNotifier? _remote;
   CoreFieldNotifier? _ctx;
-
-  /// The screen whose `Load`s the two list fields last served.
-  ///
-  /// A popping route stays in the tree for the length of its transition
-  /// while the screen beneath is already tappable, so a new Addons screen
-  /// can dispatch its `Load`s before the old one's dispose runs. Only the
-  /// owner unloads the fields on dispose, as the details screens do.
-  static _AddonsScreenState? _fieldOwner;
   final TextEditingController _search = TextEditingController();
   int _nextPageRequestedAt = -1;
 
@@ -77,7 +70,8 @@ class _AddonsScreenState extends State<AddonsScreen> {
       _remote = CoreFieldNotifier(client, CoreField.remoteAddons);
       _ctx = CoreFieldNotifier(client, CoreField.ctx);
       _nextPageRequestedAt = -1;
-      _fieldOwner = this;
+      SharedFieldOwnership.claim(CoreField.installedAddons, this);
+      SharedFieldOwnership.claim(CoreField.remoteAddons, this);
       client.dispatch(
         CoreActions.loadInstalledAddons(const InstalledAddonsRequest()),
       );
@@ -87,11 +81,11 @@ class _AddonsScreenState extends State<AddonsScreen> {
 
   @override
   void dispose() {
-    if (_fieldOwner == this) {
-      _fieldOwner = null;
-      _client?.dispatch(CoreActions.unload(CoreField.installedAddons));
-      _client?.dispatch(CoreActions.unload(CoreField.remoteAddons));
-    }
+    // A popping route stays in the tree for its transition while the screen
+    // beneath is already tappable, so a new Addons screen can have loaded
+    // the lists by now: only their owner unloads them.
+    SharedFieldOwnership.release(CoreField.installedAddons, this, _client);
+    SharedFieldOwnership.release(CoreField.remoteAddons, this, _client);
     _installed?.dispose();
     _remote?.dispose();
     _ctx?.dispose();
