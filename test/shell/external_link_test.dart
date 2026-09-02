@@ -1,5 +1,7 @@
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:url_launcher/url_launcher.dart' show LaunchMode;
 import 'package:xtremio/shell/external_link.dart';
 
 import '../support/fake_link_opener.dart';
@@ -40,6 +42,33 @@ void main() {
       ),
     );
     expect(found, isA<UrlLauncherLinkOpener>());
+  });
+
+  test('the url_launcher opener reports a failed launch as false', () async {
+    // url_launcher_linux never returns false: a URL nothing opens is a
+    // PlatformException, and one the plugin refuses an ArgumentError.
+    final url = Uri.parse('https://example.com/configure');
+    final launched = <Uri>[];
+    final opener = UrlLauncherLinkOpener(
+      launch: (url, {required mode}) async {
+        launched.add(url);
+        expect(mode, LaunchMode.externalApplication);
+        throw PlatformException(code: 'Launch Error', message: 'no handler');
+      },
+    );
+    expect(await opener.open(url), isFalse);
+    expect(launched, [url]);
+
+    final refusing = UrlLauncherLinkOpener(
+      launch: (url, {required mode}) async => throw ArgumentError('bad URL'),
+    );
+    expect(await refusing.open(url), isFalse);
+
+    // A launcher's own answer passes through.
+    final honest = UrlLauncherLinkOpener(
+      launch: (url, {required mode}) async => true,
+    );
+    expect(await honest.open(url), isTrue);
   });
 }
 

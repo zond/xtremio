@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addon_details_screen.dart';
@@ -13,7 +14,7 @@ import '../support/fixtures.dart';
 void main() {
   const cinemeta = 'https://v3-cinemeta.strem.io/manifest.json';
 
-  Widget harness(FakeCoreClient core, FakeLinkOpener opener) => CoreScope(
+  Widget harness(FakeCoreClient core, ExternalLinkOpener opener) => CoreScope(
     client: core,
     child: ExternalLinkScope(
       opener: opener,
@@ -206,6 +207,34 @@ void main() {
     // The opener refused: the user is told.
     expect(find.byType(SnackBar), findsOneWidget);
     expect(find.textContaining('Could not open'), findsOneWidget);
+  });
+
+  testWidgets('a launcher that throws still ends in the "Could not open"', (
+    tester,
+  ) async {
+    // url_launcher on Linux throws instead of returning false; the real
+    // opener turns that into false so the SnackBar shows and nothing
+    // propagates into the framework's error handler.
+    final json = details();
+    json['localAddon']['manifest']['behaviorHints']['configurable'] = true;
+    remoteContent(json)['manifest']['behaviorHints']['configurable'] = true;
+    final core = fakeCore(details: json);
+    final opener = UrlLauncherLinkOpener(
+      launch: (url, {required mode}) async =>
+          throw PlatformException(code: 'Launch Error'),
+    );
+    await tester.pumpWidget(harness(core, opener));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, 'Configure'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(
+      find.textContaining('Could not open https://v3-cinemeta.strem.io'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a failed manifest fetch shows the message and retries', (
