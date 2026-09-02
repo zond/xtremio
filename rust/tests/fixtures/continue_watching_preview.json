@@ -1,0 +1,33 @@
+{
+  "items": [
+    {
+      "_ctime": "2026-09-02T17:58:49.180674399Z",
+      "_id": "tt0063350",
+      "_mtime": "2026-09-02T17:58:49.213648916Z",
+      "behaviorHints": {
+        "defaultVideoId": "tt0063350",
+        "featuredVideoId": null,
+        "hasScheduledVideos": false
+      },
+      "name": "Night of the Living Dead",
+      "notifications": 0,
+      "poster": "https://images.metahub.space/poster/small/tt0063350/img",
+      "posterShape": "poster",
+      "removed": true,
+      "state": {
+        "duration": 5760000,
+        "flaggedWatched": 0,
+        "lastWatched": "2026-09-02T17:58:49.213615213Z",
+        "noNotif": false,
+        "overallTimeWatched": 0,
+        "timeOffset": 60000,
+        "timeWatched": 0,
+        "timesWatched": 0,
+        "video_id": "tt0063350",
+        "watched": null
+      },
+      "temp": true,
+      "type": "movie"
+    }
+  ]
+}

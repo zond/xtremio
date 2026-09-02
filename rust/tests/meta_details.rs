@@ -1,5 +1,6 @@
-//! Network test: loads `MetaDetails` for a public-domain movie and then the
-//! `Player` for one of its torrent streams, recording both states as fixtures
+//! Network test: loads `MetaDetails` for a public-domain movie, then the
+//! `Player` for one of its torrent streams, then reports progress so the item
+//! enters `continue_watching_preview`, recording all three states as fixtures
 //! for the Dart tests. Ignored by default (needs internet); run with
 //! `cargo test --test meta_details -- --ignored --nocapture`.
 //!
@@ -168,6 +169,40 @@ fn meta_details_and_player_for_a_public_domain_torrent() -> anyhow::Result<()> {
         "{streaming_url}"
     );
     write_fixture("player_public_domain_torrent.json", &player)?;
+
+    // Report a minute of playback and a pause: `PausedChanged` flushes the
+    // library item (`Internal::UpdateLibraryItem` -> `LibraryChanged(true)`)
+    // and the temp item, now with `timeOffset > 0`, enters continue watching.
+    for action in [
+        serde_json::json!({
+            "action": "TimeChanged",
+            "args": { "time": 60_000, "duration": 5_760_000, "device": "test" }
+        }),
+        serde_json::json!({ "action": "PausedChanged", "args": { "paused": true } }),
+    ] {
+        core_dispatch(
+            serde_json::json!({
+                "field": "player",
+                "action": { "action": "Player", "args": action }
+            })
+            .to_string(),
+        )?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let continue_watching = loop {
+        let continue_watching = state("continue_watching_preview");
+        if continue_watching["items"][0]["_id"] == META_ID {
+            break continue_watching;
+        }
+        assert!(Instant::now() < deadline, "timed out: {continue_watching}");
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    let item = &continue_watching["items"][0];
+    assert_eq!(item["state"]["timeOffset"], 60_000, "{item}");
+    assert_eq!(item["state"]["duration"], 5_760_000, "{item}");
+    assert_eq!(item["state"]["video_id"], META_ID, "{item}");
+    assert_eq!(item["notifications"], 0, "{item}");
+    write_fixture("continue_watching_preview.json", &continue_watching)?;
 
     core_shutdown()?;
     Ok(())

@@ -1,0 +1,1714 @@
+{
+  "catalogLabels": [
+    {
+      "addonName": "Cinemeta",
+      "name": "Popular",
+      "type": "movie"
+    },
+    {
+      "addonName": "Cinemeta",
+      "name": "Popular",
+      "type": "series"
+    },
+    {
+      "addonName": "YouTube",
+      "name": "YouTube",
+      "type": "channel"
+    },
+    {
+      "addonName": "YouTube",
+      "name": "YouTube",
+      "type": "channel"
+    },
+    {
+      "addonName": "Public Domain Movies",
+      "name": "Public Domain Movies",
+      "type": "movie"
+    }
+  ],
+  "catalogs": [
+    [
+      {
+        "content": {
+          "content": [
+            {
+              "background": "https://images.metahub.space/background/medium/tt0063350/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0063350",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt0063350",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BZGMyZTA0MWEtZjczMS00ZDE5LTk1OTQtNmIxNGYzNDA2NDVhXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "1968",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0100258/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0100258",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt0100258",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMTNjZWQwNDEtNjg3Ny00Y2MwLWI2ZmEtMzkyMTFlZGJkNTkyXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "1990",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt33296064/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt33296064",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt33296064",
+              "links": [],
+              "logo": null,
+              "name": "Based on the Original Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMmQ5MjJmNWQtZjMzNi00MDI3LThmYTUtNTVmZDcxOTUwMDU2XkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2026",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0489244/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0489244",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt0489244",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead 3D",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMTgxNTE0Njg1OV5BMl5BanBnXkFtZTcwODMyMzQzMQ@@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2006",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt13742126/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt13742126",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt13742126",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BOGM4ZDAwNzMtNWFkNC00ODMwLThhODMtYzM1MTdhNWQyMWJjXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2021",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt10675496/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt10675496",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt10675496",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMzFmYmZiYWMtMTY2Yi00NzcxLTllNGYtMGZkMzQwZGJiMGM2XkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": null,
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt2006801/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt2006801",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt2006801",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead: Resurrection",
+              "poster": "https://m.media-amazon.com/images/M/MV5BNWIxZTAwYmEtNmQ2Zi00MWQ1LWIyM2UtZTU1OGE4OWMwZjlkXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2012",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt1512222/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt1512222",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt1512222",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead: Darkest Dawn",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMDAxMmFkODItMDhkNS00NzZkLWIyYzctOTRhZjlmODU4NTFjXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2015",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt1879012/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt1879012",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt1879012",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead 3D: Re-Animation",
+              "poster": "https://m.media-amazon.com/images/M/MV5BOTU5ODgyNTI1Nl5BMl5BanBnXkFtZTcwMjEwOTA0Nw@@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2012",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt3393372/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt3393372",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt3393372",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMmU0NDRiZWItNGUzNS00Zjg3LWExYjUtMjZmMmIyZmRhZDhjXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2014",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt2076794/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt2076794",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt2076794",
+              "links": [],
+              "logo": null,
+              "name": "Another Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMzcxNTAyMjc1Nl5BMl5BanBnXkFtZTcwNTY5MTU0OQ@@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2011",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt2344508/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt2344508",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt2344508",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living 3D Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BODY5MjMzNTkxMV5BMl5BanBnXkFtZTgwMDcyMTM3NTE@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2013",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt3387174/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt3387174",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt3387174",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead: Genesis",
+              "poster": "https://m.media-amazon.com/images/M/MV5BM2RlNzQ3MWQtNDM2ZC00OWZiLTkyZjgtNTAxMTQwNmQ1Y2MwXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": null,
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt1520368/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt1520368",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt1520368",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead: Reanimated",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMTYyODkwODU4M15BMl5BanBnXkFtZTcwMjEwNzU2Mw@@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2009",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt30764841/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt30764841",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt30764841",
+              "links": [],
+              "logo": null,
+              "name": "Synthwave Horror: Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BZTRkZWEyODItZGExMi00NzU3LWJiNjctYWEwY2ZiODRlYWZkXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2024",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt5244912/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt5244912",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt5244912",
+              "links": [],
+              "logo": null,
+              "name": "Night of the Living Dead Reboot",
+              "poster": "https://m.media-amazon.com/images/M/MV5BNzA1ODcxNjUtZWE0YS00ZmQ1LTg3YjMtZDMzYjVlMDIxMTZhXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2013",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt14871494/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt14871494",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt14871494",
+              "links": [],
+              "logo": null,
+              "name": "A Night of the Undead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BOWJhNWFkNjAtMjFlMy00MGQxLTk2MDktNTgxZDZjNmFlOGU4XkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2022",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt19732660/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt19732660",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": null,
+              "id": "tt19732660",
+              "links": [],
+              "logo": null,
+              "name": "Bocas vs Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMWEwMzU4YjQtMjk3NC00MGRmLWFhNGEtZjc1OGI5MjRlMzJiXkEyXkFqcGc@._V1_SX250.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "2025",
+              "released": null,
+              "runtime": null,
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt3157102/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt3157102",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "RiffTrax does George A. Romero's classic Night of the Living Dead Live.",
+              "id": "tt3157102",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "7.6",
+                  "url": "https://imdb.com/title/tt3157102"
+                },
+                {
+                  "category": "share",
+                  "name": "RiffTrax Live: Night of the Living Dead",
+                  "url": "https://www.strem.io/s/movie/rifftrax-live-night-of-the-living-dead-3157102"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Comedy",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Bill Corbett",
+                  "url": "stremio:///search?search=Bill%20Corbett"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Kevin Murphy",
+                  "url": "stremio:///search?search=Kevin%20Murphy"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Michael J. Nelson",
+                  "url": "stremio:///search?search=Michael%20J.%20Nelson"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Bill Corbett",
+                  "url": "stremio:///search?search=Bill%20Corbett"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Conor Lastowka",
+                  "url": "stremio:///search?search=Conor%20Lastowka"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Kevin Murphy",
+                  "url": "stremio:///search?search=Kevin%20Murphy"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt3157102/img",
+              "name": "RiffTrax Live: Night of the Living Dead",
+              "poster": "https://images.metahub.space/poster/small/tt3157102/img",
+              "posterShape": "poster",
+              "releaseInfo": "2013",
+              "released": "2013-10-24T00:00:00Z",
+              "runtime": "115 min",
+              "trailerStreams": [],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0378417/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0378417",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "Three not-so-cool school friends decide to try a old voodoo ritual. Later, they die in a car accident, but live on as zombies. But being a zombie has advantages, too...",
+              "id": "tt0378417",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "5.6",
+                  "url": "https://imdb.com/title/tt0378417"
+                },
+                {
+                  "category": "share",
+                  "name": "Night of the Living Dorks",
+                  "url": "https://www.strem.io/s/movie/night-of-the-living-dorks-0378417"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Comedy",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Tino Mewes",
+                  "url": "stremio:///search?search=Tino%20Mewes"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Manuel Cortez",
+                  "url": "stremio:///search?search=Manuel%20Cortez"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Thomas Schmieder",
+                  "url": "stremio:///search?search=Thomas%20Schmieder"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Matthias Dinter",
+                  "url": "stremio:///search?search=Matthias%20Dinter"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Matthias Dinter",
+                  "url": "stremio:///search?search=Matthias%20Dinter"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0378417/img",
+              "name": "Night of the Living Dorks",
+              "poster": "https://images.metahub.space/poster/small/tt0378417/img",
+              "posterShape": "poster",
+              "releaseInfo": "2004",
+              "released": "2004-11-04T00:00:00Z",
+              "runtime": "90 min",
+              "trailerStreams": [
+                {
+                  "description": "Night of the Living Dorks",
+                  "ytId": "0Gbf1Rpvgzg"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt3602128/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt3602128",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "After a girls' night out, endearingly awkward Deb wakes up in the apartment of the most attractive guy in Portland, Maine. Pretty boy Ryan only knows it was a mistake and ushers her out the door into a full-scale zombie apocalypse.",
+              "id": "tt3602128",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "5.6",
+                  "url": "https://imdb.com/title/tt3602128"
+                },
+                {
+                  "category": "share",
+                  "name": "Night of the Living Deb",
+                  "url": "https://www.strem.io/s/movie/night-of-the-living-deb-3602128"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Comedy",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Romance",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Romance"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Maria Thayer",
+                  "url": "stremio:///search?search=Maria%20Thayer"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Michael Cassidy",
+                  "url": "stremio:///search?search=Michael%20Cassidy"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Julie Brister",
+                  "url": "stremio:///search?search=Julie%20Brister"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Andy Selsor",
+                  "url": "stremio:///search?search=Andy%20Selsor"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Kyle Rankin",
+                  "url": "stremio:///search?search=Kyle%20Rankin"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Kyle Rankin",
+                  "url": "stremio:///search?search=Kyle%20Rankin"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt3602128/img",
+              "name": "Night of the Living Deb",
+              "poster": "https://images.metahub.space/poster/small/tt3602128/img",
+              "posterShape": "poster",
+              "releaseInfo": "2015",
+              "released": "2015-10-08T00:00:00Z",
+              "runtime": "84 min",
+              "trailerStreams": [
+                {
+                  "description": "Night of the Living Deb",
+                  "ytId": "T3rZXmf0oAE"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0107953/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0107953",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "Having recently witnessed the horrific results of a top secret project to bring the dead back to life, a distraught youth performs the operation on his girlfriend after she's killed in a motorcycle accident.",
+              "id": "tt0107953",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "5.9",
+                  "url": "https://imdb.com/title/tt0107953"
+                },
+                {
+                  "category": "share",
+                  "name": "Return of the Living Dead III",
+                  "url": "https://www.strem.io/s/movie/return-of-the-living-dead-iii-0107953"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Cast",
+                  "name": "J. Trevor Edmond",
+                  "url": "stremio:///search?search=J.%20Trevor%20Edmond"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Melinda Clarke",
+                  "url": "stremio:///search?search=Melinda%20Clarke"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Kent McCord",
+                  "url": "stremio:///search?search=Kent%20McCord"
+                },
+                {
+                  "category": "Writers",
+                  "name": "John Penney",
+                  "url": "stremio:///search?search=John%20Penney"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Brian Yuzna",
+                  "url": "stremio:///search?search=Brian%20Yuzna"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0107953/img",
+              "name": "Return of the Living Dead III",
+              "poster": "https://images.metahub.space/poster/small/tt0107953/img",
+              "posterShape": "poster",
+              "releaseInfo": "1993",
+              "released": "1994-02-25T00:00:00Z",
+              "runtime": "97 min",
+              "trailerStreams": [
+                {
+                  "description": "Return of the Living Dead III",
+                  "ytId": "PJypjaGuXKo"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0095990/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0095990",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "Curious kids unearth the barrels that previously helped revive the dead, which proves the second time's an undead charm.",
+              "id": "tt0095990",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "5.7",
+                  "url": "https://imdb.com/title/tt0095990"
+                },
+                {
+                  "category": "share",
+                  "name": "Return of the Living Dead II",
+                  "url": "https://www.strem.io/s/movie/return-of-the-living-dead-ii-0095990"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Comedy",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Sci-Fi",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sci-Fi"
+                },
+                {
+                  "category": "Cast",
+                  "name": "James Karen",
+                  "url": "stremio:///search?search=James%20Karen"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Thom Mathews",
+                  "url": "stremio:///search?search=Thom%20Mathews"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Michael Kenworthy",
+                  "url": "stremio:///search?search=Michael%20Kenworthy"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Ken Wiederhorn",
+                  "url": "stremio:///search?search=Ken%20Wiederhorn"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Ken Wiederhorn",
+                  "url": "stremio:///search?search=Ken%20Wiederhorn"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0095990/img",
+              "name": "Return of the Living Dead II",
+              "poster": "https://images.metahub.space/poster/small/tt0095990/img",
+              "posterShape": "poster",
+              "releaseInfo": "1988",
+              "released": "1988-01-15T00:00:00Z",
+              "runtime": "89 min",
+              "trailerStreams": [
+                {
+                  "description": "Return of the Living Dead II",
+                  "ytId": "X1Ea5xNfh1U"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0411806/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0411806",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "A college student creates a drug called \"Z\" and sells it on campus, inadvertently resurrecting the living dead, who wreak havoc at a Halloween rave.",
+              "id": "tt0411806",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "3.3",
+                  "url": "https://imdb.com/title/tt0411806"
+                },
+                {
+                  "category": "share",
+                  "name": "Return of the Living Dead: Rave to the Grave",
+                  "url": "https://www.strem.io/s/movie/return-of-the-living-dead-rave-to-the-grave-0411806"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Comedy",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Sci-Fi",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sci-Fi"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Peter Coyote",
+                  "url": "stremio:///search?search=Peter%20Coyote"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Aimee-Lynn Chadwick",
+                  "url": "stremio:///search?search=Aimee-Lynn%20Chadwick"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Cory Hardrict",
+                  "url": "stremio:///search?search=Cory%20Hardrict"
+                },
+                {
+                  "category": "Writers",
+                  "name": "William Butler",
+                  "url": "stremio:///search?search=William%20Butler"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Aaron Strongoni",
+                  "url": "stremio:///search?search=Aaron%20Strongoni"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Ellory Elkayem",
+                  "url": "stremio:///search?search=Ellory%20Elkayem"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0411806/img",
+              "name": "Return of the Living Dead: Rave to the Grave",
+              "poster": "https://images.metahub.space/poster/small/tt0411806/img",
+              "posterShape": "poster",
+              "releaseInfo": "2005",
+              "released": "2006-08-31T00:00:00Z",
+              "runtime": "95 min",
+              "trailerStreams": [
+                {
+                  "description": "Return of the Living Dead: Rave to the Grave",
+                  "ytId": "sK8LrKQSPJY"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0411805/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0411805",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "A group of teenagers, in an attempt to rescue their friend from an evil corporation, end up inadvertently releasing a horde of bloodthirsty zombies.",
+              "id": "tt0411805",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "3.3",
+                  "url": "https://imdb.com/title/tt0411805"
+                },
+                {
+                  "category": "share",
+                  "name": "Return of the Living Dead: Necropolis",
+                  "url": "https://www.strem.io/s/movie/return-of-the-living-dead-necropolis-0411805"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Action",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Action"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Comedy",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Aimee-Lynn Chadwick",
+                  "url": "stremio:///search?search=Aimee-Lynn%20Chadwick"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Cory Hardrict",
+                  "url": "stremio:///search?search=Cory%20Hardrict"
+                },
+                {
+                  "category": "Cast",
+                  "name": "John Keefe",
+                  "url": "stremio:///search?search=John%20Keefe"
+                },
+                {
+                  "category": "Writers",
+                  "name": "William Butler",
+                  "url": "stremio:///search?search=William%20Butler"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Aaron Strongoni",
+                  "url": "stremio:///search?search=Aaron%20Strongoni"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Ellory Elkayem",
+                  "url": "stremio:///search?search=Ellory%20Elkayem"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0411805/img",
+              "name": "Return of the Living Dead: Necropolis",
+              "poster": "https://images.metahub.space/poster/small/tt0411805/img",
+              "posterShape": "poster",
+              "releaseInfo": "2005",
+              "released": "2006-03-23T00:00:00Z",
+              "runtime": "88 min",
+              "trailerStreams": [
+                {
+                  "description": "Return of the Living Dead: Necropolis",
+                  "ytId": "tQD5ZLP5c-E"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0780583/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0780583",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "A mad scientist is transferring a dead woman in a freezer with an armed guard on a plane to Paris. After slight turbulence, the freezer breaks down and she awakens, turns into a zombie, and infects all on board.",
+              "id": "tt0780583",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "5.1",
+                  "url": "https://imdb.com/title/tt0780583"
+                },
+                {
+                  "category": "share",
+                  "name": "Flight of the Living Dead",
+                  "url": "https://www.strem.io/s/movie/flight-of-the-living-dead-0780583"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Cast",
+                  "name": "David Chisum",
+                  "url": "stremio:///search?search=David%20Chisum"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Kristen Kerr",
+                  "url": "stremio:///search?search=Kristen%20Kerr"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Kevin J. O'Connor",
+                  "url": "stremio:///search?search=Kevin%20J.%20O'Connor"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Sidney Iwanter",
+                  "url": "stremio:///search?search=Sidney%20Iwanter"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Mark Onspaugh",
+                  "url": "stremio:///search?search=Mark%20Onspaugh"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Scott Thomas",
+                  "url": "stremio:///search?search=Scott%20Thomas"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Scott Thomas",
+                  "url": "stremio:///search?search=Scott%20Thomas"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0780583/img",
+              "name": "Flight of the Living Dead",
+              "poster": "https://images.metahub.space/poster/small/tt0780583/img",
+              "posterShape": "poster",
+              "releaseInfo": "2007",
+              "released": "2008-06-24T00:00:00Z",
+              "runtime": "89 min",
+              "trailerStreams": [
+                {
+                  "description": "Flight of the Living Dead",
+                  "ytId": "4JQs-5b7huY"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0081318/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0081318",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "A reporter and a psychic race to close the Gates of Hell after the suicide of a clergyman caused them to open, allowing the dead to rise from their graves.",
+              "id": "tt0081318",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "6.2",
+                  "url": "https://imdb.com/title/tt0081318"
+                },
+                {
+                  "category": "share",
+                  "name": "City of the Living Dead",
+                  "url": "https://www.strem.io/s/movie/city-of-the-living-dead-0081318"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Christopher George",
+                  "url": "stremio:///search?search=Christopher%20George"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Catriona MacColl",
+                  "url": "stremio:///search?search=Catriona%20MacColl"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Carlo De Mejo",
+                  "url": "stremio:///search?search=Carlo%20De%20Mejo"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Lucio Fulci",
+                  "url": "stremio:///search?search=Lucio%20Fulci"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Dardano Sacchetti",
+                  "url": "stremio:///search?search=Dardano%20Sacchetti"
+                },
+                {
+                  "category": "Writers",
+                  "name": "H.P. Lovecraft",
+                  "url": "stremio:///search?search=H.P.%20Lovecraft"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Lucio Fulci",
+                  "url": "stremio:///search?search=Lucio%20Fulci"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0081318/img",
+              "name": "City of the Living Dead",
+              "poster": "https://images.metahub.space/poster/small/tt0081318/img",
+              "posterShape": "poster",
+              "releaseInfo": "1980",
+              "released": "1983-04-08T00:00:00Z",
+              "runtime": "93 min",
+              "trailerStreams": [
+                {
+                  "description": "City of the Living Dead",
+                  "ytId": "M-tU_HCF5i4"
+                },
+                {
+                  "description": "City of the Living Dead",
+                  "ytId": "PX9Z21XCOgA"
+                },
+                {
+                  "description": "City of the Living Dead",
+                  "ytId": "n2ONlzvTYVc"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0082559/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0082559",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "After an experiment gone wrong, a virus that turns people into zombies spreads throughout New Guinea. A female reporter and her cameraman, and a team of four commandos sent to investigate try to survive the onslaught.",
+              "id": "tt0082559",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "4.8",
+                  "url": "https://imdb.com/title/tt0082559"
+                },
+                {
+                  "category": "share",
+                  "name": "Hell of the Living Dead",
+                  "url": "https://www.strem.io/s/movie/hell-of-the-living-dead-0082559"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Sci-Fi",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Sci-Fi"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Thriller",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Margie Newton",
+                  "url": "stremio:///search?search=Margie%20Newton"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Franco Garofalo",
+                  "url": "stremio:///search?search=Franco%20Garofalo"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Selan Karay",
+                  "url": "stremio:///search?search=Selan%20Karay"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Claudio Fragasso",
+                  "url": "stremio:///search?search=Claudio%20Fragasso"
+                },
+                {
+                  "category": "Writers",
+                  "name": "José María Cunillés",
+                  "url": "stremio:///search?search=Jos%C3%A9%20Mar%C3%ADa%20Cunill%C3%A9s"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Rossella Drudi",
+                  "url": "stremio:///search?search=Rossella%20Drudi"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Bruno Mattei",
+                  "url": "stremio:///search?search=Bruno%20Mattei"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Claudio Fragasso",
+                  "url": "stremio:///search?search=Claudio%20Fragasso"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0082559/img",
+              "name": "Hell of the Living Dead",
+              "poster": "https://images.metahub.space/poster/small/tt0082559/img",
+              "posterShape": "poster",
+              "releaseInfo": "1980",
+              "released": "1983-10-14T00:00:00Z",
+              "runtime": "101 min",
+              "trailerStreams": [
+                {
+                  "description": "Hell of the Living Dead",
+                  "ytId": "OnuHk2Rgtf4"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0062957/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0062957",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "A beautiful virgin inherits a castle, but when she arrives at it, she finds that the inhabitants include a strange nobleman and a bevy of beautiful women she suspects may be vampires.",
+              "id": "tt0062957",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "4.4",
+                  "url": "https://imdb.com/title/tt0062957"
+                },
+                {
+                  "category": "share",
+                  "name": "Fangs of the Living Dead",
+                  "url": "https://www.strem.io/s/movie/fangs-of-the-living-dead-0062957"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Comedy",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Drama",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Drama"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Anita Ekberg",
+                  "url": "stremio:///search?search=Anita%20Ekberg"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Gianni Medici",
+                  "url": "stremio:///search?search=Gianni%20Medici"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Diana Lorys",
+                  "url": "stremio:///search?search=Diana%20Lorys"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Amando de Ossorio",
+                  "url": "stremio:///search?search=Amando%20de%20Ossorio"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Amando de Ossorio",
+                  "url": "stremio:///search?search=Amando%20de%20Ossorio"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0062957/img",
+              "name": "Fangs of the Living Dead",
+              "poster": "https://images.metahub.space/poster/small/tt0062957/img",
+              "posterShape": "poster",
+              "releaseInfo": "1969",
+              "released": "1973-05-18T00:00:00Z",
+              "runtime": "94 min",
+              "trailerStreams": [
+                {
+                  "description": "Fangs of the Living Dead",
+                  "ytId": "UPZOwWXzGNY"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt1927093/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt1927093",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "Fred suspects that his new music teacher is a vampire and sets out to prove his theory.",
+              "id": "tt1927093",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "2.5",
+                  "url": "https://imdb.com/title/tt1927093"
+                },
+                {
+                  "category": "share",
+                  "name": "Fred 2: Night of the Living Fred",
+                  "url": "https://www.strem.io/s/movie/fred-2-night-of-the-living-fred-1927093"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Adventure",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Adventure"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Comedy",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Comedy"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Lucas Cruikshank",
+                  "url": "stremio:///search?search=Lucas%20Cruikshank"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Jake Weary",
+                  "url": "stremio:///search?search=Jake%20Weary"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Stephanie Courtney",
+                  "url": "stremio:///search?search=Stephanie%20Courtney"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Lucas Cruikshank",
+                  "url": "stremio:///search?search=Lucas%20Cruikshank"
+                },
+                {
+                  "category": "Writers",
+                  "name": "David A. Goodman",
+                  "url": "stremio:///search?search=David%20A.%20Goodman"
+                },
+                {
+                  "category": "Directors",
+                  "name": "John Fortenberry",
+                  "url": "stremio:///search?search=John%20Fortenberry"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt1927093/img",
+              "name": "Fred 2: Night of the Living Fred",
+              "poster": "https://images.metahub.space/poster/small/tt1927093/img",
+              "posterShape": "poster",
+              "releaseInfo": "2011",
+              "released": "2011-10-22T00:00:00Z",
+              "runtime": "84 min",
+              "trailerStreams": [
+                {
+                  "description": "Fred 2: Night of the Living Fred",
+                  "ytId": "SbL2FJx0REM"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt27739396/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt27739396",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "While attending a festival to commemorate the original zombie attack, Ash and her friends encounter the living dead and must fight back or be devoured.",
+              "id": "tt27739396",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "4.4",
+                  "url": "https://imdb.com/title/tt27739396"
+                },
+                {
+                  "category": "share",
+                  "name": "Festival of the Living Dead",
+                  "url": "https://www.strem.io/s/movie/festival-of-the-living-dead-27739396"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Ashley Moore",
+                  "url": "stremio:///search?search=Ashley%20Moore"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Andre Anthony",
+                  "url": "stremio:///search?search=Andre%20Anthony"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Camren Bicondova",
+                  "url": "stremio:///search?search=Camren%20Bicondova"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Miriam Lyapin",
+                  "url": "stremio:///search?search=Miriam%20Lyapin"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Helen Marsh",
+                  "url": "stremio:///search?search=Helen%20Marsh"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Jen Soska",
+                  "url": "stremio:///search?search=Jen%20Soska"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Sylvia Soska",
+                  "url": "stremio:///search?search=Sylvia%20Soska"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt27739396/img",
+              "name": "Festival of the Living Dead",
+              "poster": "https://images.metahub.space/poster/small/tt27739396/img",
+              "posterShape": "poster",
+              "releaseInfo": "2024",
+              "released": "2024-04-05T00:00:00Z",
+              "runtime": "88 min",
+              "trailerStreams": [
+                {
+                  "description": "Festival of the Living Dead",
+                  "ytId": "iqPu8TnDYag"
+                }
+              ],
+              "type": "movie"
+            },
+            {
+              "background": "https://images.metahub.space/background/medium/tt0276011/img",
+              "behaviorHints": {
+                "defaultVideoId": "tt0276011",
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "In a small Pennsylvanian town, Matthew has just taken over an old farm property in order to start his new car dealership. Unknown to him the farm is located on the site of a graveyard, which the local townsfolk claim should be left alone.",
+              "id": "tt0276011",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "2.4",
+                  "url": "https://imdb.com/title/tt0276011"
+                },
+                {
+                  "category": "share",
+                  "name": "Children of the Living Dead",
+                  "url": "https://www.strem.io/s/movie/children-of-the-living-dead-0276011"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Thriller",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Tom Savini",
+                  "url": "stremio:///search?search=Tom%20Savini"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Marty Schiff",
+                  "url": "stremio:///search?search=Marty%20Schiff"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Damien Luvara",
+                  "url": "stremio:///search?search=Damien%20Luvara"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Jamie McCoy",
+                  "url": "stremio:///search?search=Jamie%20McCoy"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Karen L. Wolf (screenplay by)",
+                  "url": "stremio:///search?search=Karen%20L.%20Wolf%20(screenplay%20by)"
+                },
+                {
+                  "category": "Directors",
+                  "name": "Tor Ramsey",
+                  "url": "stremio:///search?search=Tor%20Ramsey"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt0276011/img",
+              "name": "Children of the Living Dead",
+              "poster": "https://images.metahub.space/poster/small/tt0276011/img",
+              "posterShape": "poster",
+              "releaseInfo": "2001",
+              "released": "2005-03-17T00:00:00Z",
+              "runtime": "90 min",
+              "trailerStreams": [
+                {
+                  "description": "Children of the Living Dead",
+                  "ytId": "9-2nmaQIyhA"
+                }
+              ],
+              "type": "movie"
+            }
+          ],
+          "type": "Ready"
+        },
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [
+              [
+                "search",
+                "night of the living dead"
+              ]
+            ],
+            "id": "top",
+            "resource": "catalog",
+            "type": "movie"
+          }
+        }
+      }
+    ],
+    [
+      {
+        "content": {
+          "content": [
+            {
+              "background": "https://images.metahub.space/background/medium/tt5338744/img",
+              "behaviorHints": {
+                "defaultVideoId": null,
+                "featuredVideoId": null,
+                "hasScheduledVideos": true
+              },
+              "description": "In an America quarantined by the rest of the world, humans and vampires co-exist on opposite coasts thanks to a peace treaty, while each side plots to destroy the other.",
+              "id": "tt5338744",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "4.4",
+                  "url": "https://imdb.com/title/tt5338744"
+                },
+                {
+                  "category": "share",
+                  "name": "Age of the Living Dead",
+                  "url": "https://www.strem.io/s/series/age-of-the-living-dead-5338744"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Action",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/series/top?genre=Action"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/series/top?genre=Horror"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Sci-Fi",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/series/top?genre=Sci-Fi"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Nicola Posener",
+                  "url": "stremio:///search?search=Nicola%20Posener"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Simon Phillips",
+                  "url": "stremio:///search?search=Simon%20Phillips"
+                },
+                {
+                  "category": "Cast",
+                  "name": "Deji LaRay",
+                  "url": "stremio:///search?search=Deji%20LaRay"
+                },
+                {
+                  "category": "Writers",
+                  "name": "Simon Phillips",
+                  "url": "stremio:///search?search=Simon%20Phillips"
+                }
+              ],
+              "logo": "https://images.metahub.space/logo/medium/tt5338744/img",
+              "name": "Age of the Living Dead",
+              "poster": "https://images.metahub.space/poster/small/tt5338744/img",
+              "posterShape": "poster",
+              "releaseInfo": "2018–",
+              "released": "2020-07-19T00:00:00Z",
+              "runtime": "45 min",
+              "trailerStreams": [
+                {
+                  "description": "Age of the Living Dead",
+                  "ytId": "2mtl4nm6ZJs"
+                }
+              ],
+              "type": "series"
+            }
+          ],
+          "type": "Ready"
+        },
+        "request": {
+          "base": "https://v3-cinemeta.strem.io/manifest.json",
+          "path": {
+            "extra": [
+              [
+                "search",
+                "night of the living dead"
+              ]
+            ],
+            "id": "top",
+            "resource": "catalog",
+            "type": "series"
+          }
+        }
+      }
+    ],
+    [
+      {
+        "content": {
+          "content": {
+            "content": {
+              "code": 1,
+              "message": "Failed to fetch: HTTP 500"
+            },
+            "type": "Env"
+          },
+          "type": "Err"
+        },
+        "request": {
+          "base": "https://v3-channels.strem.io/manifest.json",
+          "path": {
+            "extra": [
+              [
+                "search",
+                "night of the living dead"
+              ]
+            ],
+            "id": "top",
+            "resource": "catalog",
+            "type": "channel"
+          }
+        }
+      }
+    ],
+    [
+      {
+        "content": {
+          "content": {
+            "content": {
+              "code": 1,
+              "message": "Failed to fetch: HTTP 500"
+            },
+            "type": "Env"
+          },
+          "type": "Err"
+        },
+        "request": {
+          "base": "https://v3-channels.strem.io/manifest.json",
+          "path": {
+            "extra": [
+              [
+                "search",
+                "night of the living dead"
+              ]
+            ],
+            "id": "videos",
+            "resource": "catalog",
+            "type": "channel"
+          }
+        }
+      }
+    ],
+    [
+      {
+        "content": {
+          "content": [
+            {
+              "background": null,
+              "behaviorHints": {
+                "defaultVideoId": null,
+                "featuredVideoId": null,
+                "hasScheduledVideos": false
+              },
+              "description": "Rotten Tomatoes: 96% / A ragtag group of Pennsylvanians barricade themselves in an old farmhouse to remain safe from a horde of flesh-eating ghouls that are ravaging the East Coast of the United States.",
+              "id": "tt0063350",
+              "links": [
+                {
+                  "category": "imdb",
+                  "name": "7.8",
+                  "url": "https://imdb.com/title/tt0063350"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Horror",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+                },
+                {
+                  "category": "Genres",
+                  "name": "Thriller",
+                  "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+                }
+              ],
+              "logo": null,
+              "name": "Night of the Living Dead",
+              "poster": "https://m.media-amazon.com/images/M/MV5BMzRmN2E1ZDUtZDc2ZC00ZmI3LTkwOTctNzE2ZDIzMGJiMTYzXkEyXkFqcGdeQXVyMTQxNzMzNDI@._V1_SX300.jpg",
+              "posterShape": "poster",
+              "releaseInfo": "1968",
+              "released": null,
+              "runtime": "96 min",
+              "trailerStreams": [],
+              "type": "movie"
+            }
+          ],
+          "type": "Ready"
+        },
+        "request": {
+          "base": "https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json",
+          "path": {
+            "extra": [
+              [
+                "search",
+                "night of the living dead"
+              ]
+            ],
+            "id": "publicdomainmovies",
+            "resource": "catalog",
+            "type": "movie"
+          }
+        }
+      }
+    ]
+  ],
+  "selected": {
+    "extra": [
+      [
+        "search",
+        "night of the living dead"
+      ]
+    ],
+    "type": null
+  }
+}
