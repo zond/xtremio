@@ -213,6 +213,7 @@ cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && car
 cargo test --test cinemeta -- --ignored       # network: loads a Cinemeta catalog, refreshes the fixture
 cargo test --test meta_details -- --ignored   # network: meta + streams + Player + continue watching for a public-domain torrent, plus a series (seasons, selected episode, watched), refreshes fixtures
 cargo test --test board -- --ignored          # network: Board rows + a search over the default addons, refreshes fixtures
+cargo test --test library_addons -- --ignored # network: ctx, installed/remote addons, addon details (Cinemeta), library fixtures
 
 # Dart (FFI-backed tests load rust/target/debug/libxtremio_core.* directly)
 cargo build --manifest-path rust/Cargo.toml
