@@ -144,9 +144,12 @@ class CargoKitPlugin implements Plugin<Project> {
                 platforms = plugin.getTargetPlatforms().collect()
             }
 
-            // Same thing addFlutterDependencies does in flutter.gradle
+            // Same thing addFlutterDependencies does in flutter.gradle.
+            // Local patch (see rust_builder/README.md): upstream also adds
+            // "android-x86" here, but Flutter 3.47 has no android-x86 target
+            // any more and drops x86 from the APK via abiFilters, so the
+            // i686-linux-android cross-compile would be pure waste.
             if (buildType == "debug") {
-                platforms.add("android-x86")
                 platforms.add("android-x64")
             }
 
