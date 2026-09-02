@@ -67,6 +67,27 @@ final class ResourcePath {
     id: id ?? this.id,
     extra: extra,
   );
+
+  /// Equal when every part is, extras in the same order (the engine keeps
+  /// the order it was given).
+  @override
+  bool operator ==(Object other) =>
+      other is ResourcePath &&
+      other.resource == resource &&
+      other.type == type &&
+      other.id == id &&
+      _sameExtra(other.extra);
+
+  bool _sameExtra(List<ExtraValue> other) {
+    if (other.length != extra.length) return false;
+    for (var i = 0; i < extra.length; i++) {
+      if (other[i] != extra[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(resource, type, id, Object.hashAll(extra));
 }
 
 /// A resource path addressed to one addon (its manifest URL).
@@ -97,4 +118,11 @@ final class ResourceRequest {
 
   ResourceRequest copyWith({ResourcePath? path}) =>
       ResourceRequest(base: base, path: path ?? this.path);
+
+  @override
+  bool operator ==(Object other) =>
+      other is ResourceRequest && other.base == base && other.path == path;
+
+  @override
+  int get hashCode => Object.hash(base, path);
 }

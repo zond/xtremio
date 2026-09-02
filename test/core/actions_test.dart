@@ -252,6 +252,44 @@ void main() {
     expect(copy.path.extra, const [ExtraValue('skip', '100')]);
   });
 
+  test('requests are equal by value, extras in order', () {
+    final request = ResourceRequest.cinemetaCatalog(
+      type: 'movie',
+      id: 'top',
+      extra: const [ExtraValue('genre', 'Drama'), ExtraValue('skip', '100')],
+    );
+    final copy = ResourceRequest.fromJson(
+      jsonDecode(jsonEncode(request.toJson())) as Map<String, dynamic>,
+    );
+    expect(copy, request);
+    expect(copy.hashCode, request.hashCode);
+    expect(copy.path, request.path);
+
+    expect(
+      ResourceRequest.cinemetaCatalog(type: 'movie', id: 'top'),
+      isNot(request),
+    );
+    expect(
+      ResourceRequest.cinemetaCatalog(
+        type: 'movie',
+        id: 'top',
+        extra: const [ExtraValue('skip', '100'), ExtraValue('genre', 'Drama')],
+      ),
+      isNot(request),
+    );
+    expect(
+      request.copyWith(path: request.path.copyWith(id: 'year')),
+      isNot(request),
+    );
+    expect(
+      ResourceRequest(
+        base: 'https://other.example/manifest.json',
+        path: request.path,
+      ),
+      isNot(request),
+    );
+  });
+
   group('Ctx actions', () {
     test('every Ctx action targets the ctx field, nested under Ctx', () {
       final actions = [
