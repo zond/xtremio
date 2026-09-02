@@ -8,7 +8,11 @@ enum CoreField {
   discover('discover'),
   metaDetails('meta_details'),
   streamingServer('streaming_server'),
-  player('player');
+  player('player'),
+  library('library'),
+  installedAddons('installed_addons'),
+  remoteAddons('remote_addons'),
+  addonDetails('addon_details');
 
   const CoreField(this.wireName);
 

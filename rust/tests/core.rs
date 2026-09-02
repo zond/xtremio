@@ -124,6 +124,10 @@ fn core_lifecycle() -> anyhow::Result<()> {
         "meta_details",
         "streaming_server",
         "player",
+        "library",
+        "installed_addons",
+        "remote_addons",
+        "addon_details",
     ] {
         assert!(state(field).is_object(), "{field}");
     }

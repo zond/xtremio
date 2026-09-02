@@ -1,21 +1,25 @@
 //! `XtremioModel`: the app model the stremio-core Runtime drives.
 //!
 //! A trimmed `WebModel`: the mandatory `ctx` plus one field per screen the
-//! app renders today. `#[derive(Model)]` generates `XtremioModelField` (a
+//! app renders (or is about to render). `#[derive(Model)]` generates `XtremioModelField` (a
 //! `snake_case` serde enum, one variant per field) and the `update` /
 //! `update_field` dispatch. Every field is serialized to JSON with serde for
 //! the Dart side; there is no per-type mirroring.
 
 use serde::Serialize;
+use stremio_core::models::addon_details::AddonDetails;
 use stremio_core::models::catalog_with_filters::CatalogWithFilters;
 use stremio_core::models::catalogs_with_extra::CatalogsWithExtra;
 use stremio_core::models::common::Loadable;
 use stremio_core::models::continue_watching_preview::ContinueWatchingPreview;
 use stremio_core::models::ctx::Ctx;
+use stremio_core::models::installed_addons_with_filters::InstalledAddonsWithFilters;
+use stremio_core::models::library_with_filters::{LibraryWithFilters, NotRemovedFilter};
 use stremio_core::models::meta_details::MetaDetails;
 use stremio_core::models::player::Player;
 use stremio_core::models::streaming_server::StreamingServer;
 use stremio_core::runtime::Effects;
+use stremio_core::types::addon::Descriptor;
 use stremio_core::types::events::DismissedEventsBucket;
 use stremio_core::types::library::LibraryBucket;
 use stremio_core::types::notifications::NotificationsBucket;
@@ -51,11 +55,24 @@ pub struct XtremioModel {
     pub streaming_server: StreamingServer,
     /// Playback state for the selected stream (`ActionLoad::Player`).
     pub player: Player,
+    /// The library, filtered by type and sorted, everything not removed
+    /// (`ActionLoad::LibraryWithFilters`). Follows the library on its own
+    /// once loaded; `catalog` is cumulative across pages.
+    pub library: LibraryWithFilters<NotRemovedFilter>,
+    /// The profile's addons, filtered by type
+    /// (`ActionLoad::InstalledAddonsWithFilters`); follows the profile.
+    pub installed_addons: InstalledAddonsWithFilters,
+    /// One `addon_catalog` (the community list) with its filters
+    /// (`ActionLoad::CatalogWithFilters`, `Descriptor` items).
+    pub remote_addons: CatalogWithFilters<Descriptor>,
+    /// One addon by manifest URL: the installed copy and the fetched manifest
+    /// (`ActionLoad::AddonDetails`).
+    pub addon_details: AddonDetails,
 }
 
 impl XtremioModel {
     /// Builds the model from hydrated buckets. The returned effects (the
-    /// streaming-server settings fetch and the discover catalog bootstrap)
+    /// streaming-server settings fetch and the catalog/filter bootstraps)
     /// must be handed to `Runtime::new`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -69,9 +86,15 @@ impl XtremioModel {
     ) -> (XtremioModel, Effects) {
         let (discover, discover_effects) = CatalogWithFilters::<MetaItemPreview>::new(&profile);
         let (streaming_server, server_effects) = StreamingServer::new::<XtremioEnv>(&profile);
+        let (installed_addons, installed_addons_effects) =
+            InstalledAddonsWithFilters::new(&profile);
+        let (remote_addons, remote_addons_effects) =
+            CatalogWithFilters::<Descriptor>::new(&profile);
         // Before `Ctx::new` takes the buckets, as `WebModel::new` does.
         let (continue_watching_preview, continue_watching_effects) =
             ContinueWatchingPreview::new(&library, &notifications);
+        let (library_with_filters, library_effects) =
+            LibraryWithFilters::<NotRemovedFilter>::new(&library, &notifications);
         let model = XtremioModel {
             ctx: Ctx::new(
                 profile,
@@ -89,12 +112,19 @@ impl XtremioModel {
             meta_details: Default::default(),
             streaming_server,
             player: Default::default(),
+            library: library_with_filters,
+            installed_addons,
+            remote_addons,
+            addon_details: Default::default(),
         };
         (
             model,
             discover_effects
                 .join(server_effects)
-                .join(continue_watching_effects),
+                .join(continue_watching_effects)
+                .join(library_effects)
+                .join(installed_addons_effects)
+                .join(remote_addons_effects),
         )
     }
 
@@ -111,6 +141,10 @@ impl XtremioModel {
             XtremioModelField::MetaDetails => self.meta_details_json(),
             XtremioModelField::StreamingServer => serde_json::to_string(&self.streaming_server),
             XtremioModelField::Player => serde_json::to_string(&self.player),
+            XtremioModelField::Library => serde_json::to_string(&self.library),
+            XtremioModelField::InstalledAddons => serde_json::to_string(&self.installed_addons),
+            XtremioModelField::RemoteAddons => serde_json::to_string(&self.remote_addons),
+            XtremioModelField::AddonDetails => serde_json::to_string(&self.addon_details),
         }
     }
 
@@ -219,7 +253,7 @@ mod tests {
     use stremio_core::models::common::ResourceLoadable;
     use stremio_core::types::addon::{ResourcePath, ResourceRequest};
 
-    const FIELD_NAMES: [&str; 8] = [
+    const FIELD_NAMES: [&str; 12] = [
         "ctx",
         "continue_watching_preview",
         "board",
@@ -228,6 +262,10 @@ mod tests {
         "meta_details",
         "streaming_server",
         "player",
+        "library",
+        "installed_addons",
+        "remote_addons",
+        "addon_details",
     ];
 
     fn default_model() -> XtremioModel {
@@ -297,6 +335,117 @@ mod tests {
         )
         .unwrap();
         assert_eq!(json, serde_json::json!({ "items": [] }));
+    }
+
+    #[test]
+    fn library_starts_unloaded_with_the_all_type_and_every_sort() {
+        let model = default_model();
+        let json: serde_json::Value =
+            serde_json::from_str(&model.get_state_json(&XtremioModelField::Library).unwrap())
+                .unwrap();
+        assert_eq!(json["selected"], serde_json::Value::Null);
+        assert_eq!(json["catalog"], serde_json::json!([]));
+        // No `rename_all` on this model: snake_case `next_page`.
+        assert!(json["selectable"].get("next_page").is_some(), "{json}");
+        assert_eq!(json["selectable"]["next_page"], serde_json::Value::Null);
+        assert_eq!(
+            json["selectable"]["types"],
+            serde_json::json!([{
+                "type": null,
+                "selected": false,
+                "request": { "type": null, "sort": "lastwatched", "page": 1 },
+            }])
+        );
+        let sorts: Vec<&str> = json["selectable"]["sorts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|sort| sort["sort"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            sorts,
+            [
+                "lastwatched",
+                "name",
+                "namereverse",
+                "timeswatched",
+                "watched",
+                "notwatched",
+            ]
+        );
+    }
+
+    #[test]
+    fn installed_addons_start_unloaded_with_types_from_the_official_addons() {
+        let model = default_model();
+        let json: serde_json::Value = serde_json::from_str(
+            &model
+                .get_state_json(&XtremioModelField::InstalledAddons)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json["selected"], serde_json::Value::Null);
+        assert_eq!(json["catalog"], serde_json::json!([]));
+        let types = json["selectable"]["types"].as_array().unwrap();
+        assert_eq!(
+            types[0],
+            serde_json::json!({
+                "type": null,
+                "selected": false,
+                "request": { "type": null },
+            })
+        );
+        assert!(
+            types
+                .iter()
+                .any(|entry| entry["type"] == "movie" && entry["request"]["type"] == "movie"),
+            "{json}"
+        );
+    }
+
+    #[test]
+    fn remote_addons_start_unloaded_and_share_discovers_shape() {
+        let model = default_model();
+        let json: serde_json::Value = serde_json::from_str(
+            &model
+                .get_state_json(&XtremioModelField::RemoteAddons)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json["selected"], serde_json::Value::Null);
+        assert_eq!(json["catalog"], serde_json::json!([]));
+        // camelCase here, unlike the library model.
+        assert!(json["selectable"].get("nextPage").is_some(), "{json}");
+        // Cinemeta's manifest carries the `official` and `community` addon
+        // catalogs; the Load with `args: null` picks the first of these.
+        let catalogs = json["selectable"]["catalogs"].as_array().unwrap();
+        assert!(!catalogs.is_empty(), "{json}");
+        for catalog in catalogs {
+            assert_eq!(catalog["request"]["path"]["resource"], "addon_catalog");
+            assert_eq!(catalog["selected"], false);
+        }
+        assert!(
+            catalogs.iter().any(|catalog| {
+                catalog["request"]["base"] == "https://v3-cinemeta.strem.io/manifest.json"
+                    && catalog["request"]["path"]["id"] == "community"
+            }),
+            "{json}"
+        );
+    }
+
+    #[test]
+    fn addon_details_start_empty() {
+        let model = default_model();
+        let json: serde_json::Value = serde_json::from_str(
+            &model
+                .get_state_json(&XtremioModelField::AddonDetails)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "selected": null, "localAddon": null, "remoteAddon": null })
+        );
     }
 
     #[test]
