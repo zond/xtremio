@@ -39,6 +39,10 @@ class FakePlaybackEngine implements PlaybackEngine {
   final List<(Uri, String?, String?)> externalSubtitles = [];
   int disableSubtitlesCalls = 0;
 
+  /// When set, `open` records the call and then fails with it (mpv refusing
+  /// the URL).
+  Object? openError;
+
   /// When set, `setSubtitleTrack` and `setExternalSubtitle` record the call
   /// and then fail with it (mpv refusing the track).
   Object? subtitleError;
@@ -95,6 +99,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     opened.add((url, start));
     callLog?.add('open');
+    if (openError != null) throw openError!;
   }
 
   @override

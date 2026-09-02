@@ -20,6 +20,7 @@ class PlayerHarness {
     this.streamRequest,
     this.metaRequest,
     this.subtitlesPath,
+    this.configureEngine,
   }) : fixture = player ?? loadPlayerFixture() {
     core = FakeCoreClient(state: {CoreField.player: fixture});
   }
@@ -44,6 +45,10 @@ class PlayerHarness {
     const SubtitleStyle(),
   );
 
+  /// Applied to every engine before the screen gets it: how a test makes
+  /// the first `open` fail, which happens during the first pump.
+  final void Function(FakePlaybackEngine engine)? configureEngine;
+
   final Map<String, dynamic>? stream;
   final ResourceRequest? streamRequest;
   final ResourceRequest? metaRequest;
@@ -61,6 +66,7 @@ class PlayerHarness {
       child: PlaybackScope(
         createEngine: () {
           final engine = FakePlaybackEngine()..callLog = calls;
+          configureEngine?.call(engine);
           engines.add(engine);
           return engine;
         },

@@ -235,7 +235,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ?.open(url, start: start)
         .then((_) => _reportVideoParams(state, url))
         .catchError((Object error) {
-          if (mounted) setState(() => _engineError = '$error');
+          if (mounted && _opened == url) _failPlayback('$error');
         });
     // After `open` is on its way: a stats request the server sees first
     // would make it create the torrent's engine from the bare info hash,
@@ -299,7 +299,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _maybeAutoPickSubtitles();
   }
 
-  void _onEngineError(String error) {
+  void _onEngineError(String error) => _failPlayback(error);
+
+  /// Shows "Playback failed: [error]" in place of whatever was waiting for
+  /// the media (the start-up overlay included, whose polling ends here).
+  void _failPlayback(String error) {
     setState(() {
       _engineError = error;
       _stopTorrentStats();

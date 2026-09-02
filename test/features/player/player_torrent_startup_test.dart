@@ -402,6 +402,18 @@ void main() {
     expect(harness.torrentStats.requests, hasLength(polled));
   });
 
+  testWidgets('a rejected open replaces it too', (tester) async {
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.openError = 'unsupported URL',
+    );
+    await harness.pump(tester);
+    expect(overlay, findsNothing);
+    expect(find.text('Playback failed: unsupported URL'), findsOneWidget);
+    final polled = harness.torrentStats.requests.length;
+    await tester.pump(PlayerScreen.torrentStatsInterval * 4);
+    expect(harness.torrentStats.requests, hasLength(polled));
+  });
+
   testWidgets('is not fooled by a stale answer for the previous stream', (
     tester,
   ) async {
