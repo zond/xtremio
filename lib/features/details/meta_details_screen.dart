@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../widgets/poster_tile.dart';
+import '../../widgets/shared_field_screen.dart';
 import '../discover/discover_screen.dart';
 import '../player/player_screen.dart';
 
@@ -36,32 +37,17 @@ class MetaDetailsScreen extends StatefulWidget {
   State<MetaDetailsScreen> createState() => _MetaDetailsScreenState();
 }
 
-class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
+/// Two of these screens can be on the stack at once (a genre chip opens
+/// Discover, whose posters open another title), both on the one
+/// `meta_details` field: see [SharedFieldScreen].
+class _MetaDetailsScreenState extends State<MetaDetailsScreen>
+    with SharedFieldScreen<MetaDetailsScreen, MetaDetailsState> {
   CoreClient? _client;
   CoreFieldNotifier? _details;
-
-  /// The screen whose `Load` the shared `meta_details` field last served.
-  ///
-  /// Two of these screens can be on the stack at once (a genre chip opens
-  /// Discover, whose posters open another title), so the field is owned by
-  /// whichever dispatched the last `Load`, and only the owner unloads it on
-  /// dispose: a screen popping off above one that has already taken the
-  /// field back (see [_reclaimField]) leaves it alone.
-  static _MetaDetailsScreenState? _fieldOwner;
-
-  /// The field's last state that was this screen's (its `metaPath` names
-  /// [MetaDetailsScreen.id]) — what is rendered, also while another screen
-  /// holds the field with a different title.
-  MetaDetailsState? _ownState;
-  Map<String, dynamic>? _ownJson;
 
   /// The video of the last `Load` this screen dispatched (null lets the
   /// engine guess), so the field can be reloaded with the same selection.
   String? _requestedVideoId;
-
-  /// Whether this screen's route is on top; a covered screen ignores the
-  /// field and reloads it when it is current again.
-  bool _isCurrent = true;
 
   /// Set once the screen has picked an episode on the engine's behalf (or
   /// was told which video to open), so a later state without a stream path
@@ -80,33 +66,52 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
       _details?.dispose();
       _client = client;
       _details = CoreFieldNotifier(client, CoreField.metaDetails)
-        ..addListener(_onDetails);
+        ..addListener(onFieldChanged);
       _load(widget.videoId);
     }
-    // `ModalRoute.of` subscribes to the route's status, so this runs again
-    // when another route is pushed over this one and when that route pops.
-    final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
-    if (isCurrent && !_isCurrent) _reclaimField();
-    _isCurrent = isCurrent;
+    trackRoute();
   }
 
   @override
   void dispose() {
-    if (_fieldOwner == this) {
-      _fieldOwner = null;
-      _client?.dispatch(CoreActions.unload(CoreField.metaDetails));
-    }
+    releaseField();
     _details?.dispose();
     super.dispose();
   }
 
-  MetaDetailsState? get _state => _ownState;
+  @override
+  CoreField get sharedField => CoreField.metaDetails;
+
+  @override
+  CoreClient? get coreClient => _client;
+
+  @override
+  CoreFieldNotifier? get fieldNotifier => _details;
+
+  @override
+  MetaDetailsState parseField(Map<String, dynamic> json) =>
+      MetaDetailsState.fromJson(json);
+
+  /// Its `metaPath` names this title (another title, or the unloaded field,
+  /// does not).
+  @override
+  bool isOwnState(MetaDetailsState state) => state.metaPath?.id == widget.id;
+
+  /// Back on top: load this title again with the selection it had.
+  @override
+  void reloadField() => _load(_requestedVideoId ?? ownState?.streamPath?.id);
+
+  @override
+  void didReceiveOwnState(MetaDetailsState state) =>
+      _maybePickInitialVideo(state);
+
+  MetaDetailsState? get _state => ownState;
 
   /// Dispatches `Load MetaDetails` for this title, showing [videoId]'s
   /// streams (or letting the engine guess), and takes the field over.
   void _load(String? videoId) {
     _requestedVideoId = videoId;
-    _fieldOwner = this;
+    claimField();
     _client?.dispatch(
       CoreActions.loadMetaDetails(
         type: widget.type,
@@ -114,27 +119,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
         videoId: videoId,
       ),
     );
-  }
-
-  /// Back on top: if another screen loaded its title into the field in the
-  /// meantime, load ours again with the selection it had. A route that left
-  /// the field alone (the player) costs nothing here.
-  void _reclaimField() {
-    if (identical(_details?.value, _ownJson)) return;
-    _load(_requestedVideoId ?? _ownState?.streamPath?.id);
-  }
-
-  void _onDetails() {
-    final json = _details?.value;
-    if (json == null) return;
-    final state = MetaDetailsState.fromJson(json);
-    // Another title (or the field unloaded) while a second details screen
-    // holds the field: keep rendering our own last state.
-    if (state.metaPath?.id != widget.id) return;
-    _ownJson = json;
-    _ownState = state;
-    if (mounted) setState(() {});
-    _maybePickInitialVideo(state);
   }
 
   /// Mirrors `selected_guess_stream_update`: when the engine will not pick a
@@ -199,7 +183,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
   }
 
   void _selectVideoId(String videoId) {
-    final video = _ownState?.meta?.videoById(videoId);
+    final video = ownState?.meta?.videoById(videoId);
     if (video != null) {
       _selectVideo(video);
     } else {
