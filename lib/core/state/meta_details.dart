@@ -160,9 +160,20 @@ final class MetaDetailsState {
   /// Whether the meta item has videos to pick from (a series).
   bool get hasVideos => meta?.videos.isNotEmpty ?? false;
 
-  /// Whether the engine will pick a stream path on its own once the meta
-  /// settles (`selected_guess_stream_update`): a default video, or no videos
-  /// at all. When false and [streamPath] is null the UI has to select one.
+  /// Whether the engine will pick a stream path on its own
+  /// (`selected_guess_stream_update`): the meta item has a `defaultVideoId`,
+  /// or no videos at all. True while no meta is in yet. When false and
+  /// [streamPath] is null the UI has to select a video itself.
+  ///
+  /// Not exactly the engine's test. The engine waits until every meta addon
+  /// has answered (Ready or Err) and then reads the first Ready item in
+  /// addon order; this reads the first item that is Ready now, so the UI
+  /// can pick an episode as soon as one addon answers. The two disagree
+  /// only while an earlier addon is still loading and its item, once in,
+  /// differs from this one on having a default video (or any videos). Then
+  /// either the UI has already picked an episode, which stops the engine
+  /// guessing (the Load sets `guessStream: false`), or the UI picks on the
+  /// later state that makes this false — nothing is left unselected.
   bool get engineWillGuessStream {
     final meta = this.meta;
     if (meta == null) return true;

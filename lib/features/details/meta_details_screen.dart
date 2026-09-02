@@ -321,7 +321,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
     ];
   }
 
-  /// The streams for the selected video, the meta addon's own first.
+  /// The streams for the selected video, the meta addon's own first. The
+  /// engine lists every addon it asked from the moment of the request (as
+  /// `Loading` groups), so the header's small spinner is the only loading
+  /// indicator needed; an empty list means no addon was asked.
   List<Widget> _streamSlivers(MetaDetailsState state, MetaItem meta) {
     final lastUsed = state.lastUsedStream;
     final groups = state.allStreamGroups;
@@ -344,13 +347,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
             leadingIcon: Icons.history,
             titleOverride: 'Continue with last source',
             onTap: () => _play(state, lastUsed.$1, lastUsed.$2),
-          ),
-        ),
-      if (groups.isEmpty && state.isLoadingStreams)
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator()),
           ),
         ),
       for (final group in groups)

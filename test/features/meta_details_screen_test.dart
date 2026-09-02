@@ -552,6 +552,34 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
+    testWidgets('a stream addon still answering shows the header spinner', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final fixture = loadSeriesEpisodeMetaDetailsFixture();
+      fixture['streams'] = [
+        {
+          'request': torrentGroup(pilotId)['request'],
+          'content': {'type': 'Loading'},
+        },
+      ];
+      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
+      await tester.pumpWidget(
+        harness(core, FakePlaybackEngine(), type: 'series', id: seriesId),
+      );
+      // (A spinner never settles.)
+      await tester.pump();
+      await tester.pump();
+
+      // One small spinner in the "Streams" header, no large one below it.
+      final spinner = tester.widget<CircularProgressIndicator>(
+        find.byType(CircularProgressIndicator),
+      );
+      expect(spinner.strokeWidth, 2);
+      expect(find.text('torrentio.example'), findsOneWidget);
+      expect(find.text('Pick an episode to see its streams'), findsNothing);
+    });
+
     testWidgets('tapping an episode loads its streams', (tester) async {
       useWideViewport(tester);
       final core = await mountSeries(tester);
