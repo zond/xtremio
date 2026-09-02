@@ -117,7 +117,7 @@ void main() {
   testWidgets('Shift+I pins it on and off regardless of hover', (tester) async {
     final engine = await pumpPlayer(tester);
 
-    // Plain `i` belongs to media_kit's controls (seek +10s): not ours.
+    // Plain `i` is not bound.
     await tester.sendKeyEvent(LogicalKeyboardKey.keyI);
     await tester.pump();
     expect(overlay, findsNothing);
@@ -129,6 +129,13 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('hwdec    software (hwdec-current: no)'), findsOneWidget);
+    // The URL libmpv is playing sits at the bottom of the panel.
+    expect(
+      find.textContaining(
+        'url      http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0',
+      ),
+      findsOneWidget,
+    );
 
     // Pinned: the hover timeout does not apply.
     await tester.pump(PlayerScreen.statsHoverTimeout * 2);

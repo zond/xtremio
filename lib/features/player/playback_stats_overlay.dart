@@ -8,9 +8,13 @@ import 'playback_stats.dart';
 /// Subscribes to [stats] for as long as it is mounted, so whoever shows it
 /// controls when the engine samples: mount it to start, unmount to stop.
 class PlaybackStatsOverlay extends StatelessWidget {
-  const PlaybackStatsOverlay({super.key, required this.stats});
+  const PlaybackStatsOverlay({super.key, required this.stats, this.source});
 
   final Stream<PlaybackStats> stats;
+
+  /// The URL libmpv is playing, shown as the last line (a torrent reads
+  /// `http://127.0.0.1:11470/<infoHash>/<fileIdx>?tr=…`).
+  final Uri? source;
 
   static const TextStyle _style = TextStyle(
     color: Colors.white,
@@ -42,6 +46,16 @@ class PlaybackStatsOverlay extends StatelessWidget {
                         ? const ['stats: collecting…']
                         : describe(sample))
                   Text(line, style: _style),
+                if (source != null)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: Text(
+                      'url      $source',
+                      style: _style,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
               ],
             ),
           ),
