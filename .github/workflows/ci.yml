@@ -6,17 +6,50 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FLUTTER_VERSION: 3.47.1
+  FRB_VERSION: 2.13.0
+
 jobs:
+  rust:
+    name: Rust (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - run: cargo fmt --check
+        working-directory: rust
+
+      - run: cargo clippy --all-targets -- -D warnings
+        working-directory: rust
+
+      - run: cargo test
+        working-directory: rust
+
   flutter:
     name: Flutter (format, analyze, test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.47.1
+          flutter-version: ${{ env.FLUTTER_VERSION }}
 
       - run: flutter pub get
 
@@ -24,10 +57,43 @@ jobs:
 
       - run: flutter analyze
 
+      # FFI-backed tests load the host-built library from rust/target/debug
+      # (see test/support/rust_lib.dart); cargokit only builds it for
+      # `flutter run`/`flutter build`.
+      - run: cargo build --manifest-path rust/Cargo.toml
+
       - run: flutter test
 
-      # Android build (Rust cross-compiled via the NDK) and the Rust
-      # crate's own cargo build/test/clippy are not gated here yet —
-      # there is no Rust bridge in this repo to build. Add an
-      # android/rust job once stremio-core + stream-server are wired
-      # in via FFI.
+  codegen:
+    name: flutter_rust_bridge codegen drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - uses: cargo-bins/cargo-binstall@main
+
+      # Codegen, Dart package and Rust crate must be the same FRB version.
+      # `generate` shells out to `cargo expand`, so install that too.
+      - run: cargo binstall -y flutter_rust_bridge_codegen@${{ env.FRB_VERSION }} cargo-expand
+
+      - run: flutter pub get
+
+      - run: flutter_rust_bridge_codegen generate
+
+      - name: Generated bindings must be committed
+        run: git diff --exit-code -- lib/src/rust rust/src/frb_generated.rs
+
+  # Native platform builds (flutter build linux / apk, Rust cross-compiled
+  # through cargokit + the NDK) are not gated yet; add them once the core
+  # vertical slice is stable.
