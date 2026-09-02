@@ -21,10 +21,12 @@ typedef LaunchUrl = Future<bool> Function(
 /// an addon's configuration page.
 ///
 /// A launch that fails is reported as `false`, whichever way the platform
-/// says so: `url_launcher_linux` never returns false but throws a
-/// `PlatformException` when nothing opens the URL, and a URL the plugin
-/// cannot handle is an `ArgumentError`. Either would otherwise escape past
-/// the caller's "Could not open" message.
+/// says so: with `LaunchMode.externalApplication`, `url_launcher` 6.3.2
+/// itself never throws `ArgumentError` (that's only for in-app modes); some
+/// platforms' plugins throw a `PlatformException` instead of returning
+/// false when nothing opens the URL, e.g. `url_launcher_linux`.
+/// `ArgumentError` is still caught defensively. Either would otherwise
+/// escape past the caller's "Could not open" message.
 class UrlLauncherLinkOpener implements ExternalLinkOpener {
   const UrlLauncherLinkOpener({this.launch = url_launcher.launchUrl});
 
