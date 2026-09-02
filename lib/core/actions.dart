@@ -185,6 +185,32 @@ abstract final class CoreActions {
 
   static CoreAction playerNextVideo() => _player('NextVideo');
 
+  /// What the player learned about the file once it opened. The engine
+  /// only asks subtitle addons once some parameter is known, so this is
+  /// what triggers the subtitle request; [hash] and [size] are the
+  /// OpenSubtitles hash and byte size when available.
+  static CoreAction playerVideoParamsChanged({
+    String? filename,
+    String? hash,
+    int? size,
+  }) => _player('VideoParamsChanged', {
+    'videoParams': {'hash': hash, 'size': size, 'filename': filename},
+  });
+
+  /// The user's subtitle choice for this Player session: on or off, and
+  /// from which [source] (`embedded` / `external`) in which [language].
+  static CoreAction playerSubtitlePreferenceChanged({
+    required bool enabled,
+    String? source,
+    String? language,
+  }) => _player('SubtitlePreferenceChanged', {
+    'preference': {
+      'enabled': enabled,
+      'source': ?source,
+      'language': ?language,
+    },
+  });
+
   /// Clears a model field back to its unloaded state.
   static CoreAction unload(CoreField field) =>
       CoreAction(field: field, action: _tagged('Unload'));

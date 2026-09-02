@@ -25,6 +25,13 @@ final class StreamInfo {
   /// says so (used for subtitle lookups and as a tooltip).
   String? get filename => behaviorHints['filename'] as String?;
 
+  /// Subtitle files the addon attached to the stream itself (raw
+  /// `Subtitles` JSON; `lib/core/state/player.dart` types them).
+  List<Map<String, dynamic>> get subtitlesJson => [
+    for (final item in (json['subtitles'] as List<dynamic>? ?? const []))
+      item as Map<String, dynamic>,
+  ];
+
   /// Two streams point at the same source when their discriminating keys
   /// match (`Stream::is_source_match`, minus the archive variants).
   bool isSameSource(StreamInfo other) {

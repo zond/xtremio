@@ -59,6 +59,14 @@ final class ResourcePath {
     'id': id,
     'extra': [for (final value in extra) value.toJson()],
   };
+
+  /// The same resource for another item (the next episode, say).
+  ResourcePath copyWith({String? id}) => ResourcePath(
+    resource: resource,
+    type: type,
+    id: id ?? this.id,
+    extra: extra,
+  );
 }
 
 /// A resource path addressed to one addon (its manifest URL).
@@ -86,4 +94,7 @@ final class ResourceRequest {
       );
 
   Map<String, dynamic> toJson() => {'base': base, 'path': path.toJson()};
+
+  ResourceRequest copyWith({ResourcePath? path}) =>
+      ResourceRequest(base: base, path: path ?? this.path);
 }

@@ -423,6 +423,117 @@ void main() {
     });
   });
 
+  group('PlayerState subtitles and next episode', () {
+    const spa = 'https://subs.example/spa.srt';
+    const eng = 'https://subs.example/eng.srt';
+    Map<String, dynamic> response(String base, Map<String, dynamic> content) =>
+        {
+          'request': {
+            'base': base,
+            'path': {
+              'resource': 'subtitles',
+              'type': 'movie',
+              'id': 'tt1',
+              'extra': <Object>[],
+            },
+          },
+          'content': content,
+        };
+
+    test("unions addon files with the stream's own, deduplicated by URL", () {
+      final state = PlayerState.fromJson({
+        'selected': {
+          'stream': {
+            'url': 'https://x/e1.mkv',
+            'behaviorHints': {'filename': 'e1.mkv'},
+            'subtitles': [
+              {'id': 's', 'lang': 'spa', 'url': spa},
+            ],
+          },
+          'streamRequest': {
+            'base': 'https://a/manifest.json',
+            'path': {'resource': 'stream', 'type': 'movie', 'id': 'tt1'},
+          },
+          'metaRequest': {
+            'base': 'https://m/manifest.json',
+            'path': {'resource': 'meta', 'type': 'movie', 'id': 'tt1'},
+          },
+          'subtitlesPath': {
+            'resource': 'subtitles',
+            'type': 'movie',
+            'id': 'tt1',
+          },
+        },
+        'stream': {
+          'type': 'Ready',
+          'content': [
+            {'streaming_url': 'https://x/e1.mkv'},
+            {
+              'url': 'https://x/e1.mkv',
+              'behaviorHints': {'filename': 'converted.mkv'},
+              'subtitles': [
+                {'id': 'c', 'lang': 'eng', 'url': eng},
+              ],
+            },
+          ],
+        },
+        'subtitles': [
+          response('https://slow/manifest.json', {'type': 'Loading'}),
+          response('https://os/manifest.json', {
+            'type': 'Ready',
+            'content': [
+              {'id': '1', 'lang': 'eng', 'url': eng, 'label': 'English (SDH)'},
+              {'id': '2', 'lang': 'spa', 'url': spa},
+            ],
+          }),
+          response('https://broken/manifest.json', {
+            'type': 'Err',
+            'content': {'type': 'EmptyContent'},
+          }),
+        ],
+        'subtitlePreference': {
+          'enabled': true,
+          'source': 'external',
+          'language': 'eng',
+        },
+        'nextVideo': {
+          'id': 'tt1:1:2',
+          'title': 'Two',
+          'season': 1,
+          'episode': 2,
+        },
+        'nextStream': {'url': 'https://x/e2.mkv'},
+      });
+      expect(state.subtitles, hasLength(3));
+      expect(state.subtitlesLoading, isTrue);
+      final external = state.externalSubtitles;
+      expect(external.map((s) => s.url.toString()), [eng, spa]);
+      expect(external.first.label, 'English (SDH)');
+      expect(external.last.lang, 'spa');
+      expect(external.last.id, '2');
+      expect(state.subtitlePreference?.enabled, isTrue);
+      expect(state.subtitlePreference?.source, 'external');
+      expect(state.subtitlePreference?.language, 'eng');
+      expect(state.convertedStream?.filename, 'converted.mkv');
+      expect(state.nextVideo?.id, 'tt1:1:2');
+      expect(state.nextStream?.url, 'https://x/e2.mkv');
+      expect(state.streamRequest?.base, 'https://a/manifest.json');
+      expect(state.metaRequest?.path.resource, 'meta');
+      expect(state.subtitlesPath?.copyWith(id: 'tt1:1:2').id, 'tt1:1:2');
+    });
+
+    test('the recorded fixture has no subtitles, preference or next video', () {
+      final state = PlayerState.fromJson(loadPlayerFixture());
+      expect(state.subtitles, isEmpty);
+      expect(state.subtitlesLoading, isFalse);
+      expect(state.externalSubtitles, isEmpty);
+      expect(state.subtitlePreference, isNull);
+      expect(state.nextStream, isNull);
+      expect(state.convertedStream?.infoHash, state.selectedStream?.infoHash);
+      expect(state.subtitlesPath, isNull);
+    });
+  });
+
   group('CatalogsWithExtraState', () {
     test('aligns labels with rows and tells planned from loaded rows', () {
       final state = CatalogsWithExtraState.fromJson(loadBoardFixture());

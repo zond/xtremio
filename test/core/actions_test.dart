@@ -198,6 +198,46 @@ void main() {
     expect(load.action['args']['args']['metaRequest'], isNull);
   });
 
+  test('video params and subtitle preference nest under Player', () {
+    expect(CoreActions.playerVideoParamsChanged(filename: 'e1.mkv').toJson(), {
+      'field': 'player',
+      'action': {
+        'action': 'Player',
+        'args': {
+          'action': 'VideoParamsChanged',
+          'args': {
+            'videoParams': {'hash': null, 'size': null, 'filename': 'e1.mkv'},
+          },
+        },
+      },
+    });
+    expect(
+      CoreActions.playerSubtitlePreferenceChanged(
+        enabled: true,
+        source: 'embedded',
+        language: 'eng',
+      ).action['args'],
+      {
+        'action': 'SubtitlePreferenceChanged',
+        'args': {
+          'preference': {
+            'enabled': true,
+            'source': 'embedded',
+            'language': 'eng',
+          },
+        },
+      },
+    );
+    // Absent options are omitted, as the Rust side skips them when None.
+    expect(
+      CoreActions.playerSubtitlePreferenceChanged(enabled: false)
+          .action['args']['args'],
+      {
+        'preference': {'enabled': false},
+      },
+    );
+  });
+
   test('resource types roundtrip through JSON', () {
     final request = ResourceRequest.cinemetaCatalog(
       type: 'movie',
