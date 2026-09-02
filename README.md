@@ -20,12 +20,18 @@ The point of Xtremio is to go past what existing Stremio apps do:
   watching with no connection (through a tunnel, on a plane), the way Netflix
   does. This fits the architecture naturally: the torrent engine already writes
   to a local cache; offline support means downloading the *whole* file, pinning
-  it so it is never evicted, and a library UI to manage what is saved.
+  it so it is never evicted, and a library UI to manage what is saved. No
+  transcoding is needed here either — playback is just libmpv decoding the
+  original file bytes off disk, the same as any local video.
 - **Casting** to plain Chromecast / Cast-enabled TVs (the Cast *sender*
-  protocol), in addition to running natively on Android TV devices. This works
-  for Chromecast-supported codecs served over the LAN; content in a codec the
-  receiver can't decode can't be cast, because the server intentionally does no
-  transcoding.
+  protocol), in addition to running natively on Android TV devices. Where the
+  receiver can already decode the source, this is a direct cast over the LAN —
+  the server still does no transcoding. Where it can't, the *sending* device
+  transcodes in real time using its **platform hardware codec** (Android
+  MediaCodec first; VideoToolbox/VAAPI later) before casting — never ffmpeg,
+  never pure-Rust software transcoding, so the pure-Rust core stays untouched.
+  This is scoped to devices with a hardware encode path; where none exists,
+  casting is limited to formats the receiver supports natively.
 - **Cloud storage sources** (e.g. Google Drive) — stream from a personal cloud
   drive, most naturally via a Stremio addon that resolves cloud files to
   playable URLs. Provider OAuth / API-key setup is the fiddly part.
