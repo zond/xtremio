@@ -97,6 +97,13 @@ void main() {
         TorrentStats.statsUrlFor(Uri.parse('http://127.0.0.1:11470/$hash')),
         Uri.parse('http://127.0.0.1:11470/$hash/stats.json'),
       );
+      // The torrent-level stats for any of them, query included.
+      expect(
+        TorrentStats.torrentStatsUrlFor(
+          Uri.parse('http://127.0.0.1:11470/$hash/-1?tr=udp%3A%2F%2Fa'),
+        ),
+        Uri.parse('http://127.0.0.1:11470/$hash/stats.json?tr=udp%3A%2F%2Fa'),
+      );
       // Not the server's torrent path.
       expect(
         TorrentStats.statsUrlFor(
@@ -105,6 +112,10 @@ void main() {
         isNull,
       );
       expect(TorrentStats.statsUrlFor(Uri.parse('http://127.0.0.1/')), isNull);
+      expect(
+        TorrentStats.torrentStatsUrlFor(Uri.parse('http://127.0.0.1/x.mp4')),
+        isNull,
+      );
     });
   });
 
@@ -208,17 +219,18 @@ void main() {
     expect(progressBar(tester).value, isNull);
     expect(stats.requests, isEmpty);
 
-    // Polled every interval, for this torrent's file; the same answer does
-    // not redraw anything.
+    // Polled every interval, for this torrent's file, and while that has no
+    // answer the torrent-level stats too; the same answer does not redraw
+    // anything.
+    const base =
+        'http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060';
     await poll(tester);
-    expect(
-      stats.requests.single,
-      Uri.parse(
-        'http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0/stats.json',
-      ),
-    );
+    expect(stats.requests, [
+      Uri.parse('$base/0/stats.json'),
+      Uri.parse('$base/stats.json'),
+    ]);
     await poll(tester);
-    expect(stats.requests, hasLength(2));
+    expect(stats.requests, hasLength(4));
 
     stats.response = const TorrentStats(
       phase: TorrentPhase.checking,
@@ -270,6 +282,41 @@ void main() {
     await pumpEvents(tester);
     expect(find.text('Buffering from the torrent…'), findsOneWidget);
     expect(overlay, findsNothing);
+  });
+
+  testWidgets('reads the metadata phase off the torrent-level stats', (
+    tester,
+  ) async {
+    // While a magnet's metadata is unresolved the per-file route has no
+    // file to resolve and answers 404; the torrent-level route still says
+    // what is going on.
+    const base =
+        'http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060';
+    final harness = PlayerHarness();
+    final stats = harness.torrentStats
+      ..response = null
+      ..responses[Uri.parse('$base/stats.json')] = const TorrentStats(
+        phase: TorrentPhase.resolvingMetadata,
+      );
+    await tester.pumpWidget(harness.build());
+    await tester.pump();
+    await poll(tester);
+    expect(stats.requests, [
+      Uri.parse('$base/0/stats.json'),
+      Uri.parse('$base/stats.json'),
+    ]);
+    expect(overlayText('Fetching torrent metadata…'), findsOneWidget);
+
+    // Once the per-file route answers, the torrent-level one is not asked.
+    stats.response = const TorrentStats(
+      phase: TorrentPhase.buffering,
+      initialWindowReadyBytes: 0,
+      initialWindowBytes: 4194304,
+    );
+    await poll(tester);
+    expect(stats.requests, hasLength(3));
+    expect(stats.requests.last, Uri.parse('$base/0/stats.json'));
+    expect(overlayText('Finding peers…'), findsOneWidget);
   });
 
   testWidgets('asks the server nothing before the engine is told to open', (

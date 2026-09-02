@@ -16,6 +16,11 @@ class FakeTorrentStatsClient implements TorrentStatsClient {
     initialWindowBytes: 4194304,
   );
 
+  /// Answers for particular URLs, over [response]: a null value plays a
+  /// route the server answers 404 for (the per-file stats before a
+  /// magnet's metadata is in).
+  final Map<Uri, TorrentStats?> responses = {};
+
   /// Every URL polled, in order.
   final List<Uri> requests = [];
 
@@ -27,6 +32,6 @@ class FakeTorrentStatsClient implements TorrentStatsClient {
   Future<TorrentStats?> fetch(Uri statsUrl) async {
     requests.add(statsUrl);
     callLog?.add('stats');
-    return response;
+    return responses.containsKey(statsUrl) ? responses[statsUrl] : response;
   }
 }

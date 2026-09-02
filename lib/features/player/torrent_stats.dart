@@ -154,6 +154,17 @@ final class TorrentStats {
     return _statsUrl(streamingUrl, segments.take(2));
   }
 
+  /// The torrent-level `<server>/{infoHash}/stats.json` for the same
+  /// stream, with the same query: what the server can still answer while a
+  /// magnet's metadata is unresolved, when the per-file route has no files
+  /// to resolve the index against and answers 404. Null when
+  /// [streamingUrl] is not the server's torrent path.
+  static Uri? torrentStatsUrlFor(Uri streamingUrl) {
+    final segments = _torrentSegments(streamingUrl);
+    if (segments == null) return null;
+    return _statsUrl(streamingUrl, segments.take(1));
+  }
+
   /// The non-empty path segments when the path starts with an info hash.
   static List<String>? _torrentSegments(Uri streamingUrl) {
     final segments = streamingUrl.pathSegments

@@ -140,8 +140,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// [PlayerScreen.torrentStatsInterval] and the latest answer shown (null
   /// until the server answers for this torrent). Cleared once the media
   /// loads, on an engine error and on dispose.
+  ///
+  /// [_torrentStatsUrl] is the per-file `stats.json`, which focuses the
+  /// file and reports its initial window; it 404s while a magnet's
+  /// metadata is unresolved, and a poll then asks the torrent-level
+  /// [_torrentStatsFallbackUrl] instead, which reports that phase.
   TorrentStatsClient? _torrentStatsClient;
   Uri? _torrentStatsUrl;
+  Uri? _torrentStatsFallbackUrl;
   Timer? _torrentStatsTimer;
   bool _torrentStatsFetching = false;
   TorrentStats? _torrentStats;
@@ -313,6 +319,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final statsUrl = TorrentStats.statsUrlFor(url);
     if (statsUrl == null) return;
     _torrentStatsUrl = statsUrl;
+    final fallbackUrl = TorrentStats.torrentStatsUrlFor(url);
+    _torrentStatsFallbackUrl = fallbackUrl == statsUrl ? null : fallbackUrl;
     _torrentStatsTimer = Timer.periodic(
       PlayerScreen.torrentStatsInterval,
       (_) => _pollTorrentStats(),
@@ -325,17 +333,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStatsTimer?.cancel();
     _torrentStatsTimer = null;
     _torrentStatsUrl = null;
+    _torrentStatsFallbackUrl = null;
     _torrentStats = null;
   }
 
+  /// One poll: the per-file stats, or the torrent-level ones when the
+  /// per-file route has no answer (a 404 before the metadata is in; an
+  /// unreachable server fails the second ask as fast as the first).
   Future<void> _pollTorrentStats() async {
     final url = _torrentStatsUrl;
+    final fallbackUrl = _torrentStatsFallbackUrl;
     final client = _torrentStatsClient;
     if (url == null || client == null || _torrentStatsFetching) return;
     _torrentStatsFetching = true;
     TorrentStats? stats;
     try {
       stats = await client.fetch(url);
+      if (stats == null && fallbackUrl != null && _torrentStatsUrl == url) {
+        stats = await client.fetch(fallbackUrl);
+      }
     } on Object {
       stats = null;
     } finally {
