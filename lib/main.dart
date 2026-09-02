@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
@@ -9,6 +10,8 @@ import 'src/rust/frb_generated.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // libmpv must be loaded before the first Player is constructed.
+  MediaKit.ensureInitialized();
   runApp(const XtremioBootstrap());
 }
 
