@@ -53,6 +53,15 @@ class _RootShellState extends State<RootShell> {
 
   @override
   Widget build(BuildContext context) {
+    // The shell is the root route. Without this, a back gesture/key that
+    // reaches it pops nothing and the framework asks the platform to exit
+    // (SystemNavigator.pop), which on desktop quits the app. Quitting must
+    // be deliberate (closing the window), so a stray back is a no-op here;
+    // routes pushed on top (player, details) still pop back normally.
+    return PopScope(canPop: false, child: _buildShell(context));
+  }
+
+  Widget _buildShell(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= 720;
     final body = _destinations[_index].screen;
 

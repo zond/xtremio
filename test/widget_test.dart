@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/shell/root_shell.dart';
 
 import 'support/fake_core_client.dart';
 
@@ -18,6 +20,71 @@ void main() {
     expect(find.text('Discover'), findsWidgets);
     expect(find.text('Library'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
+  });
+
+  group('back at the root', () {
+    /// Records `SystemNavigator.pop` requests, which is what the framework
+    /// sends when a back reaches a navigator with nothing left to pop (and
+    /// what quits the app on desktop).
+    List<String> recordPlatformCalls(WidgetTester tester) {
+      final calls = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          calls.add(call.method);
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      return calls;
+    }
+
+    testWidgets('does not pop the shell or ask the platform to exit', (
+      tester,
+    ) async {
+      final calls = recordPlatformCalls(tester);
+      await tester.pumpWidget(XtremioApp(core: FakeCoreClient()));
+
+      // The platform's back button / key arrives here.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RootShell), findsOneWidget);
+      expect(calls, isNot(contains('SystemNavigator.pop')));
+    });
+
+    testWidgets('still pops a route pushed on top of the shell', (
+      tester,
+    ) async {
+      final calls = recordPlatformCalls(tester);
+      await tester.pumpWidget(XtremioApp(core: FakeCoreClient()));
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      navigator.push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: 'player'),
+          builder: (_) => const Scaffold(body: Text('pushed screen')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('pushed screen'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('pushed screen'), findsNothing);
+      expect(find.byType(RootShell), findsOneWidget);
+
+      // One more back, now at the root: still no exit.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(RootShell), findsOneWidget);
+      expect(calls, isNot(contains('SystemNavigator.pop')));
+    });
   });
 
   testWidgets('Settings shows the embedded server status from core state', (
