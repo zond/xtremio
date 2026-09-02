@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../widgets/poster_tile.dart';
+import '../details/meta_details_screen.dart';
 
 /// Browses one catalog: dispatches `Load CatalogWithFilters` for [request]
 /// on mount, renders the pages of `discover.catalog` as a poster grid,
@@ -91,7 +92,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 if (index >= items.length) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                return PosterTile(item: items[index]);
+                final item = items[index];
+                return PosterTile(
+                  item: item,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          MetaDetailsScreen(type: item.type, id: item.id),
+                    ),
+                  ),
+                );
               },
             ),
           );
