@@ -21,6 +21,11 @@ flutter_rust_bridge = "=2.13.0"
 # Build with `default-features = false` for an MIT binary without RAR support.
 stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "3d927ff5f6a49feed7d4583fac936ab2de6d701a" }
 
+# The official Stremio engine (addons, catalogs, library, player state).
+# `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
+# the Runtime can live on a multithreaded host.
+stremio-core = { git = "https://github.com/Stremio/stremio-core", rev = "7ae100c077541622b26c25a9aee3453eeba4aeb2", features = ["derive", "env-future-send"] }
+
 anyhow = "1"
 url = "2"
 # `log` feature: on Android no tracing subscriber is installed and events flow
@@ -33,6 +38,14 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "h
 serde_json = "1"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# REQUIRED: stremio-core's workspace member stremio-watched-bitfield pins
+# `flate2 = "1.0.*"` (< 1.1) while stream-server's tree (zip, async-compression
+# via async_zip/librqbit) needs flate2 >= 1.1. Cargo cannot pick two 1.x
+# versions, so the graph does not resolve without relaxing that pin. See
+# vendor/README.md for how to drop this once upstream relaxes it.
+[patch."https://github.com/Stremio/stremio-core"]
+stremio-watched-bitfield = { path = "vendor/stremio-watched-bitfield" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

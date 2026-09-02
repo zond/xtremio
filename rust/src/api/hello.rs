@@ -18,3 +18,10 @@ pub fn init_app() {
 pub fn bridge_version() -> String {
     BRIDGE_VERSION.to_owned()
 }
+
+/// stremio-core's persisted storage schema version (`SCHEMA_VERSION`); the
+/// Env runs migrations up to this on every init.
+#[frb(sync)]
+pub fn core_schema_version() -> u32 {
+    stremio_core::constants::SCHEMA_VERSION
+}

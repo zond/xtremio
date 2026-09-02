@@ -9,4 +9,9 @@ void main() {
   test('Dart and Rust agree on the pinned flutter_rust_bridge version', () {
     expect(bridgeVersion(), '2.13.0');
   });
+
+  test('stremio-core reports its storage schema version', () {
+    // SCHEMA_VERSION at the pinned stremio-core rev.
+    expect(coreSchemaVersion(), 25);
+  });
 }

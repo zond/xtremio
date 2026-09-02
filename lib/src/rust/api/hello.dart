@@ -9,3 +9,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Trivial synchronous getter (runs on the calling Dart thread).
 String bridgeVersion() => RustLib.instance.api.crateApiHelloBridgeVersion();
+
+/// stremio-core's persisted storage schema version (`SCHEMA_VERSION`); the
+/// Env runs migrations up to this on every init.
+int coreSchemaVersion() =>
+    RustLib.instance.api.crateApiHelloCoreSchemaVersion();
