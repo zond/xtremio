@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
 
 import '../support/fake_core_client.dart';
@@ -9,13 +10,11 @@ import '../support/fixtures.dart';
 void main() {
   final topMovies = ResourceRequest.cinemetaCatalog(type: 'movie', id: 'top');
 
-  Widget harness(FakeCoreClient core, {ResourceRequest? request}) =>
-      MaterialApp(
-        home: CoreScope(
-          client: core,
-          child: DiscoverScreen(request: request),
-        ),
-      );
+  // CoreScope sits above MaterialApp, as in the app, so pushed routes see it.
+  Widget harness(FakeCoreClient core, {ResourceRequest? request}) => CoreScope(
+    client: core,
+    child: MaterialApp(home: DiscoverScreen(request: request)),
+  );
 
   /// Phone width, below [DiscoverScreen.wideBreakpoint].
   void useNarrowScreen(WidgetTester tester) {
@@ -166,16 +165,139 @@ void main() {
 
   testWidgets('with a request loads exactly that catalog', (tester) async {
     final request = ResourceRequest.cinemetaCatalog(type: 'series', id: 'top');
-    final core = FakeCoreClient(
-      state: {CoreField.discover: loadDiscoverFixture()},
-    );
+    final fixture = loadDiscoverFixture();
+    final core = FakeCoreClient(state: {CoreField.discover: fixture});
     await tester.pumpWidget(harness(core, request: request));
-    await tester.pumpAndSettle();
+    // The field still holds another catalog (the movie fixture), which this
+    // screen ignores: a spinner (never settling) until its own state is in.
+    await tester.pump();
+    await tester.pump();
 
     expect(core.dispatched, hasLength(1));
     expect(
       core.dispatched.single.action,
       CoreActions.loadDiscover(request).action,
+    );
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    final movieName = DiscoverState.fromJson(fixture).items.first.name;
+    expect(find.text(movieName), findsNothing);
+  });
+
+  testWidgets(
+    'covered by a second Discover, keeps its rows and takes the field back '
+    'when it is on top again',
+    (tester) async {
+      final fixture = loadDiscoverFixture();
+      final movieName = DiscoverState.fromJson(fixture).items.first.name;
+      final core = FakeCoreClient(state: {CoreField.discover: fixture});
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+      expect(core.dispatched, hasLength(1));
+      expect(find.text(movieName), findsOneWidget);
+
+      // A genre chip on a details screen pushes a second Discover with its
+      // own request over this one; the shared field now serves it.
+      final topSeries = ResourceRequest.cinemetaCatalog(
+        type: 'series',
+        id: 'top',
+      );
+      Navigator.of(tester.element(find.byType(DiscoverScreen))).push(
+        MaterialPageRoute<void>(
+          builder: (_) => DiscoverScreen(request: topSeries),
+        ),
+      );
+      // (Its spinner never settles until its state is in, so pump the route
+      // transition by hand.)
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(core.dispatched, hasLength(2));
+      expect(
+        core.dispatched.last.action,
+        CoreActions.loadDiscover(topSeries).action,
+      );
+      // The new screen does not show the covered one's catalog meanwhile.
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text(movieName), findsNothing);
+      expect(find.text(movieName, skipOffstage: false), findsOneWidget);
+
+      core.setState(
+        CoreField.discover,
+        stateWith(
+          selected: topSeries,
+          selectable: {
+            'types': [],
+            'catalogs': [],
+            'extra': [],
+            'nextPage': null,
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The second screen shows its catalog; the covered one neither
+      // reloaded nor went blank (or over to the series) on that state.
+      expect(core.dispatched, hasLength(2));
+      expect(find.text('Only Item'), findsOneWidget);
+      expect(find.text(movieName), findsNothing);
+      expect(find.text(movieName, skipOffstage: false), findsOneWidget);
+      expect(find.text('Only Item', skipOffstage: false), findsOneWidget);
+      expect(
+        find.byType(CircularProgressIndicator, skipOffstage: false),
+        findsNothing,
+      );
+
+      // Back: the first screen loads the catalog the engine had picked for
+      // it again (not the default), and the popped screen leaves the field
+      // to it.
+      Navigator.of(tester.element(find.byType(DiscoverScreen).last)).pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(DiscoverScreen), findsOneWidget);
+      expect(find.text(movieName), findsOneWidget);
+      expect(core.dispatched, hasLength(3));
+      expect(
+        core.dispatched.last.action,
+        CoreActions.loadDiscover(topMovies).action,
+      );
+
+      // Its own exit unloads the field as usual, once.
+      await tester.pumpWidget(const SizedBox());
+      expect(
+        core.dispatched.last.action,
+        CoreActions.unload(CoreField.discover).action,
+      );
+      expect(
+        core.dispatched.where((a) => a.action['action'] == 'Unload'),
+        hasLength(1),
+      );
+    },
+  );
+
+  testWidgets('coming back from details does not reload the catalog', (
+    tester,
+  ) async {
+    final fixture = loadDiscoverFixture();
+    final first = DiscoverState.fromJson(fixture).items.first;
+    final core = FakeCoreClient(state: {CoreField.discover: fixture});
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(first.name));
+    // The details screen spins (never settling) until its state is in, so
+    // pump the route transition by hand.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(MetaDetailsScreen), findsOneWidget);
+    expect(loads(core), hasLength(2));
+    expect(loads(core).last.field, CoreField.metaDetails);
+
+    Navigator.of(tester.element(find.byType(MetaDetailsScreen))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(DiscoverScreen), findsOneWidget);
+    expect(find.text(first.name), findsOneWidget);
+    expect(
+      core.dispatched.where((a) => a.field == CoreField.discover),
+      hasLength(1),
+      reason: 'the field still holds this catalog',
     );
   });
 
@@ -433,7 +555,12 @@ void main() {
     await tester.pumpAndSettle();
 
     // The engine answers a type change: series selected, other catalogs.
+    // (A state for a catalog this screen did not ask for would be another
+    // Discover screen's, and ignored.)
     final series = ResourceRequest.cinemetaCatalog(type: 'series', id: 'top');
+    await tester.tap(find.text('Series'));
+    await tester.pump();
+    expect(loads(core).last.action, CoreActions.loadDiscover(series).action);
     core.setState(
       CoreField.discover,
       stateWith(

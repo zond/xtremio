@@ -4,6 +4,7 @@ import '../../core/core.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
+import '../../widgets/shared_field_screen.dart';
 import '../details/meta_details_screen.dart';
 
 /// Browses one catalog with its filters (`discover`, a `CatalogWithFilters`).
@@ -15,7 +16,8 @@ import '../details/meta_details_screen.dart';
 /// that selects it; the filter bar dispatches those verbatim and re-renders
 /// from the next state, keeping no selection of its own. The pages of
 /// `catalog` are a poster grid that loads the next page near the end of the
-/// scroll. The field is unloaded on dispose.
+/// scroll. The field is unloaded on dispose, unless another Discover screen
+/// has loaded it since.
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key, this.request});
 
@@ -29,10 +31,19 @@ class DiscoverScreen extends StatefulWidget {
   State<DiscoverScreen> createState() => _DiscoverScreenState();
 }
 
-class _DiscoverScreenState extends State<DiscoverScreen> {
+/// Two of these screens can be on the stack at once (the Discover tab, a
+/// poster, its details, a genre chip), both on the one `discover` field: see
+/// [SharedFieldScreen].
+class _DiscoverScreenState extends State<DiscoverScreen>
+    with SharedFieldScreen<DiscoverScreen, DiscoverState> {
   CoreClient? _client;
   CoreFieldNotifier? _discover;
   int _nextPageRequestedAt = -1;
+
+  /// The catalog of the last `Load` this screen dispatched, which names its
+  /// states. Null while the engine is choosing (no [DiscoverScreen.request]);
+  /// its first answer's `selected` is adopted.
+  ResourceRequest? _request;
 
   @override
   void didChangeDependencies() {
@@ -41,26 +52,63 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     if (_client != client) {
       _discover?.dispose();
       _client = client;
-      _discover = CoreFieldNotifier(client, CoreField.discover);
-      final request = widget.request;
-      client.dispatch(
-        request == null
-            ? CoreActions.loadDiscoverDefault()
-            : CoreActions.loadDiscover(request),
-      );
+      _discover = CoreFieldNotifier(client, CoreField.discover)
+        ..addListener(onFieldChanged);
+      _load(widget.request);
     }
+    trackRoute();
   }
 
   @override
   void dispose() {
-    _client?.dispatch(CoreActions.unload(CoreField.discover));
+    releaseField();
     _discover?.dispose();
     super.dispose();
   }
 
+  @override
+  CoreField get sharedField => CoreField.discover;
+
+  @override
+  CoreClient? get coreClient => _client;
+
+  @override
+  CoreFieldNotifier? get fieldNotifier => _discover;
+
+  @override
+  DiscoverState parseField(Map<String, dynamic> json) =>
+      DiscoverState.fromJson(json);
+
+  /// Its `selected` is this screen's catalog (another screen's, or the
+  /// unloaded field's null, is not).
+  @override
+  bool isOwnState(DiscoverState state) {
+    final selected = state.selected;
+    return selected != null && (_request == null || selected == _request);
+  }
+
+  @override
+  void didReceiveOwnState(DiscoverState state) => _request ??= state.selected;
+
+  /// Back on top: load this screen's catalog again.
+  @override
+  void reloadField() => _load(_request);
+
+  /// Dispatches `Load CatalogWithFilters` for [request] (null lets the
+  /// engine choose) and takes the field over.
+  void _load(ResourceRequest? request) {
+    _request = request;
+    claimField();
+    _client?.dispatch(
+      request == null
+          ? CoreActions.loadDiscoverDefault()
+          : CoreActions.loadDiscover(request),
+    );
+  }
+
   void _select(ResourceRequest request) {
     _nextPageRequestedAt = -1;
-    _client?.dispatch(CoreActions.loadDiscover(request));
+    _load(request);
   }
 
   bool _onScroll(ScrollNotification notification, DiscoverState state) {
@@ -76,26 +124,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Map<String, dynamic>?>(
-      valueListenable: _discover!,
-      builder: (context, json, _) {
-        final state = json == null ? null : DiscoverState.fromJson(json);
-        final selectable = state?.selectable;
-        return Scaffold(
-          appBar: AppBar(title: Text(state?.selectedCatalogName ?? 'Discover')),
-          body: Column(
-            children: [
-              if (selectable != null && !selectable.isEmpty)
-                _FilterBar(selectable: selectable, onSelect: _select),
-              Expanded(
-                child: state == null
-                    ? const Center(child: CircularProgressIndicator())
-                    : _buildCatalog(state),
-              ),
-            ],
+    final state = ownState;
+    final selectable = state?.selectable;
+    return Scaffold(
+      appBar: AppBar(title: Text(state?.selectedCatalogName ?? 'Discover')),
+      body: Column(
+        children: [
+          if (selectable != null && !selectable.isEmpty)
+            _FilterBar(selectable: selectable, onSelect: _select),
+          Expanded(
+            child: state == null
+                ? const Center(child: CircularProgressIndicator())
+                : _buildCatalog(state),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
