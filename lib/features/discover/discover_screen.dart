@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../widgets/content_type_label.dart';
 import '../../widgets/poster_tile.dart';
 import '../details/meta_details_screen.dart';
 
@@ -146,24 +147,8 @@ class _FilterBar extends StatelessWidget {
   final DiscoverSelectable selectable;
   final ValueChanged<ResourceRequest> onSelect;
 
-  /// `movie` -> `Movies`; unknown types are capitalised.
-  static String typeLabel(String type) => switch (type) {
-    'movie' => 'Movies',
-    'series' => 'Series',
-    'channel' => 'Channels',
-    'tv' => 'TV',
-    'music' => 'Music',
-    'book' => 'Books',
-    'game' => 'Games',
-    'podcast' => 'Podcasts',
-    _ => _capitalise(type),
-  };
-
   /// Label of a non-required extra's `value: null` option.
   static const String anyOptionLabel = 'Any';
-
-  static String _capitalise(String word) =>
-      word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}';
 
   @override
   Widget build(BuildContext context) {
@@ -189,7 +174,7 @@ class _FilterBar extends StatelessWidget {
           for (final extra in selectable.extra)
             if (extra.options.isNotEmpty)
               _OptionMenu(
-                label: _capitalise(extra.name),
+                label: capitalise(extra.name),
                 options: [
                   for (final option in extra.options)
                     SelectableOption(
@@ -217,10 +202,7 @@ class _TypeSegments extends StatelessWidget {
     showSelectedIcon: false,
     segments: [
       for (final (index, type) in types.indexed)
-        ButtonSegment(
-          value: index,
-          label: Text(_FilterBar.typeLabel(type.label)),
-        ),
+        ButtonSegment(value: index, label: Text(contentTypeLabel(type.label))),
     ],
     selected: {
       for (final (index, type) in types.indexed)
@@ -245,7 +227,7 @@ class _TypeChips extends StatelessWidget {
     children: [
       for (final type in types)
         ChoiceChip(
-          label: Text(_FilterBar.typeLabel(type.label)),
+          label: Text(contentTypeLabel(type.label)),
           selected: type.selected,
           onSelected: (_) {
             if (!type.selected) onSelect(type.request);
