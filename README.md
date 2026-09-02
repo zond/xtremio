@@ -152,14 +152,81 @@ embedded server; "Play test HTTP stream" is the direct-play path). The
 bottom of the player shows the URL libmpv is playing, so a torrent should
 read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
 
-Not yet exercised on a device or desktop build (this was developed on a
-host without the GTK toolchain): `flutter run -d linux` itself (cargokit
-builds the crate through CMake; `media_kit_libs_video` supplies libmpv) and
-`flutter build apk` (cargokit drives the NDK; the first cross-compile has
-to prove that aws-lc-sys/ring build under it). On **Android**, reqwest's
-rustls uses `rustls-platform-verifier`, which needs a one-time JNI init with
-the app `Context` (plus its small Kotlin component) before any HTTPS fetch
-works; that hook is still to be added to `MainActivity`.
+`flutter run -d linux` itself has not been exercised yet (this was developed
+on a host without the GTK toolchain); cargokit builds the crate through
+CMake and `media_kit_libs_video` supplies libmpv there.
+
+### Android
+
+The debug APK builds; running it on an emulator or device is the next step.
+
+**Prerequisites.** Android SDK with platform 36, build-tools 36.0.0 and NDK
+28.2.13676358 (the versions Flutter 3.47 pins; `android/app/build.gradle.kts`
+takes them from the Flutter Gradle plugin, minSdk 24), JDK 21, Rust via
+rustup (cargokit runs `rustup target add` itself, but pre-installing
+`aarch64-linux-android x86_64-linux-android armv7-linux-androideabi` keeps
+the first Gradle run predictable), and `cargo` on the PATH of whoever runs
+Gradle (`build.gradle.kts` calls `cargo metadata` to find the Kotlin half of
+`rustls-platform-verifier`). Builds for **x86_64 or armv7** additionally need
+**libclang** on the host: `aws-lc-sys` only ships pregenerated bindings for
+aarch64-linux-android, so those targets enable its `bindgen` feature
+(`rust/Cargo.toml`) and `rust/cargokit.yaml` forces its `cc` builder. If
+clang-sys cannot find libclang, `export LIBCLANG_PATH=/usr/lib/llvm-18/lib`
+(or wherever `libclang*.so` lives) before building.
+
+**Build.** Always redirect to a log and check the real exit code; the first
+Rust cross-compile takes several minutes per target.
+
+```bash
+flutter build apk --debug --target-platform android-x64            # emulator only
+flutter build apk --debug --target-platform android-arm64,android-x64   # phone/TV + emulator
+flutter build apk --release --target-platform android-arm64        # arm64 only, no bindgen needed
+flutter build apk --release --split-per-abi                        # arm, arm64, x64 APKs
+```
+
+Debug builds always add x86_64 for the emulator (cargokit mirrors Flutter's
+rule; the vendored copy is patched to no longer add x86, which Flutter 3.47
+cannot package -- see `rust_builder/README.md`). Output:
+`build/app/outputs/flutter-apk/app-debug.apk`.
+
+**What the Android glue does.** `MainActivity.onCreate` calls
+`NativeInit.initTlsVerifier(applicationContext)` (a JNI hook in
+`rust/src/android.rs`) before the Flutter engine starts: on Android reqwest's
+rustls verifies certificates through `rustls-platform-verifier`, which needs
+the app `Context` once, and both the stremio-core `Env` and the embedded
+stream-server share that global. Its Kotlin component is an AAR shipped inside
+the crate; Gradle locates it through `cargo metadata` and a ProGuard keep rule
+(`android/app/proguard-rules.pro`) protects it from R8 in release builds. The
+main manifest declares `INTERNET` (Flutter's template only does so for
+debug/profile) and `usesCleartextTraffic="true"`: that flag only governs
+dart:io (`Image.network` posters from self-hosted http:// addons, calls to the
+loopback server), while Rust sockets and libmpv ignore the policy either way.
+
+**Emulator (headless, KVM).** The x86_64 `google_apis` image is the one that
+runs on an x86_64 Linux host (which is why the bindgen path above matters);
+the user must be in the `kvm` group.
+
+```bash
+export ANDROID_HOME=~/Android/Sdk
+export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
+yes | sdkmanager --install "emulator" "system-images;android-36;google_apis;x86_64"
+echo no | avdmanager create avd -n xtremio_api36 -k "system-images;android-36;google_apis;x86_64" -d pixel_7
+emulator -avd xtremio_api36 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 4096 &
+adb wait-for-device
+until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 5; done
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb shell am start -n com.zond.xtremio/.MainActivity
+```
+
+Verify: `adb logcat -d | grep -E "flutter|xtremio|stream_server|rustls"` should
+show the embedded server starting and no "Expect rustls-platform-verifier to
+be initialized"; `adb forward tcp:11470 tcp:11470 && curl -s
+http://127.0.0.1:11470/heartbeat` reaches the server (if 11470 was taken the
+app fell back to an ephemeral port, read it from logcat); Discover showing
+Cinemeta posters proves HTTPS end to end. For D-pad work use the
+`system-images;android-36;android-tv;x86_64` image instead. A physical
+phone/TV box (USB debugging, `adb devices` shows `device`) takes the arm64
+APK the same way.
 
 ## Platform support
 
