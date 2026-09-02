@@ -90,8 +90,31 @@ class MediaKitEngine implements PlaybackEngine {
   Future<void> playOrPause() => _player.playOrPause();
 
   @override
-  Widget buildVideo(BuildContext context) =>
-      Video(controller: _controller, fill: const Color(0xFF000000));
+  Widget buildVideo(BuildContext context) {
+    // The player screen shows its own buffering spinner (driven by
+    // [buffering]); suppress media_kit's built-in one so only one shows.
+    // The default controls (play/pause/seek bar) stay for now — Phase 2
+    // replaces them with our own.
+    final video = Video(controller: _controller, fill: const Color(0xFF000000));
+    return MaterialVideoControlsTheme(
+      normal: kDefaultMaterialVideoControlsThemeData.copyWith(
+        bufferingIndicatorBuilder: (_) => const SizedBox.shrink(),
+      ),
+      fullscreen: kDefaultMaterialVideoControlsThemeDataFullscreen.copyWith(
+        bufferingIndicatorBuilder: (_) => const SizedBox.shrink(),
+      ),
+      child: MaterialDesktopVideoControlsTheme(
+        normal: kDefaultMaterialDesktopVideoControlsThemeData.copyWith(
+          bufferingIndicatorBuilder: (_) => const SizedBox.shrink(),
+        ),
+        fullscreen: kDefaultMaterialDesktopVideoControlsThemeDataFullscreen
+            .copyWith(
+              bufferingIndicatorBuilder: (_) => const SizedBox.shrink(),
+            ),
+        child: video,
+      ),
+    );
+  }
 
   @override
   Future<void> dispose() => _player.dispose();
