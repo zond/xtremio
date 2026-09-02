@@ -1,0 +1,27 @@
+[package]
+name = "xtremio_core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[lib]
+name = "xtremio_core"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+# Codegen, Dart package and Rust crate must all be exactly this version
+# (FRB enforces it at RustLib.init via forceSameCodegenVersion).
+flutter_rust_bridge = "=2.13.0"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+# Keep unwinding so panics can be caught at the FFI boundary instead of
+# aborting the host app.
+panic = "unwind"
