@@ -203,8 +203,9 @@ connection.
   tap, mouse or key; they stay while paused or buffering. Keyboard:
   Space/K play-pause, ←/→ or J/L ± the seek step (10 s by default),
   Shift+←/→ ± the short seek step (3 s), ↑/↓ volume, M mute, F
-  fullscreen, Esc leaves fullscreen (unless `escExitFullscreen` is off) or
-  the player, S subtitles, A audio, N next episode, Shift+I stats. Everything is a stream or method on
+  fullscreen, Esc leaves fullscreen first when `escExitFullscreen` is on
+  and the player otherwise, S subtitles, A audio, N next episode, Shift+I
+  stats. Everything is a stream or method on
   `PlaybackEngine` (`tracks`, `buffer`, `volume`, `setAudioTrack`,
   `setSubtitleTrack`, `setExternalSubtitle`, ...) or a core action, so the
   screen is tested against `FakePlaybackEngine` and `FakeCoreClient`

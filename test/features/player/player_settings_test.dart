@@ -9,8 +9,8 @@ import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// What `profile.settings` changes in the player: the seek steps, the
-/// binge gate and the up-next countdown, pause on minimize and Esc in
-/// fullscreen.
+/// binge gate and the up-next countdown, pause on minimize and what Esc
+/// does in fullscreen.
 void main() {
   const total = Duration(minutes: 96);
   const nextVideo = {
@@ -180,17 +180,51 @@ void main() {
     });
   });
 
-  testWidgets('escExitFullscreen off keeps Esc from leaving fullscreen', (
+  testWidgets('escExitFullscreen off: Esc in fullscreen leaves the player', (
+    tester,
+  ) async {
+    // As in stremio-web, the flag only decides whether Esc leaves
+    // fullscreen; off, Esc still leaves the player (which exits fullscreen
+    // on its way out).
+    useWideViewport(tester);
+    final harness = PlayerHarness(ctx: ctxWith({'escExitFullscreen': false}));
+    await harness.pump(
+      tester,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute<void>(builder: (_) => harness.screen())),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    harness.engine.emitDuration(total);
+    harness.engine.emitPosition(const Duration(minutes: 2));
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+
+    await key(tester, LogicalKeyboardKey.keyF);
+    expect(harness.fullscreen.enters, 1);
+    expect(harness.fullscreen.exits, 0);
+    await key(tester, LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(find.text('open'), findsOneWidget);
+    // The one exit is the screen leaving, not the key.
+    expect(harness.fullscreen.exits, 1);
+  });
+
+  testWidgets('escExitFullscreen off: F still toggles fullscreen', (
     tester,
   ) async {
     final harness = await pumpPlaying(tester, {'escExitFullscreen': false});
     await key(tester, LogicalKeyboardKey.keyF);
     expect(harness.fullscreen.enters, 1);
-    await key(tester, LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(harness.fullscreen.exits, 0);
-    expect(find.byType(PlayerScreen), findsOneWidget);
-    // F still toggles it.
     await key(tester, LogicalKeyboardKey.keyF);
     expect(harness.fullscreen.exits, 1);
   });

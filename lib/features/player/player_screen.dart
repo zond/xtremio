@@ -937,8 +937,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (event is KeyDownEvent) _toggleFullscreen();
       case LogicalKeyboardKey.escape:
         if (event is! KeyDownEvent) break;
-        if (_fullscreenOn) {
-          if (_settings.escExitFullscreen) _toggleFullscreen();
+        // `escExitFullscreen` only decides whether Esc leaves fullscreen
+        // first; otherwise it leaves the player, as in stremio-web.
+        if (_fullscreenOn && _settings.escExitFullscreen) {
+          _toggleFullscreen();
         } else {
           Navigator.of(context).maybePop();
         }
