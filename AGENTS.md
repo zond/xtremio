@@ -18,9 +18,10 @@ explains what the code does; this is about how changes are made.
 
 - Small, single-concept commits with a message that says what changed and
   why in prose. Do not push unless asked.
-- Every commit message ends with the trailer
-  `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` when an agent
-  wrote it.
+- Every commit an agent wrote ends with a `Co-Authored-By` trailer naming
+  the model that wrote it (`Co-Authored-By: <model name>
+  <noreply@anthropic.com>`), so the name follows the model rather than
+  this document.
 - Latest dependency versions; `flutter_rust_bridge` must stay the same
   exact version in `pubspec.yaml`, `rust/Cargo.toml` and the codegen.
   Nothing under `rust/src/api` changes without regenerating the bindings
