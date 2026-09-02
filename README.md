@@ -158,7 +158,11 @@ CMake and `media_kit_libs_video` supplies libmpv there.
 
 ### Android
 
-The debug APK builds; running it on an emulator or device is the next step.
+The debug APK builds and boots on a headless x86_64 emulator (Discover
+loading a Cinemeta catalog with posters end to end); a physical device or
+Android TV box has not been tried yet. See [ANDROID.md](ANDROID.md) for the
+full build/run reference, the manifest and network decisions, and exactly
+what has been verified so far.
 
 **Prerequisites.** Android SDK with platform 36, build-tools 36.0.0 and NDK
 28.2.13676358 (the versions Flutter 3.47 pins; `android/app/build.gradle.kts`
