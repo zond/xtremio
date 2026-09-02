@@ -8,8 +8,10 @@ plugins {
 
 // rustls-platform-verifier is a Rust crate with a Kotlin component (an AAR
 // shipped inside the crate, not on Maven). Locate it through cargo so the
-// Kotlin side always matches the Rust version in rust/Cargo.lock.
-fun RepositoryHandler.rustlsPlatformVerifier(): MavenArtifactRepository {
+// Kotlin side always matches the Rust version in rust/Cargo.lock. The crate's
+// tiny repo has no maven-metadata.xml, so a dynamic version such as
+// `latest.release` cannot be resolved; pin the exact version cargo reports.
+val rustlsPlatformVerifierAndroid: Pair<File, String> by lazy {
     val metadataJson =
         providers.exec {
             workingDir = file("../../rust")
@@ -21,21 +23,21 @@ fun RepositoryHandler.rustlsPlatformVerifier(): MavenArtifactRepository {
 
     @Suppress("UNCHECKED_CAST")
     val packages = (JsonSlurper().parseText(metadataJson) as Map<String, Any?>)["packages"] as List<Map<String, Any?>>
-    val manifestPath =
-        packages.first { it["name"] == "rustls-platform-verifier-android" }["manifest_path"] as String
-    return maven {
-        url = uri(File(File(manifestPath).parentFile, "maven"))
-        metadataSources { artifact() }
-    }
+    val pkg = packages.first { it["name"] == "rustls-platform-verifier-android" }
+    val repo = File(File(pkg["manifest_path"] as String).parentFile, "maven")
+    repo to (pkg["version"] as String)
 }
 
 repositories {
-    rustlsPlatformVerifier()
+    maven {
+        url = uri(rustlsPlatformVerifierAndroid.first)
+        content { includeModule("rustls", "rustls-platform-verifier") }
+    }
 }
 
 dependencies {
     // Kotlin half of rustls-platform-verifier; the version tracks the crate.
-    implementation("rustls:rustls-platform-verifier:latest.release")
+    implementation("rustls:rustls-platform-verifier:${rustlsPlatformVerifierAndroid.second}")
 }
 
 android {
