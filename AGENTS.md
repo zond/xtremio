@@ -1,0 +1,79 @@
+# Working on Xtremio
+
+Conventions for people and agents changing this repository. `README.md`
+explains what the code does; this is about how changes are made.
+
+## Read first
+
+- `README.md` → "How the Rust core is wired in" (state crosses as JSON,
+  what each model field is, what the app reads from the settings).
+- `docs/phase3-design.md` when touching account, library, addons or
+  settings: it is verified against the pinned stremio-core rev and lists the
+  exact action JSON, state shapes and the engine's surprises.
+- The pinned stremio-core source (`rust/Cargo.toml` names the rev) is the
+  authority on wire shapes. Do not guess a field name; read the `serde`
+  attributes.
+
+## Commits
+
+- Small, single-concept commits with a message that says what changed and
+  why in prose. Do not push unless asked.
+- Every commit message ends with the trailer
+  `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` when an agent
+  wrote it.
+- Latest dependency versions; `flutter_rust_bridge` must stay the same
+  exact version in `pubspec.yaml`, `rust/Cargo.toml` and the codegen.
+  Nothing under `rust/src/api` changes without regenerating the bindings
+  and committing them (CI checks for drift).
+
+## Verification, with real exit codes
+
+Run these before every commit and look at the exit codes, not at the tail
+of the output. Never pipe a test command into `tail`/`head`/`grep` before
+an `&&`-gated commit (the pipe's exit code is the filter's, not the
+tests'); redirect to a log file and `echo EXIT=$?` instead.
+
+```bash
+dart format --set-exit-if-changed lib test; echo EXIT=$?
+flutter analyze; echo EXIT=$?
+flutter test > /tmp/flutter-test.log 2>&1; echo EXIT=$?
+# Rust changes:
+(cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test); echo EXIT=$?
+# FFI-backed Dart tests load rust/target/debug/libxtremio_core.*: rebuild
+# it after touching rust/src, or they run against a stale library.
+cargo build --manifest-path rust/Cargo.toml; echo EXIT=$?
+```
+
+New behaviour needs tests that fail without it. Check at least one by
+stashing the `lib/` (or `rust/src`) change and running the new test
+(`git stash push -- lib && flutter test <file>; git stash pop`).
+
+## Tests and fixtures
+
+- Widget tests run against `FakeCoreClient` (`test/support/`), a
+  `FakePlaybackEngine` and the other fakes there; nothing in `test/features`
+  touches FFI or libmpv. `test/core/core_client_test.dart` and
+  `rust/tests/core.rs` are the FFI/engine tests.
+- Model-field states come from fixtures under `rust/tests/fixtures/`,
+  recorded by the `#[ignore]` network tests in `rust/tests/` (the README
+  lists the `cargo test --test <name> -- --ignored` commands) and loaded
+  through `test/support/fixtures.dart`. Refresh a fixture by re-running its
+  recorder, never by hand-editing recorded JSON; trim large catalogs.
+- `ctx_logged_in.json` is hand-authored with a fake account. Never commit a
+  recorded session, and redact `auth.key`, `_id` and `email` from anything
+  captured against a real account.
+
+## Never log auth material
+
+`Authenticate` actions and the `UserAuthenticated` / `Error{source}` events
+carry the password; `ctx.profile.auth.key` is the session key. Do not log
+or print `RuntimeCoreEvent.args`, action args of `Ctx` actions, or the
+`ctx` JSON — log event names and `source.event` only. The same goes for
+test output and bug reports.
+
+## Use cheaper models for mechanical work
+
+When an agent delegates, mechanical subtasks (formatting, renames, moving
+code, re-recording fixtures, running the verification above) go to a
+smaller model; keep the larger model for design and for anything that
+reads stremio-core to decide a wire shape.

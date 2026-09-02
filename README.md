@@ -9,8 +9,9 @@ with [`stremio-core`](https://github.com/Stremio/stremio-core) (the official
 Rust engine for addons, catalogs, library, and playback state) and
 [`media_kit`](https://pub.dev/packages/media_kit)/libmpv for playback.
 
-> **Status:** phase 2 (browse → details → play) is complete, and the
-> project is early beyond that. The app boots `stremio-core` and the
+> **Status:** phase 3 (account, library, addons, settings) is complete
+> on top of phase 2 (browse → details → play); the roadmap items below are
+> not started. The app boots `stremio-core` and the
 > embedded `stream-server` at start-up. **Board** shows a continue-watching
 > row and one row per catalog of every installed addon; **Discover** browses
 > any catalog through the engine's type/catalog/genre filters; **Search**
@@ -21,9 +22,10 @@ Rust engine for addons, catalogs, library, and playback state) and
 > chips; details routes are video-aware, so coming back from the player
 > lands on the right episode. The **player** plays torrents through the
 > embedded server and HTTP streams directly, with its own controls (seek
-> bar with the buffered range, play/pause, ±10 s, volume, fullscreen,
-> keyboard shortcuts, playback speed), embedded and addon subtitles with
-> basic styling, audio track selection, a stats OSD, an up-next countdown
+> bar with the buffered range, play/pause, seek buttons, volume,
+> fullscreen, keyboard shortcuts, playback speed), embedded and addon
+> subtitles styled from the profile settings, audio track selection, a
+> stats OSD, an up-next countdown
 > that hands off to the next episode, and a pre-playback progress overlay
 > for torrents that shows the server's start-up phase (checking existing
 > data, finding peers, buffering the start) with percentages and download
@@ -32,8 +34,13 @@ Rust engine for addons, catalogs, library, and playback state) and
 > addon. **Library** lists every added title over the engine's
 > `LibraryWithFilters` model (type and sort filters, cumulative paging,
 > long-press to remove, mark watched, rewind or mute notifications), and
-> the details header has a bookmark to add or remove a title. Settings are
-> still to come.
+> the details header has a bookmark to add or remove a title. **Addons**
+> (from Settings) lists the installed and community addons and installs,
+> updates, uninstalls or configures one by manifest URL. **Settings** holds
+> the Stremio account (sign in, create an account, sync, log out), the
+> engine's own settings (player, subtitles, interface, streaming server)
+> and the state of the embedded server. The design notes behind phase 3
+> are in [docs/phase3-design.md](docs/phase3-design.md).
 
 ## Goals (beyond current Stremio clients)
 
@@ -114,11 +121,16 @@ connection.
   the UI needs, `get_state_json` (`rust/src/model.rs`) adds a sibling key
   rather than reshaping the field: `meta_details` gains `watchedVideoIds`,
   `board`/`search` gain `catalogLabels` (catalog and addon names resolved
-  from the profile's manifests, aligned with `catalogs`). The `ctx` field
-  skips the library bucket, so the Library screen reads its own `library`
-  field (`LibraryWithFilters<NotRemovedFilter>`, snake_case keys such as
-  `next_page`). Typed FRB structs can be added for hot paths later if
-  profiling asks for it.
+  from the profile's manifests, aligned with `catalogs`). The model
+  (`XtremioModel`) has `ctx`, `continue_watching_preview`, `board`,
+  `search`, `discover`, `meta_details`, `streaming_server`, `player`,
+  `library`, `installed_addons`, `remote_addons` and `addon_details`;
+  `lib/core/fields.dart` mirrors the list. `ctx` serializes as
+  `{profile, notifications, events}` only — the library, streams and
+  server-URL buckets it also holds are `#[serde(skip)]` — so the Library
+  screen reads its own `library` field (`LibraryWithFilters<NotRemovedFilter>`,
+  snake_case keys such as `next_page`). Typed FRB structs can be added
+  for hot paths later if profiling asks for it.
 - **The engine runs on our `Env`** (`rust/src/env.rs`): reqwest + rustls for
   HTTP, one JSON file per bucket under the app-support directory with
   temp-then-fsync-then-rename writes, and two lib-owned tokio runtimes
@@ -127,7 +139,49 @@ connection.
   thread and runtime; the core's `streaming_server_url` is retargeted to it
   when the persisted profile points at loopback (a remote server URL set by
   the user is left alone). Port 11470 is preferred, ephemeral is the
-  fallback.
+  fallback. Login and logout reset the profile's settings to stremio-core's
+  defaults (`http://127.0.0.1:11470/`), so the event pump re-applies the
+  retarget on `UserAuthenticated` / `UserLoggedOut`.
+- **Settings are the engine's.** `ctx.profile.settings` is stremio-core's
+  `Settings` struct (camelCase; `docs/phase3-design.md` §4 lists it) and
+  the only way to change one is `Ctx::UpdateSettings` with the *entire*
+  object — it has no serde defaults, so a map missing a key fails at
+  dispatch with "invalid action JSON" and never reaches the engine.
+  `ProfileSettings.withValue(key, value)` (`lib/core/state/profile.dart`)
+  copies the map with one key changed, and every control in Settings and
+  in the player's settings sheet writes exactly that; nothing writes while
+  the `ctx` field is still unknown. Settings are device-local (the API's
+  `saveUser` carries only the user record). What the app reads: the player
+  takes `seekTimeDuration` (arrows, the seek buttons, double-tap) and
+  `seekShortTimeDuration` (Shift + arrows — the *short* seek, as
+  stremio-core names it), `bingeWatching` and
+  `nextVideoNotificationDuration` (the up-next countdown after an episode
+  ends; 0 plays the next one at once, and with binge watching off nothing
+  moves on by itself), `pauseOnMinimize` (through `AppLifecycleListener`),
+  `escExitFullscreen`, and `subtitlesSize` / `subtitlesTextColor` /
+  `subtitlesBackgroundColor` (`SubtitleStyle.fromSettings`: 32 px scaled
+  by the percentage, `#RRGGBBAA` colours, a transparent background means
+  no box); `XtremioApp` creates each `MediaKitEngine` with
+  `hardwareDecoding` as the video controller's hardware acceleration, so
+  it applies to the next video that opens. `streamingServerUrl` is the
+  "Embedded server" (the URL init reported) / "Remote server" (a validated
+  http(s) URL) choice. `quitOnClose` and `hideSpoilers` are stored but not
+  yet honoured (no tray to hide to; the details screen shows thumbnails
+  and summaries regardless); the remaining fields pass through untouched.
+- **Account.** Settings → Account dispatches `Authenticate` (`Login` or
+  `Register` with the GDPR consent the API requires, `from: xtremio`),
+  `Logout`, and the housekeeping stremio-web does on window focus
+  (`PullAddonsFromAPI` at every start-up, plus `PullUserFromAPI`,
+  `SyncLibraryWithAPI` and `PullNotifications` for a signed-in profile, on
+  start-up, resume and `UserAuthenticated`). The engine does not serialize
+  its "authenticating" status, so the pending spinner is local state
+  cleared by `UserAuthenticated` or the `Error` whose `source` is it.
+  Signing in *replaces* the anonymous library and resets the settings;
+  the UI says so. **Privacy:** `AuthRequest` serializes the password, so
+  `UserAuthenticated{auth_request}` and its `Error{source}` carry it, and
+  `ctx.profile.auth.key` is the session key — nothing in the app logs
+  `RuntimeCoreEvent.args` or dumps `ctx`, and `ctx_logged_in.json` is a
+  hand-authored fixture with a fake account, never a recorded session.
 - **Playback goes through the engine's `Player` model.** The UI dispatches
   `Load Player` with the raw stream JSON (plus the stream/meta requests);
   stremio-core converts the source and publishes `player.stream` as
@@ -144,12 +198,13 @@ connection.
   (`controls: NoVideoControls`) and draws its own dark-M3 overlay: a top
   bar (back, title, next episode, subtitles, audio, stats, settings) and a
   bottom bar (seek bar with buffered range and drag scrubbing, play/pause,
-  ±10 s, elapsed/remaining time, volume on wide layouts, fullscreen). The
-  controls fade after 3 s while playing and return on tap, mouse or key;
-  they stay while paused or buffering. Keyboard: Space/K play-pause,
-  ←/→ or J/L ±10 s, Shift+←/→ ±60 s, ↑/↓ volume, M mute, F fullscreen,
-  Esc leaves fullscreen or the player, S subtitles, A audio, N next
-  episode, Shift+I stats. Everything is a stream or method on
+  ± the seek step, elapsed/remaining time, volume on wide layouts,
+  fullscreen). The controls fade after 3 s while playing and return on
+  tap, mouse or key; they stay while paused or buffering. Keyboard:
+  Space/K play-pause, ←/→ or J/L ± the seek step (10 s by default),
+  Shift+←/→ ± the short seek step (3 s), ↑/↓ volume, M mute, F
+  fullscreen, Esc leaves fullscreen (unless `escExitFullscreen` is off) or
+  the player, S subtitles, A audio, N next episode, Shift+I stats. Everything is a stream or method on
   `PlaybackEngine` (`tracks`, `buffer`, `volume`, `setAudioTrack`,
   `setSubtitleTrack`, `setExternalSubtitle`, ...) or a core action, so the
   screen is tested against `FakePlaybackEngine` and `FakeCoreClient`
@@ -177,8 +232,8 @@ connection.
   mpv `sub-*` properties — identical on Linux and Android with no fonts
   to ship. **Limitation:** bitmap subtitles (PGS, VobSub) are listed but
   not drawn on this path; that needs `libass: true` and font shipping.
-  The style lives in a `ValueNotifier` on `PlaybackScope` for now (a
-  Settings entry and persistence come later).
+  The style is the profile's subtitle settings (see *Settings are the
+  engine's*); the player's settings sheet edits the same keys.
 - **Torrent start-up overlay.** From `open` until the engine first reports
   the media loaded (a duration, or playing), a torrent shows a card instead
   of a spinner. Once `open` has been issued, the screen polls the embedded
@@ -199,7 +254,8 @@ connection.
   HTTP streams get nothing extra. The `TorrentStatsClient` comes from
   `PlaybackScope`, so tests feed phases through a fake.
 - **Next episode.** `player.nextVideo`/`nextStream` come from the core.
-  On `Ended` an up-next card counts down 10 s; playing it dispatches
+  On `Ended`, with `bingeWatching` on, an up-next card counts down
+  `nextVideoNotificationDuration` (35 s by default); playing it dispatches
   `NextVideo` and either replaces the player route with one for the
   engine's `nextStream` (same addon, matching binge group) — the old
   screen then skips its `Unload` so the session's subtitle preference
@@ -237,9 +293,11 @@ cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && car
 cargo test --test cinemeta -- --ignored       # network: loads a Cinemeta catalog, refreshes the fixture
 cargo test --test meta_details -- --ignored   # network: meta + streams + Player + continue watching for a public-domain torrent, plus a series (seasons, selected episode, watched), refreshes fixtures
 cargo test --test board -- --ignored          # network: Board rows + a search over the default addons, refreshes fixtures
-cargo test --test library_addons -- --ignored # network: ctx, installed/remote addons, addon details (Cinemeta), library fixtures
+cargo test --test library_addons -- --ignored # network: ctx (logged out), installed/remote addons, addon details (Cinemeta), library fixtures
+# ctx_logged_in.json is hand-authored (a fake account); there is no recorder for it, and a real session must never be committed
 
-# Dart (FFI-backed tests load rust/target/debug/libxtremio_core.* directly)
+# Dart (FFI-backed tests load rust/target/debug/libxtremio_core.* directly;
+# rebuild after touching rust/src or they run against a stale library)
 cargo build --manifest-path rust/Cargo.toml
 flutter pub get && dart format --set-exit-if-changed . && flutter analyze && flutter test
 
