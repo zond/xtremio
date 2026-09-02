@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import 'language_names.dart';
 import 'playback_engine.dart';
+import 'subtitle_color_chips.dart';
 
 /// The subtitle picker: off, the tracks embedded in the file, and the files
 /// the subtitle addons (or the stream itself) offer.
@@ -205,7 +206,7 @@ class PlayerSettingsSheet extends StatelessWidget {
           ),
         ),
         const _SectionLabel('Subtitle colour'),
-        _ColorChips(
+        SubtitleColorChips(
           colors: SubtitleStyle.textColors,
           selected: settings.subtitlesTextColor,
           onSelected: onSetting == null
@@ -213,7 +214,7 @@ class PlayerSettingsSheet extends StatelessWidget {
               : (hex) => onSetting(ProfileSettings.subtitlesTextColorKey, hex),
         ),
         const _SectionLabel('Subtitle background'),
-        _ColorChips(
+        SubtitleColorChips(
           colors: SubtitleStyle.backgroundColors,
           selected: settings.subtitlesBackgroundColor,
           onSelected: onSetting == null
@@ -249,48 +250,6 @@ class PlayerSettingsSheet extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Named colour swatches; the current value is selected by its hex string,
-/// and a value outside the palette shows as a "Custom" chip so the picker
-/// never claims a colour the user did not set.
-class _ColorChips extends StatelessWidget {
-  const _ColorChips({
-    required this.colors,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final Map<String, String> colors;
-  final String selected;
-  final ValueChanged<String>? onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final normalized = selected.toUpperCase();
-    final known = colors.values.any((hex) => hex.toUpperCase() == normalized);
-    final onSelected = this.onSelected;
-    Widget chip(String name, String hex) => ChoiceChip(
-      avatar: CircleAvatar(
-        backgroundColor:
-            SubtitleStyle.parseRgbaHex(hex) ?? const Color(0x00000000),
-        radius: 8,
-      ),
-      label: Text(name),
-      selected: hex.toUpperCase() == normalized,
-      onSelected: onSelected == null ? null : (_) => onSelected(hex),
-    );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Wrap(
-        spacing: 8,
-        children: [
-          for (final entry in colors.entries) chip(entry.key, entry.value),
-          if (!known) chip('Custom ($selected)', selected),
-        ],
-      ),
     );
   }
 }

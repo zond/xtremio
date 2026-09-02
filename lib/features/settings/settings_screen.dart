@@ -6,10 +6,14 @@ import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
 import '../player/player_screen.dart';
 import 'account_section.dart';
+import 'core_settings.dart';
 
 /// Settings: the account ([AccountSection] over `ctx.profile`), the way to
-/// the Addons screen, the state of the embedded streaming server and the
-/// core (straight from the `streaming_server` model field).
+/// the Addons screen, the controls over `ctx.profile.settings` (Player,
+/// Subtitles, Interface, Streaming server; every change is one
+/// `UpdateSettings` with the whole map and that key changed), the state of
+/// the streaming server (from the `streaming_server` model field) and the
+/// core.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -40,6 +44,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
+  /// The profile settings of the `ctx` state, or null while unknown.
+  static ProfileSettings? _settingsOf(Map<String, dynamic>? ctx) {
+    if (ctx == null) return null;
+    final settings = ProfileState.fromCtx(ctx).settings;
+    return settings.isEmpty ? null : settings;
+  }
+
+  /// One setting changed: `UpdateSettings` with the whole map, as the
+  /// engine has no per-field defaults.
+  void _updateSetting(ProfileSettings settings, String key, Object? value) {
+    CoreScope.of(context)
+        .dispatch(CoreActions.updateSettings(settings.withValue(key, value)));
+  }
+
+  /// [build] over the current settings, or the pending indicator until the
+  /// `ctx` field has arrived (no control may write a partial map).
+  Widget _withSettings(
+    Widget Function(ProfileSettings settings, SettingWriter write) build,
+  ) => ValueListenableBuilder<Map<String, dynamic>?>(
+    valueListenable: _ctx!,
+    builder: (context, ctx, _) {
+      final settings = _settingsOf(ctx);
+      if (settings == null) return const _SettingsPending();
+      return build(
+        settings,
+        (key, value) => _updateSetting(settings, key, value),
+      );
+    },
+  );
+
   @override
   Widget build(BuildContext context) {
     final initInfo = CoreScope.initInfoOf(context);
@@ -59,7 +93,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
               MaterialPageRoute<void>(builder: (_) => const AddonsScreen()),
             ),
           ),
+          const _SectionHeader('Player'),
+          _withSettings(
+            (settings, write) =>
+                PlayerSettingsSection(settings: settings, onSetting: write),
+          ),
+          const _SectionHeader('Subtitles'),
+          _withSettings(
+            (settings, write) =>
+                SubtitlesSettingsSection(settings: settings, onSetting: write),
+          ),
+          const _SectionHeader('Interface'),
+          _withSettings(
+            (settings, write) =>
+                InterfaceSettingsSection(settings: settings, onSetting: write),
+          ),
           const _SectionHeader('Streaming server'),
+          _withSettings(
+            (settings, write) => StreamingServerSection(
+              settings: settings,
+              embeddedUrl: initInfo?.serverBaseUrl,
+              onSetting: write,
+            ),
+          ),
           ValueListenableBuilder<Map<String, dynamic>?>(
             valueListenable: _server!,
             builder: (context, state, _) {
@@ -72,27 +128,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'Err' => 'Error: ${settings?['content']}',
                       _ => 'Unknown',
                     };
-              final url =
-                  state?['baseUrl'] as String? ??
-                  initInfo?.serverBaseUrl?.toString() ??
-                  'not running';
-              return Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.dns_outlined),
-                    title: const Text('Embedded server'),
-                    subtitle: Text(url),
-                  ),
-                  ListTile(
-                    leading: Icon(
-                      settings?['type'] == 'Ready'
-                          ? Icons.check_circle_outline
-                          : Icons.hourglass_empty,
-                    ),
-                    title: const Text('Status'),
-                    subtitle: Text(status),
-                  ),
-                ],
+              final url = state?['baseUrl'] as String?;
+              return ListTile(
+                leading: Icon(
+                  settings?['type'] == 'Ready'
+                      ? Icons.check_circle_outline
+                      : Icons.hourglass_empty,
+                ),
+                title: const Text('Status'),
+                subtitle: Text(url == null ? status : '$status · $url'),
               );
             },
           ),
@@ -148,6 +192,18 @@ class _DevPlayTile extends StatelessWidget {
         builder: (_) => PlayerScreen(stream: stream),
       ),
     ),
+  );
+}
+
+/// Shown in place of a settings section until the `ctx` field is in (a
+/// moment after start-up). Deliberately static: nothing here animates.
+class _SettingsPending extends StatelessWidget {
+  const _SettingsPending();
+
+  @override
+  Widget build(BuildContext context) => const ListTile(
+    leading: Icon(Icons.hourglass_empty),
+    title: Text('Loading settings…'),
   );
 }
 

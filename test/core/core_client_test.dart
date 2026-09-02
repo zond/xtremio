@@ -83,6 +83,59 @@ void main() {
       expect(const ServerClient().baseUrl, isNull);
     },
   );
+
+  test(
+    'UpdateSettings round-trips the whole map and rejects a partial one',
+    () async {
+      final tmp = await Directory.systemTemp.createTemp('xtremio-core-test-');
+      final client = RustCoreClient();
+      addTearDown(() async {
+        await client.shutdown();
+        await tmp.delete(recursive: true);
+      });
+      await client.init(
+        support: Directory('${tmp.path}/support'),
+        cache: Directory('${tmp.path}/cache'),
+        embeddedServer: false,
+      );
+
+      final before = ProfileState.fromCtx(await client.state(CoreField.ctx))
+          .settings;
+      expect(before.isEmpty, isFalse);
+      expect(before.bingeWatching, isTrue);
+      expect(before.subtitlesSize, 100);
+
+      await client.dispatch(
+        CoreActions.updateSettings(
+          before.withValue(ProfileSettings.subtitlesSizeKey, 150),
+        ),
+      );
+      // The update is applied by the runtime's task; poll for it.
+      Map<String, dynamic> after = before.json;
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (after['subtitlesSize'] != 150 &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        after = ProfileState.fromCtx(await client.state(CoreField.ctx))
+            .settings
+            .json;
+      }
+      expect(after, {...before.json, 'subtitlesSize': 150});
+
+      // Settings has no serde defaults: a map with keys missing never reaches
+      // the engine.
+      await expectLater(
+        client.dispatch(
+          CoreActions.updateSettings({ProfileSettings.bingeWatchingKey: false}),
+        ),
+        throwsA(predicate((e) => e.toString().contains('invalid action JSON'))),
+      );
+      expect(
+        ProfileState.fromCtx(await client.state(CoreField.ctx)).settings.json,
+        {...before.json, 'subtitlesSize': 150},
+      );
+    },
+  );
 }
 
 extension on CoreFieldNotifier {

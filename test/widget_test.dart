@@ -6,6 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
 import 'support/fake_core_client.dart';
+import 'support/fixtures.dart';
 
 /// A core whose board is loaded but plans no catalogs, so the Board section
 /// renders its static empty state (a still-loading board spins forever,
@@ -107,6 +108,9 @@ void main() {
   ) async {
     final core = FakeCoreClient(
       state: {
+        // The recorded profile points at the loopback default, i.e. the
+        // embedded server below.
+        CoreField.ctx: loadCtxLoggedOutFixture(),
         CoreField.streamingServer: {
           'baseUrl': 'http://127.0.0.1:11470/',
           'settings': {'type': 'Loading'},
@@ -131,8 +135,9 @@ void main() {
       ),
     );
 
+    // The embedded server's URL on its radio tile; the status carries it too.
     expect(find.text('http://127.0.0.1:11470/'), findsOneWidget);
-    expect(find.text('Connecting…'), findsOneWidget);
+    expect(find.text('Connecting… · http://127.0.0.1:11470/'), findsOneWidget);
     expect(find.text('v25'), findsOneWidget);
 
     // A NewState for streaming_server re-pulls the field.
@@ -141,6 +146,6 @@ void main() {
       'settings': {'type': 'Ready', 'content': {}},
     });
     await tester.pumpAndSettle();
-    expect(find.text('Ready'), findsOneWidget);
+    expect(find.text('Ready · http://127.0.0.1:11470/'), findsOneWidget);
   });
 }
