@@ -174,10 +174,12 @@ connection.
   Settings entry and persistence come later).
 - **Torrent start-up overlay.** From `open` until the engine first reports
   the media loaded (a duration, or playing), a torrent shows a card instead
-  of a spinner. The screen polls the embedded server's
-  `/{infoHash}/{fileIdx}/stats.json` every 500 ms (plain `dart:io` HTTP,
-  like the stream URL itself; `TorrentStats.statsUrlFor` derives it from
-  the core's streaming URL) and maps the server's `phase` to a label:
+  of a spinner. Once `open` has been issued, the screen polls the embedded
+  server's `/{infoHash}/{fileIdx}/stats.json` every 500 ms (plain `dart:io`
+  HTTP, like the stream URL itself; `TorrentStats.statsUrlFor` derives it
+  from the core's streaming URL, index and `tr=`/`f=` query kept, and a poll
+  falls back to `/{infoHash}/stats.json` while the per-file route still
+  404s on an unresolved magnet) and maps the server's `phase` to a label:
   `resolvingMetadata` → "Fetching torrent metadata…", `checking` →
   "Checking existing data…" with `checkedBytes/checkTotalBytes`,
   `buffering` → "Finding peers…" with the `peerDiscovery` counts while no
