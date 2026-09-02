@@ -1,9 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Network access for addons, the torrent swarm, media streams and the
+         loopback stream-server. Flutter's template only declares it in the
+         debug/profile manifests, so without this a release APK is offline. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- usesCleartextTraffic only governs the Java network stack and dart:io
+         (Image.network for addon-supplied posters, any Dart call to the
+         embedded http://127.0.0.1:<port> server). Rust sockets (reqwest) and
+         libmpv are unaffected either way. Self-hosted http:// addons are
+         common in the Stremio ecosystem, so plain http is allowed, as in
+         the official Stremio Android app. -->
     <application
         android:label="xtremio"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:banner="@mipmap/ic_launcher">
+        android:banner="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
