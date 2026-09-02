@@ -12,7 +12,8 @@ import 'addon_widgets.dart';
 ///
 /// On mount it dispatches `Load InstalledAddonsWithFilters {type: null}` and
 /// `Load CatalogWithFilters` with no request (the engine picks the first
-/// addon catalog, Cinemeta's); both fields are unloaded on dispose. Every
+/// addon catalog, Cinemeta's); both fields are unloaded on dispose, unless
+/// another Addons screen has loaded them since. Every
 /// filter option carries the request that selects it and the controls
 /// dispatch those verbatim. The Installed list follows the profile on its
 /// own after each mutation; whether a community entry is installed is not
@@ -46,6 +47,14 @@ class _AddonsScreenState extends State<AddonsScreen> {
   CoreFieldNotifier? _installed;
   CoreFieldNotifier? _remote;
   CoreFieldNotifier? _ctx;
+
+  /// The screen whose `Load`s the two list fields last served.
+  ///
+  /// A popping route stays in the tree for the length of its transition
+  /// while the screen beneath is already tappable, so a new Addons screen
+  /// can dispatch its `Load`s before the old one's dispose runs. Only the
+  /// owner unloads the fields on dispose, as the details screens do.
+  static _AddonsScreenState? _fieldOwner;
   final TextEditingController _search = TextEditingController();
   int _nextPageRequestedAt = -1;
 
@@ -68,6 +77,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
       _remote = CoreFieldNotifier(client, CoreField.remoteAddons);
       _ctx = CoreFieldNotifier(client, CoreField.ctx);
       _nextPageRequestedAt = -1;
+      _fieldOwner = this;
       client.dispatch(
         CoreActions.loadInstalledAddons(const InstalledAddonsRequest()),
       );
@@ -77,8 +87,11 @@ class _AddonsScreenState extends State<AddonsScreen> {
 
   @override
   void dispose() {
-    _client?.dispatch(CoreActions.unload(CoreField.installedAddons));
-    _client?.dispatch(CoreActions.unload(CoreField.remoteAddons));
+    if (_fieldOwner == this) {
+      _fieldOwner = null;
+      _client?.dispatch(CoreActions.unload(CoreField.installedAddons));
+      _client?.dispatch(CoreActions.unload(CoreField.remoteAddons));
+    }
     _installed?.dispose();
     _remote?.dispose();
     _ctx?.dispose();
