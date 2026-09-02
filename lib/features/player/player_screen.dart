@@ -219,7 +219,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _opened = url;
     _autoPickedSubtitles = false;
     _mediaLoaded = false;
-    _startTorrentStats(state, url);
     _dismissUpNext();
     final progress = state.progress;
     final start = progress != null && progress.isResumable
@@ -232,6 +231,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         .catchError((Object error) {
           if (mounted) setState(() => _engineError = '$error');
         });
+    // After `open` is on its way: a stats request the server sees first
+    // would make it create the torrent's engine from the bare info hash,
+    // without the trackers in the URL, and the stream request then reuses
+    // that engine.
+    _startTorrentStats(state, url);
     setState(() => _engineError = null);
     _restartControlsTimer();
   }
@@ -300,14 +304,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Begins polling the server's `stats.json` for [url] when [state] plays a
   /// torrent through the embedded server (see [TorrentStats.statsUrlFor]);
-  /// anything else (a direct HTTP stream) shows no overlay.
+  /// anything else (a direct HTTP stream) shows no overlay. The first
+  /// request goes out on the first tick, never before the engine's `open`
+  /// has been issued.
   void _startTorrentStats(PlayerState state, Uri url) {
     _stopTorrentStats();
     if (state.selectedStream?.kind != StreamKind.torrent) return;
     final statsUrl = TorrentStats.statsUrlFor(url);
     if (statsUrl == null) return;
     _torrentStatsUrl = statsUrl;
-    _pollTorrentStats();
     _torrentStatsTimer = Timer.periodic(
       PlayerScreen.torrentStatsInterval,
       (_) => _pollTorrentStats(),

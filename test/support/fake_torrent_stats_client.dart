@@ -19,9 +19,14 @@ class FakeTorrentStatsClient implements TorrentStatsClient {
   /// Every URL polled, in order.
   final List<Uri> requests = [];
 
+  /// When set, `fetch` also appends `'stats'` here: a log shared with other
+  /// fakes, for tests about the order of calls across them.
+  List<String>? callLog;
+
   @override
   Future<TorrentStats?> fetch(Uri statsUrl) async {
     requests.add(statsUrl);
+    callLog?.add('stats');
     return response;
   }
 }

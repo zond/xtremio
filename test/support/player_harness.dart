@@ -34,7 +34,12 @@ class PlayerHarness {
 
   /// What the start-up overlay polls; answers nothing (`null`) until a test
   /// sets [FakeTorrentStatsClient.response].
-  final FakeTorrentStatsClient torrentStats = FakeTorrentStatsClient();
+  late final FakeTorrentStatsClient torrentStats = FakeTorrentStatsClient()
+    ..callLog = calls;
+
+  /// Engine opens (`'open'`) and stats fetches (`'stats'`), in the order
+  /// they happened.
+  final List<String> calls = [];
   final ValueNotifier<SubtitleStyle> subtitleStyle = ValueNotifier(
     const SubtitleStyle(),
   );
@@ -55,7 +60,7 @@ class PlayerHarness {
       client: core,
       child: PlaybackScope(
         createEngine: () {
-          final engine = FakePlaybackEngine();
+          final engine = FakePlaybackEngine()..callLog = calls;
           engines.add(engine);
           return engine;
         },

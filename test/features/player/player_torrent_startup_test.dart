@@ -199,22 +199,24 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Opened, nothing loaded yet: the overlay is up, no bare spinner, and the
-    // server has been asked for this torrent's file stats once so far.
+    // Opened, nothing loaded yet: the overlay is up, no bare spinner. The
+    // server is not asked anything until the first tick (see below).
     expect(harness.engine.opened, hasLength(1));
     expect(overlay, findsOneWidget);
     expect(overlayText('Connecting to server…'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(progressBar(tester).value, isNull);
-    expect(stats.requests, hasLength(1));
+    expect(stats.requests, isEmpty);
+
+    // Polled every interval, for this torrent's file; the same answer does
+    // not redraw anything.
+    await poll(tester);
     expect(
       stats.requests.single,
       Uri.parse(
         'http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0/stats.json',
       ),
     );
-
-    // Polled every interval; the same answer does not redraw anything.
     await poll(tester);
     expect(stats.requests, hasLength(2));
 
@@ -268,6 +270,18 @@ void main() {
     await pumpEvents(tester);
     expect(find.text('Buffering from the torrent…'), findsOneWidget);
     expect(overlay, findsNothing);
+  });
+
+  testWidgets('asks the server nothing before the engine is told to open', (
+    tester,
+  ) async {
+    // A stats request the server sees before the stream request makes it
+    // create the torrent's engine from the bare info hash, without the
+    // URL's trackers, and the stream then reuses that engine.
+    final harness = PlayerHarness();
+    await harness.pump(tester);
+    expect(harness.calls.first, 'open');
+    expect(harness.calls, contains('stats'));
   });
 
   testWidgets('a playing signal also ends it', (tester) async {

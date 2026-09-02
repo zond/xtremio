@@ -46,6 +46,10 @@ class FakePlaybackEngine implements PlaybackEngine {
   double? lastSubtitleBottomPadding;
   bool disposed = false;
 
+  /// When set, `open` also appends `'open'` here: a log shared with other
+  /// fakes, for tests about the order of calls across them.
+  List<String>? callLog;
+
   void emitPosition(Duration position) => _position.add(position);
   void emitDuration(Duration duration) => _duration.add(duration);
   void emitBuffer(Duration buffer) => _buffer.add(buffer);
@@ -90,6 +94,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     opened.add((url, start));
+    callLog?.add('open');
   }
 
   @override
