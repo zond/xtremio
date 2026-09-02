@@ -74,12 +74,14 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
   release builds.
 - **No `HOME` needed by the embedded server.** Android app processes start
   with no `HOME` environment variable, and `dirs`/`directories` have no
-  passwd fallback there. `stream-server` therefore derives every path it
-  needs from the directories the app passes in `ServerConfig`
-  (`RustCoreClient.init(support, cache)` → `<files>/server` for settings
-  and logs, `<cache>/server` for the torrent session, its DHT routing-table
-  dump `dht.json` and the piece cache) and never consults the environment
-  on its startup path.
+  passwd fallback there. Nothing on `stream-server`'s startup path fails
+  without it: every effective path comes from the directories the app
+  passes in `ServerConfig` (`RustCoreClient.init(support, cache)` →
+  `<files>/server` for settings and logs, `<cache>/server` for the torrent
+  session, its DHT routing-table dump `dht.json` and the piece cache). The
+  environment is at most consulted for defaults those directories override
+  (a `HOME` fallback in the settings defaults, `dirs::cache_dir` in the
+  update manager), and a missing one is not an error.
 - **Leanback entries** for Android TV / Google TV are already in
   `AndroidManifest.xml` (same APK runs on Android TV boxes, Chromecast with
   Google TV, and the Google TV Streamer — they're all just Android).

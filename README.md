@@ -289,9 +289,11 @@ debug/profile) and `usesCleartextTraffic="true"`: that flag only governs
 dart:io (`Image.network` posters from self-hosted http:// addons, calls to the
 loopback server), while Rust sockets and libmpv ignore the policy either way.
 The embedded server needs no environment: Android app processes have no
-`HOME`, and `stream-server` derives every path (settings, logs, torrent
-session and DHT state) from the config and cache directories the app hands
-it (`<files>/server` and `<cache>/server`, from `path_provider`).
+`HOME`, and nothing on `stream-server`'s startup path fails without it; every
+effective path (settings, logs, torrent session and DHT state) comes from the
+config and cache directories the app hands it (`<files>/server` and
+`<cache>/server`, from `path_provider`), which override the environment-based
+defaults it may still look at.
 
 **Emulator (headless, KVM).** The x86_64 `google_apis` image is the one that
 runs on an x86_64 Linux host (which is why the bindgen path above matters);

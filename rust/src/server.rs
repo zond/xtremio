@@ -45,10 +45,11 @@ fn url_of(handle: &ServerHandle) -> anyhow::Result<Url> {
     Url::parse(&format!("http://{}", handle.http_addr())).context("embedded server base URL")
 }
 
-/// Both directories are passed explicitly: stream-server derives every path
-/// it needs (settings, logs, torrent session and DHT state, archive caches)
-/// from them and never consults `HOME`/`XDG_*`, which Android app processes
-/// do not have.
+/// Both directories are passed explicitly: every effective path stream-server
+/// uses (settings, logs, torrent session and DHT state, archive caches) comes
+/// from them, and nothing on its startup path fails without `HOME`/`XDG_*`,
+/// which Android app processes do not have. (It may still glance at the
+/// environment for defaults these directories override.)
 fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
     stream_server::start(stream_server::ServerConfig {
         http_addr: SocketAddr::from((Ipv4Addr::LOCALHOST, port)),
