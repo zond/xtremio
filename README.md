@@ -56,7 +56,10 @@ These are roadmap, not built yet.
 
 The UI stays thin: discovery/library/addon logic lives in `stremio-core`, the
 bytes come from `stream-server`, and the client's job is presentation plus
-driving libmpv. Because a capable on-device player handles codecs and
+driving libmpv. `stream-server` runs **in-process**: the Rust crate in `rust/`
+links it as a library and starts it on its own thread (loopback only,
+port 11470 with an ephemeral fallback), so there is no sidecar binary to
+ship, launch, or keep alive on mobile. Because a capable on-device player handles codecs and
 subtitles, the server never transcodes — it just gets bytes onto an HTTP
 connection.
 

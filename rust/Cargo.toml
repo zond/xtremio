@@ -7,12 +7,32 @@ publish = false
 
 [lib]
 name = "xtremio_core"
-crate-type = ["cdylib", "staticlib"]
+# rlib is needed so tests/ can link the crate; cargokit ships the cdylib.
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 # Codegen, Dart package and Rust crate must all be exactly this version
 # (FRB enforces it at RustLib.init via forceSameCodegenVersion).
 flutter_rust_bridge = "=2.13.0"
+
+# Pure-Rust torrent/archive streaming server, embedded in-process (package
+# `server`, lib `stream_server`). Pinned to a rev for reproducibility. Default
+# features are ON, which links unrar-rs (GPL-3.0-or-later) -- see README.
+# Build with `default-features = false` for an MIT binary without RAR support.
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "3d927ff5f6a49feed7d4583fac936ab2de6d701a" }
+
+anyhow = "1"
+url = "2"
+# `log` feature: on Android no tracing subscriber is installed and events flow
+# through the `log` crate into FRB's android_logger instead.
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "gzip", "json"] }
+serde_json = "1"
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
