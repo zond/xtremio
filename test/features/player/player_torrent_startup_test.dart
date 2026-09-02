@@ -68,17 +68,31 @@ void main() {
 
     test('derives the stats URL from the stream URL', () {
       const hash = '11ea02584fa6351956f35671962ab46354d99060';
+      // The query travels along: the server's per-file route takes the
+      // stream route's `tr=`/`f=` and focuses the file it resolves.
       expect(
         TorrentStats.statsUrlFor(
           Uri.parse('http://127.0.0.1:11470/$hash/0?tr=udp%3A%2F%2Fa'),
         ),
-        Uri.parse('http://127.0.0.1:11470/$hash/0/stats.json'),
+        Uri.parse('http://127.0.0.1:11470/$hash/0/stats.json?tr=udp%3A%2F%2Fa'),
       );
-      // No file index (the server guesses): the torrent-level stats.
+      // The server's guessed index stays in the path; with `f=` filters the
+      // per-file route picks the same file the stream route does.
+      expect(
+        TorrentStats.statsUrlFor(
+          Uri.parse(
+            'http://127.0.0.1:11470/$hash/-1?tr=udp%3A%2F%2Fa&f=Movie.mkv',
+          ),
+        ),
+        Uri.parse(
+          'http://127.0.0.1:11470/$hash/-1/stats.json?tr=udp%3A%2F%2Fa&f=Movie.mkv',
+        ),
+      );
       expect(
         TorrentStats.statsUrlFor(Uri.parse('http://127.0.0.1:11470/$hash/-1')),
-        Uri.parse('http://127.0.0.1:11470/$hash/stats.json'),
+        Uri.parse('http://127.0.0.1:11470/$hash/-1/stats.json'),
       );
+      // Only the hash: the torrent-level stats.
       expect(
         TorrentStats.statsUrlFor(Uri.parse('http://127.0.0.1:11470/$hash')),
         Uri.parse('http://127.0.0.1:11470/$hash/stats.json'),

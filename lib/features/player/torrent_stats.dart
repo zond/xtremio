@@ -140,27 +140,36 @@ final class TorrentStats {
   }
 
   /// The `stats.json` for a stream the embedded server serves: the core's
-  /// `<server>/{infoHash}/{fileIdx}?tr=…` becomes
-  /// `<server>/{infoHash}/{fileIdx}/stats.json` (or `/{infoHash}/stats.json`
-  /// when no file index is in the path, e.g. `-1`, the server's guess).
-  /// Null when [streamingUrl] is not such a URL (a direct HTTP stream).
+  /// `<server>/{infoHash}/{fileIdx}?tr=…&f=…` becomes
+  /// `<server>/{infoHash}/{fileIdx}/stats.json?tr=…&f=…`. The second path
+  /// segment is kept verbatim, `-1` included: the server's per-file route
+  /// resolves it the way the stream route does (the `f=` filters pick the
+  /// file when the index is a guess) and focuses that file, which is what
+  /// makes it report the initial window. A path with only the hash yields
+  /// the torrent-level `<server>/{infoHash}/stats.json`. Null when
+  /// [streamingUrl] is not such a URL (a direct HTTP stream).
   static Uri? statsUrlFor(Uri streamingUrl) {
+    final segments = _torrentSegments(streamingUrl);
+    if (segments == null) return null;
+    return _statsUrl(streamingUrl, segments.take(2));
+  }
+
+  /// The non-empty path segments when the path starts with an info hash.
+  static List<String>? _torrentSegments(Uri streamingUrl) {
     final segments = streamingUrl.pathSegments
         .where((segment) => segment.isNotEmpty)
         .toList();
     if (segments.isEmpty || !_infoHash.hasMatch(segments.first)) return null;
-    final fileIdx = segments.length > 1 ? int.tryParse(segments[1]) : null;
-    return Uri(
-      scheme: streamingUrl.scheme,
-      host: streamingUrl.host,
-      port: streamingUrl.hasPort ? streamingUrl.port : null,
-      pathSegments: [
-        segments.first,
-        if (fileIdx != null && fileIdx >= 0) '$fileIdx',
-        'stats.json',
-      ],
-    );
+    return segments;
   }
+
+  static Uri _statsUrl(Uri streamingUrl, Iterable<String> segments) => Uri(
+    scheme: streamingUrl.scheme,
+    host: streamingUrl.host,
+    port: streamingUrl.hasPort ? streamingUrl.port : null,
+    pathSegments: [...segments, 'stats.json'],
+    query: streamingUrl.hasQuery ? streamingUrl.query : null,
+  );
 
   static final RegExp _infoHash = RegExp(r'^[0-9a-fA-F]{40}$');
 
