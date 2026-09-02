@@ -9,8 +9,10 @@ with [`stremio-core`](https://github.com/Stremio/stremio-core) (the official
 Rust engine for addons, catalogs, library, and playback state) and
 [`media_kit`](https://pub.dev/packages/media_kit)/libmpv for playback.
 
-> **Status:** early scaffold. Right now this is a responsive app shell; the
-> Rust integration and real screens are being built out.
+> **Status:** early. The Rust core is wired in: the app boots `stremio-core`
+> and the embedded `stream-server` at start-up, Settings shows the server
+> state, and Discover browses a Cinemeta catalog from core state. Meta
+> details, the player (media_kit) and everything else are still to come.
 
 ## Goals (beyond current Stremio clients)
 
@@ -62,6 +64,63 @@ port 11470 with an ephemeral fallback), so there is no sidecar binary to
 ship, launch, or keep alive on mobile. Because a capable on-device player handles codecs and
 subtitles, the server never transcodes — it just gets bytes onto an HTTP
 connection.
+
+### How the Rust core is wired in
+
+- **Bridge:** [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge)
+  2.13.0 with the cargokit backend. Codegen, Dart package and Rust crate must
+  be the exact same version (FRB refuses to start otherwise). The crate lives
+  in `rust/` (package `xtremio_core`, cdylib + staticlib, plus rlib for its
+  own tests); `rust_builder/` is the generated FFI-plugin glue that builds it
+  for each platform; `lib/src/rust/` and `rust/src/frb_generated.rs` are
+  generated and committed. After changing anything under `rust/src/api`, run
+  `flutter_rust_bridge_codegen generate` and commit the result (CI fails on
+  drift).
+- **State crosses as JSON.** `core_dispatch` takes a stremio-core `Action`
+  as JSON, `core_get_state(field)` returns one model field as JSON, and
+  `core_events` streams `RuntimeEvent`s (`NewState` lists the fields that
+  changed). Every stremio-core type already derives serde, so this costs no
+  per-type mirroring and survives engine upgrades; Dart keeps small view
+  classes (`lib/core/state/`) over the maps. Typed FRB structs can be added
+  for hot paths later if profiling asks for it.
+- **The engine runs on our `Env`** (`rust/src/env.rs`): reqwest + rustls for
+  HTTP, one JSON file per bucket under the app-support directory with
+  temp-then-fsync-then-rename writes, and two lib-owned tokio runtimes
+  (concurrent + a single-worker sequential one for ordered persistence).
+- **The server is in-process**: `stream_server::start` runs on its own
+  thread and runtime; the core's `streaming_server_url` is retargeted to it
+  when the persisted profile points at loopback (a remote server URL set by
+  the user is left alone). Port 11470 is preferred, ephemeral is the
+  fallback.
+- **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
+  with the `derive` + `env-future-send` features, `zond/stream-server` at a
+  fixed rev. To bump: change the rev, `cargo update -p <crate>`, run
+  `cargo test`, and re-copy `rust/vendor/stremio-watched-bitfield` from the
+  new stremio-core rev (it carries a one-line `flate2` relaxation the
+  combined graph needs; see `rust/vendor/README.md`).
+
+### Verifying on a dev machine
+
+```bash
+# Rust crate
+cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+cargo test --test cinemeta -- --ignored   # network: loads a Cinemeta catalog, refreshes the fixture
+
+# Dart (FFI-backed tests load rust/target/debug/libxtremio_core.* directly)
+cargo build --manifest-path rust/Cargo.toml
+flutter pub get && dart format --set-exit-if-changed . && flutter analyze && flutter test
+
+# Bindings must be committed
+flutter_rust_bridge_codegen generate && git diff --exit-code lib/src/rust rust/src/frb_generated.rs
+```
+
+Not yet exercised on a device or desktop build: `flutter run -d linux`
+(needs clang/cmake/ninja/GTK; cargokit builds the crate through CMake) and
+`flutter build apk` (cargokit drives the NDK; the first cross-compile has
+to prove that aws-lc-sys/ring build under it). On **Android**, reqwest's
+rustls uses `rustls-platform-verifier`, which needs a one-time JNI init with
+the app `Context` (plus its small Kotlin component) before any HTTPS fetch
+works; that hook is still to be added to `MainActivity`.
 
 ## Platform support
 
