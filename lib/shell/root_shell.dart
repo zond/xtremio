@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/board/board_screen.dart';
 import '../features/discover/discover_screen.dart';
 import '../features/library/library_screen.dart';
+import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
 
 /// A top-level navigation destination and the screen it shows.
@@ -35,6 +36,7 @@ class _RootShellState extends State<RootShell> {
       Icons.explore,
       DiscoverScreen(),
     ),
+    _Destination('Search', Icons.search, Icons.search, SearchScreen()),
     _Destination(
       'Library',
       Icons.video_library_outlined,

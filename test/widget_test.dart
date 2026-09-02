@@ -32,6 +32,7 @@ void main() {
 
     // All primary destinations are reachable from the shell.
     expect(find.text('Discover'), findsWidgets);
+    expect(find.text('Search'), findsWidgets);
     expect(find.text('Library'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
   });

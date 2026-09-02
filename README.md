@@ -13,13 +13,14 @@ Rust engine for addons, catalogs, library, and playback state) and
 > `stremio-core` and the embedded `stream-server` at start-up, the Board
 > shows a continue-watching row and one row per catalog of every
 > installed addon, Discover browses any catalog through the engine's
-> type/catalog/genre filters, tapping a title loads its meta details and
+> type/catalog/genre filters, Search asks every addon that supports it and
+> groups the hits per addon, tapping a title loads its meta details and
 > the streams every installed addon returns,
 > and selecting a stream plays it with `media_kit` — torrents through the
 > embedded server, HTTP streams directly. A debug-only Settings entry
 > plays a public Big Buck Bunny torrent to prove the torrent path without
-> any addon. Ugly on purpose; Library, search, episode picking, subtitles
-> and settings are still to come.
+> any addon. Ugly on purpose; Library, episode picking, subtitles and
+> settings are still to come.
 
 ## Goals (beyond current Stremio clients)
 
