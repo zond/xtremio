@@ -1,0 +1,188 @@
+{
+  "libraryItem": {
+    "_ctime": "2026-09-02T10:05:01.614256240Z",
+    "_id": "tt0063350",
+    "_mtime": "2026-09-02T10:05:01.614256320Z",
+    "behaviorHints": {
+      "defaultVideoId": "tt0063350",
+      "featuredVideoId": null,
+      "hasScheduledVideos": false
+    },
+    "name": "Night of the Living Dead",
+    "poster": "https://images.metahub.space/poster/small/tt0063350/img",
+    "posterShape": "poster",
+    "removed": true,
+    "state": {
+      "duration": 0,
+      "flaggedWatched": 0,
+      "lastWatched": "2026-09-02T10:05:01.614256390Z",
+      "noNotif": false,
+      "overallTimeWatched": 0,
+      "timeOffset": 0,
+      "timeWatched": 0,
+      "timesWatched": 0,
+      "video_id": null,
+      "watched": null
+    },
+    "temp": true,
+    "type": "movie"
+  },
+  "metaItem": {
+    "content": {
+      "content": {
+        "background": "https://images.metahub.space/background/medium/tt0063350/img",
+        "behaviorHints": {
+          "defaultVideoId": "tt0063350",
+          "featuredVideoId": null,
+          "hasScheduledVideos": false
+        },
+        "description": "A ragtag group of Pennsylvanians barricade themselves in an old farmhouse to remain safe from a horde of flesh-eating ghouls that are ravaging the Northeast of the United States.",
+        "id": "tt0063350",
+        "links": [
+          {
+            "category": "imdb",
+            "name": "7.8",
+            "url": "https://imdb.com/title/tt0063350"
+          },
+          {
+            "category": "share",
+            "name": "Night of the Living Dead",
+            "url": "https://www.strem.io/s/movie/night-of-the-living-dead-0063350"
+          },
+          {
+            "category": "Genres",
+            "name": "Horror",
+            "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+          },
+          {
+            "category": "Genres",
+            "name": "Thriller",
+            "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+          },
+          {
+            "category": "Cast",
+            "name": "Duane Jones",
+            "url": "stremio:///search?search=Duane%20Jones"
+          },
+          {
+            "category": "Cast",
+            "name": "Judith O'Dea",
+            "url": "stremio:///search?search=Judith%20O'Dea"
+          },
+          {
+            "category": "Cast",
+            "name": "Karl Hardman",
+            "url": "stremio:///search?search=Karl%20Hardman"
+          },
+          {
+            "category": "Writers",
+            "name": "John A. Russo",
+            "url": "stremio:///search?search=John%20A.%20Russo"
+          },
+          {
+            "category": "Writers",
+            "name": "George A. Romero",
+            "url": "stremio:///search?search=George%20A.%20Romero"
+          },
+          {
+            "category": "Directors",
+            "name": "George A. Romero",
+            "url": "stremio:///search?search=George%20A.%20Romero"
+          }
+        ],
+        "logo": "https://images.metahub.space/logo/medium/tt0063350/img",
+        "name": "Night of the Living Dead",
+        "poster": "https://images.metahub.space/poster/small/tt0063350/img",
+        "posterShape": "poster",
+        "releaseInfo": "1968",
+        "released": "1968-10-04T00:00:00Z",
+        "runtime": "96 min",
+        "trailerStreams": [
+          {
+            "description": "Night of the Living Dead",
+            "ytId": "DIuI6T48Sj0"
+          },
+          {
+            "description": "Night of the Living Dead",
+            "ytId": "V5XwrRFP7Zw"
+          }
+        ],
+        "type": "movie",
+        "videos": []
+      },
+      "type": "Ready"
+    },
+    "request": {
+      "base": "https://v3-cinemeta.strem.io/manifest.json",
+      "path": {
+        "extra": [],
+        "id": "tt0063350",
+        "resource": "meta",
+        "type": "movie"
+      }
+    }
+  },
+  "nextStream": null,
+  "nextStreams": null,
+  "nextVideo": null,
+  "selected": {
+    "metaRequest": {
+      "base": "https://v3-cinemeta.strem.io/manifest.json",
+      "path": {
+        "extra": [],
+        "id": "tt0063350",
+        "resource": "meta",
+        "type": "movie"
+      }
+    },
+    "stream": {
+      "announce": [],
+      "description": "💾 1.51 GB",
+      "fileIdx": 0,
+      "infoHash": "11ea02584fa6351956f35671962ab46354d99060",
+      "name": "1080p"
+    },
+    "streamRequest": {
+      "base": "https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json",
+      "path": {
+        "extra": [],
+        "id": "tt0063350",
+        "resource": "stream",
+        "type": "movie"
+      }
+    },
+    "subtitlesPath": null
+  },
+  "seriesInfo": null,
+  "stream": {
+    "content": [
+      {
+        "download_url": "http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0?external=1&download=1",
+        "m3u_data_uri": "data:application/octet-stream;charset=utf-8;base64,I0VYVE0zVQojRVhUSU5GOjAKaHR0cDovLzEyNy4wLjAuMTozMzc1OS8xMWVhMDI1ODRmYTYzNTE5NTZmMzU2NzE5NjJhYjQ2MzU0ZDk5MDYwLzA/",
+        "magnet_url": "magnet:?xt=urn:btih:11ea02584fa6351956f35671962ab46354d99060&dn=1080p",
+        "stream": {
+          "announce": [],
+          "description": "💾 1.51 GB",
+          "fileIdx": 0,
+          "infoHash": "11ea02584fa6351956f35671962ab46354d99060",
+          "name": "1080p",
+          "url": "http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0?"
+        },
+        "streaming_url": "http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0?"
+      },
+      {
+        "announce": [],
+        "description": "💾 1.51 GB",
+        "fileIdx": 0,
+        "infoHash": "11ea02584fa6351956f35671962ab46354d99060",
+        "name": "1080p",
+        "url": "http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0?"
+      }
+    ],
+    "type": "Ready"
+  },
+  "streamState": null,
+  "subtitlePreference": null,
+  "subtitles": [],
+  "videoParams": null
+}

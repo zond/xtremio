@@ -1,0 +1,257 @@
+{
+  "lastUsedStream": {
+    "content": {
+      "content": null,
+      "type": "Ready"
+    },
+    "request": {
+      "base": "https://v3-cinemeta.strem.io/manifest.json",
+      "path": {
+        "extra": [],
+        "id": "tt0063350",
+        "resource": "meta",
+        "type": "movie"
+      }
+    }
+  },
+  "libraryItem": {
+    "_ctime": "2026-09-02T10:05:01.546697598Z",
+    "_id": "tt0063350",
+    "_mtime": "2026-09-02T10:05:01.546698890Z",
+    "behaviorHints": {
+      "defaultVideoId": "tt0063350",
+      "featuredVideoId": null,
+      "hasScheduledVideos": false
+    },
+    "name": "Night of the Living Dead",
+    "poster": "https://images.metahub.space/poster/small/tt0063350/img",
+    "posterShape": "poster",
+    "removed": true,
+    "state": {
+      "duration": 0,
+      "flaggedWatched": 0,
+      "lastWatched": "2026-09-02T10:05:01.546698970Z",
+      "noNotif": false,
+      "overallTimeWatched": 0,
+      "timeOffset": 0,
+      "timeWatched": 0,
+      "timesWatched": 0,
+      "video_id": null,
+      "watched": null
+    },
+    "temp": true,
+    "type": "movie"
+  },
+  "metaItems": [
+    {
+      "content": {
+        "content": {
+          "background": "https://images.metahub.space/background/medium/tt0063350/img",
+          "behaviorHints": {
+            "defaultVideoId": "tt0063350",
+            "featuredVideoId": null,
+            "hasScheduledVideos": false
+          },
+          "description": "A ragtag group of Pennsylvanians barricade themselves in an old farmhouse to remain safe from a horde of flesh-eating ghouls that are ravaging the Northeast of the United States.",
+          "id": "tt0063350",
+          "links": [
+            {
+              "category": "imdb",
+              "name": "7.8",
+              "url": "https://imdb.com/title/tt0063350"
+            },
+            {
+              "category": "share",
+              "name": "Night of the Living Dead",
+              "url": "https://www.strem.io/s/movie/night-of-the-living-dead-0063350"
+            },
+            {
+              "category": "Genres",
+              "name": "Horror",
+              "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Horror"
+            },
+            {
+              "category": "Genres",
+              "name": "Thriller",
+              "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/movie/top?genre=Thriller"
+            },
+            {
+              "category": "Cast",
+              "name": "Duane Jones",
+              "url": "stremio:///search?search=Duane%20Jones"
+            },
+            {
+              "category": "Cast",
+              "name": "Judith O'Dea",
+              "url": "stremio:///search?search=Judith%20O'Dea"
+            },
+            {
+              "category": "Cast",
+              "name": "Karl Hardman",
+              "url": "stremio:///search?search=Karl%20Hardman"
+            },
+            {
+              "category": "Writers",
+              "name": "John A. Russo",
+              "url": "stremio:///search?search=John%20A.%20Russo"
+            },
+            {
+              "category": "Writers",
+              "name": "George A. Romero",
+              "url": "stremio:///search?search=George%20A.%20Romero"
+            },
+            {
+              "category": "Directors",
+              "name": "George A. Romero",
+              "url": "stremio:///search?search=George%20A.%20Romero"
+            }
+          ],
+          "logo": "https://images.metahub.space/logo/medium/tt0063350/img",
+          "name": "Night of the Living Dead",
+          "poster": "https://images.metahub.space/poster/small/tt0063350/img",
+          "posterShape": "poster",
+          "releaseInfo": "1968",
+          "released": "1968-10-04T00:00:00Z",
+          "runtime": "96 min",
+          "trailerStreams": [
+            {
+              "description": "Night of the Living Dead",
+              "ytId": "DIuI6T48Sj0"
+            },
+            {
+              "description": "Night of the Living Dead",
+              "ytId": "V5XwrRFP7Zw"
+            }
+          ],
+          "type": "movie",
+          "videos": []
+        },
+        "type": "Ready"
+      },
+      "request": {
+        "base": "https://v3-cinemeta.strem.io/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0063350",
+          "resource": "meta",
+          "type": "movie"
+        }
+      }
+    }
+  ],
+  "metaStreams": [],
+  "ratingInfo": null,
+  "selected": {
+    "guessStream": false,
+    "metaPath": {
+      "extra": [],
+      "id": "tt0063350",
+      "resource": "meta",
+      "type": "movie"
+    },
+    "streamPath": {
+      "extra": [],
+      "id": "tt0063350",
+      "resource": "stream",
+      "type": "movie"
+    }
+  },
+  "streams": [
+    {
+      "content": {
+        "content": [
+          {
+            "androidTvUrl": "intent://app.primevideo.com/watch?asin=amzn1.dv.gti.6ca9f72b-eade-89d7-a0e2-09ee5ae14d17&time=0&territory=SE#Intent;package=com.amazon.amazonvideo.livingroom;scheme=https;end",
+            "description": "Subscription",
+            "externalUrl": "https://app.primevideo.com/detail?gti=amzn1.dv.gti.6ca9f72b-eade-89d7-a0e2-09ee5ae14d17",
+            "name": "Amazon Prime Video",
+            "tizenUrl": "{\"id\":\"org.tizen.primevideo\",\"action_data\":\"amzn1.dv.gti.6ca9f72b-eade-89d7-a0e2-09ee5ae14d17\"}",
+            "webosUrl": "{ \"id\": \"amazon\", \"params\": { \"contentTarget\": \"amzn1.dv.gti.6ca9f72b-eade-89d7-a0e2-09ee5ae14d17\" }}"
+          },
+          {
+            "androidTvUrl": "intent://play.google.com/movies/movies?sh=QLRi6sBpMyc#Intent;launchFlags=0x00800000;scheme=https;end",
+            "description": "Rent, Buy",
+            "externalUrl": "https://play.google.com/store/movies/details/Night_of_the_Living_Dead_In_Color_Restored?gl=US&hl=en&id=QLRi6sBpMyc",
+            "name": "Google Play Movies",
+            "tizenUrl": "{\"id\":\"QizQxC7CUf.PlayMovies\",\"action_data\":\"yt:movie:QLRi6sBpMyc\"}",
+            "webosUrl": "{ \"id\": \"googleplaymovieswebos\", \"params\": { \"contentTarget\": \"https://play.google.com/store/movies/details/Night_of_the_Living_Dead_In_Color_Restored?gl=US&hl=en&id=QLRi6sBpMyc\" }}"
+          },
+          {
+            "androidTvUrl": "intent://watch.plex.tv/movie/night-of-the-living-dead?autoplay=1#Intent;launchFlags=0x00800000;scheme=https;end",
+            "description": "ADS",
+            "externalUrl": "https://watch.plex.tv/movie/night-of-the-living-dead?autoplay=1",
+            "name": "Plex",
+            "tizenUrl": "{\"id\":\"kIciSQlYEM.plex\",\"action_data\":\"{\\\"assetId\\\":\\\"https://watch.plex.tv/movie/night-of-the-living-dead?autoplay=1\\\"}\"}"
+          },
+          {
+            "androidTvUrl": "intent://app.primevideo.com/watch?asin=amzn1.dv.gti.2df29025-1fdd-47e7-9350-a9b9e0affe9e&time=0&territory=SE#Intent;package=com.amazon.amazonvideo.livingroom;scheme=https;end",
+            "description": "Subscription",
+            "externalUrl": "https://app.primevideo.com/detail?gti=amzn1.dv.gti.2df29025-1fdd-47e7-9350-a9b9e0affe9e",
+            "name": "MUBI Amazon Channel",
+            "tizenUrl": "{\"id\":\"org.tizen.primevideo\",\"action_data\":\"amzn1.dv.gti.2df29025-1fdd-47e7-9350-a9b9e0affe9e\"}",
+            "webosUrl": "{ \"id\": \"amazon\", \"params\": { \"contentTarget\": \"amzn1.dv.gti.2df29025-1fdd-47e7-9350-a9b9e0affe9e\" }}"
+          },
+          {
+            "androidTvUrl": "intent://mubi.com/films/night-of-the-living-dead#Intent;launchFlags=0x00800000;scheme=https;end",
+            "description": "Subscription",
+            "externalUrl": "https://mubi.com/films/night-of-the-living-dead",
+            "name": "MUBI",
+            "tizenUrl": "{\"id\":\"dChOJK7EJA.mubi\",\"action_data\":\"\"}",
+            "webosUrl": "{ \"id\": \"com.mubi\", \"params\": { \"contentTarget\": \"\" }}"
+          }
+        ],
+        "type": "Ready"
+      },
+      "request": {
+        "base": "https://watchhub.strem.io/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0063350",
+          "resource": "stream",
+          "type": "movie"
+        }
+      }
+    },
+    {
+      "content": {
+        "content": [
+          {
+            "announce": [],
+            "description": "💾 1.51 GB",
+            "fileIdx": 0,
+            "infoHash": "11ea02584fa6351956f35671962ab46354d99060",
+            "name": "1080p"
+          }
+        ],
+        "type": "Ready"
+      },
+      "request": {
+        "base": "https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0063350",
+          "resource": "stream",
+          "type": "movie"
+        }
+      }
+    },
+    {
+      "content": {
+        "content": {
+          "type": "EmptyContent"
+        },
+        "type": "Err"
+      },
+      "request": {
+        "base": "http://127.0.0.1:11470/local-addon/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0063350",
+          "resource": "stream",
+          "type": "movie"
+        }
+      }
+    }
+  ],
+  "watchedVideoIds": []
+}
