@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/player_screen.dart';
+import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
 
 import '../../support/player_harness.dart';
@@ -131,6 +132,67 @@ void main() {
       harness.core.dispatched.last.action,
       CoreActions.unload(CoreField.player).action,
     );
+  });
+
+  testWidgets('holds the countdown while a sheet is open', (tester) async {
+    useWideViewport(tester);
+    final harness = harnessWithNext();
+    await harness.pump(tester);
+    await tester.tap(find.byTooltip('Playback settings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerSettingsSheet), findsOneWidget);
+
+    // The episode ends under the sheet: the end is reported, but the
+    // countdown does not run, so nothing replaces the sheet's route.
+    harness.engine.emitCompleted();
+    await pumpEvents(tester);
+    expect(harness.playerActions(), contains('Ended'));
+    await tester.pump(const Duration(seconds: 15));
+    expect(harness.playerActions(), isNot(contains('NextVideo')));
+    expect(find.byType(PlayerSettingsSheet), findsOneWidget);
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    expect(harness.engines, hasLength(1));
+
+    // Closing the sheet starts the countdown, and the hand-off replaces
+    // the player as usual.
+    Navigator.of(tester.element(find.byType(PlayerSettingsSheet))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerSettingsSheet), findsNothing);
+    expect(find.text('Playing in 10 s'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+    expect(harness.playerActions(), contains('NextVideo'));
+    expect(harness.engines, hasLength(2));
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    expect(find.byType(UpNextCard), findsNothing);
+  });
+
+  testWidgets('drops the countdown when the next episode goes away', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final harness = harnessWithNext();
+    await harness.pump(tester);
+    harness.engine.emitCompleted();
+    await pumpEvents(tester);
+    expect(find.byType(UpNextCard), findsOneWidget);
+
+    // The core no longer offers a next video.
+    final without = Map<String, dynamic>.from(harness.fixture)
+      ..['nextVideo'] = null;
+    harness.core.setState(CoreField.player, without);
+    await pumpEvents(tester);
+    expect(find.byType(UpNextCard), findsNothing);
+    await tester.pump(const Duration(seconds: 12));
+    expect(harness.playerActions(), isNot(contains('NextVideo')));
+
+    // When it is back, no stale countdown is still running against it.
+    harness.core.setState(CoreField.player, harness.fixture);
+    await pumpEvents(tester);
+    expect(find.byType(UpNextCard), findsNothing);
+    await tester.pump(const Duration(seconds: 3));
+    expect(harness.playerActions(), isNot(contains('NextVideo')));
+    expect(harness.engines, hasLength(1));
   });
 
   testWidgets('a movie offers no next episode', (tester) async {

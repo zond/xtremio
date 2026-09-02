@@ -508,8 +508,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // --- Menus ---------------------------------------------------------------
 
+  /// Shows a bottom sheet over the player. The up-next countdown does not
+  /// run while one is open (the hand-off would replace the sheet's route,
+  /// not this one); it resumes when the sheet closes.
   Future<void> _showSheet(WidgetBuilder builder) async {
     _controlsTimer?.cancel();
+    _pauseUpNext();
     setState(() => _menuOpen = true);
     await showModalBottomSheet<void>(
       context: context,
@@ -525,6 +529,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _menuOpen = false);
     _focusNode.requestFocus();
     _showControls();
+    _resumeUpNext();
   }
 
   Future<void> _openSubtitleMenu() => _showSheet(
@@ -587,9 +592,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // --- Next episode --------------------------------------------------------
 
+  /// Shows the up-next card with the full countdown and starts it ticking
+  /// (once no sheet is open; see [_showSheet]).
   void _startUpNext() {
-    _upNextTimer?.cancel();
     setState(() => _upNextSecondsLeft = PlayerScreen.upNextCountdown.inSeconds);
+    _resumeUpNext();
+  }
+
+  /// Ticks the countdown once a second while the card shows and no sheet
+  /// is open; at zero the next episode plays.
+  void _resumeUpNext() {
+    _pauseUpNext();
+    if (_upNextSecondsLeft == null || _menuOpen) return;
     _upNextTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final left = _upNextSecondsLeft;
       if (!mounted || left == null) return;
@@ -601,9 +615,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
   }
 
-  void _dismissUpNext() {
+  /// Stops the ticking but keeps the card and the seconds left on it.
+  void _pauseUpNext() {
     _upNextTimer?.cancel();
     _upNextTimer = null;
+  }
+
+  void _dismissUpNext() {
+    _pauseUpNext();
     if (_upNextSecondsLeft != null && mounted) {
       setState(() => _upNextSecondsLeft = null);
     }
@@ -616,11 +635,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _playNext() {
     final state = _state;
     final next = state?.nextVideo;
-    if (state == null || next == null || _handedOver) return;
+    // Nothing to move on to (the next episode has gone from the state):
+    // the countdown must not keep ticking.
     _dismissUpNext();
+    if (state == null || next == null || _handedOver) return;
     _client?.dispatch(CoreActions.playerNextVideo());
     final nextStream = state.nextStream;
     final navigator = Navigator.of(context);
+    // Whatever sits over this screen (a sheet) goes first, so that the
+    // pop/replacement below acts on the player's own route.
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) {
+      navigator.popUntil((candidate) => candidate == route);
+    }
     if (nextStream == null) {
       navigator.pop(PlayerScreenResult(selectVideoId: next.id));
       return;
