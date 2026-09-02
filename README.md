@@ -180,6 +180,19 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 sideload and accept the background limits, and web is fundamentally off the
 table for a self-contained streaming client.
 
+### Known issue: Linux video is software-rendered (for now)
+
+On Linux desktop, `media_kit_video` 2.0.1 cannot share Flutter 3.38+'s EGL
+context (the embedder only makes it current on the raster thread — see
+[media-kit #1404](https://github.com/media-kit/media-kit/issues/1404)), so it
+falls back to software rendering on **both X11 and Wayland**. Playback works,
+but is CPU-rendered; `--profile`/`--release` builds are much smoother than
+debug. The fix is the Linux renderer redesign in
+[media-kit PR #1346](https://github.com/media-kit/media-kit/pull/1346), not
+yet released. **No code change is needed here**: once a `media_kit_video`
+release includes it, `flutter pub upgrade media_kit_video` enables hardware
+rendering automatically. Android (the primary target) is unaffected.
+
 ## Getting started
 
 ```bash
