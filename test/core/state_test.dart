@@ -624,7 +624,7 @@ void main() {
     });
 
     test('labels episodes and has no progress without a duration', () {
-      final episode = ContinueWatchingItem({
+      final episode = LibraryItemView({
         '_id': 'tt0903747',
         'type': 'series',
         'name': 'Breaking Bad',
@@ -635,7 +635,7 @@ void main() {
       expect(episode.progress, isNull);
       expect(episode.notifications, 2);
       expect(
-        ContinueWatchingItem({
+        LibraryItemView({
           '_id': 'yt:abc',
           'type': 'channel',
           'state': {'video_id': 'yt:abc:video'},

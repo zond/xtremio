@@ -6,6 +6,10 @@ library;
 
 import 'fields.dart';
 import 'resource.dart';
+import 'state/addon_descriptor.dart';
+import 'state/installed_addons.dart';
+import 'state/library.dart';
+import 'state/profile.dart';
 
 /// An action plus the model field it targets (null = the whole model, which
 /// stremio-core routes to `Ctx` and every field).
@@ -210,6 +214,186 @@ abstract final class CoreActions {
       'language': ?language,
     },
   });
+
+  // --- Ctx: account -------------------------------------------------------
+  //
+  // Every `Action::Ctx` goes out with `field: ctx`. With `field: null` the
+  // engine would run it through every field's update as well (harmless here
+  // but a broadcast), and with any other field it is silently ignored.
+
+  static CoreAction _ctx(String action, [Object? args]) => CoreAction(
+    field: CoreField.ctx,
+    action: _tagged('Ctx', _tagged(action, args)),
+  );
+
+  /// Signs in with email and password (`AuthRequest::Login`; `facebook` is
+  /// always false here). The profile, library and streams of this device are
+  /// *replaced* by the account's on success. Outcome events:
+  /// `UserAuthenticated`, then `UserAddonsLocked` / `UserLibraryMissing`, or
+  /// `Error` with `source.event == UserAuthenticated`.
+  static CoreAction login({required String email, required String password}) =>
+      _ctx('Authenticate', {
+        'type': 'Login',
+        'email': email,
+        'password': password,
+        'facebook': false,
+      });
+
+  /// Creates an account (`AuthRequest::Register`). The API requires
+  /// [consent] with `tos` and `privacy` true; `marketing` is optional.
+  static CoreAction register({
+    required String email,
+    required String password,
+    required GdprConsent consent,
+  }) => _ctx('Authenticate', {
+    'type': 'Register',
+    'email': email,
+    'password': password,
+    'gdpr_consent': consent.toJson(),
+  });
+
+  /// Signs out: the profile, library and streams reset to their defaults
+  /// (`UserLoggedOut`). Allowed while anonymous too.
+  static CoreAction logout() => _ctx('Logout');
+
+  /// Replaces `profile.addons` with the account's collection (and, logged
+  /// out, upgrades the bundled official addons). Sets `addonsLocked` when
+  /// the fetch fails. Events `AddonsPulledFromAPI`, `UserAddonsLocked`.
+  static CoreAction pullAddonsFromAPI() => _ctx('PullAddonsFromAPI');
+
+  /// Refreshes the user record of the signed-in account. The action's
+  /// `args` object is required by the engine even when empty (an explicit
+  /// `token` would fetch another user). An expired session (API code 1)
+  /// logs the profile out.
+  static CoreAction pullUserFromAPI() =>
+      _ctx('PullUserFromAPI', <String, dynamic>{});
+
+  /// Two-way library sync by modification time. Events
+  /// `LibrarySyncWithAPIPlanned`, `LibraryItemsPushedToAPI`,
+  /// `LibraryItemsPulledFromAPI`; `Error{Other code 1}` while logged out.
+  static CoreAction syncLibraryWithAPI() => _ctx('SyncLibraryWithAPI');
+
+  /// Asks the addons for new episodes of every library item that wants
+  /// notifications. Always issues requests.
+  static CoreAction pullNotifications() => _ctx('PullNotifications');
+
+  // --- Ctx: library -------------------------------------------------------
+
+  /// Adds a title to the library. [meta] is the raw `MetaItemPreview` /
+  /// `MetaItem` JSON as received (the engine's action carries the whole
+  /// item). Event `LibraryItemAdded`.
+  static CoreAction addToLibrary(Map<String, dynamic> meta) =>
+      _ctx('AddToLibrary', meta);
+
+  /// Marks the item [id] removed (kept for sync; `Error{Other code 2}` when
+  /// unknown). Event `LibraryItemRemoved`.
+  static CoreAction removeFromLibrary(String id) =>
+      _ctx('RemoveFromLibrary', id);
+
+  /// Resets the item's progress to the start. Event `LibraryItemRewinded`.
+  static CoreAction rewindLibraryItem(String id) =>
+      _ctx('RewindLibraryItem', id);
+
+  /// Flags the whole item watched or not (`is_watched` on the wire).
+  static CoreAction libraryItemMarkAsWatched(
+    String id, {
+    required bool watched,
+  }) => _ctx('LibraryItemMarkAsWatched', {'id': id, 'is_watched': watched});
+
+  /// Mutes ([disabled] true, `state.noNotif`) or unmutes new-episode
+  /// notifications for the item; muting dismisses its pending ones. A
+  /// tuple on the wire.
+  static CoreAction toggleLibraryItemNotifications(
+    String id, {
+    required bool disabled,
+  }) => _ctx('ToggleLibraryItemNotifications', [id, disabled]);
+
+  // --- Ctx: addons --------------------------------------------------------
+
+  /// Installs [descriptor] (the fetched `remoteAddon` of `addon_details`,
+  /// or a community catalog entry). Same-URL, different-content descriptors
+  /// replace the installed one. `Error{Other}` code 7 while `addonsLocked`,
+  /// 6 when `configurationRequired`, 3 when identical to an installed one.
+  /// Event `AddonInstalled`.
+  static CoreAction installAddon(AddonDescriptor descriptor) =>
+      _ctx('InstallAddon', descriptor.json);
+
+  /// Removes the installed [descriptor] and the streams saved through it.
+  /// `Error{Other code 5}` for a protected addon. Event `AddonUninstalled`.
+  static CoreAction uninstallAddon(AddonDescriptor descriptor) =>
+      _ctx('UninstallAddon', descriptor.json);
+
+  /// Replaces the installed copy with [descriptor] (same URL, different
+  /// content; not protected, not `configurationRequired`). Event
+  /// `AddonUpgraded`.
+  static CoreAction upgradeAddon(AddonDescriptor descriptor) =>
+      _ctx('UpgradeAddon', descriptor.json);
+
+  // --- Ctx: settings ------------------------------------------------------
+
+  /// Replaces `profile.settings` with [settings]: the *entire* map (the
+  /// engine has no per-field defaults), normally
+  /// `ProfileSettings.withValue(key, value)`. A map missing a field is
+  /// rejected at dispatch with an "invalid action JSON" error. Events
+  /// `SettingsUpdated`, `ProfileChanged`; the streaming server model
+  /// reloads when `streamingServerUrl` changed.
+  static CoreAction updateSettings(Map<String, dynamic> settings) =>
+      _ctx('UpdateSettings', settings);
+
+  // --- Library screen -----------------------------------------------------
+
+  /// The library filtered by type, sorted, page 1 (or the page [request]
+  /// names). Every entry of `library.selectable` carries the request to
+  /// pass here.
+  static CoreAction loadLibrary(LibraryRequest request) => CoreAction(
+    field: CoreField.library,
+    action: _load('LibraryWithFilters', {'request': request.toJson()}),
+  );
+
+  /// Extends `library.catalog` by the next 100 items (the list is
+  /// cumulative, not appended). Only meaningful while
+  /// `selectable.next_page` is set.
+  static CoreAction loadLibraryNextPage() => CoreAction(
+    field: CoreField.library,
+    action: _tagged('LibraryWithFilters', _tagged('LoadNextPage')),
+  );
+
+  // --- Addon screens ------------------------------------------------------
+
+  /// The profile's addons, optionally those serving one type.
+  static CoreAction loadInstalledAddons(InstalledAddonsRequest request) =>
+      CoreAction(
+        field: CoreField.installedAddons,
+        action: _load('InstalledAddonsWithFilters', {
+          'request': request.toJson(),
+        }),
+      );
+
+  /// One `addon_catalog` with its filters (the community list). With a null
+  /// [request] the engine picks the first addon catalog of the
+  /// highest-priority type; `remote_addons.selectable` carries explicit
+  /// ones.
+  static CoreAction loadRemoteAddons(ResourceRequest? request) => CoreAction(
+    field: CoreField.remoteAddons,
+    action: _load(
+      'CatalogWithFilters',
+      request == null ? null : {'request': request.toJson()},
+    ),
+  );
+
+  /// Appends the next page of the addon catalog.
+  static CoreAction loadRemoteAddonsNextPage() => CoreAction(
+    field: CoreField.remoteAddons,
+    action: _tagged('CatalogWithFilters', {'action': 'LoadNextPage'}),
+  );
+
+  /// Fetches the manifest at [transportUrl] (a `stremio://` URL is accepted
+  /// and read as `https://`) into `addon_details.remoteAddon`, and looks up
+  /// the installed copy as `localAddon`.
+  static CoreAction loadAddonDetails(String transportUrl) => CoreAction(
+    field: CoreField.addonDetails,
+    action: _load('AddonDetails', {'transportUrl': transportUrl}),
+  );
 
   /// Clears a model field back to its unloaded state.
   static CoreAction unload(CoreField field) =>

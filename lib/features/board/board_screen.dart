@@ -300,7 +300,7 @@ class _ContinueWatchingRowView extends StatelessWidget {
 
   final ContinueWatchingState state;
   final double extent;
-  final ValueChanged<ContinueWatchingItem> onOpen;
+  final ValueChanged<LibraryItemView> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -334,7 +334,7 @@ class _ContinueWatchingRowView extends StatelessWidget {
 class _ContinueWatchingTile extends StatelessWidget {
   const _ContinueWatchingTile({required this.item, required this.onTap});
 
-  final ContinueWatchingItem item;
+  final LibraryItemView item;
   final VoidCallback onTap;
 
   @override

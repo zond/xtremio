@@ -251,4 +251,301 @@ void main() {
     expect(copy.path.id, 'top');
     expect(copy.path.extra, const [ExtraValue('skip', '100')]);
   });
+
+  group('Ctx actions', () {
+    test('every Ctx action targets the ctx field, nested under Ctx', () {
+      final actions = [
+        CoreActions.login(email: 'e', password: 'p'),
+        CoreActions.register(
+          email: 'e',
+          password: 'p',
+          consent: const GdprConsent(
+            tos: true,
+            privacy: true,
+            marketing: false,
+          ),
+        ),
+        CoreActions.logout(),
+        CoreActions.pullAddonsFromAPI(),
+        CoreActions.pullUserFromAPI(),
+        CoreActions.syncLibraryWithAPI(),
+        CoreActions.pullNotifications(),
+        CoreActions.addToLibrary({'id': 'tt1', 'type': 'movie', 'name': 'x'}),
+        CoreActions.removeFromLibrary('tt1'),
+        CoreActions.rewindLibraryItem('tt1'),
+        CoreActions.libraryItemMarkAsWatched('tt1', watched: true),
+        CoreActions.toggleLibraryItemNotifications('tt1', disabled: true),
+        CoreActions.installAddon(const AddonDescriptor({'transportUrl': 'u'})),
+        CoreActions.uninstallAddon(
+          const AddonDescriptor({'transportUrl': 'u'}),
+        ),
+        CoreActions.upgradeAddon(const AddonDescriptor({'transportUrl': 'u'})),
+        CoreActions.updateSettings({'bingeWatching': false}),
+      ];
+      for (final action in actions) {
+        expect(action.field, CoreField.ctx, reason: '${action.action}');
+        expect(action.toJson()['field'], 'ctx');
+        expect(action.action['action'], 'Ctx');
+        expect(action.action['args'], isA<Map<String, dynamic>>());
+      }
+    });
+
+    test('login is an AuthRequest tagged Login with facebook false', () {
+      expect(CoreActions.login(email: 'a@b.c', password: 'pw').toJson(), {
+        'field': 'ctx',
+        'action': {
+          'action': 'Ctx',
+          'args': {
+            'action': 'Authenticate',
+            'args': {
+              'type': 'Login',
+              'email': 'a@b.c',
+              'password': 'pw',
+              'facebook': false,
+            },
+          },
+        },
+      });
+    });
+
+    test('register carries gdpr_consent in snake_case', () {
+      final action = CoreActions.register(
+        email: 'a@b.c',
+        password: 'pw',
+        consent: const GdprConsent(
+          tos: true,
+          privacy: true,
+          marketing: false,
+          from: 'xtremio',
+        ),
+      );
+      expect(action.action['args'], {
+        'action': 'Authenticate',
+        'args': {
+          'type': 'Register',
+          'email': 'a@b.c',
+          'password': 'pw',
+          'gdpr_consent': {
+            'tos': true,
+            'privacy': true,
+            'marketing': false,
+            'from': 'xtremio',
+          },
+        },
+      });
+    });
+
+    test(
+      'unit actions carry no args; PullUserFromAPI carries an empty map',
+      () {
+        expect(CoreActions.logout().action['args'], {'action': 'Logout'});
+        expect(jsonEncode(CoreActions.logout().action), contains('"Logout"}'));
+        expect(CoreActions.pullAddonsFromAPI().action['args'], {
+          'action': 'PullAddonsFromAPI',
+        });
+        expect(CoreActions.syncLibraryWithAPI().action['args'], {
+          'action': 'SyncLibraryWithAPI',
+        });
+        expect(CoreActions.pullNotifications().action['args'], {
+          'action': 'PullNotifications',
+        });
+        // `PullUserFromAPI { token: Option<AuthKey> }` is a struct variant: the
+        // args object must be present even with no token.
+        expect(CoreActions.pullUserFromAPI().action['args'], {
+          'action': 'PullUserFromAPI',
+          'args': <String, dynamic>{},
+        });
+        expect(
+          jsonEncode(CoreActions.pullUserFromAPI().action),
+          contains('"args":{}'),
+        );
+      },
+    );
+
+    test('library mutations use the engine argument shapes', () {
+      final meta = {'id': 'tt1', 'type': 'movie', 'name': 'One'};
+      expect(CoreActions.addToLibrary(meta).action['args'], {
+        'action': 'AddToLibrary',
+        'args': meta,
+      });
+      expect(CoreActions.removeFromLibrary('tt1').action['args'], {
+        'action': 'RemoveFromLibrary',
+        'args': 'tt1',
+      });
+      expect(CoreActions.rewindLibraryItem('tt1').action['args'], {
+        'action': 'RewindLibraryItem',
+        'args': 'tt1',
+      });
+      expect(
+        CoreActions.libraryItemMarkAsWatched(
+          'tt1',
+          watched: false,
+        ).action['args'],
+        {
+          'action': 'LibraryItemMarkAsWatched',
+          'args': {'id': 'tt1', 'is_watched': false},
+        },
+      );
+      expect(
+        CoreActions.toggleLibraryItemNotifications(
+          'tt1',
+          disabled: true,
+        ).action['args'],
+        {
+          'action': 'ToggleLibraryItemNotifications',
+          'args': ['tt1', true],
+        },
+      );
+    });
+
+    test('addon actions send the whole descriptor back', () {
+      final json = {
+        'manifest': {'id': 'x', 'version': '1.0.0', 'name': 'X'},
+        'transportUrl': 'https://x/manifest.json',
+        'flags': {'official': false, 'protected': false},
+      };
+      final descriptor = AddonDescriptor(json);
+      expect(CoreActions.installAddon(descriptor).action['args'], {
+        'action': 'InstallAddon',
+        'args': json,
+      });
+      expect(
+        CoreActions.uninstallAddon(descriptor).action['args']['action'],
+        'UninstallAddon',
+      );
+      expect(CoreActions.upgradeAddon(descriptor).action['args'], {
+        'action': 'UpgradeAddon',
+        'args': json,
+      });
+    });
+
+    test('updateSettings passes the map through untouched', () {
+      final settings = {'bingeWatching': false, 'seekTimeDuration': 5000};
+      expect(CoreActions.updateSettings(settings).action['args'], {
+        'action': 'UpdateSettings',
+        'args': settings,
+      });
+    });
+  });
+
+  group('library and addon loads', () {
+    test('loadLibrary matches the request shape of the Rust recorder', () {
+      // Byte-for-byte the action dispatched in rust/tests/library_addons.rs.
+      expect(
+        jsonDecode(
+          jsonEncode(CoreActions.loadLibrary(const LibraryRequest()).toJson()),
+        ),
+        jsonDecode(
+          '{"field":"library","action":{"action":"Load","args":{'
+          '"model":"LibraryWithFilters","args":{"request":{'
+          '"type":null,"sort":"lastwatched","page":1}}}}}',
+        ),
+      );
+      final page2 = CoreActions.loadLibrary(
+        const LibraryRequest(type: 'series', sort: LibrarySort.name, page: 2),
+      );
+      expect(page2.action['args']['args']['request'], {
+        'type': 'series',
+        'sort': 'name',
+        'page': 2,
+      });
+      expect(CoreActions.loadLibraryNextPage().toJson(), {
+        'field': 'library',
+        'action': {
+          'action': 'LibraryWithFilters',
+          'args': {'action': 'LoadNextPage'},
+        },
+      });
+    });
+
+    test('loadInstalledAddons wraps the type in a request', () {
+      expect(
+        CoreActions.loadInstalledAddons(const InstalledAddonsRequest())
+            .toJson(),
+        {
+          'field': 'installed_addons',
+          'action': {
+            'action': 'Load',
+            'args': {
+              'model': 'InstalledAddonsWithFilters',
+              'args': {
+                'request': {'type': null},
+              },
+            },
+          },
+        },
+      );
+      expect(
+        CoreActions.loadInstalledAddons(
+          const InstalledAddonsRequest(type: 'movie'),
+        ).action['args']['args'],
+        {
+          'request': {'type': 'movie'},
+        },
+      );
+    });
+
+    test("loadRemoteAddons is Discover's Load on the remote_addons field", () {
+      final none = CoreActions.loadRemoteAddons(null);
+      expect(none.field, CoreField.remoteAddons);
+      expect(none.action, {
+        'action': 'Load',
+        'args': {'model': 'CatalogWithFilters', 'args': null},
+      });
+      final community = CoreActions.loadRemoteAddons(
+        const ResourceRequest(
+          base: kCinemetaManifestUrl,
+          path: ResourcePath(
+            resource: 'addon_catalog',
+            type: 'all',
+            id: 'community',
+          ),
+        ),
+      );
+      expect(community.action['args']['args'], {
+        'request': {
+          'base': kCinemetaManifestUrl,
+          'path': {
+            'resource': 'addon_catalog',
+            'type': 'all',
+            'id': 'community',
+            'extra': <Object>[],
+          },
+        },
+      });
+      expect(CoreActions.loadRemoteAddonsNextPage().toJson(), {
+        'field': 'remote_addons',
+        'action': {
+          'action': 'CatalogWithFilters',
+          'args': {'action': 'LoadNextPage'},
+        },
+      });
+    });
+
+    test('loadAddonDetails takes the manifest URL as transportUrl', () {
+      expect(CoreActions.loadAddonDetails(kCinemetaManifestUrl).toJson(), {
+        'field': 'addon_details',
+        'action': {
+          'action': 'Load',
+          'args': {
+            'model': 'AddonDetails',
+            'args': {'transportUrl': kCinemetaManifestUrl},
+          },
+        },
+      });
+    });
+
+    test('unload is per field for the phase 3 models too', () {
+      for (final field in [
+        CoreField.library,
+        CoreField.installedAddons,
+        CoreField.remoteAddons,
+        CoreField.addonDetails,
+      ]) {
+        final json = CoreActions.unload(field).toJson();
+        expect(json['field'], field.wireName);
+        expect(json['action'], {'action': 'Unload'});
+      }
+    });
+  });
 }
