@@ -23,8 +23,10 @@ abstract final class DevStreams {
 
   /// A plain progressive MP4 over HTTPS; the direct-play path.
   static const Map<String, dynamic> bigBuckBunnyHttp = {
-    'url': 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    'name': 'Big Buck Bunny (HTTP)',
+    // The Google sample bucket now answers 403; test-videos.co.uk serves a
+    // small public-domain clip reliably.
+    'url': 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
+    'name': 'Big Buck Bunny (HTTP, 720p 10s)',
     'description': 'Direct HTTPS file, played without the server',
   };
 }
