@@ -270,6 +270,18 @@ void main() {
     });
   });
 
+  testWidgets('sends no filename rather than a stand-in', (tester) async {
+    useWideViewport(tester);
+    // The recorded torrent: no `behaviorHints.filename` anywhere, a
+    // streaming URL ending in the file index, and a quality-label name.
+    final harness = PlayerHarness();
+    expect(harness.selected['stream']['name'], isNotNull);
+    await harness.pump(tester);
+    expect(harness.lastPlayerArgs('VideoParamsChanged'), {
+      'videoParams': {'hash': null, 'size': null, 'filename': null},
+    });
+  });
+
   testWidgets('settings change the speed and the subtitle style', (
     tester,
   ) async {

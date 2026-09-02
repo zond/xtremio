@@ -64,15 +64,15 @@ void main() {
       expect(argsOf(load)['metaRequest']['base'], kCinemetaManifestUrl);
 
       // Once open, the video parameters go to the core so it asks the
-      // subtitle addons; the torrent URL's last segment is a file index, so
-      // the stream's name stands in for a filename.
+      // subtitle addons; the torrent URL's last segment is a file index and
+      // the stream carries no filename, so none is sent (never the name).
       expect(core.dispatched, hasLength(2));
       final params = core.dispatched[1];
       expect(params.action['args']['action'], 'VideoParamsChanged');
       expect(argsOf(params)['videoParams'], {
         'hash': null,
         'size': null,
-        'filename': '1080p',
+        'filename': null,
       });
 
       // The torrent resolved to the embedded server; that is what got opened.

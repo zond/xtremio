@@ -146,7 +146,8 @@ connection.
   (media_kit_video's native window / immersive helpers by default).
 - **Subtitles.** After the media opens the screen dispatches
   `VideoParamsChanged` with the best filename it knows (the stream's
-  `behaviorHints.filename`, else the URL's, else the stream name) — that
+  `behaviorHints.filename`, else the URL's last segment when it looks
+  like one, else none — never a stand-in like the stream's label) — that
   is what makes the core ask the subtitle addons. The menu lists the
   tracks embedded in the file (from libmpv's track list, minus the
   synthetic `auto`/`no` entries) and every file from

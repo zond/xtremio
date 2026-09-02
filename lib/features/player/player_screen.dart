@@ -220,15 +220,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Tells the engine what it can know about the file, which is what makes
   /// it ask the subtitle addons (they want a filename, hash or size; we
-  /// have at best the filename).
+  /// have at best the filename). Without a real one, none is sent: the
+  /// engine asks the addons anyway from its converted stream, and a
+  /// stand-in such as the stream's label ("1080p") would only mislead the
+  /// filename matching at OpenSubtitles.
   void _reportVideoParams(PlayerState state, Uri url) {
     if (!mounted || _handedOver || _opened != url) return;
     final segment = url.pathSegments.isEmpty ? null : url.pathSegments.last;
     final filename =
         state.convertedStream?.filename ??
         state.selectedStream?.filename ??
-        (segment != null && segment.contains('.') ? segment : null) ??
-        state.selectedStream?.name;
+        (segment != null && segment.contains('.') ? segment : null);
     _client?.dispatch(CoreActions.playerVideoParamsChanged(filename: filename));
   }
 
