@@ -5,10 +5,11 @@ import '../../core/core.dart';
 import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
 import '../player/player_screen.dart';
+import 'account_section.dart';
 
-/// Settings: the way to the Addons screen, the state of the embedded
-/// streaming server and the core (straight from the `streaming_server`
-/// model field).
+/// Settings: the account ([AccountSection] over `ctx.profile`), the way to
+/// the Addons screen, the state of the embedded streaming server and the
+/// core (straight from the `streaming_server` model field).
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -18,6 +19,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   CoreFieldNotifier? _server;
+  CoreFieldNotifier? _ctx;
 
   @override
   void didChangeDependencies() {
@@ -25,13 +27,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final client = CoreScope.of(context);
     if (_server?.client != client) {
       _server?.dispose();
+      _ctx?.dispose();
       _server = CoreFieldNotifier(client, CoreField.streamingServer);
+      _ctx = CoreFieldNotifier(client, CoreField.ctx);
     }
   }
 
   @override
   void dispose() {
     _server?.dispose();
+    _ctx?.dispose();
     super.dispose();
   }
 
@@ -42,6 +47,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          const _SectionHeader('Account'),
+          AccountSection(ctx: _ctx!),
           const _SectionHeader('Addons'),
           ListTile(
             leading: const Icon(Icons.extension_outlined),

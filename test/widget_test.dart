@@ -121,6 +121,15 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
+    // The Account form at the top pushes the server and core tiles below
+    // the fold of the test viewport.
+    await tester.scrollUntilVisible(
+      find.text('stremio-core storage schema'),
+      100,
+      scrollable: find.byWidgetPredicate(
+        (widget) => widget is Scrollable && widget.axis == Axis.vertical,
+      ),
+    );
 
     expect(find.text('http://127.0.0.1:11470/'), findsOneWidget);
     expect(find.text('Connecting…'), findsOneWidget);
