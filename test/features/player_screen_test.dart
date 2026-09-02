@@ -202,7 +202,7 @@ void main() {
       },
     });
     await tester.pumpAndSettle();
-    expect(engine.opened.single.$1.host, 'commondatastorage.googleapis.com');
-    expect(find.text('Big Buck Bunny (HTTP)'), findsOneWidget);
+    expect(engine.opened.single.$1.host, 'test-videos.co.uk');
+    expect(find.text('Big Buck Bunny (HTTP, 720p 10s)'), findsOneWidget);
   });
 }
