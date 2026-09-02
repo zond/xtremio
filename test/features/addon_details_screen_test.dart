@@ -225,12 +225,21 @@ void main() {
     expect(find.text('connection refused'), findsOneWidget);
     expect(find.text('Install'), findsNothing);
 
+    // The engine ignores a Load for the transport URL it already holds, so
+    // Retry must unload the field before it loads again.
     await tester.tap(find.text('Retry'));
     await tester.pump();
-    expect(core.dispatched, hasLength(2));
     expect(
-      core.dispatched.last.action,
-      CoreActions.loadAddonDetails(cinemeta).action,
+      [for (final a in core.dispatched) a.action],
+      [
+        CoreActions.loadAddonDetails(cinemeta).action,
+        CoreActions.unload(CoreField.addonDetails).action,
+        CoreActions.loadAddonDetails(cinemeta).action,
+      ],
+    );
+    expect(
+      core.dispatched.map((a) => a.field),
+      everyElement(CoreField.addonDetails),
     );
   });
 

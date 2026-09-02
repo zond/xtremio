@@ -56,6 +56,13 @@ class _AddonDetailsScreenState extends State<AddonDetailsScreen> {
   void _load() =>
       _client?.dispatch(CoreActions.loadAddonDetails(widget.transportUrl));
 
+  /// The engine only fetches a manifest when the transport URL changes, so a
+  /// retry of the same URL has to clear the field first.
+  void _retry() {
+    _client?.dispatch(CoreActions.unload(CoreField.addonDetails));
+    _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -83,7 +90,7 @@ class _AddonDetailsScreenState extends State<AddonDetailsScreen> {
                       : _ManifestError(
                           transportUrl: state.transportUrl!,
                           message: state.manifestError!.message,
-                          onRetry: _load,
+                          onRetry: _retry,
                         ))
                 : _Details(
                     state: state,
