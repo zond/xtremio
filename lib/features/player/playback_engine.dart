@@ -155,6 +155,8 @@ class MediaKitEngine implements PlaybackEngine {
         _emitTracks();
       }),
     ];
+    final native = _player.platform;
+    if (native is NativePlayer) _observeSelection(native).ignore();
   }
 
   final Player _player;
@@ -177,6 +179,13 @@ class MediaKitEngine implements PlaybackEngine {
   late final List<StreamSubscription<void>> _trackSubscriptions;
   Tracks _lastTracks = const Tracks();
   Track _lastTrack = const Track();
+
+  /// mpv's own `aid`/`sid` (a track id, `no` or `auto`), null until
+  /// observed. media_kit only updates `stream.track` from its own
+  /// `setAudioTrack`/`setSubtitleTrack`, so a track mpv selected by itself
+  /// (a default or forced subtitle) would otherwise show as none.
+  String? _mpvAudioId;
+  String? _mpvSubtitleId;
 
   /// URLs handed to `sub-add`. mpv lists external files in `track-list`
   /// too (media_kit does not expose the `external` flag), so they are
@@ -217,31 +226,94 @@ class MediaKitEngine implements PlaybackEngine {
   @override
   Stream<PlaybackStats> get stats => _stats.stream;
 
-  /// Merges media_kit's track list with its currently selected tracks into
-  /// one [PlaybackTracks], dropping the synthetic `auto`/`no` entries.
+  /// Follows mpv's `aid`/`sid` so the selection reflects what is really
+  /// drawn, not only what went through media_kit's setters. Only the native
+  /// (libmpv) backend exposes properties.
+  Future<void> _observeSelection(NativePlayer native) async {
+    try {
+      await native.observeProperty('aid', (value) async {
+        _mpvAudioId = value;
+        _emitTracks();
+      });
+      await native.observeProperty('sid', (value) async {
+        _mpvSubtitleId = value;
+        _emitTracks();
+      });
+    } catch (_) {
+      // Torn down before the player initialised: media_kit's own
+      // selection reports still work.
+    }
+  }
+
   void _emitTracks() {
     if (_disposed || _tracks.isClosed) return;
-    final selectedSubtitle = _lastTrack.subtitle;
     _tracks.add(
-      PlaybackTracks(
-        audio: [
-          for (final track in _lastTracks.audio)
-            if (!_isSynthetic(track.id)) _trackInfo(track),
-        ],
-        subtitle: [
-          for (final track in _lastTracks.subtitle)
-            if (!_isSynthetic(track.id) &&
-                !_externalSubtitleUrls.contains(track.title))
-              _subtitleInfo(track),
-        ],
-        activeAudioId: _isSynthetic(_lastTrack.audio.id)
-            ? null
-            : _lastTrack.audio.id,
-        activeSubtitleId:
-            _isSynthetic(selectedSubtitle.id) && !selectedSubtitle.uri
-            ? null
-            : selectedSubtitle.id,
+      mergeTracks(
+        tracks: _lastTracks,
+        selected: _lastTrack,
+        mpvAudioId: _mpvAudioId,
+        mpvSubtitleId: _mpvSubtitleId,
+        externalSubtitleUrls: _externalSubtitleUrls,
       ),
+    );
+  }
+
+  /// Merges media_kit's track list, its last selection and mpv's own
+  /// `aid`/`sid` into one [PlaybackTracks], dropping the synthetic
+  /// `auto`/`no` entries and the external subtitle files (recognised by
+  /// their URL title; see [_externalSubtitleUrls]).
+  ///
+  /// mpv's ids win when known: they change with every selection, including
+  /// the ones mpv makes by itself, whereas media_kit's [selected] only
+  /// follows its own setters. An external file selected by mpv's `sid` is
+  /// reported by its URL, the id the screen knows it by.
+  static PlaybackTracks mergeTracks({
+    required Tracks tracks,
+    required Track selected,
+    required String? mpvAudioId,
+    required String? mpvSubtitleId,
+    required Set<String> externalSubtitleUrls,
+  }) {
+    final String? activeAudioId;
+    if (mpvAudioId != null) {
+      activeAudioId = _isSynthetic(mpvAudioId) ? null : mpvAudioId;
+    } else {
+      activeAudioId = _isSynthetic(selected.audio.id)
+          ? null
+          : selected.audio.id;
+    }
+    final String? activeSubtitleId;
+    if (mpvSubtitleId != null) {
+      if (_isSynthetic(mpvSubtitleId)) {
+        activeSubtitleId = null;
+      } else {
+        final track = tracks.subtitle
+            .where((t) => t.id == mpvSubtitleId)
+            .firstOrNull;
+        final title = track?.title;
+        activeSubtitleId = title != null && externalSubtitleUrls.contains(title)
+            ? title
+            : mpvSubtitleId;
+      }
+    } else {
+      final subtitle = selected.subtitle;
+      activeSubtitleId = _isSynthetic(subtitle.id) && !subtitle.uri
+          ? null
+          : subtitle.id;
+    }
+    return PlaybackTracks(
+      audio: [
+        for (final track in tracks.audio)
+          if (!_isSynthetic(track.id)) _trackInfo(track),
+      ],
+      subtitle: [
+        for (final track in tracks.subtitle)
+          if (!_isSynthetic(track.id) &&
+              !externalSubtitleUrls.contains(track.title))
+            _subtitleInfo(track),
+      ],
+      activeAudioId: activeAudioId,
+      activeSubtitleId: activeSubtitleId,
     );
   }
 

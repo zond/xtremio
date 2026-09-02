@@ -151,10 +151,14 @@ connection.
   tracks embedded in the file (from libmpv's track list, minus the
   synthetic `auto`/`no` entries) and every file from
   `player.subtitles`, the stream's own `subtitles` and the converted
-  stream's, deduplicated by URL. Picking one dispatches
-  `SubtitlePreferenceChanged`, which the core keeps for the Player
-  session; the next episode's player applies it automatically to the
-  first matching track. Text subtitles are rendered by Flutter
+  stream's, deduplicated by URL. Which track is active comes from mpv's
+  own `sid`/`aid` (observed through `NativePlayer.observeProperty`), so a
+  default or forced track mpv picked by itself shows as selected too —
+  media_kit's `stream.track` only follows its own setters. Picking one
+  dispatches `SubtitlePreferenceChanged`, which the core keeps for the
+  Player session; the next episode's player applies it automatically to
+  the first matching track once the media is loaded (mpv refuses
+  `sub-add` while it is still between files). Text subtitles are rendered by Flutter
   (media_kit's default `libass: false` sets mpv `sub-visibility=no` and
   feeds the text lines to a `SubtitleView`), so size, colour and the
   background box are a `TextStyle` in `SubtitleViewConfiguration`, not
