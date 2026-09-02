@@ -76,10 +76,14 @@ final class AddonDetailsState {
   AddonDescriptor? get descriptor => remoteDescriptor ?? localAddon;
 
   /// Installed, and the fetched manifest differs in version: offer
-  /// `UpgradeAddon` (the engine refuses identical descriptors).
+  /// `UpgradeAddon`. Mirrors the engine's refusals (`update_profile.rs`):
+  /// identical descriptors, a protected copy on either side (`Other` code 5)
+  /// and `configurationRequired` templates (code 6) are never upgradable.
   bool get hasUpgrade {
     final (local, remote) = (localAddon, remoteDescriptor);
     if (local == null || remote == null) return false;
+    if (local.isProtected || remote.isProtected) return false;
+    if (remote.manifest.behaviorHints.configurationRequired) return false;
     return local.manifest.version != remote.manifest.version;
   }
 }

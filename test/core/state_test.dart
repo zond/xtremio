@@ -1074,10 +1074,48 @@ void main() {
       },
     );
 
+    test('no upgrade is offered where UpgradeAddon would refuse it', () {
+      // Protected Cinemeta (both copies) with a bumped version: Other code 5.
+      final protected = loadAddonDetailsFixture();
+      protected['remoteAddon']['content']['content']['manifest']['version'] =
+          '99.0.0';
+      expect(AddonDetailsState.fromJson(protected).hasUpgrade, isFalse);
+
+      // Only the installed copy protected.
+      final localProtected = loadAddonDetailsFixture();
+      localProtected['remoteAddon']['content']['content']['manifest']['version'] =
+          '99.0.0';
+      localProtected['remoteAddon']['content']['content']['flags']['protected'] =
+          false;
+      expect(AddonDetailsState.fromJson(localProtected).hasUpgrade, isFalse);
+
+      // Only the fetched copy protected.
+      final remoteProtected = loadAddonDetailsFixture();
+      remoteProtected['remoteAddon']['content']['content']['manifest']['version'] =
+          '99.0.0';
+      remoteProtected['localAddon']['flags']['protected'] = false;
+      expect(AddonDetailsState.fromJson(remoteProtected).hasUpgrade, isFalse);
+
+      // A configurationRequired template: Other code 6.
+      final template = loadAddonDetailsFixture();
+      template['remoteAddon']['content']['content']['manifest']['version'] =
+          '99.0.0';
+      template['localAddon']['flags']['protected'] = false;
+      template['remoteAddon']['content']['content']['flags']['protected'] =
+          false;
+      template['remoteAddon']['content']['content']['manifest']['behaviorHints']['configurationRequired'] =
+          true;
+      expect(AddonDetailsState.fromJson(template).hasUpgrade, isFalse);
+    });
+
     test('a newer manifest offers an upgrade; a failed fetch is an error', () {
+      // Cinemeta is protected on both sides; clear the flags to get a
+      // descriptor the engine would actually upgrade.
       final json = loadAddonDetailsFixture();
       json['remoteAddon']['content']['content']['manifest']['version'] =
           '99.0.0';
+      json['localAddon']['flags']['protected'] = false;
+      json['remoteAddon']['content']['content']['flags']['protected'] = false;
       final upgradable = AddonDetailsState.fromJson(json);
       expect(upgradable.hasUpgrade, isTrue);
       expect(upgradable.descriptor?.manifest.version, '99.0.0');
