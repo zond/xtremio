@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
 import '../details/meta_details_screen.dart';
 import '../discover/discover_screen.dart';
@@ -315,81 +316,13 @@ class _ContinueWatchingRowView extends StatelessWidget {
               final item = state.items[index];
               return SizedBox(
                 width: layout.tileWidthFor(item.posterShape),
-                child: _ContinueWatchingTile(
-                  item: item,
-                  onTap: () => onOpen(item),
-                ),
+                child: LibraryItemTile(item: item, onTap: () => onOpen(item)),
               );
             },
           ),
         ),
         const SizedBox(height: _RowLayout.bottomPadding),
       ],
-    );
-  }
-}
-
-/// A poster with the watched fraction along its bottom edge, a badge for new
-/// episodes, and the episode label under the name.
-class _ContinueWatchingTile extends StatelessWidget {
-  const _ContinueWatchingTile({required this.item, required this.onTap});
-
-  final LibraryItemView item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final progress = item.progress;
-    final episode = item.seasonEpisodeLabel;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                PosterImage(url: item.poster),
-                if (progress != null)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 4,
-                      backgroundColor: Colors.black45,
-                    ),
-                  ),
-                if (item.notifications > 0)
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Badge.count(count: item.notifications),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            item.name,
-            maxLines: episode.isEmpty ? 2 : 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall,
-          ),
-          if (episode.isNotEmpty)
-            Text(
-              episode,
-              maxLines: 1,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
