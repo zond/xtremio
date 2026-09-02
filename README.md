@@ -29,7 +29,11 @@ Rust engine for addons, catalogs, library, and playback state) and
 > data, finding peers, buffering the start) with percentages and download
 > speed instead of a bare spinner. A debug-only Settings entry plays a
 > public Big Buck Bunny torrent to prove the torrent path without any
-> addon. Library and settings are still to come.
+> addon. **Library** lists every added title over the engine's
+> `LibraryWithFilters` model (type and sort filters, cumulative paging,
+> long-press to remove, mark watched, rewind or mute notifications), and
+> the details header has a bookmark to add or remove a title. Settings are
+> still to come.
 
 ## Goals (beyond current Stremio clients)
 
@@ -110,8 +114,11 @@ connection.
   the UI needs, `get_state_json` (`rust/src/model.rs`) adds a sibling key
   rather than reshaping the field: `meta_details` gains `watchedVideoIds`,
   `board`/`search` gain `catalogLabels` (catalog and addon names resolved
-  from the profile's manifests, aligned with `catalogs`). Typed FRB structs
-  can be added for hot paths later if profiling asks for it.
+  from the profile's manifests, aligned with `catalogs`). The `ctx` field
+  skips the library bucket, so the Library screen reads its own `library`
+  field (`LibraryWithFilters<NotRemovedFilter>`, snake_case keys such as
+  `next_page`). Typed FRB structs can be added for hot paths later if
+  profiling asks for it.
 - **The engine runs on our `Env`** (`rust/src/env.rs`): reqwest + rustls for
   HTTP, one JSON file per bucket under the app-support directory with
   temp-then-fsync-then-rename writes, and two lib-owned tokio runtimes
