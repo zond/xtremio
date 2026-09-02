@@ -2,11 +2,13 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
 import '../player/player_screen.dart';
 
-/// Settings. For now: the state of the embedded streaming server and the
-/// core, straight from the `streaming_server` model field.
+/// Settings: the way to the Addons screen, the state of the embedded
+/// streaming server and the core (straight from the `streaming_server`
+/// model field).
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -40,6 +42,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          const _SectionHeader('Addons'),
+          ListTile(
+            leading: const Icon(Icons.extension_outlined),
+            title: const Text('Addons'),
+            subtitle: const Text('Installed and community addons'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const AddonsScreen()),
+            ),
+          ),
           const _SectionHeader('Streaming server'),
           ValueListenableBuilder<Map<String, dynamic>?>(
             valueListenable: _server!,

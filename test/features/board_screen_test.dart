@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
@@ -327,6 +328,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No catalogs'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    // The way out of an empty board is the Addons screen.
+    // (No addon state in this fake, so its spinner never settles.)
+    await tester.tap(find.text('Browse addons'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AddonsScreen), findsOneWidget);
   });
 
   testWidgets('rows are shorter on phone widths', (tester) async {

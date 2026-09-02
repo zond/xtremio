@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
+import '../addons/addons_screen.dart';
 import '../details/meta_details_screen.dart';
 import '../discover/discover_screen.dart';
 
@@ -560,6 +561,14 @@ class _EmptyBoard extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.tonalIcon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AddonsScreen()),
+              ),
+              icon: const Icon(Icons.extension_outlined),
+              label: const Text('Browse addons'),
             ),
           ],
         ),
