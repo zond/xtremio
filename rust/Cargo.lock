@@ -6199,9 +6199,14 @@ name = "xtremio_core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "flutter_rust_bridge",
+ "futures",
+ "http",
  "reqwest",
+ "serde",
  "serde_json",
+ "serde_path_to_error",
  "server",
  "stremio-core",
  "tempfile",

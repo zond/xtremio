@@ -27,6 +27,16 @@ stream-server = { package = "server", git = "https://github.com/zond/stream-serv
 stremio-core = { git = "https://github.com/Stremio/stremio-core", rev = "7ae100c077541622b26c25a9aee3453eeba4aeb2", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
+chrono = "0.4"
+futures = "0.3"
+http = "1"
+# rustls (aws-lc-rs provider + rustls-platform-verifier roots); no system TLS.
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "gzip"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Names the failing JSON path when an addon response does not match the schema.
+serde_path_to_error = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
 url = "2"
 # `log` feature: on Android no tracing subscriber is installed and events flow
 # through the `log` crate into FRB's android_logger instead.
@@ -34,10 +44,8 @@ tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "gzip", "json"] }
-serde_json = "1"
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 tempfile = "3"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 # REQUIRED: stremio-core's workspace member stremio-watched-bitfield pins
 # `flate2 = "1.0.*"` (< 1.1) while stream-server's tree (zip, async-compression
