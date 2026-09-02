@@ -56,10 +56,10 @@ class _XtremioAppState extends State<XtremioApp> {
   StreamSubscription<CoreEvent>? _events;
 
   /// The `ctx` field, for the settings a new player is created with.
-  late final CoreFieldNotifier _ctx = CoreFieldNotifier(
-    widget.core,
-    CoreField.ctx,
-  );
+  /// Created in [initState] so its first pull is in flight from start-up;
+  /// created lazily it would come into being — empty — inside the first
+  /// player's `_createEngine`, which would then see the defaults.
+  late final CoreFieldNotifier _ctx;
 
   /// The app left the resumed state at some point, so the next resume is a
   /// real return to the foreground. Without this the first `resumed` a
@@ -69,6 +69,7 @@ class _XtremioAppState extends State<XtremioApp> {
   @override
   void initState() {
     super.initState();
+    _ctx = CoreFieldNotifier(widget.core, CoreField.ctx);
     _lifecycle = AppLifecycleListener(
       onExitRequested: _onExitRequested,
       onResume: _onResume,
