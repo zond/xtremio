@@ -10,14 +10,15 @@ Rust engine for addons, catalogs, library, and playback state) and
 [`media_kit`](https://pub.dev/packages/media_kit)/libmpv for playback.
 
 > **Status:** early, but the vertical slice is in place: the app boots
-> `stremio-core` and the embedded `stream-server` at start-up, Discover
-> browses a Cinemeta catalog, tapping a title loads its meta details and
-> the streams every installed addon returns, and selecting a stream plays
-> it with `media_kit` — torrents through the embedded server, HTTP streams
-> directly. A debug-only Settings entry plays a public Big Buck Bunny
-> torrent to prove the torrent path without any addon. Ugly on purpose;
-> Board, Library, search, episode picking, subtitles and settings are
-> still to come.
+> `stremio-core` and the embedded `stream-server` at start-up, the Board
+> shows a continue-watching row and one row per catalog of every
+> installed addon, Discover browses a Cinemeta catalog, tapping a title
+> loads its meta details and the streams every installed addon returns,
+> and selecting a stream plays it with `media_kit` — torrents through the
+> embedded server, HTTP streams directly. A debug-only Settings entry
+> plays a public Big Buck Bunny torrent to prove the torrent path without
+> any addon. Ugly on purpose; Library, search, episode picking, subtitles
+> and settings are still to come.
 
 ## Goals (beyond current Stremio clients)
 
@@ -94,8 +95,12 @@ connection.
   `core_events` streams `RuntimeEvent`s (`NewState` lists the fields that
   changed). Every stremio-core type already derives serde, so this costs no
   per-type mirroring and survives engine upgrades; Dart keeps small view
-  classes (`lib/core/state/`) over the maps. Typed FRB structs can be added
-  for hot paths later if profiling asks for it.
+  classes (`lib/core/state/`) over the maps. Where the raw model lacks what
+  the UI needs, `get_state_json` (`rust/src/model.rs`) adds a sibling key
+  rather than reshaping the field: `meta_details` gains `watchedVideoIds`,
+  `board`/`search` gain `catalogLabels` (catalog and addon names resolved
+  from the profile's manifests, aligned with `catalogs`). Typed FRB structs
+  can be added for hot paths later if profiling asks for it.
 - **The engine runs on our `Env`** (`rust/src/env.rs`): reqwest + rustls for
   HTTP, one JSON file per bucket under the app-support directory with
   temp-then-fsync-then-rename writes, and two lib-owned tokio runtimes
@@ -129,7 +134,8 @@ connection.
 # Rust crate
 cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cargo test --test cinemeta -- --ignored       # network: loads a Cinemeta catalog, refreshes the fixture
-cargo test --test meta_details -- --ignored   # network: meta + streams + Player for a public-domain torrent, refreshes fixtures
+cargo test --test meta_details -- --ignored   # network: meta + streams + Player + continue watching for a public-domain torrent, refreshes fixtures
+cargo test --test board -- --ignored          # network: Board rows + a search over the default addons, refreshes fixtures
 
 # Dart (FFI-backed tests load rust/target/debug/libxtremio_core.* directly)
 cargo build --manifest-path rust/Cargo.toml
