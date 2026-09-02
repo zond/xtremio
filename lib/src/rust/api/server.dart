@@ -20,6 +20,38 @@ Future<void> serverStop() => RustLib.instance.api.crateApiServerServerStop();
 /// Base URL of the running embedded server, or null when it is stopped.
 String? serverBaseUrl() => RustLib.instance.api.crateApiServerServerBaseUrl();
 
+/// A torrent's `stats.json` as JSON (camelCase, the shape stremio-core's
+/// `Statistics` parses plus the start-up `phase` fields and an optional
+/// `error` message): the per-file stats when `file_idx` is set, the
+/// torrent-level ones otherwise. `trackers` is the stream's `announce`
+/// list, used only if this call is what creates the torrent's engine.
+/// Errors when the server is not running, for a negative index, or for an
+/// index the torrent does not have once its metadata is known. Blocks the
+/// FRB worker while the server answers; never call from the UI thread.
+Future<String> serverTorrentStats({
+  required String infoHash,
+  PlatformInt64? fileIdx,
+  required List<String> trackers,
+}) => RustLib.instance.api.crateApiServerServerTorrentStats(
+  infoHash: infoHash,
+  fileIdx: fileIdx,
+  trackers: trackers,
+);
+
+/// The embedded server's settings as JSON (the `values` of `GET /settings`:
+/// `cacheSize`, `btMaxConnections`, ...). Errors when it is not running.
+Future<String> serverSettings() =>
+    RustLib.instance.api.crateApiServerServerSettings();
+
+/// Applies `patch_json` (a JSON object of settings keys) exactly as
+/// `POST /settings` would -- same keys, validation, engine update and
+/// persistence -- and returns the settings afterwards as JSON. Errors on
+/// malformed JSON, a rejected value, or when the server is not running.
+Future<String> serverUpdateSettings({required String patchJson}) => RustLib
+    .instance
+    .api
+    .crateApiServerServerUpdateSettings(patchJson: patchJson);
+
 /// Where and how the embedded server runs. Directories are decided by Dart
 /// (path_provider) and created by Rust if missing.
 class ServerConfig {

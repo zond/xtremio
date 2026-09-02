@@ -5,14 +5,16 @@
 //! stremio-core runtime or FRB's thread pool. We keep a single global
 //! [`ServerHandle`] and expose start/stop/base_url around it, plus the
 //! bearer token its control API requires: `Env::fetch` attaches it to the
-//! engine's requests to the server, and nothing else ever sees it.
+//! engine's requests to the server, and nothing else ever sees it. The
+//! app's own control calls (torrent stats, server settings) go through the
+//! handle's library API here, never over HTTP.
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
 use anyhow::Context;
-use stream_server::ServerHandle;
+use stream_server::{EngineStats, ServerHandle, ServerSettings};
 use url::Url;
 
 /// stremio-core's default `streaming_server_url` port; preferred so a
@@ -111,6 +113,48 @@ pub fn stop() -> anyhow::Result<()> {
 /// Base URL of the running server, if any.
 pub fn base_url() -> Option<Url> {
     lock().as_ref().and_then(|handle| url_of(handle).ok())
+}
+
+/// Runs `f` against the running server's handle. The handle's library calls
+/// block the calling thread until the server's runtime answers, so callers
+/// stay off the UI thread (FRB's worker pool is fine).
+fn with_handle<T>(f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>) -> anyhow::Result<T> {
+    let guard = lock();
+    let handle = guard
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("embedded server is not running"))?;
+    f(handle)
+}
+
+/// A torrent's `stats.json` as the server's library API answers it: the
+/// per-file stats (`/{infoHash}/{fileIdx}/stats.json`) for `Some(file_idx)`,
+/// the torrent-level ones (`/{infoHash}/stats.json`) otherwise. `trackers`
+/// are the stream's `announce` list, exactly what the stream URL's `tr=`
+/// carries; the server uses them only when this call is what creates the
+/// engine. A magnet still resolving reports `phase: resolvingMetadata`
+/// (per-file too, so the caller need not fall back), a failed add
+/// `phase: error` with an `error` message; an index the torrent does not
+/// have, once its metadata is known, is an error.
+pub fn torrent_stats(
+    info_hash: &str,
+    file_idx: Option<usize>,
+    trackers: &[String],
+) -> anyhow::Result<EngineStats> {
+    with_handle(|handle| match file_idx {
+        Some(idx) => handle.file_stats(info_hash, idx, trackers),
+        None => handle.engine_stats(info_hash, trackers),
+    })
+}
+
+/// The server's current settings (`GET /settings` → `values`).
+pub fn settings() -> anyhow::Result<ServerSettings> {
+    with_handle(|handle| handle.settings())
+}
+
+/// Applies `patch` as `POST /settings` would (same keys, validation and
+/// persistence) and returns the settings afterwards.
+pub fn update_settings(patch: serde_json::Value) -> anyhow::Result<ServerSettings> {
+    with_handle(|handle| handle.update_settings(patch))
 }
 
 /// Whether `url` addresses the running embedded server: same scheme, host

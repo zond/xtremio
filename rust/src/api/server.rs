@@ -1,4 +1,7 @@
-//! FRB surface for the embedded stream-server.
+//! FRB surface for the embedded stream-server: lifecycle, and the control
+//! calls the app makes itself (torrent start-up stats, server settings) as
+//! JSON strings over the server's library API -- the Dart side never
+//! speaks HTTP to the server; only the player fetches media from it.
 
 use flutter_rust_bridge::frb;
 
@@ -43,4 +46,47 @@ pub fn server_stop() -> anyhow::Result<()> {
 #[frb(sync)]
 pub fn server_base_url() -> anyhow::Result<Option<String>> {
     guarded_ok(|| crate::server::base_url().map(|url| url.to_string()))
+}
+
+/// A torrent's `stats.json` as JSON (camelCase, the shape stremio-core's
+/// `Statistics` parses plus the start-up `phase` fields and an optional
+/// `error` message): the per-file stats when `file_idx` is set, the
+/// torrent-level ones otherwise. `trackers` is the stream's `announce`
+/// list, used only if this call is what creates the torrent's engine.
+/// Errors when the server is not running, for a negative index, or for an
+/// index the torrent does not have once its metadata is known. Blocks the
+/// FRB worker while the server answers; never call from the UI thread.
+pub fn server_torrent_stats(
+    info_hash: String,
+    file_idx: Option<i64>,
+    trackers: Vec<String>,
+) -> anyhow::Result<String> {
+    guarded(|| {
+        let file_idx = file_idx
+            .map(|idx| {
+                usize::try_from(idx).map_err(|_| anyhow::anyhow!("invalid file index {idx}"))
+            })
+            .transpose()?;
+        let stats = crate::server::torrent_stats(&info_hash, file_idx, &trackers)?;
+        serde_json::to_string(&stats).map_err(Into::into)
+    })
+}
+
+/// The embedded server's settings as JSON (the `values` of `GET /settings`:
+/// `cacheSize`, `btMaxConnections`, ...). Errors when it is not running.
+pub fn server_settings() -> anyhow::Result<String> {
+    guarded(|| serde_json::to_string(&crate::server::settings()?).map_err(Into::into))
+}
+
+/// Applies `patch_json` (a JSON object of settings keys) exactly as
+/// `POST /settings` would -- same keys, validation, engine update and
+/// persistence -- and returns the settings afterwards as JSON. Errors on
+/// malformed JSON, a rejected value, or when the server is not running.
+pub fn server_update_settings(patch_json: String) -> anyhow::Result<String> {
+    guarded(|| {
+        let patch: serde_json::Value = serde_json::from_str(&patch_json)
+            .map_err(|error| anyhow::anyhow!("invalid settings patch JSON: {error}"))?;
+        let settings = crate::server::update_settings(patch)?;
+        serde_json::to_string(&settings).map_err(Into::into)
+    })
 }

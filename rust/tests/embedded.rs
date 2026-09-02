@@ -5,7 +5,18 @@
 //! test function to keep them from interfering.
 
 use reqwest::StatusCode;
-use xtremio_core::api::server::{server_base_url, server_start, server_stop, ServerConfig};
+use xtremio_core::api::server::{
+    server_base_url, server_settings, server_start, server_stop, server_torrent_stats,
+    server_update_settings, ServerConfig,
+};
+
+/// A well-known public-domain torrent (Night of the Living Dead), never
+/// downloaded here: the stats calls only create its engine.
+const INFO_HASH: &str = "11ea02584fa6351956f35671962ab46354d99060";
+
+fn json(text: &str) -> serde_json::Value {
+    serde_json::from_str(text).expect("valid JSON")
+}
 
 fn config(root: &std::path::Path) -> ServerConfig {
     ServerConfig {
@@ -55,6 +66,55 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     // Answering, and refusing a control request that carries no token.
     assert_eq!(heartbeat_status(&url).await?, StatusCode::UNAUTHORIZED);
 
+    // The app's control plane is the library API, no token needed: settings
+    // read and patched (the patch is validated and merged like POST
+    // /settings), and a torrent's stats, whose first call creates the
+    // engine and answers `resolvingMetadata` at once -- for the per-file
+    // route too, so the caller needs no torrent-level fallback.
+    let settings = json(&tokio::task::spawn_blocking(server_settings).await??);
+    assert!(settings["btMaxConnections"].is_u64(), "{settings}");
+    assert!(settings.get("cacheSize").is_some(), "{settings}");
+    let patched = json(
+        &tokio::task::spawn_blocking(|| {
+            server_update_settings(r#"{"btMaxConnections": 77}"#.to_owned())
+        })
+        .await??,
+    );
+    assert_eq!(patched["btMaxConnections"], 77, "{patched}");
+    assert_eq!(
+        json(&tokio::task::spawn_blocking(server_settings).await??)["btMaxConnections"],
+        77
+    );
+    let error = tokio::task::spawn_blocking(|| server_update_settings("nope".to_owned()))
+        .await?
+        .unwrap_err();
+    assert!(error.to_string().contains("settings patch"), "{error}");
+
+    let trackers = vec!["udp://tracker.opentrackr.org:1337/announce".to_owned()];
+    let stats = json(
+        &tokio::task::spawn_blocking({
+            let trackers = trackers.clone();
+            move || server_torrent_stats(INFO_HASH.to_owned(), None, trackers)
+        })
+        .await??,
+    );
+    assert_eq!(stats["infoHash"], INFO_HASH, "{stats}");
+    assert_eq!(stats["phase"], "resolvingMetadata", "{stats}");
+    assert!(stats.get("error").is_none(), "{stats}");
+    let per_file = json(
+        &tokio::task::spawn_blocking(move || {
+            server_torrent_stats(INFO_HASH.to_owned(), Some(0), trackers)
+        })
+        .await??,
+    );
+    assert_eq!(per_file["phase"], "resolvingMetadata", "{per_file}");
+    let error = tokio::task::spawn_blocking(|| {
+        server_torrent_stats(INFO_HASH.to_owned(), Some(-1), vec![])
+    })
+    .await?
+    .unwrap_err();
+    assert!(error.to_string().contains("file index"), "{error}");
+
     // Idempotent: a second start returns the same URL without restarting.
     let again = tokio::task::spawn_blocking({
         let cfg = config(tmp.path());
@@ -63,9 +123,19 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     .await??;
     assert_eq!(again, url);
 
-    // Stop joins the server thread; the port goes dark.
+    // Stop joins the server thread; the port goes dark and the library
+    // calls say so.
     tokio::task::spawn_blocking(server_stop).await??;
     assert_eq!(server_base_url()?, None);
+    let error = tokio::task::spawn_blocking(server_settings)
+        .await?
+        .unwrap_err();
+    assert!(error.to_string().contains("not running"), "{error}");
+    let error =
+        tokio::task::spawn_blocking(|| server_torrent_stats(INFO_HASH.to_owned(), None, vec![]))
+            .await?
+            .unwrap_err();
+    assert!(error.to_string().contains("not running"), "{error}");
     assert!(
         heartbeat_status(&url).await.is_err(),
         "server still answering after stop"
