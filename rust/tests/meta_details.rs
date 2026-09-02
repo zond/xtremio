@@ -207,3 +207,147 @@ fn meta_details_and_player_for_a_public_domain_torrent() -> anyhow::Result<()> {
     core_shutdown()?;
     Ok(())
 }
+
+const SERIES_ID: &str = "tt0903747";
+
+fn load_meta_details(stream_path: Option<serde_json::Value>) -> anyhow::Result<()> {
+    core_dispatch(
+        serde_json::json!({
+            "field": "meta_details",
+            "action": {
+                "action": "Load",
+                "args": {
+                    "model": "MetaDetails",
+                    "args": {
+                        "metaPath": { "resource": "meta", "type": "series", "id": SERIES_ID, "extra": [] },
+                        "streamPath": stream_path,
+                        "guessStream": stream_path.is_none()
+                    }
+                }
+            }
+        })
+        .to_string(),
+    )?;
+    Ok(())
+}
+
+/// Network test: `MetaDetails` for a series (Breaking Bad), recording the
+/// state after the initial guessing load (no stream path: the engine guesses
+/// nothing for a series without `defaultVideoId`, so the UI must pick an
+/// episode) and after selecting S1E1 with one episode marked as watched. Run
+/// with `cargo test --test meta_details -- --ignored --nocapture`.
+#[test]
+#[ignore = "needs internet access to the default Stremio addons"]
+fn meta_details_for_a_series_and_a_selected_episode() -> anyhow::Result<()> {
+    let tmp = tempfile::tempdir()?;
+    core_init(CoreConfig {
+        storage_dir: tmp.path().join("core").display().to_string(),
+        cache_dir: tmp.path().join("cache").display().to_string(),
+        server: Some(ServerConfig {
+            config_dir: tmp.path().join("server").display().to_string(),
+            cache_dir: tmp.path().join("cache/server").display().to_string(),
+            port: 0,
+            fallback_to_ephemeral: true,
+        }),
+    })?;
+
+    load_meta_details(None)?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let meta_details = loop {
+        let meta_details = state("meta_details");
+        let meta_items = meta_details["metaItems"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert_ne!(meta_items[0]["content"]["type"], "Err", "{meta_details}");
+        if !meta_items.is_empty() && meta_items.iter().all(is_settled) {
+            break meta_details;
+        }
+        assert!(Instant::now() < deadline, "timed out: {meta_details}");
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    let meta = &meta_details["metaItems"][0]["content"]["content"];
+    assert_eq!(meta["id"], SERIES_ID);
+    assert_eq!(
+        meta["behaviorHints"]["defaultVideoId"],
+        serde_json::Value::Null
+    );
+    assert!(
+        meta["videos"]
+            .as_array()
+            .is_some_and(|videos| videos.len() > 10),
+        "a series with episodes"
+    );
+    assert_eq!(
+        meta_details["selected"]["streamPath"],
+        serde_json::Value::Null,
+        "nothing is guessed for a series without a default video"
+    );
+    assert_eq!(meta_details["streams"], serde_json::json!([]));
+    write_fixture("meta_details_series.json", &meta_details)?;
+
+    // Select the first regular episode, as the UI does when nothing was
+    // guessed. The meta is reused (`force: false`), so only streams load.
+    let episode = meta["videos"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|video| video["season"] == 1 && video["episode"] == 1)
+        .cloned()
+        .expect("S1E1");
+    let episode_id = episode["id"].as_str().unwrap().to_owned();
+    load_meta_details(Some(serde_json::json!({
+        "resource": "stream", "type": "series", "id": episode_id, "extra": []
+    })))?;
+    let deadline = Instant::now() + Duration::from_secs(45);
+    loop {
+        let meta_details = state("meta_details");
+        assert_eq!(
+            meta_details["metaItems"][0]["content"]["type"], "Ready",
+            "the loaded meta is kept: {meta_details}"
+        );
+        let streams = meta_details["streams"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        if !streams.is_empty() && streams.iter().all(is_settled) {
+            break;
+        }
+        if Instant::now() >= deadline && streams.iter().any(is_settled) {
+            break;
+        }
+        assert!(Instant::now() < deadline, "timed out: {meta_details}");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
+    // Mark the episode as watched so the fixture carries a watched id
+    // (`watchedVideoIds` is the app's projection of the watched bitfield).
+    core_dispatch(
+        serde_json::json!({
+            "field": "meta_details",
+            "action": {
+                "action": "MetaDetails",
+                "args": { "action": "MarkVideoAsWatched", "args": [episode, true] }
+            }
+        })
+        .to_string(),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let meta_details = loop {
+        let meta_details = state("meta_details");
+        if meta_details["watchedVideoIds"]
+            .as_array()
+            .is_some_and(|ids| ids.iter().any(|id| id == episode_id.as_str()))
+        {
+            break meta_details;
+        }
+        assert!(Instant::now() < deadline, "timed out: {meta_details}");
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    assert_eq!(meta_details["selected"]["streamPath"]["id"], episode_id);
+    assert_eq!(meta_details["selected"]["guessStream"], false);
+    write_fixture("meta_details_series_episode.json", &meta_details)?;
+
+    core_shutdown()?;
+    Ok(())
+}

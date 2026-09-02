@@ -1,0 +1,875 @@
+{
+  "lastUsedStream": null,
+  "libraryItem": {
+    "_ctime": "2026-09-02T18:43:42.147306410Z",
+    "_id": "tt0903747",
+    "_mtime": "2026-09-02T18:43:42.147308133Z",
+    "behaviorHints": {
+      "defaultVideoId": null,
+      "featuredVideoId": null,
+      "hasScheduledVideos": true
+    },
+    "name": "Breaking Bad",
+    "poster": "https://images.metahub.space/poster/small/tt0903747/img",
+    "posterShape": "poster",
+    "removed": true,
+    "state": {
+      "duration": 0,
+      "flaggedWatched": 0,
+      "lastWatched": "2026-09-02T18:43:42.147308213Z",
+      "noNotif": false,
+      "overallTimeWatched": 0,
+      "timeOffset": 0,
+      "timeWatched": 0,
+      "timesWatched": 0,
+      "video_id": null,
+      "watched": null
+    },
+    "temp": true,
+    "type": "series"
+  },
+  "metaItems": [
+    {
+      "content": {
+        "content": {
+          "background": "https://images.metahub.space/background/medium/tt0903747/img",
+          "behaviorHints": {
+            "defaultVideoId": null,
+            "featuredVideoId": null,
+            "hasScheduledVideos": true
+          },
+          "description": "A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
+          "id": "tt0903747",
+          "links": [
+            {
+              "category": "imdb",
+              "name": "9.5",
+              "url": "https://imdb.com/title/tt0903747"
+            },
+            {
+              "category": "share",
+              "name": "Breaking Bad",
+              "url": "https://www.strem.io/s/series/breaking-bad-0903747"
+            },
+            {
+              "category": "Genres",
+              "name": "Crime",
+              "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/series/top?genre=Crime"
+            },
+            {
+              "category": "Genres",
+              "name": "Drama",
+              "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/series/top?genre=Drama"
+            },
+            {
+              "category": "Genres",
+              "name": "Thriller",
+              "url": "stremio:///discover/https%3A%2F%2Fv3-cinemeta.strem.io%2Fmanifest.json/series/top?genre=Thriller"
+            },
+            {
+              "category": "Cast",
+              "name": "Bryan Cranston",
+              "url": "stremio:///search?search=Bryan%20Cranston"
+            },
+            {
+              "category": "Cast",
+              "name": "Aaron Paul",
+              "url": "stremio:///search?search=Aaron%20Paul"
+            },
+            {
+              "category": "Cast",
+              "name": "Anna Gunn",
+              "url": "stremio:///search?search=Anna%20Gunn"
+            },
+            {
+              "category": "Writers",
+              "name": "Vince Gilligan",
+              "url": "stremio:///search?search=Vince%20Gilligan"
+            }
+          ],
+          "logo": "https://images.metahub.space/logo/medium/tt0903747/img",
+          "name": "Breaking Bad",
+          "poster": "https://images.metahub.space/poster/small/tt0903747/img",
+          "posterShape": "poster",
+          "releaseInfo": "2008–2013",
+          "released": "2008-01-20T00:00:00Z",
+          "runtime": "49 min",
+          "trailerStreams": [
+            {
+              "description": "Breaking Bad",
+              "ytId": "VFLkMDEO-Xc"
+            },
+            {
+              "description": "Breaking Bad",
+              "ytId": "XZ8daibM3AE"
+            }
+          ],
+          "type": "series",
+          "videos": [
+            {
+              "episode": 1,
+              "id": "tt0903747:1:1",
+              "overview": "When an unassuming high school chemistry teacher discovers he has a rare form of lung cancer, he decides to team up with a former student and create a top of the line crystal meth in a used RV, to provide for his family once he is gone.",
+              "released": "2008-01-21T05:00:00Z",
+              "season": 1,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/1/1/w780.jpg",
+              "title": "Pilot",
+              "trailerStreams": []
+            },
+            {
+              "episode": 2,
+              "id": "tt0903747:1:2",
+              "overview": "Walt and Jesse attempt to tie up loose ends. The desperate situation gets more complicated with the flip of a coin. Walt's wife, Skyler, becomes suspicious of Walt's strange behavior.",
+              "released": "2008-01-28T05:00:00Z",
+              "season": 1,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/1/2/w780.jpg",
+              "title": "Cat's in the Bag...",
+              "trailerStreams": []
+            },
+            {
+              "episode": 3,
+              "id": "tt0903747:1:3",
+              "overview": "Walter fights with Jesse over his drug use, causing him to leave Walter alone with their captive, Krazy-8. Meanwhile, Hank has a scared straight moment with Walter Jr..",
+              "released": "2008-02-11T05:00:00Z",
+              "season": 1,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/1/3/w780.jpg",
+              "title": "...And the Bag's in the River",
+              "trailerStreams": []
+            },
+            {
+              "episode": 4,
+              "id": "tt0903747:1:4",
+              "overview": "Walter finally tells his family that he has cancer. Meanwhile, the DEA believes Albuquerque has a new, big time player to worry about. Jesse makes a surprise visit to his parents home.",
+              "released": "2008-02-18T05:00:00Z",
+              "season": 1,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/1/4/w780.jpg",
+              "title": "Cancer Man",
+              "trailerStreams": []
+            },
+            {
+              "episode": 5,
+              "id": "tt0903747:1:5",
+              "overview": "Walter and Skyler attend a former colleague's birthday party. Jesse tries to free himself from drugs, while Skyler organizes an intervention.",
+              "released": "2008-02-25T05:00:00Z",
+              "season": 1,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/1/5/w780.jpg",
+              "title": "Gray Matter",
+              "trailerStreams": []
+            },
+            {
+              "episode": 6,
+              "id": "tt0903747:1:6",
+              "overview": "The side effects of chemo begin to plague Walt. Meanwhile, the DEA rounds up suspected dealers.",
+              "released": "2008-03-03T05:00:00Z",
+              "season": 1,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/1/6/w780.jpg",
+              "title": "Crazy Handful of Nothin'",
+              "trailerStreams": []
+            },
+            {
+              "episode": 7,
+              "id": "tt0903747:1:7",
+              "overview": "Walter accepts his new identity as a drug dealer. Elsewhere, Jesse decides to put his aunt's house on the market and Marie throws Skyler a baby shower.",
+              "released": "2008-03-10T05:00:00Z",
+              "season": 1,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/1/7/w780.jpg",
+              "title": "A No-Rough-Stuff-Type Deal",
+              "trailerStreams": []
+            },
+            {
+              "episode": 1,
+              "id": "tt0903747:2:1",
+              "overview": "Walt and Jesse are reminded of Tuco’s volatile nature, and try to figure a way out of their business partnership. Hank attempts to mend fences between the estranged Marie and Skyler.",
+              "released": "2009-03-09T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/1/w780.jpg",
+              "title": "Seven Thirty-Seven",
+              "trailerStreams": []
+            },
+            {
+              "episode": 2,
+              "id": "tt0903747:2:2",
+              "overview": "Walt and Jesse find themselves in close quarters with an unhinged Tuco. Marie and Hank comfort Skyler, who is distraught over Walt’s disappearance. Hank pays a visit to Mrs. Pinkman on some not-so-official business.",
+              "released": "2009-03-16T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/2/w780.jpg",
+              "title": "Grilled",
+              "trailerStreams": []
+            },
+            {
+              "episode": 3,
+              "id": "tt0903747:2:3",
+              "overview": "Walt and Jesse cover their tracks, but as a result, both of their financial situations suffer. Meanwhile, Hank and his DEA colleagues may have a break in their meth investigation.",
+              "released": "2009-03-23T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/3/w780.jpg",
+              "title": "Bit by a Dead Bee",
+              "trailerStreams": []
+            },
+            {
+              "episode": 4,
+              "id": "tt0903747:2:4",
+              "overview": "Walt tries to reconnect with his family. Still suspicious of her husband's actions, Skyler keeps her distance. Jesse finds himself without a place to live and struggles to cope.",
+              "released": "2009-03-30T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/4/w780.jpg",
+              "title": "Down",
+              "trailerStreams": []
+            },
+            {
+              "episode": 5,
+              "id": "tt0903747:2:5",
+              "overview": "Tensions and bills mount at the White household. Hank makes progress at work, but struggles with some residual effects from his encounter with Tuco. Jesse assembles a crew of dealers to get their product out on the streets.",
+              "released": "2009-04-06T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/5/w780.jpg",
+              "title": "Breakage",
+              "trailerStreams": []
+            },
+            {
+              "episode": 6,
+              "id": "tt0903747:2:6",
+              "overview": "Walt returns to work. Skinny Pete gets ripped off and when Jesse steps in, he gets more than he bargained for. Walt's cover story on how Elliott and Gretchen are paying for his medical treatment starts to collapse.",
+              "released": "2009-04-13T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/6/w780.jpg",
+              "title": "Peekaboo",
+              "trailerStreams": []
+            },
+            {
+              "episode": 7,
+              "id": "tt0903747:2:7",
+              "overview": "Rumors fly about Jesse's recent actions as he and Walt discuss expanding their business into new territories. Hank struggles in El Paso. Skyler pursues a new job opportunity. Jesse gets to know his landlord, Jane.",
+              "released": "2009-04-20T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/7/w780.jpg",
+              "title": "Negro Y Azul",
+              "trailerStreams": []
+            },
+            {
+              "episode": 8,
+              "id": "tt0903747:2:8",
+              "overview": "When Badger gets busted, Walt and Jesse seek the legal advice of a shady attorney, Saul Goodman. Hank returns to Albuquerque, but his troubled mental state and demeanor cause Marie to worry.",
+              "released": "2009-04-27T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/8/w780.jpg",
+              "title": "Better Call Saul",
+              "trailerStreams": []
+            },
+            {
+              "episode": 9,
+              "id": "tt0903747:2:9",
+              "overview": "The Whites await news about Walt's cancer treatment progress. Walt and Jesse retreat to the desert for a marathon cook.",
+              "released": "2009-05-04T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/9/w780.jpg",
+              "title": "4 Days Out",
+              "trailerStreams": []
+            },
+            {
+              "episode": 10,
+              "id": "tt0903747:2:10",
+              "overview": "Walt and Hank get into a fight, and Walt consumes himself with home improvements. Skyler opens up to her boss, Ted. Jane hides her relationship with Jesse from her father.",
+              "released": "2009-05-11T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/10/w780.jpg",
+              "title": "Over",
+              "trailerStreams": []
+            },
+            {
+              "episode": 11,
+              "id": "tt0903747:2:11",
+              "overview": "Saul proposes a new business partner. Skyler makes a disturbing discovery. Jesse divulges his real profession to Jane.",
+              "released": "2009-05-18T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/11/w780.jpg",
+              "title": "Mandala",
+              "trailerStreams": []
+            },
+            {
+              "episode": 12,
+              "id": "tt0903747:2:12",
+              "overview": "The Whites welcome a new addition. Walter,  Jr. launches a website to aid his struggling family. Jesse's addiction spirals out of control.",
+              "released": "2009-05-25T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/12/w780.jpg",
+              "title": "Phoenix",
+              "trailerStreams": []
+            },
+            {
+              "episode": 13,
+              "id": "tt0903747:2:13",
+              "overview": "Walt's lies have pushed Skyler to her limit. Jesse self-destructs after a personal blow, forcing Walt to come to his aid. Donald's grief leads to tragedy.",
+              "released": "2009-06-01T05:00:00Z",
+              "season": 2,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/2/13/w780.jpg",
+              "title": "ABQ",
+              "trailerStreams": []
+            },
+            {
+              "episode": 1,
+              "id": "tt0903747:3:1",
+              "overview": "As Walt copes with the aftermath of the plane crash and Skyler's anger, Jesse comes to a new realization. A new adversary tracks the elusive Heisenberg. Skyler seeks advice on the state of her marriage and confronts Walt.",
+              "released": "2010-03-22T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/1/w780.jpg",
+              "title": "No Mas",
+              "trailerStreams": []
+            },
+            {
+              "episode": 2,
+              "id": "tt0903747:3:2",
+              "overview": "Walt takes drastic action to bring his family back together. With Saul's help, Jesse makes an unexpected investment.",
+              "released": "2010-03-29T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/2/w780.jpg",
+              "title": "Caballo Sin Nombre",
+              "trailerStreams": []
+            },
+            {
+              "episode": 3,
+              "id": "tt0903747:3:3",
+              "overview": "Walt ignores Skyler's demands, furthering the rift between them. Hank crosses a line at work.",
+              "released": "2010-04-05T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/3/w780.jpg",
+              "title": "I.F.T.",
+              "trailerStreams": []
+            },
+            {
+              "episode": 4,
+              "id": "tt0903747:3:4",
+              "overview": "Walt loses control. Hank throws himself into his blue meth investigation. Jesse enacts a new plan.",
+              "released": "2010-04-12T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/4/w780.jpg",
+              "title": "Green Light",
+              "trailerStreams": []
+            },
+            {
+              "episode": 5,
+              "id": "tt0903747:3:5",
+              "overview": "Gus tries to lure Walt back into business, forcing a rift between Walt and Jesse. Skyler doubts her new relationship. Marie confides in Skyler about her concern for Hank's well-being.",
+              "released": "2010-04-19T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/5/w780.jpg",
+              "title": "Mas",
+              "trailerStreams": []
+            },
+            {
+              "episode": 6,
+              "id": "tt0903747:3:6",
+              "overview": "As Walt settles into his new surroundings, Walter, Jr. demands answers about his parents' relationship. Hank's investigation creates an immediate problem for Walt and Jesse.",
+              "released": "2010-04-26T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/6/w780.jpg",
+              "title": "Sunset",
+              "trailerStreams": []
+            },
+            {
+              "episode": 7,
+              "id": "tt0903747:3:7",
+              "overview": "Hank's increasing volatility forces a confrontation with Jesse and trouble at work. Skyler pressures Walt to make a deal. Gus' actions have severe consequences.",
+              "released": "2010-05-03T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/7/w780.jpg",
+              "title": "One Minute",
+              "trailerStreams": []
+            },
+            {
+              "episode": 8,
+              "id": "tt0903747:3:8",
+              "overview": "The family waits for news about Hank. While Jesse covers at the lab, Walt attempts to placate Gus.",
+              "released": "2010-05-10T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/8/w780.jpg",
+              "title": "I See You",
+              "trailerStreams": []
+            },
+            {
+              "episode": 9,
+              "id": "tt0903747:3:9",
+              "overview": "As Hank's hospital bills stack up, Skyler hatches a plan. Walt and Gus come to a better understanding. Jesse pursues a new opportunity.",
+              "released": "2010-05-17T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/9/w780.jpg",
+              "title": "Kafkaesque",
+              "trailerStreams": []
+            },
+            {
+              "episode": 10,
+              "id": "tt0903747:3:10",
+              "overview": "Walt becomes obsessed with a contaminant in the lab. A frustrated Jesse attempts to get Walt back on track.",
+              "released": "2010-05-24T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/10/w780.jpg",
+              "title": "Fly",
+              "trailerStreams": []
+            },
+            {
+              "episode": 11,
+              "id": "tt0903747:3:11",
+              "overview": "Skyler gets more involved in Walt's business. Hank struggles with his recovery. Jesse takes an active role in his new enterprise, leading him to a startling discovery.",
+              "released": "2010-05-31T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/11/w780.jpg",
+              "title": "Abiquiu",
+              "trailerStreams": []
+            },
+            {
+              "episode": 12,
+              "id": "tt0903747:3:12",
+              "overview": "Jesse lashes out. Fearing for Jesse's safety, Walt takes drastic action to intervene. A tragic event leads to a shocking confrontation.",
+              "released": "2010-06-07T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/12/w780.jpg",
+              "title": "Half Measures",
+              "trailerStreams": []
+            },
+            {
+              "episode": 13,
+              "id": "tt0903747:3:13",
+              "overview": "With Jesse on the run, Walt negotiates a bargain with Gus and concocts a plan to provide for his and Jesse's safety.",
+              "released": "2010-06-14T05:00:00Z",
+              "season": 3,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/3/13/w780.jpg",
+              "title": "Full Measure",
+              "trailerStreams": []
+            },
+            {
+              "episode": 1,
+              "id": "tt0903747:4:1",
+              "overview": "Walt and Jesse face the deadly consequences of their actions. Skyler deals with a puzzling disappearance, as Marie struggles to help Hank with his recovery.",
+              "released": "2011-07-18T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/1/w780.jpg",
+              "title": "Box Cutter",
+              "trailerStreams": []
+            },
+            {
+              "episode": 2,
+              "id": "tt0903747:4:2",
+              "overview": "Walt attempts to form a new alliance as he plans his next move. Skyler pushes Walt towards a business opportunity, in hopes of protecting the family.",
+              "released": "2011-07-25T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/2/w780.jpg",
+              "title": "Thirty-Eight Snub",
+              "trailerStreams": []
+            },
+            {
+              "episode": 3,
+              "id": "tt0903747:4:3",
+              "overview": "Events spiral out of control at Jesse’s place. Skyler reluctantly asks for Saul’s help. Marie returns to an old pastime and a friend asks Hank for help.",
+              "released": "2011-08-01T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/3/w780.jpg",
+              "title": "Open House",
+              "trailerStreams": []
+            },
+            {
+              "episode": 4,
+              "id": "tt0903747:4:4",
+              "overview": "The Cartel takes steps to gain the upper hand. Walt and Skyler share an embarrassing secret with the rest of the family. Jesse’s activities draw unwanted attention.",
+              "released": "2011-08-08T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/4/w780.jpg",
+              "title": "Bullet Points",
+              "trailerStreams": []
+            },
+            {
+              "episode": 5,
+              "id": "tt0903747:4:5",
+              "overview": "When Jesse goes missing, Walt fears the worst. Skyler has an unlikely reunion. Hank shares some bad news with Detective Tim Roberts.",
+              "released": "2011-08-15T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/5/w780.jpg",
+              "title": "Shotgun",
+              "trailerStreams": []
+            },
+            {
+              "episode": 6,
+              "id": "tt0903747:4:6",
+              "overview": "Skyler makes an unsettling discovery. Walter, Jr. pushes his dad into a questionable purchase. Jesse offers Mike some unexpected help.",
+              "released": "2011-08-22T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/6/w780.jpg",
+              "title": "Cornered",
+              "trailerStreams": []
+            },
+            {
+              "episode": 7,
+              "id": "tt0903747:4:7",
+              "overview": "A frustrated Walt gambles on a risky new plan.  Skyler's business venture hits a snag.  Hank recruits Walter, Jr. for an unusual outing.",
+              "released": "2011-08-29T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/7/w780.jpg",
+              "title": "Problem Dog",
+              "trailerStreams": []
+            },
+            {
+              "episode": 8,
+              "id": "tt0903747:4:8",
+              "overview": "Skyler develops an unusual solution to her money troubles. Hank enlists Walt to investigate a theory. Walt’s impatience with Jesse grows.",
+              "released": "2011-09-05T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/8/w780.jpg",
+              "title": "Hermanos",
+              "trailerStreams": []
+            },
+            {
+              "episode": 9,
+              "id": "tt0903747:4:9",
+              "overview": "Skyler's past mistakes come back to haunt her. Gus takes action to thwart his rivals. Jesse seeks Walt's help, with mixed results.",
+              "released": "2011-09-12T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/9/w780.jpg",
+              "title": "Bug",
+              "trailerStreams": []
+            },
+            {
+              "episode": 10,
+              "id": "tt0903747:4:10",
+              "overview": "Walt's family worries when he doesn't turn up for Walter, Jr.'s 16th birthday.  Jesse is forced to put his lab skills to the test without Walt's help.",
+              "released": "2011-09-19T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/10/w780.jpg",
+              "title": "Salud",
+              "trailerStreams": []
+            },
+            {
+              "episode": 11,
+              "id": "tt0903747:4:11",
+              "overview": "Walt takes drastic action to protect his secret and Gus. Skyler's efforts to solve Ted's financial problems hit a wall.",
+              "released": "2011-09-26T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/11/w780.jpg",
+              "title": "Crawl Space",
+              "trailerStreams": []
+            },
+            {
+              "episode": 12,
+              "id": "tt0903747:4:12",
+              "overview": "Hank pushes Gomez to pursue one last lead, while Walt struggles to protect the family. Jesse gets alarming news and rushes to meet with Walt.",
+              "released": "2011-10-03T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/12/w780.jpg",
+              "title": "End Times",
+              "trailerStreams": []
+            },
+            {
+              "episode": 13,
+              "id": "tt0903747:4:13",
+              "overview": "Walt and Jesse team up to take on Gus. With Saul's help, Walt finds an unexpected ally.",
+              "released": "2011-10-10T05:00:00Z",
+              "season": 4,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/4/13/w780.jpg",
+              "title": "Face Off",
+              "trailerStreams": []
+            },
+            {
+              "episode": 1,
+              "id": "tt0903747:5:1",
+              "overview": "As Walt deals with the aftermath of the Casa Tranquila explosion, Hank works to wrap up his investigation of Gus' empire.",
+              "released": "2012-07-16T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/1/w780.jpg",
+              "title": "Live Free or Die",
+              "trailerStreams": []
+            },
+            {
+              "episode": 2,
+              "id": "tt0903747:5:2",
+              "overview": "Walt and Jesse seek out an unlikely partner for a new business venture. The DEA follows up new leads in its investigation.",
+              "released": "2012-07-23T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/2/w780.jpg",
+              "title": "Madrigal",
+              "trailerStreams": []
+            },
+            {
+              "episode": 3,
+              "id": "tt0903747:5:3",
+              "overview": "Walt and Jesse put a business plan into action. Walt confesses a secret to Marie.",
+              "released": "2012-07-30T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/3/w780.jpg",
+              "title": "Hazard Pay",
+              "trailerStreams": []
+            },
+            {
+              "episode": 4,
+              "id": "tt0903747:5:4",
+              "overview": "Walt celebrates another birthday. Skyler considers her options. An associate complicates Walt and Jesse's plan.",
+              "released": "2012-08-06T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/4/w780.jpg",
+              "title": "Fifty-One",
+              "trailerStreams": []
+            },
+            {
+              "episode": 5,
+              "id": "tt0903747:5:5",
+              "overview": "Walt's team must get creative to obtain the materials they need to continue their operation.",
+              "released": "2012-08-13T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/5/w780.jpg",
+              "title": "Dead Freight",
+              "trailerStreams": []
+            },
+            {
+              "episode": 6,
+              "id": "tt0903747:5:6",
+              "overview": "Walt, Jesse, and Mike struggle over the future of their business, as occupational hazards weigh on Jesse.",
+              "released": "2012-08-20T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/6/w780.jpg",
+              "title": "Buyout",
+              "trailerStreams": []
+            },
+            {
+              "episode": 7,
+              "id": "tt0903747:5:7",
+              "overview": "Walt takes control of business matters as Mike grapples with the consequences of his actions.",
+              "released": "2012-08-27T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/7/w780.jpg",
+              "title": "Say My Name",
+              "trailerStreams": []
+            },
+            {
+              "episode": 8,
+              "id": "tt0903747:5:8",
+              "overview": "Walt ties up loose ends. Seeing the evidence of his success, he makes a startling and dangerous decision.",
+              "released": "2012-09-03T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/8/w780.jpg",
+              "title": "Gliding Over All",
+              "trailerStreams": []
+            },
+            {
+              "episode": 9,
+              "id": "tt0903747:5:9",
+              "overview": "As Walt and Jesse adjust to life out of the business, Hank grapples with a troubling lead.",
+              "released": "2013-08-12T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/9/w780.jpg",
+              "title": "Blood Money",
+              "trailerStreams": []
+            },
+            {
+              "episode": 10,
+              "id": "tt0903747:5:10",
+              "overview": "While Skyler's past catches up with her, Walt covers his tracks. Jesse continues to struggle with his guilt.",
+              "released": "2013-08-19T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/10/w780.jpg",
+              "title": "Buried",
+              "trailerStreams": []
+            },
+            {
+              "episode": 11,
+              "id": "tt0903747:5:11",
+              "overview": "Jesse decides to make a change, while Walt and Skyler try to deal with an unexpected demand.",
+              "released": "2013-08-26T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/11/w780.jpg",
+              "title": "Confessions",
+              "trailerStreams": []
+            },
+            {
+              "episode": 12,
+              "id": "tt0903747:5:12",
+              "overview": "An unusual strategy starts to bear fruit, while plans are set in motion that could change everything.",
+              "released": "2013-09-02T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/12/w780.jpg",
+              "title": "Rabid Dog",
+              "trailerStreams": []
+            },
+            {
+              "episode": 13,
+              "id": "tt0903747:5:13",
+              "overview": "Things heat up for Walt in unexpected ways.",
+              "released": "2013-09-09T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/13/w780.jpg",
+              "title": "To'hajiilee",
+              "trailerStreams": []
+            },
+            {
+              "episode": 14,
+              "id": "tt0903747:5:14",
+              "overview": "Everyone copes with radically changed circumstances.",
+              "released": "2013-09-16T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/14/w780.jpg",
+              "title": "Ozymandias",
+              "trailerStreams": []
+            },
+            {
+              "episode": 15,
+              "id": "tt0903747:5:15",
+              "overview": "Events set in motion long ago move toward a conclusion.",
+              "released": "2013-09-23T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/15/w780.jpg",
+              "title": "Granite State",
+              "trailerStreams": []
+            },
+            {
+              "episode": 16,
+              "id": "tt0903747:5:16",
+              "overview": "All bad things must come to an end.",
+              "released": "2013-09-30T05:00:00Z",
+              "season": 5,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/5/16/w780.jpg",
+              "title": "Felina",
+              "trailerStreams": []
+            },
+            {
+              "episode": 1,
+              "id": "tt0903747:0:1",
+              "overview": "Hank and Marie try to spice up their relationship on Valentine's Day.",
+              "released": "2009-02-18T05:00:00Z",
+              "season": 0,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/0/1/w780.jpg",
+              "title": "Good Cop Bad Cop",
+              "trailerStreams": []
+            },
+            {
+              "episode": 2,
+              "id": "tt0903747:0:2",
+              "overview": "Walt and Hank have a talk before Hank gets married.",
+              "released": "2009-02-18T05:00:00Z",
+              "season": 0,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/0/2/w780.jpg",
+              "title": "Wedding Day",
+              "trailerStreams": []
+            },
+            {
+              "episode": 3,
+              "id": "tt0903747:0:3",
+              "overview": "Jesse and Badger make a behind the scenes video about their band \"TwaughtHammer\" and show a music video for their song \"Fallacies.\"",
+              "released": "2009-02-18T05:00:00Z",
+              "season": 0,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/0/3/w780.jpg",
+              "title": "TwaughtHammer",
+              "trailerStreams": []
+            },
+            {
+              "episode": 4,
+              "id": "tt0903747:0:4",
+              "overview": "Marie records a video diary.",
+              "released": "2009-02-18T05:00:00Z",
+              "season": 0,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/0/4/w780.jpg",
+              "title": "Marie's Confession",
+              "trailerStreams": []
+            },
+            {
+              "episode": 5,
+              "id": "tt0903747:0:5",
+              "overview": "Badger uses his lock-picking skills to help Walt (AKA Heisenberg) with some \"B&E\".",
+              "released": "2009-02-18T05:00:00Z",
+              "season": 0,
+              "streams": [],
+              "thumbnail": "https://episodes.metahub.space/tt0903747/0/5/w780.jpg",
+              "title": "The Break-In",
+              "trailerStreams": []
+            }
+          ]
+        },
+        "type": "Ready"
+      },
+      "request": {
+        "base": "https://v3-cinemeta.strem.io/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0903747",
+          "resource": "meta",
+          "type": "series"
+        }
+      }
+    }
+  ],
+  "metaStreams": [],
+  "ratingInfo": null,
+  "selected": {
+    "guessStream": true,
+    "metaPath": {
+      "extra": [],
+      "id": "tt0903747",
+      "resource": "meta",
+      "type": "series"
+    },
+    "streamPath": null
+  },
+  "streams": [],
+  "watchedVideoIds": []
+}
