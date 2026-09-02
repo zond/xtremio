@@ -3,9 +3,11 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
 import 'playback_engine.dart';
+import 'playback_stats_overlay.dart';
 
 /// Plays one stream.
 ///
@@ -35,6 +37,9 @@ class PlayerScreen extends StatefulWidget {
   /// Minimum spacing of `TimeChanged` reports to the core.
   static const Duration timeReportInterval = Duration(seconds: 1);
 
+  /// How long the stats OSD stays up after the pointer stops moving.
+  static const Duration statsHoverTimeout = Duration(seconds: 3);
+
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
@@ -51,6 +56,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool? _lastPlaying;
   bool _buffering = false;
   String? _engineError;
+
+  /// Stats OSD visibility. Hover shows it until the pointer rests for
+  /// [PlayerScreen.statsHoverTimeout]; Shift+I pins it on or off, after
+  /// which hover no longer matters (a non-null [_statsPinned]).
+  bool _statsHover = false;
+  bool? _statsPinned;
+  Timer? _statsHoverTimer;
+
+  bool get _statsVisible => _statsPinned ?? _statsHover;
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
 
   @override
   void didChangeDependencies() {
@@ -134,8 +154,44 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  /// Shift+I toggles the stats OSD, as in mpv. This listens on
+  /// [HardwareKeyboard] rather than through a [Focus] so it needs no focus of
+  /// its own and leaves media_kit's controls (which take focus and bind the
+  /// arrows, space, plain `i`/`j`, `f`) untouched; they do not bind Shift+I.
+  bool _onKey(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.keyI ||
+        !keyboard.isShiftPressed ||
+        keyboard.isControlPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed ||
+        !mounted ||
+        !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return false;
+    }
+    setState(() => _statsPinned = !(_statsPinned ?? false));
+    return true;
+  }
+
+  void _onPointerMoved() {
+    _statsHoverTimer?.cancel();
+    _statsHoverTimer = Timer(PlayerScreen.statsHoverTimeout, () {
+      if (mounted && _statsHover) setState(() => _statsHover = false);
+    });
+    if (!_statsHover) setState(() => _statsHover = true);
+  }
+
+  void _onPointerLeft() {
+    _statsHoverTimer?.cancel();
+    _statsHoverTimer = null;
+    if (_statsHover) setState(() => _statsHover = false);
+  }
+
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    _statsHoverTimer?.cancel();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -180,57 +236,73 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final status = _statusText(state);
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (engine != null && _opened != null) engine.buildVideo(context),
-          if (status != null)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_engineError == null && state?.unplayableReason == null)
-                      const CircularProgressIndicator()
-                    else
-                      const Icon(Icons.error_outline, size: 48),
-                    const SizedBox(height: 12),
-                    Text(status, textAlign: TextAlign.center),
-                  ],
-                ),
-              ),
-            ),
-          SafeArea(
-            child: Row(
-              children: [
-                const BackButton(color: Colors.white),
-                Expanded(
-                  child: Text(
-                    state?.title ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium
-                        ?.copyWith(color: Colors.white),
+      body: MouseRegion(
+        onEnter: (_) => _onPointerMoved(),
+        onHover: (_) => _onPointerMoved(),
+        onExit: (_) => _onPointerLeft(),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (engine != null && _opened != null) engine.buildVideo(context),
+            if (engine != null && _opened != null && _statsVisible)
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12, top: 48),
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: PlaybackStatsOverlay(stats: engine.stats),
                   ),
                 ),
-              ],
-            ),
-          ),
-          if (_opened != null)
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 4,
-              child: Text(
-                _opened.toString(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: Colors.white38),
+              ),
+            if (status != null)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_engineError == null &&
+                          state?.unplayableReason == null)
+                        const CircularProgressIndicator()
+                      else
+                        const Icon(Icons.error_outline, size: 48),
+                      const SizedBox(height: 12),
+                      Text(status, textAlign: TextAlign.center),
+                    ],
+                  ),
+                ),
+              ),
+            SafeArea(
+              child: Row(
+                children: [
+                  const BackButton(color: Colors.white),
+                  Expanded(
+                    child: Text(
+                      state?.title ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(color: Colors.white),
+                    ),
+                  ),
+                ],
               ),
             ),
-        ],
+            if (_opened != null)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 4,
+                child: Text(
+                  _opened.toString(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: Colors.white38),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

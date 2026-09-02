@@ -193,6 +193,13 @@ yet released. **No code change is needed here**: once a `media_kit_video`
 release includes it, `flutter pub upgrade media_kit_video` enables hardware
 rendering automatically. Android (the primary target) is unaffected.
 
+To judge playback performance by numbers rather than feel, the player has a
+stats OSD (like mpv's): move the mouse over the video to show it, or press
+**Shift+I** to pin it on/off. It lists output vs container FPS, dropped
+frames, the **hwdec** in use (or `software` when libmpv is decoding on the
+CPU), codec and resolution, video bitrate, and demuxer cache / buffering
+state, sampled twice a second only while it is on screen.
+
 ## Getting started
 
 ```bash
