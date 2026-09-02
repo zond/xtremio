@@ -43,6 +43,13 @@ url = "2"
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# JNI hook that hands the Android app Context to rustls-platform-verifier
+# (src/android.rs); without it no HTTPS request from Rust succeeds on Android.
+# Same versions stream-server uses, so nothing new enters the graph.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.22"
+rustls-platform-verifier = "0.7"
+
 # aws-lc-sys (rustls' crypto provider) only ships pregenerated bindings for
 # aarch64-linux-android; the emulator (x86_64) and armv7 builds must generate
 # them at build time, which needs libclang on the host. Desktop and arm64
