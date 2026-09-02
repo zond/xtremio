@@ -10,6 +10,7 @@ use serde::Serialize;
 use stremio_core::models::catalog_with_filters::CatalogWithFilters;
 use stremio_core::models::catalogs_with_extra::CatalogsWithExtra;
 use stremio_core::models::common::Loadable;
+use stremio_core::models::continue_watching_preview::ContinueWatchingPreview;
 use stremio_core::models::ctx::Ctx;
 use stremio_core::models::meta_details::MetaDetails;
 use stremio_core::models::player::Player;
@@ -32,9 +33,15 @@ use crate::env::XtremioEnv;
 pub struct XtremioModel {
     /// Profile, library, streams, server URLs, notifications, search history.
     pub ctx: Ctx,
+    /// Continue watching row: library items with progress, newest first.
+    /// Never loaded or unloaded; follows the library on its own.
+    pub continue_watching_preview: ContinueWatchingPreview,
     /// Home: every catalog of every installed addon
     /// (`ActionLoad::CatalogsWithExtra`).
     pub board: CatalogsWithExtra,
+    /// Search results: every catalog supporting the `search` extra
+    /// (`ActionLoad::CatalogsWithExtra` with `["search", query]`).
+    pub search: CatalogsWithExtra,
     /// One catalog with its filters (`ActionLoad::CatalogWithFilters`).
     pub discover: CatalogWithFilters<MetaItemPreview>,
     /// Meta + per-addon streams for one item (`ActionLoad::MetaDetails`).
@@ -62,6 +69,9 @@ impl XtremioModel {
     ) -> (XtremioModel, Effects) {
         let (discover, discover_effects) = CatalogWithFilters::<MetaItemPreview>::new(&profile);
         let (streaming_server, server_effects) = StreamingServer::new::<XtremioEnv>(&profile);
+        // Before `Ctx::new` takes the buckets, as `WebModel::new` does.
+        let (continue_watching_preview, continue_watching_effects) =
+            ContinueWatchingPreview::new(&library, &notifications);
         let model = XtremioModel {
             ctx: Ctx::new(
                 profile,
@@ -72,25 +82,85 @@ impl XtremioModel {
                 search_history,
                 dismissed_events,
             ),
+            continue_watching_preview,
             board: Default::default(),
+            search: Default::default(),
             discover,
             meta_details: Default::default(),
             streaming_server,
             player: Default::default(),
         };
-        (model, discover_effects.join(server_effects))
+        (
+            model,
+            discover_effects
+                .join(server_effects)
+                .join(continue_watching_effects),
+        )
     }
 
     /// Serializes one field to JSON.
     pub fn get_state_json(&self, field: &XtremioModelField) -> serde_json::Result<String> {
         match field {
             XtremioModelField::Ctx => serde_json::to_string(&self.ctx),
-            XtremioModelField::Board => serde_json::to_string(&self.board),
+            XtremioModelField::ContinueWatchingPreview => {
+                serde_json::to_string(&self.continue_watching_preview)
+            }
+            XtremioModelField::Board => self.catalogs_with_extra_json(&self.board),
+            XtremioModelField::Search => self.catalogs_with_extra_json(&self.search),
             XtremioModelField::Discover => serde_json::to_string(&self.discover),
             XtremioModelField::MetaDetails => self.meta_details_json(),
             XtremioModelField::StreamingServer => serde_json::to_string(&self.streaming_server),
             XtremioModelField::Player => serde_json::to_string(&self.player),
         }
+    }
+
+    /// `CatalogsWithExtra` plus a `catalogLabels` array aligned by index with
+    /// `catalogs`. The raw model only carries requests; the catalog and addon
+    /// names live in the profile's manifests, so they are resolved here the
+    /// way stremio-core-web's `serialize_catalogs_with_extra` does (the same
+    /// lookup `CatalogsWithExtra` itself uses for `LoadNextPage`). A catalog
+    /// whose addon is gone from the profile falls back to its id and host.
+    fn catalogs_with_extra_json(&self, model: &CatalogsWithExtra) -> serde_json::Result<String> {
+        let mut value = serde_json::to_value(model)?;
+        let labels: Vec<serde_json::Value> = model
+            .catalogs
+            .iter()
+            .map(|catalog| {
+                let Some(request) = catalog.first().map(|page| &page.request) else {
+                    return serde_json::Value::Null;
+                };
+                let addon = self
+                    .ctx
+                    .profile
+                    .addons
+                    .iter()
+                    .find(|addon| addon.transport_url == request.base);
+                let manifest_catalog = addon.and_then(|addon| {
+                    addon.manifest.catalogs.iter().find(|catalog| {
+                        catalog.id == request.path.id && catalog.r#type == request.path.r#type
+                    })
+                });
+                let addon_name = addon
+                    .map(|addon| addon.manifest.name.clone())
+                    .or_else(|| request.base.host_str().map(str::to_owned))
+                    .unwrap_or_else(|| request.base.to_string());
+                let name = manifest_catalog
+                    .and_then(|catalog| catalog.name.clone())
+                    .unwrap_or_else(|| match addon {
+                        Some(_) => addon_name.clone(),
+                        None => request.path.id.clone(),
+                    });
+                serde_json::json!({
+                    "name": name,
+                    "addonName": addon_name,
+                    "type": request.path.r#type,
+                })
+            })
+            .collect();
+        if let Some(object) = value.as_object_mut() {
+            object.insert("catalogLabels".to_owned(), serde_json::json!(labels));
+        }
+        serde_json::to_string(&value)
     }
 
     /// `MetaDetails` plus a `watchedVideoIds` array. The engine's `watched`
@@ -145,26 +215,22 @@ fn _assert_field_serializes(field: &XtremioModelField) -> impl Serialize + '_ {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use stremio_core::models::catalogs_with_extra::Selected;
+    use stremio_core::models::common::ResourceLoadable;
+    use stremio_core::types::addon::{ResourcePath, ResourceRequest};
 
-    #[test]
-    fn field_names_roundtrip() {
-        for name in [
-            "ctx",
-            "board",
-            "discover",
-            "meta_details",
-            "streaming_server",
-            "player",
-        ] {
-            let field = parse_field(name).expect(name);
-            assert_eq!(field_name(&field), name);
-        }
-        assert!(parse_field("metaDetails").is_err());
-        assert!(parse_field("nope").is_err());
-    }
+    const FIELD_NAMES: [&str; 8] = [
+        "ctx",
+        "continue_watching_preview",
+        "board",
+        "search",
+        "discover",
+        "meta_details",
+        "streaming_server",
+        "player",
+    ];
 
-    #[test]
-    fn default_model_serializes_every_field() {
+    fn default_model() -> XtremioModel {
         let profile = Profile::default();
         let uid = profile.uid();
         let (model, _effects) = XtremioModel::new(
@@ -176,14 +242,37 @@ mod tests {
             SearchHistoryBucket::new(uid.clone()),
             DismissedEventsBucket::new(uid),
         );
-        for name in [
-            "ctx",
-            "board",
-            "discover",
-            "meta_details",
-            "streaming_server",
-            "player",
-        ] {
+        model
+    }
+
+    fn planned_catalog(
+        base: &str,
+        r#type: &str,
+        id: &str,
+    ) -> Vec<ResourceLoadable<Vec<MetaItemPreview>>> {
+        vec![ResourceLoadable {
+            request: ResourceRequest::new(
+                url::Url::parse(base).unwrap(),
+                ResourcePath::without_extra("catalog", r#type, id),
+            ),
+            content: None,
+        }]
+    }
+
+    #[test]
+    fn field_names_roundtrip() {
+        for name in FIELD_NAMES {
+            let field = parse_field(name).expect(name);
+            assert_eq!(field_name(&field), name);
+        }
+        assert!(parse_field("metaDetails").is_err());
+        assert!(parse_field("nope").is_err());
+    }
+
+    #[test]
+    fn default_model_serializes_every_field() {
+        let model = default_model();
+        for name in FIELD_NAMES {
             let json = model
                 .get_state_json(&parse_field(name).unwrap())
                 .expect(name);
@@ -195,6 +284,65 @@ mod tests {
         assert_eq!(
             ctx["profile"]["settings"]["streamingServerUrl"],
             "http://127.0.0.1:11470/"
+        );
+    }
+
+    #[test]
+    fn continue_watching_preview_starts_empty() {
+        let model = default_model();
+        let json: serde_json::Value = serde_json::from_str(
+            &model
+                .get_state_json(&XtremioModelField::ContinueWatchingPreview)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json, serde_json::json!({ "items": [] }));
+    }
+
+    #[test]
+    fn catalogs_with_extra_carry_empty_labels_when_unloaded() {
+        let model = default_model();
+        for field in [XtremioModelField::Board, XtremioModelField::Search] {
+            let json: serde_json::Value =
+                serde_json::from_str(&model.get_state_json(&field).unwrap()).unwrap();
+            assert_eq!(json["selected"], serde_json::Value::Null);
+            assert_eq!(json["catalogs"], serde_json::json!([]));
+            assert_eq!(json["catalogLabels"], serde_json::json!([]));
+        }
+    }
+
+    #[test]
+    fn catalog_labels_resolve_names_from_the_profile_addons() {
+        let mut model = default_model();
+        model.board = CatalogsWithExtra {
+            selected: Some(Selected {
+                r#type: None,
+                extra: vec![],
+            }),
+            catalogs: vec![
+                planned_catalog("https://v3-cinemeta.strem.io/manifest.json", "movie", "top"),
+                // No catalog name in the manifest: the addon name stands in.
+                planned_catalog(
+                    "https://v3-channels.strem.io/manifest.json",
+                    "channel",
+                    "top",
+                ),
+                // Addon not installed (any more): id and host.
+                planned_catalog("https://example.org/addon/manifest.json", "movie", "weird"),
+            ],
+        };
+        let json: serde_json::Value =
+            serde_json::from_str(&model.get_state_json(&XtremioModelField::Board).unwrap())
+                .unwrap();
+        assert_eq!(json["catalogs"].as_array().unwrap().len(), 3);
+        assert_eq!(json["catalogs"][0][0]["content"], serde_json::Value::Null);
+        assert_eq!(
+            json["catalogLabels"],
+            serde_json::json!([
+                { "name": "Popular", "addonName": "Cinemeta", "type": "movie" },
+                { "name": "YouTube", "addonName": "YouTube", "type": "channel" },
+                { "name": "weird", "addonName": "example.org", "type": "movie" },
+            ])
         );
     }
 }

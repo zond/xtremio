@@ -117,7 +117,9 @@ fn core_lifecycle() -> anyhow::Result<()> {
     // Every field serializes.
     for field in [
         "ctx",
+        "continue_watching_preview",
         "board",
+        "search",
         "discover",
         "meta_details",
         "streaming_server",
