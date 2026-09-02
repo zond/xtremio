@@ -11,7 +11,7 @@
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use anyhow::Context;
 use stream_server::{EngineStats, ServerHandle, ServerSettings};
@@ -21,7 +21,15 @@ use url::Url;
 /// previously persisted profile keeps pointing at the embedded server.
 pub const DEFAULT_PORT: u16 = stream_server::DEFAULT_HTTP_PORT;
 
-static SERVER: Mutex<Option<ServerHandle>> = Mutex::new(None);
+// A `RwLock`, not a `Mutex`: `with_handle`'s blocking library calls
+// (`engine_stats`, `file_stats`, `settings`, `update_settings`) and
+// `token_for` (called from `Env::fetch` on stremio-core's tokio workers,
+// including the single-worker sequential runtime) all just need to observe
+// the running handle, so they take a read lock and run concurrently with
+// each other; only `start`/`stop`, which replace the handle, take the
+// write lock. A slow stats poll must never stall an addon/catalog fetch
+// waiting on `token_for`.
+static SERVER: RwLock<Option<ServerHandle>> = RwLock::new(None);
 
 /// How to start the embedded server.
 #[derive(Clone, Debug)]
@@ -37,11 +45,17 @@ pub struct StartConfig {
     pub fallback_to_ephemeral: bool,
 }
 
-fn lock() -> MutexGuard<'static, Option<ServerHandle>> {
+fn read() -> RwLockReadGuard<'static, Option<ServerHandle>> {
     // A poisoned lock only means a previous holder panicked; the Option is
     // still a valid value.
     SERVER
-        .lock()
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn write() -> RwLockWriteGuard<'static, Option<ServerHandle>> {
+    SERVER
+        .write()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
@@ -70,7 +84,7 @@ fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
 /// returned as-is, regardless of the config passed.
 pub fn start(config: StartConfig) -> anyhow::Result<Url> {
     crate::logging::init();
-    let mut guard = lock();
+    let mut guard = write();
     if let Some(handle) = guard.as_ref() {
         return url_of(handle);
     }
@@ -99,7 +113,7 @@ pub fn start(config: StartConfig) -> anyhow::Result<Url> {
 
 /// Stops the server and waits for its thread to exit. Ok if not running.
 pub fn stop() -> anyhow::Result<()> {
-    let handle = lock().take();
+    let handle = write().take();
     if let Some(handle) = handle {
         handle
             .shutdown()
@@ -112,14 +126,17 @@ pub fn stop() -> anyhow::Result<()> {
 
 /// Base URL of the running server, if any.
 pub fn base_url() -> Option<Url> {
-    lock().as_ref().and_then(|handle| url_of(handle).ok())
+    read().as_ref().and_then(|handle| url_of(handle).ok())
 }
 
 /// Runs `f` against the running server's handle. The handle's library calls
 /// block the calling thread until the server's runtime answers, so callers
-/// stay off the UI thread (FRB's worker pool is fine).
+/// stay off the UI thread (FRB's worker pool is fine). Only a read lock is
+/// held: concurrent `with_handle`/`token_for` calls (e.g. a stats poll
+/// alongside `Env::fetch`) run in parallel instead of serialising on each
+/// other; only `start`/`stop` exclude them.
 fn with_handle<T>(f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>) -> anyhow::Result<T> {
-    let guard = lock();
+    let guard = read();
     let handle = guard
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("embedded server is not running"))?;
@@ -160,7 +177,16 @@ pub fn update_settings(patch: serde_json::Value) -> anyhow::Result<ServerSetting
 /// Whether `url` addresses the running embedded server: same scheme, host
 /// and (effective) port as [`base_url`]. False when no server runs.
 pub fn is_embedded_url(url: &Url) -> bool {
-    base_url().is_some_and(|base| same_authority(&base, url))
+    read()
+        .as_ref()
+        .is_some_and(|handle| is_embedded_url_locked(handle, url))
+}
+
+/// [`is_embedded_url`]'s check against an already-locked `handle`; the sole
+/// authority check, shared by `is_embedded_url` and `token_for` so there is
+/// only one implementation to keep in sync.
+fn is_embedded_url_locked(handle: &ServerHandle, url: &Url) -> bool {
+    url_of(handle).is_ok_and(|base| same_authority(&base, url))
 }
 
 fn same_authority(a: &Url, b: &Url) -> bool {
@@ -175,19 +201,82 @@ fn same_authority(a: &Url, b: &Url) -> bool {
 /// no credentials. Never log or serialize the token: it is what keeps other
 /// local processes out of the server's settings.
 pub fn token_for(url: &Url) -> Option<String> {
-    let guard = lock();
+    let guard = read();
     let handle = guard.as_ref()?;
-    let base = url_of(handle).ok()?;
-    if same_authority(&base, url) {
+    if is_embedded_url_locked(handle, url) {
         handle.auth_token().map(str::to_owned)
     } else {
         None
     }
 }
 
+/// Serializes tests that start/stop the process-global embedded server:
+/// this module's lifecycle test and `env.rs`'s
+/// `fetch_decodes_json_from_the_embedded_server` both drive it and would
+/// otherwise race when `cargo test` runs unit tests in parallel.
+#[cfg(test)]
+pub(crate) static LIFECYCLE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Barrier};
+    use std::time::{Duration, Instant};
+
     use super::*;
+
+    /// `with_handle` (stats, settings) and `token_for` (`Env::fetch`) both
+    /// only need to observe the running handle, so they must run
+    /// concurrently rather than serialise on `SERVER`: a slow stats poll
+    /// must never stall an addon/catalog fetch waiting on its bearer token.
+    /// Holds a read lock in one thread via `with_handle`'s closure (blocked
+    /// on a barrier then a sleep) and asserts `token_for` returns from
+    /// another thread almost immediately, well inside the sleep — with a
+    /// `Mutex` instead of a `RwLock` this would take as long as the sleep.
+    #[test]
+    fn with_handle_readers_run_concurrently_with_token_for() {
+        let _serialize = LIFECYCLE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let url = start(StartConfig {
+            config_dir: tmp.path().join("server"),
+            cache_dir: tmp.path().join("cache"),
+            port: 0,
+            fallback_to_ephemeral: true,
+        })
+        .expect("server start");
+
+        let barrier = Arc::new(Barrier::new(2));
+        let handle_thread = std::thread::spawn({
+            let barrier = Arc::clone(&barrier);
+            move || {
+                with_handle(|_handle| {
+                    // Reached only once `with_handle`'s read guard is held.
+                    barrier.wait();
+                    std::thread::sleep(Duration::from_millis(500));
+                    Ok(())
+                })
+            }
+        });
+
+        barrier.wait();
+        let started = Instant::now();
+        let token = token_for(&url);
+        let elapsed = started.elapsed();
+
+        handle_thread
+            .join()
+            .expect("with_handle thread")
+            .expect("with_handle closure");
+        stop().expect("server stop");
+
+        assert!(token.is_some(), "server was still running");
+        assert!(
+            elapsed < Duration::from_millis(250),
+            "token_for waited on with_handle's in-flight call: {elapsed:?}"
+        );
+    }
 
     #[test]
     fn same_authority_compares_scheme_host_and_effective_port() {

@@ -371,6 +371,11 @@ mod tests {
 
     #[test]
     fn fetch_decodes_json_from_the_embedded_server() {
+        // The embedded server is a process-global singleton; serialize
+        // against `server`'s own start/stop test.
+        let _guard = crate::server::LIFECYCLE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tmp = tempfile::tempdir().expect("tempdir");
         let url = crate::server::start(crate::server::StartConfig {
             config_dir: tmp.path().join("server"),
