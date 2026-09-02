@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../widgets/content_type_label.dart';
+import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
 import '../details/meta_details_screen.dart';
 
@@ -150,10 +151,25 @@ class _FilterBar extends StatelessWidget {
   /// Label of a non-required extra's `value: null` option.
   static const String anyOptionLabel = 'Any';
 
+  static List<FilterOption<ResourceRequest>> _options(
+    List<SelectableOption> options, {
+    String Function(String label) label = _identity,
+  }) => [
+    for (final option in options)
+      FilterOption(
+        label: label(option.label),
+        selected: option.selected,
+        request: option.request,
+      ),
+  ];
+
+  static String _identity(String label) => label;
+
   @override
   Widget build(BuildContext context) {
     final isWide =
         MediaQuery.sizeOf(context).width >= DiscoverScreen.wideBreakpoint;
+    final types = _options(selectable.types, label: contentTypeLabel);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: Wrap(
@@ -161,23 +177,23 @@ class _FilterBar extends StatelessWidget {
         runSpacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          if (selectable.types.isNotEmpty)
+          if (types.isNotEmpty)
             isWide
-                ? _TypeSegments(types: selectable.types, onSelect: onSelect)
-                : _TypeChips(types: selectable.types, onSelect: onSelect),
+                ? FilterSegments(options: types, onSelect: onSelect)
+                : FilterChips(options: types, onSelect: onSelect),
           if (selectable.catalogs.isNotEmpty)
-            _OptionMenu(
+            FilterMenu(
               label: 'Catalog',
-              options: selectable.catalogs,
+              options: _options(selectable.catalogs),
               onSelect: onSelect,
             ),
           for (final extra in selectable.extra)
             if (extra.options.isNotEmpty)
-              _OptionMenu(
+              FilterMenu(
                 label: capitalise(extra.name),
                 options: [
                   for (final option in extra.options)
-                    SelectableOption(
+                    FilterOption(
                       label: option.value ?? anyOptionLabel,
                       selected: option.selected,
                       request: option.request,
@@ -187,101 +203,6 @@ class _FilterBar extends StatelessWidget {
               ),
         ],
       ),
-    );
-  }
-}
-
-class _TypeSegments extends StatelessWidget {
-  const _TypeSegments({required this.types, required this.onSelect});
-
-  final List<SelectableOption> types;
-  final ValueChanged<ResourceRequest> onSelect;
-
-  @override
-  Widget build(BuildContext context) => SegmentedButton<int>(
-    showSelectedIcon: false,
-    segments: [
-      for (final (index, type) in types.indexed)
-        ButtonSegment(value: index, label: Text(contentTypeLabel(type.label))),
-    ],
-    selected: {
-      for (final (index, type) in types.indexed)
-        if (type.selected) index,
-    },
-    emptySelectionAllowed: true,
-    onSelectionChanged: (selection) {
-      if (selection.isNotEmpty) onSelect(types[selection.first].request);
-    },
-  );
-}
-
-class _TypeChips extends StatelessWidget {
-  const _TypeChips({required this.types, required this.onSelect});
-
-  final List<SelectableOption> types;
-  final ValueChanged<ResourceRequest> onSelect;
-
-  @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    children: [
-      for (final type in types)
-        ChoiceChip(
-          label: Text(contentTypeLabel(type.label)),
-          selected: type.selected,
-          onSelected: (_) {
-            if (!type.selected) onSelect(type.request);
-          },
-        ),
-    ],
-  );
-}
-
-/// A read-only dropdown over [options]; the selected one is the entry the
-/// engine flagged, so a new state moves the selection without local state.
-class _OptionMenu extends StatelessWidget {
-  const _OptionMenu({
-    required this.label,
-    required this.options,
-    required this.onSelect,
-  });
-
-  final String label;
-  final List<SelectableOption> options;
-  final ValueChanged<ResourceRequest> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    int? selectedIndex;
-    for (final (index, option) in options.indexed) {
-      if (option.selected) {
-        selectedIndex = index;
-        break;
-      }
-    }
-    return DropdownMenu<int>(
-      // A new option list (another type or catalog) gets a fresh menu, so
-      // its text never shows an entry that no longer exists.
-      key: ValueKey(
-        Object.hashAll([label, for (final option in options) option.label]),
-      ),
-      label: Text(label),
-      initialSelection: selectedIndex,
-      requestFocusOnTap: false,
-      inputDecorationTheme: const InputDecorationTheme(
-        isDense: true,
-        border: OutlineInputBorder(),
-        constraints: BoxConstraints(maxHeight: 44),
-      ),
-      dropdownMenuEntries: [
-        for (final (index, option) in options.indexed)
-          DropdownMenuEntry(value: index, label: option.label),
-      ],
-      onSelected: (index) {
-        if (index != null && !options[index].selected) {
-          onSelect(options[index].request);
-        }
-      },
     );
   }
 }
