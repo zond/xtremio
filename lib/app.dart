@@ -9,6 +9,12 @@ import 'features/player/playback_engine.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
 
+/// Builds a [PlaybackEngine] for a player with the profile's
+/// `hardwareDecoding`; [MediaKitEngine.new] fits.
+typedef PlaybackEngineBuilder = PlaybackEngine Function({
+  required bool hardwareDecoding,
+});
+
 /// Root of the Xtremio application.
 ///
 /// The UI is a thin layer: discovery/library/addon logic comes from
@@ -23,14 +29,23 @@ import 'shell/route_log_observer.dart';
 /// `PullNotifications` — at startup, after `UserAuthenticated`, and when the
 /// app resumes after having been inactive, hidden or paused.
 ///
-/// It also supplies the [PlaybackScope]: every player gets a
-/// [MediaKitEngine] configured from `profile.settings.hardwareDecoding` as
-/// it stands when that player opens.
+/// It also supplies the [PlaybackScope]: every player gets an engine from
+/// [engineBuilder] ([MediaKitEngine.new] by default) configured from
+/// `profile.settings.hardwareDecoding` as it stands when that player opens.
 class XtremioApp extends StatefulWidget {
-  const XtremioApp({super.key, required this.core, this.initInfo});
+  const XtremioApp({
+    super.key,
+    required this.core,
+    this.initInfo,
+    this.engineBuilder,
+  });
 
   final CoreClient core;
   final CoreInitInfo? initInfo;
+
+  /// Builds the [PlaybackEngine] for one player. Tests inject a recorder
+  /// here to see what the app asked for without touching libmpv.
+  final PlaybackEngineBuilder? engineBuilder;
 
   @override
   State<XtremioApp> createState() => _XtremioAppState();
@@ -102,7 +117,9 @@ class _XtremioAppState extends State<XtremioApp> {
   }
 
   PlaybackEngine _createEngine() =>
-      MediaKitEngine(hardwareDecoding: _settings.hardwareDecoding);
+      (widget.engineBuilder ?? MediaKitEngine.new)(
+        hardwareDecoding: _settings.hardwareDecoding,
+      );
 
   Future<bool> _isLoggedIn() async {
     try {
