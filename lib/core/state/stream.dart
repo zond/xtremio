@@ -18,6 +18,27 @@ final class StreamInfo {
   String? get ytId => json['ytId'] as String?;
   String? get externalUrl => json['externalUrl'] as String?;
 
+  Map<String, dynamic> get behaviorHints =>
+      json['behaviorHints'] as Map<String, dynamic>? ?? const {};
+
+  /// `behaviorHints.filename`: the file the addon expects to play, when it
+  /// says so (used for subtitle lookups and as a tooltip).
+  String? get filename => behaviorHints['filename'] as String?;
+
+  /// Two streams point at the same source when their discriminating keys
+  /// match (`Stream::is_source_match`, minus the archive variants).
+  bool isSameSource(StreamInfo other) {
+    if (infoHash != null || other.infoHash != null) {
+      return infoHash == other.infoHash && fileIdx == other.fileIdx;
+    }
+    if (url != null || other.url != null) return url == other.url;
+    if (ytId != null || other.ytId != null) return ytId == other.ytId;
+    if (externalUrl != null || other.externalUrl != null) {
+      return externalUrl == other.externalUrl;
+    }
+    return false;
+  }
+
   /// Which `StreamSource` variant this is, by the discriminating key.
   StreamKind get kind {
     if (infoHash != null) return StreamKind.torrent;

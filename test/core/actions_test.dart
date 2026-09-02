@@ -149,6 +149,20 @@ void main() {
     expect(explicit.action['args']['args']['guessStream'], isTrue);
   });
 
+  test('markVideoAsWatched carries the raw video and the flag as a tuple', () {
+    final video = {'id': 'tt1:1:2', 'title': 'Two', 'season': 1, 'episode': 2};
+    expect(CoreActions.markVideoAsWatched(video, watched: true).toJson(), {
+      'field': 'meta_details',
+      'action': {
+        'action': 'MetaDetails',
+        'args': {
+          'action': 'MarkVideoAsWatched',
+          'args': [video, true],
+        },
+      },
+    });
+  });
+
   test('player actions nest under Player', () {
     expect(
       CoreActions.playerTimeChanged(

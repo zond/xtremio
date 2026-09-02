@@ -18,3 +18,4 @@ export 'state/meta_item.dart';
 export 'state/meta_item_preview.dart';
 export 'state/player.dart';
 export 'state/stream.dart';
+export 'state/stream_hints.dart';

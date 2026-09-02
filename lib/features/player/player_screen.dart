@@ -22,6 +22,7 @@ class PlayerScreen extends StatefulWidget {
     required this.stream,
     this.streamRequest,
     this.metaRequest,
+    this.subtitlesPath,
   });
 
   /// Raw stream JSON as it came out of `meta_details.streams` (or a
@@ -33,6 +34,10 @@ class PlayerScreen extends StatefulWidget {
 
   /// The meta request, so the engine tracks the library item / next video.
   final ResourceRequest? metaRequest;
+
+  /// `subtitles/<type>/<video id>`: the resource the engine asks subtitle
+  /// addons for once the video parameters are known.
+  final ResourcePath? subtitlesPath;
 
   /// Minimum spacing of `TimeChanged` reports to the core.
   static const Duration timeReportInterval = Duration(seconds: 1);
@@ -85,6 +90,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         stream: widget.stream,
         streamRequest: widget.streamRequest,
         metaRequest: widget.metaRequest,
+        subtitlesPath: widget.subtitlesPath,
       ),
     );
 

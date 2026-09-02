@@ -99,6 +99,222 @@ void main() {
     });
   });
 
+  group('MetaItem', () {
+    final movie = MetaDetailsState.fromJson(loadMetaDetailsFixture()).meta!;
+    final series = MetaDetailsState.fromJson(loadSeriesMetaDetailsFixture())
+        .meta!;
+
+    test('reads genres, the IMDb rating and the default video from links', () {
+      expect(movie.genres.map((g) => g.name), ['Horror', 'Thriller']);
+      expect(movie.imdbRating, '7.8');
+      expect(movie.defaultVideoId, 'tt0063350');
+      expect(series.imdbRating, '9.5');
+      expect(series.defaultVideoId, isNull);
+      expect(const MetaItem({'id': 'x', 'type': 'movie'}).genres, isEmpty);
+      expect(const MetaItem({'id': 'x', 'type': 'movie'}).imdbRating, isNull);
+    });
+
+    test('genre links resolve to Discover catalog requests', () {
+      final request = movie.genres.first.discoverRequest!;
+      expect(request.base, kCinemetaManifestUrl);
+      expect(request.path.resource, 'catalog');
+      expect(request.path.type, 'movie');
+      expect(request.path.id, 'top');
+      expect(request.path.extra, [const ExtraValue('genre', 'Horror')]);
+      // Search and web links are not catalogs.
+      expect(
+        MetaLink({
+          'category': 'Cast',
+          'name': 'x',
+          'url': 'stremio:///search?search=x',
+        }).discoverRequest,
+        isNull,
+      );
+      expect(
+        MetaLink({
+          'category': 'imdb',
+          'name': '7.8',
+          'url': 'https://imdb.com/title/tt0063350',
+        }).discoverRequest,
+        isNull,
+      );
+    });
+
+    test('lists seasons ascending with specials last', () {
+      expect(series.seasons, [1, 2, 3, 4, 5, 0]);
+      expect(movie.seasons, isEmpty);
+      expect(series.videosOfSeason(1), hasLength(7));
+      expect(series.videosOfSeason(1).first.title, 'Pilot');
+      expect(series.videosOfSeason(0), hasLength(5));
+      expect(series.videosOfSeason(9), isEmpty);
+    });
+
+    test('videos know when they have aired', () {
+      final pilot = series.videoById('tt0903747:1:1')!;
+      expect(pilot.releasedAt, DateTime.utc(2008, 1, 21, 5));
+      expect(pilot.isReleased(DateTime.utc(2010)), isTrue);
+      expect(pilot.isReleased(DateTime.utc(2007)), isFalse);
+      expect(
+        const VideoInfo({'id': 'x', 'title': 'no date'})
+            .isReleased(DateTime.utc(2000)),
+        isTrue,
+        reason: 'undated videos count as released, like MetaItem::next_video',
+      );
+    });
+  });
+
+  group('MetaDetailsState for a series', () {
+    final guessing = MetaDetailsState.fromJson(loadSeriesMetaDetailsFixture());
+    final episode = MetaDetailsState.fromJson(
+      loadSeriesEpisodeMetaDetailsFixture(),
+    );
+
+    test('knows when the engine will not guess a stream path', () {
+      expect(guessing.hasVideos, isTrue);
+      expect(guessing.streamPath, isNull);
+      expect(guessing.engineWillGuessStream, isFalse);
+      expect(guessing.allStreamGroups, isEmpty);
+      expect(guessing.isLoadingStreams, isFalse);
+      final movie = MetaDetailsState.fromJson(loadMetaDetailsFixture());
+      expect(movie.engineWillGuessStream, isTrue);
+      expect(movie.hasVideos, isFalse);
+    });
+
+    test('resolves the initial episode by preference', () {
+      expect(guessing.initialVideo()?.id, 'tt0903747:1:1');
+      expect(
+        guessing.initialVideo(preferred: 'tt0903747:3:2')?.id,
+        'tt0903747:3:2',
+      );
+      expect(
+        guessing.initialVideo(preferred: 'not-a-video')?.id,
+        'tt0903747:1:1',
+        reason: 'unknown ids are ignored',
+      );
+      expect(episode.initialVideo()?.id, 'tt0903747:1:1', reason: 'selected');
+
+      final json = loadSeriesMetaDetailsFixture();
+      json['libraryItem']['state']['video_id'] = 'tt0903747:2:4';
+      final resumed = MetaDetailsState.fromJson(json);
+      expect(resumed.libraryVideoId, 'tt0903747:2:4');
+      expect(resumed.initialVideo()?.id, 'tt0903747:2:4');
+      expect(
+        resumed.initialVideo(preferred: 'tt0903747:5:1')?.id,
+        'tt0903747:5:1',
+        reason: 'the caller wins over the library',
+      );
+    });
+
+    test('reads the selected episode, watched ids and addon errors', () {
+      expect(episode.streamPath?.id, 'tt0903747:1:1');
+      expect(episode.selectedVideo?.title, 'Pilot');
+      expect(episode.watchedVideoIds, ['tt0903747:1:1']);
+      expect(episode.isWatched(episode.selectedVideo!), isTrue);
+      expect(
+        episode.isWatched(episode.meta!.videoById('tt0903747:1:2')!),
+        isFalse,
+      );
+      expect(episode.metaStreamGroups, isEmpty);
+      expect(episode.streamGroups, hasLength(2));
+      expect(episode.streamGroups[0].error?.isEmptyContent, isTrue);
+      expect(episode.streamGroups[1].error?.kind, 'Env');
+      expect(episode.lastUsedStream, isNull, reason: 'Ready(None)');
+      expect(episode.playableStreams, isEmpty);
+    });
+
+    test('exposes meta streams and the last used stream', () {
+      final json = loadSeriesEpisodeMetaDetailsFixture();
+      final stream = {'ytId': 'abc', 'name': 'Trailer'};
+      final request = {
+        'base': kCinemetaManifestUrl,
+        'path': {
+          'resource': 'stream',
+          'type': 'series',
+          'id': 'tt0903747:1:1',
+          'extra': <Object>[],
+        },
+      };
+      json['metaStreams'] = [
+        {
+          'request': request,
+          'content': {
+            'type': 'Ready',
+            'content': [stream],
+          },
+        },
+      ];
+      json['lastUsedStream'] = {
+        'request': request,
+        'content': {'type': 'Ready', 'content': stream},
+      };
+      final state = MetaDetailsState.fromJson(json);
+      expect(state.metaStreamGroups.single.isFromMeta, isTrue);
+      expect(state.allStreamGroups.first.isFromMeta, isTrue);
+      expect(state.allStreamGroups, hasLength(3));
+      final (group, last) = state.lastUsedStream!;
+      expect(last.ytId, 'abc');
+      expect(group.request.base, kCinemetaManifestUrl);
+      expect(group.request.path.id, 'tt0903747:1:1');
+      expect(state.playableStreams.single.$2.isSameSource(last), isTrue);
+    });
+  });
+
+  group('StreamHints', () {
+    test('parses resolution, size and seeders out of free text', () {
+      final hints = StreamHints.parse('Torrentio\n4k HDR\n👤 120 💾 14.2 GB');
+      expect(hints.resolution, '4K');
+      expect(hints.size, '14.2 GB');
+      expect(hints.seeders, 120);
+      expect(hints.chips, ['4K', '14.2 GB', '120 seeders']);
+      expect(StreamHints.parse('720P WEB 700MB').chips, ['720p', '700 MB']);
+      expect(StreamHints.parse('plain').chips, isEmpty);
+      expect(StreamHints.parse('x1080px').resolution, isNull);
+    });
+
+    test('reads a stream and strips the parsed markers from text', () {
+      final movie = MetaDetailsState.fromJson(loadMetaDetailsFixture());
+      final (_, torrent) = movie.playableStreams.single;
+      final hints = StreamHints.of(torrent);
+      expect(hints.chips, ['1080p', '1.51 GB']);
+      expect(hints.strip(torrent.description), isNull);
+      expect(hints.filename, isNull);
+
+      final hinted = StreamHints.of(
+        StreamInfo({
+          'infoHash': 'a',
+          'name': 'Torrentio\n1080p',
+          'description': 'Show.S01E01.1080p.mkv\n👤 42 💾 1.51 GB ⚙️ RARBG',
+          'behaviorHints': {'filename': 'Show.S01E01.1080p.mkv'},
+        }),
+      );
+      expect(hinted.filename, 'Show.S01E01.1080p.mkv');
+      expect(
+        hinted.strip('Show.S01E01.1080p.mkv\n👤 42 💾 1.51 GB ⚙️ RARBG'),
+        'Show.S01E01.1080p.mkv\nRARBG',
+      );
+      expect(hinted.strip(null), isNull);
+    });
+
+    test('same-source streams match on their discriminating keys', () {
+      final torrent = StreamInfo({'infoHash': 'a', 'fileIdx': 1});
+      expect(
+        torrent.isSameSource(StreamInfo({'infoHash': 'a', 'fileIdx': 1})),
+        isTrue,
+      );
+      expect(
+        torrent.isSameSource(StreamInfo({'infoHash': 'a', 'fileIdx': 2})),
+        isFalse,
+      );
+      expect(torrent.isSameSource(StreamInfo({'url': 'https://x'})), isFalse);
+      expect(
+        StreamInfo({'url': 'https://x'})
+            .isSameSource(StreamInfo({'url': 'https://x'})),
+        isTrue,
+      );
+      expect(StreamInfo({}).isSameSource(StreamInfo({})), isFalse);
+    });
+  });
+
   group('PlayerState', () {
     test('resolves a torrent to the embedded server URL', () {
       final state = PlayerState.fromJson(loadPlayerFixture());

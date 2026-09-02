@@ -38,3 +38,17 @@ Map<String, dynamic> loadBoardFixture() =>
 /// Movies hits, YouTube rows failed with `Err Env`.
 Map<String, dynamic> loadSearchFixture() =>
     loadFixture('search_default_addons.json');
+
+/// `meta_details` for Breaking Bad (tt0903747) right after the guessing
+/// load (rust/tests/meta_details.rs): Cinemeta meta with seasons 1-5 plus
+/// specials, no `streamPath` (a series without `defaultVideoId` gets no
+/// guess) and no streams.
+Map<String, dynamic> loadSeriesMetaDetailsFixture() =>
+    loadFixture('meta_details_series.json');
+
+/// The same title after selecting S1E1 (`tt0903747:1:1`, "Pilot") with
+/// `guessStream: false` and marking it watched: WatchHub answered
+/// `EmptyContent`, the local addon failed with `Env`, `watchedVideoIds`
+/// holds the episode.
+Map<String, dynamic> loadSeriesEpisodeMetaDetailsFixture() =>
+    loadFixture('meta_details_series_episode.json');

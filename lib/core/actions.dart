@@ -123,6 +123,21 @@ abstract final class CoreActions {
     );
   }
 
+  /// Flags one video of the loaded meta item as (un)watched. [video] is the
+  /// raw `videos[]` JSON as received: the engine's action carries the whole
+  /// `Video`. Marking the video the library item is on advances it to the
+  /// next episode.
+  static CoreAction markVideoAsWatched(
+    Map<String, dynamic> video, {
+    required bool watched,
+  }) => CoreAction(
+    field: CoreField.metaDetails,
+    action: _tagged(
+      'MetaDetails',
+      _tagged('MarkVideoAsWatched', [video, watched]),
+    ),
+  );
+
   /// Selects a stream for playback. [stream] is the raw stream JSON as it
   /// came out of `meta_details.streams`.
   static CoreAction loadPlayer({
