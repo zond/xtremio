@@ -12,7 +12,11 @@ Rust engine for addons, catalogs, library, and playback state) and
 > **Status:** phase 3 (account, library, addons, settings) is complete
 > on top of phase 2 (browse → details → play); the roadmap items below are
 > not started. The app boots `stremio-core` and the
-> embedded `stream-server` at start-up. **Board** shows a continue-watching
+> embedded `stream-server` at start-up, and nothing in the app talks HTTP
+> to that server except libmpv fetching media: the server's control API
+> takes a per-launch bearer token that only the Rust side holds
+> (stremio-core's requests get it in `Env::fetch`; the app's own control
+> calls are FFI). **Board** shows a continue-watching
 > row and one row per catalog of every installed addon; **Discover** browses
 > any catalog through the engine's type/catalog/genre filters; **Search**
 > asks every addon that supports it and groups the hits per addon.
@@ -139,9 +143,30 @@ connection.
   thread and runtime; the core's `streaming_server_url` is retargeted to it
   when the persisted profile points at loopback (a remote server URL set by
   the user is left alone). Port 11470 is preferred, ephemeral is the
-  fallback. Login and logout reset the profile's settings to stremio-core's
-  defaults (`http://127.0.0.1:11470/`), so the event pump re-applies the
-  retarget on `UserAuthenticated` / `UserLoggedOut`.
+  fallback; the BitTorrent listener itself is on an ephemeral port
+  (`ServerConfig::embedded()`). Login and logout reset the profile's
+  settings to stremio-core's defaults (`http://127.0.0.1:11470/`), so the
+  event pump re-applies the retarget on `UserAuthenticated` /
+  `UserLoggedOut`.
+- **The server's control API requires a bearer token; only Rust has it.**
+  `ServerConfig::embedded()` generates a token per launch, and every
+  non-media route (`/settings`, `/network-info`, `/device-info`,
+  `/casting`, `/create`, the `stats.json` routes, `/heartbeat`) answers
+  401 without `Authorization: Bearer <token>`; the media routes libmpv
+  fetches (`/{infoHash}/{fileIdx}`, archives, `/proxy`) and the
+  `/local-addon` stubs stay open. stremio-core reaches the server only
+  through `Env::fetch`, so `rust/src/env.rs` adds the header when the
+  request's scheme, host and effective port are the embedded server's
+  (`server::token_for`; any other host, loopback included, gets nothing).
+  The Dart side never sees the token and never speaks HTTP to the server:
+  the app's own control calls are FFI functions over `ServerHandle`'s
+  library API in `rust/src/api/server.rs` — `server_torrent_stats(info_hash,
+  file_idx, trackers)` (the per-file or torrent-level `stats.json` as
+  JSON), `server_settings()` and `server_update_settings(patch_json)`
+  (`GET`/`POST /settings`) — wrapped by `ServerClient` in
+  `lib/core/server_client.dart`. Nothing logs the token; the header value
+  is marked sensitive. `media_kit`'s `Media.httpHeaders` could carry it to
+  mpv should a media route ever need it; none does.
 - **Settings are the engine's.** `ctx.profile.settings` is stremio-core's
   `Settings` struct (camelCase; `docs/phase3-design.md` §4 lists it) and
   the only way to change one is `Ctx::UpdateSettings` with the *entire*
@@ -240,22 +265,26 @@ connection.
 - **Torrent start-up overlay.** From `open` until the engine first reports
   the media loaded (a duration, or playing), a torrent shows a card instead
   of a spinner. Once `open` has been issued, the screen polls the embedded
-  server's `/{infoHash}/{fileIdx}/stats.json` every 500 ms (plain `dart:io`
-  HTTP, like the stream URL itself; `TorrentStats.statsUrlFor` derives it
-  from the core's streaming URL, index and `tr=`/`f=` query kept, and a poll
-  falls back to `/{infoHash}/stats.json` while the per-file route still
-  404s on an unresolved magnet) and maps the server's `phase` to a label:
+  server's stats every 500 ms over FFI (`server_torrent_stats`, the same
+  function its `stats.json` routes run; `TorrentStatsRequest.forStream`
+  takes the stream's `infoHash`, `fileIdx` and `announce` list — the three
+  things the core builds the stream URL from, `announce` being its `tr=` —
+  and a poll falls back to the torrent-level stats when the server has no
+  answer for the file) and maps the server's `phase` to a label:
   `resolvingMetadata` → "Fetching torrent metadata…", `checking` →
   "Checking existing data…" with `checkedBytes/checkTotalBytes`,
   `buffering` → "Finding peers…" with the `peerDiscovery` counts while no
   peer is live, else "Buffering start…" with
   `initialWindowReadyBytes/initialWindowBytes`, `ready` → "Starting
-  playback…", `error` → a failure; no answer yet (404, unreachable) →
-  "Connecting to server…". The bar is determinate whenever there is a
-  percentage; `downloadSpeed` and `peers` show when non-zero. Polling
-  stops when the media loads, on an engine error and on dispose; direct
-  HTTP streams get nothing extra. The `TorrentStatsClient` comes from
-  `PlaybackScope`, so tests feed phases through a fake.
+  playback…", `error` → "The torrent failed to start" with the server's
+  `error` string as the detail; no answer yet → "Connecting to server…".
+  The bar is determinate whenever there is a percentage; `downloadSpeed`
+  and `peers` show when non-zero. Polling stops when the media loads, on
+  an engine error and on dispose; direct HTTP streams get nothing extra.
+  The `TorrentStatsClient` comes from `PlaybackScope`, so tests feed
+  phases through a fake. The stream's `fileMustInclude` (`f=`) filters
+  are not part of the library call: a stream without a `fileIdx` polls
+  the torrent-level stats.
 - **Next episode.** `player.nextVideo`/`nextStream` come from the core.
   On `Ended`, with `bingeWatching` on, an up-next card counts down
   `nextVideoNotificationDuration` (35 s by default); playing it dispatches
@@ -283,10 +312,12 @@ connection.
   as a SnackBar.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
   with the `derive` + `env-future-send` features, `zond/stream-server` at a
-  fixed rev. To bump: change the rev, `cargo update -p <crate>`, run
-  `cargo test`, and re-copy `rust/vendor/stremio-watched-bitfield` from the
-  new stremio-core rev (it carries a one-line `flate2` relaxation the
-  combined graph needs; see `rust/vendor/README.md`).
+  fixed rev (`8763760`: generated bearer token, library API on
+  `ServerHandle`, ephemeral torrent port, `/local-addon` stubs). To bump:
+  change the rev, `cargo update -p <crate>`, run `cargo test`, and re-copy
+  `rust/vendor/stremio-watched-bitfield` from the new stremio-core rev (it
+  carries a one-line `flate2` relaxation the combined graph needs; see
+  `rust/vendor/README.md`).
 
 ### Verifying on a dev machine
 

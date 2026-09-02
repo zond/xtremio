@@ -72,6 +72,23 @@ or print `RuntimeCoreEvent.args`, action args of `Ctx` actions, or the
 `ctx` JSON — log event names and `source.event` only. The same goes for
 test output and bug reports.
 
+The embedded server's bearer token (`ServerHandle::auth_token`, read
+through `server::token_for` in `rust/src/env.rs`) is in the same class:
+never log it, never return it over FFI, never put it in a URL. It exists
+only inside the Rust crate.
+
+## The app never speaks HTTP to the embedded server
+
+Only libmpv fetches from it (the open media routes). Everything else the
+server can answer — settings, a torrent's `stats.json`, creating an
+engine — is a control route that wants the token, and the app reaches it
+in one of two ways: stremio-core's `StreamingServer` model through
+`Env::fetch` (which adds the header), or an FFI function in
+`rust/src/api/server.rs` over `ServerHandle`'s library API
+(`server_torrent_stats`, `server_settings`, `server_update_settings`).
+A new need goes there, as a Rust function returning JSON, not as a
+`dart:io` `HttpClient` call.
+
 ## Use cheaper models for mechanical work
 
 When an agent delegates, mechanical subtasks (formatting, renames, moving

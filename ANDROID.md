@@ -56,12 +56,13 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
   need it in release too.
 - **`android:usesCleartextTraffic="true"`** is set on the application. This
   flag only governs Android's own network stack (`dart:io` — `Image.network`
-  posters from self-hosted `http://` addons, and calls the Flutter side makes
-  to the embedded server's loopback URL). It does **not** affect the Rust
-  side: reqwest/rustls sockets and libmpv's own networking ignore Android's
-  cleartext policy either way. It's needed because the embedded
-  `stream-server` always talks `http://127.0.0.1:<port>`, never https, and
-  some addons are themselves plain-http.
+  posters from self-hosted `http://` addons; the Flutter side itself makes
+  no HTTP calls to the embedded server, its control calls are FFI). It does
+  **not** affect the Rust side: reqwest/rustls sockets and libmpv's own
+  networking ignore Android's cleartext policy either way. It's needed
+  because some addons are plain-http, and it keeps the embedded
+  `stream-server`'s `http://127.0.0.1:<port>` media URLs open to anything
+  on the Dart side that might load one.
 - **`rustls-platform-verifier` JNI hook.** On Android, reqwest's rustls
   verifies TLS certificates through `rustls-platform-verifier`, which needs
   the Android `Context` once before any HTTPS request. `MainActivity.onCreate`
@@ -119,9 +120,13 @@ adb logcat -d | grep -E "flutter|xtremio|stream_server|rustls"
 # "Expect rustls-platform-verifier to be initialized"
 
 adb forward tcp:11470 tcp:11470
-curl -s http://127.0.0.1:11470/heartbeat
-# {"success":true} — if 11470 was taken the app fell back to an
-# ephemeral port; read the real one from logcat instead
+curl -si http://127.0.0.1:11470/heartbeat
+# HTTP/1.1 401 Unauthorized — the control API wants the per-launch bearer
+# token only the Rust side holds; the 401 itself proves the server is up.
+# If 11470 was taken the app fell back to an ephemeral port; read the real
+# one from logcat instead. The BitTorrent listener (librqbit) is always on
+# an ephemeral UDP/TCP port for the embedded server, so nothing needs
+# forwarding or a fixed firewall rule for it.
 
 # Discover showing Cinemeta posters proves HTTPS end to end
 ```
@@ -172,7 +177,8 @@ bottom of `ci.yml` — verified manually instead):
   `127.0.0.1:11470`, the stremio-core runtime starting against that URL, and
   no `FATAL` or uncaught-exception lines for the run.
 - `adb forward tcp:11470 tcp:11470 && curl http://127.0.0.1:11470/heartbeat`
-  returned `{"success":true}` (HTTP 200).
+  returned `{"success":true}` (HTTP 200). (That was before the server's
+  control API took a bearer token; today the same probe answers 401.)
 - The app booted straight into **Board**; navigating to **Discover** loaded
   and rendered the Cinemeta catalog with poster images over HTTPS (confirmed
   visually via `adb shell screencap`), proving the TLS-verifier hook,
