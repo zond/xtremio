@@ -5,7 +5,7 @@ import 'package:xtremio/core/core.dart';
 
 void main() {
   test('envelope carries the field wire name and the action', () {
-    final json = Actions.unload(CoreField.metaDetails).toJson();
+    final json = CoreActions.unload(CoreField.metaDetails).toJson();
     expect(json, {
       'field': 'meta_details',
       'action': {'action': 'Unload'},
@@ -13,7 +13,7 @@ void main() {
   });
 
   test('loadBoard is a Load of CatalogsWithExtra', () {
-    expect(Actions.loadBoard().toJson(), {
+    expect(CoreActions.loadBoard().toJson(), {
       'field': 'board',
       'action': {
         'action': 'Load',
@@ -24,7 +24,7 @@ void main() {
       },
     });
     expect(
-      Actions.loadBoard(
+      CoreActions.loadBoard(
         type: 'movie',
         extra: const [ExtraValue('genre', 'Drama')],
       ).toJson()['action']['args']['args'],
@@ -38,7 +38,7 @@ void main() {
   });
 
   test('loadDiscover matches the request shape the Rust network test uses', () {
-    final action = Actions.loadDiscover(
+    final action = CoreActions.loadDiscover(
       ResourceRequest.cinemetaCatalog(type: 'movie', id: 'top'),
     );
     // Byte-for-byte the action dispatched in rust/tests/cinemeta.rs.
@@ -51,14 +51,14 @@ void main() {
             "path":{"resource":"catalog","type":"movie","id":"top","extra":[]}
         }}}}}'''),
     );
-    expect(Actions.loadDiscoverNextPage().toJson()['action'], {
+    expect(CoreActions.loadDiscoverNextPage().toJson()['action'], {
       'action': 'CatalogWithFilters',
       'args': {'action': 'LoadNextPage'},
     });
   });
 
   test('loadMetaDetails defaults to guessing the stream', () {
-    final json = Actions.loadMetaDetails(type: 'series', id: 'tt0903747');
+    final json = CoreActions.loadMetaDetails(type: 'series', id: 'tt0903747');
     expect(json.field, CoreField.metaDetails);
     expect(json.action, {
       'action': 'Load',
@@ -80,7 +80,7 @@ void main() {
 
   test('player actions nest under Player', () {
     expect(
-      Actions.playerTimeChanged(
+      CoreActions.playerTimeChanged(
         time: 1000,
         duration: 5000,
         device: 'xtremio',
@@ -96,16 +96,16 @@ void main() {
         },
       },
     );
-    expect(Actions.playerEnded().action, {
+    expect(CoreActions.playerEnded().action, {
       'action': 'Player',
       'args': {'action': 'Ended'},
     });
-    expect(Actions.playerPausedChanged(true).action['args'], {
+    expect(CoreActions.playerPausedChanged(true).action['args'], {
       'action': 'PausedChanged',
       'args': {'paused': true},
     });
     final stream = {'infoHash': 'abc', 'fileIdx': 0};
-    final load = Actions.loadPlayer(
+    final load = CoreActions.loadPlayer(
       stream: stream,
       streamRequest: ResourceRequest.cinemetaCatalog(type: 'movie', id: 'top'),
     );

@@ -65,7 +65,7 @@ void main() {
       final discover = CoreFieldNotifier(client, CoreField.discover);
       addTearDown(discover.dispose);
       final firstValue = discover.stream().first;
-      await client.dispatch(Actions.unload(CoreField.discover));
+      await client.dispatch(CoreActions.unload(CoreField.discover));
       final value = await firstValue.timeout(const Duration(seconds: 5));
       expect(value, isNotNull);
       expect(value!['selected'], isNull);

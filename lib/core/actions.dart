@@ -28,7 +28,7 @@ Map<String, dynamic> _load(String model, Object? args) =>
     _tagged('Load', {'model': model, 'args': args});
 
 /// Builders for the actions the app dispatches.
-abstract final class Actions {
+abstract final class CoreActions {
   /// Home board: every catalog of every installed addon.
   static CoreAction loadBoard({
     String? type,
