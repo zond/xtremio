@@ -274,6 +274,105 @@ void main() {
     });
 
     testWidgets(
+      'covered by another title, keeps its own state and takes the field '
+      'back when it is on top again',
+      (tester) async {
+        useWideViewport(tester);
+        final core = FakeCoreClient(
+          state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+        );
+        await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+        await tester.pumpAndSettle();
+        expect(core.dispatched, hasLength(1));
+
+        // A poster in Discover (reached through a genre chip) pushes a second
+        // details screen over this one; the shared field now serves it.
+        Navigator.of(tester.element(find.byType(MetaDetailsScreen))).push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                const MetaDetailsScreen(type: 'series', id: seriesId),
+          ),
+        );
+        // (Its spinner never settles until its state is in.)
+        await tester.pump();
+        await tester.pump();
+        core.setState(CoreField.metaDetails, loadSeriesMetaDetailsFixture());
+        await tester.pumpAndSettle();
+
+        // The second screen loaded and picked its pilot; the covered one
+        // neither reloaded nor went blank on the other title's state.
+        expect(core.dispatched, hasLength(3));
+        expect(loadArgs(core.dispatched[1])['metaPath']['id'], seriesId);
+        expect(find.text('Breaking Bad'), findsWidgets);
+        expect(find.text('Night of the Living Dead'), findsNothing);
+        expect(
+          find.text('Night of the Living Dead', skipOffstage: false),
+          findsWidgets,
+        );
+        expect(
+          find.byType(CircularProgressIndicator, skipOffstage: false),
+          findsNothing,
+        );
+
+        // Back: the first screen loads its title again, with the video it
+        // had, and the popped screen leaves the field to it.
+        Navigator.of(tester.element(find.byType(MetaDetailsScreen))).pop();
+        await tester.pumpAndSettle();
+        expect(find.byType(MetaDetailsScreen), findsOneWidget);
+        expect(find.text('Night of the Living Dead'), findsWidgets);
+        expect(core.dispatched, hasLength(4));
+        expect(
+          core.dispatched.last.action,
+          CoreActions.loadMetaDetails(
+            type: 'movie',
+            id: 'tt0063350',
+            videoId: 'tt0063350',
+          ).action,
+        );
+
+        // Its own exit unloads the field as usual.
+        await tester.pumpWidget(const SizedBox());
+        expect(
+          core.dispatched.last.action,
+          CoreActions.unload(CoreField.metaDetails).action,
+        );
+        expect(
+          core.dispatched.where((a) => a.action['action'] == 'Unload'),
+          hasLength(1),
+        );
+      },
+    );
+
+    testWidgets('coming back from the player does not reload the title', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: loadMetaDetailsFixture(),
+          CoreField.player: loadPlayerFixture(),
+        },
+      );
+      await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1080p'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      final before = core.dispatched
+          .where((a) => a.field == CoreField.metaDetails)
+          .length;
+
+      Navigator.of(tester.element(find.byType(PlayerScreen))).pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(MetaDetailsScreen), findsOneWidget);
+      expect(
+        core.dispatched.where((a) => a.field == CoreField.metaDetails),
+        hasLength(before),
+        reason: 'the field still holds this title',
+      );
+    });
+
+    testWidgets(
       'shows a spinner while the meta loads and the error otherwise',
       (tester) async {
         Map<String, dynamic> withMeta(Map<String, dynamic> content) => {

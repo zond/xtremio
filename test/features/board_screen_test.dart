@@ -192,9 +192,15 @@ void main() {
         .items
         .first;
     await tester.tap(find.text(first.name));
-    await tester.pumpAndSettle();
+    // The field holds another title (the movie fixture), which the new
+    // screen ignores: it shows a spinner (never settling) until its own
+    // state arrives, so pump the route transition by hand.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.byType(MetaDetailsScreen), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Night of the Living Dead'), findsNothing);
     final load = core.dispatched.firstWhere(
       (a) => a.field == CoreField.metaDetails,
     );

@@ -40,6 +40,29 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
   CoreClient? _client;
   CoreFieldNotifier? _details;
 
+  /// The screen whose `Load` the shared `meta_details` field last served.
+  ///
+  /// Two of these screens can be on the stack at once (a genre chip opens
+  /// Discover, whose posters open another title), so the field is owned by
+  /// whichever dispatched the last `Load`, and only the owner unloads it on
+  /// dispose: a screen popping off above one that has already taken the
+  /// field back (see [_reclaimField]) leaves it alone.
+  static _MetaDetailsScreenState? _fieldOwner;
+
+  /// The field's last state that was this screen's (its `metaPath` names
+  /// [MetaDetailsScreen.id]) — what is rendered, also while another screen
+  /// holds the field with a different title.
+  MetaDetailsState? _ownState;
+  Map<String, dynamic>? _ownJson;
+
+  /// The video of the last `Load` this screen dispatched (null lets the
+  /// engine guess), so the field can be reloaded with the same selection.
+  String? _requestedVideoId;
+
+  /// Whether this screen's route is on top; a covered screen ignores the
+  /// field and reloads it when it is current again.
+  bool _isCurrent = true;
+
   /// Set once the screen has picked an episode on the engine's behalf (or
   /// was told which video to open), so a later state without a stream path
   /// (unload, another title) does not trigger it again.
@@ -58,35 +81,67 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
       _client = client;
       _details = CoreFieldNotifier(client, CoreField.metaDetails)
         ..addListener(_onDetails);
-      client.dispatch(
-        CoreActions.loadMetaDetails(
-          type: widget.type,
-          id: widget.id,
-          videoId: widget.videoId,
-        ),
-      );
+      _load(widget.videoId);
     }
+    // `ModalRoute.of` subscribes to the route's status, so this runs again
+    // when another route is pushed over this one and when that route pops.
+    final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+    if (isCurrent && !_isCurrent) _reclaimField();
+    _isCurrent = isCurrent;
   }
 
   @override
   void dispose() {
-    _client?.dispatch(CoreActions.unload(CoreField.metaDetails));
+    if (_fieldOwner == this) {
+      _fieldOwner = null;
+      _client?.dispatch(CoreActions.unload(CoreField.metaDetails));
+    }
     _details?.dispose();
     super.dispose();
   }
 
-  MetaDetailsState? get _state {
+  MetaDetailsState? get _state => _ownState;
+
+  /// Dispatches `Load MetaDetails` for this title, showing [videoId]'s
+  /// streams (or letting the engine guess), and takes the field over.
+  void _load(String? videoId) {
+    _requestedVideoId = videoId;
+    _fieldOwner = this;
+    _client?.dispatch(
+      CoreActions.loadMetaDetails(
+        type: widget.type,
+        id: widget.id,
+        videoId: videoId,
+      ),
+    );
+  }
+
+  /// Back on top: if another screen loaded its title into the field in the
+  /// meantime, load ours again with the selection it had. A route that left
+  /// the field alone (the player) costs nothing here.
+  void _reclaimField() {
+    if (identical(_details?.value, _ownJson)) return;
+    _load(_requestedVideoId ?? _ownState?.streamPath?.id);
+  }
+
+  void _onDetails() {
     final json = _details?.value;
-    return json == null ? null : MetaDetailsState.fromJson(json);
+    if (json == null) return;
+    final state = MetaDetailsState.fromJson(json);
+    // Another title (or the field unloaded) while a second details screen
+    // holds the field: keep rendering our own last state.
+    if (state.metaPath?.id != widget.id) return;
+    _ownJson = json;
+    _ownState = state;
+    if (mounted) setState(() {});
+    _maybePickInitialVideo(state);
   }
 
   /// Mirrors `selected_guess_stream_update`: when the engine will not pick a
   /// stream path for this title (a series without a default video), select
   /// the initial episode once the meta is in so streams load without a tap.
-  void _onDetails() {
+  void _maybePickInitialVideo(MetaDetailsState state) {
     if (_pickedInitialVideo) return;
-    final state = _state;
-    if (state == null || state.metaPath?.id != widget.id) return;
     if (state.streamPath != null || state.engineWillGuessStream) return;
     final video = state.initialVideo(preferred: widget.videoId);
     if (video == null) return;
@@ -96,13 +151,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
 
   void _selectVideo(VideoInfo video) {
     if (mounted) setState(() => _season = video.season);
-    _client?.dispatch(
-      CoreActions.loadMetaDetails(
-        type: widget.type,
-        id: widget.id,
-        videoId: video.id,
-      ),
-    );
+    _load(video.id);
   }
 
   void _toggleWatched(MetaDetailsState state, VideoInfo video) {
@@ -140,20 +189,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
   }
 
   void _selectVideoId(String videoId) {
-    final json = _details?.value;
-    final meta = json == null ? null : MetaDetailsState.fromJson(json).meta;
-    final video = meta?.videoById(videoId);
+    final video = _ownState?.meta?.videoById(videoId);
     if (video != null) {
       _selectVideo(video);
-      return;
+    } else {
+      _load(videoId);
     }
-    _client?.dispatch(
-      CoreActions.loadMetaDetails(
-        type: widget.type,
-        id: widget.id,
-        videoId: videoId,
-      ),
-    );
   }
 
   void _openGenre(ResourceRequest request) {
@@ -167,66 +208,58 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Map<String, dynamic>?>(
-      valueListenable: _details!,
-      builder: (context, json, _) {
-        final state = json == null ? null : MetaDetailsState.fromJson(json);
-        final meta = state?.meta;
-        if (state == null || meta == null) {
-          final error = state?.metaError;
-          return Scaffold(
-            appBar: AppBar(),
-            body: Center(
-              child: error == null
-                  ? const CircularProgressIndicator()
-                  : Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text(
-                        'Could not load this title: ${error.message}',
-                        textAlign: TextAlign.center,
+    final state = _state;
+    final meta = state?.meta;
+    if (state == null || meta == null) {
+      final error = state?.metaError;
+      return Scaffold(
+        appBar: AppBar(),
+        body: Center(
+          child: error == null
+              ? const CircularProgressIndicator()
+              : Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Text(
+                    'Could not load this title: ${error.message}',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+        ),
+      );
+    }
+    return Scaffold(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide =
+              constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
+          final info = _infoSlivers(state, meta, isWide: isWide);
+          final streams = _streamSlivers(state, meta);
+          if (!isWide) {
+            return CustomScrollView(slivers: [...info, ...streams]);
+          }
+          final paneWidth = (constraints.maxWidth * 0.38).clamp(320.0, 480.0);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: CustomScrollView(slivers: info)),
+              const VerticalDivider(width: 1),
+              SizedBox(
+                width: paneWidth,
+                child: CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      padding: EdgeInsets.only(
+                        top: MediaQuery.paddingOf(context).top + 8,
                       ),
                     ),
-            ),
+                    ...streams,
+                  ],
+                ),
+              ),
+            ],
           );
-        }
-        return Scaffold(
-          body: LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide =
-                  constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
-              final info = _infoSlivers(state, meta, isWide: isWide);
-              final streams = _streamSlivers(state, meta);
-              if (!isWide) {
-                return CustomScrollView(slivers: [...info, ...streams]);
-              }
-              final paneWidth = (constraints.maxWidth * 0.38).clamp(
-                320.0,
-                480.0,
-              );
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: CustomScrollView(slivers: info)),
-                  const VerticalDivider(width: 1),
-                  SizedBox(
-                    width: paneWidth,
-                    child: CustomScrollView(
-                      slivers: [
-                        SliverPadding(
-                          padding: EdgeInsets.only(
-                            top: MediaQuery.paddingOf(context).top + 8,
-                          ),
-                        ),
-                        ...streams,
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 
