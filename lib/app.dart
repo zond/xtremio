@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'core/core.dart';
+import 'features/player/playback_engine.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
 
@@ -21,6 +22,10 @@ import 'shell/route_log_observer.dart';
 /// profile also `PullUserFromAPI`, `SyncLibraryWithAPI` and
 /// `PullNotifications` — at startup, after `UserAuthenticated`, and when the
 /// app resumes after having been inactive, hidden or paused.
+///
+/// It also supplies the [PlaybackScope]: every player gets a
+/// [MediaKitEngine] configured from `profile.settings.hardwareDecoding` as
+/// it stands when that player opens.
 class XtremioApp extends StatefulWidget {
   const XtremioApp({super.key, required this.core, this.initInfo});
 
@@ -34,6 +39,12 @@ class XtremioApp extends StatefulWidget {
 class _XtremioAppState extends State<XtremioApp> {
   late final AppLifecycleListener _lifecycle;
   StreamSubscription<CoreEvent>? _events;
+
+  /// The `ctx` field, for the settings a new player is created with.
+  late final CoreFieldNotifier _ctx = CoreFieldNotifier(
+    widget.core,
+    CoreField.ctx,
+  );
 
   /// The app left the resumed state at some point, so the next resume is a
   /// real return to the foreground. Without this the first `resumed` a
@@ -83,6 +94,16 @@ class _XtremioAppState extends State<XtremioApp> {
     await _dispatch(CoreActions.pullNotifications());
   }
 
+  ProfileSettings get _settings {
+    final ctx = _ctx.value;
+    return ctx == null
+        ? const ProfileSettings({})
+        : ProfileState.fromCtx(ctx).settings;
+  }
+
+  PlaybackEngine _createEngine() =>
+      MediaKitEngine(hardwareDecoding: _settings.hardwareDecoding);
+
   Future<bool> _isLoggedIn() async {
     try {
       final ctx = await widget.core.state(CoreField.ctx);
@@ -120,6 +141,7 @@ class _XtremioAppState extends State<XtremioApp> {
   @override
   void dispose() {
     _events?.cancel();
+    _ctx.dispose();
     _lifecycle.dispose();
     super.dispose();
   }
@@ -134,16 +156,19 @@ class _XtremioAppState extends State<XtremioApp> {
     return CoreScope(
       client: widget.core,
       initInfo: widget.initInfo,
-      child: MaterialApp(
-        title: 'Xtremio',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: colorScheme,
-          scaffoldBackgroundColor: const Color(0xFF0E0B16),
+      child: PlaybackScope(
+        createEngine: _createEngine,
+        child: MaterialApp(
+          title: 'Xtremio',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: colorScheme,
+            scaffoldBackgroundColor: const Color(0xFF0E0B16),
+          ),
+          navigatorObservers: [if (kDebugMode) RouteLogObserver()],
+          home: const RootShell(),
         ),
-        navigatorObservers: [if (kDebugMode) RouteLogObserver()],
-        home: const RootShell(),
       ),
     );
   }

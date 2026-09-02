@@ -141,9 +141,16 @@ class PlaybackScope extends InheritedWidget {
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever
 /// the URL serves is decoded on this device; the server never transcodes.
+///
+/// [hardwareDecoding] (`profile.settings.hardwareDecoding`) is fixed at
+/// creation: media_kit takes it as the video controller's configuration
+/// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
 class MediaKitEngine implements PlaybackEngine {
-  MediaKitEngine() : _player = Player() {
-    _controller = VideoController(_player);
+  MediaKitEngine({bool hardwareDecoding = true}) : _player = Player() {
+    _controller = VideoController(
+      _player,
+      configuration: configurationFor(hardwareDecoding: hardwareDecoding),
+    );
     _trackSubscriptions = [
       _player.stream.tracks.listen((tracks) {
         _lastTracks = tracks;
@@ -161,6 +168,15 @@ class MediaKitEngine implements PlaybackEngine {
   final Player _player;
   late final VideoController _controller;
   bool _disposed = false;
+
+  /// The controller configuration for a `hardwareDecoding` setting:
+  /// media_kit's default (GPU decode and render) when on, software
+  /// decoding when off.
+  static VideoControllerConfiguration configurationFor({
+    required bool hardwareDecoding,
+  }) => VideoControllerConfiguration(
+    enableHardwareAcceleration: hardwareDecoding,
+  );
 
   /// How often [stats] samples while listened to.
   static const Duration statsInterval = Duration(milliseconds: 500);

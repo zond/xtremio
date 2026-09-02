@@ -202,15 +202,19 @@ void main() {
     await key(LogicalKeyboardKey.keyK);
     expect(engine.playOrPauseCalls, 2);
 
+    // Arrows move by seekTimeDuration (10 s by default); Shift + arrows by
+    // the *short* seekShortTimeDuration (3 s), as in stremio-core.
     await key(LogicalKeyboardKey.arrowRight);
     await key(LogicalKeyboardKey.keyJ);
     await key(LogicalKeyboardKey.arrowLeft, shift: true);
     expect(engine.seeks, [
       const Duration(minutes: 2, seconds: 10),
       const Duration(minutes: 2),
-      const Duration(minutes: 1),
+      const Duration(minutes: 1, seconds: 57),
     ]);
     // Never before the start.
+    engine.emitPosition(const Duration(seconds: 1));
+    await pumpEvents(tester);
     await key(LogicalKeyboardKey.arrowLeft, shift: true);
     expect(engine.seeks.last, Duration.zero);
 

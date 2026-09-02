@@ -6,6 +6,7 @@ import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
 
+import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// Moving on to the next episode: the up-next countdown after the credits,
@@ -20,8 +21,16 @@ void main() {
   };
   const nextStream = {'url': 'https://x.example/e2.mp4', 'name': 'Direct'};
 
+  /// A profile whose up-next card counts down 10 s (the default is 35 s).
+  Map<String, dynamic> ctxWithTenSeconds() {
+    final ctx = loadCtxLoggedOutFixture();
+    ctx['profile']['settings']['nextVideoNotificationDuration'] = 10000;
+    return ctx;
+  }
+
   PlayerHarness harnessWithNext({bool withStream = true}) {
     final harness = PlayerHarness(
+      ctx: ctxWithTenSeconds(),
       subtitlesPath: const ResourcePath(
         resource: 'subtitles',
         type: 'series',

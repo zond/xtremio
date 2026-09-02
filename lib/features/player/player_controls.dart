@@ -100,18 +100,40 @@ class PlayerTopBar extends StatelessWidget {
   }
 }
 
-/// The large play/pause and ±10 s buttons in the middle of the video
+/// Seconds label and icon for a seek step: mpv-style `replay_10` glyphs
+/// where Material has one for the step, generic rewind/forward otherwise.
+String seekLabel(Duration step) => '${step.inSeconds} seconds';
+
+IconData seekBackIcon(Duration step) => switch (step.inSeconds) {
+  5 => Icons.replay_5,
+  10 => Icons.replay_10,
+  30 => Icons.replay_30,
+  _ => Icons.fast_rewind,
+};
+
+IconData seekForwardIcon(Duration step) => switch (step.inSeconds) {
+  5 => Icons.forward_5,
+  10 => Icons.forward_10,
+  30 => Icons.forward_30,
+  _ => Icons.fast_forward,
+};
+
+/// The large play/pause and ±[seekStep] buttons in the middle of the video
 /// (phone layout; on wide screens they live in [PlayerBottomBar]).
 class PlayerCenterControls extends StatelessWidget {
   const PlayerCenterControls({
     super.key,
     required this.playing,
+    required this.seekStep,
     required this.onPlayPause,
     required this.onSeekBack,
     required this.onSeekForward,
   });
 
   final bool playing;
+
+  /// What the seek buttons move by (`seekTimeDuration`), for their labels.
+  final Duration seekStep;
   final VoidCallback onPlayPause;
   final VoidCallback onSeekBack;
   final VoidCallback onSeekForward;
@@ -122,11 +144,11 @@ class PlayerCenterControls extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          tooltip: 'Back 10 seconds',
+          tooltip: 'Back ${seekLabel(seekStep)}',
           iconSize: 40,
           color: Colors.white,
           onPressed: onSeekBack,
-          icon: const Icon(Icons.replay_10),
+          icon: Icon(seekBackIcon(seekStep)),
         ),
         const SizedBox(width: 24),
         IconButton.filled(
@@ -137,11 +159,11 @@ class PlayerCenterControls extends StatelessWidget {
         ),
         const SizedBox(width: 24),
         IconButton(
-          tooltip: 'Forward 10 seconds',
+          tooltip: 'Forward ${seekLabel(seekStep)}',
           iconSize: 40,
           color: Colors.white,
           onPressed: onSeekForward,
-          icon: const Icon(Icons.forward_10),
+          icon: Icon(seekForwardIcon(seekStep)),
         ),
       ],
     );
@@ -156,6 +178,7 @@ class PlayerBottomBar extends StatelessWidget {
     super.key,
     required this.wide,
     required this.playing,
+    required this.seekStep,
     required this.position,
     required this.buffered,
     required this.duration,
@@ -176,6 +199,9 @@ class PlayerBottomBar extends StatelessWidget {
 
   final bool wide;
   final bool playing;
+
+  /// What the seek buttons move by (`seekTimeDuration`), for their labels.
+  final Duration seekStep;
   final ValueListenable<Duration> position;
   final ValueListenable<Duration> buffered;
   final Duration duration;
@@ -248,16 +274,16 @@ class PlayerBottomBar extends StatelessWidget {
                     icon: Icon(playing ? Icons.pause : Icons.play_arrow),
                   ),
                   IconButton(
-                    tooltip: 'Back 10 seconds (←)',
+                    tooltip: 'Back ${seekLabel(seekStep)} (←)',
                     color: Colors.white,
                     onPressed: onSeekBack,
-                    icon: const Icon(Icons.replay_10),
+                    icon: Icon(seekBackIcon(seekStep)),
                   ),
                   IconButton(
-                    tooltip: 'Forward 10 seconds (→)',
+                    tooltip: 'Forward ${seekLabel(seekStep)} (→)',
                     color: Colors.white,
                     onPressed: onSeekForward,
-                    icon: const Icon(Icons.forward_10),
+                    icon: Icon(seekForwardIcon(seekStep)),
                   ),
                   const SizedBox(width: 8),
                 ],

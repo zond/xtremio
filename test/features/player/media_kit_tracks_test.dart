@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 
 /// How [MediaKitEngine] derives the active tracks from media_kit's track
@@ -75,5 +76,18 @@ void main() {
     expect(viaMediaKit.activeSubtitleId, 'https://subs.example/fre.srt');
     // A track mpv knows that the list has not caught up with yet.
     expect(merge(sid: '9').activeSubtitleId, '9');
+  });
+
+  test('hardwareDecoding maps to the controller\'s hardware acceleration', () {
+    expect(
+      MediaKitEngine.configurationFor(hardwareDecoding: true)
+          .enableHardwareAcceleration,
+      isTrue,
+    );
+    final software = MediaKitEngine.configurationFor(hardwareDecoding: false);
+    expect(software.enableHardwareAcceleration, isFalse);
+    // Nothing else strays from media_kit's defaults.
+    expect(software.vo, const VideoControllerConfiguration().vo);
+    expect(software.hwdec, const VideoControllerConfiguration().hwdec);
   });
 }

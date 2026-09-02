@@ -27,6 +27,14 @@ import 'up_next_card.dart';
 /// the track menus, a bottom bar with the seek bar, transport, time, volume
 /// and fullscreen, keyboard shortcuts, and an up-next card when an episode
 /// ends. They fade after [controlsTimeout] while playing.
+///
+/// `profile.settings` (the `ctx` field) drives the seek steps
+/// (`seekTimeDuration`; Shift + arrows is the *short* `seekShortTimeDuration`,
+/// as in stremio-core), whether an ending episode moves on at all
+/// (`bingeWatching`), how long the up-next card counts down first
+/// (`nextVideoNotificationDuration`; 0 skips the card and plays at once),
+/// whether hiding the app pauses (`pauseOnMinimize`), whether Esc leaves
+/// fullscreen (`escExitFullscreen`), and the subtitle style.
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -63,13 +71,6 @@ class PlayerScreen extends StatefulWidget {
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
 
-  /// The arrow-key / button seek step; Shift+arrows use [longSeekStep].
-  static const Duration seekStep = Duration(seconds: 10);
-  static const Duration longSeekStep = Duration(seconds: 60);
-
-  /// How long the up-next card counts down before playing the next episode.
-  static const Duration upNextCountdown = Duration(seconds: 10);
-
   static const List<double> rates = [0.75, 1, 1.25, 1.5, 2];
 
   /// Below this width the transport sits in the middle of the video and
@@ -97,8 +98,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   CoreClient? _client;
   CoreFieldNotifier? _player;
 
-  /// The `ctx` field, for `profile.settings`: the subtitle style.
+  /// The `ctx` field, for `profile.settings`.
   CoreFieldNotifier? _ctx;
+  late final AppLifecycleListener _lifecycle;
   PlaybackEngine? _engine;
   FullscreenController? _fullscreen;
   SubtitleStyle _subtitleStyle = const SubtitleStyle();
@@ -174,6 +176,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool get _statsVisible => _statsPinned ?? _statsHover;
 
   @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onHide: _onAppHidden);
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_client != null) return;
@@ -227,10 +235,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onCtx() {
     if (!mounted) return;
     final style = SubtitleStyle.fromSettings(_settings);
-    if (style == _subtitleStyle) return;
-    _subtitleStyle = style;
-    _engine?.setSubtitleStyle(style);
+    if (style != _subtitleStyle) {
+      _subtitleStyle = style;
+      _engine?.setSubtitleStyle(style);
+    }
+    // The seek labels follow the settings too.
     setState(() {});
+  }
+
+  /// The arrow-key / button seek step (`seekTimeDuration`).
+  Duration get _seekStep => Duration(milliseconds: _settings.seekTimeDuration);
+
+  /// The Shift + arrow seek step (`seekShortTimeDuration`).
+  Duration get _shortSeekStep =>
+      Duration(milliseconds: _settings.seekShortTimeDuration);
+
+  /// `pauseOnMinimize`: the window was minimised or the app went to the
+  /// background while playing.
+  void _onAppHidden() {
+    if (_settings.pauseOnMinimize && _playing && !_handedOver) {
+      _engine?.pause();
+    }
   }
 
   /// Writes one profile setting: the whole map with [key] changed, as the
@@ -421,7 +446,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onCompleted(bool completed) {
     if (!completed || _opened == null || _handedOver) return;
     _client?.dispatch(CoreActions.playerEnded());
-    if (_state?.nextVideo != null) _startUpNext();
+    // `bingeWatching` off: the episode just ends; the Next button remains.
+    if (_state?.nextVideo != null && _settings.bingeWatching) _startUpNext();
     _showControls();
   }
 
@@ -490,9 +516,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (details.kind != PointerDeviceKind.touch) return;
     final x = details.localPosition.dx;
     if (x < width / 3) {
-      _seekBy(-PlayerScreen.seekStep);
+      _seekBy(-_seekStep);
     } else if (x > width * 2 / 3) {
-      _seekBy(PlayerScreen.seekStep);
+      _seekBy(_seekStep);
     }
   }
 
@@ -773,10 +799,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // --- Next episode --------------------------------------------------------
 
-  /// Shows the up-next card with the full countdown and starts it ticking
-  /// (once no sheet is open; see [_showSheet]).
+  /// Shows the up-next card with the full `nextVideoNotificationDuration`
+  /// countdown and starts it ticking (once no sheet is open; see
+  /// [_showSheet]). A duration of 0 ("disabled") shows no card: the next
+  /// episode plays as soon as this one ends.
   void _startUpNext() {
-    setState(() => _upNextSecondsLeft = PlayerScreen.upNextCountdown.inSeconds);
+    final millis = _settings.nextVideoNotificationDuration;
+    setState(() => _upNextSecondsLeft = (millis / 1000).ceil());
     _resumeUpNext();
   }
 
@@ -784,7 +813,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// is open; at zero the next episode plays.
   void _resumeUpNext() {
     _pauseUpNext();
-    if (_upNextSecondsLeft == null || _menuOpen) return;
+    final left = _upNextSecondsLeft;
+    if (left == null || _menuOpen) return;
+    if (left <= 0) {
+      _playNext();
+      return;
+    }
     _upNextTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final left = _upNextSecondsLeft;
       if (!mounted || left == null) return;
@@ -878,9 +912,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         (key == LogicalKeyboardKey.arrowLeft ||
             key == LogicalKeyboardKey.arrowRight)) {
       _seekBy(
-        key == LogicalKeyboardKey.arrowLeft
-            ? -PlayerScreen.longSeekStep
-            : PlayerScreen.longSeekStep,
+        key == LogicalKeyboardKey.arrowLeft ? -_shortSeekStep : _shortSeekStep,
       );
       return KeyEventResult.handled;
     }
@@ -891,10 +923,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (event is KeyDownEvent) _togglePlay();
       case LogicalKeyboardKey.arrowLeft:
       case LogicalKeyboardKey.keyJ:
-        _seekBy(-PlayerScreen.seekStep);
+        _seekBy(-_seekStep);
       case LogicalKeyboardKey.arrowRight:
       case LogicalKeyboardKey.keyL:
-        _seekBy(PlayerScreen.seekStep);
+        _seekBy(_seekStep);
       case LogicalKeyboardKey.arrowUp:
         _setVolume(_volume + 5);
       case LogicalKeyboardKey.arrowDown:
@@ -906,7 +938,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case LogicalKeyboardKey.escape:
         if (event is! KeyDownEvent) break;
         if (_fullscreenOn) {
-          _toggleFullscreen();
+          if (_settings.escExitFullscreen) _toggleFullscreen();
         } else {
           Navigator.of(context).maybePop();
         }
@@ -945,6 +977,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _statsHoverTimer?.cancel();
     _controlsTimer?.cancel();
     _upNextTimer?.cancel();
@@ -1007,6 +1040,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final nextVideo = state?.nextVideo;
     final upNext = _upNextSecondsLeft;
     final hasVideo = engine != null && _opened != null;
+    final seekStep = _seekStep;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
@@ -1098,11 +1132,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               ? Center(
                                   child: PlayerCenterControls(
                                     playing: _playing,
+                                    seekStep: seekStep,
                                     onPlayPause: _togglePlay,
-                                    onSeekBack: () =>
-                                        _seekBy(-PlayerScreen.seekStep),
-                                    onSeekForward: () =>
-                                        _seekBy(PlayerScreen.seekStep),
+                                    onSeekBack: () => _seekBy(-seekStep),
+                                    onSeekForward: () => _seekBy(seekStep),
                                   ),
                                 )
                               : const SizedBox.expand(),
@@ -1111,6 +1144,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           PlayerBottomBar(
                             wide: wide,
                             playing: _playing,
+                            seekStep: seekStep,
                             position: _position,
                             buffered: _buffer,
                             duration: _duration,
@@ -1118,8 +1152,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             volume: _volume,
                             fullscreen: _fullscreenOn,
                             onPlayPause: _togglePlay,
-                            onSeekBack: () => _seekBy(-PlayerScreen.seekStep),
-                            onSeekForward: () => _seekBy(PlayerScreen.seekStep),
+                            onSeekBack: () => _seekBy(-seekStep),
+                            onSeekForward: () => _seekBy(seekStep),
                             onSeek: _seekTo,
                             onScrubStart: () {
                               _scrubbing = true;
@@ -1141,7 +1175,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                 ),
               ),
-              if (upNext != null && nextVideo != null)
+              if (upNext != null && upNext > 0 && nextVideo != null)
                 Positioned(
                   right: 16,
                   bottom: hasVideo ? 112 : 16,
