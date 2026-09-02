@@ -385,6 +385,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // --- Tracks --------------------------------------------------------------
 
+  void _selectAudio(TrackInfo track) {
+    _tracks.value = _tracks.value.copyWith(activeAudioId: track.id);
+    _engine?.setAudioTrack(track.id);
+  }
+
   void _selectEmbeddedSubtitle(TrackInfo track) {
     _tracks.value = _tracks.value.copyWith(activeSubtitleId: track.id);
     _engine?.setSubtitleTrack(track.id);
@@ -521,6 +526,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ),
   );
 
+  Future<void> _openAudioMenu() => _showSheet(
+    (context) => ValueListenableBuilder<PlaybackTracks>(
+      valueListenable: _tracks,
+      builder: (context, tracks, _) => AudioMenu(
+        tracks: tracks.audio,
+        activeId: tracks.activeAudioId,
+        onSelect: (track) {
+          _selectAudio(track);
+          Navigator.of(context).pop();
+        },
+      ),
+    ),
+  );
+
   Future<void> _openSettings() => _showSheet(
     (context) => StatefulBuilder(
       builder: (context, setSheetState) => PlayerSettingsSheet(
@@ -596,6 +615,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       case LogicalKeyboardKey.keyS:
         if (event is KeyDownEvent) _openSubtitleMenu();
+      case LogicalKeyboardKey.keyA:
+        if (event is KeyDownEvent && _tracks.value.audio.length > 1) {
+          _openAudioMenu();
+        }
       default:
         return KeyEventResult.ignored;
     }
@@ -750,7 +773,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           title: state?.title ?? '',
                           subtitlesOn: _tracks.value.activeSubtitleId != null,
                           onSubtitles: _openSubtitleMenu,
-                          onAudio: null,
+                          onAudio: _tracks.value.audio.length > 1
+                              ? _openAudioMenu
+                              : null,
                           statsOn: _statsPinned ?? false,
                           onStats: _toggleStatsPinned,
                           onSettings: _openSettings,

@@ -83,6 +83,55 @@ class SubtitleMenu extends StatelessWidget {
   }
 }
 
+/// The audio track picker.
+class AudioMenu extends StatelessWidget {
+  const AudioMenu({
+    super.key,
+    required this.tracks,
+    required this.activeId,
+    required this.onSelect,
+  });
+
+  final List<TrackInfo> tracks;
+  final String? activeId;
+  final ValueChanged<TrackInfo> onSelect;
+
+  static String label(TrackInfo track, int index) =>
+      track.title ??
+      (track.language == null
+          ? 'Audio ${index + 1}'
+          : languageName(track.language!));
+
+  /// Language (when the title took the first line), channel layout and
+  /// codec, whichever are known.
+  static String? details(TrackInfo track) {
+    final parts = [
+      if (track.title != null && track.language != null)
+        languageName(track.language!),
+      ?track.channels,
+      ?track.codec,
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      shrinkWrap: true,
+      children: [
+        const _MenuHeader('Audio'),
+        for (final (index, track) in tracks.indexed)
+          _MenuTile(
+            title: label(track, index),
+            subtitle: details(track),
+            selected: activeId == track.id,
+            onTap: () => onSelect(track),
+          ),
+      ],
+    );
+  }
+}
+
 /// Playback speed and subtitle appearance.
 class PlayerSettingsSheet extends StatelessWidget {
   const PlayerSettingsSheet({
