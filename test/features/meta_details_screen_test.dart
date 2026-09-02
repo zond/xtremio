@@ -8,6 +8,7 @@ import 'package:xtremio/features/player/player_screen.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fake_playback_engine.dart';
+import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
 
 const seriesId = 'tt0903747';
@@ -51,6 +52,7 @@ void main() {
     client: core,
     child: PlaybackScope(
       createEngine: () => engine,
+      torrentStats: FakeTorrentStatsClient(),
       child: MaterialApp(
         home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
       ),

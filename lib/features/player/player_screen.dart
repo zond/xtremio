@@ -11,6 +11,7 @@ import 'language_names.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
+import 'torrent_startup_overlay.dart';
 import 'track_menus.dart';
 import 'up_next_card.dart';
 
@@ -54,6 +55,10 @@ class PlayerScreen extends StatefulWidget {
 
   /// How long the stats OSD stays up after the pointer stops moving.
   static const Duration statsHoverTimeout = Duration(seconds: 3);
+
+  /// How often the server's `stats.json` is polled while a torrent starts
+  /// up (from `open` until the engine reports the media loaded).
+  static const Duration torrentStatsInterval = Duration(milliseconds: 500);
 
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
@@ -130,6 +135,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// auto-pick waits for this.
   bool _mediaLoaded = false;
 
+  /// The pre-playback overlay for torrents: while [_torrentStatsUrl] is set
+  /// the server's `stats.json` is polled every
+  /// [PlayerScreen.torrentStatsInterval] and the latest answer shown (null
+  /// until the server answers for this torrent). Cleared once the media
+  /// loads, on an engine error and on dispose.
+  TorrentStatsClient? _torrentStatsClient;
+  Uri? _torrentStatsUrl;
+  Timer? _torrentStatsTimer;
+  bool _torrentStatsFetching = false;
+  TorrentStats? _torrentStats;
+
   bool _controlsVisible = true;
   Timer? _controlsTimer;
   bool _menuOpen = false;
@@ -166,6 +182,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     _fullscreen = PlaybackScope.fullscreenOf(context);
+    _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     final subtitleStyle = PlaybackScope.subtitleStyleOf(context);
     _subtitleStyle = subtitleStyle..addListener(_onSubtitleStyle);
 
@@ -179,7 +196,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       engine.playing.listen(_onPlaying),
       engine.completed.listen(_onCompleted),
       engine.buffering.listen(_onBuffering),
-      engine.errors.listen((e) => setState(() => _engineError = e)),
+      engine.errors.listen(_onEngineError),
       engine.volume.listen((v) => setState(() => _volume = v)),
       engine.tracks.listen(_onTracks),
     ]);
@@ -202,6 +219,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _opened = url;
     _autoPickedSubtitles = false;
     _mediaLoaded = false;
+    _startTorrentStats(state, url);
     _dismissUpNext();
     final progress = state.progress;
     final start = progress != null && progress.isResumable
@@ -261,12 +279,71 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// The first sign from the engine that the opened media is in: what the
-  /// subtitle auto-pick waits for.
+  /// subtitle auto-pick waits for, and the end of the start-up overlay.
   void _onMediaLoaded() {
     if (_mediaLoaded || _opened == null || _handedOver) return;
-    _mediaLoaded = true;
+    setState(() {
+      _mediaLoaded = true;
+      _stopTorrentStats();
+    });
     _maybeAutoPickSubtitles();
   }
+
+  void _onEngineError(String error) {
+    setState(() {
+      _engineError = error;
+      _stopTorrentStats();
+    });
+  }
+
+  // --- Torrent start-up ----------------------------------------------------
+
+  /// Begins polling the server's `stats.json` for [url] when [state] plays a
+  /// torrent through the embedded server (see [TorrentStats.statsUrlFor]);
+  /// anything else (a direct HTTP stream) shows no overlay.
+  void _startTorrentStats(PlayerState state, Uri url) {
+    _stopTorrentStats();
+    if (state.selectedStream?.kind != StreamKind.torrent) return;
+    final statsUrl = TorrentStats.statsUrlFor(url);
+    if (statsUrl == null) return;
+    _torrentStatsUrl = statsUrl;
+    _pollTorrentStats();
+    _torrentStatsTimer = Timer.periodic(
+      PlayerScreen.torrentStatsInterval,
+      (_) => _pollTorrentStats(),
+    );
+  }
+
+  /// Stops polling and forgets the last answer. Callers that need a
+  /// rebuild wrap this in `setState`.
+  void _stopTorrentStats() {
+    _torrentStatsTimer?.cancel();
+    _torrentStatsTimer = null;
+    _torrentStatsUrl = null;
+    _torrentStats = null;
+  }
+
+  Future<void> _pollTorrentStats() async {
+    final url = _torrentStatsUrl;
+    final client = _torrentStatsClient;
+    if (url == null || client == null || _torrentStatsFetching) return;
+    _torrentStatsFetching = true;
+    TorrentStats? stats;
+    try {
+      stats = await client.fetch(url);
+    } on Object {
+      stats = null;
+    } finally {
+      _torrentStatsFetching = false;
+    }
+    // Still the same torrent, still waiting for it, and something changed.
+    if (!mounted || _torrentStatsUrl != url || stats == _torrentStats) return;
+    setState(() => _torrentStats = stats);
+  }
+
+  /// The start-up overlay replaces the status text from `open` until the
+  /// media loads, for torrents the server streams.
+  bool get _startupOverlayShown => _torrentStatsUrl != null && !_mediaLoaded;
 
   void _onPlaying(bool playing) {
     if (_handedOver) return;
@@ -315,6 +392,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       !_scrubbing &&
       _opened != null &&
       _upNextSecondsLeft == null &&
+      !_startupOverlayShown &&
       _statusText(_state) == null;
 
   bool get _controlsShown => _controlsVisible || !_canAutoHide;
@@ -814,6 +892,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _statsHoverTimer?.cancel();
     _controlsTimer?.cancel();
     _upNextTimer?.cancel();
+    _stopTorrentStats();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -863,7 +942,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget build(BuildContext context) {
     final state = _state;
     final engine = _engine;
-    final status = _statusText(state);
+    final startup = _startupOverlayShown;
+    final status = startup ? null : _statusText(state);
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= PlayerScreen.wideBreakpoint;
     final shown = _controlsShown;
@@ -911,6 +991,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
+              if (startup)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: TorrentStartupOverlay(stats: _torrentStats),
+                  ),
+                ),
               if (status != null)
                 Center(
                   child: Padding(
@@ -950,7 +1037,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           onNext: nextVideo == null ? null : _playNext,
                         ),
                         Expanded(
-                          child: !wide && hasVideo && status == null
+                          child: !wide && hasVideo && status == null && !startup
                               ? Center(
                                   child: PlayerCenterControls(
                                     playing: _playing,

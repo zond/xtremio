@@ -4,9 +4,11 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
+import 'package:xtremio/features/player/torrent_startup_overlay.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fake_playback_engine.dart';
+import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
 
 void main() {
@@ -20,6 +22,7 @@ void main() {
     client: core,
     child: PlaybackScope(
       createEngine: () => engine,
+      torrentStats: FakeTorrentStatsClient(),
       child: MaterialApp(
         home: PlayerScreen(
           stream: stream,
@@ -84,10 +87,16 @@ void main() {
       expect(engine.opened, [(expectedUrl, Duration.zero)]);
       expect(find.text('video surface'), findsOneWidget);
       expect(find.text('Night of the Living Dead'), findsOneWidget);
+      // A torrent shows its start-up overlay (not a bare spinner) until the
+      // engine reports the media loaded; see player_torrent_startup_test.
+      expect(find.byType(TorrentStartupOverlay), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
 
       // Progress goes back to the core, throttled to one report per second.
       engine.emitDuration(const Duration(minutes: 96));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(TorrentStartupOverlay), findsNothing);
       engine.emitPosition(const Duration(seconds: 5));
       engine.emitPosition(const Duration(milliseconds: 5500));
       engine.emitPosition(const Duration(milliseconds: 6200));

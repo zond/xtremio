@@ -6,9 +6,11 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
+import 'torrent_stats.dart';
 
 export 'playback_stats.dart';
 export 'playback_tracks.dart';
+export 'torrent_stats.dart';
 
 /// What the player screen needs from a video backend. `media_kit` is the
 /// real one; tests substitute a fake through [PlaybackScope] so the screen's
@@ -101,21 +103,25 @@ class NativeFullscreenController implements FullscreenController {
 
 /// Supplies what the player screen needs from the outside: the
 /// [PlaybackEngineFactory] (absent, the screen builds a [MediaKitEngine]),
-/// the [FullscreenController], and the user's [SubtitleStyle], which lives
-/// in a notifier so it survives from one player to the next within a run.
-/// (A Settings entry and persistence come later.)
+/// the [FullscreenController], the [TorrentStatsClient] the start-up
+/// overlay polls the embedded server with (absent, plain HTTP), and the
+/// user's [SubtitleStyle], which lives in a notifier so it survives from one
+/// player to the next within a run. (A Settings entry and persistence come
+/// later.)
 class PlaybackScope extends InheritedWidget {
   const PlaybackScope({
     super.key,
     required this.createEngine,
     this.fullscreen,
     this.subtitleStyle,
+    this.torrentStats,
     required super.child,
   });
 
   final PlaybackEngineFactory createEngine;
   final FullscreenController? fullscreen;
   final ValueNotifier<SubtitleStyle>? subtitleStyle;
+  final TorrentStatsClient? torrentStats;
 
   /// The app-wide subtitle style when no scope provides one.
   static final ValueNotifier<SubtitleStyle> defaultSubtitleStyle =
@@ -133,11 +139,15 @@ class PlaybackScope extends InheritedWidget {
   static ValueNotifier<SubtitleStyle> subtitleStyleOf(BuildContext context) =>
       _maybeOf(context)?.subtitleStyle ?? defaultSubtitleStyle;
 
+  static TorrentStatsClient torrentStatsOf(BuildContext context) =>
+      _maybeOf(context)?.torrentStats ?? const HttpTorrentStatsClient();
+
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
       fullscreen != oldWidget.fullscreen ||
-      subtitleStyle != oldWidget.subtitleStyle;
+      subtitleStyle != oldWidget.subtitleStyle ||
+      torrentStats != oldWidget.torrentStats;
 }
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever

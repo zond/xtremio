@@ -9,6 +9,7 @@ import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fake_playback_engine.dart';
+import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
 
 /// The stats OSD over a stream the core has already resolved, so the video
@@ -37,6 +38,7 @@ void main() {
         client: core,
         child: PlaybackScope(
           createEngine: () => engine,
+          torrentStats: FakeTorrentStatsClient(),
           child: MaterialApp(
             home: PlayerScreen(
               stream: selected['stream'] as Map<String, dynamic>,

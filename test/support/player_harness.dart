@@ -7,6 +7,7 @@ import 'package:xtremio/features/player/player_screen.dart';
 
 import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
+import 'fake_torrent_stats_client.dart';
 import 'fixtures.dart';
 
 /// A [PlayerScreen] over a fake core and a fake engine, as the widget tests
@@ -30,6 +31,10 @@ class PlayerHarness {
   final List<FakePlaybackEngine> engines = [];
   FakePlaybackEngine get engine => engines.first;
   final FakeFullscreenController fullscreen = FakeFullscreenController();
+
+  /// What the start-up overlay polls; answers nothing (`null`) until a test
+  /// sets [FakeTorrentStatsClient.response].
+  final FakeTorrentStatsClient torrentStats = FakeTorrentStatsClient();
   final ValueNotifier<SubtitleStyle> subtitleStyle = ValueNotifier(
     const SubtitleStyle(),
   );
@@ -56,6 +61,7 @@ class PlayerHarness {
         },
         fullscreen: fullscreen,
         subtitleStyle: subtitleStyle,
+        torrentStats: torrentStats,
         child: MaterialApp(home: home ?? screen()),
       ),
     ),
