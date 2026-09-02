@@ -19,10 +19,13 @@ Rust engine for addons, catalogs, library, and playback state) and
 > picking an episode loads that episode's streams) with the streams every
 > installed addon returns, quality hints parsed into chips,
 > and selecting a stream plays it with `media_kit` — torrents through the
-> embedded server, HTTP streams directly. A debug-only Settings entry
-> plays a public Big Buck Bunny torrent to prove the torrent path without
-> any addon. Ugly on purpose; Library, subtitles and settings are still to
-> come.
+> embedded server, HTTP streams directly — in a player with its own
+> controls: seek bar with the buffered range, play/pause, ±10 s, volume,
+> fullscreen, keyboard shortcuts, playback speed, embedded and addon
+> subtitles with basic styling, audio track selection, and an up-next
+> countdown between episodes. A debug-only Settings entry plays a public
+> Big Buck Bunny torrent to prove the torrent path without any addon.
+> Library and settings are still to come.
 
 ## Goals (beyond current Stremio clients)
 
@@ -125,6 +128,48 @@ connection.
   `StreamUrls` is snake_case on the wire, unlike the rest of the model.
   `PlaybackEngine` (`lib/features/player/`) is the thin interface over
   media_kit; widget tests swap in a fake through `PlaybackScope`.
+- **The player UI is ours, driven by the engine and the core.**
+  `PlayerScreen` switches media_kit's built-in controls off
+  (`controls: NoVideoControls`) and draws its own dark-M3 overlay: a top
+  bar (back, title, next episode, subtitles, audio, stats, settings) and a
+  bottom bar (seek bar with buffered range and drag scrubbing, play/pause,
+  ±10 s, elapsed/remaining time, volume on wide layouts, fullscreen). The
+  controls fade after 3 s while playing and return on tap, mouse or key;
+  they stay while paused or buffering. Keyboard: Space/K play-pause,
+  ←/→ or J/L ±10 s, Shift+←/→ ±60 s, ↑/↓ volume, M mute, F fullscreen,
+  Esc leaves fullscreen or the player, S subtitles, A audio, N next
+  episode, Shift+I stats. Everything is a stream or method on
+  `PlaybackEngine` (`tracks`, `buffer`, `volume`, `setAudioTrack`,
+  `setSubtitleTrack`, `setExternalSubtitle`, ...) or a core action, so the
+  screen is tested against `FakePlaybackEngine` and `FakeCoreClient`
+  alone; fullscreen goes through an injectable `FullscreenController`
+  (media_kit_video's native window / immersive helpers by default).
+- **Subtitles.** After the media opens the screen dispatches
+  `VideoParamsChanged` with the best filename it knows (the stream's
+  `behaviorHints.filename`, else the URL's, else the stream name) — that
+  is what makes the core ask the subtitle addons. The menu lists the
+  tracks embedded in the file (from libmpv's track list, minus the
+  synthetic `auto`/`no` entries) and every file from
+  `player.subtitles`, the stream's own `subtitles` and the converted
+  stream's, deduplicated by URL. Picking one dispatches
+  `SubtitlePreferenceChanged`, which the core keeps for the Player
+  session; the next episode's player applies it automatically to the
+  first matching track. Text subtitles are rendered by Flutter
+  (media_kit's default `libass: false` sets mpv `sub-visibility=no` and
+  feeds the text lines to a `SubtitleView`), so size, colour and the
+  background box are a `TextStyle` in `SubtitleViewConfiguration`, not
+  mpv `sub-*` properties — identical on Linux and Android with no fonts
+  to ship. **Limitation:** bitmap subtitles (PGS, VobSub) are listed but
+  not drawn on this path; that needs `libass: true` and font shipping.
+  The style lives in a `ValueNotifier` on `PlaybackScope` for now (a
+  Settings entry and persistence come later).
+- **Next episode.** `player.nextVideo`/`nextStream` come from the core.
+  On `Ended` an up-next card counts down 10 s; playing it dispatches
+  `NextVideo` and either replaces the player route with one for the
+  engine's `nextStream` (same addon, matching binge group) — the old
+  screen then skips its `Unload` so the session's subtitle preference
+  survives — or pops with a `PlayerScreenResult` so the details screen
+  loads that episode's streams when the engine found no stream.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
   with the `derive` + `env-future-send` features, `zond/stream-server` at a
   fixed rev. To bump: change the rev, `cargo update -p <crate>`, run
@@ -159,8 +204,8 @@ flutter run -d linux
 Then either **Discover → a title → a stream**, or **Settings → Developer →
 "Play test torrent"** (Big Buck Bunny from a public torrent through the
 embedded server; "Play test HTTP stream" is the direct-play path). The
-bottom of the player shows the URL libmpv is playing, so a torrent should
-read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
+stats OSD (Shift+I) ends with the URL libmpv is playing, so a torrent
+should read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
 
 `flutter run -d linux` itself has not been exercised yet (this was developed
 on a host without the GTK toolchain); cargokit builds the crate through
@@ -284,7 +329,8 @@ rendering automatically. Android (the primary target) is unaffected.
 
 To judge playback performance by numbers rather than feel, the player has a
 stats OSD (like mpv's): move the mouse over the video to show it, or press
-**Shift+I** to pin it on/off. It lists output vs container FPS, dropped
+**Shift+I** (or the stats button in the top bar) to pin it on/off. It lists
+output vs container FPS, dropped
 frames, the **hwdec** in use (or `software` when libmpv is decoding on the
 CPU), codec and resolution, video bitrate, and demuxer cache / buffering
 state, sampled twice a second only while it is on screen.
