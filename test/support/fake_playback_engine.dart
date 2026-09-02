@@ -38,6 +38,10 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// Every `setExternalSubtitle` call: URL, title, language.
   final List<(Uri, String?, String?)> externalSubtitles = [];
   int disableSubtitlesCalls = 0;
+
+  /// When set, `setSubtitleTrack` and `setExternalSubtitle` record the call
+  /// and then fail with it (mpv refusing the track).
+  Object? subtitleError;
   SubtitleStyle? subtitleStyle;
   double? lastSubtitleBottomPadding;
   bool disposed = false;
@@ -126,6 +130,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   @override
   Future<void> setSubtitleTrack(String id) async {
     setSubtitleTrackIds.add(id);
+    if (subtitleError != null) throw subtitleError!;
   }
 
   @override
@@ -135,6 +140,7 @@ class FakePlaybackEngine implements PlaybackEngine {
     String? language,
   }) async {
     externalSubtitles.add((url, title, language));
+    if (subtitleError != null) throw subtitleError!;
   }
 
   @override

@@ -120,8 +120,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _handedOver = false;
 
   /// Whether the session's subtitle preference has been applied to this
-  /// media yet (once per `open`).
+  /// media yet (once per `open`), and whether an attempt is in flight.
   bool _autoPickedSubtitles = false;
+  bool _autoPickingSubtitles = false;
+
+  /// Whether the engine has reported the opened media loaded (a duration,
+  /// or that it is playing). Until then mpv is between files and refuses
+  /// `sub-add` ("Cannot add track at the moment"), so the subtitle
+  /// auto-pick waits for this.
+  bool _mediaLoaded = false;
 
   bool _controlsVisible = true;
   Timer? _controlsTimer;
@@ -166,7 +173,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _engine = engine;
     engine.setSubtitleStyle(subtitleStyle.value);
     _subscriptions.addAll([
-      engine.duration.listen((d) => setState(() => _duration = d)),
+      engine.duration.listen(_onDuration),
       engine.position.listen(_onPosition),
       engine.buffer.listen((b) => _buffer.value = b),
       engine.playing.listen(_onPlaying),
@@ -194,6 +201,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _opened = url;
     _autoPickedSubtitles = false;
+    _mediaLoaded = false;
     _dismissUpNext();
     final progress = state.progress;
     final start = progress != null && progress.isResumable
@@ -208,7 +216,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         });
     setState(() => _engineError = null);
     _restartControlsTimer();
-    _maybeAutoPickSubtitles();
   }
 
   /// Tells the engine what it can know about the file, which is what makes
@@ -246,8 +253,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  void _onDuration(Duration duration) {
+    setState(() => _duration = duration);
+    if (duration > Duration.zero) _onMediaLoaded();
+  }
+
+  /// The first sign from the engine that the opened media is in: what the
+  /// subtitle auto-pick waits for.
+  void _onMediaLoaded() {
+    if (_mediaLoaded || _opened == null || _handedOver) return;
+    _mediaLoaded = true;
+    _maybeAutoPickSubtitles();
+  }
+
   void _onPlaying(bool playing) {
     if (_handedOver) return;
+    if (playing) _onMediaLoaded();
     if (_playing != playing) {
       setState(() => _playing = playing);
       _showControls();
@@ -462,48 +483,72 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Applies the session's subtitle preference (set by an earlier pick in
   /// this Player session, e.g. the previous episode) to freshly opened
   /// media: off stays off; otherwise the first track in the preferred
-  /// language, from the preferred source first. Retried as tracks and
-  /// addon results arrive until something matches.
+  /// language, from the preferred source first. Waits for the engine to
+  /// report the media loaded (see [_mediaLoaded]), then retries as tracks
+  /// and addon results arrive until something matches, and counts as done
+  /// only once the engine accepted the pick.
   void _maybeAutoPickSubtitles() {
-    if (_autoPickedSubtitles || _opened == null || _handedOver) return;
+    if (_autoPickedSubtitles ||
+        _autoPickingSubtitles ||
+        !_mediaLoaded ||
+        _opened == null ||
+        _handedOver) {
+      return;
+    }
     final state = _state;
     final preference = state?.subtitlePreference;
     if (state == null || preference == null) return;
+    final before = _tracks.value;
+    final Future<void>? applied;
     if (!preference.enabled) {
-      _autoPickedSubtitles = true;
-      _tracks.value = _tracks.value.copyWith(clearSubtitle: true);
-      _engine?.disableSubtitles();
-      return;
+      _tracks.value = before.copyWith(clearSubtitle: true);
+      applied = _engine?.disableSubtitles();
+    } else {
+      final language = preference.language;
+      bool matches(String? candidate) =>
+          language == null ||
+          (candidate != null &&
+              languageName(candidate).toLowerCase() ==
+                  languageName(language).toLowerCase());
+      final external = state.externalSubtitles
+          .where((s) => matches(s.lang))
+          .firstOrNull;
+      final embedded = before.subtitle
+          .where((t) => matches(t.language))
+          .firstOrNull;
+      final externalFirst = preference.source != 'embedded';
+      if (externalFirst && external != null ||
+          embedded == null && external != null) {
+        _tracks.value = before.copyWith(
+          activeSubtitleId: external.url.toString(),
+        );
+        applied = _engine?.setExternalSubtitle(
+          external.url,
+          title: SubtitleMenu.externalLabel(external),
+          language: external.lang.isEmpty ? null : external.lang,
+        );
+      } else if (embedded != null) {
+        _tracks.value = before.copyWith(activeSubtitleId: embedded.id);
+        applied = _engine?.setSubtitleTrack(embedded.id);
+      } else {
+        return;
+      }
     }
-    final language = preference.language;
-    bool matches(String? candidate) =>
-        language == null ||
-        (candidate != null &&
-            languageName(candidate).toLowerCase() ==
-                languageName(language).toLowerCase());
-    final external = state.externalSubtitles
-        .where((s) => matches(s.lang))
-        .firstOrNull;
-    final embedded = _tracks.value.subtitle
-        .where((t) => matches(t.language))
-        .firstOrNull;
-    final externalFirst = preference.source != 'embedded';
-    if (externalFirst && external != null ||
-        embedded == null && external != null) {
-      _autoPickedSubtitles = true;
-      _tracks.value = _tracks.value.copyWith(
-        activeSubtitleId: external.url.toString(),
-      );
-      _engine?.setExternalSubtitle(
-        external.url,
-        title: SubtitleMenu.externalLabel(external),
-        language: external.lang.isEmpty ? null : external.lang,
-      );
-    } else if (embedded != null) {
-      _autoPickedSubtitles = true;
-      _tracks.value = _tracks.value.copyWith(activeSubtitleId: embedded.id);
-      _engine?.setSubtitleTrack(embedded.id);
-    }
+    if (applied == null) return;
+    final url = _opened;
+    _autoPickingSubtitles = true;
+    applied
+        .then(
+          (_) {
+            if (_opened == url) _autoPickedSubtitles = true;
+          },
+          onError: (Object _) {
+            // Rejected (mpv could not add the track): show what is really
+            // selected and try again on the next tracks/state change.
+            if (_opened == url && mounted) _tracks.value = before;
+          },
+        )
+        .whenComplete(() => _autoPickingSubtitles = false);
   }
 
   // --- Menus ---------------------------------------------------------------

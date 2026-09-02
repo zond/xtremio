@@ -66,6 +66,13 @@ void main() {
     return harness;
   }
 
+  /// A `player` state change that alters nothing (a fresh copy, so the
+  /// notifier does see a new value).
+  void pokeState(PlayerHarness harness) => harness.core.setState(
+    CoreField.player,
+    Map<String, dynamic>.from(harness.fixture),
+  );
+
   const embedded = PlaybackTracks(
     subtitle: [
       TrackInfo(id: '3', language: 'eng'),
@@ -164,28 +171,39 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('applies the session preference to newly opened media', (
+  testWidgets('applies the session preference once the media is loaded', (
     tester,
   ) async {
     useWideViewport(tester);
-    // External French picked earlier in this Player session.
+    // External French picked earlier in this Player session. Nothing is
+    // added while mpv is still between files: the pick waits for the
+    // engine to report the media in (a duration, or playing).
     var harness = harnessWithSubtitles(
       preference: {'enabled': true, 'source': 'external', 'language': 'fre'},
     );
     await harness.pump(tester);
+    expect(harness.engine.externalSubtitles, isEmpty);
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
     expect(harness.engine.externalSubtitles.single.$1, Uri.parse(frenchUrl));
     expect(
       harness.playerActions(),
       isNot(contains('SubtitlePreferenceChanged')),
     );
+    // Once applied, later state changes do not re-add it.
+    pokeState(harness);
+    await pumpEvents(tester);
+    expect(harness.engine.externalSubtitles, hasLength(1));
 
     // Embedded English: waits for the tracks, then picks the first match.
     harness = harnessWithSubtitles(
       preference: {'enabled': true, 'source': 'embedded', 'language': 'en'},
     );
     await harness.pump(tester);
-    expect(harness.engine.setSubtitleTrackIds, isEmpty);
     harness.engine.emitTracks(embedded);
+    await pumpEvents(tester);
+    expect(harness.engine.setSubtitleTrackIds, isEmpty);
+    harness.engine.emitDuration(const Duration(minutes: 96));
     await pumpEvents(tester);
     expect(harness.engine.setSubtitleTrackIds, ['3']);
     expect(harness.engine.externalSubtitles, isEmpty);
@@ -193,7 +211,44 @@ void main() {
     // Off stays off, whatever the container would default to.
     harness = harnessWithSubtitles(preference: {'enabled': false});
     await harness.pump(tester);
+    expect(harness.engine.disableSubtitlesCalls, 0);
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
     expect(harness.engine.disableSubtitlesCalls, 1);
+  });
+
+  testWidgets('a rejected auto-pick is retried, not counted as applied', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final harness = harnessWithSubtitles(
+      preference: {'enabled': true, 'source': 'external', 'language': 'fre'},
+    );
+    await harness.pump(tester);
+    final engine = harness.engine..subtitleError = StateError('mpv: no');
+    engine.emitPlaying(true);
+    await pumpEvents(tester);
+    expect(engine.externalSubtitles, hasLength(1));
+    expect(
+      find.byIcon(Icons.subtitles_off),
+      findsOneWidget,
+      reason: 'nothing shows as selected',
+    );
+
+    // Still not applied: the next state change tries again.
+    pokeState(harness);
+    await pumpEvents(tester);
+    expect(engine.externalSubtitles, hasLength(2));
+
+    // Accepted now: done, no further attempts.
+    engine.subtitleError = null;
+    pokeState(harness);
+    await pumpEvents(tester);
+    expect(engine.externalSubtitles, hasLength(3));
+    expect(find.byIcon(Icons.subtitles), findsOneWidget);
+    pokeState(harness);
+    await pumpEvents(tester);
+    expect(engine.externalSubtitles, hasLength(3));
   });
 
   testWidgets('tells the core the filename once the media is open', (
