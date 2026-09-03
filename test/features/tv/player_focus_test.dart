@@ -289,6 +289,38 @@ void main() {
       expect(find.byType(AudioMenu), findsOneWidget);
     });
 
+    testWidgets('closing a sheet gives the remote back to its button', (
+      tester,
+    ) async {
+      final harness = await pumpOnTv(tester);
+      harness.engine.emitTracks(
+        const PlaybackTracks(
+          audio: [
+            TrackInfo(id: '1', title: 'English'),
+            TrackInfo(id: '2', title: 'German'),
+          ],
+        ),
+      );
+      await pumpEvents(tester);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      for (var i = 0; i < 6 && focusedTooltip() != 'Audio track (A)'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusedTooltip(), 'Audio track (A)');
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(AudioMenu), findsOneWidget);
+
+      await tester.tap(find.text('German'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AudioMenu), findsNothing);
+      expect(
+        focusedTooltip(),
+        'Audio track (A)',
+        reason: 'the neighbouring menu is one press away again',
+      );
+    });
+
     testWidgets('left and right seek while the seek bar has focus', (
       tester,
     ) async {

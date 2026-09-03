@@ -813,6 +813,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _showSheet(WidgetBuilder builder) async {
     _controlsTimer?.cancel();
     _pauseUpNext();
+    // On a television the remote opened this from a button on the bar:
+    // remember which, so closing the sheet puts it back there and the
+    // neighbouring menu stays one press away.
+    final opener = _controlsScope.hasFocus && _isTv
+        ? FocusManager.instance.primaryFocus
+        : null;
     setState(() => _menuOpen = true);
     await showModalBottomSheet<void>(
       context: context,
@@ -826,7 +832,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     if (!mounted) return;
     setState(() => _menuOpen = false);
-    _focusNode.requestFocus();
+    if (opener != null &&
+        opener.context != null &&
+        opener.ancestors.contains(_controlsScope)) {
+      opener.requestFocus();
+    } else {
+      _focusNode.requestFocus();
+    }
     _showControls();
     _resumeUpNext();
   }
