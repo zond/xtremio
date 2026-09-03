@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../shell/device_profile.dart';
+import 'remote_press.dart';
 
 /// The tappable surface under every poster-like tile ([PosterTile],
 /// [LibraryItemTile], the Board's "See all").
@@ -11,7 +12,10 @@ import '../shell/device_profile.dart';
 /// does: a [FocusRing] is drawn over the child while focused, and gaining
 /// focus scrolls every enclosing scrollable (the row, then the rows) so the
 /// tile sits in the middle of the viewport, which keeps the next tile in
-/// each direction built and reachable.
+/// each direction built and reachable. The remote's keys go through a
+/// [RemotePress]: select taps on release, a held select or the menu key is
+/// the tile's long press (or, failing that, its secondary tap: the two mean
+/// "more options" on a phone and a desktop).
 ///
 /// A TV also needs somewhere for focus to start. Under a [FocusMemory] the
 /// tile remembers itself (by [memoryId]) as the last focused tile of that
@@ -104,18 +108,22 @@ class _FocusableTileState extends State<FocusableTile> {
         child: widget.child,
       );
     }
-    return InkWell(
+    return RemotePress(
       onTap: widget.onTap,
-      onLongPress: widget.onLongPress,
-      onSecondaryTap: widget.onSecondaryTap,
-      focusNode: widget.focusNode,
-      autofocus: _autofocus,
-      onFocusChange: _onFocusChange,
-      borderRadius: widget.borderRadius,
-      child: FocusRing(
-        focused: _focused,
+      onLongPress: widget.onLongPress ?? widget.onSecondaryTap,
+      child: InkWell(
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        onSecondaryTap: widget.onSecondaryTap,
+        focusNode: widget.focusNode,
+        autofocus: _autofocus,
+        onFocusChange: _onFocusChange,
         borderRadius: widget.borderRadius,
-        child: widget.child,
+        child: FocusRing(
+          focused: _focused,
+          borderRadius: widget.borderRadius,
+          child: widget.child,
+        ),
       ),
     );
   }

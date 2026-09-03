@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
+import 'package:xtremio/widgets/remote_press.dart';
 
 const tv = DeviceProfile(isTv: true, hasTouch: false);
 
@@ -103,6 +104,68 @@ void main() {
     await tester.tap(find.text('tile'), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
     expect(events, ['tap', 'long', 'secondary']);
+  });
+
+  group('remote keys on a TV', () {
+    Widget tile(List<String> events, {bool longPress = true}) =>
+        SizedBox.square(
+          dimension: 100,
+          child: FocusableTile(
+            onTap: () => events.add('tap'),
+            onLongPress: longPress ? () => events.add('long') : null,
+            onSecondaryTap: () => events.add('secondary'),
+            defaultFocus: true,
+            child: const Text('tile'),
+          ),
+        );
+
+    testWidgets('select taps on release; held, it is the long press', (
+      tester,
+    ) async {
+      final events = <String>[];
+      await tester.pumpWidget(harness(tile(events)));
+      await tester.pumpAndSettle();
+      expect(ringOf(tester, 'tile'), isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(events, ['tap']);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+      await tester.pump(RemotePress.holdDuration * 2);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(events, ['tap', 'long']);
+    });
+
+    testWidgets('the menu key is the long press, or the secondary tap when '
+        'the tile has no long press', (tester) async {
+      final events = <String>[];
+      await tester.pumpWidget(harness(tile(events)));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      expect(events, ['long']);
+
+      events.clear();
+      await tester.pumpWidget(harness(tile(events, longPress: false)));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);
+      await tester.pumpAndSettle();
+      expect(events, ['secondary']);
+    });
+
+    testWidgets('off a TV there is no remote handling', (tester) async {
+      final events = <String>[];
+      await tester.pumpWidget(
+        harness(
+          Focus(autofocus: true, child: tile(events)),
+          device: DeviceProfile.fallback,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(RemotePress), findsNothing);
+    });
   });
 
   group('focus memory', () {
