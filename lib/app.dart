@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'core/core.dart';
 import 'features/player/playback_engine.dart';
+import 'shell/device_profile.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
 
@@ -32,16 +33,24 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// It also supplies the [PlaybackScope]: every player gets an engine from
 /// [engineBuilder] ([MediaKitEngine.new] by default) configured from
 /// `profile.settings.hardwareDecoding` as it stands when that player opens.
+///
+/// And the [DeviceScope]: [device] is what start-up detected
+/// ([DeviceProfile.detect] in `main.dart`), so every screen can ask
+/// `DeviceScope.isTv(context)` for the remote-driven layout.
 class XtremioApp extends StatefulWidget {
   const XtremioApp({
     super.key,
     required this.core,
     this.initInfo,
     this.engineBuilder,
+    this.device = DeviceProfile.fallback,
   });
 
   final CoreClient core;
   final CoreInitInfo? initInfo;
+
+  /// The device the app runs on; tests put the app on a TV through it.
+  final DeviceProfile device;
 
   /// Builds the [PlaybackEngine] for one player. Tests inject a recorder
   /// here to see what the app asked for without touching libmpv.
@@ -171,21 +180,24 @@ class _XtremioAppState extends State<XtremioApp> {
       brightness: Brightness.dark,
     );
 
-    return CoreScope(
-      client: widget.core,
-      initInfo: widget.initInfo,
-      child: PlaybackScope(
-        createEngine: _createEngine,
-        child: MaterialApp(
-          title: 'Xtremio',
-          debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: colorScheme,
-            scaffoldBackgroundColor: const Color(0xFF0E0B16),
+    return DeviceScope(
+      profile: widget.device,
+      child: CoreScope(
+        client: widget.core,
+        initInfo: widget.initInfo,
+        child: PlaybackScope(
+          createEngine: _createEngine,
+          child: MaterialApp(
+            title: 'Xtremio',
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              useMaterial3: true,
+              colorScheme: colorScheme,
+              scaffoldBackgroundColor: const Color(0xFF0E0B16),
+            ),
+            navigatorObservers: [if (kDebugMode) RouteLogObserver()],
+            home: const RootShell(),
           ),
-          navigatorObservers: [if (kDebugMode) RouteLogObserver()],
-          home: const RootShell(),
         ),
       ),
     );

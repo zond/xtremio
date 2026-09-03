@@ -6,28 +6,41 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
 import 'core/core.dart';
+import 'shell/device_profile.dart';
 import 'src/rust/frb_generated.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // libmpv must be loaded before the first Player is constructed.
   MediaKit.ensureInitialized();
-  runApp(const XtremioBootstrap());
+  // Once, before the first frame: whether this is a TV decides the layout
+  // of every screen, and the answer never changes while the app runs.
+  final device = await DeviceProfile.detect();
+  runApp(XtremioBootstrap(device: device));
 }
+
+/// Boots the core: the client to use and what its init reported.
+typedef CoreBoot = Future<(CoreClient, CoreInitInfo)> Function();
 
 /// Loads the Rust library and boots stremio-core (with the embedded
 /// stream-server) before showing the app; shows the failure otherwise.
 class XtremioBootstrap extends StatefulWidget {
-  const XtremioBootstrap({super.key});
+  const XtremioBootstrap({
+    super.key,
+    this.device = DeviceProfile.fallback,
+    this.boot = bootCore,
+  });
 
-  @override
-  State<XtremioBootstrap> createState() => _XtremioBootstrapState();
-}
+  /// What [DeviceProfile.detect] found, handed to [XtremioApp].
+  final DeviceProfile device;
 
-class _XtremioBootstrapState extends State<XtremioBootstrap> {
-  late final Future<(CoreClient, CoreInitInfo)> _boot = _bootCore();
+  /// How the core comes up; [bootCore] (the Rust library) unless a test
+  /// hands in a fake.
+  final CoreBoot boot;
 
-  static Future<(CoreClient, CoreInitInfo)> _bootCore() async {
+  /// Loads the Rust library and initializes stremio-core with the app's
+  /// support and cache directories.
+  static Future<(CoreClient, CoreInitInfo)> bootCore() async {
     await RustLib.init();
     final client = RustCoreClient();
     final Directory support = await getApplicationSupportDirectory();
@@ -35,6 +48,13 @@ class _XtremioBootstrapState extends State<XtremioBootstrap> {
     final info = await client.init(support: support, cache: cache);
     return (client, info);
   }
+
+  @override
+  State<XtremioBootstrap> createState() => _XtremioBootstrapState();
+}
+
+class _XtremioBootstrapState extends State<XtremioBootstrap> {
+  late final Future<(CoreClient, CoreInitInfo)> _boot = widget.boot();
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +66,11 @@ class _XtremioBootstrapState extends State<XtremioBootstrap> {
         }
         final data = snapshot.data;
         if (data == null) return const _BootSplash();
-        return XtremioApp(core: data.$1, initInfo: data.$2);
+        return XtremioApp(
+          core: data.$1,
+          initInfo: data.$2,
+          device: widget.device,
+        );
       },
     );
   }
