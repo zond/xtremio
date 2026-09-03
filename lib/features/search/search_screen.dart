@@ -215,29 +215,108 @@ class _SearchField extends StatelessWidget {
   final VoidCallback onClear;
 
   @override
-  Widget build(BuildContext context) => TextField(
-    key: const Key('search-field'),
-    controller: controller,
-    // A keyboard is right there on a desktop or phone. On a TV taking focus
-    // as soon as the tab is selected would pull it off the rail, which no
-    // other tab does, and open the IME; the D-pad enters the field instead.
-    autofocus: !DeviceScope.isTv(context),
-    textInputAction: TextInputAction.search,
-    onChanged: onChanged,
-    onSubmitted: onSubmitted,
-    decoration: InputDecoration(
-      hintText: 'Search',
-      border: InputBorder.none,
-      prefixIcon: const Icon(Icons.search),
-      suffixIcon: controller.text.isEmpty
-          ? null
-          : IconButton(
-              tooltip: 'Clear',
-              icon: const Icon(Icons.close),
-              onPressed: onClear,
+  Widget build(BuildContext context) {
+    final isTv = DeviceScope.isTv(context);
+    final field = TextField(
+      key: const Key('search-field'),
+      controller: controller,
+      // A keyboard is right there on a desktop or phone. On a TV taking
+      // focus as soon as the tab is selected would pull it off the rail,
+      // which no other tab does, and open the IME; the D-pad enters the
+      // field instead.
+      autofocus: !isTv,
+      textInputAction: TextInputAction.search,
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
+      decoration: InputDecoration(
+        hintText: 'Search',
+        border: InputBorder.none,
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Clear',
+                icon: const Icon(Icons.close),
+                onPressed: onClear,
+              ),
+      ),
+    );
+    if (!isTv) return field;
+    return Actions(
+      actions: <Type, Action<Intent>>{
+        ExtendSelectionByCharacterIntent:
+            _LeaveFieldAction<ExtendSelectionByCharacterIntent>(
+              controller: controller,
+              axis: Axis.horizontal,
             ),
-    ),
-  );
+        ExtendSelectionVerticallyToAdjacentLineIntent:
+            _LeaveFieldAction<ExtendSelectionVerticallyToAdjacentLineIntent>(
+              controller: controller,
+              axis: Axis.vertical,
+            ),
+      },
+      child: field,
+    );
+  }
+}
+
+/// The D-pad's way out of a single-line text field on a TV.
+///
+/// [EditableText] claims every arrow key while it has focus: its selection
+/// actions are enabled whenever the selection is valid, so an arrow at the
+/// edge of the text does nothing and the remote is stuck in the field. An
+/// [Actions] with these above the field overrides the field's own actions
+/// ([EditableText] makes them overridable): a horizontal step past the
+/// start or end of the text, or any vertical step (one line has no line
+/// above or below), moves focus in that direction instead. Any other step
+/// is the field's own caret movement.
+class _LeaveFieldAction<T extends DirectionalTextEditingIntent>
+    extends ContextAction<T> {
+  _LeaveFieldAction({required this.controller, required this.axis});
+
+  final TextEditingController controller;
+  final Axis axis;
+
+  bool _leaves(bool forward) {
+    if (axis == Axis.vertical) return true;
+    final value = controller.value;
+    if (!value.selection.isValid) return true;
+    final offset = value.selection.extentOffset;
+    return forward ? offset >= value.text.length : offset <= 0;
+  }
+
+  TraversalDirection _direction(bool forward) => switch (axis) {
+    Axis.horizontal =>
+      forward ? TraversalDirection.right : TraversalDirection.left,
+    Axis.vertical => forward ? TraversalDirection.down : TraversalDirection.up,
+  };
+
+  @override
+  bool isEnabled(T intent, [BuildContext? context]) =>
+      _leaves(intent.forward) ||
+      (callingAction?._isEnabledWith(intent, context) ?? false);
+
+  @override
+  Object? invoke(T intent, [BuildContext? context]) {
+    if (_leaves(intent.forward)) {
+      primaryFocus?.focusInDirection(_direction(intent.forward));
+      return null;
+    }
+    final calling = callingAction;
+    return calling is ContextAction<T>
+        ? calling.invoke(intent, context)
+        : calling?.invoke(intent);
+  }
+}
+
+extension on Action<Intent> {
+  /// [Action.isEnabled], with the context when the action wants one.
+  bool _isEnabledWith(Intent intent, BuildContext? context) {
+    final action = this;
+    return action is ContextAction<Intent>
+        ? action.isEnabled(intent, context)
+        : action.isEnabled(intent);
+  }
 }
 
 /// One grid per catalog that returned items, plus a compact error for any

@@ -315,4 +315,83 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusIn<TextField>(), isTrue);
   });
+
+  testWidgets('the D-pad leaves the search field at the edges of its text', (
+    tester,
+  ) async {
+    useScreen(tester, const Size(1280, 720));
+    final core = fakeCore();
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+    await focusSearchDestination(tester);
+    await press(tester, LogicalKeyboardKey.select);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<TextField>(), isTrue);
+
+    // Empty field: left is the way back to the rail (to whichever
+    // destination is nearest, as directional traversal goes).
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusIn<NavigationRail>(), isTrue);
+
+    // With text, left walks the caret to the start first, then leaves.
+    final field = find.byKey(const Key('search-field'));
+    const query = 'night of the living dead';
+    await tester.enterText(field, query);
+    await tester.pump(SearchScreen.debounce);
+    core.setState(CoreField.search, loadSearchFixture());
+    await tester.pumpAndSettle();
+    expect(focusIn<TextField>(), isTrue);
+    final controller = tester.widget<TextField>(field).controller!;
+    controller.selection = const TextSelection.collapsed(offset: 1);
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusIn<TextField>(), isTrue);
+    expect(controller.selection.extentOffset, 0);
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusIn<NavigationRail>(), isTrue);
+
+    // Right past the end of the text reaches the Clear button. (Right from
+    // the rail now finds a result tile alongside; up from there is the field.)
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    for (var i = 0; i < 3 && !focusIn<TextField>(); i++) {
+      await press(tester, LogicalKeyboardKey.arrowUp);
+    }
+    expect(focusIn<TextField>(), isTrue);
+    controller.selection = TextSelection.collapsed(offset: query.length - 1);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<TextField>(), isTrue);
+    expect(controller.selection.extentOffset, query.length);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    // (The Clear button is the field's suffix, so still within the TextField.)
+    expect(focusIn<EditableText>(), isFalse);
+    expect(focusIn<IconButton>(), isTrue);
+  });
+
+  testWidgets('down from the search field goes to the results', (tester) async {
+    useScreen(tester, const Size(1280, 720));
+    final core = fakeCore();
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+    await focusSearchDestination(tester);
+    await press(tester, LogicalKeyboardKey.select);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<TextField>(), isTrue);
+
+    await tester.enterText(
+      find.byKey(const Key('search-field')),
+      'night of the living dead',
+    );
+    await tester.pump(SearchScreen.debounce);
+    core.setState(CoreField.search, loadSearchFixture());
+    await tester.pumpAndSettle();
+    expect(find.byType(FocusableTile), findsWidgets);
+    expect(focusIn<TextField>(), isTrue);
+
+    // A single-line field has no line below the caret to move to.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusIn<TextField>(), isFalse);
+    expect(focusIn<FocusableTile>(), isTrue);
+
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusIn<TextField>(), isTrue);
+  });
 }
