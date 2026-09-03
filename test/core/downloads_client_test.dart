@@ -617,10 +617,11 @@ void main() {
         reason: 'the fake stamps what the registry would',
       );
 
-      expect(
-        (await client.open('tt2:tt2')).reason,
-        DownloadOpenFailure.incomplete,
-      );
+      final incomplete = await client.open('tt2:tt2');
+      expect(incomplete.reason, DownloadOpenFailure.incomplete);
+      // `OpenOutcome::refused` never fills the entry in, so neither does
+      // the fake: a screen that read it back would find it on a device.
+      expect(incomplete.entry, isNull);
       expect(
         (await client.open('tt9:tt9')).reason,
         DownloadOpenFailure.unknown,

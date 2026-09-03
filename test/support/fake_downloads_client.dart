@@ -146,18 +146,18 @@ class FakeDownloadsClient implements DownloadsClient {
         reason: DownloadOpenFailure.unknown,
       );
     }
+    // A refusal carries no entry: `OpenOutcome::refused` leaves the field
+    // out, so the bridge never has one to read back.
     if (!view.isComplete) {
-      return DownloadOpenResult(
+      return const DownloadOpenResult(
         ok: false,
-        entry: view,
         reason: DownloadOpenFailure.incomplete,
       );
     }
     final path = view.path;
     if (path == null) {
-      return DownloadOpenResult(
+      return const DownloadOpenResult(
         ok: false,
-        entry: view,
         reason: DownloadOpenFailure.missing,
       );
     }
