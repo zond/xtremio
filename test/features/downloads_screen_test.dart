@@ -99,6 +99,28 @@ void main() {
       expect(DownloadsScreen.storageUsed(recorded()), 65536);
     });
 
+    test('one file under two titles takes the room of one', () {
+      // The same torrent file offered by two addons under two ids: two
+      // rows, one file on the disk.
+      DownloadView shared(String metaId) => DownloadView({
+        'metaId': metaId,
+        'videoId': metaId,
+        'infoHash': 'abcdabcdabcdabcdabcd',
+        'fileIdx': 2,
+        'size': 4000,
+        'downloaded': 4000,
+        'state': 'complete',
+      });
+      final registry = DownloadsRegistry(
+        items: {
+          for (final view in [shared('tt1'), shared('kitsu:1')]) view.key: view,
+        },
+      );
+
+      expect(registry.length, 2);
+      expect(DownloadsScreen.storageUsed(registry), 4000);
+    });
+
     testWidgets('an empty list says how to fill it', (tester) async {
       useTallViewport(tester);
       final downloads = FakeDownloadsClient();

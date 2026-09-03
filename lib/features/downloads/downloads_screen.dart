@@ -41,8 +41,20 @@ class DownloadsScreen extends StatefulWidget {
 
   /// What is on the device for these downloads. A complete one has fetched
   /// its whole length, so this is the same sum either way.
-  static int storageUsed(DownloadsRegistry registry) =>
-      registry.items.values.fold(0, (total, view) => total + view.downloaded);
+  ///
+  /// Summed over distinct files, not over rows: one torrent file offered
+  /// under two metas is two downloads and one file on the disk, which is
+  /// the same reason a removal can report `unpinned: false`.
+  static int storageUsed(DownloadsRegistry registry) {
+    final counted = <String>{};
+    var total = 0;
+    for (final view in registry.items.values) {
+      if (counted.add('${view.infoHash}:${view.fileIdx}')) {
+        total += view.downloaded;
+      }
+    }
+    return total;
+  }
 
   /// Shown in place of the destination when none is set.
   static const String defaultDestinationLabel = 'Default (with the cache)';
