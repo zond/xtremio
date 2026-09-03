@@ -53,6 +53,20 @@ String _percentSuffix(DownloadView view) {
   return progress == null ? '' : ' ${(progress * 100).round()}%';
 }
 
+/// What to say once a removal has come back. The entry is gone either
+/// way, so what is worth reporting is what happened to the bytes: they
+/// went, they stayed because they are another download's too, or they were
+/// left as ordinary cache on purpose.
+String downloadRemovedMessage(DownloadRemoveResult result, DownloadView view) =>
+    switch (result) {
+      // One torrent offered under two titles: the row goes, the bytes belong
+      // to the other download.
+      DownloadRemoveResult(removed: true, unpinned: false) =>
+        'Removed. The file stays: another download uses it.',
+      DownloadRemoveResult(deletedFiles: true) => 'Deleted ${view.name}.',
+      _ => 'Removed ${view.name} from downloads.',
+    };
+
 /// The sentence to show for a refused pin. The server's own message is
 /// client-safe (it never names a local path); a full disk gets the numbers
 /// that message was built from, since "not enough space" is only useful

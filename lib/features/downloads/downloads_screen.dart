@@ -7,6 +7,7 @@ import 'destination.dart';
 import 'download_labels.dart';
 import 'downloads_controller.dart';
 import 'offline_play.dart';
+import 'remove_download_dialog.dart';
 
 /// Everything kept on the device: what it is, how far along, how much room
 /// it takes and where it goes.
@@ -246,10 +247,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final client = _client;
     final downloads = _downloads;
     if (client == null || downloads == null) return;
-    final deleteFiles = await showDialog<bool>(
-      context: context,
-      builder: (_) => _DeleteDialog(view: view),
-    );
+    final deleteFiles = await askToRemoveDownload(context, view);
     if (deleteFiles == null || !mounted) return;
     DownloadRemoveResult? result;
     try {
@@ -259,14 +257,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     }
     await downloads.refresh();
     if (result == null || !mounted) return;
-    _tell(switch (result) {
-      // One torrent offered under two titles: the row goes, the bytes
-      // belong to the other download.
-      DownloadRemoveResult(removed: true, unpinned: false) =>
-        'Removed. The file stays: another download uses it.',
-      DownloadRemoveResult(deletedFiles: true) => 'Deleted ${view.name}.',
-      _ => 'Removed ${view.name} from downloads.',
-    });
+    _tell(downloadRemovedMessage(result, view));
   }
 
   Future<void> _retry(DownloadView view) async {
@@ -607,41 +598,6 @@ class _DownloadRow extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Asks what a removal should do with the bytes. Popping `true` deletes
-/// them, `false` keeps them, nothing at all cancels.
-class _DeleteDialog extends StatelessWidget {
-  const _DeleteDialog({required this.view});
-
-  final DownloadView view;
-
-  static const String keepLabel = 'Keep the file';
-  static const String deleteLabel = 'Delete the file';
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text('Remove ${view.name}?'),
-    content: Text(
-      'It stops being kept for offline playback. The '
-      '${view.downloadedLabel} already downloaded can go with it, or stay '
-      'as ordinary cache.',
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Cancel'),
-      ),
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(false),
-        child: const Text(keepLabel),
-      ),
-      FilledButton(
-        onPressed: () => Navigator.of(context).pop(true),
-        child: const Text(deleteLabel),
-      ),
-    ],
-  );
 }
 
 /// The listing itself failed -- a broken bridge, since the Rust side
