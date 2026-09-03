@@ -114,6 +114,51 @@ class TorrentProgressCard extends StatelessWidget {
     ].join(' · ');
   }
 
+  /// What the wait is when the window the reader wants is one piece wide:
+  /// `Waiting for the first piece (16 MiB)…`.
+  ///
+  /// A piece is the unit that becomes readable -- librqbit credits
+  /// verified pieces and nothing in between -- so a one-piece window can
+  /// only ever read 0% or 100%. Saying which piece and how big it is
+  /// describes the wait honestly; a percentage stuck at 0 while the
+  /// download runs at 2 MB/s does not. [first] is the start-up wait, where
+  /// nothing has played yet; a stall mid-file is waiting for the *next*
+  /// one.
+  static String pieceWait(TorrentStats stats, {required bool first}) {
+    final size = stats.initialWindowBytes;
+    final which = first ? 'first' : 'next';
+    return size == null
+        ? 'Waiting for the $which piece…'
+        : 'Waiting for the $which piece (${formatPieceSize(size)})…';
+  }
+
+  /// `about 12 s left` at the current speed, or null when nothing is
+  /// arriving or the wait is longer than the estimate is worth. An
+  /// estimate, and it says so.
+  static String? formatEta(TorrentStats stats) {
+    final eta = stats.windowEta;
+    if (eta == null) return null;
+    if (eta.inSeconds < 60) return 'about ${eta.inSeconds} s left';
+    return 'about ${eta.inMinutes} min left';
+  }
+
+  /// A piece's size in binary units (`16 MiB`, `512 kiB`). Piece lengths
+  /// are powers of two, which the decimal units file sizes use would turn
+  /// into `16.8 MB`.
+  static String formatPieceSize(int bytes) {
+    const units = ['B', 'kiB', 'MiB', 'GiB'];
+    var value = bytes.toDouble();
+    var unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit++;
+    }
+    final rounded = value == value.roundToDouble()
+        ? value.round().toString()
+        : value.toStringAsFixed(1);
+    return '$rounded ${units[unit]}';
+  }
+
   /// Bytes per second in human units: `850 kB/s`, `4.2 MB/s`.
   static String formatSpeed(double bytesPerSecond) {
     if (bytesPerSecond >= 1000000) {

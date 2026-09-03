@@ -66,6 +66,16 @@ class TorrentStartupOverlay extends StatelessWidget {
             ].join(' · '),
           );
         }
+        // A window one piece wide has no progress between 0 and done, so
+        // it is described rather than measured; several pieces really do
+        // advance and keep their percentage.
+        if (stats.waitsForOnePiece) {
+          final parts = [?detail, ?TorrentProgressCard.formatEta(stats)];
+          return TorrentProgressStatus(
+            label: TorrentProgressCard.pieceWait(stats, first: true),
+            detail: parts.isEmpty ? null : parts.join(' · '),
+          );
+        }
         return TorrentProgressStatus(
           label: TorrentProgressCard.withPercent('Buffering start…', progress),
           progress: progress,

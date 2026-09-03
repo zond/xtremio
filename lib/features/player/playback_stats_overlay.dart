@@ -149,6 +149,10 @@ class PlaybackStatsOverlay extends StatelessWidget {
       'peers    ${s.peerDiscovery.live} connected'
           ' / ${s.peerDiscovery.seen} found',
       'swarm    ${_swarm(s)}',
+      // The single number that explains why a wait is long: nothing
+      // becomes readable until a whole piece is verified.
+      if (s.pieceLength case final piece?)
+        'piece    ${TorrentProgressCard.formatPieceSize(piece)}',
     ];
   }
 

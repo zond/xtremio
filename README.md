@@ -537,8 +537,18 @@ connection.
   `resolvingMetadata` → "Fetching torrent metadata…", `checking` →
   "Checking existing data…" with `checkedBytes/checkTotalBytes`,
   `buffering` → "Finding peers…" with the `peerDiscovery` counts while no
-  peer is live, else "Buffering start…" with
-  `initialWindowReadyBytes/initialWindowBytes`, `ready` → "Starting
+  peer is live, else the window the reader is waiting for -- which is
+  piece-aligned and follows the reader, so after a seek it describes the
+  bytes actually being fetched. **A window one piece wide is said in
+  pieces, not in percent**: librqbit credits verified pieces and nothing
+  in between, so with 8-16 MiB pieces and a window inside one of them the
+  percentage could only ever read 0 or 100, and it read 0 for tens of
+  seconds while the download ran perfectly. It reads "Waiting for the
+  first piece (16 MiB)…" ("next piece" mid-playback) with an estimate from
+  `downloadSpeed` when there is one, and an indeterminate bar, because
+  there is nothing between 0 and done to draw. A window that genuinely
+  spans several pieces keeps "Buffering start…" and its percentage, and a
+  server that sends no `pieceLength` keeps it too. `ready` → "Starting
   playback…", `error` → "The torrent failed to start" with the server's
   `error` string as the detail; no answer yet → "Connecting to server…".
   The bar is determinate whenever there is a percentage; `downloadSpeed`
@@ -601,10 +611,12 @@ connection.
   as a SnackBar.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
   (`00265b3`, release 0.62.0) with the `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`7c46427`: generated
+  features, `zond/stream-server` at a fixed rev (`33e1ed9`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
-  counts). To bump: change the rev, `cargo update -p <crate>`, run
+  counts, the buffer profiles behind `?buffer=`, and the piece-aligned
+  start-up window that follows the reader plus the `pieceLength` it is
+  measured in). To bump: change the rev, `cargo update -p <crate>`, run
   `cargo test`, re-record any fixture whose shape moved, and re-copy
   `rust/vendor/stremio-watched-bitfield` from the new stremio-core rev
   when that crate changed (it carries a one-line `flate2` relaxation the
@@ -991,7 +1003,9 @@ state, sampled twice a second only while it is on screen.
 For a torrent it also carries the swarm, from the same `stats.json` the
 start-up and stall cards read: download speed, `<connectedSeeders>
 connected` seeds, `<live> connected / <seen> found` peers, a `swarm` row,
-the phase (with its percentage) while the torrent is not ready yet, and
+the phase (with its percentage) while the torrent is not ready yet, the
+torrent's piece length -- the one number that explains why a wait is long,
+since nothing is readable until a whole piece is verified -- and
 the server's reason when it stopped. The first two rows are *our
 connections* — who we are talking to, and how many of them hold the whole
 file. The `swarm` row is not a measurement at all but what the torrent's

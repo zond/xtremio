@@ -137,6 +137,7 @@ void main() {
           swarmLeechers: 402,
           swarmScrapeAge: Duration(minutes: 4),
           peerDiscovery: PeerDiscovery(seen: 9, live: 4),
+          pieceLength: 2097152,
         ),
       ),
       [
@@ -145,6 +146,9 @@ void main() {
         'seeds    2 connected',
         'peers    4 connected / 9 found',
         'swarm    137 seeds / 402 peers · 4 min ago',
+        // The single number that explains why a wait is long: nothing is
+        // readable until a whole piece is verified.
+        'piece    2 MiB',
       ],
     );
 

@@ -200,6 +200,98 @@ void main() {
     );
   });
 
+  group('a wait one piece wide', () {
+    /// A 16 MiB-piece torrent whose reader wants exactly one piece --
+    /// which is every big torrent: librqbit credits verified pieces and
+    /// nothing between them, so this percentage could only ever read 0 or
+    /// 100, and it read 0 for tens of seconds while the download ran.
+    const onePiece = TorrentStats(
+      phase: TorrentPhase.buffering,
+      initialWindowReadyBytes: 0,
+      initialWindowBytes: 16777216,
+      pieceLength: 16777216,
+      peerDiscovery: PeerDiscovery(seen: 9, live: 4),
+      downloadSpeed: 2000000,
+      peers: 4,
+      connectedSeeders: 2,
+    );
+
+    test('is counted in pieces, and has no percentage to show', () {
+      expect(onePiece.windowPieces, 1);
+      expect(onePiece.waitsForOnePiece, isTrue);
+      expect(onePiece.initialWindowProgress, isNull);
+      expect(onePiece.windowEta, const Duration(seconds: 9));
+    });
+
+    test('says which piece it is waiting for, not 0%', () {
+      final status = TorrentStartupOverlay.describe(onePiece);
+      expect(status.label, 'Waiting for the first piece (16 MiB)…');
+      expect(status.progress, isNull, reason: 'nothing between 0 and done');
+      expect(status.detail, contains('about 9 s left'));
+      expect(status.detail, contains('2.0 MB/s'));
+
+      // Mid-playback the same wait is for the next piece, not the first.
+      final stalled = TorrentStallOverlay.describe(onePiece);
+      expect(stalled.label, 'Waiting for the next piece (16 MiB)…');
+      expect(stalled.progress, isNull);
+    });
+
+    test('a window of several pieces keeps a percentage that moves', () {
+      const spanning = TorrentStats(
+        phase: TorrentPhase.buffering,
+        initialWindowReadyBytes: 2097152,
+        initialWindowBytes: 8388608,
+        pieceLength: 2097152,
+        peerDiscovery: PeerDiscovery(seen: 9, live: 4),
+        peers: 4,
+      );
+      expect(spanning.windowPieces, 4);
+      expect(spanning.waitsForOnePiece, isFalse);
+      expect(spanning.initialWindowProgress, 0.25);
+      expect(
+        TorrentStartupOverlay.describe(spanning).label,
+        'Buffering start… 25%',
+      );
+    });
+
+    test('an unknown piece length degrades to what it always said', () {
+      // A server from before `pieceLength`: nothing is known about the
+      // pieces, so the percentage is still the best that can be said and
+      // nothing invents a piece size.
+      const unknown = TorrentStats(
+        phase: TorrentPhase.buffering,
+        initialWindowReadyBytes: 1048576,
+        initialWindowBytes: 4194304,
+        peerDiscovery: PeerDiscovery(seen: 9, live: 4),
+        peers: 4,
+      );
+      expect(unknown.windowPieces, isNull);
+      expect(unknown.waitsForOnePiece, isFalse);
+      expect(
+        TorrentStartupOverlay.describe(unknown).label,
+        'Buffering start… 25%',
+      );
+    });
+
+    test('the piece length is parsed and shown in binary units', () {
+      final stats = TorrentStats.fromJson(const {
+        'phase': 'buffering',
+        'initialWindowReadyBytes': 0,
+        'initialWindowBytes': 16777216,
+        'pieceLength': 16777216,
+      });
+      expect(stats.pieceLength, 16777216);
+      expect(TorrentProgressCard.formatPieceSize(16777216), '16 MiB');
+      expect(TorrentProgressCard.formatPieceSize(524288), '512 kiB');
+      expect(TorrentProgressCard.formatPieceSize(1572864), '1.5 MiB');
+      // A server that does not send it leaves it null rather than 0.
+      expect(
+        TorrentStats.fromJson(const {'phase': 'buffering'}).pieceLength,
+        isNull,
+      );
+    });
+  });
+
   group('TorrentStartupOverlay.describe', () {
     test('labels each phase, with a percentage where one exists', () {
       final connecting = TorrentStartupOverlay.describe(null);

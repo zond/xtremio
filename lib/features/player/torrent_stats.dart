@@ -85,6 +85,7 @@ final class TorrentStats {
     this.checkTotalBytes,
     this.initialWindowReadyBytes,
     this.initialWindowBytes,
+    this.pieceLength,
     this.peerDiscovery = const PeerDiscovery(),
     this.downloadSpeed = 0,
     this.peers = 0,
@@ -101,11 +102,27 @@ final class TorrentStats {
   final int? checkedBytes;
   final int? checkTotalBytes;
 
-  /// Bytes of the stream file's head window verified on disk, and the
-  /// window's size (`min(4 MiB, file length)`); non-null only in
+  /// Bytes of the window the reader is waiting for that are verified on
+  /// disk, and the window's size; non-null only in
   /// [TorrentPhase.buffering] / [TorrentPhase.ready].
+  ///
+  /// The window is piece-aligned and follows the reader, so after a seek
+  /// or a re-open it describes the bytes actually being fetched rather
+  /// than the head of the file. Equal values mean exactly "servable".
   final int? initialWindowReadyBytes;
   final int? initialWindowBytes;
+
+  /// The torrent's piece length (`pieceLength`), null until its metadata
+  /// resolves.
+  ///
+  /// A piece is the unit that becomes readable: librqbit credits verified
+  /// pieces and nothing in between, so a window one piece wide can only
+  /// ever read 0 or all of it. On a multi-gigabyte torrent a piece is
+  /// 8-16 MiB, which is why a percentage sat at 0% for tens of seconds
+  /// while the download was running perfectly. What shows a wait has to
+  /// say it in pieces when there is only one of them; see
+  /// [windowPieces] and [initialWindowProgress].
+  final int? pieceLength;
 
   final PeerDiscovery peerDiscovery;
 
@@ -152,6 +169,7 @@ final class TorrentStats {
       checkTotalBytes: _intOrNull(json['checkTotalBytes']),
       initialWindowReadyBytes: _intOrNull(json['initialWindowReadyBytes']),
       initialWindowBytes: _intOrNull(json['initialWindowBytes']),
+      pieceLength: _intOrNull(json['pieceLength']),
       peerDiscovery: discovery is Map<String, dynamic>
           ? PeerDiscovery.fromJson(discovery)
           : const PeerDiscovery(),
@@ -171,9 +189,49 @@ final class TorrentStats {
   /// `0..1` of the hash check, when the server reports one.
   double? get checkProgress => _ratio(checkedBytes, checkTotalBytes);
 
-  /// `0..1` of the initial window, when the server reports one.
-  double? get initialWindowProgress =>
-      _ratio(initialWindowReadyBytes, initialWindowBytes);
+  /// How many pieces the window the reader waits for spans, when both it
+  /// and the piece length are known.
+  ///
+  /// The window is piece-aligned, so this is an exact count rather than an
+  /// estimate. 1 means the whole wait is one piece arriving: there is no
+  /// progress to show between 0 and done, and pretending otherwise is what
+  /// made a working download look stuck.
+  int? get windowPieces {
+    final window = initialWindowBytes;
+    final piece = pieceLength;
+    if (window == null || piece == null || piece <= 0 || window <= 0) {
+      return null;
+    }
+    return (window / piece).ceil();
+  }
+
+  /// Whether the wait is a single piece, so it must be described rather
+  /// than measured. False when the window spans several pieces (a
+  /// percentage then really does advance) and false when the piece length
+  /// is unknown, where a percentage is the best that can be said.
+  bool get waitsForOnePiece => windowPieces == 1;
+
+  /// `0..1` of the window the reader waits for -- null when there is
+  /// nothing honest to show, which now includes a window one piece wide:
+  /// it can only ever be 0 or 1, and a bar that jumps between the two is a
+  /// worse answer than a sentence.
+  double? get initialWindowProgress => waitsForOnePiece
+      ? null
+      : _ratio(initialWindowReadyBytes, initialWindowBytes);
+
+  /// How long the piece being waited for should take at the current
+  /// download speed, when both are known and moving. An estimate, and
+  /// named as one wherever it is shown.
+  Duration? get windowEta {
+    final window = initialWindowBytes;
+    final ready = initialWindowReadyBytes ?? 0;
+    if (window == null || downloadSpeed <= 0) return null;
+    final remaining = window - ready;
+    if (remaining <= 0) return null;
+    final seconds = remaining / downloadSpeed;
+    if (!seconds.isFinite || seconds > 3600) return null;
+    return Duration(seconds: seconds.ceil());
+  }
 
   static double? _ratio(int? part, int? total) {
     if (part == null || total == null || total <= 0) return null;
@@ -188,6 +246,7 @@ final class TorrentStats {
       other.checkTotalBytes == checkTotalBytes &&
       other.initialWindowReadyBytes == initialWindowReadyBytes &&
       other.initialWindowBytes == initialWindowBytes &&
+      other.pieceLength == pieceLength &&
       other.peerDiscovery == peerDiscovery &&
       other.downloadSpeed == downloadSpeed &&
       other.peers == peers &&
@@ -204,6 +263,7 @@ final class TorrentStats {
     checkTotalBytes,
     initialWindowReadyBytes,
     initialWindowBytes,
+    pieceLength,
     peerDiscovery,
     downloadSpeed,
     peers,

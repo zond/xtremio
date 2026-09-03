@@ -65,6 +65,14 @@ class TorrentStallOverlay extends StatelessWidget {
         // one arriving late (playback began on a partial window) and its
         // percentage is about the very bytes being waited for.
         final progress = stats.initialWindowProgress;
+        // One piece wide: there is nothing between 0 and done to draw, so
+        // the card says which piece it is waiting for and how big it is.
+        if (stats.waitsForOnePiece) {
+          return TorrentProgressStatus(
+            label: TorrentProgressCard.pieceWait(stats, first: false),
+            detail: [detail, ?TorrentProgressCard.formatEta(stats)].join(' · '),
+          );
+        }
         return TorrentProgressStatus(
           label: TorrentProgressCard.withPercent(waiting, progress),
           progress: progress,
