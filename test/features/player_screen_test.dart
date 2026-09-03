@@ -134,11 +134,16 @@ void main() {
       ]);
 
       // Buffering shows a status over the video (one pump delivers the
-      // event, the next draws the frame).
+      // event, the next draws the frame). For a torrent that is the stall
+      // card, which appends the server's percentage when there is one; see
+      // player_torrent_stall_test.
       engine.emitBuffering(true);
       await tester.pump();
       await tester.pump();
-      expect(find.text('Buffering from the torrent…'), findsOneWidget);
+      expect(
+        find.textContaining('Buffering from the torrent…'),
+        findsOneWidget,
+      );
 
       // Leaving unloads the field at once but releases the engine only two
       // frames later, after the raster thread is done with the video texture.

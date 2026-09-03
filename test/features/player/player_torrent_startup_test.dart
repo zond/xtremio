@@ -5,6 +5,7 @@ import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/torrent_progress_card.dart';
+import 'package:xtremio/features/player/torrent_stall_overlay.dart';
 import 'package:xtremio/features/player/torrent_startup_overlay.dart';
 
 import '../../support/player_harness.dart';
@@ -307,11 +308,13 @@ void main() {
     await tester.pump(PlayerScreen.torrentStatsInterval * 4);
     expect(stats.requests, hasLength(polled));
 
-    // Later buffering is the plain status again, not the start-up card.
+    // Later buffering is the stall card, not this one; see
+    // player_torrent_stall_test.
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(find.text('Buffering from the torrent…'), findsOneWidget);
+    expect(find.textContaining('Buffering from the torrent…'), findsOneWidget);
     expect(overlay, findsNothing);
+    expect(find.byType(TorrentStallOverlay), findsOneWidget);
   });
 
   testWidgets('falls back to the torrent-level stats for the phase', (

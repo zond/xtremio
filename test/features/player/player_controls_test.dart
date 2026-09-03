@@ -274,7 +274,7 @@ void main() {
     // While buffering the centre shows the status instead of the buttons.
     engine.emitBuffering(true);
     await pumpEvents(tester);
-    expect(find.text('Buffering from the torrent…'), findsOneWidget);
+    expect(find.textContaining('Buffering from the torrent…'), findsOneWidget);
     expect(find.byType(PlayerCenterControls), findsNothing);
   });
 

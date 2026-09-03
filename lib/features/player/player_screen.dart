@@ -14,6 +14,7 @@ import 'language_names.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
+import 'torrent_stall_overlay.dart';
 import 'torrent_startup_overlay.dart';
 import 'track_menus.dart';
 import 'up_next_card.dart';
@@ -80,6 +81,11 @@ class PlayerScreen extends StatefulWidget {
   /// How often the server's `stats.json` is polled while a torrent starts
   /// up (from `open` until the engine reports the media loaded).
   static const Duration torrentStatsInterval = Duration(milliseconds: 500);
+
+  /// How often it is polled once playback has begun and then stalled.
+  /// Slower: nothing is waiting on the first frame any more, and a stall
+  /// only has to keep a few numbers honest.
+  static const Duration torrentStallStatsInterval = Duration(seconds: 2);
 
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
@@ -198,16 +204,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// auto-pick waits for this.
   bool _mediaLoaded = false;
 
-  /// The pre-playback overlay for torrents: while [_torrentStatsRequest]
-  /// is set the server's stats are polled every
-  /// [PlayerScreen.torrentStatsInterval] and the latest answer shown (null
-  /// until the server answers for this torrent). Cleared once the media
-  /// loads, on an engine error and on dispose.
+  /// The torrent overlays: while [_torrentStatsTimer] runs the server's
+  /// stats are polled and the latest answer shown ([_torrentStats], null
+  /// until the server answers for this torrent).
   ///
-  /// [_torrentStatsRequest] asks for the stream's file, which focuses it
-  /// and reports its initial window; when the server has no answer for
-  /// that (an index the torrent turns out not to have) a poll asks for the
-  /// torrent-level [_torrentStatsFallback] instead.
+  /// [_torrentStatsRequest] is set for as long as the player is on a
+  /// torrent -- what is polled *for* -- and the timer is what says whether
+  /// anything is waiting on it: every
+  /// [PlayerScreen.torrentStatsInterval] until the media loads, then off
+  /// until playback stalls, then every
+  /// [PlayerScreen.torrentStallStatsInterval] until it resumes
+  /// ([_syncStallStats]). An engine error and dispose end both.
+  ///
+  /// The request asks for the stream's file, which focuses it and reports
+  /// its initial window; when the server has no answer for that (an index
+  /// the torrent turns out not to have) a poll asks for the torrent-level
+  /// [_torrentStatsFallback] instead.
   TorrentStatsClient? _torrentStatsClient;
   TorrentStatsRequest? _torrentStatsRequest;
   TorrentStatsRequest? _torrentStatsFallback;
@@ -464,8 +476,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_mediaLoaded || _opened == null || _handedOver) return;
     setState(() {
       _mediaLoaded = true;
-      _stopTorrentStats();
+      // The start-up cadence is over. The torrent is not: a stall brings
+      // the polling back, at once if the media arrived already stalled.
+      _pauseTorrentStats();
     });
+    _syncStallStats();
     _maybeAutoPickSubtitles();
   }
 
@@ -501,14 +516,48 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  /// Stops polling and forgets the last answer. Callers that need a
-  /// rebuild wrap this in `setState`.
+  /// Stops polling for good and forgets the torrent: this player will not
+  /// ask about it again. Callers that need a rebuild wrap this in
+  /// `setState`.
   void _stopTorrentStats() {
-    _torrentStatsTimer?.cancel();
-    _torrentStatsTimer = null;
+    _pauseTorrentStats();
     _torrentStatsRequest = null;
     _torrentStatsFallback = null;
+  }
+
+  /// Stops polling but keeps the torrent, so a stall can pick it up again.
+  /// The last answer goes with the timer: by the time playback stalls it
+  /// describes a start-up minutes ago, and a card showing it would be
+  /// stating the past as the present.
+  void _pauseTorrentStats() {
+    _torrentStatsTimer?.cancel();
+    _torrentStatsTimer = null;
     _torrentStats = null;
+  }
+
+  /// Keeps the stall polling in step with the engine, from
+  /// [_onMediaLoaded] and [_onBuffering]: once the media has loaded, a
+  /// torrent's stats are worth asking for exactly while playback is
+  /// stalled. Anything else -- playing again, a direct stream, a failure
+  /// that cleared the request -- leaves no timer behind.
+  void _syncStallStats() {
+    if (!_mediaLoaded || _torrentStatsRequest == null) return;
+    if (!_buffering) {
+      if (_torrentStatsTimer != null || _torrentStats != null) {
+        setState(_pauseTorrentStats);
+      }
+      return;
+    }
+    if (_torrentStatsTimer != null) return;
+    _torrentStatsTimer = Timer.periodic(
+      PlayerScreen.torrentStallStatsInterval,
+      (_) => _pollTorrentStats(),
+    );
+    // Unlike the start-up poll this one goes out at once: the stream
+    // request created the torrent's engine long ago, so there is no
+    // ordering to respect, and a stall wants its numbers now, not in two
+    // seconds.
+    _pollTorrentStats();
   }
 
   /// One poll: the per-file stats, or the torrent-level ones when the
@@ -533,8 +582,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } finally {
       _torrentStatsFetching = false;
     }
-    // Still the same torrent, still waiting for it, and something changed.
-    if (!mounted || _torrentStatsRequest != request || stats == _torrentStats) {
+    // Still the same torrent, still polling for it (a stall that ended
+    // while the fetch was out wants no answer), and something changed.
+    if (!mounted ||
+        _torrentStatsTimer == null ||
+        _torrentStatsRequest != request ||
+        stats == _torrentStats) {
       return;
     }
     setState(() => _torrentStats = stats);
@@ -544,6 +597,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// media loads, for torrents the server streams.
   bool get _startupOverlayShown =>
       _torrentStatsRequest != null && !_mediaLoaded;
+
+  /// The stall card replaces the plain spinner-and-sentence status once
+  /// playback has begun: the same measurable card, for a torrent the
+  /// server can still be asked about. Everything the status text puts
+  /// before buffering (a failure, an unplayable stream, a stream not
+  /// resolved yet) is not a stall and keeps its own presentation.
+  bool _stallOverlayShown(PlayerState? state) =>
+      _buffering &&
+      _mediaLoaded &&
+      _engineError == null &&
+      _opened != null &&
+      state?.unplayableReason == null &&
+      _torrentStatsRequest != null;
 
   void _onPlaying(bool playing) {
     if (_handedOver) return;
@@ -559,6 +625,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onBuffering(bool buffering) {
     setState(() => _buffering = buffering);
+    _syncStallStats();
     _restartControlsTimer();
   }
 
@@ -1343,6 +1410,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final engine = _engine;
     final startup = _startupOverlayShown;
     final status = startup ? null : _statusText(state);
+    final stall = status != null && _stallOverlayShown(state);
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= PlayerScreen.wideBreakpoint;
     final shown = _controlsShown;
@@ -1403,18 +1471,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_engineError == null &&
-                            state?.unplayableReason == null)
-                          const CircularProgressIndicator()
-                        else
-                          const Icon(Icons.error_outline, size: 48),
-                        const SizedBox(height: 12),
-                        Text(status, textAlign: TextAlign.center),
-                      ],
-                    ),
+                    child: stall
+                        ? TorrentStallOverlay(stats: _torrentStats)
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_engineError == null &&
+                                  state?.unplayableReason == null)
+                                const CircularProgressIndicator()
+                              else
+                                const Icon(Icons.error_outline, size: 48),
+                              const SizedBox(height: 12),
+                              Text(status, textAlign: TextAlign.center),
+                            ],
+                          ),
                   ),
                 ),
               AnimatedOpacity(
@@ -1534,8 +1604,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (unplayable != null) return unplayable;
     if (_opened == null) return 'Resolving stream…';
     if (_buffering) {
+      // For a torrent this is what the stall card says with nothing from
+      // the server yet, and the whole of what a stall says without one.
       return state.selectedStream?.kind == StreamKind.torrent
-          ? 'Buffering from the torrent…'
+          ? TorrentStallOverlay.waiting
           : 'Buffering…';
     }
     return null;
