@@ -98,6 +98,52 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
   remote-driven layout keys on. Any error on the channel means "a phone";
   no other platform calls it (desktop is never a TV).
 
+## Where offline downloads go, and when they run
+
+- **The destination is set by the app, once.** The embedded server's own
+  default keeps a pinned torrent in its cache root — on Android that is
+  `getApplicationCacheDirectory()` (`/data/data/com.zond.xtremio/cache`),
+  which the system is free to reclaim whenever it wants space. Half a film
+  reclaimed mid-download is not a download, so start-up points the server
+  at the app-specific external files directory instead
+  (`applyDefaultDestination`, `lib/features/downloads/destination.dart`,
+  called from `XtremioApp.initState`) through the `downloads_set_dir` FFI
+  call — `POST /settings`'s `downloadsDir`, with its validation.
+
+  ```
+  /storage/emulated/0/Android/data/com.zond.xtremio/files/downloads/<infoHash>/<file>
+  ```
+
+  `adb shell run-as com.zond.xtremio ls …` is not needed for it: the
+  external files directory is world-readable over adb
+  (`adb shell ls /sdcard/Android/data/com.zond.xtremio/files/downloads`).
+- **No permission is involved.** An app's own external files directory
+  needs none on `minSdk` 24 (`getExternalFilesDir`, which is what
+  path_provider's `getExternalStorageDirectory()` returns), and it must
+  stay that way: the manifest declares no storage permission, and
+  `MANAGE_EXTERNAL_STORAGE` is never the answer. The Downloads screen's
+  picker offers `getExternalStorageDirectories()`, which is the same
+  directory on every removable volume — an SD card among them — so a
+  chosen destination is still permission-free.
+- **Uninstall takes the downloads with it**, as it does for anything in the
+  app's own directories, and the system does *not* purge them the way it
+  may purge `getCacheDir()`. "Clear storage" in the app info screen does
+  delete them; the registry (`<files>/downloads.json`) goes at the same
+  time, so the two stay consistent.
+- **Downloads only advance while the app is running.** There is no
+  foreground service yet, so once Android freezes or kills the process the
+  torrent stops with it; a notification and a `FOREGROUND_SERVICE_DATA_SYNC`
+  service are the follow-up. Nothing is lost when it happens: librqbit
+  persists the torrent and its verified pieces, the server persists its pin
+  set, and start-up re-pins every unfinished registry entry, so reopening
+  the app continues where it stopped. A *finished* download needs nothing
+  running at all — it is played straight off the file.
+- **Moving the destination moves nothing that is already there.** The
+  server relocates a torrent only when it is pinned again, which for an
+  unfinished download happens at the next start-up. Files a finished
+  download left behind stay where they were downloaded; the registry keeps
+  naming that path.
+
 ## Running on an emulator (headless, KVM)
 
 The x86_64 `google_apis` image is the one that runs on an x86_64 Linux host

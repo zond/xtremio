@@ -45,7 +45,12 @@ Rust engine for addons, catalogs, library, and playback state) and
 > screen (from Settings, or the "Downloaded" chip in the Library) lists
 > everything with its progress, plays a finished one, retries a stopped one,
 > deletes one with or without its bytes, and says where the files go --
-> a folder to pick on Android, a path to type elsewhere. A stream whose
+> a folder to pick on Android, a path to type elsewhere. On Android the
+> app picks that folder itself on a first run: its own external files
+> directory, which the system leaves alone, rather than the cache it may
+> reclaim mid-download. A download runs only while the app is up, though
+> -- there is no foreground service yet, so Android freezing the process
+> stops it until the app is opened again. A stream whose
 > video is already kept from another release is offered as a replacement,
 > and a *finished* one is named in a confirmation first, because taking the
 > new pin deletes the old file. Downloading a
@@ -84,12 +89,12 @@ The point of Xtremio is to go past what existing Stremio apps do:
 
 - **Offline downloads** — cache a full episode or movie to the device and keep
   watching with no connection (through a tunnel, on a plane), the way Netflix
-  does. The download itself is built (see **Downloads** above): the whole file
-  is fetched, pinned so it is never evicted, and managed from a screen of its
-  own. What is left is playing it as a local file (`file://` straight off the
-  pinned path, so a finished download needs nothing running), choosing the
-  Android destination without being asked, and a foreground service so a
-  download survives the app leaving the screen.
+  does. Built (see **Downloads** above): the whole file is fetched, pinned so
+  it is never evicted, managed from a screen of its own, put somewhere the
+  platform will not purge it, and played straight off the disk as a
+  `file://` stream — so a finished download needs no server, no network and
+  no torrent. What is left is a foreground service, so a download that is
+  still running survives the app leaving the screen on Android.
 - **Cloud storage sources** (e.g. Google Drive) — stream from a personal cloud
   drive, most naturally via a Stremio addon that resolves cloud files to
   playable URLs. Provider OAuth / API-key setup is the fiddly part.
@@ -241,6 +246,35 @@ connection.
   disposes and a `DownloadsScope` hands down the tree -- one client,
   because the progress sink is one -- with `DownloadView`
   (`lib/core/state/download.dart`) reading the registry it answers with.
+- **Where the files land is the platform's question.** The server's own
+  default keeps a pinned torrent in its cache root
+  (`<cache>/rqbit-downloads`) with everything else, which is right on a
+  desktop and wrong on Android, where `<cache>` is the OS's to reclaim
+  whenever it wants room. So start-up settles it once
+  (`applyDefaultDestination`, `lib/features/downloads/destination.dart`,
+  called by `XtremioApp`): on
+  Android the server is pointed at the app-specific external files
+  directory --
+  `/storage/emulated/0/Android/data/com.zond.xtremio/files/downloads`,
+  which needs no storage permission at all on `minSdk` 24 and which the
+  system keeps until the app is uninstalled -- through
+  `downloads_set_dir`, which is `POST /settings` with its validation (the
+  path must be absolute, creatable, writable and not at or above a cache
+  root). Everywhere else nothing is written and the server keeps deciding.
+  A destination already set, by an earlier launch or by hand, is never
+  overridden, and the Downloads screen's picker offers the same
+  directories (`getExternalStorageDirectories()`, so an SD card is among
+  them) plus a typed path off Android. With a destination set, each pin
+  gets a folder of its own (`<downloadsDir>/<infoHash>/`), and only pins
+  taken from then on move there: the server relocates an already-managed
+  torrent when it is pinned again, which for an unfinished download is
+  the next boot's re-pin and for a finished one never (its bytes stay
+  where they were downloaded, and the registry keeps naming that path).
+  A download whose volume is not mounted reads as `missing` rather than
+  as an error. **No background downloads on Android yet** -- there is no
+  foreground service, so a download only advances while the app is
+  running; the registry and the server's own pin set survive the process
+  dying, and the boot re-pin picks the unfinished ones up again.
 - **A finished download is played from the file, not from the server.**
   `downloads_open(key)` answers the `file://` URL of a download whose
   bytes are all here and whose file really is where it was left, and

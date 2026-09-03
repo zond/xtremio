@@ -91,6 +91,34 @@ in one of two ways: stremio-core's `StreamingServer` model through
 `downloads_events`). A new need goes in one of those, as a Rust function
 returning JSON, not as a `dart:io` `HttpClient` call.
 
+## The downloads registry
+
+`rust/src/downloads.rs` owns what is kept offline; the server owns the pin
+and the bytes. Keep it that way:
+
+- **Progress is read, never stored.** `downloaded`/`size`/`path`/`state`
+  come from the server's `downloads()` at list time. Adding a field that
+  duplicates something the server can answer means two truths and one of
+  them stale.
+- **The file is forgiving and additive.** Entries are camelCase, unknown
+  keys survive a round trip, and an entry this build cannot parse is
+  written back verbatim. A new field is optional with a default; nothing
+  in the app hand-edits `downloads.json` (or a recorded
+  `downloads_registry.json` fixture — re-record it with
+  `cargo test --test downloads -- --ignored`).
+- **One client, one sink.** The Rust side keeps a single progress sink, so
+  the app builds one `DownloadsClient` in `XtremioApp` and hands it down
+  through `DownloadsScope`. A screen takes the client from the scope;
+  widget tests put `FakeDownloadsClient` (`test/support/`) there and never
+  reach FFI.
+- **Where the files go is asked, not assumed.** The destination is the
+  server's `downloadsDir` setting: read it with `DownloadsClient.directory`
+  and write it with `setDirectory`, which is `downloads_set_dir` and its
+  validation. The platform default is applied once at start-up
+  (`lib/features/downloads/destination.dart`); no screen invents a path.
+- Downloads are control calls like any other: over FFI, never HTTP (see
+  above).
+
 ## Use cheaper models for mechanical work
 
 When an agent delegates, mechanical subtasks (formatting, renames, moving
