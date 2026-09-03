@@ -7,6 +7,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
+import '../../widgets/remote_press.dart';
 import 'language_names.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
@@ -35,6 +37,12 @@ import 'up_next_card.dart';
 /// (`nextVideoNotificationDuration`; 0 skips the card and plays at once),
 /// whether hiding the app pauses (`pauseOnMinimize`), whether Esc leaves
 /// fullscreen (`escExitFullscreen`), and the subtitle style.
+///
+/// On a TV ([DeviceScope.isTv]) the remote drives it: the D-pad's centre
+/// brings the controls up when they are hidden and toggles play/pause when
+/// they show, and the media keys (play, pause, play/pause, stop, fast
+/// forward, rewind, next and previous track) do what they say. The media
+/// keys work off a TV too; nothing else about the keyboard changes there.
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -111,6 +119,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   SubtitleStyle _subtitleStyle = const SubtitleStyle();
   final List<StreamSubscription<void>> _subscriptions = [];
   final FocusNode _focusNode = FocusNode(debugLabel: 'player');
+
+  /// [DeviceScope.isTv], read with the dependencies.
+  bool _isTv = false;
 
   Uri? _opened;
   Duration _duration = Duration.zero;
@@ -189,6 +200,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _isTv = DeviceScope.isTv(context);
     if (_client != null) return;
     final client = CoreScope.of(context);
     _client = client;
@@ -917,7 +929,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     final key = event.logicalKey;
     final shift = keyboard.isShiftPressed;
+    final shownBefore = _controlsShown;
     _showControls();
+
+    // The remote's centre key (and Enter, a gamepad's A) on a TV: hidden
+    // controls come up, showing ones mean play/pause. Off a TV these keys
+    // keep their default meaning (nothing, on the video itself).
+    if (RemotePress.activateKeys.contains(key)) {
+      if (!_isTv) return KeyEventResult.ignored;
+      if (event is KeyDownEvent && shownBefore) _togglePlay();
+      return KeyEventResult.handled;
+    }
 
     // Shift+I toggles the stats OSD, as in mpv; only the initial press.
     if (key == LogicalKeyboardKey.keyI) {
@@ -941,11 +963,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case LogicalKeyboardKey.keyK:
       case LogicalKeyboardKey.mediaPlayPause:
         if (event is KeyDownEvent) _togglePlay();
+      case LogicalKeyboardKey.mediaPlay:
+        if (event is KeyDownEvent) _engine?.play();
+      case LogicalKeyboardKey.mediaPause:
+        if (event is KeyDownEvent) _engine?.pause();
+      case LogicalKeyboardKey.mediaStop:
+        // Stop ends the session: leave the player (unloading pauses and
+        // reports the position), as the Back key does.
+        if (event is KeyDownEvent) Navigator.of(context).maybePop();
       case LogicalKeyboardKey.arrowLeft:
       case LogicalKeyboardKey.keyJ:
+      case LogicalKeyboardKey.mediaRewind:
         _seekBy(-_seekStep);
       case LogicalKeyboardKey.arrowRight:
       case LogicalKeyboardKey.keyL:
+      case LogicalKeyboardKey.mediaFastForward:
         _seekBy(_seekStep);
       case LogicalKeyboardKey.arrowUp:
         _setVolume(_volume + 5);
@@ -971,7 +1003,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _openAudioMenu();
         }
       case LogicalKeyboardKey.keyN:
+      case LogicalKeyboardKey.mediaTrackNext:
         if (event is KeyDownEvent && _state?.nextVideo != null) _playNext();
+      case LogicalKeyboardKey.mediaTrackPrevious:
+        // There is no previous episode in the player's state; the remote's
+        // previous-track key starts this one over, as music players do.
+        if (event is KeyDownEvent) _seekTo(Duration.zero);
       default:
         return KeyEventResult.ignored;
     }

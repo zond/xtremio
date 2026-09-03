@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
+import 'package:xtremio/shell/device_profile.dart';
 
 import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
@@ -23,6 +24,7 @@ class PlayerHarness {
     this.metaRequest,
     this.subtitlesPath,
     this.configureEngine,
+    this.device,
   }) : fixture = player ?? loadPlayerFixture() {
     core = FakeCoreClient(
       state: {
@@ -58,14 +60,18 @@ class PlayerHarness {
   final ResourceRequest? metaRequest;
   final ResourcePath? subtitlesPath;
 
+  /// The device the screen is mounted on; null leaves it to the
+  /// `DeviceScope`-less default (a phone or desktop), `tv` (from
+  /// `support/tv.dart`) puts it on a television.
+  final DeviceProfile? device;
+
   Map<String, dynamic> get selected =>
       fixture['selected'] as Map<String, dynamic>;
 
   /// Keyed per harness so mounting a second harness in one test builds a
   /// fresh screen instead of updating the first one in place.
-  Widget build({Widget? home}) => KeyedSubtree(
-    key: ObjectKey(this),
-    child: CoreScope(
+  Widget build({Widget? home}) {
+    final app = CoreScope(
       client: core,
       child: PlaybackScope(
         createEngine: () {
@@ -78,8 +84,13 @@ class PlayerHarness {
         torrentStats: torrentStats,
         child: MaterialApp(home: home ?? screen()),
       ),
-    ),
-  );
+    );
+    final device = this.device;
+    return KeyedSubtree(
+      key: ObjectKey(this),
+      child: device == null ? app : DeviceScope(profile: device, child: app),
+    );
+  }
 
   PlayerScreen screen() => PlayerScreen(
     stream: stream ?? selected['stream'] as Map<String, dynamic>,
