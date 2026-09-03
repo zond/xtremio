@@ -5,6 +5,7 @@ import '../features/discover/discover_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
+import 'device_profile.dart';
 
 /// A top-level navigation destination and the screen it shows.
 class _Destination {
@@ -17,7 +18,18 @@ class _Destination {
 }
 
 /// Responsive navigation shell: a rail on wide layouts (desktop/tablet) and a
-/// bottom bar on narrow ones (phones).
+/// bottom bar on narrow ones (phones). A television always gets the rail,
+/// whatever its reported width, since a remote has no way to reach a bottom
+/// bar that is not part of the focus order the D-pad walks.
+///
+/// On a TV the rail and the body are separate [FocusTraversalGroup]s, so
+/// Tab order treats the rail as one unit, and every tab's body sits in its
+/// own [FocusScope] whose directional edge behaviour falls back to the
+/// parent scope: left from the body's first column finds nothing in the
+/// body and lands on the rail; right from the rail finds the body's nearest
+/// tile. The scope also lets a tile autofocus when its tab is shown while
+/// the rail keeps a focused destination (autofocus only applies inside a
+/// scope with no focused child of its own).
 class RootShell extends StatefulWidget {
   const RootShell({super.key});
 
@@ -27,6 +39,15 @@ class RootShell extends StatefulWidget {
 
 class _RootShellState extends State<RootShell> {
   int _index = 0;
+
+  /// One focus scope per tab (TV only); see [RootShell].
+  late final List<FocusScopeNode> _tabScopes = [
+    for (final d in _destinations)
+      FocusScopeNode(
+        debugLabel: '${d.label} tab',
+        directionalTraversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+      ),
+  ];
 
   static const _destinations = <_Destination>[
     _Destination('Board', Icons.home_outlined, Icons.home, BoardScreen()),
@@ -54,6 +75,14 @@ class _RootShellState extends State<RootShell> {
   void _select(int i) => setState(() => _index = i);
 
   @override
+  void dispose() {
+    for (final scope in _tabScopes) {
+      scope.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     // The shell is the root route. Without this, a back gesture/key that
     // reaches it pops nothing and the framework asks the platform to exit
@@ -64,28 +93,36 @@ class _RootShellState extends State<RootShell> {
   }
 
   Widget _buildShell(BuildContext context) {
-    final isWide = MediaQuery.sizeOf(context).width >= 720;
+    final isTv = DeviceScope.isTv(context);
+    final isWide = isTv || MediaQuery.sizeOf(context).width >= 720;
     final body = _destinations[_index].screen;
 
     if (isWide) {
+      final rail = NavigationRail(
+        selectedIndex: _index,
+        onDestinationSelected: _select,
+        labelType: NavigationRailLabelType.all,
+        destinations: [
+          for (final d in _destinations)
+            NavigationRailDestination(
+              icon: Icon(d.icon),
+              selectedIcon: Icon(d.selectedIcon),
+              label: Text(d.label),
+            ),
+        ],
+      );
       return Scaffold(
         body: Row(
           children: [
-            NavigationRail(
-              selectedIndex: _index,
-              onDestinationSelected: _select,
-              labelType: NavigationRailLabelType.all,
-              destinations: [
-                for (final d in _destinations)
-                  NavigationRailDestination(
-                    icon: Icon(d.icon),
-                    selectedIcon: Icon(d.selectedIcon),
-                    label: Text(d.label),
-                  ),
-              ],
-            ),
+            if (isTv) FocusTraversalGroup(child: rail) else rail,
             const VerticalDivider(width: 1),
-            Expanded(child: body),
+            Expanded(
+              child: isTv
+                  ? FocusTraversalGroup(
+                      child: FocusScope(node: _tabScopes[_index], child: body),
+                    )
+                  : body,
+            ),
           ],
         ),
       );
