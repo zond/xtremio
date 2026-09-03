@@ -226,6 +226,47 @@ void main() {
     expect(row('speed    250 kB/s'), findsOneWidget);
   });
 
+  /// To the background and back, through the transitions the framework
+  /// allows.
+  Future<void> sendApp(WidgetTester tester, List<AppLifecycleState> to) async {
+    for (final state in to) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+      await tester.pump();
+    }
+  }
+
+  testWidgets('a backgrounded app asks nothing, pinned panel or not', (
+    tester,
+  ) async {
+    final harness = await pumpPlaying(tester);
+    final stats = harness.torrentStats;
+    stats.response = swarm;
+    await pressShiftI(tester);
+    expect(row('speed    1.5 MB/s'), findsOneWidget);
+    final whileWatched = stats.requests.length;
+
+    // Minimised with the panel pinned: nobody can see it, so the server is
+    // left alone -- and a stall down there is no reason to start again.
+    await sendApp(tester, [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+    ]);
+    await tester.pump(PlayerScreen.torrentStatsOverlayInterval * 3);
+    harness.engine.emitBuffering(true);
+    await pumpEvents(tester);
+    await tester.pump(PlayerScreen.torrentStallStatsInterval * 2);
+    expect(stats.requests, hasLength(whileWatched));
+
+    // Back in front: the numbers start moving again without being asked.
+    await sendApp(tester, [
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]);
+    await pumpEvents(tester);
+    expect(stats.requests.length, greaterThan(whileWatched));
+    expect(row('speed    1.5 MB/s'), findsOneWidget);
+  });
+
   testWidgets('a direct stream has no swarm rows and asks nothing', (
     tester,
   ) async {

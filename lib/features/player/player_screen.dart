@@ -254,10 +254,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   bool get _statsVisible => _statsPinned ?? _statsHover;
 
+  /// The app is in the background (see [_onAppHidden]): nothing on this
+  /// screen is being looked at, whatever is on it.
+  bool _appHidden = false;
+
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(onHide: _onAppHidden);
+    _lifecycle = AppLifecycleListener(
+      onHide: _onAppHidden,
+      onShow: _onAppShown,
+    );
     _controlsScope.addListener(_onControlsFocusChange);
     _upNextScope.addListener(_onControlsFocusChange);
   }
@@ -385,12 +392,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Duration get _shortSeekStep =>
       Duration(milliseconds: _settings.seekShortTimeDuration);
 
-  /// `pauseOnMinimize`: the window was minimised or the app went to the
-  /// background while playing.
+  /// The window was minimised, or the app went to the background: with
+  /// `pauseOnMinimize` a playing video pauses, and either way the torrent
+  /// polling stops -- a pinned stats panel nobody can see is no reason to
+  /// keep asking the server every few seconds.
   void _onAppHidden() {
+    _appHidden = true;
     if (_settings.pauseOnMinimize && _playing && !_handedOver) {
       _engine?.pause();
     }
+    _syncTorrentStats();
+  }
+
+  /// Back in front: whatever was left on screen -- a stall, an open stats
+  /// panel -- gets its numbers moving again.
+  void _onAppShown() {
+    _appHidden = false;
+    _syncTorrentStats();
   }
 
   /// Writes one profile setting: the whole map with [key] changed, as the
@@ -549,16 +567,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Keeps the polling in step with whoever wants the numbers, from
-  /// [_onMediaLoaded], [_onBuffering] and every change of the stats OSD's
-  /// visibility. Once the media has loaded a torrent's stats are worth
+  /// [_onMediaLoaded], [_onBuffering], the app going to the background and
+  /// back, and every change of the stats OSD's visibility. Once the media has loaded a torrent's stats are worth
   /// asking for while playback is stalled (the stall card measures them)
   /// and, more slowly, while the OSD shows them -- playback being fine is
   /// no reason for a panel someone opened to freeze. Anything else -- no
-  /// watcher, a direct stream, a failure that cleared the request --
-  /// leaves no timer behind.
+  /// watcher, a backgrounded app, a direct stream, a failure that cleared
+  /// the request -- leaves no timer behind.
   void _syncTorrentStats() {
     if (!_mediaLoaded || _torrentStatsRequest == null) return;
-    final cadence = _buffering
+    final cadence = _appHidden
+        ? null
+        : _buffering
         ? PlayerScreen.torrentStallStatsInterval
         : _statsVisible
         ? PlayerScreen.torrentStatsOverlayInterval
