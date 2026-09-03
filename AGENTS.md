@@ -96,16 +96,21 @@ returning JSON, not as a `dart:io` `HttpClient` call.
 `rust/src/downloads.rs` owns what is kept offline; the server owns the pin
 and the bytes. Keep it that way:
 
-- **Progress is read, never stored.** `downloaded`/`size`/`path`/`state`
-  come from the server's `downloads()` at list time. Adding a field that
-  duplicates something the server can answer means two truths and one of
-  them stale.
+- **Progress has one source of truth, and the registry is not it.**
+  `downloaded`/`size`/`path`/`state` come from the server's `downloads()`,
+  which `refresh` merges into the entries and writes back: the file keeps
+  the last-known copy so the list and `downloads_open` still work with no
+  server, and that is all it is. Never compute or advance progress
+  locally, and do not add a field the server could answer that is not a
+  cached echo of it — that is two truths, and one of them stale.
 - **The file is forgiving and additive.** Entries are camelCase, unknown
   keys survive a round trip, and an entry this build cannot parse is
   written back verbatim. A new field is optional with a default; nothing
   in the app hand-edits `downloads.json` (or a recorded
   `downloads_registry.json` fixture — re-record it with
-  `cargo test --test downloads -- --ignored`).
+  `cargo test --test downloads -- --ignored`, which is idempotent: the
+  recorder fixes the tmp path and the timestamps because the Dart tests
+  quote them, so keep it that way).
 - **One client, one sink.** The Rust side keeps a single progress sink, so
   the app builds one `DownloadsClient` in `XtremioApp` and hands it down
   through `DownloadsScope`. A screen takes the client from the scope;
@@ -114,8 +119,11 @@ and the bytes. Keep it that way:
 - **Where the files go is asked, not assumed.** The destination is the
   server's `downloadsDir` setting: read it with `DownloadsClient.directory`
   and write it with `setDirectory`, which is `downloads_set_dir` and its
-  validation. The platform default is applied once at start-up
-  (`lib/features/downloads/destination.dart`); no screen invents a path.
+  validation. The registry records the answer (`destinationSettled` and
+  `destinationChoice`) because the server clears a `downloadsDir` it
+  cannot prepare at boot; start-up reads both
+  (`lib/features/downloads/destination.dart`) and no screen invents a
+  path.
 - Downloads are control calls like any other: over FFI, never HTTP (see
   above).
 
