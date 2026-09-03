@@ -46,17 +46,24 @@ Future<String?> platformDefaultDestination() async {
 
 String _inside(String root) => '$root/$downloadsFolderName';
 
-/// Points [client] at [resolve]'s directory unless the question has already
-/// been answered, which is what start-up does once.
+/// Points [client] at [resolve]'s directory unless the question has
+/// already been answered, which is what start-up does once.
 ///
-/// "Answered" is the registry's `destinationSettled`, not a non-null
-/// `downloadsDir`: choosing `Default (with the cache)` on the Downloads
-/// screen writes null on purpose, and the server itself clears a
-/// destination it cannot use at boot (an SD card that is not in the
-/// device). Reading either as "nobody has chosen" would silently move the
-/// downloads on the next launch. A `downloadsDir` set by a build from
-/// before the flag counts as answered too, so an upgrade does not move
-/// anything.
+/// "Answered" is the registry's `destinationSettled` and
+/// `destinationChoice`, not a non-null `downloadsDir`: choosing
+/// `Default (with the cache)` on the Downloads screen writes null on
+/// purpose, and reading that as "nobody has chosen" would silently move
+/// the downloads on the next launch. A `downloadsDir` already set --
+/// including one a build from before the flag wrote -- counts as answered
+/// too, so an upgrade does not move anything.
+///
+/// The case worth acting on is the third one: settled on a *path* that the
+/// settings no longer have. The server clears a `downloadsDir` it cannot
+/// prepare at boot (an SD card that is not in the device) and persists the
+/// null, which on Android would otherwise park every download in the app
+/// cache the OS may reclaim mid-file -- the very thing the platform
+/// default exists to avoid. So the recorded path is asked for again; if it
+/// is really gone the platform default takes over, and never the cache.
 ///
 /// A platform with no default of its own changes nothing -- the server
 /// keeps deciding -- and nothing is asked of it either. Failure is not
@@ -69,8 +76,20 @@ Future<void> applyDefaultDestination(
   try {
     final path = await resolve();
     if (path == null) return;
-    if ((await client.list()).destinationSettled) return;
+    final registry = await client.list();
     if (await client.directory() != null) return;
+    final chosen = registry.destinationChoice;
+    if (chosen == null) {
+      if (registry.destinationSettled) return;
+      await client.setDirectory(path);
+      return;
+    }
+    try {
+      await client.setDirectory(chosen);
+      return;
+    } catch (error) {
+      if (kDebugMode) debugPrint('downloads destination $chosen: $error');
+    }
     await client.setDirectory(path);
   } catch (error) {
     if (kDebugMode) debugPrint('default downloads destination: $error');

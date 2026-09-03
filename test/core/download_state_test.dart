@@ -273,5 +273,36 @@ void main() {
       expect(settled.merge(DownloadsRegistry.empty).destinationSettled, isTrue);
       expect(DownloadsRegistry.empty.merge(settled).destinationSettled, isTrue);
     });
+
+    test('the destination chosen is read, and an event cannot forget it', () {
+      expect(
+        DownloadsRegistry.fromJson(const {
+          'version': 1,
+          'items': <String, dynamic>{},
+          'destinationSettled': true,
+        }).destinationChoice,
+        isNull,
+        reason: 'null is the answer "with the torrent cache"',
+      );
+      final chosen = DownloadsRegistry.fromJson(const {
+        'version': 1,
+        'items': <String, dynamic>{},
+        'destinationSettled': true,
+        'destinationChoice': '/sdcard/files/downloads',
+      });
+      expect(chosen.destinationChoice, '/sdcard/files/downloads');
+
+      // A progress event carries neither key, and folding one in must not
+      // read as "back to the cache" -- which is what would send the next
+      // start-up looking for a destination to restore.
+      expect(
+        chosen.merge(DownloadsRegistry.empty).destinationChoice,
+        '/sdcard/files/downloads',
+      );
+      expect(
+        DownloadsRegistry.empty.merge(chosen).destinationChoice,
+        '/sdcard/files/downloads',
+      );
+    });
   });
 }

@@ -43,6 +43,10 @@ class FakeDownloadsClient implements DownloadsClient {
   /// would give otherwise).
   DownloadOpenResult Function(String key)? onOpen;
 
+  /// Paths [setDirectory] refuses, as the server refuses one it cannot
+  /// prepare: an SD card that is not in the device.
+  final Set<String?> unusableDirectories = {};
+
   /// Thrown by the matching call when set, for the failure paths.
   Object? addError;
   Object? openError;
@@ -114,6 +118,7 @@ class FakeDownloadsClient implements DownloadsClient {
       version: registry.version,
       items: items,
       destinationSettled: registry.destinationSettled,
+      destinationChoice: registry.destinationChoice,
     );
     return result;
   }
@@ -184,6 +189,7 @@ class FakeDownloadsClient implements DownloadsClient {
       version: registry.version,
       items: {...registry.items, key: entry},
       destinationSettled: registry.destinationSettled,
+      destinationChoice: registry.destinationChoice,
     );
   }
 
@@ -193,12 +199,16 @@ class FakeDownloadsClient implements DownloadsClient {
     callLog?.add('downloads.setDirectory');
     final error = setDirectoryError;
     if (error != null) throw error;
+    if (unusableDirectories.contains(path)) {
+      throw ArgumentError.value(path, 'downloadsDir', 'cannot be created');
+    }
     // As the Rust side does: an accepted destination -- null among them --
-    // settles the question for good.
+    // settles the question for good, and is recorded as the answer.
     registry = DownloadsRegistry(
       version: registry.version,
       items: registry.items,
       destinationSettled: true,
+      destinationChoice: path,
     );
     return settings = {...settings, 'downloadsDir': path};
   }

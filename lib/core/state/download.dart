@@ -174,6 +174,7 @@ final class DownloadsRegistry {
     this.version = 1,
     this.items = const {},
     this.destinationSettled = false,
+    this.destinationChoice,
   });
 
   /// The file format's version, so a payload from a newer build is
@@ -191,6 +192,14 @@ final class DownloadsRegistry {
   /// Set by [DownloadsClient.setDirectory], and never unset.
   final bool destinationSettled;
 
+  /// Which destination was answered, spelled the way the server stored it.
+  /// Null is "with the torrent cache, on purpose" when [destinationSettled]
+  /// -- and nothing recorded when it is not. Kept so a start-up can compare
+  /// it with the live `downloadsDir`: a path recorded here that the
+  /// settings no longer have is a destination the server cleared at boot
+  /// because it could not prepare it, and one worth asking for again.
+  final String? destinationChoice;
+
   /// Nothing downloaded, and what a failed read falls back to.
   static const DownloadsRegistry empty = DownloadsRegistry();
 
@@ -204,6 +213,7 @@ final class DownloadsRegistry {
             entry.key: DownloadView(entry.value as Map<String, dynamic>),
       },
       destinationSettled: json['destinationSettled'] == true,
+      destinationChoice: json['destinationChoice'] as String?,
     );
   }
 
@@ -243,8 +253,11 @@ final class DownloadsRegistry {
     version: update.version,
     items: {...items, ...update.items},
     // Progress events carry only the entries that moved and say nothing
-    // about the destination, so the flag only ever turns on.
+    // about the destination, so the flag only ever turns on and the path
+    // recorded is never forgotten -- an event's null means "not said", not
+    // "back to the cache".
     destinationSettled: destinationSettled || update.destinationSettled,
+    destinationChoice: update.destinationChoice ?? destinationChoice,
   );
 
   @override

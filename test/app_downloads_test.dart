@@ -129,10 +129,8 @@ void main() {
       tester,
     ) async {
       // The Downloads screen writes a null `downloadsDir` on purpose for
-      // "Default (with the cache)", and the server writes one itself when
-      // a persisted destination is unusable at boot (an SD card that is
-      // not in the device). Neither is an open question, and the registry
-      // is what says so.
+      // "Default (with the cache)". That is not an open question, and the
+      // registry is what says so: settled, with no path recorded.
       final downloads = FakeDownloadsClient(
         registry: const DownloadsRegistry(destinationSettled: true),
       );
@@ -182,6 +180,63 @@ void main() {
         '/sdcard/files/downloads',
         null,
       ], reason: 'the second launch asked for nothing');
+    });
+
+    testWidgets('a destination the server dropped at boot is asked for '
+        'again', (tester) async {
+      // The server clears a `downloadsDir` it cannot prepare at boot -- an
+      // SD card that is not in the device -- and persists the null. The
+      // registry still remembers which directory was chosen, so the app
+      // asks for it again instead of leaving the downloads in the cache
+      // the OS is free to reclaim.
+      final downloads = FakeDownloadsClient(
+        registry: const DownloadsRegistry(
+          destinationSettled: true,
+          destinationChoice: '/storage/ABCD-1234/files/downloads',
+        ),
+      );
+      addTearDown(downloads.dispose);
+
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          defaultDestination: () async => '/sdcard/files/downloads',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(downloads.directories, ['/storage/ABCD-1234/files/downloads']);
+    });
+
+    testWidgets('a destination that is gone gives way to the platform '
+        'default, never to the cache', (tester) async {
+      final downloads = FakeDownloadsClient(
+        registry: const DownloadsRegistry(
+          destinationSettled: true,
+          destinationChoice: '/storage/ABCD-1234/files/downloads',
+        ),
+      )..unusableDirectories.add('/storage/ABCD-1234/files/downloads');
+      addTearDown(downloads.dispose);
+
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          defaultDestination: () async => '/sdcard/files/downloads',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(downloads.directories, [
+        '/storage/ABCD-1234/files/downloads',
+        '/sdcard/files/downloads',
+      ], reason: 'the card is really gone, so the app-specific files dir');
+      expect(
+        await downloads.directory(),
+        '/sdcard/files/downloads',
+        reason: 'and not the cache root a null would have meant',
+      );
     });
 
     testWidgets('a server that cannot be asked changes nothing', (
