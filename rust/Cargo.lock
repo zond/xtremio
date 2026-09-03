@@ -1308,12 +1308,13 @@ dependencies = [
 [[package]]
 name = "enginefs"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=8763760d3c9ed13edea581a08b5e2c1ab8407a16#8763760d3c9ed13edea581a08b5e2c1ab8407a16"
+source = "git+https://github.com/zond/stream-server?rev=af1669e1c5a9e087b567c278e10ea705cb85e57c#af1669e1c5a9e087b567c278e10ea705cb85e57c"
 dependencies = [
  "anyhow",
  "async-trait",
  "bumpalo",
  "bytes",
+ "fs4",
  "futures",
  "hex",
  "librqbit",
@@ -1525,6 +1526,16 @@ checksum = "b91aa448ca50d7e79433bdf3ee8d99215430d2ec02ade5aefab2a073a1822e8a"
 dependencies = [
  "autocfg",
  "tokio",
+]
+
+[[package]]
+name = "fs4"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e72ed92b67c146290f88e9c89d60ca163ea417a446f61ffd7b72df3e7f1dfd5"
+dependencies = [
+ "rustix",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4492,7 +4503,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=8763760d3c9ed13edea581a08b5e2c1ab8407a16#8763760d3c9ed13edea581a08b5e2c1ab8407a16"
+source = "git+https://github.com/zond/stream-server?rev=af1669e1c5a9e087b567c278e10ea705cb85e57c#af1669e1c5a9e087b567c278e10ea705cb85e57c"
 dependencies = [
  "anyhow",
  "async-channel",
