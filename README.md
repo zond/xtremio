@@ -262,6 +262,19 @@ connection.
   offline that is the only way it advances at all, since the next
   episode's streams never load and the engine finds nothing to move on
   to.
+  *Known consequence:* the synthesized `file://` stream is what
+  stremio-core records as that video's last stream, and it is persisted.
+  `MetaDetails` resolves the last stream against the addon's current
+  responses by `Stream::is_source_match` (which compares the source, so a
+  `Url` never matches the `Torrent` the addon offers) and then by
+  `Stream::is_binge_match`. The binge match is why `offlineStream` keeps
+  `behaviorHints.bingeGroup` -- but an addon that sets none leaves neither
+  match to make, so after one play off the disk that title's "Continue
+  with last source" tile is gone until it is played from an addon stream
+  again, and `StreamsItem::adjusted_state` starts the next play of it with
+  no remembered subtitle or audio track (playback speed survives). The
+  download itself is unaffected: its badge, its row, and playing it from
+  the release's own stream tile all still work.
 - **Settings are the engine's.** `ctx.profile.settings` is stremio-core's
   `Settings` struct (camelCase; `docs/phase3-design.md` §4 lists it) and
   the only way to change one is `Ctx::UpdateSettings` with the *entire*
