@@ -149,6 +149,12 @@ final class DownloadView {
       value /= 1000;
       unit++;
     }
+    // 999_999 B is 999.999 kB, which rounds to `1000 kB`: a unit that does
+    // not exist. Promote it once more so it reads `1.0 MB`.
+    if (value.round() >= 1000 && unit < units.length - 1) {
+      value /= 1000;
+      unit++;
+    }
     return '${value.toStringAsFixed(value >= 100 ? 0 : 1)} ${units[unit]}';
   }
 

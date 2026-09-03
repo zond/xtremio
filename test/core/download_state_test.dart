@@ -190,6 +190,16 @@ void main() {
       expect(DownloadView.humanSize(1400 * 1000 * 1000), '1.4 GB');
       expect(DownloadView.humanSize(2 * 1000 * 1000 * 1000 * 1000), '2.0 TB');
     });
+
+    test('a size that rounds up to a whole unit is shown as that unit', () {
+      expect(DownloadView.humanSize(999999), '1.0 MB');
+      expect(DownloadView.humanSize(999999999), '1.0 GB');
+      expect(
+        DownloadView.humanSize(999499),
+        '999 kB',
+        reason: 'and one that rounds down stays where it is',
+      );
+    });
   });
 
   group('DownloadsRegistry', () {
