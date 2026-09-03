@@ -10,6 +10,10 @@ use std::sync::Once;
 /// Default filter when `RUST_LOG` is unset.
 pub const DEFAULT_FILTER: &str = "xtremio_core=info,stream_server=info,enginefs=warn";
 
+/// A static, not part of `crate::state::AppState`: `tracing`'s global
+/// subscriber is itself process-wide and can only be installed once, so
+/// what remembers that has to outlive any one session. Re-running this
+/// after a shutdown would be a no-op at best.
 static INIT: Once = Once::new();
 
 /// Installs the global subscriber once. Safe to call repeatedly; a subscriber

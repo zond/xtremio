@@ -29,6 +29,13 @@ use stremio_core::models::ctx::Ctx;
 use stremio_core::models::streaming_server::StreamingServer;
 use stremio_core::runtime::{Env, EnvError, EnvFuture, EnvFutureExt, TryEnvFuture};
 
+// The three statics below stay statics on purpose, and are not part of
+// `crate::state::AppState`: an executor and a connection pool are
+// process-wide by nature. They are built once, hold no per-session state,
+// cost real OS threads and sockets to create, and outliving a shutdown is
+// the point -- work spawned before it still has somewhere to run, and the
+// next `core_init` reuses the pool instead of standing up new threads.
+
 /// Effects that may run in parallel (catalog fetches, addon calls, ...), the
 /// runtime-event pump, and async work started by the FRB layer.
 pub static CONCURRENT: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
@@ -65,6 +72,23 @@ static CLIENT: LazyLock<Client> = LazyLock::new(|| {
 });
 
 /// Root for persisted buckets: `<dir>/<key>.json`. Set once from `core_init`.
+///
+/// This one is a forced global, and the only piece of session state that
+/// did not move into `crate::state::AppState`. `Env` declares `fetch`,
+/// `get_storage`, `set_storage` and `now` as associated functions with no
+/// `self` (stremio-core `src/runtime/env.rs`, `pub trait Env`), so an
+/// implementation is a *type* and has no instance to hang a storage
+/// directory on: `XtremioEnv::get_storage(key)` has nothing but statics to
+/// read from.
+///
+/// If we ever want two independent cores in one process, the way out is a
+/// type-indexed context -- `struct XtremioEnv<C: EnvContext>(PhantomData<C>)`
+/// with the directory behind `C`, which type-checks because `Runtime` only
+/// asks for `E: Env + Send + 'static` and the trait's defaulted methods
+/// only add `Self: Sized + 'static`. A `tokio::task_local!` context was
+/// considered and rejected: a future that escapes the scope reads the
+/// wrong context silently instead of failing loudly, and storage effects
+/// are exactly the futures that get spawned onwards.
 static STORAGE_DIR: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 /// Points storage at `dir` (created if missing).
