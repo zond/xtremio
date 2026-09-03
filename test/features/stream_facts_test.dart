@@ -235,7 +235,7 @@ void main() {
           sizeBytes: 3 * gb,
           seeders: 42,
         ).badges,
-        ['2160p', '3.00 GB', '42 seeders'],
+        ['2160p', '3 GB', '42 seeders'],
       );
       expect(facts(sizeBytes: 700 * mb).badges, ['700 MB']);
       expect(facts().badges, isEmpty);
@@ -249,6 +249,9 @@ void main() {
       expect(StreamFacts.formatSize(4 * kb), '4 KB');
       expect(StreamFacts.formatSize(1621350154), '1.51 GB');
       expect(StreamFacts.formatSize(700 * gb), '700 GB');
+      // A fraction that is all zeros is dropped rather than padded.
+      expect(StreamFacts.formatSize(20 * gb), '20 GB');
+      expect(StreamFacts.formatSize((1.5 * gb).round()), '1.5 GB');
     });
   });
 

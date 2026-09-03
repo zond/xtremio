@@ -17,6 +17,7 @@ import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import '../downloads/remove_download_dialog.dart';
 import '../player/player_screen.dart';
+import 'stream_facts.dart';
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
 /// shows the meta item, its episodes (for a series) and every stream the
@@ -43,6 +44,18 @@ import '../player/player_screen.dart';
 /// see `docs/phase3-design.md` on `library_item`). Playing that same
 /// release afterwards plays the file on the device rather than streaming
 /// it, connection or not (`offline_play.dart`).
+///
+/// The sources list has two layouts, and which one it is in is a global
+/// preference ([AppPrefs.streamsFlat]) rather than a per-title one: the
+/// section header carries the toggle, the choice follows the user to the
+/// next title, and it is read from the Rust side's preferences file at
+/// start-up so the first list is already the one they left. Grouped -- a
+/// section per addon, in profile order, each addon's own ranking intact --
+/// is the default and is what the engine hands over. Flat is every addon's
+/// answers in one list, sorted by [compareStreamFacts] and each row named
+/// with the addon it came from. Everything around the streams is the same
+/// in both: the last-used shortcut, the addons that had nothing, the ones
+/// that failed, and the notice when nobody had anything.
 ///
 /// An addon that answers a stream request with an error is not listed as an
 /// empty group but collected below the streams that worked, named from the
@@ -107,6 +120,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   DownloadsClient? _downloadsClient;
   DownloadsController? _downloads;
 
+  /// The app's preferences, for the sources list's layout. From the
+  /// [PrefsScope] the app puts above every screen; a screen mounted
+  /// without one (a widget test that does not care where the choice goes)
+  /// gets [_ownPrefs] instead, which persists nothing.
+  AppPrefs? _prefs;
+  AppPrefs? _ownPrefs;
+
   /// The streams whose pin is in flight, by [_streamKey]. `add` blocks
   /// until the server takes the pin -- for a magnet, until its metadata
   /// resolves -- so a tapped tile has to say it is working.
@@ -168,6 +188,15 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         ..addListener(_onProfileChanged);
       _load(widget.videoId);
     }
+    // Reading the scope here is what subscribes to it: an `InheritedNotifier`
+    // rebuilds its dependents when the value changes, so a layout chosen on
+    // another screen is already in place when this one comes back.
+    final prefs =
+        PrefsScope.maybeOf(context) ?? (_ownPrefs ??= AppPrefs.inMemory());
+    if (_prefs != prefs) {
+      _prefs?.removeListener(_onPrefsChanged);
+      _prefs = prefs..addListener(_onPrefsChanged);
+    }
     final downloads = DownloadsScope.maybeOf(context);
     if (_downloadsClient != downloads) {
       _downloads
@@ -189,6 +218,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     if (mounted) setState(() {});
   }
 
+  void _onPrefsChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     releaseField();
@@ -200,6 +233,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     _downloads
       ?..removeListener(_onDownloadsChanged)
       ..dispose();
+    _prefs?.removeListener(_onPrefsChanged);
+    _ownPrefs?.dispose();
     super.dispose();
   }
 
@@ -766,6 +801,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// asked. Between a tap and that first state there is nothing at all to
   /// list, and the section says so where the tap can see it.
   List<Widget> _streamSlivers(MetaDetailsState state, MetaItem meta) {
+    final isFlat = _prefs?.streamsFlat ?? false;
     final lastUsed = state.lastUsedStream;
     final groups = state.allStreamGroups;
     final noneYet =
@@ -790,6 +826,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             state: state,
             video: meta.videoById(_awaitingVideoId!),
             isLoading: true,
+            flat: isFlat,
+            onFlatChanged: _setFlatStreams,
           ),
         ),
         const SliverToBoxAdapter(
@@ -837,9 +875,31 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             addon: profile?.installedAddon(group.request.base),
           ),
     ];
+    // The flat layout: every listed addon's streams in one list, in
+    // [compareStreamFacts] order, each row named with the addon it came
+    // from since it has no heading to sit under any more. Built only for
+    // the layout that shows it -- parsing every stream costs a handful of
+    // regexes each.
+    final flatStreams = isFlat
+        ? sortedByStreamFacts([
+            for (final group in listed)
+              for (final stream in group.streams)
+                (
+                  group: group,
+                  stream: stream,
+                  facts: StreamFacts.of(
+                    stream,
+                    addonName: _addonNameOf(profile, group),
+                  ),
+                ),
+          ], (row) => row.facts)
+        : const <_FlatStream>[];
     final autofocusAt = isTv && lastUsed == null
         ? _firstPlayable(listed)
         : null;
+    final flatAutofocusAt = isTv && lastUsed == null && isFlat
+        ? flatStreams.indexWhere((row) => row.stream.isPlayable)
+        : -1;
     final videoId = state.streamPath?.id ?? meta.id;
     final downloads = _downloadsClient == null
         ? null
@@ -853,7 +913,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           );
     return [
       SliverToBoxAdapter(
-        child: _StreamsHeader(key: _streamsKey, state: state),
+        child: _StreamsHeader(
+          key: _streamsKey,
+          state: state,
+          flat: isFlat,
+          onFlatChanged: _setFlatStreams,
+        ),
       ),
       if (foundNothing)
         SliverToBoxAdapter(
@@ -881,14 +946,34 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             downloads: downloads?.forGroup(lastUsed.$1),
           ),
         ),
-      for (final (index, group) in listed.indexed)
-        _StreamGroupSliver(
-          group: group,
-          lastUsed: lastUsed?.$2,
-          onPlay: (stream) => _play(state, group, stream),
-          autofocusIndex: autofocusAt?.$1 == index ? autofocusAt!.$2 : null,
-          downloads: downloads?.forGroup(group),
-        ),
+      if (isFlat)
+        SliverList.builder(
+          itemCount: flatStreams.length,
+          itemBuilder: (context, index) {
+            final row = flatStreams[index];
+            return _StreamTile(
+              stream: row.stream,
+              facts: row.facts,
+              highlighted:
+                  lastUsed != null && row.stream.isSameSource(lastUsed.$2),
+              onTap: row.stream.isPlayable
+                  ? () => _play(state, row.group, row.stream)
+                  : null,
+              autofocus: index == flatAutofocusAt,
+              downloads: downloads?.forGroup(row.group),
+            );
+          },
+        )
+      else ...[
+        for (final (index, group) in listed.indexed)
+          _StreamGroupSliver(
+            group: group,
+            lastUsed: lastUsed?.$2,
+            onPlay: (stream) => _play(state, group, stream),
+            autofocusIndex: autofocusAt?.$1 == index ? autofocusAt!.$2 : null,
+            downloads: downloads?.forGroup(group),
+          ),
+      ],
       if (empties.isNotEmpty)
         SliverToBoxAdapter(
           child: _EmptyAddonsSummary(
@@ -912,6 +997,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
     ];
   }
+
+  /// Puts the sources list in one layout or the other, for everything the
+  /// app shows from now on: the preference is global, not this title's.
+  void _setFlatStreams(bool value) => _prefs?.setStreamsFlat(value);
+
+  /// What an addon is called in a list that has lost its headings: the
+  /// installed addon's own name, else the host its manifest URL names --
+  /// the same fallback the failed-addon rows use.
+  static String _addonNameOf(ProfileState? profile, StreamGroup group) =>
+      profile?.installedAddon(group.request.base)?.manifest.name ??
+      group.addonLabel;
 
   /// Whether the addon answered with something other than streams: an
   /// error that is not the ordinary "this addon has nothing for this
@@ -1455,15 +1551,27 @@ class _NoStreamsNotice extends StatelessWidget {
 /// engine's answer.
 const String kLookingForStreams = 'Looking for streams…';
 
+/// What the toggle in the section header offers next, as its tooltip.
+const String kFlatStreamsTooltip = 'Sort all streams together';
+const String kGroupedStreamsTooltip = 'Group streams by addon';
+
 class _StreamsHeader extends StatelessWidget {
   const _StreamsHeader({
     super.key,
     required this.state,
     this.video,
     this.isLoading = false,
+    this.flat = false,
+    this.onFlatChanged,
   });
 
   final MetaDetailsState state;
+
+  /// Whether the list below is the flat, sorted one.
+  final bool flat;
+
+  /// Flips the layout; null draws no toggle at all.
+  final ValueChanged<bool>? onFlatChanged;
 
   /// The episode the section is about; null takes the state's selection.
   /// A tap that has not been answered yet names the tapped episode here,
@@ -1504,6 +1612,12 @@ class _StreamsHeader extends StatelessWidget {
               ],
             ),
           ),
+          if (onFlatChanged != null)
+            IconButton(
+              tooltip: flat ? kGroupedStreamsTooltip : kFlatStreamsTooltip,
+              icon: Icon(flat ? Icons.view_agenda_outlined : Icons.sort),
+              onPressed: () => onFlatChanged!(!flat),
+            ),
           if (isLoading || state.isLoadingStreams)
             const SizedBox.square(
               dimension: 16,
@@ -1546,6 +1660,15 @@ class _ReplaceDialog extends StatelessWidget {
     ],
   );
 }
+
+/// One row of the flat sources list: the stream, the addon group it came
+/// from (a download records the request its stream came from, so the group
+/// has to travel with it) and what could be read out of it.
+typedef _FlatStream = ({
+  StreamGroup group,
+  StreamInfo stream,
+  StreamFacts facts,
+});
 
 /// What a stream tile knows about offline downloads: the entry for its
 /// stream if the registry has one, whether a pin for it is in flight, how
@@ -1983,9 +2106,17 @@ class _StreamTile extends StatelessWidget {
     this.titleOverride,
     this.autofocus = false,
     this.downloads,
+    this.facts,
   });
 
   final StreamInfo stream;
+
+  /// In the flat list, what was read out of the stream: the row says which
+  /// addon answered (there is no heading above it any more) and carries a
+  /// badge for each thing that is actually known -- an unknown gets no
+  /// badge rather than a placeholder. Null is the grouped list, where the
+  /// heading names the addon and the chips come from [StreamHints].
+  final StreamFacts? facts;
   final VoidCallback? onTap;
   final bool highlighted;
   final IconData? leadingIcon;
@@ -2000,13 +2131,18 @@ class _StreamTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hints = StreamHints.of(stream);
+    final facts = this.facts;
     final title = titleOverride ?? stream.title;
     // A name that is nothing but the hint ("1080p") needs no chip for it.
-    final chips = [
-      for (final chip in hints.chips)
-        if (chip.toLowerCase() != stream.title.toLowerCase()) chip,
-    ];
-    final description = titleOverride != null
+    final chips = facts != null
+        ? facts.badges
+        : [
+            for (final chip in hints.chips)
+              if (chip.toLowerCase() != stream.title.toLowerCase()) chip,
+          ];
+    final description = facts != null
+        ? facts.addonName
+        : titleOverride != null
         ? stream.title
         : stream.name == null
         ? null

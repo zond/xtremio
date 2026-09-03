@@ -23,7 +23,15 @@ Rust engine for addons, catalogs, library, and playback state) and
 > **Details** shows facts and genres, a season picker and episode list with
 > watched state for series (picking an episode loads its streams), and the
 > streams every installed addon returns with quality hints parsed into
-> chips; an addon that answered with an error is named from the profile
+> chips. The sources list has two layouts and a toggle in its header to
+> pick one: grouped (a section per addon, in profile order, each addon's
+> own ranking intact) is the default, and flat is every addon's answers in
+> one list sorted by resolution, then seeders, then size, each row naming
+> the addon it came from and badged with what could actually be read off
+> the stream -- nothing is badged that is not known. The choice is global
+> and persisted (`streamsFlat` in the preferences file), so it follows the
+> user to the next title and survives a restart. An addon that answered
+> with an error is named from the profile
 > rather than by its host and offers to be checked or uninstalled on the
 > spot; details routes are video-aware, so coming back from the player
 > lands on the right episode. The **player** plays torrents through the

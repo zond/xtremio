@@ -14,6 +14,7 @@ import 'package:xtremio/widgets/remote_press.dart';
 import '../../support/fake_core_client.dart';
 import '../../support/fake_downloads_client.dart';
 import '../../support/fake_playback_engine.dart';
+import '../../support/fake_prefs_client.dart';
 import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/tv.dart';
@@ -62,12 +63,16 @@ Widget harness(
   String? videoId,
   DeviceProfile device = tv,
   DownloadsClient? downloads,
+  AppPrefs? prefs,
 }) {
-  Widget screen = PlaybackScope(
-    createEngine: FakePlaybackEngine.new,
-    torrentStats: FakeTorrentStatsClient(),
-    child: MaterialApp(
-      home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
+  Widget screen = PrefsScope(
+    prefs: prefs ?? AppPrefs.inMemory(),
+    child: PlaybackScope(
+      createEngine: FakePlaybackEngine.new,
+      torrentStats: FakeTorrentStatsClient(),
+      child: MaterialApp(
+        home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
+      ),
     ),
   );
   if (downloads != null) {
@@ -78,6 +83,46 @@ Widget harness(
     child: CoreScope(client: core, child: screen),
   );
 }
+
+/// Two addons whose streams a remote has to walk in sorted order once the
+/// list is flat: alpha answers with its worst release first.
+List<Map<String, dynamic>> twoTorrentAddons() => [
+  for (final (base, streams) in [
+    (
+      'https://alpha.example/manifest.json',
+      [
+        {
+          'infoHash': 'a' * 40,
+          'name': 'Alpha 720p',
+          'description': '💾 900 MB',
+        },
+        {
+          'infoHash': 'b' * 40,
+          'name': 'Alpha 2160p',
+          'description': '💾 20 GB',
+        },
+      ],
+    ),
+    (
+      'https://beta.example/manifest.json',
+      [
+        {'infoHash': 'c' * 40, 'name': 'Beta 1080p', 'description': '👤 100'},
+      ],
+    ),
+  ])
+    {
+      'request': {
+        'base': base,
+        'path': {
+          'resource': 'stream',
+          'type': 'movie',
+          'id': 'tt0063350',
+          'extra': <Object>[],
+        },
+      },
+      'content': {'type': 'Ready', 'content': streams},
+    },
+];
 
 /// Where the streams pane starts at [tvSize]: 38 % of the width, at most
 /// 480 px, on the right.
@@ -237,12 +282,19 @@ void main() {
         if (focusedLabel(tester) == '1080p') break;
         inPane.add(focusInPane());
       }
-      // Three stops: the two streams and the row summarising the addons
-      // that had nothing, which expands and so takes the remote too.
+      // Four stops: the header's flat/grouped toggle, the two streams, and
+      // the row summarising the addons that had nothing (which expands and
+      // so takes the remote too).
       expect(inPane.length, lessThan(41), reason: 'came back around');
-      expect(inPane.where((b) => b).length, 3);
-      expect(inPane.sublist(0, 3), [true, true, true]);
-      expect(inPane.sublist(3).any((b) => b), isFalse);
+      expect(inPane.where((b) => b).length, 4);
+      // And they are one contiguous run of the cycle: the walk starts on a
+      // stream, which is in the middle of the pane's own stops, so the run
+      // wraps around the end of the list rather than starting at index 0.
+      final leaves = [
+        for (var i = 0; i < inPane.length; i++)
+          if (inPane[i] != inPane[(i + 1) % inPane.length]) i,
+      ];
+      expect(leaves, hasLength(2), reason: 'the pane is entered and left once');
     });
 
     testWidgets(
@@ -261,6 +313,107 @@ void main() {
         expect(find.byType(RemotePress), findsNothing);
       },
     );
+  });
+
+  group('flat sources', () {
+    /// The movie on a TV with the two torrent addons, listed flat.
+    Future<FakeCoreClient> mountFlat(
+      WidgetTester tester, {
+      AppPrefs? prefs,
+      DownloadsClient? downloads,
+    }) async {
+      useScreen(tester, tvSize);
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: loadMetaDetailsFixture()
+            ..['streams'] = twoTorrentAddons(),
+        },
+      );
+      final layout =
+          prefs ?? AppPrefs(client: FakePrefsClient({'streamsFlat': true}));
+      // Read before the first build, the way start-up does it, so the
+      // first sources list a remote sees is already the flat one.
+      await layout.load();
+      await tester.pumpWidget(
+        harness(core, prefs: layout, downloads: downloads),
+      );
+      await tester.pumpAndSettle();
+      return core;
+    }
+
+    testWidgets('a stored choice is already in place, and focus starts on '
+        'the best stream the list now begins with', (tester) async {
+      final prefs = AppPrefs(client: FakePrefsClient({'streamsFlat': true}));
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      await mountFlat(tester, prefs: prefs);
+
+      expect(focusedLabel(tester), 'Alpha 2160p');
+      expect(focusInPane(), isTrue);
+    });
+
+    testWidgets('down and up walk the sorted list, and the ends hold', (
+      tester,
+    ) async {
+      await mountFlat(tester);
+      expect(focusedLabel(tester), 'Alpha 2160p');
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), 'Beta 1080p');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), 'Alpha 720p');
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), 'Beta 1080p');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), 'Alpha 2160p');
+      // Above the first stream is the toggle, still inside the pane.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedTooltip(), kGroupedStreamsTooltip);
+      expect(focusInPane(), isTrue);
+    });
+
+    testWidgets('the remote reaches the toggle and select groups them again', (
+      tester,
+    ) async {
+      final stored = FakePrefsClient({'streamsFlat': true});
+      final prefs = AppPrefs(client: stored);
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      await mountFlat(tester, prefs: prefs);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedTooltip(), kGroupedStreamsTooltip);
+
+      await press(tester, LogicalKeyboardKey.select);
+      expect(focusedTooltip(), kFlatStreamsTooltip, reason: 'focus stayed');
+      expect(stored.stored, {'streamsFlat': false});
+      // Grouped again: each addon's own order, under its own heading.
+      expect(find.text('alpha.example'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Alpha 720p')).dy,
+        lessThan(tester.getTopLeft(find.text('Alpha 2160p')).dy),
+      );
+    });
+
+    testWidgets('a held select on a flat row still downloads it', (
+      tester,
+    ) async {
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      await mountFlat(tester, downloads: downloads);
+      expect(focusedLabel(tester), 'Alpha 2160p');
+
+      await hold(
+        tester,
+        LogicalKeyboardKey.select,
+        RemotePress.holdDuration * 2,
+      );
+
+      expect(downloads.added, hasLength(1));
+      expect(downloads.added.single.stream.infoHash, 'b' * 40);
+      expect(find.byType(PlayerScreen), findsNothing);
+    });
   });
 
   group('series', () {

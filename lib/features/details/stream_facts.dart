@@ -120,9 +120,16 @@ final class StreamFacts {
       value /= 1024;
       unit++;
     }
-    // Whole bytes and kilobytes have no meaningful fraction to show.
+    // Whole bytes and kilobytes have no meaningful fraction to show, and a
+    // fraction that is all zeros is noise: `20 GB`, not `20.00 GB`.
     final digits = unit <= 1 ? 0 : (value >= 100 ? 0 : 2);
-    return '${value.toStringAsFixed(digits)} ${units[unit]}';
+    var text = value.toStringAsFixed(digits);
+    if (text.contains('.')) {
+      text = text
+          .replaceFirst(RegExp(r'0+$'), '')
+          .replaceFirst(RegExp(r'\.$'), '');
+    }
+    return '$text ${units[unit]}';
   }
 
   /// The first resolution any of [sources] yields, in their order.
