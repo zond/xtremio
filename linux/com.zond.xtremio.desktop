@@ -1,0 +1,27 @@
+[Desktop Entry]
+Type=Application
+Name=Xtremio
+GenericName=Stremio client
+Comment=A native Stremio client on a pure-Rust core
+# %u hands the URI to the binary as its first argument, which is where the
+# GApplication command line (and so app_links) picks a stremio:// link up.
+# Point Exec at wherever the bundle was installed if it is not on the PATH.
+Exec=xtremio %u
+Icon=com.zond.xtremio
+Terminal=false
+Categories=AudioVideo;Video;Player;Network;
+# Registers the app as a handler for stremio:// links, which is how every
+# addon site's Install button (stremio-addons.net's included) hands an addon
+# over. Installing this file is what makes xdg-open route them here:
+#
+#   cp linux/com.zond.xtremio.desktop ~/.local/share/applications/
+#   update-desktop-database ~/.local/share/applications
+#   xdg-mime default com.zond.xtremio.desktop x-scheme-handler/stremio
+#
+# The Flutter build does not install it: `flutter build linux` produces a
+# bundle directory, not a system package, so this is the file a package (deb,
+# rpm, Flatpak) ships and a developer copies by hand.
+MimeType=x-scheme-handler/stremio;
+# Matches the application ID the runner sets with g_set_prgname, so the
+# window is attributed to this entry.
+StartupWMClass=com.zond.xtremio

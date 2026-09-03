@@ -22,6 +22,18 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+
+  // The application is a single instance (see my_application_new), so a
+  // second launch -- xdg-open handing over a stremio:// link, say -- lands
+  // here on the running process. Present the window it already has instead
+  // of building a second one; the link itself arrives separately, on the
+  // command-line signal.
+  GList* windows = gtk_application_get_windows(GTK_APPLICATION(application));
+  if (windows != nullptr) {
+    gtk_window_present(GTK_WINDOW(windows->data));
+    return;
+  }
+
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -96,7 +108,12 @@ static gboolean my_application_local_command_line(GApplication* application,
   g_application_activate(application);
   *exit_status = 0;
 
-  return TRUE;
+  // FALSE, not TRUE: the command line has not been fully handled here. That
+  // lets GApplication's own handling run on -- forwarding the arguments to
+  // the primary instance and emitting ::command-line there -- which is what
+  // carries a stremio:// link to the Dart side (the gtk plugin app_links
+  // uses listens on that signal).
+  return FALSE;
 }
 
 // Implements GApplication::startup.
@@ -142,7 +159,16 @@ MyApplication* my_application_new() {
   // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
 
-  return MY_APPLICATION(g_object_new(my_application_get_type(),
-                                     "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+  // A single instance that handles its own command line, rather than the
+  // template's G_APPLICATION_NON_UNIQUE. Both are needed for deep links: a
+  // stremio:// link opens the app with the URI as an argument, and with
+  // NON_UNIQUE that would start a second copy of the app (and a second
+  // embedded server on a taken port) instead of handing the link to the one
+  // already running. HANDLES_COMMAND_LINE is what forwards the arguments to
+  // the primary instance; HANDLES_OPEN covers the platforms that pass a URI
+  // as a GFile to ::open instead.
+  return MY_APPLICATION(g_object_new(
+      my_application_get_type(), "application-id", APPLICATION_ID, "flags",
+      G_APPLICATION_HANDLES_COMMAND_LINE | G_APPLICATION_HANDLES_OPEN,
+      nullptr));
 }
