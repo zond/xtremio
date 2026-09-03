@@ -92,6 +92,33 @@ void main() {
       );
     });
 
+    test('leaves a field that holds nothing, and its punctuation, alone', () {
+      // Both of these came out of a real report. `Url`'s own `Debug` prints
+      // every field, so an absent password reads `password: None` -- and a
+      // report that blanks it says a password was there.
+      const url =
+          'INFO xtremio_core::core: stremio-core runtime started '
+          'server_base_url=Some(Url { scheme: "http", username: "", '
+          'password: None, host: Some(Ipv4(127.0.0.1)), port: Some(11470) })';
+      expect(redactSecrets(url), url);
+      expect(redactSecrets('{"key":""}'), '{"key":""}');
+      expect(redactSecrets('auth_token=null'), 'auth_token=null');
+
+      // A header named in prose, with a placeholder for the value: the
+      // whole point of the line is that there is no token in it, and the
+      // closing backtick is not part of any value.
+      const prose =
+          'INFO stream_server: control API requires '
+          '`Authorization: Bearer <token>`';
+      expect(redactSecrets(prose), prose);
+      // The same shape with a real value behind it still goes, backtick and
+      // all still standing.
+      expect(
+        redactSecrets('requires `Authorization: Bearer s3cret-value` header'),
+        'requires `Authorization: <redacted>` header',
+      );
+    });
+
     test('leaves the diagnostics worth having alone', () {
       const line =
           '2026-09-03T15:04:19.484Z  INFO xtremio_core::server: embedded '

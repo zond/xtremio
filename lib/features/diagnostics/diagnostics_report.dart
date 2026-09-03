@@ -21,9 +21,12 @@ const String _secretNames =
     r'password|passwd|pwd|signature|secret|token|auth';
 
 /// `Authorization: <anything>` -- the whole value, scheme included, so the
-/// bearer token behind it cannot survive as a leftover word.
+/// bearer token behind it cannot survive as a leftover word. A backtick
+/// ends the value like a quote does: a log line that writes the header name
+/// in prose (``control API requires `Authorization: Bearer <token>` ``)
+/// must come out with its punctuation intact.
 final RegExp _authorizationValue = RegExp(
-  r'\b(authorization)("?\s*[:=]\s*)("?)[^",;\n]*',
+  r'\b(authorization)("?\s*[:=]\s*)("?)([^"`,;\n]*)',
   caseSensitive: false,
 );
 
@@ -42,7 +45,7 @@ final RegExp _secretValue = RegExp(
 /// `"key": "..."`: stremio-core's session key is `ctx.profile.auth.key`, so
 /// a bare `key` inside JSON is assumed to be it.
 final RegExp _jsonKey = RegExp(
-  r'"(key)"(\s*:\s*)"[^"]*"',
+  r'"(key)"(\s*:\s*)"([^"]*)"',
   caseSensitive: false,
 );
 
@@ -53,6 +56,22 @@ final RegExp _longKeyValue = RegExp(
   r'\b(key)(\s*[:=]\s*)[A-Za-z0-9\-._~+/=]{16,}',
   caseSensitive: false,
 );
+
+/// A value that is not a secret because it is not a value: an absent
+/// field's `None`/`null`, an empty string, or a placeholder somebody wrote
+/// into a message on purpose (`Authorization: Bearer <token>`).
+///
+/// The `Url` struct's `Debug` prints `password: None` for a URL with no
+/// password in it, and blanking that says "a password was here" about a
+/// line that says the opposite. Redaction has to leave harmless text alone
+/// to stay readable enough to be worth reading.
+final RegExp _nothingValue = RegExp(
+  r'^(?:none|null|nil|undefined|)$|^(?:\w+\s+)?<[\w \-]+>$',
+  caseSensitive: false,
+);
+
+/// Whether [value] is one of those -- surrounding quotes already stripped.
+bool _isNothing(String value) => _nothingValue.hasMatch(value.trim());
 
 /// Credentials in a URL's authority (`https://user:pass@host`).
 final RegExp _urlUserInfo = RegExp(
@@ -78,18 +97,24 @@ final RegExp _manifestUrl = RegExp(
 String redactSecrets(String text) => text
     .replaceAllMapped(
       _authorizationValue,
-      (match) => '${match[1]}${match[2]}${match[3]}$redactedMarker',
+      (match) => _isNothing(match[4]!)
+          ? match[0]!
+          : '${match[1]}${match[2]}${match[3]}$redactedMarker',
     )
     .replaceAllMapped(_bearerToken, (match) => '${match[1]} $redactedMarker')
     .replaceAllMapped(
       _secretValue,
-      (match) => match[3] != null
-          ? '${match[1]}${match[2]}"$redactedMarker"'
-          : '${match[1]}${match[2]}$redactedMarker',
+      (match) => switch (match[3] ?? match[4]!) {
+        final value when _isNothing(value) => match[0]!,
+        _ when match[3] != null => '${match[1]}${match[2]}"$redactedMarker"',
+        _ => '${match[1]}${match[2]}$redactedMarker',
+      },
     )
     .replaceAllMapped(
       _jsonKey,
-      (match) => '"${match[1]}"${match[2]}"$redactedMarker"',
+      (match) => _isNothing(match[3]!)
+          ? match[0]!
+          : '"${match[1]}"${match[2]}"$redactedMarker"',
     )
     .replaceAllMapped(
       _longKeyValue,
