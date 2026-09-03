@@ -180,8 +180,21 @@ impl Entry {
 
     /// Folds one live `DownloadInfo` into this entry: progress, path, size,
     /// the server's error, and the state they imply. `completed_at` is set
-    /// the first time the file is whole and cleared if it stops being whole
-    /// (a deleted file the server re-downloads).
+    /// the first time the file is whole and cleared only when the server
+    /// says it stopped being whole.
+    ///
+    /// Some of the server's readings say nothing about the bytes on disk,
+    /// and they read as zeros: while the torrent hash-checks, per-file
+    /// progress is empty until the check ends, and a torrent with no file
+    /// list at all -- a magnet still resolving, or a dormant pin whose
+    /// torrent the backend does not have right now (an unmounted downloads
+    /// volume) -- reports a placeholder with no path, no length and no
+    /// progress. Those are treated as *unknown*, the way `path` and `size`
+    /// already were: taking them at face value demoted a complete, playable
+    /// download to `queued, 0 B` on the first refresh after a restart and
+    /// erased a `completedAt` nothing can recover. The server's own reason
+    /// still comes through, so a complete entry can explain why it is not
+    /// reachable.
     fn apply_live(&mut self, info: &DownloadInfo, now: DateTime<Utc>) {
         if info.path.is_some() {
             self.path = info.path.clone();
@@ -189,14 +202,27 @@ impl Entry {
         if info.length > 0 {
             self.size = info.length;
         }
-        self.downloaded = info.downloaded;
-        self.error = info.error.clone();
         let phase = phase(info);
+        let unknown = phase == "checking"
+            || (info.length == 0 && info.downloaded == 0 && info.path.is_none());
+        if !unknown {
+            self.downloaded = info.downloaded;
+        }
+        self.error = info.error.clone();
+        let failing = info.error.is_some() || phase == "error";
         self.state = if info.complete {
             State::Complete
-        } else if info.error.is_some() || phase == "error" {
+        } else if unknown {
+            // Nothing here contradicts what was already known about the
+            // bytes; only the reason it is not progressing is news.
+            match self.state {
+                State::Complete => State::Complete,
+                _ if failing => State::Error,
+                _ => State::Queued,
+            }
+        } else if failing {
             State::Error
-        } else if matches!(phase.as_str(), "resolvingMetadata" | "checking") {
+        } else if phase == "resolvingMetadata" {
             State::Queued
         } else {
             State::Downloading
@@ -204,7 +230,11 @@ impl Entry {
         match self.state {
             State::Complete if self.completed_at.is_none() => self.completed_at = Some(now),
             State::Complete => {}
-            _ => self.completed_at = None,
+            // Only a reading that actually counted the bytes can say the
+            // file is no longer whole (a deleted file the server
+            // re-downloads); a transient zero must not erase the date.
+            _ if !unknown && self.downloaded < self.size => self.completed_at = None,
+            _ => {}
         }
     }
 }
@@ -1187,9 +1217,10 @@ mod tests {
         e.apply_live(&info(100, true, "ready", None), later);
         assert_eq!(e.completed_at, Some(now));
 
-        // The file went away: not complete any more, and no stale stamp.
-        e.apply_live(&info(0, false, "checking", None), later);
-        assert_eq!((e.state, e.completed_at), (State::Queued, None));
+        // The file really went away: a reading that counted the bytes and
+        // found fewer than the file has drops both the state and the stamp.
+        e.apply_live(&info(0, false, "buffering", None), later);
+        assert_eq!((e.state, e.completed_at), (State::Downloading, None));
 
         e.apply_live(&info(10, false, "error", Some("no peers")), later);
         assert_eq!(e.state, State::Error);
@@ -1197,6 +1228,74 @@ mod tests {
         // An error the phase does not show still counts.
         e.apply_live(&info(10, false, "buffering", Some("dormant")), later);
         assert_eq!(e.state, State::Error);
+    }
+
+    /// The server reports `downloaded: 0, complete: false` in states where
+    /// the file may be whole on disk: while the torrent hash-checks, and for
+    /// a pin whose torrent it does not have right now. A finished download
+    /// must survive both -- offline Play is gated on `complete`, and the
+    /// `completedAt` it would erase is not recoverable.
+    #[test]
+    fn transient_zeros_do_not_demote_a_finished_download() {
+        let now = Utc::now();
+        let later = now + chrono::Duration::seconds(60);
+        let complete = serde_json::from_value::<DownloadInfo>(serde_json::json!({
+            "infoHash": "abc", "fileIdx": 2, "path": "/downloads/abc/film.mkv",
+            "name": "film.mkv", "length": 100, "downloaded": 100, "complete": true,
+            "phase": "ready", "error": null,
+        }))
+        .expect("DownloadInfo");
+        // What a re-opened torrent reads while librqbit re-checks it, and
+        // what a pin whose torrent is not managed reads (no path, no length,
+        // no progress -- `routes::downloads::DORMANT_DOWNLOAD_ERROR`).
+        let checking = serde_json::from_value::<DownloadInfo>(serde_json::json!({
+            "infoHash": "abc", "fileIdx": 2, "path": "/downloads/abc/film.mkv",
+            "name": "film.mkv", "length": 100, "downloaded": 0, "complete": false,
+            "phase": "checking", "error": null,
+        }))
+        .expect("DownloadInfo");
+        let dormant = serde_json::from_value::<DownloadInfo>(serde_json::json!({
+            "infoHash": "abc", "fileIdx": 2, "path": null, "name": "",
+            "length": 0, "downloaded": 0, "complete": false,
+            "phase": "error", "error": "the torrent is not managed right now",
+        }))
+        .expect("DownloadInfo");
+
+        for transient in [&checking, &dormant] {
+            let mut e = entry("tt1", "tt1");
+            e.apply_live(&complete, now);
+            assert_eq!((e.state, e.downloaded), (State::Complete, 100));
+            e.apply_live(transient, later);
+            assert_eq!(e.state, State::Complete, "{transient:?}");
+            assert_eq!(e.downloaded, 100, "{transient:?}");
+            assert_eq!(e.completed_at, Some(now), "{transient:?}");
+            assert_eq!(e.path.as_deref(), Some("/downloads/abc/film.mkv"));
+            assert_eq!(e.size, 100, "the placeholder length is not a size");
+        }
+        // The reason it is not reachable still comes through.
+        let mut e = entry("tt1", "tt1");
+        e.apply_live(&complete, now);
+        e.apply_live(&dormant, later);
+        assert_eq!(e.error, dormant.error);
+
+        // An unfinished download keeps the progress it had, and says why it
+        // is not moving.
+        let mut e = entry("tt1", "tt1");
+        e.apply_live(
+            &serde_json::from_value::<DownloadInfo>(serde_json::json!({
+                "infoHash": "abc", "fileIdx": 2, "path": "/downloads/abc/film.mkv",
+                "name": "film.mkv", "length": 100, "downloaded": 40, "complete": false,
+                "phase": "buffering", "error": null,
+            }))
+            .expect("DownloadInfo"),
+            now,
+        );
+        assert_eq!((e.state, e.downloaded), (State::Downloading, 40));
+        e.apply_live(&dormant, later);
+        assert_eq!((e.state, e.downloaded), (State::Error, 40));
+        e.apply_live(&checking, later);
+        assert_eq!((e.state, e.downloaded), (State::Queued, 40));
+        assert_eq!(e.error, None, "the check is not an error");
     }
 
     #[test]
