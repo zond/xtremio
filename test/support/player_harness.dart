@@ -26,6 +26,7 @@ class PlayerHarness {
     this.subtitlesPath,
     this.configureEngine,
     this.device,
+    this.downloads,
   }) : fixture = player ?? loadPlayerFixture() {
     core = FakeCoreClient(
       state: {
@@ -66,6 +67,11 @@ class PlayerHarness {
   /// `support/tv.dart`) puts it on a television.
   final DeviceProfile? device;
 
+  /// The downloads client above the screen, or null for no
+  /// [DownloadsScope] at all -- which is what most players run under and
+  /// what the screen has to keep working without.
+  final DownloadsClient? downloads;
+
   Map<String, dynamic> get selected =>
       fixture['selected'] as Map<String, dynamic>;
 
@@ -92,9 +98,15 @@ class PlayerHarness {
       ),
     );
     final device = this.device;
+    final downloads = this.downloads;
+    final scoped = downloads == null
+        ? app
+        : DownloadsScope(client: downloads, child: app);
     return KeyedSubtree(
       key: ObjectKey(this),
-      child: device == null ? app : DeviceScope(profile: device, child: app),
+      child: device == null
+          ? scoped
+          : DeviceScope(profile: device, child: scoped),
     );
   }
 

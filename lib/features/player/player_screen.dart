@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../widgets/remote_press.dart';
+import '../downloads/offline_play.dart';
 import 'language_names.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
@@ -178,6 +179,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Set once the next episode's screen has been pushed in our place: this
   /// screen then neither unloads the core's player nor reacts to its state.
   bool _handedOver = false;
+
+  /// Set once moving on to the next episode has begun. Looking the episode
+  /// up on the disk stands between the decision and the hand-over, and
+  /// nothing on screen stops answering meanwhile, so without this a second
+  /// Next -- or the countdown running out under one -- would advance the
+  /// core's player twice and replace this route twice over.
+  bool _advancing = false;
 
   /// Whether the session's subtitle preference has been applied to this
   /// media yet (once per `open`), and whether an attempt is in flight.
@@ -979,18 +987,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Moves on to the next episode: the engine advances the library item,
-  /// and either a new player takes this one's place with the stream the
-  /// engine found (same addon, same binge group), or we return to the
+  /// and either a new player takes this one's place, or we return to the
   /// details screen pointing at the episode so its streams can be picked.
+  ///
+  /// A finished download of that episode is what the new player gets,
+  /// connection or not: a whole file on this disk is the better source,
+  /// and it is the *only* one offline, where the next episode's streams
+  /// never load and the engine finds nothing to binge into. Otherwise it
+  /// is the stream the engine found (same addon, same binge group).
+  ///
+  /// Asking the registry is a round trip, so [_advancing] holds the second
+  /// press: the countdown running out under a finger on Next would
+  /// otherwise advance twice.
   void _playNext() {
     final state = _state;
     final next = state?.nextVideo;
     // Nothing to move on to (the next episode has gone from the state):
     // the countdown must not keep ticking.
     _dismissUpNext();
-    if (state == null || next == null || _handedOver) return;
+    if (state == null || next == null || _handedOver || _advancing) return;
+    _advancing = true;
     _client?.dispatch(CoreActions.playerNextVideo());
-    final nextStream = state.nextStream;
     final navigator = Navigator.of(context);
     // Whatever sits over this screen (a sheet) goes first, so that the
     // pop/replacement below acts on the player's own route.
@@ -998,7 +1015,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (route != null && !route.isCurrent) {
       navigator.popUntil((candidate) => candidate == route);
     }
-    if (nextStream == null) {
+    final downloads = DownloadsScope.maybeOf(context);
+    final metaId = (state.metaRequest ?? widget.metaRequest)?.path.id;
+    if (downloads == null || metaId == null) {
+      _handOver(navigator, state, next, state.nextStream?.json);
+      return;
+    }
+    unawaited(_handOverFromDisk(navigator, downloads, metaId, state, next));
+  }
+
+  /// Hands over to the next episode's own file when the registry has a
+  /// finished download of it, and to whatever the engine found otherwise.
+  Future<void> _handOverFromDisk(
+    NavigatorState navigator,
+    DownloadsClient downloads,
+    String metaId,
+    PlayerState state,
+    VideoInfo next,
+  ) async {
+    final playback = await offlinePlaybackOf(downloads, metaId, next.id);
+    // Gone while the registry was answering: there is no route left to
+    // replace, and the screen that took ours over is not ours to steer.
+    if (!mounted) return;
+    _handOver(
+      navigator,
+      state,
+      next,
+      playback.stream ?? state.nextStream?.json,
+    );
+  }
+
+  /// Puts a player for [next] in this screen's place, or -- with no
+  /// [stream] anywhere for it -- goes back to the caller pointing at the
+  /// episode so its streams can be picked.
+  void _handOver(
+    NavigatorState navigator,
+    PlayerState state,
+    VideoInfo next,
+    Map<String, dynamic>? stream,
+  ) {
+    if (stream == null) {
       navigator.pop(PlayerScreenResult(selectVideoId: next.id));
       return;
     }
@@ -1009,7 +1065,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       MaterialPageRoute<PlayerScreenResult>(
         settings: const RouteSettings(name: 'player'),
         builder: (_) => PlayerScreen(
-          stream: nextStream.json,
+          stream: stream,
           streamRequest: streamRequest?.copyWith(
             path: streamRequest.path.copyWith(id: next.id),
           ),

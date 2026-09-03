@@ -72,15 +72,35 @@ Map<String, dynamic> offlineStream(DownloadView view, String url) {
 Future<OfflinePlayback> offlinePlayback(
   DownloadsClient client,
   DownloadView view,
+) => _open(client, view.key, view);
+
+/// The same for the video [videoId] of [metaId], for a caller that holds no
+/// listing to look an entry up in: the registry answers with the entry
+/// along with the file, and a video with no finished download is a refusal
+/// like any other -- nothing to play from the disk, so play what the caller
+/// had.
+Future<OfflinePlayback> offlinePlaybackOf(
+  DownloadsClient client,
+  String metaId,
+  String videoId,
+) => _open(client, DownloadView.keyFor(metaId, videoId), null);
+
+/// Opens [key], building the stream from [known] when the caller has the
+/// entry and from the one the open answered with otherwise.
+Future<OfflinePlayback> _open(
+  DownloadsClient client,
+  String key,
+  DownloadView? known,
 ) async {
   DownloadOpenResult opened;
   try {
-    opened = await client.open(view.key);
+    opened = await client.open(key);
   } catch (_) {
     return (stream: null, message: null);
   }
   final url = opened.url;
-  if (opened.ok && url != null) {
+  final view = known ?? opened.entry;
+  if (opened.ok && url != null && view != null) {
     return (stream: offlineStream(view, url), message: null);
   }
   return (

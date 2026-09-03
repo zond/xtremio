@@ -257,6 +257,11 @@ connection.
   downloaded; picking another stream is a request for that source. A
   download whose file went away with its volume streams instead and says
   so, rather than opening a player on a URL with no file behind it.
+  Binge-advancing asks the same question about the next episode before it
+  hands over, so a downloaded season plays through off the disk -- and
+  offline that is the only way it advances at all, since the next
+  episode's streams never load and the engine finds nothing to move on
+  to.
 - **Settings are the engine's.** `ctx.profile.settings` is stremio-core's
   `Settings` struct (camelCase; `docs/phase3-design.md` §4 lists it) and
   the only way to change one is `Ctx::UpdateSettings` with the *entire*

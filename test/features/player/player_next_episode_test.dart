@@ -6,6 +6,7 @@ import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
 
+import '../../support/fake_downloads_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
@@ -28,7 +29,10 @@ void main() {
     return ctx;
   }
 
-  PlayerHarness harnessWithNext({bool withStream = true}) {
+  PlayerHarness harnessWithNext({
+    bool withStream = true,
+    DownloadsClient? downloads,
+  }) {
     final harness = PlayerHarness(
       ctx: ctxWithTenSeconds(),
       subtitlesPath: const ResourcePath(
@@ -36,6 +40,7 @@ void main() {
         type: 'series',
         id: 'tt0063350:1:1',
       ),
+      downloads: downloads,
     );
     harness.fixture['nextVideo'] = nextVideo;
     harness.fixture['nextStream'] = withStream ? nextStream : null;
@@ -44,6 +49,45 @@ void main() {
 
   Map<String, dynamic> loadArgs(CoreAction action) =>
       action.action['args']['args'] as Map<String, dynamic>;
+
+  /// The registry key the next episode's download has: the meta the player
+  /// was loaded for, and that episode.
+  const nextKey = 'tt0063350:$nextId';
+  const nextPath = '/downloads/breaking/e2.mkv';
+
+  /// A client holding a finished download of the next episode.
+  FakeDownloadsClient withNextEpisodeOnDisk() => FakeDownloadsClient(
+    registry: DownloadsRegistry(
+      items: {
+        nextKey: DownloadView(const {
+          'metaId': 'tt0063350',
+          'videoId': nextId,
+          'type': 'series',
+          'name': 'S1E2',
+          'stream': {
+            'infoHash': 'cccccccccccccccccccccccccccccccccccccccc',
+            'fileIdx': 1,
+            'name': 'Torrentio',
+            'behaviorHints': {'bingeGroup': 'pdm-1080p'},
+          },
+          'state': 'complete',
+          'size': 1000,
+          'downloaded': 1000,
+          'path': nextPath,
+        }),
+      },
+    ),
+  );
+
+  /// The `Load Player` stream of the last load, which is what the next
+  /// episode's player was handed.
+  Map<String, dynamic> lastLoadedStream(PlayerHarness harness) =>
+      loadArgs(
+            harness.core.dispatched.lastWhere(
+              (a) => a.action['action'] == 'Load',
+            ),
+          )['stream']
+          as Map<String, dynamic>;
 
   testWidgets('counts down after the end and plays the next stream', (
     tester,
@@ -141,6 +185,71 @@ void main() {
       harness.core.dispatched.last.action,
       CoreActions.unload(CoreField.player).action,
     );
+  });
+
+  testWidgets('binges into a downloaded episode off the disk', (tester) async {
+    // A whole file for the next episode is on the device, so there is
+    // nothing for the server -- or the network -- to do, connection or
+    // not. The addon's stream for it is only the fallback.
+    useWideViewport(tester);
+    final downloads = withNextEpisodeOnDisk();
+    addTearDown(downloads.dispose);
+    final harness = harnessWithNext(downloads: downloads);
+    await harness.pump(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.pumpAndSettle();
+
+    expect(downloads.opens, [nextKey]);
+    expect(lastLoadedStream(harness), {
+      'url': 'file://$nextPath',
+      'name': 'Torrentio',
+      'behaviorHints': {'filename': 'e2.mkv', 'bingeGroup': 'pdm-1080p'},
+    });
+    expect(harness.engines, hasLength(2));
+  });
+
+  testWidgets('binges offline, where the core has no stream for it', (
+    tester,
+  ) async {
+    // With no connection the next episode's streams never load, so the
+    // core offers none -- but the episode is on the disk, which is a
+    // stream this screen can make for itself.
+    useWideViewport(tester);
+    final downloads = withNextEpisodeOnDisk();
+    addTearDown(downloads.dispose);
+    final harness = harnessWithNext(withStream: false, downloads: downloads);
+    await harness.pump(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    expect(lastLoadedStream(harness)['url'], 'file://$nextPath');
+    expect(harness.engines, hasLength(2));
+    // A hand-over, not an exit: the core's player stays loaded for the
+    // screen that took this one's place.
+    expect(
+      harness.core.dispatched.where(
+        (a) => a.action['action'] == 'Unload' && a.field == CoreField.player,
+      ),
+      isEmpty,
+    );
+  });
+
+  testWidgets('an episode that is not downloaded streams as before', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final downloads = FakeDownloadsClient();
+    addTearDown(downloads.dispose);
+    final harness = harnessWithNext(downloads: downloads);
+    await harness.pump(tester);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.pumpAndSettle();
+
+    expect(lastLoadedStream(harness), nextStream);
   });
 
   testWidgets('holds the countdown while a sheet is open', (tester) async {
