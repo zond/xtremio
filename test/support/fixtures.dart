@@ -92,3 +92,13 @@ Map<String, dynamic> loadRemoteAddonsFixture() =>
 /// `next_page`.
 Map<String, dynamic> loadLibraryFixture() =>
     loadFixture('library_default.json');
+
+/// What `downloads_list` answers, recorded hermetically by the `#[ignore]`d
+/// `record_registry_fixture` in `rust/tests/downloads.rs`: three offline
+/// downloads of two torrents it builds itself — a movie that finished
+/// (`tt0063350:tt0063350`), an episode two thirds of the way through
+/// (`tt0903747:tt0903747:1:1`) and one with nothing on disk yet
+/// (`tt0903747:tt0903747:1:2`). The paths are the recorder's temporary
+/// directory.
+Map<String, dynamic> loadDownloadsFixture() =>
+    loadFixture('downloads_registry.json');

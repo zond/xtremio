@@ -8,6 +8,9 @@
 //! session without waiting 90 s for a magnet nobody can answer, and it has no
 //! `ServerHandle` method. Everything the app itself does goes through the FFI
 //! surface, as it must.
+//!
+//! The `#[ignore]`d recorder at the bottom writes the registry fixture the
+//! Dart tests read. It takes the same globals, so it runs on its own.
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -602,5 +605,202 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     );
 
     core_shutdown()?;
+    Ok(())
+}
+
+/// A payload whose first `valid` bytes hash as the torrent says and whose
+/// tail does not: a file caught halfway, with whole pieces on disk and whole
+/// pieces still missing. `0xff` never occurs in a valid payload byte.
+fn write_partial(path: &std::path::Path, len: usize, valid: usize) {
+    let mut data: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+    data[valid..].fill(0xff);
+    std::fs::write(path, data).expect("write partial payload");
+}
+
+fn write_fixture(name: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    std::fs::create_dir_all(&fixtures)?;
+    std::fs::write(fixtures.join(name), serde_json::to_vec_pretty(value)?)?;
+    Ok(())
+}
+
+/// Records `tests/fixtures/downloads_registry.json`, what `downloads_list`
+/// answers, for the Dart tests over `DownloadView`:
+/// `cargo test --test downloads -- --ignored --nocapture`.
+///
+/// Hermetic like the lifecycle test above -- two torrents built here, no
+/// peer, no tracker, no network -- but ignored all the same, because the
+/// storage directory and the embedded server are process globals and it
+/// cannot share a run with the test that also takes them.
+///
+/// The three rows are the three shapes a downloads list has to draw: a movie
+/// that finished, an episode partway through (its first two pieces are on
+/// disk, its last one is not), and an episode with nothing on disk yet. The
+/// paths are this recorder's temporary directory; nothing reads them back as
+/// a location, only as the string a row shows.
+#[test]
+#[ignore = "rewrites a committed fixture, and takes the process globals the lifecycle test takes"]
+fn record_registry_fixture() -> anyhow::Result<()> {
+    let tmp = tempfile::tempdir()?;
+    let storage = tmp.path().join("core");
+    xtremio_core::env::set_storage_dir(&storage)?;
+
+    let movie_name = "Night.of.the.Living.Dead.1968.1080p.BluRay";
+    let movie_file = "night.of.the.living.dead.1968.1080p.mkv";
+    let movie_dir = tmp.path().join(movie_name);
+    std::fs::create_dir_all(&movie_dir)?;
+    write_payload(&movie_dir.join(movie_file), HAVE_LEN);
+    write_payload(&movie_dir.join("sample.mkv"), PIECE);
+    let (movie_torrent, movie_hash) = real_torrent(&movie_dir);
+
+    let series_name = "Breaking.Bad.S01.1080p.BluRay";
+    let first = "Breaking.Bad.S01E01.1080p.mkv";
+    let second = "Breaking.Bad.S01E02.1080p.mkv";
+    let series_dir = tmp.path().join(series_name);
+    std::fs::create_dir_all(&series_dir)?;
+    write_payload(&series_dir.join(first), MISSING_LEN);
+    write_payload(&series_dir.join(second), HAVE_LEN);
+    let (series_torrent, series_hash) = real_torrent(&series_dir);
+
+    // What the torrent engine already has: the whole movie, and the first
+    // two pieces of the first episode.
+    let cache_root = tmp.path().join("cache").join("server");
+    let managed = cache_root.join("rqbit-downloads");
+    std::fs::create_dir_all(managed.join(movie_name))?;
+    std::fs::copy(
+        movie_dir.join(movie_file),
+        managed.join(movie_name).join(movie_file),
+    )?;
+    std::fs::create_dir_all(managed.join(series_name))?;
+    write_partial(
+        &managed.join(series_name).join(first),
+        MISSING_LEN,
+        2 * PIECE,
+    );
+
+    let base_url = url::Url::parse(&server_start(ServerConfig {
+        config_dir: tmp.path().join("server").display().to_string(),
+        cache_dir: cache_root.display().to_string(),
+        port: 0,
+        fallback_to_ephemeral: true,
+    })?)?;
+    let movie_stats = create_torrent_on_server(&base_url, &movie_torrent);
+    let series_stats = create_torrent_on_server(&base_url, &series_torrent);
+    let movie_idx = file_index(&movie_stats, movie_file);
+    let first_idx = file_index(&series_stats, first);
+    let second_idx = file_index(&series_stats, second);
+
+    let trackers = serde_json::json!(["udp://tracker.invalid:1337/announce"]);
+    let added = json(&downloads_add(
+        serde_json::json!({
+            "metaId": "tt0063350",
+            "videoId": "tt0063350",
+            "type": "movie",
+            "name": "Night of the Living Dead",
+            "poster": "https://images.metahub.space/poster/medium/tt0063350/img",
+            "stream": {
+                "infoHash": movie_hash,
+                "fileIdx": movie_idx,
+                "name": "Torrent",
+                "title": "1080p BluRay\n👤 12 💾 1.4 GB",
+                "announce": trackers,
+                "behaviorHints": {"filename": movie_file, "bingeGroup": "pdm-1080p"},
+            },
+            "meta": {
+                "id": "tt0063350",
+                "type": "movie",
+                "name": "Night of the Living Dead",
+                "poster": "https://images.metahub.space/poster/medium/tt0063350/img",
+                "releaseInfo": "1968",
+            },
+            "streamRequest": {
+                "base": "https://public-domain-movies.now.sh/manifest.json",
+                "path": {"resource": "stream", "type": "movie", "id": "tt0063350", "extra": []},
+            },
+            "metaRequest": {
+                "base": "https://v3-cinemeta.strem.io/manifest.json",
+                "path": {"resource": "meta", "type": "movie", "id": "tt0063350", "extra": []},
+            },
+        })
+        .to_string(),
+    )?);
+    assert_eq!(added["ok"], true, "{added}");
+
+    for (video_id, file, file_idx, episode) in [
+        (
+            "tt0903747:1:1",
+            first,
+            first_idx,
+            ("Pilot", 1, 1, "Breaking Bad: Pilot"),
+        ),
+        (
+            "tt0903747:1:2",
+            second,
+            second_idx,
+            (
+                "Cat's in the Bag...",
+                1,
+                2,
+                "Breaking Bad: Cat's in the Bag...",
+            ),
+        ),
+    ] {
+        let (title, season, number, name) = episode;
+        let added = json(&downloads_add(
+            serde_json::json!({
+                "metaId": "tt0903747",
+                "videoId": video_id,
+                "type": "series",
+                "name": name,
+                "poster": "https://images.metahub.space/poster/medium/tt0903747/img",
+                "stream": {
+                    "infoHash": series_hash,
+                    "fileIdx": file_idx,
+                    "name": "Torrent",
+                    "title": format!("S{season:02}E{number:02} 1080p BluRay"),
+                    "announce": trackers,
+                    "behaviorHints": {"filename": file},
+                },
+                "meta": {
+                    "id": "tt0903747",
+                    "type": "series",
+                    "name": "Breaking Bad",
+                    "poster": "https://images.metahub.space/poster/medium/tt0903747/img",
+                    "videos": [{
+                        "id": video_id,
+                        "title": title,
+                        "season": season,
+                        "episode": number,
+                    }],
+                },
+                "streamRequest": {
+                    "base": "https://torrentio.invalid/manifest.json",
+                    "path": {"resource": "stream", "type": "series", "id": video_id, "extra": []},
+                },
+                "metaRequest": {
+                    "base": "https://v3-cinemeta.strem.io/manifest.json",
+                    "path": {"resource": "meta", "type": "series", "id": "tt0903747", "extra": []},
+                },
+            })
+            .to_string(),
+        )?);
+        assert_eq!(added["ok"], true, "{added}");
+    }
+
+    wait_for("tt0063350:tt0063350", "the movie to finish", |entry| {
+        entry["state"] == "complete"
+    });
+    let partial = wait_for("tt0903747:tt0903747:1:1", "the pieces on disk", |entry| {
+        entry["downloaded"] == 2 * PIECE
+    });
+    assert_eq!(partial["state"], "downloading", "{partial}");
+    let pending = wait_for("tt0903747:tt0903747:1:2", "the empty episode", |entry| {
+        entry["size"] == HAVE_LEN
+    });
+    assert_eq!(pending["downloaded"], 0, "{pending}");
+
+    let registry = list();
+    write_fixture("downloads_registry.json", &registry)?;
+    println!("recorded downloads_registry.json: {registry:#}");
     Ok(())
 }

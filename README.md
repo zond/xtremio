@@ -384,6 +384,7 @@ cargo test --test cinemeta -- --ignored       # network: loads a Cinemeta catalo
 cargo test --test meta_details -- --ignored   # network: meta + streams + Player + continue watching for a public-domain torrent, plus a series (seasons, selected episode, watched), refreshes fixtures
 cargo test --test board -- --ignored          # network: Board rows + a search over the default addons, refreshes fixtures
 cargo test --test library_addons -- --ignored # network: ctx (logged out), installed/remote addons, addon details (Cinemeta), library fixtures
+cargo test --test downloads -- --ignored      # no network: rebuilds downloads_registry.json (a finished movie, a half-done episode, an empty one) from two torrents it builds itself
 # ctx_logged_in.json is hand-authored (a fake account); there is no recorder for it, and a real session must never be committed
 
 # Dart (FFI-backed tests load rust/target/debug/libxtremio_core.* directly;

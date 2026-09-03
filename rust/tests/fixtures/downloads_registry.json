@@ -1,0 +1,191 @@
+{
+  "items": {
+    "tt0063350:tt0063350": {
+      "announce": [
+        "udp://tracker.invalid:1337/announce"
+      ],
+      "completedAt": "2026-09-03T06:52:48.292426130Z",
+      "createdAt": "2026-09-03T06:52:48.292426130Z",
+      "downloaded": 32768,
+      "error": null,
+      "fileIdx": 1,
+      "infoHash": "bbdd47be75282ea36cddf7a48ba5a73e667e57bb",
+      "lastPlayedAt": null,
+      "meta": {
+        "id": "tt0063350",
+        "name": "Night of the Living Dead",
+        "poster": "https://images.metahub.space/poster/medium/tt0063350/img",
+        "releaseInfo": "1968",
+        "type": "movie"
+      },
+      "metaId": "tt0063350",
+      "metaRequest": {
+        "base": "https://v3-cinemeta.strem.io/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0063350",
+          "resource": "meta",
+          "type": "movie"
+        }
+      },
+      "name": "Night of the Living Dead",
+      "path": "/tmp/.tmpaA6dw9/cache/server/rqbit-downloads/Night.of.the.Living.Dead.1968.1080p.BluRay/night.of.the.living.dead.1968.1080p.mkv",
+      "poster": "https://images.metahub.space/poster/medium/tt0063350/img",
+      "size": 32768,
+      "state": "complete",
+      "stream": {
+        "announce": [
+          "udp://tracker.invalid:1337/announce"
+        ],
+        "behaviorHints": {
+          "bingeGroup": "pdm-1080p",
+          "filename": "night.of.the.living.dead.1968.1080p.mkv"
+        },
+        "fileIdx": 1,
+        "infoHash": "bbdd47be75282ea36cddf7a48ba5a73e667e57bb",
+        "name": "Torrent",
+        "title": "1080p BluRay\n👤 12 💾 1.4 GB"
+      },
+      "streamRequest": {
+        "base": "https://public-domain-movies.now.sh/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0063350",
+          "resource": "stream",
+          "type": "movie"
+        }
+      },
+      "type": "movie",
+      "videoId": "tt0063350"
+    },
+    "tt0903747:tt0903747:1:1": {
+      "announce": [
+        "udp://tracker.invalid:1337/announce"
+      ],
+      "completedAt": null,
+      "createdAt": "2026-09-03T06:52:48.296613081Z",
+      "downloaded": 32768,
+      "error": null,
+      "fileIdx": 1,
+      "infoHash": "3890a4775f6c2375f9987aeddd03c01f72cecbbf",
+      "lastPlayedAt": null,
+      "meta": {
+        "id": "tt0903747",
+        "name": "Breaking Bad",
+        "poster": "https://images.metahub.space/poster/medium/tt0903747/img",
+        "type": "series",
+        "videos": [
+          {
+            "episode": 1,
+            "id": "tt0903747:1:1",
+            "season": 1,
+            "title": "Pilot"
+          }
+        ]
+      },
+      "metaId": "tt0903747",
+      "metaRequest": {
+        "base": "https://v3-cinemeta.strem.io/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0903747",
+          "resource": "meta",
+          "type": "series"
+        }
+      },
+      "name": "Breaking Bad: Pilot",
+      "path": "/tmp/.tmpaA6dw9/cache/server/rqbit-downloads/Breaking.Bad.S01.1080p.BluRay/Breaking.Bad.S01E01.1080p.mkv",
+      "poster": "https://images.metahub.space/poster/medium/tt0903747/img",
+      "size": 49152,
+      "state": "downloading",
+      "stream": {
+        "announce": [
+          "udp://tracker.invalid:1337/announce"
+        ],
+        "behaviorHints": {
+          "filename": "Breaking.Bad.S01E01.1080p.mkv"
+        },
+        "fileIdx": 1,
+        "infoHash": "3890a4775f6c2375f9987aeddd03c01f72cecbbf",
+        "name": "Torrent",
+        "title": "S01E01 1080p BluRay"
+      },
+      "streamRequest": {
+        "base": "https://torrentio.invalid/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0903747:1:1",
+          "resource": "stream",
+          "type": "series"
+        }
+      },
+      "type": "series",
+      "videoId": "tt0903747:1:1"
+    },
+    "tt0903747:tt0903747:1:2": {
+      "announce": [
+        "udp://tracker.invalid:1337/announce"
+      ],
+      "completedAt": null,
+      "createdAt": "2026-09-03T06:52:48.300836661Z",
+      "downloaded": 0,
+      "error": null,
+      "fileIdx": 0,
+      "infoHash": "3890a4775f6c2375f9987aeddd03c01f72cecbbf",
+      "lastPlayedAt": null,
+      "meta": {
+        "id": "tt0903747",
+        "name": "Breaking Bad",
+        "poster": "https://images.metahub.space/poster/medium/tt0903747/img",
+        "type": "series",
+        "videos": [
+          {
+            "episode": 2,
+            "id": "tt0903747:1:2",
+            "season": 1,
+            "title": "Cat's in the Bag..."
+          }
+        ]
+      },
+      "metaId": "tt0903747",
+      "metaRequest": {
+        "base": "https://v3-cinemeta.strem.io/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0903747",
+          "resource": "meta",
+          "type": "series"
+        }
+      },
+      "name": "Breaking Bad: Cat's in the Bag...",
+      "path": "/tmp/.tmpaA6dw9/cache/server/rqbit-downloads/Breaking.Bad.S01.1080p.BluRay/Breaking.Bad.S01E02.1080p.mkv",
+      "poster": "https://images.metahub.space/poster/medium/tt0903747/img",
+      "size": 32768,
+      "state": "downloading",
+      "stream": {
+        "announce": [
+          "udp://tracker.invalid:1337/announce"
+        ],
+        "behaviorHints": {
+          "filename": "Breaking.Bad.S01E02.1080p.mkv"
+        },
+        "fileIdx": 0,
+        "infoHash": "3890a4775f6c2375f9987aeddd03c01f72cecbbf",
+        "name": "Torrent",
+        "title": "S01E02 1080p BluRay"
+      },
+      "streamRequest": {
+        "base": "https://torrentio.invalid/manifest.json",
+        "path": {
+          "extra": [],
+          "id": "tt0903747:1:2",
+          "resource": "stream",
+          "type": "series"
+        }
+      },
+      "type": "series",
+      "videoId": "tt0903747:1:2"
+    }
+  },
+  "version": 1
+}
