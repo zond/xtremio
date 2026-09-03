@@ -4,6 +4,10 @@
          debug/profile manifests, so without this a release APK is offline. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- android:banner is what the Android TV / Google TV home screen shows
+         for the app: a 320x180 xhdpi PNG (drawable-xhdpi/banner.png), as the
+         leanback launcher wants; the square launcher icon would be letterboxed
+         or rejected there. -->
     <!-- usesCleartextTraffic only governs the Java network stack and dart:io
          (Image.network for addon-supplied posters, any Dart call to the
          embedded http://127.0.0.1:<port> server). Rust sockets (reqwest) and
@@ -14,7 +18,7 @@
         android:label="xtremio"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:banner="@mipmap/ic_launcher"
+        android:banner="@drawable/banner"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
