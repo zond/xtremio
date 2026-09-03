@@ -350,6 +350,28 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         "the still-pinned file of the same torrent stays"
     );
 
+    // Pressing Download on a second stream for the same title replaces the
+    // entry -- and has to release the pin it replaces. The registry is keyed
+    // by meta and video, the server's pins by (infoHash, fileIdx), so a pin
+    // left behind keeps a whole torrent downloading, exempt from every
+    // sweeper, with nothing in the registry naming it and no way for the UI
+    // to reach it again.
+    add("tt-swap", &info_hash, have_idx);
+    let pins = xtremio_core::server::downloads()?;
+    assert_eq!(pins.len(), 2, "both files are pinned now: {pins:?}");
+    let swapped = add("tt-swap", &info_hash, missing_idx);
+    assert_eq!(swapped["entry"]["fileIdx"], missing_idx, "{swapped}");
+    let pins = xtremio_core::server::downloads()?;
+    assert_eq!(pins.len(), 1, "the replaced pin is gone: {pins:?}");
+    assert_eq!(pins[0].file_idx, missing_idx, "{pins:?}");
+    // Dropped from the registry directly: removing it through the FFI would
+    // unpin the file `tt-missing` also names, which the rest of this test
+    // needs pinned.
+    xtremio_core::downloads::update(|registry| {
+        registry.items.remove("tt-swap:tt-swap");
+        Ok(())
+    })?;
+
     // Progress events: the ticker is running (something is unfinished), so a
     // registry that disagrees with the server is corrected and the change is
     // pushed. Written straight into the registry to make the change certain

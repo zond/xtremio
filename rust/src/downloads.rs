@@ -657,6 +657,8 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
             });
         }
     };
+    release_replaced_pin(&key, &info_hash, file_idx);
+
     // `pin_download` already reports the path when the engine knows it; ask
     // again only for the case where it did not (metadata just landed).
     let path = match info.path.clone() {
@@ -704,6 +706,61 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
         entry: Some(entry),
         error: None,
     })
+}
+
+/// Drops the pin the entry at `key` used to hold, when the download being
+/// recorded is a different file (the user pressed Download on a second
+/// stream for the same title, or retried at another index). The registry is
+/// keyed by meta and video, the server's pin registry by `(infoHash,
+/// fileIdx)`, so without this the replaced torrent stays wanted, exempt
+/// from the idle sweeper and the cache cleaner, and downloading -- with
+/// nothing in `downloads.json` naming it any more, which means the list
+/// cannot show it and [`remove`] cannot reach it, ever.
+///
+/// Another entry naming the same file (the same movie under two metas) owns
+/// that pin too, so it is left alone; otherwise the pin goes and the bytes
+/// with it, since nothing references them any more.
+fn release_replaced_pin(key: &str, info_hash: &str, file_idx: usize) {
+    let registry = match load() {
+        Ok(registry) => registry,
+        Err(error) => {
+            tracing::warn!(%error, "could not check for a download to replace");
+            return;
+        }
+    };
+    let Some(previous) = registry.items.get(key) else {
+        return;
+    };
+    if previous.info_hash.eq_ignore_ascii_case(info_hash) && previous.file_idx == file_idx {
+        return;
+    }
+    let shared = registry.items.iter().any(|(other, entry)| {
+        other != key
+            && entry.info_hash.eq_ignore_ascii_case(&previous.info_hash)
+            && entry.file_idx == previous.file_idx
+    });
+    if shared {
+        tracing::info!(
+            key,
+            file_idx = previous.file_idx,
+            "the replaced download is another entry's too; its pin stays"
+        );
+        return;
+    }
+    match crate::server::unpin_download(&previous.info_hash, previous.file_idx, true) {
+        Ok(outcome) => tracing::info!(
+            key,
+            file_idx = previous.file_idx,
+            deleted_files = outcome.deleted_files,
+            "released the download this one replaces"
+        ),
+        Err(error) => tracing::warn!(
+            key,
+            file_idx = previous.file_idx,
+            %error,
+            "could not release the download this one replaces; it stays pinned"
+        ),
+    }
 }
 
 /// What `downloads_remove` answers: whether a pin was actually cleared,

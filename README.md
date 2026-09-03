@@ -200,7 +200,10 @@ connection.
   `downloads_set_dir(path)` and a `downloads_events()` stream that ticks
   about once a second, only while something is unfinished, and pushes
   just the entries that moved. Progress is merged from the server's
-  `downloads()`, never stored twice. A stream that names no `fileIdx` (or
+  `downloads()`, never stored twice. Downloading a second stream for a
+  title replaces the entry and releases the pin it replaces (with its
+  bytes, unless another entry names the same file), so no torrent is left
+  downloading behind the registry's back. A stream that names no `fileIdx` (or
   the `-1` sentinel the player's URL carries) is resolved the way the media
   route resolves `/{infoHash}/-1` — the `fileMustInclude` match, else the
   largest media file — so what is kept offline is the file that streamed,
