@@ -92,24 +92,31 @@ fn list() -> serde_json::Value {
     json(&downloads_list().expect("downloads_list"))
 }
 
-fn add(meta_id: &str, info_hash: &str, file_idx: usize) -> serde_json::Value {
+fn add_stream(meta_id: &str, stream: serde_json::Value) -> serde_json::Value {
     let request = serde_json::json!({
         "metaId": meta_id,
         "videoId": meta_id,
         "type": "movie",
         "name": format!("{meta_id} the film"),
         "poster": "https://example.invalid/poster.jpg",
-        "stream": {
-            "infoHash": info_hash,
-            "fileIdx": file_idx,
-            "name": "Test",
-            "announce": [],
-        },
+        "stream": stream,
         "meta": { "id": meta_id, "type": "movie", "name": "Snapshot" },
         "streamRequest": { "base": "https://addon.invalid/manifest.json" },
         "metaRequest": { "base": "https://cinemeta.invalid/manifest.json" },
     });
     json(&downloads_add(request.to_string()).expect("downloads_add"))
+}
+
+fn add(meta_id: &str, info_hash: &str, file_idx: usize) -> serde_json::Value {
+    add_stream(
+        meta_id,
+        serde_json::json!({
+            "infoHash": info_hash,
+            "fileIdx": file_idx,
+            "name": "Test",
+            "announce": [],
+        }),
+    )
 }
 
 /// Index of the torrent file called `name`, as the create response reports
@@ -193,6 +200,55 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert!(
         error.to_string().contains("invalid download request"),
         "{error}"
+    );
+
+    // A stream that names no file downloads the file it would *play*: the
+    // player asks the server for `/{infoHash}/-1`, which resolves to the
+    // `fileMustInclude` match or the largest media file, so pinning file 0
+    // would keep -- and later delete -- a different file than the one that
+    // streamed. The torrent's file order is the directory walk's, so both
+    // rules are checked: whichever file sits at index 0, one of them names
+    // the other.
+    let largest_idx = created["files"]
+        .as_array()
+        .expect("files")
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, file)| file["length"].as_u64().unwrap_or_default())
+        .map(|(idx, _)| idx)
+        .expect("a largest file");
+    assert_eq!(largest_idx, missing_idx, "missing.bin is the bigger file");
+
+    let filtered = add_stream(
+        "tt-filtered",
+        serde_json::json!({
+            "infoHash": info_hash, "announce": [], "fileMustInclude": ["have"],
+        }),
+    );
+    assert_eq!(filtered["ok"], true, "{filtered}");
+    assert_eq!(filtered["entry"]["fileIdx"], have_idx, "{filtered}");
+    assert_eq!(filtered["entry"]["size"], HAVE_LEN, "{filtered}");
+
+    let resolved = add_stream(
+        "tt-largest",
+        serde_json::json!({"infoHash": info_hash, "name": "Test", "announce": []}),
+    );
+    assert_eq!(resolved["entry"]["fileIdx"], largest_idx, "{resolved}");
+    assert_eq!(resolved["entry"]["size"], MISSING_LEN, "{resolved}");
+
+    // The explicit `-1` the player's URL carries means the same thing.
+    let sentinel = add_stream(
+        "tt-sentinel",
+        serde_json::json!({"infoHash": info_hash, "fileIdx": -1, "announce": []}),
+    );
+    assert_eq!(sentinel["entry"]["fileIdx"], largest_idx, "{sentinel}");
+
+    for key in ["tt-filtered", "tt-largest", "tt-sentinel"] {
+        json(&downloads_remove(format!("{key}:{key}"), false)?);
+    }
+    assert!(
+        xtremio_core::server::downloads()?.is_empty(),
+        "the probes left no pin behind"
     );
 
     // Add both. The pin answers at once (the metadata is known), with the

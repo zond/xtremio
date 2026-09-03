@@ -200,7 +200,11 @@ connection.
   `downloads_set_dir(path)` and a `downloads_events()` stream that ticks
   about once a second, only while something is unfinished, and pushes
   just the entries that moved. Progress is merged from the server's
-  `downloads()`, never stored twice. A refused pin comes back as
+  `downloads()`, never stored twice. A stream that names no `fileIdx` (or
+  the `-1` sentinel the player's URL carries) is resolved the way the media
+  route resolves `/{infoHash}/-1` — the `fileMustInclude` match, else the
+  largest media file — so what is kept offline is the file that streamed,
+  not file 0. A refused pin comes back as
   `{"ok":false,"error":{"kind":…}}` — `insufficientSpace` carries the
   byte counts, the rest the server's client-safe message, which names no
   local path — because a full disk is something to show, not an

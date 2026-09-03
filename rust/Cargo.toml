@@ -32,6 +32,10 @@ futures = "0.3"
 http = "1"
 # rustls (aws-lc-rs provider + rustls-platform-verifier roots); no system TLS.
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "gzip"] }
+# Same matcher the server uses for a stream's `fileMustInclude` filters, so
+# a download picks the file the media route would play. Already in the graph
+# (tracing-subscriber's env-filter, stream-server), nothing new is compiled.
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Names the failing JSON path when an addon response does not match the schema.

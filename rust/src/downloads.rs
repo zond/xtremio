@@ -41,6 +41,15 @@ const FILE_NAME: &str = "downloads.json";
 /// How often [`ticker`] merges live progress while anything is unfinished.
 const TICK: Duration = Duration::from_secs(1);
 
+/// How long [`resolve_media_file`] waits for the file list of a stream that
+/// names no `fileIdx`. The same wait the server gives a magnet's metadata
+/// (`enginefs::METADATA_RESOLVE_TIMEOUT`, which it does not re-export), so
+/// such a stream is no slower to refuse than the pin itself would be.
+const METADATA_WAIT: Duration = Duration::from_secs(90);
+
+/// How often [`resolve_media_file`] re-asks while that wait runs.
+const METADATA_POLL: Duration = Duration::from_millis(250);
+
 /// Serializes read-modify-write cycles on the registry file: the FFI calls,
 /// the progress ticker and the init-time re-pin all run on different
 /// threads and must not lose each other's edits.
@@ -433,9 +442,10 @@ pub struct AddRequest {
     /// The addon's raw stream JSON; must be a torrent (`infoHash`).
     pub stream: serde_json::Value,
     /// Overrides the stream's own `fileIdx`, for a caller that resolved the
-    /// episode's index itself.
+    /// episode's index itself. Negative (the `-1` the player's URL carries)
+    /// means "you pick", exactly like a stream with no `fileIdx`.
     #[serde(default)]
-    pub file_idx: Option<usize>,
+    pub file_idx: Option<i64>,
     #[serde(default)]
     pub meta: Option<serde_json::Value>,
     #[serde(default)]
@@ -444,48 +454,191 @@ pub struct AddRequest {
     pub meta_request: Option<serde_json::Value>,
 }
 
-/// The torrent coordinates of a stream: `infoHash`, the file index and the
-/// trackers. Errors when the stream is not a torrent, which is the one
-/// thing the caller must not get wrong.
-fn torrent_source(
-    stream: &serde_json::Value,
-    file_idx_override: Option<usize>,
-) -> anyhow::Result<(String, usize, Vec<String>)> {
-    let info_hash = stream
-        .get("infoHash")
-        .and_then(serde_json::Value::as_str)
-        .filter(|hash| !hash.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("only torrent streams can be downloaded (no infoHash)"))?
-        .to_lowercase();
-    let file_idx = file_idx_override
-        .or_else(|| {
-            stream
-                .get("fileIdx")
-                .and_then(serde_json::Value::as_u64)
-                .map(|idx| idx as usize)
-        })
-        .unwrap_or(0);
-    // `announce` is stremio-core's field; `sources` is what addons that
-    // speak the server's shape send. Either is only consulted when this pin
-    // is what creates the engine.
-    let announce = ["announce", "sources"]
-        .iter()
+/// The torrent coordinates of a stream, as the player's own URL carries
+/// them: `infoHash`, the file the stream names, the trackers and the
+/// `fileMustInclude` filters. Errors when the stream is not a torrent,
+/// which is the one thing the caller must not get wrong.
+#[derive(Clone, Debug, PartialEq)]
+struct TorrentSource {
+    info_hash: String,
+    /// The index the stream names, or `None` when it names none — a missing
+    /// `fileIdx` and the explicit `-1` sentinel alike. `None` is not file 0:
+    /// the app plays `/{infoHash}/-1`, which the server resolves to the
+    /// filtered or largest media file (`routes::compat::resolve_file_idx`),
+    /// so the index has to be asked for rather than assumed.
+    file_idx: Option<usize>,
+    announce: Vec<String>,
+    /// The stream's `fileMustInclude`, which the play URL passes as `f=` and
+    /// which wins over the largest-file rule.
+    filters: Vec<String>,
+}
+
+fn string_list(stream: &serde_json::Value, keys: &[&str]) -> Vec<String> {
+    keys.iter()
         .find_map(|key| stream.get(key).and_then(serde_json::Value::as_array))
         .map(|list| {
             list.iter()
                 .filter_map(|item| item.as_str().map(str::to_owned))
                 .collect()
         })
-        .unwrap_or_default();
-    Ok((info_hash, file_idx, announce))
+        .unwrap_or_default()
+}
+
+fn torrent_source(
+    stream: &serde_json::Value,
+    file_idx_override: Option<i64>,
+) -> anyhow::Result<TorrentSource> {
+    let info_hash = stream
+        .get("infoHash")
+        .and_then(serde_json::Value::as_str)
+        .filter(|hash| !hash.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("only torrent streams can be downloaded (no infoHash)"))?
+        .to_lowercase();
+    // A negative index is the caller saying "you pick", the same thing the
+    // media route's `-1` says, so it never becomes a real index here.
+    let file_idx = file_idx_override
+        .or_else(|| stream.get("fileIdx").and_then(serde_json::Value::as_i64))
+        .filter(|idx| *idx >= 0)
+        .map(|idx| idx as usize);
+    // `announce` is stremio-core's field; `sources` is what addons that
+    // speak the server's shape send. Either is only consulted when this pin
+    // is what creates the engine.
+    let announce = string_list(stream, &["announce", "sources"]);
+    let filters = string_list(stream, &["fileMustInclude"]);
+    Ok(TorrentSource {
+        info_hash,
+        file_idx,
+        announce,
+        filters,
+    })
+}
+
+/// Whether a file name is one the server counts as media
+/// (`routes::compat::is_video_name`).
+fn is_video_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().rsplit('.').next(),
+        Some("mkv" | "mp4" | "avi" | "webm" | "mov" | "wmv" | "m4v" | "ts")
+    )
+}
+
+/// One `fileMustInclude` filter against one file name, as the server matches
+/// it (`routes::compat::file_matches_filter`): `/pattern/flags` is a regular
+/// expression, anything else a case-insensitive substring.
+fn file_matches_filter(name: &str, filter: &str) -> bool {
+    if let Some((pattern, flags)) = filter
+        .strip_prefix('/')
+        .and_then(|rest| rest.rsplit_once('/'))
+        .filter(|(pattern, _)| !pattern.is_empty())
+    {
+        return regex::RegexBuilder::new(pattern)
+            .case_insensitive(flags.contains('i'))
+            .build()
+            .map(|regex| regex.is_match(name))
+            .unwrap_or(false);
+    }
+    name.to_ascii_lowercase()
+        .contains(&filter.to_ascii_lowercase())
+}
+
+/// The file `/{infoHash}/-1` plays, from the torrent's `(name, length)` list:
+/// the first one a `fileMustInclude` filter matches, else the largest file
+/// with a media extension, else the largest file of any kind. A mirror of
+/// the server's `routes::compat::resolve_file_idx("-1", ..)` — what the app
+/// keeps offline has to be what it played online, and the index is the
+/// file's position in the torrent either way.
+fn media_file_index(files: &[(String, u64)], filters: &[String]) -> Option<usize> {
+    if !filters.is_empty() {
+        let matched = files.iter().position(|(name, _)| {
+            filters
+                .iter()
+                .any(|filter| file_matches_filter(name, filter))
+        });
+        if let Some(idx) = matched {
+            return Some(idx);
+        }
+    }
+    files
+        .iter()
+        .enumerate()
+        .filter(|(_, (name, _))| is_video_name(name))
+        .max_by_key(|(_, (_, length))| *length)
+        .or_else(|| {
+            files
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, (_, length))| *length)
+        })
+        .map(|(idx, _)| idx)
+}
+
+/// Which file of `source` to pin when the stream names none: the server is
+/// asked for the torrent's file list and the media route's rule applied to
+/// it. The stats call creates the engine when the hash is new, so this waits
+/// for a magnet's metadata the way the pin itself would, and refuses with a
+/// message the UI can show rather than guessing file 0.
+fn resolve_media_file(source: &TorrentSource) -> Result<usize, PinFailure> {
+    let deadline = std::time::Instant::now() + METADATA_WAIT;
+    loop {
+        let stats = crate::server::torrent_stats(&source.info_hash, None, &source.announce)
+            .map_err(|error| PinFailure::classify(&error))?;
+        let files: Vec<(String, u64)> = stats
+            .files
+            .iter()
+            .map(|file| (file.name.clone(), file.length))
+            .collect();
+        if let Some(idx) = media_file_index(&files, &source.filters) {
+            return Ok(idx);
+        }
+        if let Some(error) = stats.error.clone() {
+            return Err(PinFailure::MagnetAdd { message: error });
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(PinFailure::MagnetAdd {
+                message: format!(
+                    "the torrent's file list did not resolve within {}s, so there is no way to \
+                     tell which file this stream plays",
+                    METADATA_WAIT.as_secs()
+                ),
+            });
+        }
+        std::thread::sleep(METADATA_POLL);
+    }
 }
 
 /// Pins the request's stream and records it. An existing entry for the same
 /// meta/video keeps its `createdAt` and `lastPlayedAt` and takes everything
 /// else from this call, so re-downloading after a failure is one call.
 pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
-    let (info_hash, file_idx, announce) = torrent_source(&request.stream, request.file_idx)?;
+    let source = torrent_source(&request.stream, request.file_idx)?;
+    let TorrentSource {
+        info_hash,
+        announce,
+        ..
+    } = source.clone();
     let key = Entry::key_of(&request.meta_id, &request.video_id);
+
+    // A stream that names no file is not a stream about file 0: it plays
+    // whatever `/{infoHash}/-1` resolves to, and that is what gets pinned.
+    let file_idx = match source.file_idx {
+        Some(file_idx) => file_idx,
+        None => match resolve_media_file(&source) {
+            Ok(file_idx) => file_idx,
+            Err(failure) => {
+                tracing::warn!(
+                    key,
+                    message = failure.message(),
+                    "could not tell which file this stream downloads"
+                );
+                return Ok(AddOutcome {
+                    ok: false,
+                    key: Some(key),
+                    entry: None,
+                    error: Some(failure),
+                });
+            }
+        },
+    };
 
     let info = match crate::server::pin_download(&info_hash, file_idx, &announce) {
         Ok(info) => info,
@@ -841,25 +994,101 @@ mod tests {
             torrent_source(&serde_json::json!({"url": "http://example/x.mkv"}), None).unwrap_err();
         assert!(error.to_string().contains("infoHash"), "{error}");
 
-        let (hash, idx, announce) = torrent_source(
+        let source = torrent_source(
             &serde_json::json!({"infoHash": "ABC", "fileIdx": 3, "announce": ["udp://t", 7]}),
             None,
         )
         .unwrap();
-        assert_eq!((hash.as_str(), idx), ("abc", 3), "the hash is normalized");
-        assert_eq!(announce, vec!["udp://t".to_owned()], "non-strings dropped");
+        assert_eq!(
+            (source.info_hash.as_str(), source.file_idx),
+            ("abc", Some(3)),
+            "the hash is normalized"
+        );
+        assert_eq!(
+            source.announce,
+            vec!["udp://t".to_owned()],
+            "non-strings dropped"
+        );
 
-        // No `fileIdx` means the only file there can be; an explicit
-        // override wins over the stream's own.
-        let (_, idx, _) = torrent_source(&serde_json::json!({"infoHash": "abc"}), None).unwrap();
-        assert_eq!(idx, 0);
-        let (_, idx, announce) = torrent_source(
-            &serde_json::json!({"infoHash": "abc", "fileIdx": 3, "sources": ["dht:abc"]}),
+        // An explicit override wins over the stream's own index, and the
+        // `fileMustInclude` filters the play URL carries come along.
+        let source = torrent_source(
+            &serde_json::json!({
+                "infoHash": "abc", "fileIdx": 3, "sources": ["dht:abc"],
+                "fileMustInclude": ["S01E02"],
+            }),
             Some(9),
         )
         .unwrap();
-        assert_eq!(idx, 9);
-        assert_eq!(announce, vec!["dht:abc".to_owned()]);
+        assert_eq!(source.file_idx, Some(9));
+        assert_eq!(source.announce, vec!["dht:abc".to_owned()]);
+        assert_eq!(source.filters, vec!["S01E02".to_owned()]);
+    }
+
+    /// A stream that names no file names *no* file — not file 0. The app
+    /// plays `/{infoHash}/-1` for it, so the index has to be resolved the
+    /// way the server resolves that URL, or the download keeps (and later
+    /// deletes) a different file than the one that streamed.
+    #[test]
+    fn no_file_index_is_not_index_zero() {
+        for stream in [
+            serde_json::json!({"infoHash": "abc"}),
+            serde_json::json!({"infoHash": "abc", "fileIdx": -1}),
+            serde_json::json!({"infoHash": "abc", "fileIdx": null}),
+        ] {
+            let source = torrent_source(&stream, None).unwrap();
+            assert_eq!(source.file_idx, None, "{stream}");
+        }
+        // A negative override says the same thing as a negative `fileIdx`.
+        let source = torrent_source(&serde_json::json!({"infoHash": "abc"}), Some(-1)).unwrap();
+        assert_eq!(source.file_idx, None);
+    }
+
+    /// The rule the media route applies to `-1`, mirrored: filters first,
+    /// then the largest media file, then the largest file at all.
+    #[test]
+    fn the_resolved_file_is_the_one_the_player_would_open() {
+        let files: Vec<(String, u64)> = [
+            ("readme.nfo", 100_u64),
+            ("sample.mkv", 1_000),
+            ("Movie.2160p.mkv", 9_000),
+            ("extras.zip", 20_000),
+        ]
+        .into_iter()
+        .map(|(name, length)| (name.to_owned(), length))
+        .collect();
+
+        assert_eq!(
+            media_file_index(&files, &[]),
+            Some(2),
+            "the largest media file, not the largest file"
+        );
+        assert_eq!(
+            media_file_index(&files, &["sample".to_owned()]),
+            Some(1),
+            "a fileMustInclude filter wins"
+        );
+        assert_eq!(
+            media_file_index(&files, &["/mo.ie\\.2160p/i".to_owned()]),
+            Some(2),
+            "a /regex/i filter is a regex, like the server's"
+        );
+        assert_eq!(
+            media_file_index(&files, &["nothing matches".to_owned()]),
+            Some(2),
+            "an unmatched filter falls back to the largest media file"
+        );
+
+        // No media extension at all: the largest file of any kind.
+        let blobs: Vec<(String, u64)> = [("a.bin", 10_u64), ("b.bin", 20)]
+            .into_iter()
+            .map(|(name, length)| (name.to_owned(), length))
+            .collect();
+        assert_eq!(media_file_index(&blobs, &[]), Some(1));
+
+        // Nothing to choose from: the caller has to wait for metadata.
+        assert_eq!(media_file_index(&[], &[]), None);
+        assert_eq!(media_file_index(&[], &["x".to_owned()]), None);
     }
 
     /// The state a live `DownloadInfo` implies, and the `completedAt` stamp
