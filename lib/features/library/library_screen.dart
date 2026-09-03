@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/library_item_tile.dart';
@@ -21,6 +22,12 @@ import '../details/meta_details_screen.dart';
 /// refreshes this field on its own after each. The field is unloaded on
 /// dispose; the anonymous library is shown with a hint to sign in, and a
 /// signed-in profile gets a "Sync now" button.
+///
+/// On a TV the filter row and the grid are separate [FocusTraversalGroup]s,
+/// the tiles remember which one had focus for the shell's per-tab memory,
+/// the remote's menu key or a held select opens an item's actions (what a
+/// long press does on a phone), and the sheet puts focus on its first
+/// action so the D-pad can walk it.
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
 
@@ -197,7 +204,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
           body: Column(
             children: [
               if (state != null && state.isLoaded && !state.isLibraryEmpty)
-                _FilterRow(selectable: state.selectable, onSelect: _select),
+                _tvGroup(
+                  context,
+                  _FilterRow(selectable: state.selectable, onSelect: _select),
+                ),
               if (!isLoggedIn && state != null && !state.isLibraryEmpty)
                 const _SignInHint(),
               Expanded(
@@ -207,7 +217,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     ? _EmptyFilter(type: state.selected!.type!)
                     : state.isEmpty
                     ? _EmptyLibrary(isLoggedIn: isLoggedIn)
-                    : _buildGrid(state),
+                    : _tvGroup(context, _buildGrid(state)),
               ),
             ],
           ),
@@ -235,11 +245,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
             item: item,
             onTap: () => _open(item),
             onLongPress: () => _showActions(item),
+            memoryId: item.id,
           );
         },
       ),
     );
   }
+
+  /// [child] as its own traversal group on a TV; [child] itself elsewhere.
+  static Widget _tvGroup(BuildContext context, Widget child) =>
+      DeviceScope.isTv(context) ? FocusTraversalGroup(child: child) : child;
 }
 
 /// The types present in the library and the sort. Stateless: [onSelect]
@@ -303,6 +318,9 @@ class _ItemActionsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     void pick(_ItemAction action) => Navigator.of(context).pop(action);
+    // A remote has nothing to point with: the first action takes focus so
+    // up, down and select work from the start.
+    final isTv = DeviceScope.isTv(context);
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -316,6 +334,7 @@ class _ItemActionsSheet extends StatelessWidget {
             ),
           ),
           ListTile(
+            autofocus: isTv,
             leading: Icon(
               item.isWatched
                   ? Icons.remove_done_outlined
