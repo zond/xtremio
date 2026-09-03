@@ -8,6 +8,8 @@ import '../../widgets/poster_tile.dart';
 import '../../widgets/remote_press.dart';
 import '../../widgets/shared_field_screen.dart';
 import '../discover/discover_screen.dart';
+import '../downloads/download_labels.dart';
+import '../downloads/downloads_controller.dart';
 import '../player/player_screen.dart';
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
@@ -19,6 +21,14 @@ import '../player/player_screen.dart';
 /// first sensible episode itself and every episode tap re-`Load`s the field
 /// with that video's stream path, so the streams list always follows the
 /// selection. Tapping a playable stream opens the player.
+///
+/// A torrent stream can also be taken offline: the tile's download button
+/// pins it through the [DownloadsClient] with everything the play path
+/// hands the player (the raw stream, both addon requests) plus a meta
+/// snapshot, so Details and the Downloads screen render with no network.
+/// The title goes into the library with it, because that is what makes the
+/// player track progress while offline (a temp library item is not enough:
+/// see `docs/phase3-design.md` on `library_item`).
 ///
 /// On a TV the info column and the streams pane are separate
 /// [FocusTraversalGroup]s, focus starts on the stream the user most likely
@@ -56,6 +66,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   CoreClient? _client;
   CoreFieldNotifier? _details;
 
+  /// The downloads, when the app put a client above this screen (it always
+  /// does; a test that does not care about downloads need not). Null leaves
+  /// the download affordances off the tiles entirely.
+  DownloadsClient? _downloadsClient;
+  DownloadsController? _downloads;
+
+  /// The streams whose pin is in flight, by [_streamKey]. `add` blocks
+  /// until the server takes the pin -- for a magnet, until its metadata
+  /// resolves -- so a tapped tile has to say it is working.
+  final Set<String> _pending = {};
+
   /// The video of the last `Load` this screen dispatched (null lets the
   /// engine guess), so the field can be reloaded with the same selection.
   String? _requestedVideoId;
@@ -80,13 +101,30 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         ..addListener(onFieldChanged);
       _load(widget.videoId);
     }
+    final downloads = DownloadsScope.maybeOf(context);
+    if (_downloadsClient != downloads) {
+      _downloads
+        ?..removeListener(_onDownloadsChanged)
+        ..dispose();
+      _downloadsClient = downloads;
+      _downloads = downloads == null
+          ? null
+          : (DownloadsController(downloads)..addListener(_onDownloadsChanged));
+    }
     trackRoute();
+  }
+
+  void _onDownloadsChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     releaseField();
     _details?.dispose();
+    _downloads
+      ?..removeListener(_onDownloadsChanged)
+      ..dispose();
     super.dispose();
   }
 
@@ -192,6 +230,85 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           if (result != null && mounted) _selectVideoId(result.selectVideoId);
         });
   }
+
+  /// Identifies one stream of one video while its pin is in flight. The
+  /// state is reloaded while the call runs, so the tile the user tapped is
+  /// a different widget by the time it comes back.
+  static String _streamKey(String videoId, StreamInfo stream) =>
+      '$videoId|${stream.infoHash}|${stream.fileIdx}';
+
+  /// The download of [stream] for the video its tile belongs to, if the
+  /// registry has one. Only the entry pinned from *this* source counts: a
+  /// download of the same episode from another release is a different file,
+  /// and downloading this one replaces it.
+  DownloadView? _downloadFor(String videoId, StreamInfo stream) {
+    final entry = _downloads?.forVideo(widget.id, videoId);
+    return entry != null && entry.stream.isSameSource(stream) ? entry : null;
+  }
+
+  /// Pins [stream] as an offline download of the selected video, and puts
+  /// the title in the library so playing it offline still records progress.
+  ///
+  /// The library add waits for the pin: a refused one (a full disk) should
+  /// not leave a title behind that the user never asked to keep. Whether it
+  /// was in the library is read before the call, since the state this was
+  /// built from is a moment old by the time the pin is taken.
+  Future<void> _download(
+    MetaDetailsState state,
+    MetaItem meta,
+    StreamGroup group,
+    StreamInfo stream,
+  ) async {
+    final client = _downloadsClient;
+    final downloads = _downloads;
+    if (client == null || downloads == null) return;
+    final videoId = state.streamPath?.id ?? meta.id;
+    final key = _streamKey(videoId, stream);
+    if (!_pending.add(key)) return;
+    setState(() {});
+    final wasInLibrary = state.isInLibrary;
+    final request = DownloadRequest(
+      metaId: widget.id,
+      videoId: videoId,
+      type: widget.type,
+      name: downloadName(meta, state.selectedVideo),
+      poster: meta.poster,
+      stream: stream,
+      meta: meta.json,
+      streamRequest: group.request.toJson(),
+      metaRequest: state.metaRequest?.toJson(),
+    );
+
+    DownloadAddResult? result;
+    Object? thrown;
+    try {
+      result = await client.add(request);
+    } catch (error) {
+      thrown = error;
+    }
+    if (!mounted) return;
+    setState(() => _pending.remove(key));
+    await downloads.refresh();
+    if (!mounted) return;
+
+    if (thrown != null) {
+      _tell('This stream could not be downloaded.');
+      return;
+    }
+    final failure = result!.error;
+    if (failure != null) {
+      _tell(downloadFailureMessage(failure));
+      return;
+    }
+    if (!wasInLibrary) {
+      _client?.dispatch(CoreActions.addToLibrary(meta.json));
+    }
+    _tell('Downloading ${request.name}');
+  }
+
+  void _tell(String message) =>
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
 
   void _selectVideoId(String videoId) {
     final video = ownState?.meta?.videoById(videoId);
@@ -363,6 +480,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final autofocusAt = isTv && lastUsed == null
         ? _firstPlayable(groups)
         : null;
+    final videoId = state.streamPath?.id ?? meta.id;
+    final downloads = _downloadsClient == null
+        ? null
+        : _StreamDownloads(
+            entryOf: (stream) => _downloadFor(videoId, stream),
+            isPending: (stream) =>
+                _pending.contains(_streamKey(videoId, stream)),
+            onDownload: (group, stream) =>
+                _download(state, meta, group, stream),
+          );
     return [
       SliverToBoxAdapter(child: _StreamsHeader(state: state)),
       if (noneYet)
@@ -381,6 +508,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             titleOverride: 'Continue with last source',
             onTap: () => _play(state, lastUsed.$1, lastUsed.$2),
             autofocus: isTv,
+            downloads: downloads?.forGroup(lastUsed.$1),
           ),
         ),
       for (final (index, group) in groups.indexed)
@@ -389,6 +517,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           lastUsed: lastUsed?.$2,
           onPlay: (stream) => _play(state, group, stream),
           autofocusIndex: autofocusAt?.$1 == index ? autofocusAt!.$2 : null,
+          downloads: downloads?.forGroup(group),
         ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
     ];
@@ -860,12 +989,51 @@ class _StreamsHeader extends StatelessWidget {
   }
 }
 
+/// What a stream tile knows about offline downloads: the entry for its
+/// stream if the registry has one, whether a pin for it is in flight, and
+/// how to start one. Bound to the addon group the tile sits in, because a
+/// pin records the request its stream came from.
+final class _StreamDownloads {
+  const _StreamDownloads({
+    required this.entryOf,
+    required this.isPending,
+    required this.onDownload,
+    this.group,
+  });
+
+  final DownloadView? Function(StreamInfo stream) entryOf;
+  final bool Function(StreamInfo stream) isPending;
+  final void Function(StreamGroup group, StreamInfo stream) onDownload;
+
+  /// The addon group; null until [forGroup] binds one, which is when a tile
+  /// can offer to download at all.
+  final StreamGroup? group;
+
+  _StreamDownloads forGroup(StreamGroup group) => _StreamDownloads(
+    entryOf: entryOf,
+    isPending: isPending,
+    onDownload: onDownload,
+    group: group,
+  );
+
+  /// Starts the download of [stream]; null when the server has nothing to
+  /// pin (only a torrent stream is a file it keeps) or one is already on
+  /// its way.
+  VoidCallback? starter(StreamInfo stream) {
+    final group = this.group;
+    if (group == null || stream.kind != StreamKind.torrent) return null;
+    if (isPending(stream)) return null;
+    return () => onDownload(group, stream);
+  }
+}
+
 class _StreamGroupSliver extends StatelessWidget {
   const _StreamGroupSliver({
     required this.group,
     required this.lastUsed,
     required this.onPlay,
     this.autofocusIndex,
+    this.downloads,
   });
 
   final StreamGroup group;
@@ -876,6 +1044,9 @@ class _StreamGroupSliver extends StatelessWidget {
 
   /// The stream (by index) where TV focus starts; null for none here.
   final int? autofocusIndex;
+
+  /// The downloads, when there is a client above this screen.
+  final _StreamDownloads? downloads;
 
   @override
   Widget build(BuildContext context) {
@@ -924,6 +1095,7 @@ class _StreamGroupSliver extends StatelessWidget {
               highlighted: lastUsed != null && stream.isSameSource(lastUsed),
               onTap: stream.isPlayable ? () => onPlay(stream) : null,
               autofocus: index == autofocusIndex,
+              downloads: downloads,
             );
           },
         ),
@@ -933,8 +1105,9 @@ class _StreamGroupSliver extends StatelessWidget {
 }
 
 /// One stream: its name, what is left of the description once the quality
-/// hints are pulled out into chips, and a play affordance (or the kind of
-/// source when the player cannot open it).
+/// hints are pulled out into chips, a download affordance for a torrent,
+/// and a play affordance (or the kind of source when the player cannot
+/// open it).
 class _StreamTile extends StatelessWidget {
   const _StreamTile({
     required this.stream,
@@ -943,6 +1116,7 @@ class _StreamTile extends StatelessWidget {
     this.leadingIcon,
     this.titleOverride,
     this.autofocus = false,
+    this.downloads,
   });
 
   final StreamInfo stream;
@@ -954,9 +1128,11 @@ class _StreamTile extends StatelessWidget {
   /// Where TV focus starts on the screen (see [MetaDetailsScreen]).
   final bool autofocus;
 
+  /// The offline downloads, when there is a client above this screen.
+  final _StreamDownloads? downloads;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final hints = StreamHints.of(stream);
     final title = titleOverride ?? stream.title;
     // A name that is nothing but the hint ("1080p") needs no chip for it.
@@ -999,9 +1175,7 @@ class _StreamTile extends StatelessWidget {
                   ),
               ],
             ),
-      trailing: onTap != null
-          ? const Icon(Icons.play_arrow)
-          : Text(stream.kind.label, style: theme.textTheme.labelSmall),
+      trailing: _trailing(context),
       onTap: onTap,
     );
     final filename = hints.filename;
@@ -1009,6 +1183,65 @@ class _StreamTile extends StatelessWidget {
         ? tile
         : Tooltip(message: filename, child: tile);
     return isTv ? RemotePress(onTap: onTap, child: withTooltip) : withTooltip;
+  }
+
+  /// The download affordance (when there is one) beside the play one.
+  Widget _trailing(BuildContext context) {
+    final theme = Theme.of(context);
+    final play = onTap != null
+        ? const Icon(Icons.play_arrow)
+        : Text(stream.kind.label, style: theme.textTheme.labelSmall);
+    final download = _downloadAffordance(context);
+    if (download == null) return play;
+    return Row(mainAxisSize: MainAxisSize.min, children: [download, play]);
+  }
+
+  /// What the download side of the tile shows: a button to start one, a
+  /// ring while it arrives, a check once it is on the device, and the
+  /// error as a button that pins again. Nothing at all for a stream the
+  /// server cannot keep (anything but a torrent) or with no client above.
+  Widget? _downloadAffordance(BuildContext context) {
+    final downloads = this.downloads;
+    if (downloads == null) return null;
+    if (downloads.isPending(stream)) {
+      return const _DownloadIndicator(
+        tooltip: kDownloadStartingTooltip,
+        progress: null,
+      );
+    }
+    final entry = downloads.entryOf(stream);
+    final start = downloads.starter(stream);
+    if (entry == null) {
+      return start == null
+          ? null
+          : IconButton(
+              tooltip: kDownloadTooltip,
+              icon: const Icon(Icons.download_outlined),
+              onPressed: start,
+            );
+    }
+    return switch (entry.state) {
+      DownloadState.complete => IconTheme.merge(
+        data: IconThemeData(color: Theme.of(context).colorScheme.primary),
+        child: const _DownloadIndicator(
+          tooltip: kDownloadedTooltip,
+          icon: Icons.download_done,
+        ),
+      ),
+      DownloadState.error => IconButton(
+        tooltip: kDownloadRetryTooltip,
+        icon: const Icon(Icons.error_outline),
+        onPressed: start,
+      ),
+      // A ring at 0 rather than a spinner: a queued download whose length
+      // is not known yet is still a fraction of nothing, and an
+      // indeterminate spinner would say "working" about a file nobody is
+      // sending yet.
+      _ => _DownloadIndicator(
+        tooltip: downloadStateLabel(entry),
+        progress: entry.progress ?? 0,
+      ),
+    };
   }
 
   static IconData _iconFor(StreamKind kind) => switch (kind) {
@@ -1020,6 +1253,39 @@ class _StreamTile extends StatelessWidget {
     StreamKind.archive => Icons.folder_zip_outlined,
     StreamKind.unknown => Icons.help_outline,
   };
+}
+
+/// The non-pressable half of the download affordance: a progress ring (or
+/// a spinner while there is no fraction to show) or a finished icon, padded
+/// to the size of the [IconButton] it stands in for so the tile does not
+/// jump when the state changes.
+class _DownloadIndicator extends StatelessWidget {
+  const _DownloadIndicator({required this.tooltip, this.progress, this.icon});
+
+  final String tooltip;
+
+  /// `0..1` of the file; null spins.
+  final double? progress;
+
+  /// Shown instead of a ring.
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = this.icon;
+    return Tooltip(
+      message: tooltip,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: SizedBox.square(
+          dimension: 20,
+          child: icon != null
+              ? Icon(icon, size: 20)
+              : CircularProgressIndicator(strokeWidth: 2, value: progress),
+        ),
+      ),
+    );
+  }
 }
 
 class _HintChip extends StatelessWidget {

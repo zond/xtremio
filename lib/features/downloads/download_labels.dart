@@ -1,0 +1,67 @@
+/// The words the downloads UI puts on a download: what to call one, what
+/// state it is in, and why one was refused. Shared by the stream picker,
+/// the episode list and the Downloads screen so all three say the same
+/// thing about the same entry.
+library;
+
+import '../../core/core.dart';
+
+/// Tooltip of the download button on a stream tile.
+const String kDownloadTooltip = 'Download';
+
+/// ... while its pin is being taken (a magnet resolves its metadata first).
+const String kDownloadStartingTooltip = 'Starting download…';
+
+/// ... once the file is whole on the device.
+const String kDownloadedTooltip = 'Downloaded';
+
+/// ... when the server reported a reason it stopped; pressing it pins again.
+const String kDownloadRetryTooltip = 'Download stopped — try again';
+
+/// What a download of [video] is called in a list: the title for a movie,
+/// `Breaking Bad: S1E1 · Pilot` for an episode. It is stored with the entry,
+/// so a Downloads screen has it without the meta.
+String downloadName(MetaItem meta, VideoInfo? video) {
+  if (video == null || video.id == meta.id) return meta.name;
+  final label = [
+    if (video.seasonEpisodeLabel.isNotEmpty) video.seasonEpisodeLabel,
+    if (video.title.isNotEmpty) video.title,
+  ].join(' · ');
+  return label.isEmpty ? meta.name : '${meta.name}: $label';
+}
+
+/// One word (or two) for the state of [view], with the percentage while it
+/// is arriving.
+String downloadStateLabel(DownloadView view) => switch (view.state) {
+  DownloadState.complete => 'Downloaded',
+  DownloadState.downloading => 'Downloading${_percentSuffix(view)}',
+  DownloadState.queued => 'Waiting to start',
+  DownloadState.paused => 'Paused',
+  DownloadState.error => 'Stopped',
+};
+
+/// ` 42%` when there is a fraction to report, nothing while there is not
+/// (a magnet whose metadata has not resolved knows no length yet).
+String _percentSuffix(DownloadView view) {
+  final progress = view.progress;
+  return progress == null ? '' : ' ${(progress * 100).round()}%';
+}
+
+/// The sentence to show for a refused pin. The server's own message is
+/// client-safe (it never names a local path); a full disk gets the numbers
+/// that message was built from, since "not enough space" is only useful
+/// with "how much".
+String downloadFailureMessage(DownloadFailure failure) {
+  final message = failure.message.isEmpty
+      ? 'The download was refused.'
+      : failure.message;
+  final required = failure.requiredBytes;
+  final available = failure.availableBytes;
+  if (failure.kind != DownloadFailureKind.insufficientSpace ||
+      required == null ||
+      available == null) {
+    return message;
+  }
+  return '$message (needs ${DownloadView.humanSize(required)}, '
+      '${DownloadView.humanSize(available)} free)';
+}
