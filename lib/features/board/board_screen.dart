@@ -202,12 +202,14 @@ class _BoardScreenState extends State<BoardScreen> {
               _ContinueWatchingRow(:final state) => _ContinueWatchingRowView(
                 state: state,
                 extent: extent,
+                isFirstRow: index == 0,
                 onOpen: (item) =>
                     _openDetails(item.type, item.id, videoId: item.videoId),
               ),
               _CatalogRow(:final row) => _CatalogRowView(
                 row: row,
                 extent: extent,
+                isFirstRow: index == 0,
                 onOpen: (item) => _openDetails(item.type, item.id),
                 onSeeAll: () => _openCatalog(row),
               ),
@@ -298,11 +300,16 @@ class _ContinueWatchingRowView extends StatelessWidget {
   const _ContinueWatchingRowView({
     required this.state,
     required this.extent,
+    required this.isFirstRow,
     required this.onOpen,
   });
 
   final ContinueWatchingState state;
   final double extent;
+
+  /// The row's first tile is where TV focus starts on a fresh Board.
+  final bool isFirstRow;
+
   final ValueChanged<LibraryItemView> onOpen;
 
   @override
@@ -322,6 +329,8 @@ class _ContinueWatchingRowView extends StatelessWidget {
                   item: item,
                   onTap: () => onOpen(item),
                   showWatchedMark: false,
+                  memoryId: 'continue-watching/${item.id}',
+                  defaultFocus: isFirstRow && index == 0,
                 ),
               );
             },
@@ -337,12 +346,17 @@ class _CatalogRowView extends StatelessWidget {
   const _CatalogRowView({
     required this.row,
     required this.extent,
+    required this.isFirstRow,
     required this.onOpen,
     required this.onSeeAll,
   });
 
   final CatalogRow row;
   final double extent;
+
+  /// The row's first tile is where TV focus starts on a fresh Board.
+  final bool isFirstRow;
+
   final ValueChanged<MetaItemPreview> onOpen;
   final VoidCallback onSeeAll;
 
@@ -377,13 +391,21 @@ class _CatalogRowView extends StatelessWidget {
         if (index == shown) {
           return SizedBox(
             width: tileWidth,
-            child: _SeeAllTile(onTap: onSeeAll),
+            child: _SeeAllTile(
+              onTap: onSeeAll,
+              memoryId: 'catalog/${row.index}/see-all',
+            ),
           );
         }
         final item = items[index];
         return SizedBox(
           width: tileWidth,
-          child: PosterTile(item: item, onTap: () => onOpen(item)),
+          child: PosterTile(
+            item: item,
+            onTap: () => onOpen(item),
+            memoryId: 'catalog/${row.index}/${item.id}',
+            defaultFocus: isFirstRow && index == 0,
+          ),
         );
       },
     );
@@ -392,15 +414,17 @@ class _CatalogRowView extends StatelessWidget {
 
 /// The trailing tile of a catalog row: opens the whole catalog in Discover.
 class _SeeAllTile extends StatelessWidget {
-  const _SeeAllTile({required this.onTap});
+  const _SeeAllTile({required this.onTap, required this.memoryId});
 
   final VoidCallback onTap;
+  final String memoryId;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return FocusableTile(
       onTap: onTap,
+      memoryId: memoryId,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

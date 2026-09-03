@@ -6,10 +6,20 @@ import 'focusable_tile.dart';
 /// A poster with the item's name underneath; falls back to a neutral box
 /// when there is no poster or it fails to load.
 class PosterTile extends StatelessWidget {
-  const PosterTile({super.key, required this.item, this.onTap});
+  const PosterTile({
+    super.key,
+    required this.item,
+    this.onTap,
+    this.memoryId,
+    this.defaultFocus = false,
+  });
 
   final MetaItemPreview item;
   final VoidCallback? onTap;
+
+  /// See [FocusableTile.memoryId] and [FocusableTile.defaultFocus].
+  final String? memoryId;
+  final bool defaultFocus;
 
   /// Height of the caption under the image ([PosterImage] gets the rest).
   static const double captionHeight = 38;
@@ -19,6 +29,8 @@ class PosterTile extends StatelessWidget {
     final theme = Theme.of(context);
     return FocusableTile(
       onTap: onTap,
+      memoryId: memoryId,
+      defaultFocus: defaultFocus,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

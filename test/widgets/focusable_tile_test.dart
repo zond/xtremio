@@ -105,6 +105,107 @@ void main() {
     expect(events, ['tap', 'long', 'secondary']);
   });
 
+  group('focus memory', () {
+    /// Three tiles a, b, c under [store] (or none); a is the default.
+    Widget remembered(FocusMemoryStore? store) {
+      final row = Row(
+        children: [
+          for (final id in ['a', 'b', 'c'])
+            SizedBox.square(
+              dimension: 100,
+              child: FocusableTile(
+                onTap: () {},
+                memoryId: id,
+                defaultFocus: id == 'a',
+                child: Text('tile $id'),
+              ),
+            ),
+        ],
+      );
+      return store == null ? row : FocusMemory(store: store, child: row);
+    }
+
+    testWidgets('the default tile takes focus when nothing is remembered', (
+      tester,
+    ) async {
+      final store = FocusMemoryStore();
+      await tester.pumpWidget(harness(remembered(store)));
+      await tester.pumpAndSettle();
+
+      expect(ringOf(tester, 'tile a'), isTrue);
+      expect(store.lastFocused, 'a');
+    });
+
+    testWidgets('moving focus updates the memory', (tester) async {
+      final store = FocusMemoryStore();
+      await tester.pumpWidget(harness(remembered(store)));
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+
+      expect(ringOf(tester, 'tile c'), isTrue);
+      expect(store.lastFocused, 'c');
+    });
+
+    testWidgets('the remembered tile takes focus over the default', (
+      tester,
+    ) async {
+      final store = FocusMemoryStore()..lastFocused = 'b';
+      await tester.pumpWidget(harness(remembered(store)));
+      await tester.pumpAndSettle();
+
+      expect(ringOf(tester, 'tile a'), isFalse);
+      expect(ringOf(tester, 'tile b'), isTrue);
+    });
+
+    testWidgets('a remembered tile that is gone leaves focus alone', (
+      tester,
+    ) async {
+      final store = FocusMemoryStore()..lastFocused = 'z';
+      await tester.pumpWidget(harness(remembered(store)));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FocusRing), findsNWidgets(3));
+      expect(
+        tester
+            .widgetList<FocusRing>(find.byType(FocusRing))
+            .where((r) => r.focused),
+        isEmpty,
+      );
+    });
+
+    testWidgets('without a memory the default tile still takes focus', (
+      tester,
+    ) async {
+      await tester.pumpWidget(harness(remembered(null)));
+      await tester.pumpAndSettle();
+
+      expect(ringOf(tester, 'tile a'), isTrue);
+    });
+
+    testWidgets('off a TV nothing autofocuses and nothing is remembered', (
+      tester,
+    ) async {
+      final store = FocusMemoryStore();
+      await tester.pumpWidget(
+        harness(remembered(store), device: DeviceProfile.fallback),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<FocusableTile>(),
+        isNull,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(store.lastFocused, isNull);
+    });
+  });
+
   group('focus scrolls the tile into view', () {
     /// A 300 px wide strip of ten 100 px tiles; tile 3 is just outside the
     /// viewport (built, since it is within the cache extent) and [node] is

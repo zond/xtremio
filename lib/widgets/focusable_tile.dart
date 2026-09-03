@@ -12,6 +12,15 @@ import '../shell/device_profile.dart';
 /// focus scrolls every enclosing scrollable (the row, then the rows) so the
 /// tile sits in the middle of the viewport, which keeps the next tile in
 /// each direction built and reachable.
+///
+/// A TV also needs somewhere for focus to start. Under a [FocusMemory] the
+/// tile remembers itself (by [memoryId]) as the last focused tile of that
+/// memory whenever it gains focus, and autofocuses when it is built as
+/// that remembered tile; with nothing remembered yet, the tile built with
+/// [defaultFocus] (a screen's first tile) autofocuses instead. The shell
+/// keeps one memory per tab, so a tab rebuilt after a switch puts focus
+/// back where it was. Without a memory above it, [defaultFocus] alone
+/// decides.
 class FocusableTile extends StatefulWidget {
   const FocusableTile({
     super.key,
@@ -20,6 +29,8 @@ class FocusableTile extends StatefulWidget {
     this.onLongPress,
     this.onSecondaryTap,
     this.focusNode,
+    this.memoryId,
+    this.defaultFocus = false,
     this.borderRadius = const BorderRadius.all(Radius.circular(8)),
   });
 
@@ -30,6 +41,13 @@ class FocusableTile extends StatefulWidget {
 
   /// The node the tile focuses with; one is created when null.
   final FocusNode? focusNode;
+
+  /// What the enclosing [FocusMemory] remembers this tile as; unique within
+  /// that memory and stable across rebuilds. Null: never remembered.
+  final String? memoryId;
+
+  /// Autofocus on a TV when nothing is remembered (or there is no memory).
+  final bool defaultFocus;
 
   /// Clips the ink and rounds the ring; every tile uses 8 px.
   final BorderRadius borderRadius;
@@ -44,10 +62,19 @@ class FocusableTile extends StatefulWidget {
 class _FocusableTileState extends State<FocusableTile> {
   bool _focused = false;
 
+  bool _autofocus(FocusMemoryStore? memory) {
+    if (memory == null) return widget.defaultFocus;
+    final remembered = memory.lastFocused;
+    if (remembered == null) return widget.defaultFocus;
+    return widget.memoryId != null && remembered == widget.memoryId;
+  }
+
   void _onFocusChange(bool focused) {
     if (!mounted) return;
     setState(() => _focused = focused);
     if (!focused) return;
+    final id = widget.memoryId;
+    if (id != null) FocusMemory.maybeOf(context)?.lastFocused = id;
     Scrollable.ensureVisible(
       context,
       alignment: 0.5,
@@ -73,6 +100,7 @@ class _FocusableTileState extends State<FocusableTile> {
       onLongPress: widget.onLongPress,
       onSecondaryTap: widget.onSecondaryTap,
       focusNode: widget.focusNode,
+      autofocus: _autofocus(FocusMemory.maybeOf(context)),
       onFocusChange: _onFocusChange,
       borderRadius: widget.borderRadius,
       child: FocusRing(
@@ -82,6 +110,27 @@ class _FocusableTileState extends State<FocusableTile> {
       ),
     );
   }
+}
+
+/// Which [FocusableTile] (by [FocusableTile.memoryId]) was focused last
+/// under one [FocusMemory]. Mutable on purpose: the tiles write it as focus
+/// moves and read it when built, and nothing has to rebuild for that.
+class FocusMemoryStore {
+  String? lastFocused;
+}
+
+/// Hands a [FocusMemoryStore] to the [FocusableTile]s below it; the shell
+/// puts one around each tab's body.
+class FocusMemory extends InheritedWidget {
+  const FocusMemory({super.key, required this.store, required super.child});
+
+  final FocusMemoryStore store;
+
+  static FocusMemoryStore? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<FocusMemory>()?.store;
+
+  @override
+  bool updateShouldNotify(FocusMemory oldWidget) => store != oldWidget.store;
 }
 
 /// The border a [FocusableTile] draws over its child while it has focus:

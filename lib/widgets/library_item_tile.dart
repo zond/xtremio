@@ -16,6 +16,8 @@ class LibraryItemTile extends StatelessWidget {
     required this.onTap,
     this.onLongPress,
     this.showWatchedMark = true,
+    this.memoryId,
+    this.defaultFocus = false,
   });
 
   final LibraryItemView item;
@@ -29,6 +31,10 @@ class LibraryItemTile extends StatelessWidget {
   /// finished episode is there to be resumed, not marked done.
   final bool showWatchedMark;
 
+  /// See [FocusableTile.memoryId] and [FocusableTile.defaultFocus].
+  final String? memoryId;
+  final bool defaultFocus;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -38,6 +44,8 @@ class LibraryItemTile extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       onSecondaryTap: onLongPress,
+      memoryId: memoryId,
+      defaultFocus: defaultFocus,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

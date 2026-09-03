@@ -5,6 +5,7 @@ import '../features/discover/discover_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../widgets/focusable_tile.dart';
 import 'device_profile.dart';
 
 /// A top-level navigation destination and the screen it shows.
@@ -29,7 +30,9 @@ class _Destination {
 /// body and lands on the rail; right from the rail finds the body's nearest
 /// tile. The scope also lets a tile autofocus when its tab is shown while
 /// the rail keeps a focused destination (autofocus only applies inside a
-/// scope with no focused child of its own).
+/// scope with no focused child of its own): each tab has a [FocusMemory],
+/// so showing a tab puts focus on the tile it was on when the user left
+/// it, or on the tab's first tile the first time.
 class RootShell extends StatefulWidget {
   const RootShell({super.key});
 
@@ -47,6 +50,11 @@ class _RootShellState extends State<RootShell> {
         debugLabel: '${d.label} tab',
         directionalTraversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
       ),
+  ];
+
+  /// The last focused tile of each tab (TV only); see [RootShell].
+  final List<FocusMemoryStore> _tabMemories = [
+    for (final _ in _destinations) FocusMemoryStore(),
   ];
 
   static const _destinations = <_Destination>[
@@ -119,7 +127,13 @@ class _RootShellState extends State<RootShell> {
             Expanded(
               child: isTv
                   ? FocusTraversalGroup(
-                      child: FocusScope(node: _tabScopes[_index], child: body),
+                      child: FocusScope(
+                        node: _tabScopes[_index],
+                        child: FocusMemory(
+                          store: _tabMemories[_index],
+                          child: body,
+                        ),
+                      ),
                     )
                   : body,
             ),

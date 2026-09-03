@@ -69,7 +69,7 @@ void main() {
         .first
         .items;
 
-    await press(tester, LogicalKeyboardKey.tab);
+    // Focus starts on the first tile: the continue-watching movie.
     expect(focusedTileName(tester), 'Night of the Living Dead');
     expect(ringOf(tester, 'Night of the Living Dead'), isTrue);
     expect(ringOf(tester, popular.first.name), isFalse);
