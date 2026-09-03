@@ -13,6 +13,7 @@ import '../addons/addons_screen.dart';
 import '../discover/discover_screen.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_controller.dart';
+import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import '../downloads/remove_download_dialog.dart';
 import '../player/player_screen.dart';
@@ -542,6 +543,19 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     }
   }
 
+  /// Everything kept on this device. Reached from here as well as from the
+  /// Library and the Settings, because what is downloaded is most worth
+  /// looking at from the title the downloads were taken from: the tile that
+  /// keeps an episode is two taps from the list that holds the rest.
+  void _openDownloads() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'downloads'),
+        builder: (_) => const DownloadsScreen(),
+      ),
+    );
+  }
+
   /// The Addons screen, where a stream addon is installed by manifest URL.
   void _openAddons() {
     Navigator.of(context).push(
@@ -680,6 +694,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       SliverAppBar(
         pinned: true,
         expandedHeight: isWide ? 300 : 220,
+        actions: [
+          if (_downloadsClient != null)
+            IconButton(
+              tooltip: kDownloadsScreenTooltip,
+              onPressed: _openDownloads,
+              icon: const Icon(Icons.download_outlined),
+            ),
+        ],
         flexibleSpace: FlexibleSpaceBar(
           title: Text(meta.name, maxLines: 1, overflow: TextOverflow.ellipsis),
           background: _Backdrop(url: meta.background, logo: meta.logo),

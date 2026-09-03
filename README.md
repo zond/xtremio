@@ -53,10 +53,14 @@ Rust engine for addons, catalogs, library, and playback state) and
 > the details header say what is kept and how far along -- an episode's
 > badge is the same delete button once its file is whole, while the header's
 > counts several downloads and stays a count. The Downloads
-> screen (from Settings, or the "Downloaded" chip in the Library) lists
+> screen -- from the details app bar, the running player's menu, the
+> "Downloaded" chip in the Library or Settings, so the list is one tap from
+> whatever the downloads are of -- lists
 > everything with its progress, plays a finished one, retries a stopped one,
 > deletes one with or without its bytes, and says where the files go --
-> a folder to pick on Android, a path to type elsewhere. On Android the
+> a folder to pick on Android, a path to type elsewhere. Opened from the
+> player it offers no play of its own: a second player over the running one
+> would load the same shared `player` field and start an engine beside it. On Android the
 > app picks that folder itself on a first run: its own external files
 > directory, which the system leaves alone, rather than the cache it may
 > reclaim mid-download. A download runs only while the app is up, though

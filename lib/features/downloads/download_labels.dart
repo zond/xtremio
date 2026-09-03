@@ -6,6 +6,10 @@ library;
 
 import '../../core/core.dart';
 
+/// What the way to the Downloads screen is called wherever it is offered
+/// from a screen that is about something else -- a title, a running player.
+const String kDownloadsScreenTooltip = 'Downloads on this device';
+
 /// Tooltip of the download button on a stream tile.
 const String kDownloadTooltip = 'Download';
 

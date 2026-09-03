@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
+import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -466,6 +467,32 @@ void main() {
 
       expect(find.byType(PlayerScreen), findsOneWidget);
       expect(downloads.removed, isEmpty);
+    });
+
+    testWidgets('the app bar way to the downloads list takes the D-pad', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(registry: downloaded());
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads: downloads));
+      await tester.pumpAndSettle();
+
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      for (
+        var i = 0;
+        i < 6 && focusedTooltip() != kDownloadsScreenTooltip;
+        i++
+      ) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      expect(focusedTooltip(), kDownloadsScreenTooltip);
+
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(DownloadsScreen), findsOneWidget);
     });
   });
 }

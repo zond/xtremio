@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../widgets/remote_press.dart';
+import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import 'language_names.dart';
 import 'playback_engine.dart';
@@ -1037,6 +1038,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         builder: (context, setSheetState) {
           final settings = _settings;
           return PlayerSettingsSheet(
+            onDownloads: DownloadsScope.maybeOf(context) == null
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _openDownloads();
+                  },
             rate: _rate,
             rates: PlayerScreen.rates,
             onRate: (rate) {
@@ -1055,6 +1062,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
     ),
   );
+
+  /// Everything kept on this device, from the menu of the player that is
+  /// running. Nothing there opens a player of its own: a second
+  /// [PlayerScreen] would load the same shared `player` field and start an
+  /// engine beside the one still playing, so the list is the one that only
+  /// shows and removes ([DownloadsScreen.canPlay]).
+  void _openDownloads() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'downloads'),
+        builder: (_) => const DownloadsScreen(canPlay: false),
+      ),
+    );
+  }
 
   // --- Next episode --------------------------------------------------------
 

@@ -88,6 +88,7 @@ void main() {
     DownloadsClient downloads, {
     List<String> destinations = const [],
     FakePlaybackEngine? engine,
+    bool canPlay = true,
   }) => CoreScope(
     client: core,
     child: DownloadsScope(
@@ -96,7 +97,10 @@ void main() {
         createEngine: () => engine ?? FakePlaybackEngine(),
         torrentStats: FakeTorrentStatsClient(),
         child: MaterialApp(
-          home: DownloadsScreen(destinations: () async => destinations),
+          home: DownloadsScreen(
+            destinations: () async => destinations,
+            canPlay: canPlay,
+          ),
         ),
       ),
     ),
@@ -489,6 +493,36 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+  });
+
+  group('opened from a running player', () {
+    testWidgets('a finished row is not offered a play of its own', (
+      tester,
+    ) async {
+      useTallViewport(tester);
+      final downloads = FakeDownloadsClient(registry: recorded());
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(
+        harness(coreWithPlayer(), downloads, canPlay: false),
+      );
+      await tester.pumpAndSettle();
+
+      final row = find.widgetWithText(ListTile, 'Night of the Living Dead');
+      expect(row, findsOneWidget);
+      // The row is still there, and still removable; only the player it
+      // would push -- beside the one already running -- is gone.
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayerScreen), findsNothing);
+      expect(downloads.opens, isEmpty);
+
+      await tester.tap(
+        find.descendant(of: row, matching: find.byTooltip('Download actions')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Play').hitTestable(), findsNothing);
+      expect(find.text('Delete').hitTestable(), findsOneWidget);
     });
   });
 

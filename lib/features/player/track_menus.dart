@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../downloads/download_labels.dart';
 import 'language_names.dart';
 import 'playback_engine.dart';
 import 'subtitle_color_chips.dart';
@@ -133,9 +134,10 @@ class AudioMenu extends StatelessWidget {
   }
 }
 
-/// Playback speed and subtitle appearance. The appearance is the profile's
-/// `subtitlesSize` / `subtitlesTextColor` / `subtitlesBackgroundColor`, so
-/// a pick here is an `UpdateSettings` that every later player sees too.
+/// Playback speed and subtitle appearance, and the way out to what is kept
+/// on the device. The appearance is the profile's `subtitlesSize` /
+/// `subtitlesTextColor` / `subtitlesBackgroundColor`, so a pick here is an
+/// `UpdateSettings` that every later player sees too.
 class PlayerSettingsSheet extends StatelessWidget {
   const PlayerSettingsSheet({
     super.key,
@@ -144,6 +146,7 @@ class PlayerSettingsSheet extends StatelessWidget {
     required this.onRate,
     required this.settings,
     required this.onSetting,
+    this.onDownloads,
   });
 
   final double rate;
@@ -157,6 +160,11 @@ class PlayerSettingsSheet extends StatelessWidget {
   /// `ctx` field has not arrived), which disables the style chips: a
   /// partial map would be rejected by the engine.
   final void Function(String key, Object? value)? onSetting;
+
+  /// Opens the Downloads screen. This is the player's only menu, so it is
+  /// where the list has to be reachable from while something is playing;
+  /// null when there is no downloads client above the player.
+  final VoidCallback? onDownloads;
 
   static String rateLabel(double rate) =>
       '${rate == rate.roundToDouble() ? rate.toInt() : rate}×';
@@ -179,6 +187,14 @@ class PlayerSettingsSheet extends StatelessWidget {
       ),
       children: [
         const _MenuHeader('Playback settings'),
+        if (onDownloads != null)
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text(kDownloadsScreenTooltip),
+            subtitle: const Text('What is kept for offline playback'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: onDownloads,
+          ),
         const _SectionLabel('Speed'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),

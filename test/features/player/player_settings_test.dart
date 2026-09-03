@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/downloads/download_labels.dart';
+import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/player/player_screen.dart';
+import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
 
+import '../../support/fake_downloads_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
@@ -227,5 +231,54 @@ void main() {
     expect(harness.fullscreen.enters, 1);
     await key(tester, LogicalKeyboardKey.keyF);
     expect(harness.fullscreen.exits, 1);
+  });
+
+  group('the way to the downloads list', () {
+    testWidgets('the player menu opens it, and it plays nothing from there', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final downloads = FakeDownloadsClient(
+        registry: DownloadsRegistry.fromJson(loadDownloadsFixture()),
+      );
+      addTearDown(downloads.dispose);
+      final harness = PlayerHarness(downloads: downloads);
+      await harness.pump(tester);
+
+      await tester.tap(find.byTooltip('Playback settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(kDownloadsScreenTooltip));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DownloadsScreen), findsOneWidget);
+      expect(find.text('Night of the Living Dead'), findsOneWidget);
+
+      // A second player over the one still running would load the same
+      // shared `player` field and start an engine of its own.
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Night of the Living Dead'),
+          matching: find.byTooltip('Download actions'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete').hitTestable(), findsOneWidget);
+      expect(find.text('Play').hitTestable(), findsNothing);
+      expect(harness.engines, hasLength(1));
+    });
+
+    testWidgets('with no downloads client above, the menu does not offer it', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final harness = PlayerHarness();
+      await harness.pump(tester);
+
+      await tester.tap(find.byTooltip('Playback settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PlayerSettingsSheet), findsOneWidget);
+      expect(find.text(kDownloadsScreenTooltip), findsNothing);
+    });
   });
 }

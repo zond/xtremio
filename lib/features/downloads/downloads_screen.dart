@@ -26,7 +26,17 @@ class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({
     super.key,
     this.destinations = platformDownloadDestinations,
+    this.canPlay = true,
   });
+
+  /// Whether a finished download can be played from here.
+  ///
+  /// False when the list is opened from a running player: a second
+  /// [PlayerScreen] would load the same shared `player` field and start an
+  /// engine of its own beside the one still playing. From there the list is
+  /// for seeing what is kept and removing some of it, and the row keeps
+  /// only the actions that do not open a player.
+  final bool canPlay;
 
   /// The directories the destination control offers to choose between. On
   /// Android those are the app's own external storage directories, an SD
@@ -331,7 +341,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           for (final view in items)
             _DownloadRow(
               view: view,
-              onPlay: view.isComplete ? () => _play(view) : null,
+              onPlay: view.isComplete && widget.canPlay
+                  ? () => _play(view)
+                  : null,
               onDelete: () => _delete(view),
               onRetry: view.state == DownloadState.error
                   ? () => _retry(view)

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
+import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/downloads/offline_play.dart';
 import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -1207,5 +1208,62 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(onStreamTile('Downloading 25%'), findsOneWidget);
+  });
+
+  group('reaching the downloads list', () {
+    testWidgets('the app bar opens it, from the title it was taken from', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          entry(
+            metaId: movieId,
+            videoId: movieId,
+            stream: {'infoHash': movieHash, 'fileIdx': 0},
+            state: 'complete',
+            name: 'Night of the Living Dead',
+            size: 10,
+            downloaded: 10,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip(kDownloadsScreenTooltip));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DownloadsScreen), findsOneWidget);
+      expect(find.text('1 download · 10 B on this device'), findsOneWidget);
+    });
+
+    testWidgets('with no client above there is nothing to open', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      await tester.pumpWidget(
+        CoreScope(
+          client: core,
+          child: PlaybackScope(
+            createEngine: FakePlaybackEngine.new,
+            torrentStats: FakeTorrentStatsClient(),
+            child: const MaterialApp(
+              home: MetaDetailsScreen(type: 'movie', id: movieId),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip(kDownloadsScreenTooltip), findsNothing);
+    });
   });
 }
