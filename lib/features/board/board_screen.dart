@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
@@ -23,8 +24,16 @@ class BoardScreen extends StatefulWidget {
   const BoardScreen({super.key});
 
   /// Every row (continue watching included) has this extent, so the visible
-  /// rows follow from the scroll offset alone.
-  static double rowExtentFor(double width) => width >= 720 ? 260 : 200;
+  /// rows follow from the scroll offset alone. A tile's width follows from
+  /// it (the strip is what is left under the header, and the poster's shape
+  /// turns that height into a width), so this is also how big the posters
+  /// are: on a television they are read from across the room, and a 1080p
+  /// set has the pixels to spare.
+  static double rowExtentFor(double width, {bool isTv = false}) => isTv
+      ? 360
+      : width >= 720
+      ? 260
+      : 200;
 
   /// Rows requested beyond the visible ones, on each side.
   static const int overscanRows = 1;
@@ -119,7 +128,10 @@ class _BoardScreenState extends State<BoardScreen> {
   /// overscan) when that widens what has been requested so far.
   void _updateRange() {
     if (!mounted || _client == null) return;
-    final extent = BoardScreen.rowExtentFor(MediaQuery.sizeOf(context).width);
+    final extent = BoardScreen.rowExtentFor(
+      MediaQuery.sizeOf(context).width,
+      isTv: DeviceScope.isTv(context),
+    );
     final position = _scroll.hasClients ? _scroll.position : null;
     final offset = position?.pixels ?? 0;
     final viewport =
@@ -175,7 +187,10 @@ class _BoardScreenState extends State<BoardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final extent = BoardScreen.rowExtentFor(MediaQuery.sizeOf(context).width);
+    final extent = BoardScreen.rowExtentFor(
+      MediaQuery.sizeOf(context).width,
+      isTv: DeviceScope.isTv(context),
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('Board')),
       body: ListenableBuilder(
@@ -515,6 +530,10 @@ class _RowError extends StatelessWidget {
 
 /// A horizontal list of tiles with its own controller so desktop gets a
 /// visible scrollbar (touch platforms keep the default fading one).
+///
+/// A television gets none at all: a thumb is there to be dragged, and a
+/// remote has nothing to drag it with -- the row scrolls when focus moves
+/// off its end, which is the only way it ever scrolls there.
 class _HorizontalStrip extends StatefulWidget {
   const _HorizontalStrip({required this.itemCount, required this.itemBuilder});
 
@@ -542,19 +561,21 @@ class _HorizontalStripState extends State<_HorizontalStrip> {
       TargetPlatform.windows => true,
       _ => false,
     };
+    final list = ListView.builder(
+      controller: _controller,
+      scrollDirection: Axis.horizontal,
+      padding: _RowLayout.stripPadding,
+      itemCount: widget.itemCount,
+      itemBuilder: (context, index) => Padding(
+        padding: const EdgeInsets.only(right: _RowLayout.tileSpacing),
+        child: widget.itemBuilder(context, index),
+      ),
+    );
+    if (DeviceScope.isTv(context)) return list;
     return Scrollbar(
       controller: _controller,
       thumbVisibility: isDesktop,
-      child: ListView.builder(
-        controller: _controller,
-        scrollDirection: Axis.horizontal,
-        padding: _RowLayout.stripPadding,
-        itemCount: widget.itemCount,
-        itemBuilder: (context, index) => Padding(
-          padding: const EdgeInsets.only(right: _RowLayout.tileSpacing),
-          child: widget.itemBuilder(context, index),
-        ),
-      ),
+      child: list,
     );
   }
 }

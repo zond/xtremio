@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/shell/tv_density.dart';
+import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../../support/fake_core_client.dart';
+import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
 /// A core whose board plans no catalogs, so the shell settles instead of
@@ -29,6 +32,29 @@ Future<BuildContext> pumpApp(
   await tester.pumpWidget(XtremioApp(core: fakeCore(), device: device));
   await tester.pumpAndSettle();
   return tester.element(find.byType(RootShell));
+}
+
+/// The Board alone, over the recorded catalogs, on [device].
+Future<void> pumpBoard(
+  WidgetTester tester, {
+  required DeviceProfile device,
+}) async {
+  useScreen(tester, tvSize);
+  await tester.pumpWidget(
+    DeviceScope(
+      profile: device,
+      child: CoreScope(
+        client: FakeCoreClient(
+          state: {
+            CoreField.board: loadBoardFixture(),
+            CoreField.continueWatchingPreview: loadContinueWatchingFixture(),
+          },
+        ),
+        child: const MaterialApp(home: BoardScreen()),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -106,6 +132,32 @@ void main() {
 
       expect(tester.getTopLeft(find.byType(NavigationRail)), Offset.zero);
       expect(find.byKey(RootShell.overscanKey), findsNothing);
+    });
+  });
+
+  group('the Board', () {
+    testWidgets('a television gets bigger posters than a window of the same '
+        'size', (tester) async {
+      await pumpBoard(tester, device: DeviceProfile.fallback);
+      final onDesktop = tester.getSize(find.byType(PosterTile).first);
+
+      await pumpBoard(tester, device: tv);
+      final onTv = tester.getSize(find.byType(PosterTile).first);
+
+      expect(onTv.width, greaterThan(onDesktop.width));
+      expect(onTv.height, greaterThan(onDesktop.height));
+    });
+
+    testWidgets('a television gets no scrollbar to drag', (tester) async {
+      await pumpBoard(tester, device: tv);
+
+      expect(find.byType(Scrollbar), findsNothing);
+    });
+
+    testWidgets('a window keeps its scrollbars', (tester) async {
+      await pumpBoard(tester, device: DeviceProfile.fallback);
+
+      expect(find.byType(Scrollbar), findsWidgets);
     });
   });
 
