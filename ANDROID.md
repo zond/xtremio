@@ -330,6 +330,47 @@ attached), the arm64 build's *runtime* behavior (only the x86_64 slice of the
 debug APK was actually run, though the arm64 slice built cleanly), release
 builds, and end-to-end torrent playback on Android.
 
+### Offline downloads on the phone emulator (2026-09-03)
+
+Verified on the headless `xtremio_api36` AVD
+(`android-36;google_apis;x86_64`, `-gpu swiftshader_indirect`) with the
+x86_64 debug APK at commit `7bdda0c`, driven by `adb shell input` and read
+back with `adb shell screencap`, `adb shell ls`/`du` and `adb shell run-as`.
+
+- **The destination default lands.** A fresh install wrote
+  `"downloadsDir": "/storage/emulated/0/Android/data/com.zond.xtremio/files/downloads"`
+  into `files/server/settings.json` at start-up, and the Downloads screen
+  showed that path under "Where downloads go".
+- **The download runs and the file lands there.** Settings → Developer →
+  "Download test torrent" pinned the public Big Buck Bunny torrent; the
+  registry (`files/core/downloads.json`) went
+  `downloading 11.6 MB → 65 MB → 122 MB → 186 MB → 243 MB → complete
+  276134947 / 276134947` over about 15 seconds, and the row on the
+  Downloads screen showed "Downloading 17% · 47.0 MB of 276 MB" with its
+  bar mid-flight and "Downloaded · 276 MB" after. The bytes are in
+  `…/files/downloads/dd8255…d1c/Big Buck Bunny.mp4`, next to the torrent's
+  other files.
+- **Playing it needs nothing running.** The row's Play opened the player on
+  the `file://` URL with no torrent start-up overlay (that keys on
+  `infoHash`, and this stream has none); libmpv read the real duration and
+  the position advanced (`0:18 / 10:34`). No frames are drawn — swiftshader
+  renders no video on this AVD, as in every earlier session — so decoding
+  itself is still unverified on an emulator.
+- **Deleting takes the folder with it.** "Delete the file" emptied the
+  registry and removed the whole `<infoHash>` directory.
+- **Two things to know when checking on device.** `ls -l` shows the file at
+  its full length from the first moment — librqbit allocates it sparsely —
+  so use `du -sk` for what is really on the volume (37 MB at 3 s, 122 MB at
+  7 s). And `adb shell ls /sdcard/Android/data/com.zond.xtremio/files/…`
+  works from the shell user; only other apps are kept out of `Android/data`,
+  so `run-as` is needed for the internal directories (`files/core`,
+  `files/server`) but not for the downloads.
+- No `FATAL`/`AndroidRuntime` line for the whole run.
+- **Not verified:** a purge of the cache directory (the reason for the
+  default), an SD-card destination (the AVD has one volume), moving the
+  destination with downloads already on disk, and what happens to a running
+  download when Android freezes the process.
+
 ### The TV layout on a TV emulator (2026-09-03)
 
 Verified on a headless `xtremio_tv36` AVD
