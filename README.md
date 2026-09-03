@@ -625,12 +625,13 @@ connection.
   as a SnackBar.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
   (`00265b3`, release 0.62.0) with the `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`33e1ed9`: generated
+  features, `zond/stream-server` at a fixed rev (`f147a76`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
-  counts, the buffer profiles behind `?buffer=`, and the piece-aligned
-  start-up window that follows the reader plus the `pieceLength` it is
-  measured in). To bump: change the rev, `cargo update -p <crate>`, run
+  counts, the buffer profiles behind `?buffer=`, cache usage and
+  on-demand cleaning, the piece-aligned start-up window that follows the
+  reader plus the `pieceLength` it is measured in, and `inFlightPiece`,
+  the byte progress of the one piece the reader is sitting on). To bump: change the rev, `cargo update -p <crate>`, run
   `cargo test`, re-record any fixture whose shape moved, and re-copy
   `rust/vendor/stremio-watched-bitfield` from the new stremio-core rev
   when that crate changed (it carries a one-line `flate2` relaxation the
