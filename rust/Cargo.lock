@@ -6252,6 +6252,7 @@ dependencies = [
  "http",
  "jni",
  "librqbit",
+ "log",
  "regex",
  "reqwest",
  "rustls-platform-verifier",

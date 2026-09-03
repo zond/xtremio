@@ -52,6 +52,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Same versions stream-server uses, so nothing new enters the graph.
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.22"
+# The ring layer re-emits every line through `log` so logcat keeps working:
+# installing a tracing subscriber (which the ring needs) stops tracing's own
+# `log` forwarding, which only happens while there is none. Already in the
+# graph via tracing's `log` feature, so nothing new is compiled.
+log = "0.4"
 rustls-platform-verifier = "0.7"
 
 # aws-lc-sys (rustls' crypto provider) only ships pregenerated bindings for
