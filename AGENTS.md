@@ -87,9 +87,9 @@ in one of two ways: stremio-core's `StreamingServer` model through
 `ServerHandle`'s library API — `rust/src/api/server.rs`
 (`server_torrent_stats`, `server_settings`, `server_update_settings`) and
 `rust/src/api/downloads.rs` (`downloads_add`, `downloads_remove`,
-`downloads_list`, `downloads_set_dir`, `downloads_events`). A new need
-goes in one of those, as a Rust function returning JSON, not as a
-`dart:io` `HttpClient` call.
+`downloads_list`, `downloads_open`, `downloads_set_dir`,
+`downloads_events`). A new need goes in one of those, as a Rust function
+returning JSON, not as a `dart:io` `HttpClient` call.
 
 ## Use cheaper models for mechanical work
 

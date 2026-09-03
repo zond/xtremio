@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use xtremio_core::api::core::{core_init, core_shutdown, CoreConfig};
 use xtremio_core::api::downloads::{
-    downloads_add, downloads_list, downloads_remove, downloads_set_dir,
+    downloads_add, downloads_list, downloads_open, downloads_remove, downloads_set_dir,
 };
 use xtremio_core::api::server::{server_start, ServerConfig};
 
@@ -347,6 +347,58 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert!(pending["path"].is_string(), "{pending}");
     assert_eq!(pending["size"], MISSING_LEN, "{pending}");
     assert!(pending["completedAt"].is_null(), "{pending}");
+
+    // Playing it off the device: a finished download answers the `file://`
+    // URL of the file the server actually wrote, and records that it was
+    // played. Nothing else in the registry is touched, and the stamp is on
+    // the disk, not only in the answer.
+    assert!(complete["lastPlayedAt"].is_null(), "{complete}");
+    let opened = json(&downloads_open("tt-have:tt-have".into())?);
+    assert_eq!(opened["ok"], true, "{opened}");
+    assert_eq!(opened["key"], "tt-have:tt-have");
+    let played_url = url::Url::parse(opened["url"].as_str().expect("a URL"))?;
+    assert_eq!(played_url.scheme(), "file", "{opened}");
+    assert_eq!(
+        played_url.to_file_path().expect("a local path"),
+        managed.join("have.bin"),
+        "the URL is the file on disk: {opened}"
+    );
+    let played_at = opened["entry"]["lastPlayedAt"].clone();
+    assert!(played_at.is_string(), "{opened}");
+    assert_eq!(
+        json(&std::fs::read_to_string(&registry_file)?)["items"]["tt-have:tt-have"]["lastPlayedAt"],
+        played_at,
+        "the stamp is on disk, not only in the answer"
+    );
+
+    // Everything that is not a whole file on this device is a refusal with
+    // a reason, never an exception and never a dead player: an unfinished
+    // download, an entry the registry does not have, and -- the one that
+    // matters offline -- a complete one whose file went away with its
+    // volume. A refusal stamps nothing.
+    let refused = json(&downloads_open("tt-missing:tt-missing".into())?);
+    assert_eq!(refused["ok"], false, "{refused}");
+    assert_eq!(refused["reason"], "incomplete", "{refused}");
+    let refused = json(&downloads_open("tt-nothing:tt-nothing".into())?);
+    assert_eq!(refused["reason"], "unknown", "{refused}");
+
+    xtremio_core::downloads::update(|registry| {
+        let entry = registry
+            .items
+            .get_mut("tt-have:tt-have")
+            .expect("the finished entry");
+        entry.last_played_at = None;
+        entry.path = Some(managed.join("unplugged.bin").to_string_lossy().into_owned());
+        Ok(())
+    })?;
+    let refused = json(&downloads_open("tt-have:tt-have".into())?);
+    assert_eq!(refused["ok"], false, "{refused}");
+    assert_eq!(refused["reason"], "missing", "{refused}");
+    assert!(refused["url"].is_null(), "{refused}");
+    assert!(
+        list()["items"]["tt-have:tt-have"]["lastPlayedAt"].is_null(),
+        "a play that could not happen is not recorded"
+    );
 
     // Pressing Download again on a finished title -- the button is not
     // disabled yet, or the user is retrying after a scare -- is a retry of

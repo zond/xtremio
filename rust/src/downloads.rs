@@ -944,6 +944,106 @@ pub fn remove(key: &str, delete_files: bool) -> anyhow::Result<RemoveOutcome> {
     })
 }
 
+/// Why a download cannot be played off the device. None of these is an
+/// error: each one is something a screen says before streaming the title
+/// instead, which is the whole point of answering rather than raising.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OpenFailure {
+    /// The registry has no such entry — it was removed while a screen still
+    /// held the row.
+    Unknown,
+    /// The bytes are not all here yet.
+    Incomplete,
+    /// Whole as far as the registry knows, but the file is not where it was
+    /// left: an unmounted downloads volume, or something outside the app
+    /// deleted it.
+    Missing,
+}
+
+/// What [`open`] answers.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenOutcome {
+    pub ok: bool,
+    pub key: String,
+    /// The `file://` URL to hand the player, when there is one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// The entry as it now stands, `lastPlayedAt` included.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry: Option<Entry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<OpenFailure>,
+}
+
+impl OpenOutcome {
+    fn refused(key: &str, reason: OpenFailure) -> Self {
+        Self {
+            ok: false,
+            key: key.to_owned(),
+            url: None,
+            entry: None,
+            reason: Some(reason),
+        }
+    }
+}
+
+/// The `file://` URL of a finished download's file, or why there is none.
+///
+/// Only the entry and the filesystem are consulted — never the length on
+/// disk, which says nothing about how much of the file is real (librqbit
+/// allocates it whole; `downloaded == size` is the only proof, and that is
+/// what [`State::Complete`] already stands for).
+fn local_url(entry: &Entry) -> Result<String, OpenFailure> {
+    if entry.state != State::Complete {
+        return Err(OpenFailure::Incomplete);
+    }
+    let path = entry.path.as_deref().ok_or(OpenFailure::Missing)?;
+    let path = std::path::Path::new(path);
+    if !path.is_file() {
+        return Err(OpenFailure::Missing);
+    }
+    // Only fails on a relative path; the server always answers an absolute
+    // one, so this is the same "not playable from here" as a missing file.
+    url::Url::from_file_path(path)
+        .map(String::from)
+        .map_err(|()| OpenFailure::Missing)
+}
+
+/// What to play `key` off the device with, and a note that it was played.
+///
+/// A finished download whose file is really there answers `ok: true` with
+/// the `file://` URL for it, and its `lastPlayedAt` is stamped in the same
+/// locked read-modify-write — so the timestamp cannot be lost to a progress
+/// tick landing between the check and the write, and cannot be stamped on a
+/// play that never happened.
+///
+/// Anything else answers `ok: false` with a [`OpenFailure`]: the caller
+/// streams the title instead of opening a dead player.
+pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
+    update(|registry| {
+        let Some(entry) = registry.items.get_mut(key) else {
+            return Ok(OpenOutcome::refused(key, OpenFailure::Unknown));
+        };
+        let url = match local_url(entry) {
+            Ok(url) => url,
+            Err(reason) => {
+                tracing::info!(key, ?reason, "no file to play this download from");
+                return Ok(OpenOutcome::refused(key, reason));
+            }
+        };
+        entry.last_played_at = Some(Utc::now());
+        Ok(OpenOutcome {
+            ok: true,
+            key: key.to_owned(),
+            url: Some(url),
+            entry: Some(entry.clone()),
+            reason: None,
+        })
+    })
+}
+
 /// Merges the server's live download stats into the registry, writes it back
 /// when anything moved, and returns just the entries that changed (in the
 /// same envelope [`list`] answers, so one Dart parser reads both).
@@ -1521,6 +1621,67 @@ mod tests {
             PinFailure::Unavailable {
                 message: "embedded server is not running".into()
             }
+        );
+    }
+
+    /// The half of [`open`] that decides: only a finished entry whose file
+    /// is really there is playable off the device, and the URL is a real
+    /// `file://` one (a space in the name and all).
+    #[test]
+    fn only_a_finished_file_that_is_there_is_playable() {
+        let dir = std::env::temp_dir().join(format!("xtremio-open-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("A Film 1080p.mkv");
+        std::fs::write(&file, b"bytes").unwrap();
+
+        let mut entry = entry("tt1", "tt1");
+        entry.path = Some(file.to_string_lossy().into_owned());
+
+        // Not finished: what is on disk is a fragment, whatever its name.
+        entry.state = State::Downloading;
+        assert_eq!(local_url(&entry), Err(OpenFailure::Incomplete));
+
+        entry.state = State::Complete;
+        let url = local_url(&entry).expect("a finished file is playable");
+        assert!(url.starts_with("file://"), "{url}");
+        assert!(url.ends_with("/A%20Film%201080p.mkv"), "{url}");
+        assert_eq!(
+            url::Url::parse(&url).unwrap().to_file_path().unwrap(),
+            file,
+            "the URL points back at the file it was built from"
+        );
+
+        // The file went away under a complete entry (an unplugged volume,
+        // or a deletion from outside the app), and an entry the server
+        // never gave a path.
+        std::fs::remove_file(&file).unwrap();
+        assert_eq!(local_url(&entry), Err(OpenFailure::Missing));
+        entry.path = None;
+        assert_eq!(local_url(&entry), Err(OpenFailure::Missing));
+        // A directory is not a file to play either.
+        entry.path = Some(dir.to_string_lossy().into_owned());
+        assert_eq!(local_url(&entry), Err(OpenFailure::Missing));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The wire shape the Dart side reads: a refusal names its reason and
+    /// carries no URL, and the reasons are camelCase like everything else.
+    #[test]
+    fn a_refused_open_is_a_value_with_a_reason() {
+        let json =
+            serde_json::to_value(OpenOutcome::refused("tt1:tt1", OpenFailure::Missing)).unwrap();
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["key"], "tt1:tt1");
+        assert_eq!(json["reason"], "missing");
+        assert!(json.get("url").is_none(), "{json}");
+        assert!(json.get("entry").is_none(), "{json}");
+        assert_eq!(
+            serde_json::to_value(OpenFailure::Incomplete).unwrap(),
+            "incomplete"
+        );
+        assert_eq!(
+            serde_json::to_value(OpenFailure::Unknown).unwrap(),
+            "unknown"
         );
     }
 

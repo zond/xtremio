@@ -60,6 +60,20 @@ Future<String> downloadsRemove({
 Future<String> downloadsList() =>
     RustLib.instance.api.crateApiDownloadsDownloadsList();
 
+/// What to play the download `key` off the device with, and a note that it
+/// was played.
+///
+/// Answers `{"ok":true,"key":…,"url":"file:///…","entry":{…}}` for a
+/// finished download whose file is really on the disk, stamping the entry's
+/// `lastPlayedAt` as it goes. When there is nothing to play from it answers
+/// `{"ok":false,"key":…,"reason":…}` — `unknown` (no such entry),
+/// `incomplete` (the bytes are not all here) or `missing` (complete, but
+/// the file is gone or its volume is not mounted) — so the caller can
+/// stream the title instead of opening a player on a dead URL. Only a
+/// registry that cannot be read or written raises.
+Future<String> downloadsOpen({required String key}) =>
+    RustLib.instance.api.crateApiDownloadsDownloadsOpen(key: key);
+
 /// Points the server's `downloadsDir` at `path`, or unsets it (back to the
 /// torrent cache root) with null. Validated and persisted exactly as
 /// `POST /settings` does: the path must be absolute, creatable, writable and

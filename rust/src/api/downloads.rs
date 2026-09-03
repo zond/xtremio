@@ -1,7 +1,7 @@
-//! FRB surface for offline downloads: add, remove, list, the destination
-//! directory, and a progress stream. JSON strings in and out, all real work
-//! in `crate::downloads`; like every other server call these go over the
-//! handle's library API, never over HTTP.
+//! FRB surface for offline downloads: add, remove, list, open from the
+//! device, the destination directory, and a progress stream. JSON strings in
+//! and out, all real work in `crate::downloads`; like every other server call
+//! these go over the handle's library API, never over HTTP.
 
 use crate::frb_generated::StreamSink;
 use crate::guard::guarded;
@@ -68,6 +68,21 @@ pub fn downloads_remove(key: String, delete_files: bool) -> anyhow::Result<Strin
 /// caller could not read it either.
 pub fn downloads_list() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::downloads::list()?).map_err(Into::into))
+}
+
+/// What to play the download `key` off the device with, and a note that it
+/// was played.
+///
+/// Answers `{"ok":true,"key":…,"url":"file:///…","entry":{…}}` for a
+/// finished download whose file is really on the disk, stamping the entry's
+/// `lastPlayedAt` as it goes. When there is nothing to play from it answers
+/// `{"ok":false,"key":…,"reason":…}` — `unknown` (no such entry),
+/// `incomplete` (the bytes are not all here) or `missing` (complete, but
+/// the file is gone or its volume is not mounted) — so the caller can
+/// stream the title instead of opening a player on a dead URL. Only a
+/// registry that cannot be read or written raises.
+pub fn downloads_open(key: String) -> anyhow::Result<String> {
+    guarded(|| serde_json::to_string(&crate::downloads::open(&key)?).map_err(Into::into))
 }
 
 /// Points the server's `downloadsDir` at `path`, or unsets it (back to the

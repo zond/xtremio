@@ -210,9 +210,9 @@ connection.
   and `createdAt`/`completedAt`/`lastPlayedAt`. The FFI is
   `rust/src/api/downloads.rs`: `downloads_add(request_json)`,
   `downloads_remove(key, delete_files)`, `downloads_list()`,
-  `downloads_set_dir(path)` and a `downloads_events()` stream that ticks
-  about once a second, only while something is unfinished, and pushes
-  just the entries that moved. Progress is merged from the server's
+  `downloads_open(key)`, `downloads_set_dir(path)` and a
+  `downloads_events()` stream that ticks about once a second, only while
+  something is unfinished, and pushes just the entries that moved. Progress is merged from the server's
   `downloads()`, never stored twice. Downloading a second stream for a
   title replaces the entry and releases the pin it replaces (with its
   bytes, unless another entry names the same file), so no torrent is left
