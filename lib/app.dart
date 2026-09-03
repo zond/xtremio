@@ -67,7 +67,9 @@ class XtremioApp extends StatefulWidget {
 
   /// Where the downloads go on a first run: on Android the app's external
   /// files directory, which the OS does not purge, and null -- leave it to
-  /// the server -- everywhere else. A destination already set is never
+  /// the server -- everywhere else. Applied only while the registry says
+  /// the question is still open, so an answer already given (including
+  /// "back with the cache", which is a null `downloadsDir`) is never
   /// overridden.
   final DownloadDestinationResolver defaultDestination;
 

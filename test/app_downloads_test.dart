@@ -125,6 +125,65 @@ void main() {
       expect(calls, isNot(contains('downloads.directory')));
     });
 
+    testWidgets('an answer of "with the cache" survives the next launch', (
+      tester,
+    ) async {
+      // The Downloads screen writes a null `downloadsDir` on purpose for
+      // "Default (with the cache)", and the server writes one itself when
+      // a persisted destination is unusable at boot (an SD card that is
+      // not in the device). Neither is an open question, and the registry
+      // is what says so.
+      final downloads = FakeDownloadsClient(
+        registry: const DownloadsRegistry(destinationSettled: true),
+      );
+      addTearDown(downloads.dispose);
+
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          defaultDestination: () async => '/sdcard/files/downloads',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(downloads.directories, isEmpty);
+    });
+
+    testWidgets('choosing by hand and relaunching leaves the choice alone', (
+      tester,
+    ) async {
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          defaultDestination: () async => '/sdcard/files/downloads',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(downloads.directories, ['/sdcard/files/downloads']);
+
+      // The user puts the files back with the cache, and the app restarts.
+      await downloads.setDirectory(null);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          defaultDestination: () async => '/sdcard/files/downloads',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(downloads.directories, [
+        '/sdcard/files/downloads',
+        null,
+      ], reason: 'the second launch asked for nothing');
+    });
+
     testWidgets('a server that cannot be asked changes nothing', (
       tester,
     ) async {

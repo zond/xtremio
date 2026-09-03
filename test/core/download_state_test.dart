@@ -251,5 +251,27 @@ void main() {
         reason: 'the registry merged into is unchanged',
       );
     });
+
+    test('a settled destination is read, and an event cannot unsettle it', () {
+      expect(
+        DownloadsRegistry.fromJson(const {
+          'version': 1,
+          'items': <String, dynamic>{},
+        }).destinationSettled,
+        isFalse,
+        reason: 'a registry from before the flag has settled nothing',
+      );
+      final settled = DownloadsRegistry.fromJson(const {
+        'version': 1,
+        'items': <String, dynamic>{},
+        'destinationSettled': true,
+      });
+      expect(settled.destinationSettled, isTrue);
+
+      // Progress events say nothing about the destination, so folding one
+      // in must not report the question as open again.
+      expect(settled.merge(DownloadsRegistry.empty).destinationSettled, isTrue);
+      expect(DownloadsRegistry.empty.merge(settled).destinationSettled, isTrue);
+    });
   });
 }

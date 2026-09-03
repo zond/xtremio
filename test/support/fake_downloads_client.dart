@@ -110,7 +110,11 @@ class FakeDownloadsClient implements DownloadsClient {
           deletedFiles: had && deleteFiles,
         );
     if (result.removed) items.remove(key);
-    registry = DownloadsRegistry(version: registry.version, items: items);
+    registry = DownloadsRegistry(
+      version: registry.version,
+      items: items,
+      destinationSettled: registry.destinationSettled,
+    );
     return result;
   }
 
@@ -179,6 +183,7 @@ class FakeDownloadsClient implements DownloadsClient {
     registry = DownloadsRegistry(
       version: registry.version,
       items: {...registry.items, key: entry},
+      destinationSettled: registry.destinationSettled,
     );
   }
 
@@ -188,6 +193,13 @@ class FakeDownloadsClient implements DownloadsClient {
     callLog?.add('downloads.setDirectory');
     final error = setDirectoryError;
     if (error != null) throw error;
+    // As the Rust side does: an accepted destination -- null among them --
+    // settles the question for good.
+    registry = DownloadsRegistry(
+      version: registry.version,
+      items: registry.items,
+      destinationSettled: true,
+    );
     return settings = {...settings, 'downloadsDir': path};
   }
 

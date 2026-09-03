@@ -170,7 +170,11 @@ final class DownloadView {
 /// `downloads.json` as a whole: what `downloads_list` answers and what a
 /// progress event carries.
 final class DownloadsRegistry {
-  const DownloadsRegistry({this.version = 1, this.items = const {}});
+  const DownloadsRegistry({
+    this.version = 1,
+    this.items = const {},
+    this.destinationSettled = false,
+  });
 
   /// The file format's version, so a payload from a newer build is
   /// recognisable as one.
@@ -178,6 +182,14 @@ final class DownloadsRegistry {
 
   /// Every download, by [DownloadView.key].
   final Map<String, DownloadView> items;
+
+  /// Whether where the downloads go has been answered -- by the user on the
+  /// Downloads screen, or by the platform default a first run applies. It
+  /// is the registry's, not the server's, because `downloadsDir` is null
+  /// both for "nobody has chosen" and for "put them back with the cache",
+  /// and because the server clears a destination it cannot use at boot.
+  /// Set by [DownloadsClient.setDirectory], and never unset.
+  final bool destinationSettled;
 
   /// Nothing downloaded, and what a failed read falls back to.
   static const DownloadsRegistry empty = DownloadsRegistry();
@@ -191,6 +203,7 @@ final class DownloadsRegistry {
           if (entry.value is Map<String, dynamic>)
             entry.key: DownloadView(entry.value as Map<String, dynamic>),
       },
+      destinationSettled: json['destinationSettled'] == true,
     );
   }
 
@@ -229,6 +242,9 @@ final class DownloadsRegistry {
   DownloadsRegistry merge(DownloadsRegistry update) => DownloadsRegistry(
     version: update.version,
     items: {...items, ...update.items},
+    // Progress events carry only the entries that moved and say nothing
+    // about the destination, so the flag only ever turns on.
+    destinationSettled: destinationSettled || update.destinationSettled,
   );
 
   @override

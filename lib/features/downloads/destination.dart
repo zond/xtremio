@@ -46,14 +46,22 @@ Future<String?> platformDefaultDestination() async {
 
 String _inside(String root) => '$root/$downloadsFolderName';
 
-/// Points [client] at [resolve]'s directory unless a destination is already
-/// set, which is what start-up does once.
+/// Points [client] at [resolve]'s directory unless the question has already
+/// been answered, which is what start-up does once.
 ///
-/// A destination the user (or an earlier launch) chose is never overridden,
-/// and a platform with no default of its own changes nothing -- the server
-/// keeps deciding. Failure is not worth a word on screen: the downloads
-/// still work where the server puts them, and the picker on the Downloads
-/// screen can still move them.
+/// "Answered" is the registry's `destinationSettled`, not a non-null
+/// `downloadsDir`: choosing `Default (with the cache)` on the Downloads
+/// screen writes null on purpose, and the server itself clears a
+/// destination it cannot use at boot (an SD card that is not in the
+/// device). Reading either as "nobody has chosen" would silently move the
+/// downloads on the next launch. A `downloadsDir` set by a build from
+/// before the flag counts as answered too, so an upgrade does not move
+/// anything.
+///
+/// A platform with no default of its own changes nothing -- the server
+/// keeps deciding -- and nothing is asked of it either. Failure is not
+/// worth a word on screen: the downloads still work where the server puts
+/// them, and the picker on the Downloads screen can still move them.
 Future<void> applyDefaultDestination(
   DownloadsClient client, {
   DownloadDestinationResolver resolve = platformDefaultDestination,
@@ -61,6 +69,7 @@ Future<void> applyDefaultDestination(
   try {
     final path = await resolve();
     if (path == null) return;
+    if ((await client.list()).destinationSettled) return;
     if (await client.directory() != null) return;
     await client.setDirectory(path);
   } catch (error) {
