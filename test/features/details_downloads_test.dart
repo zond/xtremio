@@ -47,6 +47,21 @@ Map<String, dynamic> episodeTorrentGroup(String videoId) => {
   },
 };
 
+/// A client whose `open` waits, so the tile can be tapped again while the
+/// registry round trip that stands between the tap and the player is still
+/// out.
+class GatedOpenClient extends FakeDownloadsClient {
+  GatedOpenClient({super.registry});
+
+  final Completer<void> gate = Completer<void>();
+
+  @override
+  Future<DownloadOpenResult> open(String key) async {
+    await gate.future;
+    return super.open(key);
+  }
+}
+
 /// A registry entry for [stream] of [videoId], as `downloads_list` writes
 /// one. Only the fields the tile reads are filled in.
 Map<String, dynamic> entry({
@@ -887,6 +902,51 @@ void main() {
       );
       expect(args['metaRequest']['base'], kCinemetaManifestUrl);
       expect(args['subtitlesPath']['id'], movieId);
+    });
+
+    testWidgets('a second tap while the file is looked up is dropped', (
+      tester,
+    ) async {
+      // `downloads_open` is a round trip, and the tile stays hit-testable
+      // for as long as it is out. Two players would each load the shared
+      // `player` field and start an engine of their own.
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: loadMetaDetailsFixture(),
+          CoreField.player: loadPlayerFixture(),
+        },
+      );
+      final downloads = GatedOpenClient(
+        registry: registryOf([
+          entry(
+            metaId: movieId,
+            videoId: movieId,
+            stream: const {'infoHash': movieHash, 'fileIdx': 0},
+            state: 'complete',
+            size: 1000,
+            downloaded: 1000,
+            path: path,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(tile);
+      await tester.pump();
+      await tester.tap(tile);
+      await tester.pump();
+      downloads.gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(downloads.opens, ['$movieId:$movieId'], reason: 'one lookup');
+      expect(
+        find.byType(PlayerScreen),
+        findsOneWidget,
+        reason: 'one player route, so one engine',
+      );
     });
 
     testWidgets('a tap on another release plays that release', (tester) async {

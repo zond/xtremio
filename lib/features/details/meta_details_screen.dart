@@ -81,6 +81,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// resolves -- so a tapped tile has to say it is working.
   final Set<String> _pending = {};
 
+  /// A play is between its tap and its player route. Held over the whole
+  /// push, so the tile underneath the player cannot start a second one.
+  bool _playing = false;
+
   /// The video of the last `Load` this screen dispatched (null lets the
   /// engine guess), so the field can be reloaded with the same selection.
   String? _requestedVideoId;
@@ -223,7 +227,26 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// A download whose file went away since it finished (an unplugged
   /// volume, a deletion from outside the app) streams instead and says so,
   /// rather than opening a player on a URL with no file behind it.
+  ///
+  /// Asking the registry is a round trip, so the tile stays tappable
+  /// between the tap and the push: a second tap is dropped rather than
+  /// pushing a second player, each of which would load the shared `player`
+  /// field and start an engine of its own.
   Future<void> _play(
+    MetaDetailsState state,
+    StreamGroup group,
+    StreamInfo stream,
+  ) async {
+    if (_playing) return;
+    _playing = true;
+    try {
+      await _pushPlayer(state, group, stream);
+    } finally {
+      _playing = false;
+    }
+  }
+
+  Future<void> _pushPlayer(
     MetaDetailsState state,
     StreamGroup group,
     StreamInfo stream,
