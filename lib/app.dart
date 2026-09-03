@@ -52,6 +52,11 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// details screen is already up replaces it instead of stacking a second
 /// screen over the same core field.
 ///
+/// And the [PrefsScope]: one [AppPrefs] for the whole app, read from the
+/// Rust side's preferences file at start-up — before any screen that reads
+/// one can be on the stack, so the first list is already laid out the way
+/// it was left — and written through on every change.
+///
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
 /// [RustDownloadsClient] unless [downloads] hands it one, and disposes only
@@ -66,6 +71,7 @@ class XtremioApp extends StatefulWidget {
     this.initInfo,
     this.engineBuilder,
     this.downloads,
+    this.prefs,
     this.deepLinks,
     this.defaultDestination = platformDefaultDestination,
     this.device = DeviceProfile.fallback,
@@ -77,6 +83,10 @@ class XtremioApp extends StatefulWidget {
   /// The offline downloads, for tests that want a fake. Read once, when the
   /// app comes up: handing over a different client later changes nothing.
   final DownloadsClient? downloads;
+
+  /// The app's own preferences, for tests that want a fake client behind
+  /// them. Read once, when the app comes up, like [downloads].
+  final AppPrefs? prefs;
 
   /// Where `stremio://` links arrive from; tests hand in a fake instead of
   /// the platform's own ([AppLinksDeepLinkSource]).
@@ -120,6 +130,11 @@ class _XtremioAppState extends State<XtremioApp> {
   late final DownloadsClient _downloads;
   late final bool _ownsDownloads;
 
+  /// The one preferences value, and whether disposing it is ours to do —
+  /// the same rule as [_downloads].
+  late final AppPrefs _prefs;
+  late final bool _ownsPrefs;
+
   /// The `ctx` field, for the settings a new player is created with.
   /// Created in [initState] so its first pull is in flight from start-up;
   /// created lazily it would come into being — empty — inside the first
@@ -137,6 +152,9 @@ class _XtremioAppState extends State<XtremioApp> {
     _ctx = CoreFieldNotifier(widget.core, CoreField.ctx);
     _ownsDownloads = widget.downloads == null;
     _downloads = widget.downloads ?? RustDownloadsClient();
+    _ownsPrefs = widget.prefs == null;
+    _prefs = widget.prefs ?? AppPrefs(client: const RustPrefsClient());
+    unawaited(_prefs.load());
     _lifecycle = AppLifecycleListener(
       onExitRequested: _onExitRequested,
       onResume: _onResume,
@@ -295,6 +313,7 @@ class _XtremioAppState extends State<XtremioApp> {
     _links?.cancel();
     // Lets go of the progress stream the client holds open on the Rust side.
     if (_ownsDownloads) _downloads.dispose();
+    if (_ownsPrefs) _prefs.dispose();
     _ctx.dispose();
     _lifecycle.dispose();
     super.dispose();
@@ -320,16 +339,22 @@ class _XtremioAppState extends State<XtremioApp> {
         initInfo: widget.initInfo,
         child: DownloadsScope(
           client: _downloads,
-          child: PlaybackScope(
-            createEngine: _createEngine,
-            child: MaterialApp(
-              title: 'Xtremio',
-              debugShowCheckedModeBanner: false,
-              navigatorKey: _navigator,
-              theme: isTv ? TvDensity.theme(theme) : theme,
-              builder: isTv ? TvMediaQuery.builder : null,
-              navigatorObservers: [_routes, if (kDebugMode) RouteLogObserver()],
-              home: const RootShell(),
+          child: PrefsScope(
+            prefs: _prefs,
+            child: PlaybackScope(
+              createEngine: _createEngine,
+              child: MaterialApp(
+                title: 'Xtremio',
+                debugShowCheckedModeBanner: false,
+                navigatorKey: _navigator,
+                theme: isTv ? TvDensity.theme(theme) : theme,
+                builder: isTv ? TvMediaQuery.builder : null,
+                navigatorObservers: [
+                  _routes,
+                  if (kDebugMode) RouteLogObserver(),
+                ],
+                home: const RootShell(),
+              ),
             ),
           ),
         ),

@@ -9,6 +9,7 @@ export 'core_scope.dart';
 export 'diagnostics_client.dart';
 export 'downloads_client.dart';
 export 'fields.dart';
+export 'prefs_client.dart';
 export 'resource.dart';
 export 'server_client.dart';
 export 'state/addon_descriptor.dart';
