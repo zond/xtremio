@@ -6,6 +6,7 @@ export 'core_client.dart';
 export 'core_events.dart';
 export 'core_field_notifier.dart';
 export 'core_scope.dart';
+export 'downloads_client.dart';
 export 'fields.dart';
 export 'resource.dart';
 export 'server_client.dart';
