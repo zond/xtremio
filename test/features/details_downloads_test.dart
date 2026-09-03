@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
+import 'package:xtremio/features/downloads/offline_play.dart';
+import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/widgets/download_badge.dart';
 
@@ -55,6 +57,7 @@ Map<String, dynamic> entry({
   String name = '',
   int size = 0,
   int downloaded = 0,
+  String? path,
 }) => {
   'metaId': metaId,
   'videoId': videoId,
@@ -65,6 +68,7 @@ Map<String, dynamic> entry({
   'size': size,
   'downloaded': downloaded,
   'state': state,
+  'path': path,
 };
 
 /// The affordance with [tooltip] on the movie's torrent stream tile. The
@@ -804,6 +808,121 @@ void main() {
 
       expect(find.byType(AlertDialog), findsNothing);
       expect(downloads.added, hasLength(1));
+    });
+  });
+
+  group('playing what is kept', () {
+    const movieKey = '$movieId:$movieId';
+    const path = '/downloads/abc/Night of the Living Dead.mkv';
+    const fileUrl =
+        'file:///downloads/abc/Night%20of%20the%20Living%20Dead.mkv';
+
+    /// The stream tile of the movie fixture's one torrent.
+    final tile = find.widgetWithText(ListTile, '1080p');
+
+    /// The `Load Player` args of the pushed player.
+    Map<String, dynamic> loadArgs(FakeCoreClient core) =>
+        (core.dispatched
+                    .firstWhere((a) => a.field == CoreField.player)
+                    .action['args']
+                as Map<String, dynamic>)['args']
+            as Map<String, dynamic>;
+
+    /// The screen with a finished download of [stream] for the movie.
+    Future<(FakeCoreClient, FakeDownloadsClient)> pumpWithDownload(
+      WidgetTester tester, {
+      Map<String, dynamic> stream = const {
+        'infoHash': movieHash,
+        'fileIdx': 0,
+        'name': '1080p',
+      },
+    }) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: loadMetaDetailsFixture(),
+          CoreField.player: loadPlayerFixture(),
+        },
+      );
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          entry(
+            metaId: movieId,
+            videoId: movieId,
+            stream: stream,
+            state: 'complete',
+            size: 1000,
+            downloaded: 1000,
+            path: path,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+      return (core, downloads);
+    }
+
+    testWidgets('a finished download of this release plays off the disk', (
+      tester,
+    ) async {
+      final (core, downloads) = await pumpWithDownload(tester);
+
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(downloads.opens, [movieKey]);
+      final args = loadArgs(core);
+      expect(args['stream'], {
+        'url': fileUrl,
+        'name': '1080p',
+        'behaviorHints': {'filename': 'Night of the Living Dead.mkv'},
+      });
+      // The addon requests are still the picker's, which is what lets the
+      // core record progress against the library item while offline.
+      expect(
+        args['streamRequest']['base'],
+        'https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json',
+      );
+      expect(args['metaRequest']['base'], kCinemetaManifestUrl);
+      expect(args['subtitlesPath']['id'], movieId);
+    });
+
+    testWidgets('a tap on another release plays that release', (tester) async {
+      // The video is kept, but from a different torrent: picking this tile
+      // is a request for *this* source, not for the copy on the disk.
+      final (core, downloads) = await pumpWithDownload(
+        tester,
+        stream: const {
+          'infoHash': 'ffffffffffffffffffffffffffffffffffffffff',
+          'fileIdx': 0,
+        },
+      );
+
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+
+      expect(downloads.opens, isEmpty);
+      expect(loadArgs(core)['stream']['infoHash'], movieHash);
+    });
+
+    testWidgets('a download whose file went away streams it, and says so', (
+      tester,
+    ) async {
+      final (core, downloads) = await pumpWithDownload(tester);
+      downloads.onOpen = (_) => const DownloadOpenResult(
+        ok: false,
+        reason: DownloadOpenFailure.missing,
+      );
+
+      await tester.tap(tile);
+      await tester.pump();
+
+      expect(find.text(kDownloadGoneMessage), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(loadArgs(core)['stream']['infoHash'], movieHash);
     });
   });
 

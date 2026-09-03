@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
+import 'package:xtremio/features/downloads/offline_play.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
@@ -14,6 +15,12 @@ import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
 
 const movieKey = 'tt0063350:tt0063350';
+
+/// Where the recorded registry says the movie's file is, as a URL.
+const movieFileUrl =
+    'file:///tmp/.tmpaA6dw9/cache/server/rqbit-downloads/'
+    'Night.of.the.Living.Dead.1968.1080p.BluRay/'
+    'night.of.the.living.dead.1968.1080p.mkv';
 const pilotKey = 'tt0903747:tt0903747:1:1';
 
 /// The recorded registry: a finished movie, an episode two thirds in, an
@@ -246,7 +253,7 @@ void main() {
       expect(find.text('Play'), findsOneWidget);
     });
 
-    testWidgets('play opens the player with the stream as it was stored', (
+    testWidgets('play opens the file on the device, not the server', (
       tester,
     ) async {
       useTallViewport(tester);
@@ -260,13 +267,21 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(downloads.opens, [movieKey]);
       final args = loadArgs(
         core.dispatched.firstWhere((a) => a.field == CoreField.player),
       );
-      expect(
-        args['stream']['infoHash'],
-        'bbdd47be75282ea36cddf7a48ba5a73e667e57bb',
-      );
+      // A `url` stream on the file itself: no torrent for the player to
+      // wait on, and nothing for the embedded server to serve.
+      expect(args['stream'], {
+        'url': movieFileUrl,
+        'name': 'Torrent',
+        'behaviorHints': {
+          'filename': 'night.of.the.living.dead.1968.1080p.mkv',
+        },
+      }, reason: 'the addon name is kept; the torrent coordinates are not');
+      // The addon requests it was downloaded with, which are what keep
+      // continue-watching moving while it plays offline.
       expect(
         args['streamRequest']['base'],
         'https://public-domain-movies.now.sh/manifest.json',
@@ -278,6 +293,36 @@ void main() {
         'id': 'tt0063350',
         'extra': <Object>[],
       });
+    });
+
+    testWidgets('a download whose file went away streams it, and says so', (
+      tester,
+    ) async {
+      useTallViewport(tester);
+      final core = coreWithPlayer();
+      final downloads = FakeDownloadsClient(registry: recorded())
+        ..onOpen = (_) => const DownloadOpenResult(
+          ok: false,
+          reason: DownloadOpenFailure.missing,
+        );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Night of the Living Dead'));
+      await tester.pump();
+
+      expect(find.text(kDownloadGoneMessage), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      final args = loadArgs(
+        core.dispatched.firstWhere((a) => a.field == CoreField.player),
+      );
+      expect(
+        args['stream']['infoHash'],
+        'bbdd47be75282ea36cddf7a48ba5a73e667e57bb',
+        reason: 'the addon stream is played instead of a dead file URL',
+      );
     });
 
     testWidgets('retry is offered on a stopped one, and pins it again', (

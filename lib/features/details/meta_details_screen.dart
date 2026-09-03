@@ -11,6 +11,7 @@ import '../../widgets/shared_field_screen.dart';
 import '../discover/discover_screen.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_controller.dart';
+import '../downloads/offline_play.dart';
 import '../player/player_screen.dart';
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
@@ -29,7 +30,9 @@ import '../player/player_screen.dart';
 /// snapshot, so Details and the Downloads screen render with no network.
 /// The title goes into the library with it, because that is what makes the
 /// player track progress while offline (a temp library item is not enough:
-/// see `docs/phase3-design.md` on `library_item`).
+/// see `docs/phase3-design.md` on `library_item`). Playing that same
+/// release afterwards plays the file on the device rather than streaming
+/// it, connection or not (`offline_play.dart`).
 ///
 /// On a TV the info column and the streams pane are separate
 /// [FocusTraversalGroup]s, focus starts on the stream the user most likely
@@ -207,29 +210,56 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     );
   }
 
-  void _play(MetaDetailsState state, StreamGroup group, StreamInfo stream) {
+  /// Opens the player on [stream] -- or on the file this device already
+  /// holds of it.
+  ///
+  /// A finished download of *this* release is played from the disk even
+  /// with a connection: there is nothing the server can add to a whole
+  /// file. Only that release, though -- picking another stream tile is a
+  /// request for that source, not for the copy on disk. The addon requests
+  /// are the ones the picker has either way, which is what keeps
+  /// continue-watching moving offline.
+  ///
+  /// A download whose file went away since it finished (an unplugged
+  /// volume, a deletion from outside the app) streams instead and says so,
+  /// rather than opening a player on a URL with no file behind it.
+  Future<void> _play(
+    MetaDetailsState state,
+    StreamGroup group,
+    StreamInfo stream,
+  ) async {
     final videoId = state.streamPath?.id ?? state.meta?.id ?? widget.id;
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute<PlayerScreenResult>(
-            settings: const RouteSettings(name: 'player'),
-            builder: (_) => PlayerScreen(
-              stream: stream.json,
-              streamRequest: group.request,
-              metaRequest: state.metaRequest,
-              subtitlesPath: ResourcePath(
-                resource: 'subtitles',
-                type: widget.type,
-                id: videoId,
-              ),
-            ),
+    final client = _downloadsClient;
+    final download = _videoDownload(videoId);
+    OfflinePlayback playback = (stream: null, message: null);
+    if (client != null &&
+        download != null &&
+        download.isComplete &&
+        download.stream.isSameSource(stream)) {
+      playback = await offlinePlayback(client, download);
+      if (!mounted) return;
+      final message = playback.message;
+      if (message != null) _tell(message);
+    }
+    if (!mounted) return;
+    final result = await Navigator.of(context).push<PlayerScreenResult>(
+      MaterialPageRoute<PlayerScreenResult>(
+        settings: const RouteSettings(name: 'player'),
+        builder: (_) => PlayerScreen(
+          stream: playback.stream ?? stream.json,
+          streamRequest: group.request,
+          metaRequest: state.metaRequest,
+          subtitlesPath: ResourcePath(
+            resource: 'subtitles',
+            type: widget.type,
+            id: videoId,
           ),
-        )
-        .then((result) {
-          // The player wanted the next episode but had no stream for it:
-          // show that episode's streams.
-          if (result != null && mounted) _selectVideoId(result.selectVideoId);
-        });
+        ),
+      ),
+    );
+    // The player wanted the next episode but had no stream for it: show
+    // that episode's streams.
+    if (result != null && mounted) _selectVideoId(result.selectVideoId);
   }
 
   /// Identifies one stream of one video while its pin is in flight. The

@@ -8,6 +8,7 @@ import '../../widgets/poster_tile.dart';
 import '../player/player_screen.dart';
 import 'download_labels.dart';
 import 'downloads_controller.dart';
+import 'offline_play.dart';
 
 /// Everything kept on the device: what it is, how far along, how much room
 /// it takes and where it goes.
@@ -18,6 +19,10 @@ import 'downloads_controller.dart';
 /// question that matters -- whether the file goes with the entry -- because
 /// the two are separable: the pin can be dropped and the bytes left where
 /// they are.
+///
+/// Play opens the file itself (`offline_play.dart`), with no server and no
+/// network in the way, and falls back to streaming -- saying so -- when the
+/// file is not there any more.
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key, this.destinations = platformDestinations});
 
@@ -162,15 +167,29 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
 
-  /// Plays what is on disk. The stream is handed back as the addon gave it,
-  /// which is what `Load Player` takes: a complete pinned file is served
-  /// off the disk by the same server the stream would have streamed from.
-  void _play(DownloadView view) {
-    Navigator.of(context).push(
+  /// Plays the file on the disk, with the addon requests the download was
+  /// taken with: those are what keep continue-watching moving while the
+  /// player runs offline (`Load Player` needs the stream request to record
+  /// progress at all, and the meta request to find the library item -- which
+  /// offline comes out of the bucket the download put the title in).
+  ///
+  /// A row is only offered Play when it is finished, but the file can still
+  /// be gone by the time it is pressed: an unplugged volume, or a deletion
+  /// from outside the app. Then the addon's own stream is played instead --
+  /// through the server, over the network -- and the row says so, rather
+  /// than opening a player on a URL with no file behind it.
+  Future<void> _play(DownloadView view) async {
+    final client = _client;
+    if (client == null) return;
+    final playback = await offlinePlayback(client, view);
+    if (!mounted) return;
+    final message = playback.message;
+    if (message != null) _tell(message);
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: 'player'),
         builder: (_) => PlayerScreen(
-          stream: view.stream.json,
+          stream: playback.stream ?? view.stream.json,
           streamRequest: _requestOf(view.streamRequest),
           metaRequest: _requestOf(view.metaRequest),
           subtitlesPath: ResourcePath(

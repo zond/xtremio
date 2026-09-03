@@ -241,6 +241,22 @@ connection.
   disposes and a `DownloadsScope` hands down the tree -- one client,
   because the progress sink is one -- with `DownloadView`
   (`lib/core/state/download.dart`) reading the registry it answers with.
+- **A finished download is played from the file, not from the server.**
+  `downloads_open(key)` answers the `file://` URL of a download whose
+  bytes are all here and whose file really is where it was left, and
+  stamps the entry's `lastPlayedAt` as it does. Details and the Downloads
+  screen hand the player that URL as a plain `url` stream
+  (`lib/features/downloads/offline_play.dart`) together with the
+  *original* `streamRequest` and `metaRequest`, which is what keeps
+  continue-watching moving: stremio-core's `TimeChanged` writes progress
+  only with a stream request and a library item, and offline the library
+  item comes out of the `ctx` bucket the download put the title into.
+  There is no torrent for the player to wait on, so the start-up overlay
+  (which keys on `infoHash`) never appears. The file wins over the server
+  even with a connection -- but only for the release that was
+  downloaded; picking another stream is a request for that source. A
+  download whose file went away with its volume streams instead and says
+  so, rather than opening a player on a URL with no file behind it.
 - **Settings are the engine's.** `ctx.profile.settings` is stremio-core's
   `Settings` struct (camelCase; `docs/phase3-design.md` §4 lists it) and
   the only way to change one is `Ctx::UpdateSettings` with the *entire*
