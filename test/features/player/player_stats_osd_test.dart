@@ -28,6 +28,14 @@ void main() {
     pausedForCache: false,
   );
 
+  /// The streaming-server URL the recorded player state resolved its
+  /// torrent stream to, which is what the panel's last row shows.
+  String playedUrl(Map<String, dynamic> fixture) {
+    final content =
+        (fixture['stream'] as Map<String, dynamic>)['content'] as List<dynamic>;
+    return (content.first as Map<String, dynamic>)['streaming_url'] as String;
+  }
+
   Future<FakePlaybackEngine> pumpPlayer(WidgetTester tester) async {
     final fixture = loadPlayerFixture();
     final selected = fixture['selected'] as Map<String, dynamic>;
@@ -131,11 +139,12 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('hwdec    software (hwdec-current: no)'), findsOneWidget);
-    // The URL libmpv is playing sits at the bottom of the panel.
+    // The URL libmpv is playing sits at the bottom of the panel. It is
+    // read out of the fixture rather than written down here: the recorder
+    // runs the embedded server on an ephemeral port, so the number changes
+    // every time the fixture is re-recorded.
     expect(
-      find.textContaining(
-        'url      http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0',
-      ),
+      find.textContaining('url      ${playedUrl(loadPlayerFixture())}'),
       findsOneWidget,
     );
 

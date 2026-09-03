@@ -539,13 +539,15 @@ connection.
   sourced from `AddonInstalled`/`AddonUninstalled`/`AddonUpgraded`) show
   as a SnackBar.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
-  with the `derive` + `env-future-send` features, `zond/stream-server` at a
-  fixed rev (`8763760`: generated bearer token, library API on
-  `ServerHandle`, ephemeral torrent port, `/local-addon` stubs). To bump:
-  change the rev, `cargo update -p <crate>`, run `cargo test`, and re-copy
-  `rust/vendor/stremio-watched-bitfield` from the new stremio-core rev (it
-  carries a one-line `flate2` relaxation the combined graph needs; see
-  `rust/vendor/README.md`).
+  (`00265b3`, release 0.62.0) with the `derive` + `env-future-send`
+  features, `zond/stream-server` at a fixed rev (`7c46427`: generated
+  bearer token, library API on `ServerHandle`, ephemeral torrent port,
+  `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
+  counts). To bump: change the rev, `cargo update -p <crate>`, run
+  `cargo test`, re-record any fixture whose shape moved, and re-copy
+  `rust/vendor/stremio-watched-bitfield` from the new stremio-core rev
+  when that crate changed (it carries a one-line `flate2` relaxation the
+  combined graph needs; see `rust/vendor/README.md`).
 
 ### Verifying on a dev machine
 

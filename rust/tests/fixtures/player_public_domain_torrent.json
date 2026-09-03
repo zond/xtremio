@@ -1,8 +1,8 @@
 {
   "libraryItem": {
-    "_ctime": "2026-09-02T10:05:01.614256240Z",
+    "_ctime": "2026-09-03T14:20:19.283514057Z",
     "_id": "tt0063350",
-    "_mtime": "2026-09-02T10:05:01.614256320Z",
+    "_mtime": "2026-09-03T14:20:19.283514158Z",
     "behaviorHints": {
       "defaultVideoId": "tt0063350",
       "featuredVideoId": null,
@@ -15,7 +15,7 @@
     "state": {
       "duration": 0,
       "flaggedWatched": 0,
-      "lastWatched": "2026-09-02T10:05:01.614256390Z",
+      "lastWatched": "2026-09-03T14:20:19.283514258Z",
       "noNotif": false,
       "overallTimeWatched": 0,
       "timeOffset": 0,
@@ -157,8 +157,8 @@
   "stream": {
     "content": [
       {
-        "download_url": "http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0?external=1&download=1",
-        "m3u_data_uri": "data:application/octet-stream;charset=utf-8;base64,I0VYVE0zVQojRVhUSU5GOjAKaHR0cDovLzEyNy4wLjAuMTozMzc1OS8xMWVhMDI1ODRmYTYzNTE5NTZmMzU2NzE5NjJhYjQ2MzU0ZDk5MDYwLzA/",
+        "download_url": "http://127.0.0.1:39661/11ea02584fa6351956f35671962ab46354d99060/0?external=1&download=1",
+        "m3u_data_uri": "data:application/octet-stream;charset=utf-8;base64,I0VYVE0zVQojRVhUSU5GOjAKaHR0cDovLzEyNy4wLjAuMTozOTY2MS8xMWVhMDI1ODRmYTYzNTE5NTZmMzU2NzE5NjJhYjQ2MzU0ZDk5MDYwLzA/",
         "magnet_url": "magnet:?xt=urn:btih:11ea02584fa6351956f35671962ab46354d99060&dn=1080p",
         "stream": {
           "announce": [],
@@ -166,9 +166,9 @@
           "fileIdx": 0,
           "infoHash": "11ea02584fa6351956f35671962ab46354d99060",
           "name": "1080p",
-          "url": "http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0?"
+          "url": "http://127.0.0.1:39661/11ea02584fa6351956f35671962ab46354d99060/0?"
         },
-        "streaming_url": "http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0?"
+        "streaming_url": "http://127.0.0.1:39661/11ea02584fa6351956f35671962ab46354d99060/0?"
       },
       {
         "announce": [],
@@ -176,7 +176,7 @@
         "fileIdx": 0,
         "infoHash": "11ea02584fa6351956f35671962ab46354d99060",
         "name": "1080p",
-        "url": "http://127.0.0.1:33759/11ea02584fa6351956f35671962ab46354d99060/0?"
+        "url": "http://127.0.0.1:39661/11ea02584fa6351956f35671962ab46354d99060/0?"
       }
     ],
     "type": "Ready"
@@ -184,5 +184,6 @@
   "streamState": null,
   "subtitlePreference": null,
   "subtitles": [],
-  "videoParams": null
+  "videoParams": null,
+  "videoScale": null
 }

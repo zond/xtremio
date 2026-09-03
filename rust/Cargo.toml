@@ -24,7 +24,7 @@ stream-server = { package = "server", git = "https://github.com/zond/stream-serv
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
 # the Runtime can live on a multithreaded host.
-stremio-core = { git = "https://github.com/Stremio/stremio-core", rev = "7ae100c077541622b26c25a9aee3453eeba4aeb2", features = ["derive", "env-future-send"] }
+stremio-core = { git = "https://github.com/Stremio/stremio-core", rev = "00265b3bad7158535fccf1e119e10d6ad492183e", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
 chrono = "0.4"

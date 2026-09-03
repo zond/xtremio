@@ -4766,7 +4766,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "stremio-core"
 version = "0.1.0"
-source = "git+https://github.com/Stremio/stremio-core?rev=7ae100c077541622b26c25a9aee3453eeba4aeb2#7ae100c077541622b26c25a9aee3453eeba4aeb2"
+source = "git+https://github.com/Stremio/stremio-core?rev=00265b3bad7158535fccf1e119e10d6ad492183e#00265b3bad7158535fccf1e119e10d6ad492183e"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4812,7 +4812,7 @@ dependencies = [
 [[package]]
 name = "stremio-derive"
 version = "0.1.0"
-source = "git+https://github.com/Stremio/stremio-core?rev=7ae100c077541622b26c25a9aee3453eeba4aeb2#7ae100c077541622b26c25a9aee3453eeba4aeb2"
+source = "git+https://github.com/Stremio/stremio-core?rev=00265b3bad7158535fccf1e119e10d6ad492183e#00265b3bad7158535fccf1e119e10d6ad492183e"
 dependencies = [
  "case",
  "proc-macro-crate",
@@ -5027,7 +5027,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
