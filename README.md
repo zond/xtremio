@@ -81,11 +81,12 @@ The point of Xtremio is to go past what existing Stremio apps do:
 
 - **Offline downloads** — cache a full episode or movie to the device and keep
   watching with no connection (through a tunnel, on a plane), the way Netflix
-  does. This fits the architecture naturally: the torrent engine already writes
-  to a local cache; offline support means downloading the *whole* file, pinning
-  it so it is never evicted, and a library UI to manage what is saved. No
-  transcoding is needed here either — playback is just libmpv decoding the
-  original file bytes off disk, the same as any local video.
+  does. The download itself is built (see **Downloads** above): the whole file
+  is fetched, pinned so it is never evicted, and managed from a screen of its
+  own. What is left is playing it as a local file (`file://` straight off the
+  pinned path, so a finished download needs nothing running), choosing the
+  Android destination without being asked, and a foreground service so a
+  download survives the app leaving the screen.
 - **Cloud storage sources** (e.g. Google Drive) — stream from a personal cloud
   drive, most naturally via a Stremio addon that resolves cloud files to
   playable URLs. Provider OAuth / API-key setup is the fiddly part.
