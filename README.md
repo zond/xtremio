@@ -187,6 +187,28 @@ connection.
   `lib/core/server_client.dart`. Nothing logs the token; the header value
   is marked sensitive. `media_kit`'s `Media.httpHeaders` could carry it to
   mpv should a media route ever need it; none does.
+- **Offline downloads are a pin plus a registry.** The server keeps the
+  chosen file of a torrent wanted and un-evictable
+  (`ServerHandle::pin_download`, a validated `downloadsDir` setting,
+  `pinned`/`complete` per file in `stats.json`); `rust/src/downloads.rs`
+  keeps everything it has no idea about in `<storage_dir>/downloads.json`
+  — keyed `"{metaId}:{videoId}"`, holding the raw stream JSON `Load
+  Player` takes back, a `MetaItem` snapshot so Details renders offline,
+  and `createdAt`/`completedAt`/`lastPlayedAt`. The FFI is
+  `rust/src/api/downloads.rs`: `downloads_add(request_json)`,
+  `downloads_remove(key, delete_files)`, `downloads_list()`,
+  `downloads_set_dir(path)` and a `downloads_events()` stream that ticks
+  about once a second, only while something is unfinished, and pushes
+  just the entries that moved. Progress is merged from the server's
+  `downloads()`, never stored twice. A refused pin comes back as
+  `{"ok":false,"error":{"kind":…}}` — `insufficientSpace` carries the
+  byte counts, the rest the server's client-safe message, which names no
+  local path — because a full disk is something to show, not an
+  exception. Reading the registry is forgiving on purpose: a corrupt file
+  starts empty, an unparseable entry is dropped alone, and a file from a
+  newer build keeps its `version` and its unknown keys. At boot every
+  entry that is not complete is pinned again, on a blocking thread, since
+  a pin waits on magnet metadata and nothing on screen waits on it.
 - **Settings are the engine's.** `ctx.profile.settings` is stremio-core's
   `Settings` struct (camelCase; `docs/phase3-design.md` §4 lists it) and
   the only way to change one is `Ctx::UpdateSettings` with the *entire*
