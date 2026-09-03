@@ -170,6 +170,20 @@ Future<void> stepLeftAndDownTo<T extends Widget>(
   expect(focusIn<T>(), isTrue);
 }
 
+/// Presses up until the control tooltipped [tooltip] has focus: what is
+/// between the top stream and the header's controls is the list's own
+/// business (a section header, the order chips) and not this test's.
+Future<void> pressUpTo(
+  WidgetTester tester,
+  String tooltip, {
+  int limit = 8,
+}) async {
+  for (var i = 0; i < limit && focusedTooltip() != tooltip; i++) {
+    await press(tester, LogicalKeyboardKey.arrowUp);
+  }
+  expect(focusedTooltip(), tooltip);
+}
+
 /// Mounts Breaking Bad at the pilot on a TV, focus on its torrent.
 Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
   useScreen(tester, tvSize);
@@ -315,8 +329,8 @@ void main() {
     );
   });
 
-  group('flat sources', () {
-    /// The movie on a TV with the two torrent addons, listed flat.
+  group('sectioned sources', () {
+    /// The movie on a TV with the two torrent addons, listed in sections.
     Future<FakeCoreClient> mountFlat(
       WidgetTester tester, {
       AppPrefs? prefs,
@@ -352,25 +366,51 @@ void main() {
       expect(focusInPane(), isTrue);
     });
 
-    testWidgets('down and up walk the sorted list, and the ends hold', (
+    testWidgets('down walks the open section and on to the headers below '
+        'it, and the ends hold', (tester) async {
+      await mountFlat(tester);
+      // The best section is open, so the remote starts on its stream.
+      expect(focusedLabel(tester), 'Alpha 2160p');
+
+      // Below it: the sections that are folded up, each header a stop of
+      // its own -- which is what keeps them reachable at all.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), '1080p');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), '720p');
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), '1080p');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), 'Alpha 2160p');
+      // And above the first stream, its own header.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), '2160p');
+      expect(focusInPane(), isTrue);
+    });
+
+    testWidgets('select on a collapsed header opens it where the remote is', (
       tester,
     ) async {
       await mountFlat(tester);
-      expect(focusedLabel(tester), 'Alpha 2160p');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), '1080p');
+      expect(find.text('Beta 1080p'), findsNothing);
 
+      await press(tester, LogicalKeyboardKey.select);
+
+      expect(find.text('Beta 1080p'), findsOneWidget);
+      expect(focusedLabel(tester), '1080p', reason: 'focus stayed');
+      // And the stream it just revealed is the next thing down.
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), 'Beta 1080p');
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusedLabel(tester), 'Alpha 720p');
 
+      // Closing it again puts the next header back under the remote.
       await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(focusedLabel(tester), 'Beta 1080p');
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(focusedLabel(tester), 'Alpha 2160p');
-      // Above the first stream is the toggle, still inside the pane.
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(focusedTooltip(), kGroupedStreamsTooltip);
-      expect(focusInPane(), isTrue);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text('Beta 1080p'), findsNothing);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), '720p');
     });
 
     testWidgets('the remote reaches the toggle and select groups them again', (
@@ -382,8 +422,8 @@ void main() {
       await prefs.load();
       await mountFlat(tester, prefs: prefs);
 
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(focusedTooltip(), kGroupedStreamsTooltip);
+      await pressUpTo(tester, kGroupedStreamsTooltip);
+      expect(focusInPane(), isTrue);
 
       await press(tester, LogicalKeyboardKey.select);
       expect(focusedTooltip(), kFlatStreamsTooltip, reason: 'focus stayed');

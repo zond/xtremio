@@ -287,64 +287,159 @@ enum StreamResolution {
   }
 }
 
-/// The order the flat sources list is in: **resolution first (highest
-/// first), then seeders when both are known, then size (largest first)**.
+/// The order the streams *inside* one resolution section are in.
 ///
-/// Unknowns never sink a stream on their own:
+/// Resolution is not part of this at all: it is what the sections
+/// themselves are (see [sectionsByResolution]), so a comparison here is
+/// always between two streams of the same picture.
 ///
-/// - An unknown **resolution** is its own bucket, and that bucket sorts
-///   after every known one. It is not zero and it is not interleaved: a
-///   stream nobody could read a resolution from would otherwise land
-///   between tiers at random, and a whole addon that names its streams
-///   plainly would be scattered through the list.
-/// - An unknown **seeder count** or **size** does not compare at all. The
-///   tie simply is not broken there and falls through to the next rule,
-///   which leaves the engine's own order (the addon's own ranking) intact
-///   rather than pushing the stream anywhere.
+/// The rule every one of the three shares is what it does with an unknown.
+/// A stream whose size, or whose peer count, was nowhere to be read cannot
+/// be ranked by an order that needs it, and the honest place for it is
+/// *after* everything that could be ranked — never as a zero (which would
+/// pin it to the bottom of the ranking as if it were measured and found
+/// empty) and never as a best guess (which would put it on top of streams
+/// that are actually known to be good). Two unranked streams compare equal,
+/// so they keep the order the addons gave them.
 ///
-/// Pure, and total in the sense a sort needs: reflexive, and consistent
-/// whichever way round the arguments come.
-int compareStreamFacts(StreamFacts a, StreamFacts b) {
-  final byResolution = _compareBuckets(
-    a.resolution?.height,
-    b.resolution?.height,
-  );
-  if (byResolution != 0) return byResolution;
-  final bySeeders = _compareKnown(a.seeders, b.seeders);
-  if (bySeeders != 0) return bySeeders;
-  return _compareKnown(a.sizeBytes, b.sizeBytes);
+/// Ties fall through the same way: two streams the order cannot tell apart
+/// stay as they came in, which is the addon's own ranking (see
+/// [sortedByStreamOrder]).
+int compareStreamOrder(StreamFacts a, StreamFacts b, StreamOrder order) =>
+    switch (order) {
+      StreamOrder.peersPerSize => _byPeersPerSize(a, b),
+      StreamOrder.largest => _byKnown(a.sizeBytes, b.sizeBytes),
+      StreamOrder.mostPeers => _byKnown(a.seeders, b.seeders),
+    };
+
+/// Ascending size ÷ peers — the most peers per megabyte first — for the
+/// reasoning in [StreamOrder].
+///
+/// The ratio is taken in doubles rather than by cross-multiplying, because
+/// a size in bytes times a peer count read off arbitrary text is a product
+/// that can leave 64 bits, and a comparator that wraps around is a
+/// comparator that crashes a sort. It also gives the swarm with nobody in
+/// it the right answer for free: size ÷ 0 is infinity, the worst ratio
+/// there is, so a stream *known* to have no peers ranks last among the
+/// ranked instead of being thrown in with the unknowns.
+int _byPeersPerSize(StreamFacts a, StreamFacts b) {
+  final ratioA = _peersPerSize(a);
+  final ratioB = _peersPerSize(b);
+  if (ratioA == null && ratioB == null) return 0;
+  if (ratioA == null) return 1;
+  if (ratioB == null) return -1;
+  return ratioA.compareTo(ratioB);
 }
 
-/// Larger first, with "unknown" as a bucket of its own after the known
-/// values.
-int _compareBuckets(int? a, int? b) {
+/// Bytes per peer, or null when either half is unknown. `double.compareTo`
+/// is a total order (it even orders a NaN, which only a zero-byte stream
+/// with no peers could produce), so a sort over these cannot come apart.
+double? _peersPerSize(StreamFacts facts) {
+  final size = facts.sizeBytes;
+  final peers = facts.seeders;
+  return size == null || peers == null ? null : size / peers;
+}
+
+/// Larger first, with "unknown" as a bucket of its own *after* every known
+/// value.
+int _byKnown(int? a, int? b) {
   if (a == null && b == null) return 0;
   if (a == null) return 1;
   if (b == null) return -1;
   return b.compareTo(a);
 }
 
-/// Larger first, but only when both sides are known; an unknown leaves the
-/// tie for the next rule.
-int _compareKnown(int? a, int? b) =>
-    a == null || b == null ? 0 : b.compareTo(a);
-
-/// [items] in [compareStreamFacts] order, **stably**: two streams that
+/// [items] in [compareStreamOrder] order, **stably**: two streams that
 /// compare equal come out in the order they went in, so what the addon
 /// itself ranked first still shows through.
 ///
 /// Stability has to be built here because `List.sort` does not promise it.
 /// [facts] is called once per item.
-List<T> sortedByStreamFacts<T>(
+List<T> sortedByStreamOrder<T>(
   List<T> items,
   StreamFacts Function(T item) facts,
+  StreamOrder order,
 ) {
   final decorated = [
     for (final (index, item) in items.indexed) (index, item, facts(item)),
   ];
   decorated.sort((a, b) {
-    final byFacts = compareStreamFacts(a.$3, b.$3);
-    return byFacts != 0 ? byFacts : a.$1.compareTo(b.$1);
+    final byOrder = compareStreamOrder(a.$3, b.$3, order);
+    return byOrder != 0 ? byOrder : a.$1.compareTo(b.$1);
   });
   return [for (final entry in decorated) entry.$2];
+}
+
+/// One resolution's worth of the sources list: the rows themselves, and the
+/// two things a *collapsed* header still has to be able to say — how many
+/// streams are folded away in it, and the best swarm among them, so an
+/// empty-looking 2160p is told apart from a healthy one without opening it.
+final class StreamSection<T> {
+  const StreamSection({
+    required this.resolution,
+    required this.rows,
+    required this.bestSeeders,
+  });
+
+  /// The rung, or null for the streams nothing could be read from. Null is
+  /// never a guess at a resolution and is never drawn as one.
+  final StreamResolution? resolution;
+
+  final List<T> rows;
+
+  /// The most peers any stream in the section claims, or null when not one
+  /// of them said. Null is "nobody said", not "nobody is there".
+  final int? bestSeeders;
+
+  /// The heading, which for the unknown bucket says so rather than
+  /// guessing.
+  String get label => resolution?.label ?? 'Unknown resolution';
+
+  /// What a collapsed header says about what it holds.
+  String get summary => [
+    rows.length == 1 ? '1 stream' : '${rows.length} streams',
+    switch (bestSeeders) {
+      null => 'seeders unknown',
+      1 => 'best 1 seeder',
+      final best => 'best $best seeders',
+    },
+  ].join(' · ');
+}
+
+/// [rows] split into one section per resolution, **highest first**, with
+/// the streams nothing could be read a resolution from last as a section of
+/// their own.
+///
+/// The order *within* a section is the order [rows] came in, so a list
+/// already put in [sortedByStreamOrder] order arrives sectioned and sorted
+/// in one pass. A resolution no stream has is not an empty section: it is
+/// not there at all.
+List<StreamSection<T>> sectionsByResolution<T>(
+  List<T> rows,
+  StreamFacts Function(T row) facts,
+) {
+  final buckets = <StreamResolution?, List<T>>{};
+  final best = <StreamResolution?, int>{};
+  for (final row in rows) {
+    final rowFacts = facts(row);
+    (buckets[rowFacts.resolution] ??= []).add(row);
+    final seeders = rowFacts.seeders;
+    if (seeders != null) {
+      final known = best[rowFacts.resolution];
+      if (known == null || seeders > known) {
+        best[rowFacts.resolution] = seeders;
+      }
+    }
+  }
+  return [
+    // `StreamResolution.values` is the ladder, highest rung first; the
+    // unknown bucket is appended after it rather than sorted into it.
+    for (final resolution in [...StreamResolution.values, null])
+      if (buckets[resolution] case final rows?)
+        StreamSection(
+          resolution: resolution,
+          rows: rows,
+          bestSeeders: best[resolution],
+        ),
+  ];
 }

@@ -255,113 +255,216 @@ void main() {
     });
   });
 
-  group('the sort', () {
-    test('is resolution first, highest first', () {
-      final order = [
-        facts(resolution: StreamResolution.sd480),
-        facts(resolution: StreamResolution.uhd2160),
-        facts(resolution: StreamResolution.hd720),
-        facts(resolution: StreamResolution.fhd1080),
+  group('the order inside a section', () {
+    /// The three orders over the same five streams, by their labels.
+    List<String> ordered(
+      List<(String, StreamFacts)> streams,
+      StreamOrder order,
+    ) => [
+      for (final entry in sortedByStreamOrder(streams, (e) => e.$2, order))
+        entry.$1,
+    ];
+
+    test('peers per megabyte is the smallest size ÷ peers first', () {
+      final streams = [
+        ('2 GB, 10 peers', facts(sizeBytes: 2 * gb, seeders: 10)),
+        ('8 GB, 200 peers', facts(sizeBytes: 8 * gb, seeders: 200)),
+        ('700 MB, 2 peers', facts(sizeBytes: 700 * mb, seeders: 2)),
       ];
-      expect(sortedByStreamFacts(order, (f) => f).map((f) => f.resolution), [
-        StreamResolution.uhd2160,
-        StreamResolution.fhd1080,
-        StreamResolution.hd720,
-        StreamResolution.sd480,
+      // 8 GB ÷ 200 is 41 MB a peer, 2 GB ÷ 10 is 205, 700 MB ÷ 2 is 350:
+      // the biggest file wins because it also has the deepest swarm, which
+      // is the whole point of the ratio.
+      expect(ordered(streams, StreamOrder.peersPerSize), [
+        '8 GB, 200 peers',
+        '2 GB, 10 peers',
+        '700 MB, 2 peers',
+      ]);
+      // And the other two orders disagree with it, each in its own way.
+      expect(ordered(streams, StreamOrder.largest).first, '8 GB, 200 peers');
+      expect(ordered(streams, StreamOrder.mostPeers), [
+        '8 GB, 200 peers',
+        '2 GB, 10 peers',
+        '700 MB, 2 peers',
       ]);
     });
 
-    test('then seeders, when both are known', () {
-      final a = facts(resolution: StreamResolution.fhd1080, seeders: 3);
-      final b = facts(resolution: StreamResolution.fhd1080, seeders: 90);
-      expect(compareStreamFacts(b, a), lessThan(0));
-      expect(compareStreamFacts(a, b), greaterThan(0));
-    });
-
-    test('then size, largest first', () {
-      final a = facts(resolution: StreamResolution.fhd1080, sizeBytes: 1 * gb);
-      final b = facts(resolution: StreamResolution.fhd1080, sizeBytes: 8 * gb);
-      expect(compareStreamFacts(b, a), lessThan(0));
-    });
-
-    test('seeders outrank size', () {
-      final many = facts(seeders: 90, sizeBytes: 1 * gb);
-      final big = facts(seeders: 3, sizeBytes: 8 * gb);
-      expect(compareStreamFacts(many, big), lessThan(0));
-    });
-
-    test('an unknown resolution is a bucket after every known one', () {
-      final unknown = facts(seeders: 900, sizeBytes: 20 * gb);
-      final lowest = facts(resolution: StreamResolution.sd240);
-      expect(compareStreamFacts(lowest, unknown), lessThan(0));
-      expect(compareStreamFacts(unknown, lowest), greaterThan(0));
-      // Two unknowns are equal to each other, not ordered by accident.
-      expect(compareStreamFacts(unknown, facts()), 0);
-    });
-
-    test('an unknown seeder count or size never moves a stream: the tie '
-        'falls through instead', () {
-      final known = facts(resolution: StreamResolution.fhd1080, seeders: 5);
-      final noSeeders = facts(resolution: StreamResolution.fhd1080);
-      expect(compareStreamFacts(known, noSeeders), 0);
-      expect(compareStreamFacts(noSeeders, known), 0);
-
-      // With seeders unknown on one side the size still decides.
-      final small = facts(
-        resolution: StreamResolution.fhd1080,
-        seeders: 500,
-        sizeBytes: 1 * gb,
+    test('the biggest file does not win on size alone', () {
+      final streams = [
+        ('20 GB, 3 peers', facts(sizeBytes: 20 * gb, seeders: 3)),
+        ('2 GB, 100 peers', facts(sizeBytes: 2 * gb, seeders: 100)),
+      ];
+      expect(
+        ordered(streams, StreamOrder.peersPerSize).first,
+        '2 GB, 100 peers',
       );
-      final large = facts(
-        resolution: StreamResolution.fhd1080,
-        sizeBytes: 9 * gb,
-      );
-      expect(compareStreamFacts(large, small), lessThan(0));
+      expect(ordered(streams, StreamOrder.largest).first, '20 GB, 3 peers');
     });
 
-    test('is reflexive and symmetric on every pair', () {
+    test('a stream missing either number sorts after every ranked one, and '
+        'is never read as a zero', () {
+      final noSize = facts(seeders: 500);
+      final noPeers = facts(sizeBytes: 700 * mb);
+      final neither = facts();
+      // The worst ranked stream there is -- 20 GB for a single peer -- is
+      // still ahead of all three, which a zero size or a zero peer count
+      // would not be.
+      final ranked = facts(sizeBytes: 20 * gb, seeders: 1);
+      for (final unranked in [noSize, noPeers, neither]) {
+        expect(
+          compareStreamOrder(ranked, unranked, StreamOrder.peersPerSize),
+          lessThan(0),
+        );
+        expect(
+          compareStreamOrder(unranked, ranked, StreamOrder.peersPerSize),
+          greaterThan(0),
+        );
+      }
+      // Nor is an unranked one *best*: it does not lead the list either.
+      expect(
+        ordered([
+          ('unknown', neither),
+          ('known', ranked),
+        ], StreamOrder.peersPerSize),
+        ['known', 'unknown'],
+      );
+      // Two unranked streams are equal, so they keep the addons' order.
+      expect(compareStreamOrder(noSize, noPeers, StreamOrder.peersPerSize), 0);
+    });
+
+    test('a known-empty swarm is ranked, and ranked last', () {
+      // Zero peers is measured, not missing: size ÷ 0 is the worst ratio
+      // there is, which puts it behind every stream anyone is seeding and
+      // still ahead of the ones nobody described.
+      final empty = facts(sizeBytes: 700 * mb, seeders: 0);
+      final seeded = facts(sizeBytes: 20 * gb, seeders: 1);
+      final unknown = facts(sizeBytes: 700 * mb);
+      expect(
+        compareStreamOrder(seeded, empty, StreamOrder.peersPerSize),
+        lessThan(0),
+      );
+      expect(
+        compareStreamOrder(empty, unknown, StreamOrder.peersPerSize),
+        lessThan(0),
+      );
+    });
+
+    test('largest and most peers put their own unknown last', () {
+      final big = facts(sizeBytes: 8 * gb);
+      final small = facts(sizeBytes: 1 * gb, seeders: 900);
+      expect(compareStreamOrder(big, small, StreamOrder.largest), lessThan(0));
+      // Size unknown: after both, even with the deepest swarm on the list.
+      final noSize = facts(seeders: 9000);
+      expect(
+        compareStreamOrder(noSize, small, StreamOrder.largest),
+        greaterThan(0),
+      );
+      expect(
+        compareStreamOrder(noSize, small, StreamOrder.mostPeers),
+        lessThan(0),
+      );
+      // Peers unknown: after both under most peers, ranked under largest.
+      expect(
+        compareStreamOrder(big, small, StreamOrder.mostPeers),
+        greaterThan(0),
+      );
+    });
+
+    test('a tie falls through to the order the addons gave', () {
+      // The same ratio, differently spelled: 2 GB for 10 peers and 1 GB
+      // for 5 is 205 MB a peer either way.
+      final tied = [
+        ('first', facts(sizeBytes: 2 * gb, seeders: 10)),
+        ('second', facts(sizeBytes: 1 * gb, seeders: 5)),
+      ];
+      expect(ordered(tied, StreamOrder.peersPerSize), ['first', 'second']);
+      expect(ordered(tied.reversed.toList(), StreamOrder.peersPerSize), [
+        'second',
+        'first',
+      ]);
+      // And streams the order cannot tell apart at all keep their places.
+      final items = [for (var i = 0; i < 6; i++) i];
+      for (final order in StreamOrder.values) {
+        expect(sortedByStreamOrder(items, (_) => facts(), order), items);
+      }
+    });
+
+    test('is reflexive and symmetric on every pair, in every order', () {
       final all = [
         facts(),
-        facts(resolution: StreamResolution.uhd2160),
-        facts(resolution: StreamResolution.fhd1080, seeders: 1),
-        facts(resolution: StreamResolution.fhd1080, sizeBytes: 1),
-        facts(seeders: 7, sizeBytes: 2),
+        facts(sizeBytes: 1 * gb),
+        facts(seeders: 7),
+        facts(sizeBytes: 1 * gb, seeders: 0),
+        facts(sizeBytes: 20 * gb, seeders: 3),
+        facts(sizeBytes: 2 * gb, seeders: 100),
       ];
-      for (final a in all) {
-        expect(compareStreamFacts(a, a), 0);
-        for (final b in all) {
-          expect(
-            compareStreamFacts(a, b).sign,
-            -compareStreamFacts(b, a).sign,
-            reason: '$a vs $b',
-          );
+      for (final order in StreamOrder.values) {
+        for (final a in all) {
+          expect(compareStreamOrder(a, a, order), 0);
+          for (final b in all) {
+            expect(
+              compareStreamOrder(a, b, order).sign,
+              -compareStreamOrder(b, a, order).sign,
+              reason: '$a vs $b in $order',
+            );
+          }
         }
       }
     });
 
-    test('is stable: equal streams keep the order the engine gave them', () {
-      // Six streams the comparator cannot tell apart at all.
-      final items = [for (var i = 0; i < 6; i++) i];
-      expect(sortedByStreamFacts(items, (_) => facts()), items);
-
-      // And equal within a tier, below one that outranks them.
-      final tiers = [
-        ('a', facts(resolution: StreamResolution.fhd1080)),
-        ('b', facts(resolution: StreamResolution.fhd1080)),
-        ('top', facts(resolution: StreamResolution.uhd2160)),
-        ('c', facts(resolution: StreamResolution.fhd1080)),
-      ];
-      expect(sortedByStreamFacts(tiers, (e) => e.$2).map((e) => e.$1), [
-        'top',
-        'a',
-        'b',
-        'c',
+    test('sorting an empty or single list is the list', () {
+      expect(
+        sortedByStreamOrder(<int>[], (_) => facts(), StreamOrder.largest),
+        isEmpty,
+      );
+      expect(sortedByStreamOrder([1], (_) => facts(), StreamOrder.largest), [
+        1,
       ]);
     });
+  });
 
-    test('sorting an empty or single list is the list', () {
-      expect(sortedByStreamFacts(<int>[], (_) => facts()), isEmpty);
-      expect(sortedByStreamFacts([1], (_) => facts()), [1]);
+  group('the sections', () {
+    test('are one per resolution, highest first, unknown last', () {
+      final rows = [
+        ('a', facts(resolution: StreamResolution.hd720)),
+        ('b', facts()),
+        ('c', facts(resolution: StreamResolution.uhd2160)),
+        ('d', facts(resolution: StreamResolution.hd720)),
+        ('e', facts(resolution: StreamResolution.fhd1080)),
+      ];
+      final sections = sectionsByResolution(rows, (row) => row.$2);
+      expect(sections.map((s) => s.label), [
+        '2160p',
+        '1080p',
+        '720p',
+        'Unknown resolution',
+      ]);
+      // Within a section the rows keep the order they arrived in, which is
+      // the order the chosen sort left them in.
+      expect(sections[2].rows.map((row) => row.$1), ['a', 'd']);
+      // A resolution nobody offered is not an empty section.
+      expect(
+        sections.map((s) => s.resolution),
+        isNot(contains(StreamResolution.sd480)),
+      );
+    });
+
+    test('a collapsed header can still say how many and how healthy', () {
+      final sections = sectionsByResolution([
+        facts(resolution: StreamResolution.uhd2160, seeders: 3),
+        facts(resolution: StreamResolution.uhd2160, seeders: 137),
+        facts(resolution: StreamResolution.uhd2160),
+        facts(resolution: StreamResolution.fhd1080, seeders: 1),
+        facts(resolution: StreamResolution.hd720),
+      ], (f) => f);
+      expect(sections[0].summary, '3 streams · best 137 seeders');
+      expect(sections[1].summary, '1 stream · best 1 seeder');
+      // Nobody said, which is not the same as nobody being there.
+      expect(sections[2].bestSeeders, isNull);
+      expect(sections[2].summary, '1 stream · seeders unknown');
+    });
+
+    test('no rows are no sections', () {
+      expect(sectionsByResolution(<StreamFacts>[], (f) => f), isEmpty);
     });
   });
 }

@@ -52,21 +52,35 @@ import 'stream_sources.dart';
 /// next title, and it is read from the Rust side's preferences file at
 /// start-up so the first list is already the one they left. Grouped -- a
 /// section per addon, in profile order, each addon's own ranking intact --
-/// is the default and is what the engine hands over. Flat is every addon's
-/// answers in one list, sorted by [compareStreamFacts] and each row named
-/// with the addon it came from. Everything around the streams is the same
-/// in both: the last-used shortcut, the addons that had nothing, the ones
-/// that failed, and the notice when nobody had anything.
+/// is the default and is what the engine hands over.
+///
+/// The other layout puts every addon's answers together and cuts them by
+/// **resolution**: one collapsible section per rung, highest first, the
+/// streams nothing could be read from in a section of their own at the
+/// bottom that says so rather than guessing. Only the best section is open
+/// to start with, so the stream most people want is one tap and not two,
+/// and a *closed* header still says how many streams it holds and the best
+/// swarm among them ([StreamSection.summary]) -- an empty-looking 2160p
+/// and a healthy one are different answers. Which sections are open is
+/// [_openSections], remembered for as long as the screen is up. Inside a
+/// section the order is [StreamOrder], the same for every section, and
+/// each row names the addon it came from since it has no addon heading to
+/// sit under any more.
+///
+/// Everything around the streams is the same in both layouts: the
+/// last-used shortcut, the addons that had nothing, the ones that failed,
+/// and the notice when nobody had anything.
 ///
 /// One release is one row. Two addons offering the same torrent -- and one
 /// addon offering it twice -- are the same *content*, identified by
 /// [StreamInfo.sourceKey] (an info hash and a file index, or a direct URL:
 /// the identity a pin is already keyed by), never by what a row looks like.
 /// Two different releases with the same resolution and size are two
-/// sources and stay two rows. The flat list collapses them after the sort,
-/// so what survives is the best-ranked instance, and says "Also from ..."
-/// when another *addon* had it, silently when one addon merely repeated
-/// itself. The grouped list keeps a copy in each addon's own group -- the
+/// sources and stay two rows. The sectioned list collapses them after the
+/// sort and across the whole list -- so what survives is the best-ranked
+/// instance, and a source two addons described differently cannot show up
+/// in two sections -- and says "Also from ..." when another *addon* had
+/// it, silently when one addon merely repeated itself. The grouped list keeps a copy in each addon's own group -- the
 /// groups are what that layout is for -- marked the same way, and collapses
 /// only an addon's repeats of its own. Either way the surviving row carries
 /// the *union* of every listing's trackers ([StreamSourceIndex]), so the
@@ -164,6 +178,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// The season the episode list shows; null until the user (or the
   /// selected episode) chooses one.
   int? _season;
+
+  /// Which resolution sections of the sources list are open, or null while
+  /// the user has not said -- which is the best section available, so
+  /// playing the best stream is one tap and not two.
+  ///
+  /// A choice, once made, is what the screen shows from then on: another
+  /// episode's streams, a re-sort, a rebuilt list all keep it. Two things
+  /// are deliberately not "the user has not said": an empty set is
+  /// everything collapsed on purpose and stays that way, and a set naming
+  /// only resolutions this title does not have falls back to the best one
+  /// here rather than showing a list with nothing open in it.
+  Set<StreamResolution?>? _openSections;
 
   /// The episode a tap asked for while the engine has not answered with its
   /// streams yet. The field still describes the previous selection, so
@@ -813,6 +839,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// list, and the section says so where the tap can see it.
   List<Widget> _streamSlivers(MetaDetailsState state, MetaItem meta) {
     final isFlat = _prefs?.streamsFlat ?? false;
+    const order = StreamOrder.peersPerSize;
     final lastUsed = state.lastUsedStream;
     final groups = state.allStreamGroups;
     final noneYet =
@@ -894,34 +921,46 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         for (final stream in group.streams)
           (addon: _addonNameOf(profile, group), stream: stream),
     ]);
-    // The flat layout: every listed addon's streams in one list, in
-    // [compareStreamFacts] order, each row named with the addon it came
-    // from since it has no heading to sit under any more. Built only for
-    // the layout that shows it -- parsing every stream costs a handful of
-    // regexes each.
+    // The sectioned layout: every listed addon's streams together, put in
+    // the chosen order ([StreamOrder], the same one for every section) and
+    // then split into a collapsible section per resolution. Each row names
+    // the addon it came from, since it has no heading to sit under any
+    // more. Built only for the layout that shows it -- parsing every
+    // stream costs a handful of regexes each.
     //
-    // Collapsed *after* the sort, so the instance that survives a
-    // duplicate is the best-ranked one rather than whichever addon was
-    // asked first.
-    final flatStreams = isFlat
-        ? _collapse(
-            sortedByStreamFacts([
-              for (final group in listed)
-                for (final stream in group.streams)
-                  (
-                    group: group,
-                    stream: stream,
-                    facts: StreamFacts.of(
-                      stream,
-                      addonName: _addonNameOf(profile, group),
-                    ),
-                    alsoFrom: const <String>[],
-                  ),
-            ], (row) => row.facts!),
-            sources,
-            (row) => row.facts?.addonName ?? '',
+    // Sorted, then collapsed, then sectioned, in that order and for a
+    // reason each: the instance of a duplicate that survives is the
+    // best-ranked one rather than whichever addon was asked first, the
+    // collapse is across the whole list so a source two addons described
+    // differently cannot appear in two sections, and sectioning keeps the
+    // order it is handed, so each section is already sorted.
+    final sections = isFlat
+        ? sectionsByResolution(
+            _collapse(
+              sortedByStreamOrder(
+                [
+                  for (final group in listed)
+                    for (final stream in group.streams)
+                      (
+                        group: group,
+                        stream: stream,
+                        facts: StreamFacts.of(
+                          stream,
+                          addonName: _addonNameOf(profile, group),
+                        ),
+                        alsoFrom: const <String>[],
+                      ),
+                ],
+                (row) => row.facts!,
+                order,
+              ),
+              sources,
+              (row) => row.facts?.addonName ?? '',
+            ),
+            (row) => row.facts!,
           )
-        : const <_SourceRow>[];
+        : const <StreamSection<_SourceRow>>[];
+    final openSections = _visibleOpenSections(sections);
     // The grouped layout: each addon's own ranking, with the addon's own
     // repeats collapsed. A source two addons both offered stays in both
     // groups -- the groups are the point of this layout -- and each row
@@ -950,9 +989,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final autofocusAt = isTv && lastUsed == null
         ? _firstPlayable(grouped)
         : null;
-    final flatAutofocusAt = isTv && lastUsed == null && isFlat
-        ? flatStreams.indexWhere((row) => row.stream.isPlayable)
-        : -1;
+    // The first playable stream of an *open* section: a collapsed one has
+    // nothing on screen to focus.
+    final sectionAutofocusAt = isTv && lastUsed == null && isFlat
+        ? _firstPlayableSection(sections, openSections)
+        : null;
     // The shortcut is the same source as one of the rows below, so it is
     // handed the same merged trackers; nothing else about it changes.
     final lastUsedStream = lastUsed == null
@@ -1005,24 +1046,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           ),
         ),
       if (isFlat)
-        SliverList.builder(
-          itemCount: flatStreams.length,
-          itemBuilder: (context, index) {
-            final row = flatStreams[index];
-            return _StreamTile(
-              stream: row.stream,
-              facts: row.facts,
-              alsoFrom: row.alsoFrom,
-              highlighted:
-                  lastUsed != null && row.stream.isSameSource(lastUsed.$2),
-              onTap: row.stream.isPlayable
-                  ? () => _play(state, row.group, row.stream)
-                  : null,
-              autofocus: index == flatAutofocusAt,
-              downloads: downloads?.forGroup(row.group),
-            );
-          },
-        )
+        for (final (index, section) in sections.indexed)
+          _ResolutionSectionSliver(
+            section: section,
+            expanded: openSections.contains(section.resolution),
+            onExpand: () => _toggleSection(section.resolution, openSections),
+            lastUsed: lastUsed?.$2,
+            onPlay: (row) => _play(state, row.group, row.stream),
+            autofocusIndex: sectionAutofocusAt?.$1 == index
+                ? sectionAutofocusAt!.$2
+                : null,
+            downloads: downloads,
+          )
       else ...[
         for (final (index, entry) in grouped.indexed)
           _StreamGroupSliver(
@@ -1061,6 +1096,36 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// Puts the sources list in one layout or the other, for everything the
   /// app shows from now on: the preference is global, not this title's.
   void _setFlatStreams(bool value) => _prefs?.setStreamsFlat(value);
+
+  /// Which of [sections] are drawn open, resolving [_openSections] against
+  /// what this title actually offers (see that field for the three cases).
+  Set<StreamResolution?> _visibleOpenSections(
+    List<StreamSection<_SourceRow>> sections,
+  ) {
+    final best = {if (sections.isNotEmpty) sections.first.resolution};
+    final chosen = _openSections;
+    if (chosen == null) return best;
+    if (chosen.isEmpty) return const {};
+    final offered = {
+      for (final section in sections)
+        if (chosen.contains(section.resolution)) section.resolution,
+    };
+    return offered.isEmpty ? best : offered;
+  }
+
+  /// Opens or closes one section, building on [open] -- what is on screen
+  /// right now -- so the first press after a default acts on what the user
+  /// can see rather than on an empty memory.
+  void _toggleSection(
+    StreamResolution? resolution,
+    Set<StreamResolution?> open,
+  ) => setState(() {
+    _openSections = {
+      for (final section in open)
+        if (section != resolution) section,
+      if (!open.contains(resolution)) resolution,
+    };
+  });
 
   /// What an addon is called in a list that has lost its headings: the
   /// installed addon's own name, else the host its manifest URL names --
@@ -1109,6 +1174,21 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             alsoFrom: sources.alsoFrom(addonOf(row), row.stream),
           ),
     ];
+  }
+
+  /// The (section, row) indices of the first playable stream in an open
+  /// section, if any: a collapsed section is not on screen to be focused.
+  static (int, int)? _firstPlayableSection(
+    List<StreamSection<_SourceRow>> sections,
+    Set<StreamResolution?> open,
+  ) {
+    for (final (s, section) in sections.indexed) {
+      if (!open.contains(section.resolution)) continue;
+      for (final (r, row) in section.rows.indexed) {
+        if (row.stream.isPlayable) return (s, r);
+      }
+    }
+    return null;
   }
 
   /// The (group, row) indices of the first playable stream, if any.
@@ -1641,8 +1721,17 @@ class _NoStreamsNotice extends StatelessWidget {
 const String kLookingForStreams = 'Looking for streams…';
 
 /// What the toggle in the section header offers next, as its tooltip.
-const String kFlatStreamsTooltip = 'Sort all streams together';
+const String kFlatStreamsTooltip = 'Group streams by resolution';
 const String kGroupedStreamsTooltip = 'Group streams by addon';
+
+/// The key on one resolution section's header.
+///
+/// A test (and anything else looking for a heading) has to be able to say
+/// *which* section it means, and the label alone cannot: a 1080p row badges
+/// itself `1080p` too, so the text is on the heading and on every row under
+/// it.
+Key streamSectionKey(StreamResolution? resolution) =>
+    ValueKey('streams-section-${resolution?.label ?? 'unknown'}');
 
 class _StreamsHeader extends StatelessWidget {
   const _StreamsHeader({
@@ -1820,6 +1909,87 @@ final class _StreamDownloads {
     if (group == null || stream.kind != StreamKind.torrent) return null;
     if (isPending(stream)) return null;
     return () => onDownload(group, stream);
+  }
+}
+
+/// One resolution's worth of the sources list: a header that says what it
+/// holds whether or not it is open, and the streams under it when it is.
+///
+/// A collapsed header is not a placeholder: it says how many streams are
+/// folded away and the best swarm among them ([StreamSection.summary]), so
+/// a 2160p section with one dead torrent in it is told from a healthy one
+/// without opening either. It is an ordinary [ListTile] with an `onTap`,
+/// which is what makes a remote able to reach it and open it: a television
+/// walks the pane by focusable nodes, and a header that could not take
+/// focus would put every section below the first one out of reach.
+class _ResolutionSectionSliver extends StatelessWidget {
+  const _ResolutionSectionSliver({
+    required this.section,
+    required this.expanded,
+    required this.onExpand,
+    required this.lastUsed,
+    required this.onPlay,
+    this.autofocusIndex,
+    this.downloads,
+  });
+
+  final StreamSection<_SourceRow> section;
+  final bool expanded;
+  final VoidCallback onExpand;
+
+  /// The stream pinned as "Continue with last source", highlighted here too.
+  final StreamInfo? lastUsed;
+  final ValueChanged<_SourceRow> onPlay;
+
+  /// The stream (by index) where TV focus starts; null for none here.
+  final int? autofocusIndex;
+
+  /// The downloads, when there is a client above this screen. Bound to each
+  /// row's own group, since a pin records the request its stream came from.
+  final _StreamDownloads? downloads;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: ListTile(
+            key: streamSectionKey(section.resolution),
+            leading: Icon(
+              expanded ? Icons.expand_more : Icons.chevron_right,
+              color: theme.colorScheme.primary,
+            ),
+            title: Text(
+              section.label,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            subtitle: Text(section.summary),
+            onTap: onExpand,
+          ),
+        ),
+        if (expanded)
+          SliverList.builder(
+            itemCount: section.rows.length,
+            itemBuilder: (context, index) {
+              final row = section.rows[index];
+              final lastUsed = this.lastUsed;
+              return _StreamTile(
+                stream: row.stream,
+                facts: row.facts,
+                alsoFrom: row.alsoFrom,
+                highlighted:
+                    lastUsed != null && row.stream.isSameSource(lastUsed),
+                onTap: row.stream.isPlayable ? () => onPlay(row) : null,
+                autofocus: index == autofocusIndex,
+                downloads: downloads?.forGroup(row.group),
+              );
+            },
+          ),
+      ],
+    );
   }
 }
 

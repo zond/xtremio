@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/details/stream_facts.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -52,9 +53,10 @@ Map<String, dynamic> failedGroup(String base) => streamGroup(base, {
 /// the addons: alpha answers with its worst release first, beta answers
 /// with the one nothing can be read from last.
 ///
-/// Grouped, that is exactly what shows. Flat, the order is 2160p, 1080p,
-/// 720p, then the unknown — and the unknown is last because unknown
-/// resolutions are a bucket of their own, not because it is worst.
+/// Grouped, that is exactly what shows. In sections it is one stream per
+/// section: 2160p, 1080p, 720p, then the unknown — which is last because
+/// an unreadable resolution is a bucket of its own, not because it is
+/// worst.
 List<Map<String, dynamic>> twoAddons() => [
   ready(alphaUrl, [
     {
@@ -78,7 +80,58 @@ List<Map<String, dynamic>> twoAddons() => [
   ]),
 ];
 
+/// One addon, five releases of the same resolution, so what decides the
+/// rows is the order inside the section and nothing else. The ratios are
+/// 41 MB a peer for the biggest file, 205 for the middle one and 350 for
+/// the smallest, so peers per megabyte, largest first and most peers each
+/// give a different answer.
+List<Map<String, dynamic>> oneResolution() => [
+  ready(alphaUrl, [
+    {
+      'infoHash': 'a' * 40,
+      'name': 'Middle 1080p',
+      'description': '👤 10 💾 2 GB',
+    },
+    {
+      'infoHash': 'b' * 40,
+      'name': 'Fat 1080p',
+      'description': '👤 200 💾 8 GB',
+    },
+    {
+      'infoHash': 'c' * 40,
+      'name': 'Lonely 1080p',
+      'description': '👤 2 💾 700 MB',
+    },
+    {'infoHash': 'd' * 40, 'name': 'Sizeless 1080p', 'description': '👤 90'},
+    {'infoHash': 'e' * 40, 'name': 'Peerless 1080p', 'description': '💾 3 GB'},
+  ]),
+];
+
 double topOf(String text) => _tester!.getTopLeft(find.text(text)).dy;
+
+/// Opens or closes the section headed [resolution]. Found by its key
+/// rather than by its heading, because a 1080p row badges itself `1080p`
+/// too and the text alone would match both.
+Future<void> toggleSection(
+  WidgetTester tester,
+  StreamResolution? resolution,
+) async {
+  await tester.tap(find.byKey(streamSectionKey(resolution)));
+  await tester.pumpAndSettle();
+}
+
+/// Where the header of [resolution] is, which is not `topOf` its label: a
+/// row inside the section badges the same text.
+double topOfSection(WidgetTester tester, StreamResolution? resolution) =>
+    tester.getTopLeft(find.byKey(streamSectionKey(resolution))).dy;
+
+/// What the header of [resolution] says it is holding.
+String sectionSummary(WidgetTester tester, StreamResolution? resolution) {
+  final header = tester.widget<ListTile>(
+    find.byKey(streamSectionKey(resolution)),
+  );
+  return (header.subtitle! as Text).data!;
+}
 
 /// The affordance with [tooltip] on the flat row titled [title].
 Finder onRow(WidgetTester tester, String title, String tooltip) =>
@@ -159,30 +212,90 @@ void main() {
       expect(find.byTooltip(kGroupedStreamsTooltip), findsNothing);
     });
 
-    testWidgets('flips to one flat list, sorted across every addon', (
-      tester,
-    ) async {
+    testWidgets('flips to a section per resolution, highest first, with the '
+        'best one already open', (tester) async {
       useWideViewport(tester);
       await tester.pumpWidget(harness(coreWith(twoAddons())));
       await tester.pumpAndSettle();
 
       await flip(tester, kFlatStreamsTooltip);
 
-      // Resolution first, highest first; the one nothing could be read
-      // from is last, as its own bucket rather than as a zero.
+      // A heading per resolution, highest first, and the one nothing could
+      // be read from last -- said to be unknown rather than guessed at.
+      expect(
+        topOfSection(tester, StreamResolution.uhd2160),
+        lessThan(topOfSection(tester, StreamResolution.fhd1080)),
+      );
+      expect(
+        topOfSection(tester, StreamResolution.fhd1080),
+        lessThan(topOfSection(tester, StreamResolution.hd720)),
+      );
+      expect(
+        topOfSection(tester, StreamResolution.hd720),
+        lessThan(topOfSection(tester, null)),
+      );
+      expect(find.text('Unknown resolution'), findsOneWidget);
+
+      // Only the best section is open, so its stream is one tap away and
+      // the rest are folded up rather than scrolled past.
+      expect(find.text('Alpha 2160p'), findsOneWidget);
+      expect(find.text('Beta 1080p'), findsNothing);
+      expect(find.text('Alpha 720p'), findsNothing);
+      expect(find.text('Beta mystery release'), findsNothing);
+      // The open row names its own addon, as it has no addon heading now.
+      expect(find.text('alpha.example'), findsOneWidget);
+
+      // Opening another section leaves the first one open too.
+      await toggleSection(tester, StreamResolution.fhd1080);
+      expect(find.text('Alpha 2160p'), findsOneWidget);
+      expect(find.text('Beta 1080p'), findsOneWidget);
       expect(topOf('Alpha 2160p'), lessThan(topOf('Beta 1080p')));
-      expect(topOf('Beta 1080p'), lessThan(topOf('Alpha 720p')));
-      expect(topOf('Alpha 720p'), lessThan(topOf('Beta mystery release')));
+      // And closing one closes only it.
+      await toggleSection(tester, StreamResolution.uhd2160);
+      expect(find.text('Alpha 2160p'), findsNothing);
+      expect(find.text('Beta 1080p'), findsOneWidget);
 
-      // No headings any more: each row names its own addon instead.
-      expect(find.text('alpha.example'), findsNWidgets(2));
-      expect(find.text('beta.example'), findsNWidgets(2));
-
-      // And the toggle now offers the way back.
+      // The toggle now offers the way back, and grouping is untouched.
       expect(find.byTooltip(kGroupedStreamsTooltip), findsOneWidget);
       await flip(tester, kGroupedStreamsTooltip);
       expect(topOf('Alpha 720p'), lessThan(topOf('Alpha 2160p')));
       expect(find.text('alpha.example'), findsOneWidget);
+    });
+
+    testWidgets('a collapsed header says how many streams and how healthy', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final streams = [
+        ready(alphaUrl, [
+          {'infoHash': 'a' * 40, 'name': '2160p one', 'description': '👤 2'},
+          {'infoHash': 'b' * 40, 'name': '2160p two', 'description': '👤 137'},
+          {'infoHash': 'c' * 40, 'name': '2160p three'},
+          {'infoHash': 'd' * 40, 'name': '1080p only', 'description': '👤 1'},
+          {'infoHash': 'e' * 40, 'name': '720p quiet'},
+        ]),
+      ];
+      await tester.pumpWidget(harness(coreWith(streams)));
+      await tester.pumpAndSettle();
+      await flip(tester, kFlatStreamsTooltip);
+
+      // Closed, a section still says what is in it: how many streams, and
+      // the best swarm among them, which is what tells an empty-looking
+      // 2160p from a healthy one without opening either.
+      expect(
+        sectionSummary(tester, StreamResolution.uhd2160),
+        '3 streams · best 137 seeders',
+      );
+      expect(
+        sectionSummary(tester, StreamResolution.fhd1080),
+        '1 stream · best 1 seeder',
+      );
+      // Nobody said, which is not the same as nobody being there.
+      expect(
+        sectionSummary(tester, StreamResolution.hd720),
+        '1 stream · seeders unknown',
+      );
+      expect(find.text('1080p only'), findsNothing);
     });
 
     testWidgets('a row badges only what is known of its stream', (
@@ -192,6 +305,8 @@ void main() {
       await tester.pumpWidget(harness(coreWith(twoAddons())));
       await tester.pumpAndSettle();
       await flip(tester, kFlatStreamsTooltip);
+      await toggleSection(tester, StreamResolution.fhd1080);
+      await toggleSection(tester, null);
 
       Finder badgesOf(String title) => find.descendant(
         of: find.widgetWithText(ListTile, title),
@@ -225,6 +340,145 @@ void main() {
     });
   });
 
+  group('the order inside a section', () {
+    /// The rows of the one section, top to bottom.
+    List<String> rows(WidgetTester tester) {
+      final titles = [
+        for (final name in [
+          'Fat 1080p',
+          'Middle 1080p',
+          'Lonely 1080p',
+          'Sizeless 1080p',
+          'Peerless 1080p',
+        ])
+          (name, topOf(name)),
+      ]..sort((a, b) => a.$2.compareTo(b.$2));
+      return [for (final row in titles) row.$1];
+    }
+
+    testWidgets('is peers per megabyte, which the biggest file can win', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(harness(coreWith(oneResolution())));
+      await tester.pumpAndSettle();
+      await flip(tester, kFlatStreamsTooltip);
+
+      // 8 GB for 200 peers is 41 MB a peer: the fattest file on the list
+      // is the one likeliest to arrive faster than it is watched, which
+      // neither "largest" nor "most peers" alone would have told us --
+      // most peers would have put the 90-peer stream of unknown size
+      // second, and it is last but one here.
+      expect(rows(tester), [
+        'Fat 1080p',
+        'Middle 1080p',
+        'Lonely 1080p',
+        'Sizeless 1080p',
+        'Peerless 1080p',
+      ]);
+    });
+
+    testWidgets('an unknown size or peer count sorts after every ranked '
+        'stream, and is not drawn as a zero', (tester) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(harness(coreWith(oneResolution())));
+      await tester.pumpAndSettle();
+      await flip(tester, kFlatStreamsTooltip);
+
+      // Behind even the worst ratio on the list (350 MB a peer)...
+      expect(topOf('Lonely 1080p'), lessThan(topOf('Sizeless 1080p')));
+      expect(topOf('Lonely 1080p'), lessThan(topOf('Peerless 1080p')));
+      // ...and between themselves, in the order the addon gave them.
+      expect(topOf('Sizeless 1080p'), lessThan(topOf('Peerless 1080p')));
+
+      // What is unknown is not badged at all: no `0 B`, no `0 seeders`.
+      List<String> badges(String title) => [
+        for (final text in tester.widgetList<Text>(
+          find.descendant(
+            of: find.widgetWithText(ListTile, title),
+            matching: find.byType(Text),
+          ),
+        ))
+          text.data ?? '',
+      ];
+      expect(badges('Sizeless 1080p'), [
+        'Sizeless 1080p',
+        'alpha.example',
+        '1080p',
+        '90 seeders',
+      ]);
+      expect(badges('Peerless 1080p'), [
+        'Peerless 1080p',
+        'alpha.example',
+        '1080p',
+        '3 GB',
+      ]);
+      // And every row that knows them shows both, so an outlier encode is
+      // visible without opening anything.
+      expect(badges('Fat 1080p'), contains('8 GB'));
+      expect(badges('Fat 1080p'), contains('200 seeders'));
+    });
+  });
+
+  group('the section the user opened', () {
+    testWidgets('is the one still open when the streams are rebuilt', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = coreWith(twoAddons());
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+      await flip(tester, kFlatStreamsTooltip);
+
+      // Open 720p and close the one that was open by default.
+      await toggleSection(tester, StreamResolution.hd720);
+      await toggleSection(tester, StreamResolution.uhd2160);
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      expect(find.text('Alpha 2160p'), findsNothing);
+
+      // The engine answers again -- another episode, a late addon -- and
+      // the list is built from scratch.
+      core.setState(
+        CoreField.metaDetails,
+        loadMetaDetailsFixture()..['streams'] = twoAddons(),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      expect(find.text('Alpha 2160p'), findsNothing);
+    });
+
+    testWidgets('falls back to the best one when this title has nothing of '
+        'that resolution', (tester) async {
+      useWideViewport(tester);
+      final core = coreWith(twoAddons());
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+      await flip(tester, kFlatStreamsTooltip);
+      await toggleSection(tester, StreamResolution.hd720);
+      await toggleSection(tester, StreamResolution.uhd2160);
+
+      // Streams with no 720p in them at all: rather than a list with
+      // everything folded up, the best section is open again.
+      core.setState(
+        CoreField.metaDetails,
+        loadMetaDetailsFixture()
+          ..['streams'] = [
+            ready(alphaUrl, [
+              {
+                'infoHash': 'f' * 40,
+                'name': 'Only 1080p',
+                'description': '👤 4',
+              },
+            ]),
+          ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Only 1080p'), findsOneWidget);
+    });
+  });
+
   group('the choice sticks', () {
     testWidgets('across another title, on the app-wide value', (tester) async {
       useWideViewport(tester);
@@ -243,7 +497,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip(kGroupedStreamsTooltip), findsOneWidget);
-      expect(topOf('Alpha 2160p'), lessThan(topOf('Alpha 720p')));
+      expect(find.text('Alpha 2160p'), findsOneWidget);
+      expect(find.text('Alpha 720p'), findsNothing);
     });
 
     testWidgets('across a fresh app start, through the stored file', (
@@ -268,8 +523,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip(kGroupedStreamsTooltip), findsOneWidget);
-      expect(topOf('Alpha 2160p'), lessThan(topOf('Alpha 720p')));
-      expect(find.text('alpha.example'), findsNWidgets(2));
+      expect(find.text('Alpha 2160p'), findsOneWidget);
+      expect(find.text('Alpha 720p'), findsNothing);
+      // The open row names its addon; the closed sections list nothing.
+      expect(find.text('alpha.example'), findsOneWidget);
     });
 
     testWidgets('a load that lands after the screen is up still reaches it', (
@@ -286,7 +543,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip(kGroupedStreamsTooltip), findsOneWidget);
-      expect(topOf('Alpha 2160p'), lessThan(topOf('Alpha 720p')));
+      expect(find.text('Alpha 2160p'), findsOneWidget);
+      expect(find.text('Alpha 720p'), findsNothing);
     });
 
     testWidgets('with no scope above, the screen still toggles', (
@@ -308,11 +566,17 @@ void main() {
       await tester.pumpAndSettle();
 
       await flip(tester, kFlatStreamsTooltip);
-      expect(topOf('Alpha 2160p'), lessThan(topOf('Alpha 720p')));
+      expect(find.text('Alpha 2160p'), findsOneWidget);
+      await toggleSection(tester, StreamResolution.hd720);
+      expect(
+        topOf('Alpha 2160p'),
+        lessThan(topOf('Alpha 720p')),
+        reason: 'the sections are still in resolution order',
+      );
     });
   });
 
-  group('flat keeps everything around the streams', () {
+  group('sections keep everything around the streams', () {
     testWidgets('the last-used shortcut, the empty summary and the failures', (
       tester,
     ) async {
@@ -347,11 +611,12 @@ void main() {
         topOf('Continue with last source'),
         lessThan(topOf('Alpha 2160p')),
       );
-      // The addon that had nothing, and the one that failed, both below.
+      // The addon that had nothing, and the one that failed, both below --
+      // below the last section, open or not.
       expect(find.text('1 addon had nothing for this title'), findsOneWidget);
       expect(
         topOf('1 addon had nothing for this title'),
-        greaterThan(topOf('Beta mystery release')),
+        greaterThan(topOfSection(tester, null)),
       );
       expect(find.text('mirror.example'), findsOneWidget);
       expect(find.text('Failed to fetch: 404 Not Found'), findsOneWidget);
@@ -370,7 +635,7 @@ void main() {
     });
   });
 
-  group('a flat row is a stream tile like any other', () {
+  group('a row in a section is a stream tile like any other', () {
     testWidgets('it plays, from the addon request it came from', (
       tester,
     ) async {
@@ -382,6 +647,7 @@ void main() {
       await tester.pumpWidget(harness(core));
       await tester.pumpAndSettle();
       await flip(tester, kFlatStreamsTooltip);
+      await toggleSection(tester, StreamResolution.fhd1080);
 
       await tester.tap(find.text('Beta 1080p'));
       await tester.pumpAndSettle();
@@ -412,6 +678,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await flip(tester, kFlatStreamsTooltip);
+      await toggleSection(tester, StreamResolution.fhd1080);
 
       expect(onRow(tester, 'Alpha 2160p', kDownloadTooltip), findsOneWidget);
       await tester.tap(onRow(tester, 'Alpha 2160p', kDownloadTooltip));
@@ -468,6 +735,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       await flip(tester, kFlatStreamsTooltip);
+      await toggleSection(tester, StreamResolution.fhd1080);
+      await toggleSection(tester, null);
 
       expect(
         onRow(tester, 'Alpha 2160p', kDownloadDeleteTooltip),

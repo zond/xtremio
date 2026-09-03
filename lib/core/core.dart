@@ -32,3 +32,4 @@ export 'state/remote_addons.dart';
 export 'state/server_storage.dart';
 export 'state/stream.dart';
 export 'state/stream_hints.dart';
+export 'stream_order.dart';
