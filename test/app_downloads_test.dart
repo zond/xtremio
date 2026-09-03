@@ -66,4 +66,82 @@ void main() {
     // a closed one; a live client would try to open a sink over FFI here.
     await expectLater(client.updates, emitsDone);
   });
+
+  group('where the downloads go', () {
+    testWidgets('a first run points the server at the platform default', (
+      tester,
+    ) async {
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          defaultDestination: () async => '/sdcard/files/downloads',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(downloads.directories, ['/sdcard/files/downloads']);
+    });
+
+    testWidgets('a destination already chosen is left where it is', (
+      tester,
+    ) async {
+      final downloads = FakeDownloadsClient()
+        ..settings = const {'downloadsDir': '/storage/ABCD-1234/downloads'};
+      addTearDown(downloads.dispose);
+
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          defaultDestination: () async => '/sdcard/files/downloads',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(downloads.directories, isEmpty);
+    });
+
+    testWidgets('a platform with no default of its own asks the server '
+        'nothing', (tester) async {
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      final calls = <String>[];
+      downloads.callLog = calls;
+
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          defaultDestination: () async => null,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(downloads.directories, isEmpty);
+      expect(calls, isNot(contains('downloads.directory')));
+    });
+
+    testWidgets('a server that cannot be asked changes nothing', (
+      tester,
+    ) async {
+      final downloads = FakeDownloadsClient()
+        ..directoryError = StateError('no server');
+      addTearDown(downloads.dispose);
+
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          defaultDestination: () async => '/sdcard/files/downloads',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(downloads.directories, isEmpty);
+    });
+  });
 }

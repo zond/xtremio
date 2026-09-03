@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'core/core.dart';
+import 'features/downloads/destination.dart';
 import 'features/player/playback_engine.dart';
 import 'shell/device_profile.dart';
 import 'shell/root_shell.dart';
@@ -42,7 +43,10 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
 /// [RustDownloadsClient] unless [downloads] hands it one, and disposes only
-/// the one it built itself.
+/// the one it built itself. Start-up also settles where the files go, once:
+/// on a platform with a default of its own ([defaultDestination]) and no
+/// destination configured yet, the server is pointed there
+/// ([applyDefaultDestination]).
 class XtremioApp extends StatefulWidget {
   const XtremioApp({
     super.key,
@@ -50,6 +54,7 @@ class XtremioApp extends StatefulWidget {
     this.initInfo,
     this.engineBuilder,
     this.downloads,
+    this.defaultDestination = platformDefaultDestination,
     this.device = DeviceProfile.fallback,
   });
 
@@ -59,6 +64,12 @@ class XtremioApp extends StatefulWidget {
   /// The offline downloads, for tests that want a fake. Read once, when the
   /// app comes up: handing over a different client later changes nothing.
   final DownloadsClient? downloads;
+
+  /// Where the downloads go on a first run: on Android the app's external
+  /// files directory, which the OS does not purge, and null -- leave it to
+  /// the server -- everywhere else. A destination already set is never
+  /// overridden.
+  final DownloadDestinationResolver defaultDestination;
 
   /// The device the app runs on; tests put the app on a TV through it.
   final DeviceProfile device;
@@ -105,6 +116,9 @@ class _XtremioAppState extends State<XtremioApp> {
       onPause: _onAway,
     );
     _events = widget.core.events.listen(_onEvent);
+    unawaited(
+      applyDefaultDestination(_downloads, resolve: widget.defaultDestination),
+    );
     _startupHousekeeping();
   }
 

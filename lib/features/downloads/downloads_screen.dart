@@ -1,11 +1,9 @@
-import 'dart:io' show Directory, Platform;
-
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../core/core.dart';
 import '../../widgets/poster_tile.dart';
 import '../player/player_screen.dart';
+import 'destination.dart';
 import 'download_labels.dart';
 import 'downloads_controller.dart';
 import 'offline_play.dart';
@@ -24,25 +22,16 @@ import 'offline_play.dart';
 /// network in the way, and falls back to streaming -- saying so -- when the
 /// file is not there any more.
 class DownloadsScreen extends StatefulWidget {
-  const DownloadsScreen({super.key, this.destinations = platformDestinations});
+  const DownloadsScreen({
+    super.key,
+    this.destinations = platformDownloadDestinations,
+  });
 
   /// The directories the destination control offers to choose between. On
   /// Android those are the app's own external storage directories, an SD
   /// card among them; everywhere else there are none to enumerate and a
   /// path is typed instead.
   final Future<List<String>> Function() destinations;
-
-  /// What the destination control offers on this platform.
-  static Future<List<String>> platformDestinations() async {
-    if (!Platform.isAndroid) return const [];
-    final roots = await getExternalStorageDirectories();
-    // A subfolder of the app's own external directory: no permission is
-    // needed for it, and the torrent folders do not land among whatever
-    // else the app keeps there.
-    return [
-      for (final root in roots ?? const <Directory>[]) '${root.path}/downloads',
-    ];
-  }
 
   /// What is on the device for these downloads. A complete one has fetched
   /// its whole length, so this is the same sum either way.
