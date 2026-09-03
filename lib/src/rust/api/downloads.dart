@@ -13,8 +13,13 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// "fileIdx"?,"meta"?,"streamRequest"?,"metaRequest"?}`; `stream` is the
 /// addon's raw stream JSON and must be a torrent (`infoHash`), `fileIdx`
 /// overrides the stream's own index for a caller that resolved the episode
-/// itself. The entry is keyed `"{metaId}:{videoId}"`, and adding the same
-/// pair again re-pins it while keeping its `createdAt`/`lastPlayedAt`.
+/// itself. A stream with no `fileIdx`, or a negative one (the `-1` the
+/// player's URL carries), downloads the file that URL would play: the
+/// `fileMustInclude` match, else the largest media file, asked of the
+/// server. The entry is keyed `"{metaId}:{videoId}"`, and adding the same
+/// pair again re-pins it while keeping its `createdAt`/`lastPlayedAt` —
+/// releasing the pin (and the bytes) of the download it replaces, unless
+/// another entry names that same file.
 ///
 /// Answers `{"ok":true,"key":…,"entry":{…}}`, or, when the server refuses
 /// the pin, `{"ok":false,"key":…,"error":{"kind":…,"message":…}}` —
@@ -46,7 +51,9 @@ Future<String> downloadsRemove({
 /// Every download as `{"version":1,"items":{"{metaId}:{videoId}":{…}}}`,
 /// with live progress (`downloaded`, `size`, `path`, `state`, `error`)
 /// merged in from the server. When the server cannot be asked, what is on
-/// disk is answered instead, so the list still renders offline.
+/// disk is answered instead, so the list still renders offline. An entry
+/// this build cannot parse stays in the file but is left out here — the
+/// caller could not read it either.
 Future<String> downloadsList() =>
     RustLib.instance.api.crateApiDownloadsDownloadsList();
 
