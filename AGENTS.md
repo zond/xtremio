@@ -83,10 +83,12 @@ Only libmpv fetches from it (the open media routes). Everything else the
 server can answer — settings, a torrent's `stats.json`, creating an
 engine — is a control route that wants the token, and the app reaches it
 in one of two ways: stremio-core's `StreamingServer` model through
-`Env::fetch` (which adds the header), or an FFI function in
-`rust/src/api/server.rs` over `ServerHandle`'s library API
-(`server_torrent_stats`, `server_settings`, `server_update_settings`).
-A new need goes there, as a Rust function returning JSON, not as a
+`Env::fetch` (which adds the header), or an FFI function over
+`ServerHandle`'s library API — `rust/src/api/server.rs`
+(`server_torrent_stats`, `server_settings`, `server_update_settings`) and
+`rust/src/api/downloads.rs` (`downloads_add`, `downloads_remove`,
+`downloads_list`, `downloads_set_dir`, `downloads_events`). A new need
+goes in one of those, as a Rust function returning JSON, not as a
 `dart:io` `HttpClient` call.
 
 ## Use cheaper models for mechanical work
