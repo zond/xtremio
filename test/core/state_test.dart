@@ -295,6 +295,30 @@ void main() {
       expect(hinted.strip(null), isNull);
     });
 
+    test('strips its own markers and leaves every other emoji whole', () {
+      final hints = StreamHints.parse('x');
+      // The marker class matches characters, not code units. Read as code
+      // units it is the set of the markers' *halves*, and every other
+      // astral emoji sharing a half with one of them -- 🎥 and 🔥 begin
+      // with the same \uD83D as 👤, a flag with the \uD83C of 🎬 -- comes
+      // out decapitated: an orphaned surrogate that Flutter's text layout
+      // refuses outright.
+      final stripped = hints.strip(
+        'Movie.2019 | 👤 45 💾 2.18 GB ⚙️ 🇬🇧 🎥 🔥',
+      )!;
+      expect(stripped, 'Movie.2019 | 🇬🇧 🎥 🔥');
+      // Nothing half a character is left in it.
+      for (var i = 0; i < stripped.length; i++) {
+        final unit = stripped.codeUnitAt(i);
+        if (unit >= 0xD800 && unit <= 0xDBFF) {
+          expect(stripped.codeUnitAt(i + 1), inInclusiveRange(0xDC00, 0xDFFF));
+          i++;
+        } else {
+          expect(unit, isNot(inInclusiveRange(0xDC00, 0xDFFF)));
+        }
+      }
+    });
+
     test('same-source streams match on their discriminating keys', () {
       final torrent = StreamInfo({'infoHash': 'a', 'fileIdx': 1});
       expect(

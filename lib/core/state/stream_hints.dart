@@ -1,3 +1,4 @@
+import '../well_formed_text.dart';
 import 'stream.dart';
 
 /// Quality hints addons bury in a stream's free-text `name` / `description`
@@ -63,16 +64,33 @@ final class StreamHints {
   /// (resolutions stay: they are usually part of a filename), or null when
   /// nothing readable is left, so a `💾 1.51 GB` description does not
   /// repeat the size chip.
+  ///
+  /// The marker class is `unicode: true` and has to be. Without it a Dart
+  /// character class matches UTF-16 *code units*, so `[💾👤📺🎬⚙️]` is not
+  /// five emoji but the set of their halves -- and every other astral
+  /// emoji in the line that begins with one of those halves (`🎥`, `🔥`,
+  /// every flag, whose halves are `\uD83C`) loses its head, leaving an
+  /// orphan the text engine refuses to lay out. That was the release name
+  /// that rendered as a replacement character on a phone.
+  ///
+  /// [wellFormedText] over the result is the belt to that braces: what
+  /// arrives here has already been through it ([StreamInfo.description]),
+  /// so it is this method that could break it again.
   String? strip(String? text) {
     if (text == null) return null;
     final stripped = text
         .replaceAll(_seeders, '')
         .replaceAll(_size, '')
-        .replaceAll(RegExp(r'[💾👤📺🎬⚙️]'), '')
+        .replaceAll(_markers, '')
         .replaceAll(RegExp(r'[ \t]+'), ' ')
         .replaceAllMapped(RegExp(r'(^|\n)[ |·\-,]+'), (m) => m.group(1)!)
         .replaceAll(RegExp(r'\n\s*\n'), '\n')
         .trim();
-    return stripped.isEmpty ? null : stripped;
+    return stripped.isEmpty ? null : wellFormedText(stripped);
   }
+
+  /// The decorations addons put in front of the numbers, as characters and
+  /// not as code units (see [strip]). `⚙️` is two code points, so its
+  /// variation selector is a member of the class in its own right.
+  static final RegExp _markers = RegExp(r'[💾👤📺🎬⚙️]', unicode: true);
 }
