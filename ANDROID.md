@@ -138,8 +138,8 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
 - **Uninstall takes the downloads with it**, as it does for anything in the
   app's own directories, and the system does *not* purge them the way it
   may purge `getCacheDir()`. "Clear storage" in the app info screen does
-  delete them; the registry (`<files>/downloads.json`) goes at the same
-  time, so the two stay consistent.
+  delete them; the registry (`<files>/core/downloads.json`) goes at the
+  same time, so the two stay consistent.
 - **Downloads only advance while the app is running.** There is no
   foreground service yet, so once Android freezes or kills the process the
   torrent stops with it; a notification and a `FOREGROUND_SERVICE_DATA_SYNC`
