@@ -117,6 +117,16 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
   `adb shell run-as com.zond.xtremio ls …` is not needed for it: the
   external files directory is world-readable over adb
   (`adb shell ls /sdcard/Android/data/com.zond.xtremio/files/downloads`).
+
+  *Once* means once ever, not once per launch: the registry records that
+  the question was answered (`destinationSettled` in
+  `<files>/core/downloads.json`, written by `downloads_set_dir`), and
+  start-up reads that rather than "is `downloadsDir` null?". Null is an
+  answer too — it is what the Downloads screen writes for "Default (with
+  the cache)", and what the server writes for itself when a persisted
+  destination is unusable at boot, an SD card that is not in the device
+  being the case to expect. Neither is quietly replaced on the next
+  launch.
 - **No permission is involved.** An app's own external files directory
   needs none on `minSdk` 24 (`getExternalFilesDir`, which is what
   path_provider's `getExternalStorageDirectory()` returns), and it must

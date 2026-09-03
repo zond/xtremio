@@ -261,10 +261,16 @@ connection.
   `downloads_set_dir`, which is `POST /settings` with its validation (the
   path must be absolute, creatable, writable and not at or above a cache
   root). Everywhere else nothing is written and the server keeps deciding.
-  A destination already set, by an earlier launch or by hand, is never
-  overridden, and the Downloads screen's picker offers the same
-  directories (`getExternalStorageDirectories()`, so an SD card is among
-  them) plus a typed path off Android. With a destination set, each pin
+  An answer already given is never overridden: the registry's
+  `destinationSettled` (set by `downloads_set_dir`, and never unset) is
+  what start-up asks, because a null `downloadsDir` is not only the unset
+  state -- it is also "put them back with the cache" chosen by hand, and
+  what the server writes for itself when it clears a destination it cannot
+  use at boot (an SD card that is not in the device). A `downloadsDir` set
+  by a build from before the flag counts as answered too. The Downloads
+  screen's picker offers the same directories
+  (`getExternalStorageDirectories()`, so an SD card is among them) plus a
+  typed path off Android. With a destination set, each pin
   gets a folder of its own (`<downloadsDir>/<infoHash>/`), and only pins
   taken from then on move there: the server relocates an already-managed
   torrent when it is pinned again, which for an unfinished download is
