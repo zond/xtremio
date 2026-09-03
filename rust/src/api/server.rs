@@ -147,6 +147,29 @@ pub fn server_clean_cache_now() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::server::clean_cache_now()?).map_err(Into::into))
 }
 
+/// The mainline DHT's status on this host, as JSON (`DhtStatus`: `enabled`,
+/// `nodes`, `nodesV6`, `everBootstrapped`) -- exactly the `dht` key of
+/// `GET /stats.json` (`ServerHandle::dht_status`).
+///
+/// This is information, not a failure. The DHT is a peer *source*, not a
+/// requirement: a torrent with working trackers downloads fine without one,
+/// and a network that drops the DHT's UDP (carrier-grade NAT, a firewalled
+/// mobile APN, a captive portal) leaves `everBootstrapped` false for the
+/// whole session with nothing actually wrong. The one case worth telling a
+/// curious person about is a stream with no trackers on a network where the
+/// DHT never came up -- that genuinely may not find peers. `enabled: false`
+/// answers the same whether the server is not running or its backend has
+/// no DHT at all; this call never errors on its account.
+///
+/// Cheap (two routing-table length reads) and synchronous -- safe to call
+/// from the UI thread. Still, nothing should poll it on a timer of its own:
+/// read it on screen-open, or piggyback it on a poll that is already
+/// running for another reason (the player's stats panel).
+#[frb(sync)]
+pub fn server_dht_status() -> anyhow::Result<String> {
+    guarded_ok(|| serde_json::to_string(&crate::server::dht_status()).unwrap_or_default())
+}
+
 /// Starts or stops the server's LAN media listener and answers the address
 /// it is bound to afterwards (`"0.0.0.0:39271"`), or null after a stop.
 ///

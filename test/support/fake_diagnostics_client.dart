@@ -8,6 +8,12 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
     this.platform = 'android',
     this.os = 'Android 14 (API 34)',
     this.storageReport,
+    this.dht = const DhtStatus(
+      enabled: false,
+      nodes: 0,
+      nodesV6: 0,
+      everBootstrapped: false,
+    ),
     this.error,
   }) : _snapshot =
            snapshot ??
@@ -31,6 +37,13 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
     if (report == null) throw StateError('embedded server is not running');
     return report;
   }
+
+  /// What [dhtStatus] answers. Disabled by default, matching "the server is
+  /// not running" -- a test opts in to the interesting states explicitly.
+  DhtStatus dht;
+
+  @override
+  DhtStatus dhtStatus() => dht;
 
   /// Thrown by [snapshot] instead of answering: the core not being up.
   Object? error;

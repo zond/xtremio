@@ -19,6 +19,7 @@ export 'state/addon_details.dart';
 export 'state/catalog.dart';
 export 'state/catalogs_with_extra.dart';
 export 'state/continue_watching.dart';
+export 'state/dht_status.dart';
 export 'state/download.dart';
 export 'state/installed_addons.dart';
 export 'state/library.dart';

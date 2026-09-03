@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../core/core.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
 import 'torrent_stats.dart';
@@ -109,22 +110,31 @@ class NativeFullscreenController implements FullscreenController {
 
 /// Supplies what the player screen needs from the outside: the
 /// [PlaybackEngineFactory] (absent, the screen builds a [MediaKitEngine]),
-/// the [FullscreenController] and the [TorrentStatsClient] the start-up
-/// overlay polls the embedded server with (absent, the FFI one). The
-/// subtitle style is not here: the screen derives it from the profile's
-/// settings in the `ctx` field.
+/// the [FullscreenController], the [TorrentStatsClient] the start-up
+/// overlay polls the embedded server with (absent, the FFI one), and
+/// [dhtStatus] (absent, `ServerClient().dhtStatus`). The subtitle style is
+/// not here: the screen derives it from the profile's settings in the `ctx`
+/// field.
 class PlaybackScope extends InheritedWidget {
   const PlaybackScope({
     super.key,
     required this.createEngine,
     this.fullscreen,
     this.torrentStats,
+    this.dhtStatus,
     required super.child,
   });
 
   final PlaybackEngineFactory createEngine;
   final FullscreenController? fullscreen;
   final TorrentStatsClient? torrentStats;
+
+  /// What the start-up card's one DHT explanation reads
+  /// (`ServerHandle::dht_status`). A plain function rather than a client
+  /// interface, because it is the only thing about the DHT the player ever
+  /// asks: cheap and synchronous, read once when torrent polling starts,
+  /// never on a timer of its own.
+  final DhtStatus Function()? dhtStatus;
 
   static PlaybackScope? _maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlaybackScope>();
@@ -138,11 +148,15 @@ class PlaybackScope extends InheritedWidget {
   static TorrentStatsClient torrentStatsOf(BuildContext context) =>
       _maybeOf(context)?.torrentStats ?? const RustTorrentStatsClient();
 
+  static DhtStatus Function() dhtStatusOf(BuildContext context) =>
+      _maybeOf(context)?.dhtStatus ?? (() => const ServerClient().dhtStatus);
+
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
       fullscreen != oldWidget.fullscreen ||
-      torrentStats != oldWidget.torrentStats;
+      torrentStats != oldWidget.torrentStats ||
+      dhtStatus != oldWidget.dhtStatus;
 }
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever

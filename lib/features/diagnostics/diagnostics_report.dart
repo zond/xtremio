@@ -135,6 +135,7 @@ String formatDiagnostics({
   required String osVersion,
   required DateTime at,
   ServerStorage? storage,
+  DhtStatus? dht,
   String appVersion = kAppVersion,
   String gitCommit = kGitCommit,
 }) {
@@ -152,6 +153,12 @@ String formatDiagnostics({
     // and a line nobody could read is `unknown` rather than absent.
     ...?storage?.reportLines,
     if (storage == null) ...ServerStorage.unknownReportLines,
+    // Information, not a failure, and only worth a line when it is the one
+    // state that explains a slow start: a DHT that never found a node this
+    // session. A bootstrapped or disabled DHT (or one nobody could ask)
+    // says nothing here -- there is nothing to explain.
+    if (dht != null && dht.unavailable)
+      'dht: ${DhtStatus.unavailableMessage} · ${dht.nodeCounts}',
     'stream-server: ${snapshot.streamServerRev ?? 'unknown'}',
     'stremio-core: ${snapshot.stremioCoreRev ?? 'unknown'}',
     'log: ${snapshot.logLines.length} lines, oldest first',

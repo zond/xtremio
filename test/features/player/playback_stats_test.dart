@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_stats.dart';
 import 'package:xtremio/features/player/playback_stats_overlay.dart';
 import 'package:xtremio/features/player/torrent_stats.dart';
@@ -240,6 +241,69 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  group('the DHT row', () {
+    const bootstrapped = DhtStatus(
+      enabled: true,
+      nodes: 40,
+      nodesV6: 3,
+      everBootstrapped: true,
+    );
+    const neverBootstrapped = DhtStatus(
+      enabled: true,
+      nodes: 0,
+      nodesV6: 0,
+      everBootstrapped: false,
+    );
+    const disabled = DhtStatus(
+      enabled: false,
+      nodes: 0,
+      nodesV6: 0,
+      everBootstrapped: false,
+    );
+
+    test('says so, with the node counts, only while never bootstrapped', () {
+      expect(
+        PlaybackStatsOverlay.describeDht(neverBootstrapped),
+        'dht      DHT unavailable — using trackers only · 0 nodes (0 v6)',
+      );
+    });
+
+    testWidgets('is absent once bootstrapped, disabled, or unread', (
+      tester,
+    ) async {
+      Future<void> pumpWith(DhtStatus? dht) => tester.pumpWidget(
+        MaterialApp(
+          home: PlaybackStatsOverlay(
+            stats: const Stream<PlaybackStats>.empty(),
+            isTorrent: true,
+            torrent: const TorrentStats(phase: TorrentPhase.ready, peers: 4),
+            dht: dht,
+          ),
+        ),
+      );
+
+      await pumpWith(bootstrapped);
+      await tester.pump();
+      expect(find.textContaining('dht'), findsNothing);
+
+      await pumpWith(disabled);
+      await tester.pump();
+      expect(find.textContaining('dht'), findsNothing);
+
+      await pumpWith(null);
+      await tester.pump();
+      expect(find.textContaining('dht'), findsNothing);
+
+      // The one state that is news.
+      await pumpWith(neverBootstrapped);
+      await tester.pump();
+      expect(
+        find.textContaining('DHT unavailable — using trackers only'),
+        findsOneWidget,
+      );
+    });
   });
 
   testWidgets('a long error from the server does not take over the frame', (

@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use anyhow::Context;
+use enginefs::backend::DhtStatus;
 use stream_server::{
     CacheUsage, DownloadInfo, EngineStats, EvictionReport, ServerHandle, ServerSettings,
     UnpinOutcome,
@@ -321,6 +322,25 @@ pub fn cache_usage() -> anyhow::Result<CacheUsage> {
 /// to make its start-up tick fire a sweep; nothing here stops playback.
 pub fn clean_cache_now() -> anyhow::Result<EvictionReport> {
     with_handle(|handle| handle.clean_cache_now())
+}
+
+/// The mainline DHT's status on this host, exactly the `dht` key of
+/// `GET /stats.json` (`ServerHandle::dht_status`): whether a DHT is
+/// running, how many nodes are in each routing table right now, and
+/// whether either has ever been non-empty this session (sticky: a table
+/// that empties out again -- peers aged out, the network changed -- still
+/// counts as having bootstrapped once).
+///
+/// The server not running answers the same as "no DHT to ask either way"
+/// (`DhtStatus::default()`, `enabled: false`), not an error -- this is
+/// information for a curious person, never a failure to surface. A
+/// network that drops the DHT's UDP (carrier-grade NAT, a firewalled
+/// mobile APN, a captive portal) simply never finishes bootstrapping, and
+/// torrents with working trackers keep streaming regardless.
+///
+/// Cheap: two routing-table length reads, no I/O.
+pub fn dht_status() -> DhtStatus {
+    with_handle(|handle| Ok(handle.dht_status())).unwrap_or_default()
 }
 
 /// Starts or stops the LAN media listener -- the server's second HTTP

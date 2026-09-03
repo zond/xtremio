@@ -584,6 +584,72 @@ void main() {
         'No peers found yet · 1 seed in the swarm',
       );
 
+      // The one actionable DHT case: no trackers on this stream, and a DHT
+      // that has never found a node this session -- said once, alongside
+      // the peer count, as an explanation rather than an error.
+      const findingNoPeers = TorrentStats(phase: TorrentPhase.buffering);
+      const neverBootstrapped = DhtStatus(
+        enabled: true,
+        nodes: 0,
+        nodesV6: 0,
+        everBootstrapped: false,
+      );
+      expect(
+        TorrentStartupOverlay.describe(
+          findingNoPeers,
+          hasTrackers: false,
+          dht: neverBootstrapped,
+        ).detail,
+        'No peers found yet · no trackers on this stream, and the DHT has '
+        'not found a peer on this network -- it may not find any',
+      );
+      // A tracked stream gets no explanation: trackers regularly work with
+      // no DHT at all, so there is nothing here to explain.
+      expect(
+        TorrentStartupOverlay.describe(
+          findingNoPeers,
+          dht: neverBootstrapped,
+        ).detail,
+        'No peers found yet',
+      );
+      // Nor does a trackerless stream once the DHT has ever bootstrapped,
+      // or when nothing was read about it at all.
+      expect(
+        TorrentStartupOverlay.describe(
+          findingNoPeers,
+          hasTrackers: false,
+          dht: const DhtStatus(
+            enabled: true,
+            nodes: 12,
+            nodesV6: 0,
+            everBootstrapped: true,
+          ),
+        ).detail,
+        'No peers found yet',
+      );
+      expect(
+        TorrentStartupOverlay.describe(
+          findingNoPeers,
+          hasTrackers: false,
+        ).detail,
+        'No peers found yet',
+      );
+      // Once a peer turns up the moment has moved past "finding peers"
+      // altogether, and with it the explanation: it only ever spoke to why
+      // nothing had been found yet.
+      expect(
+        TorrentStartupOverlay.describe(
+          const TorrentStats(
+            phase: TorrentPhase.buffering,
+            peerDiscovery: PeerDiscovery(seen: 3, live: 1),
+            peers: 1,
+          ),
+          hasTrackers: false,
+          dht: neverBootstrapped,
+        ).detail,
+        isNot(contains('DHT')),
+      );
+
       final buffering = TorrentStartupOverlay.describe(
         const TorrentStats(
           phase: TorrentPhase.buffering,
@@ -723,6 +789,101 @@ void main() {
     expect(find.textContaining('Buffering from the torrent…'), findsOneWidget);
     expect(overlay, findsNothing);
     expect(find.byType(TorrentStallOverlay), findsOneWidget);
+  });
+
+  group('the DHT explanation for a trackerless magnet', () {
+    const neverBootstrapped = DhtStatus(
+      enabled: true,
+      nodes: 0,
+      nodesV6: 0,
+      everBootstrapped: false,
+    );
+    const findingNoPeers = TorrentStats(phase: TorrentPhase.buffering);
+
+    // The progress bar is indeterminate for "Finding peers…" (nothing
+    // measurable yet), which never settles -- like the "Connecting to
+    // server…" moment above, these pump by hand rather than through
+    // `harness.pump`/`pumpAndSettle`.
+    Future<void> pumpFinding(WidgetTester tester, PlayerHarness harness) async {
+      await tester.pumpWidget(harness.build());
+      await tester.pump();
+      await tester.pump();
+      await poll(tester);
+    }
+
+    testWidgets('shows on the fixture torrent, which has no trackers, on a '
+        'DHT-less network', (tester) async {
+      // The default fixture is exactly this case (see `perFile` above:
+      // no trackers), so nothing about the stream needs building here.
+      final harness = PlayerHarness(dhtStatus: neverBootstrapped)
+        ..torrentStats.response = findingNoPeers;
+      await pumpFinding(tester, harness);
+      expect(overlayText('Finding peers…'), findsOneWidget);
+      expect(
+        overlayText(
+          'No peers found yet · no trackers on this stream, and the '
+          'DHT has not found a peer on this network -- it may not '
+          'find any',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('does not show for a stream that has trackers', (tester) async {
+      final harness = PlayerHarness(
+        dhtStatus: neverBootstrapped,
+        player: {
+          'selected': {'stream': DevStreams.bigBuckBunnyTorrent},
+          'stream': {
+            'type': 'Ready',
+            'content': [
+              {
+                'streaming_url':
+                    'http://127.0.0.1:33759/${DevStreams.bigBuckBunnyTorrent['infoHash']}/-1',
+              },
+              DevStreams.bigBuckBunnyTorrent,
+            ],
+          },
+        },
+        stream: DevStreams.bigBuckBunnyTorrent,
+      )..torrentStats.response = findingNoPeers;
+      await pumpFinding(tester, harness);
+      expect(overlayText('Finding peers…'), findsOneWidget);
+      expect(overlayText('No peers found yet'), findsOneWidget);
+      expect(find.textContaining('DHT'), findsNothing);
+    });
+
+    testWidgets('does not show once the DHT has ever bootstrapped', (
+      tester,
+    ) async {
+      final harness = PlayerHarness(
+        dhtStatus: const DhtStatus(
+          enabled: true,
+          nodes: 12,
+          nodesV6: 0,
+          everBootstrapped: true,
+        ),
+      )..torrentStats.response = findingNoPeers;
+      await pumpFinding(tester, harness);
+      expect(overlayText('No peers found yet'), findsOneWidget);
+      expect(find.textContaining('DHT'), findsNothing);
+    });
+
+    testWidgets('is read once, never on a timer of its own', (tester) async {
+      final harness = PlayerHarness(dhtStatus: neverBootstrapped)
+        ..torrentStats.response = findingNoPeers;
+      await pumpFinding(tester, harness);
+      expect(harness.dhtStatusReads, 1);
+
+      // Several more polls, a stall, and the OSD toggling on: none of it
+      // asks about the DHT again.
+      await poll(tester);
+      await poll(tester);
+      harness.engine.emitBuffering(true);
+      await pumpEvents(tester);
+      await tester.pump(PlayerScreen.torrentStallStatsInterval * 3);
+      expect(harness.dhtStatusReads, 1);
+    });
   });
 
   testWidgets('falls back to the torrent-level stats for the phase', (

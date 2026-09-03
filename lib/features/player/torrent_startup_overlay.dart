@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/core.dart';
 import 'torrent_progress_card.dart';
 import 'torrent_stats.dart';
 
@@ -9,19 +10,44 @@ import 'torrent_stats.dart';
 /// already has, finding peers, filling the initial window) and how far
 /// along it is.
 class TorrentStartupOverlay extends StatelessWidget {
-  const TorrentStartupOverlay({super.key, required this.stats});
+  const TorrentStartupOverlay({
+    super.key,
+    required this.stats,
+    this.hasTrackers = true,
+    this.dht,
+  });
 
   /// The latest `stats.json`, or null while the server has not answered
   /// for this torrent yet.
   final TorrentStats? stats;
 
+  /// Whether the stream being played has an `announce` list. False only
+  /// for a magnet with none -- see [describe]'s one actionable case.
+  final bool hasTrackers;
+
+  /// The DHT's status, read once when polling started; null when it was
+  /// not asked (a direct stream never gets here) or could not be read.
+  final DhtStatus? dht;
+
   @override
-  Widget build(BuildContext context) =>
-      TorrentProgressCard(status: describe(stats));
+  Widget build(BuildContext context) => TorrentProgressCard(
+    status: describe(stats, hasTrackers: hasTrackers, dht: dht),
+  );
 
   /// What to say for [stats]. Null stats means the server has not answered
   /// for this torrent yet (unreachable, or a 404 before the engine exists).
-  static TorrentProgressStatus describe(TorrentStats? stats) {
+  ///
+  /// [hasTrackers] and [dht] feed exactly one case: a magnet with no
+  /// `announce` list on a network where the DHT never bootstrapped
+  /// genuinely may not find any peers, and while nothing is found yet that
+  /// is worth saying once, as an explanation rather than an error --
+  /// trackers alone regularly outrun a DHT swarm, so this is never shown
+  /// as a warning and never once a peer turns up.
+  static TorrentProgressStatus describe(
+    TorrentStats? stats, {
+    bool hasTrackers = true,
+    DhtStatus? dht,
+  }) {
     if (stats == null) {
       return const TorrentProgressStatus(label: 'Connecting to server…');
     }
@@ -63,6 +89,9 @@ class TorrentStartupOverlay extends StatelessWidget {
               ],
               if (swarm != null)
                 '$swarm ${swarm == 1 ? 'seed' : 'seeds'} in the swarm',
+              if (!hasTrackers && (dht?.unavailable ?? false))
+                'no trackers on this stream, and the DHT has not found a '
+                    'peer on this network -- it may not find any',
             ].join(' · '),
           );
         }

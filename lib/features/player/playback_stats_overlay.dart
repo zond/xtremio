@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import 'playback_stats.dart';
 import 'torrent_progress_card.dart';
@@ -20,6 +21,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
     this.source,
     this.isTorrent = false,
     this.torrent,
+    this.dht,
   });
 
   final Stream<PlaybackStats> stats;
@@ -36,6 +38,12 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// The latest `stats.json` for that torrent, or null while the player's
   /// poll has not answered yet.
   final TorrentStats? torrent;
+
+  /// The DHT's status, read once when this torrent's polling started; null
+  /// when it was not asked or could not be read. Shown as its own row only
+  /// when [DhtStatus.unavailable] -- a bootstrapped or disabled DHT is not
+  /// news, and this panel is not where it would be worth a row anyway.
+  final DhtStatus? dht;
 
   static const TextStyle _style = TextStyle(
     color: Colors.white,
@@ -104,6 +112,8 @@ class PlaybackStatsOverlay extends StatelessWidget {
                     Text(line, style: style),
                   if (describeTorrentError(torrent) case final error?)
                     _wideRow(error, style, maxLines: 2),
+                  if (dht?.unavailable ?? false)
+                    Text(describeDht(dht!), style: style),
                 ],
                 if (source != null)
                   _wideRow('url      $source', style, maxLines: 1),
@@ -198,6 +208,14 @@ class PlaybackStatsOverlay extends StatelessWidget {
     final error = s?.error;
     return error == null ? null : 'error    $error';
   }
+
+  /// The DHT row, shown only while [DhtStatus.unavailable] holds: this
+  /// panel is already the details view a curious person opened, so the
+  /// node counts ride along with the wording rather than sitting behind
+  /// another tap. Information, never phrased as a problem -- trackers keep
+  /// working regardless.
+  static String describeDht(DhtStatus dht) =>
+      'dht      ${DhtStatus.unavailableMessage} · ${dht.nodeCounts}';
 
   /// The phase, with the percentage of whatever it is measuring when the
   /// server measures one.

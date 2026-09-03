@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../src/rust/api/diagnostics.dart' as rust;
 import 'server_client.dart';
+import 'state/dht_status.dart';
 import 'state/server_storage.dart';
 
 export '../src/rust/api/diagnostics.dart' show DiagnosticsSnapshot;
@@ -31,6 +32,13 @@ abstract interface class DiagnosticsClient {
   /// limit, and the room left where it writes. Throws when the server is
   /// not running, which costs the report those lines and nothing else.
   Future<ServerStorage> storage();
+
+  /// The mainline DHT's status right now (`ServerHandle::dht_status`).
+  /// Never throws: a server that is not running answers the same as "no
+  /// DHT to ask", `DhtStatus(enabled: false, ...)`. Cheap and synchronous;
+  /// this screen reads it once on open and on an explicit refresh, never
+  /// on a timer.
+  DhtStatus dhtStatus();
 }
 
 /// [DiagnosticsClient] over FFI, `dart:io` and the `xtremio/device`
@@ -59,6 +67,9 @@ class RustDiagnosticsClient implements DiagnosticsClient {
 
   @override
   Future<ServerStorage> storage() => server.storage();
+
+  @override
+  DhtStatus dhtStatus() => server.dhtStatus;
 
   /// The platform's answer, or what `dart:io` says when there is nobody to
   /// ask.

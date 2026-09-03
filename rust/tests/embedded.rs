@@ -6,8 +6,9 @@
 
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
-    server_base_url, server_cache_usage, server_clean_cache_now, server_settings, server_start,
-    server_stop, server_storage_report, server_torrent_stats, server_update_settings, ServerConfig,
+    server_base_url, server_cache_usage, server_clean_cache_now, server_dht_status,
+    server_settings, server_start, server_stop, server_storage_report, server_torrent_stats,
+    server_update_settings, ServerConfig,
 };
 
 /// A well-known public-domain torrent (Night of the Living Dead), never
@@ -141,6 +142,17 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     assert_eq!(usage["protectedBytes"], 0, "{usage}");
     assert_eq!(usage["protectedFiles"], 0, "{usage}");
 
+    // The DHT's status, exactly the `dht` key of `GET /stats.json`: cheap
+    // and synchronous, so unlike the calls above this is not spawned onto a
+    // blocking thread. The hermetic test sandbox rarely has a real DHT
+    // bootstrap within a test's lifetime, so only the shape is asserted,
+    // never a particular node count or `everBootstrapped` value.
+    let dht = json(&server_dht_status()?);
+    assert!(dht["enabled"].is_boolean(), "{dht}");
+    assert!(dht["nodes"].is_u64(), "{dht}");
+    assert!(dht["nodesV6"].is_u64(), "{dht}");
+    assert!(dht["everBootstrapped"].is_boolean(), "{dht}");
+
     // Cleaning now runs the eviction pass in place -- no restart, so the
     // server answers throughout and at the same URL afterwards.
     let cleaned = json(&tokio::task::spawn_blocking(server_clean_cache_now).await??);
@@ -182,6 +194,12 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         heartbeat_status(&url).await.is_err(),
         "server still answering after stop"
     );
+    // Unlike every other library call above, this one never errors: no
+    // server to ask means no DHT to ask either, which answers the same as
+    // a backend built with none -- information, not a failure.
+    let dht = json(&server_dht_status()?);
+    assert_eq!(dht["enabled"], false, "{dht}");
+    assert_eq!(dht["everBootstrapped"], false, "{dht}");
 
     // Stop when not running is a no-op, and a restart works.
     tokio::task::spawn_blocking(server_stop).await??;

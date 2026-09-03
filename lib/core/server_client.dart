@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../src/rust/api/server.dart' as rust;
+import 'state/dht_status.dart';
 import 'state/server_storage.dart';
 
 /// stremio-core's default streaming-server port, preferred so a persisted
@@ -141,6 +142,18 @@ class ServerClient implements LanMediaControl, ServerCacheControl {
   @override
   Future<EvictionReport> cleanCacheNow() async =>
       EvictionReport.fromJson(_object(await rust.serverCleanCacheNow()));
+
+  /// The mainline DHT's status right now (`ServerHandle::dht_status`):
+  /// whether it is running, how many nodes are in each routing table, and
+  /// whether either has ever been non-empty this session. Never throws --
+  /// a server that is not running answers the same as "no DHT to ask",
+  /// `DhtStatus(enabled: false, ...)`.
+  ///
+  /// Cheap and synchronous (two routing-table length reads); still, do not
+  /// poll it on a timer of its own -- read it on screen-open, or alongside
+  /// a poll that is already running.
+  DhtStatus get dhtStatus =>
+      DhtStatus.fromJson(_object(rust.serverDhtStatus()));
 
   /// A torrent's `stats.json`: the per-file stats when [fileIdx] is set,
   /// the torrent-level ones otherwise. [trackers] is the stream's

@@ -291,6 +291,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _torrentStatsFetching = false;
   TorrentStats? _torrentStats;
 
+  /// What reads [_dhtStatus] (absent the FFI one). Cheap and synchronous,
+  /// so unlike the stats client above this is called directly rather than
+  /// awaited.
+  DhtStatus Function()? _dhtStatusProvider;
+
+  /// The DHT's status, read once when this torrent's polling started --
+  /// never on a timer of its own, and never re-read for the rest of this
+  /// stream: it explains a start-up that has not found peers, and that
+  /// explanation does not need to track a bootstrap that happens later.
+  DhtStatus? _dhtStatus;
+
   /// The open being retried: the state and start position [_opened] was
   /// opened with, how many retries it has had, the timer waiting to make
   /// the next one, and the failure that would be shown if there were no
@@ -449,6 +460,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     _fullscreen = PlaybackScope.fullscreenOf(context);
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
+    _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
     // A television has no window to be one part of: the video fills the
     // screen from the moment the player opens, with the system bars out of
     // the way, until the player is left ([dispose] leaves fullscreen,
@@ -956,6 +968,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
       PlayerScreen.torrentStatsInterval,
       (_) => _pollTorrentStats(),
     );
+    _refreshDhtStatus();
+  }
+
+  /// Reads the DHT's status once: for the start-up card's one explanation
+  /// (a trackerless magnet on a network where it never bootstrapped) and
+  /// the stats panel's own row. Never on a timer -- called only here, when
+  /// this torrent's polling begins -- and never throws: a provider that
+  /// fails (the server not up yet) simply shows nothing.
+  void _refreshDhtStatus() {
+    final provider = _dhtStatusProvider;
+    if (provider == null) {
+      _dhtStatus = null;
+      return;
+    }
+    try {
+      _dhtStatus = provider();
+    } on Object {
+      _dhtStatus = null;
+    }
   }
 
   /// Stops polling for good and forgets the torrent: this player will not
@@ -966,6 +997,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStats = null;
     _torrentStatsRequest = null;
     _torrentStatsFallback = null;
+    _dhtStatus = null;
   }
 
   /// Stops polling but keeps the torrent, so a stall or the stats OSD can
@@ -2339,6 +2371,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         source: _opened,
                         isTorrent: _torrentStatsRequest != null,
                         torrent: _torrentStats,
+                        dht: _dhtStatus,
                       ),
                     ),
                   ),
@@ -2347,7 +2380,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.all(32),
-                    child: TorrentStartupOverlay(stats: _torrentStats),
+                    child: TorrentStartupOverlay(
+                      stats: _torrentStats,
+                      hasTrackers:
+                          _torrentStatsRequest?.trackers.isNotEmpty ?? true,
+                      dht: _dhtStatus,
+                    ),
                   ),
                 ),
               if (status != null)

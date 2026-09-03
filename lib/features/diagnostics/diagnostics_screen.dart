@@ -42,6 +42,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   int _lines = 0;
   String? _error;
 
+  /// The DHT's status, read alongside everything else -- never on a timer
+  /// of its own. Null only when the read itself failed, which the report
+  /// already covers with `_error`.
+  DhtStatus? _dht;
+
   @override
   void initState() {
     super.initState();
@@ -82,14 +87,24 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     } catch (error) {
       storage = null;
     }
+    // Cheap and synchronous, but still asked for only here -- on open and
+    // on an explicit refresh -- and never on a timer of its own.
+    DhtStatus? dht;
+    try {
+      dht = widget.client.dhtStatus();
+    } catch (error) {
+      dht = null;
+    }
     if (!mounted) return;
     setState(() {
       _lines = snapshot.logLines.length;
+      _dht = dht;
       _report = formatDiagnostics(
         snapshot: snapshot,
         platform: widget.client.platform,
         osVersion: osVersion,
         storage: storage,
+        dht: dht,
         at: widget.now(),
       );
       _error = null;
@@ -114,6 +129,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   @override
   Widget build(BuildContext context) {
     final report = _report;
+    final dht = _dht;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Diagnostics'),
@@ -136,6 +152,15 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               icon: const Icon(Icons.copy_all_outlined),
               label: const Text('Copy diagnostics'),
             ),
+            // Information, never a warning: shown only for the one state
+            // worth a curious person's attention (a DHT that never found a
+            // node this session), and gone the moment it bootstraps or was
+            // never running to begin with. The node counts stay a tap away
+            // rather than sitting in the way of the log underneath.
+            if (dht != null && dht.unavailable) ...[
+              const SizedBox(height: 12),
+              _DhtNotice(dht: dht),
+            ],
             const SizedBox(height: 12),
             Expanded(
               child: report == null
@@ -149,6 +174,30 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The one DHT line this screen ever shows: an information card, not a
+/// warning, with the node counts a tap away rather than inline.
+class _DhtNotice extends StatelessWidget {
+  const _DhtNotice({required this.dht});
+
+  final DhtStatus dht;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      color: theme.colorScheme.surfaceContainerHigh,
+      child: ExpansionTile(
+        leading: Icon(Icons.info_outline, color: theme.colorScheme.primary),
+        title: Text(DhtStatus.unavailableMessage),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        expandedAlignment: Alignment.centerLeft,
+        children: [Text(dht.nodeCounts, style: theme.textTheme.bodySmall)],
       ),
     );
   }

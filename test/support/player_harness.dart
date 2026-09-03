@@ -31,7 +31,9 @@ class PlayerHarness {
     this.cast,
     this.lanMedia,
     this.prefs,
-  }) : fixture = player ?? loadPlayerFixture() {
+    DhtStatus? dhtStatus,
+  }) : dhtStatus = dhtStatus ?? _dhtDisabled,
+       fixture = player ?? loadPlayerFixture() {
     core = FakeCoreClient(
       state: {
         CoreField.player: fixture,
@@ -42,6 +44,21 @@ class PlayerHarness {
 
   final Map<String, dynamic> fixture;
   late final FakeCoreClient core;
+
+  /// What [PlaybackScope.dhtStatusOf] answers -- disabled (nothing shown
+  /// anywhere) unless a test asks for a specific state.
+  final DhtStatus dhtStatus;
+
+  /// How many times the screen has asked for [dhtStatus] -- a test's proof
+  /// that nothing polls it on a timer of its own.
+  int dhtStatusReads = 0;
+
+  static const DhtStatus _dhtDisabled = DhtStatus(
+    enabled: false,
+    nodes: 0,
+    nodesV6: 0,
+    everBootstrapped: false,
+  );
 
   /// One per `PlaybackScope.createEngine` call; the first is [engine].
   final List<FakePlaybackEngine> engines = [];
@@ -105,6 +122,10 @@ class PlayerHarness {
         },
         fullscreen: fullscreen,
         torrentStats: torrentStats,
+        dhtStatus: () {
+          dhtStatusReads++;
+          return dhtStatus;
+        },
         child: MaterialApp(
           // As `XtremioApp` builds it: the television's text scale and
           // overscan band reach the player through the navigator.

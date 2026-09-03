@@ -322,6 +322,63 @@ void main() {
       expect(text, contains('stremio-core: unknown'));
       expect(text, isNot(contains('sekrit-token-value')));
       expect(text, contains('authorization=<redacted>'));
+      // Nothing was asked about the DHT here, and the header says nothing
+      // about it either -- absence, not an `unknown` line, since most
+      // sessions never have anything DHT-related worth reporting.
+      expect(text, isNot(contains('dht:')));
+    });
+
+    group('the DHT line', () {
+      DiagnosticsSnapshot snapshot() =>
+          const DiagnosticsSnapshot(coreVersion: '0.1.0', logLines: []);
+
+      test('says so, with the node counts, only while never bootstrapped', () {
+        final text = formatDiagnostics(
+          snapshot: snapshot(),
+          platform: 'android',
+          osVersion: 'Android 14',
+          at: DateTime.utc(2026),
+          dht: const DhtStatus(
+            enabled: true,
+            nodes: 0,
+            nodesV6: 0,
+            everBootstrapped: false,
+          ),
+        );
+        expect(
+          text,
+          contains(
+            'dht: DHT unavailable — using trackers only · 0 nodes (0 v6)',
+          ),
+        );
+      });
+
+      test('says nothing once bootstrapped, disabled, or unread', () {
+        for (final dht in [
+          const DhtStatus(
+            enabled: true,
+            nodes: 40,
+            nodesV6: 3,
+            everBootstrapped: true,
+          ),
+          const DhtStatus(
+            enabled: false,
+            nodes: 0,
+            nodesV6: 0,
+            everBootstrapped: false,
+          ),
+          null,
+        ]) {
+          final text = formatDiagnostics(
+            snapshot: snapshot(),
+            platform: 'android',
+            osVersion: 'Android 14',
+            at: DateTime.utc(2026),
+            dht: dht,
+          );
+          expect(text, isNot(contains('dht:')), reason: '$dht');
+        }
+      });
     });
   });
 
@@ -417,5 +474,61 @@ void main() {
       expect(find.textContaining('Diagnostics unavailable'), findsNothing);
       expect(client.reads, 2);
     });
+
+    testWidgets(
+      'shows the DHT notice, node counts behind a tap, only while it is '
+      'the news',
+      (tester) async {
+        final client = FakeDiagnosticsClient(
+          dht: const DhtStatus(
+            enabled: true,
+            nodes: 0,
+            nodesV6: 0,
+            everBootstrapped: false,
+          ),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: DiagnosticsScreen(
+              client: client,
+              now: () => DateTime.utc(2026, 9, 3),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Information, not in the way: the wording shows, the counts do
+        // not, until it is opened.
+        expect(
+          find.text('DHT unavailable — using trackers only'),
+          findsOneWidget,
+        );
+        expect(find.text('0 nodes (0 v6)'), findsNothing);
+        await tester.tap(find.text('DHT unavailable — using trackers only'));
+        await tester.pumpAndSettle();
+        expect(find.text('0 nodes (0 v6)'), findsOneWidget);
+
+        // A bootstrapped DHT is not news: nothing about it shows anywhere,
+        // on screen or in what gets copied.
+        client.dht = const DhtStatus(
+          enabled: true,
+          nodes: 40,
+          nodesV6: 3,
+          everBootstrapped: true,
+        );
+        await tester.tap(find.byIcon(Icons.refresh));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('DHT unavailable — using trackers only'),
+          findsNothing,
+        );
+        expect(find.textContaining('nodes ('), findsNothing);
+
+        final copied = interceptClipboard(tester);
+        await tester.tap(find.text('Copy diagnostics'));
+        await tester.pumpAndSettle();
+        expect(copied.single, isNot(contains('dht:')));
+      },
+    );
   });
 }
