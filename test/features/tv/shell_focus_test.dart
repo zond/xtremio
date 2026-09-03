@@ -394,4 +394,32 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusIn<TextField>(), isTrue);
   });
+
+  testWidgets('up from the first and down from the last destination stay on '
+      'the rail', (tester) async {
+    useScreen(tester, const Size(1280, 720));
+    await tester.pumpWidget(harness(fakeCore()));
+    await tester.pumpAndSettle();
+
+    // Directional traversal is geometric and knows nothing of the rail as
+    // a unit: past either end of the menu it would find a Board tile that
+    // happens to lie above or below, and a select there opens its details
+    // when the user meant to keep walking the menu.
+    await focusRailTop(tester);
+    expect(focusedRailLabel(tester), 'Board');
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusedRailLabel(tester), 'Board');
+
+    for (var i = 0; i < 4; i++) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(focusedRailLabel(tester), 'Settings');
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedRailLabel(tester), 'Settings');
+    expect(focusIn<BoardScreen>(), isFalse);
+
+    // Right still enters the body.
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<BoardScreen>(), isTrue);
+  });
 }

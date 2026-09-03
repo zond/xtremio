@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../features/board/board_screen.dart';
 import '../features/discover/discover_screen.dart';
@@ -28,7 +29,12 @@ class _Destination {
 /// own [FocusScope] whose directional edge behaviour falls back to the
 /// parent scope: left from the body's first column finds nothing in the
 /// body and lands on the rail; right from the rail finds the body's nearest
-/// tile. The scope also lets a tile autofocus when its tab is shown while
+/// tile. Directional traversal is geometric and ignores the groups, so up
+/// and down past the ends of the rail's menu would land on whatever tile
+/// lies above or below; the rail swallows those two keys itself, so the
+/// menu stops at its ends.
+///
+/// The tab's scope also lets a tile autofocus when its tab is shown while
 /// the rail keeps a focused destination (autofocus only applies inside a
 /// scope with no focused child of its own): each tab has a [FocusMemory],
 /// so showing a tab puts focus on the tile it was on when the user left
@@ -106,6 +112,22 @@ class _RootShellState extends State<RootShell> {
   FocusNode? _railDestination(int i) =>
       _railNode.traversalDescendants.elementAtOrNull(i);
 
+  /// Up from the first destination and down from the last stay where they
+  /// are (TV only); see [RootShell]. Every other key passes.
+  KeyEventResult _onRailKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused == null) return KeyEventResult.ignored;
+    final destinations = _railNode.traversalDescendants.toList();
+    final i = destinations.indexOf(focused);
+    if (i < 0) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final atEdge =
+        (key == LogicalKeyboardKey.arrowUp && i == 0) ||
+        (key == LogicalKeyboardKey.arrowDown && i == destinations.length - 1);
+    return atEdge ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
   @override
   void dispose() {
     for (final scope in _tabScopes) {
@@ -149,7 +171,11 @@ class _RootShellState extends State<RootShell> {
           children: [
             if (isTv)
               FocusTraversalGroup(
-                child: Focus(focusNode: _railNode, child: rail),
+                child: Focus(
+                  focusNode: _railNode,
+                  onKeyEvent: _onRailKey,
+                  child: rail,
+                ),
               )
             else
               rail,
