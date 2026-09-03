@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
@@ -674,6 +675,65 @@ void main() {
       expect(spinner.strokeWidth, 2);
       expect(find.text('torrentio.example'), findsOneWidget);
       expect(find.text('Pick an episode to see its streams'), findsNothing);
+    });
+
+    testWidgets('an episode no addon has a stream for says so and offers '
+        'the Addons screen', (tester) async {
+      useWideViewport(tester);
+      // The recorded state: WatchHub answered with nothing, the local
+      // addon failed, and nothing else was asked -- a fresh profile.
+      await mountSeries(tester, fixture: loadSeriesEpisodeMetaDetailsFixture());
+
+      expect(find.text('No streams for this episode'), findsOneWidget);
+      expect(
+        find.textContaining('comes with no torrent addon'),
+        findsOneWidget,
+      );
+      // The addon that failed still says so on its own row.
+      expect(find.textContaining('Failed to fetch'), findsOneWidget);
+      expect(find.text('No streams'), findsOneWidget);
+
+      await tester.tap(find.text('Add an addon'));
+      // (That screen spins over the fields this fake has no state for.)
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(AddonsScreen), findsOneWidget);
+      expect(
+        find.byTooltip('Add addon'),
+        findsOneWidget,
+        reason: 'the flow that installs one by manifest URL',
+      );
+    });
+
+    testWidgets('an addon still answering is not an empty answer', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final fixture = loadSeriesEpisodeMetaDetailsFixture();
+      fixture['streams'] = [
+        {
+          'request': torrentGroup(pilotId)['request'],
+          'content': {'type': 'Loading'},
+        },
+      ];
+      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
+      await tester.pumpWidget(
+        harness(core, FakePlaybackEngine(), type: 'series', id: seriesId),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('No streams for this episode'), findsNothing);
+
+      // The same state once that addon has answered with a stream.
+      core.setState(
+        CoreField.metaDetails,
+        loadSeriesEpisodeMetaDetailsFixture()
+          ..['streams'] = [torrentGroup(pilotId)],
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('No streams for this episode'), findsNothing);
+      expect(find.text('Torrentio\n1080p'), findsOneWidget);
     });
 
     testWidgets('tapping an episode loads its streams', (tester) async {

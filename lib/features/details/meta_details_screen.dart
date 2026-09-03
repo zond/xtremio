@@ -8,6 +8,7 @@ import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/remote_press.dart';
 import '../../widgets/shared_field_screen.dart';
+import '../addons/addons_screen.dart';
 import '../discover/discover_screen.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_controller.dart';
@@ -485,6 +486,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     }
   }
 
+  /// The Addons screen, where a stream addon is installed by manifest URL.
+  void _openAddons() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'addons'),
+        builder: (_) => const AddonsScreen(),
+      ),
+    );
+  }
+
   void _openGenre(ResourceRequest request) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -646,6 +657,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final groups = state.allStreamGroups;
     final noneYet =
         state.hasVideos && state.streamPath == null && groups.isEmpty;
+    // Every addon that was asked has answered and none of them offered
+    // anything the player can open. On a fresh profile that is the normal
+    // answer rather than a fault, so it is explained rather than left as
+    // an empty list under a heading.
+    final foundNothing =
+        state.streamPath != null &&
+        groups.isNotEmpty &&
+        !state.isLoadingStreams &&
+        lastUsed == null &&
+        state.playableStreams.isEmpty;
     // A tapped episode whose streams have not arrived: everything below is
     // still the previous selection's, so show none of it.
     if (_isAwaitingStreams(state)) {
@@ -692,6 +713,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       SliverToBoxAdapter(
         child: _StreamsHeader(key: _streamsKey, state: state),
       ),
+      if (foundNothing)
+        SliverToBoxAdapter(
+          child: _NoStreamsNotice(
+            isEpisode: state.hasVideos,
+            onAddons: _openAddons,
+          ),
+        ),
       if (noneYet)
         const SliverToBoxAdapter(
           child: ListTile(
@@ -1165,6 +1193,68 @@ class _EpisodeThumbnail extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Every stream addon has answered and none of them had anything to play.
+/// With the addons xtremio installs itself that is what a series episode
+/// usually looks like -- none of them serves torrents -- so the section
+/// says so in as many words and offers the screen that fixes it, rather
+/// than leaving a heading over nothing.
+class _NoStreamsNotice extends StatelessWidget {
+  const _NoStreamsNotice({required this.isEpisode, required this.onAddons});
+
+  /// Names what came up empty: an episode of a series, or the title.
+  final bool isEpisode;
+  final VoidCallback onAddons;
+
+  static const String addonsLabel = 'Add an addon';
+
+  String get title =>
+      isEpisode ? 'No streams for this episode' : 'No streams for this title';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.search_off, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    Text(
+                      'None of your sources had anything to play. xtremio '
+                      'comes with no torrent addon, so add one and its '
+                      'streams show up here.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonalIcon(
+              onPressed: onAddons,
+              icon: const Icon(Icons.extension_outlined),
+              label: const Text(addonsLabel),
+            ),
+          ),
+        ],
       ),
     );
   }
