@@ -11,7 +11,11 @@ const _gradientBlack = Color(0xCC000000);
 ///
 /// Every button here is focusable, so a remote reaches the menus once the
 /// player has moved focus onto the bar ([firstFocusNode] is where it lands:
-/// the leftmost control, with the rest a right press away).
+/// the leftmost control, with the rest a right press away). They are keyed
+/// so that a button that stops being built (the episode was the last one,
+/// the second audio track went away) takes its own element and focus node
+/// with it, rather than passing them to its neighbour and leaving the
+/// remote pointed at a button the viewer never chose.
 class PlayerTopBar extends StatelessWidget {
   const PlayerTopBar({
     super.key,
@@ -63,6 +67,7 @@ class PlayerTopBar extends StatelessWidget {
             IconButton(
               // A [BackButton] in all but name; that one takes no focus
               // node, and the remote has to be able to land on this one.
+              key: const ValueKey('back'),
               tooltip: MaterialLocalizations.of(context).backButtonTooltip,
               color: Colors.white,
               focusNode: firstFocusNode,
@@ -79,6 +84,7 @@ class PlayerTopBar extends StatelessWidget {
             ),
             if (onNext != null)
               IconButton(
+                key: const ValueKey('next'),
                 tooltip: 'Next episode (N)',
                 color: Colors.white,
                 onPressed: onNext,
@@ -86,6 +92,7 @@ class PlayerTopBar extends StatelessWidget {
               ),
             if (onSubtitles != null)
               IconButton(
+                key: const ValueKey('subtitles'),
                 tooltip: 'Subtitles (S)',
                 color: Colors.white,
                 onPressed: onSubtitles,
@@ -93,12 +100,14 @@ class PlayerTopBar extends StatelessWidget {
               ),
             if (onAudio != null)
               IconButton(
+                key: const ValueKey('audio'),
                 tooltip: 'Audio track (A)',
                 color: Colors.white,
                 onPressed: onAudio,
                 icon: const Icon(Icons.audiotrack),
               ),
             IconButton(
+              key: const ValueKey('stats'),
               tooltip: 'Playback stats (Shift+I)',
               color: Colors.white,
               isSelected: statsOn,
@@ -106,6 +115,7 @@ class PlayerTopBar extends StatelessWidget {
               icon: const Icon(Icons.query_stats),
             ),
             IconButton(
+              key: const ValueKey('settings'),
               tooltip: 'Playback settings',
               color: Colors.white,
               onPressed: onSettings,

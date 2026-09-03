@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -252,6 +253,38 @@ void main() {
       // Focus back on the video: the idle timer runs again.
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+      await tester.pump(PlayerScreen.controlsTimeout);
+      await tester.pumpAndSettle();
+      expect(controlsOpacity(tester), 0);
+    });
+
+    testWidgets('a control that disappears hands the remote back', (
+      tester,
+    ) async {
+      final harness = await pumpOnTv(tester, withNext: true);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      for (var i = 0; i < 6 && focusedTooltip() != 'Next episode (N)'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusedTooltip(), 'Next episode (N)');
+
+      // The engine drops the next episode (this turned out to be the last
+      // one): the button holding the remote leaves the tree under it.
+      harness.core.setState(
+        CoreField.player,
+        Map<String, dynamic>.from(harness.fixture)..remove('nextVideo'),
+      );
+      await pumpEvents(tester);
+      await tester.pumpAndSettle();
+
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+      await press(tester, LogicalKeyboardKey.select);
+      expect(harness.engine.playOrPauseCalls, 1, reason: 'the remote lives');
+
+      // And with the video focused again the controls fade as they should.
       await tester.pump(PlayerScreen.controlsTimeout);
       await tester.pumpAndSettle();
       expect(controlsOpacity(tester), 0);

@@ -127,6 +127,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// [DeviceScope.isTv], read with the dependencies.
   bool _isTv = false;
 
+  /// A [_scheduleFocusCheck] callback is pending for the coming frame.
+  bool _focusCheckScheduled = false;
+
   /// The controls' own focus scope on a TV: what [_controlFocused] asks
   /// whether the remote is on the bar, and what keeps the D-pad inside it.
   /// Off a TV the controls are not wrapped in it at all, so desktop
@@ -221,6 +224,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!mounted) return;
     setState(() {});
     _restartControlsTimer();
+  }
+
+  /// After every rebuild on a television: takes the remote back onto the
+  /// video when the control it was on has left the tree.
+  ///
+  /// The top bar builds Next, Subtitles and Audio only when there is
+  /// something behind them, so the button holding the remote can vanish
+  /// mid-playback (the engine reports the last episode, the second audio
+  /// track goes away). Focus is then on a node that is no longer in the
+  /// tree — the controls' scope is not told, so its listener cannot be
+  /// the hook — and the video's [Focus] never gets it back, its
+  /// `autofocus` having been spent when it first attached. [_onKeyEvent]
+  /// would stop running for good: the remote dead and the controls stuck
+  /// at full opacity until the player is left.
+  ///
+  /// [_focusNode] wraps the whole screen, so "nothing here has focus" is
+  /// exactly `!_focusNode.hasFocus`. A sheet this screen opened keeps the
+  /// remote, as the player is not the current route while it is up.
+  void _scheduleFocusCheck() {
+    if (_focusCheckScheduled) return;
+    _focusCheckScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusCheckScheduled = false;
+      if (!mounted || !_isTv || _focusNode.hasFocus) return;
+      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      _focusNode.requestFocus();
+    });
   }
 
   /// The remote is on the control bar rather than on the video.
@@ -1192,6 +1222,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final upNext = _upNextSecondsLeft;
     final hasVideo = engine != null && _opened != null;
     final seekStep = _seekStep;
+    if (_isTv) _scheduleFocusCheck();
     return Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
