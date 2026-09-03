@@ -80,6 +80,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
   final TextEditingController _typed = TextEditingController();
 
+  /// The rows whose retry is in flight, by [DownloadView.key]. Pinning a
+  /// magnet again blocks on its metadata, and nothing on the row moves
+  /// until the listing lands, so without this the menu invites a second
+  /// press that burns another worker for the same file.
+  final Set<String> _retrying = {};
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -219,16 +225,31 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final client = _client;
     final downloads = _downloads;
     if (client == null || downloads == null) return;
+    if (!_retrying.add(view.key)) return;
+    setState(() {});
     DownloadAddResult? result;
+    Object? thrown;
     try {
       result = await client.add(DownloadRequest.fromView(view));
-    } catch (_) {
-      if (mounted) _tell('This download could not be started again.');
+    } catch (error) {
+      thrown = error;
     }
+    // Held over the refresh as well: until the fresh listing has the entry
+    // the row still reads "Stopped", and offering Retry again would be an
+    // invitation to pin the same file twice.
     await downloads.refresh();
     if (!mounted) return;
+    setState(() => _retrying.remove(view.key));
+    if (thrown != null) {
+      _tell('This download could not be started again.');
+      return;
+    }
     final failure = result?.error;
-    if (failure != null) _tell(downloadFailureMessage(failure));
+    _tell(
+      failure != null
+          ? downloadFailureMessage(failure)
+          : 'Downloading ${view.name}',
+    );
   }
 
   @override
@@ -275,6 +296,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               onRetry: view.state == DownloadState.error
                   ? () => _retry(view)
                   : null,
+              isRetrying: _retrying.contains(view.key),
             ),
         ],
       ),
@@ -436,6 +458,7 @@ class _DownloadRow extends StatelessWidget {
     required this.onPlay,
     required this.onDelete,
     required this.onRetry,
+    required this.isRetrying,
   });
 
   final DownloadView view;
@@ -446,6 +469,12 @@ class _DownloadRow extends StatelessWidget {
 
   /// Null unless the download stopped.
   final VoidCallback? onRetry;
+
+  /// Whether a retry of this row is already on its way.
+  final bool isRetrying;
+
+  /// The retry item while one is in flight.
+  static const String retryingLabel = 'Retrying…';
 
   /// `Downloaded · 1.4 GB`, or what is on disk of what there is, or the
   /// server's reason it stopped.
@@ -491,7 +520,11 @@ class _DownloadRow extends StatelessWidget {
           if (onPlay != null)
             const PopupMenuItem(value: _RowAction.play, child: Text('Play')),
           if (onRetry != null)
-            const PopupMenuItem(value: _RowAction.retry, child: Text('Retry')),
+            PopupMenuItem(
+              value: _RowAction.retry,
+              enabled: !isRetrying,
+              child: Text(isRetrying ? retryingLabel : 'Retry'),
+            ),
           const PopupMenuItem(value: _RowAction.delete, child: Text('Delete')),
         ],
       ),

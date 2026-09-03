@@ -31,6 +31,20 @@ DownloadsRegistry withStoppedPilot() {
   return DownloadsRegistry.fromJson(json);
 }
 
+/// A client whose `add` waits, so the row can be looked at while a retry
+/// is on its way.
+class GatedAddClient extends FakeDownloadsClient {
+  GatedAddClient({super.registry});
+
+  final Completer<void> gate = Completer<void>();
+
+  @override
+  Future<DownloadAddResult> add(DownloadRequest request) async {
+    await gate.future;
+    return super.add(request);
+  }
+}
+
 /// A client whose listing waits, so the screen can be looked at before the
 /// first one has landed.
 class GatedListingClient extends FakeDownloadsClient {
@@ -302,6 +316,46 @@ void main() {
         1,
         reason: 'the file already half on disk, not another guess',
       );
+      expect(find.text('Downloading Breaking Bad: Pilot'), findsOneWidget);
+    });
+
+    testWidgets('a retry in flight is not offered a second time', (
+      tester,
+    ) async {
+      useTallViewport(tester);
+      // Re-pinning a magnet blocks on its metadata, and the row still
+      // reads "Stopped" until the listing lands: a second press would burn
+      // another worker on the same file.
+      final downloads = GatedAddClient(registry: withStoppedPilot());
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
+      await tester.pumpAndSettle();
+
+      Future<void> openMenu() async {
+        await tester.tap(
+          find.descendant(
+            of: find.widgetWithText(ListTile, 'Breaking Bad: Pilot'),
+            matching: find.byTooltip('Download actions'),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await openMenu();
+      await tester.tap(find.text('Retry').hitTestable());
+      await tester.pump();
+
+      await openMenu();
+      expect(find.text('Retry'), findsNothing);
+      await tester.tap(find.text('Retrying…').hitTestable());
+      await tester.pump();
+      // The disabled item does not even close the menu, so dismiss it.
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pump();
+
+      downloads.gate.complete();
+      await tester.pumpAndSettle();
+      expect(downloads.added, hasLength(1));
     });
 
     testWidgets('a retry the server refuses says why', (tester) async {
