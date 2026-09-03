@@ -18,7 +18,13 @@ class FakeDownloadsClient implements DownloadsClient {
   /// Every call made, in order.
   final List<DownloadRequest> added = [];
   final List<({String key, bool deleteFiles})> removed = [];
+
+  /// Every destination asked for, chosen and applied alike, in order.
   final List<String?> directories = [];
+
+  /// Only the defaults the app applied itself
+  /// ([DownloadsClient.applyDefaultDirectory]).
+  final List<String> defaultsApplied = [];
 
   /// The keys [open] was called with, in order.
   final List<String> opens = [];
@@ -117,8 +123,7 @@ class FakeDownloadsClient implements DownloadsClient {
     registry = DownloadsRegistry(
       version: registry.version,
       items: items,
-      destinationSettled: registry.destinationSettled,
-      destinationChoice: registry.destinationChoice,
+      destination: registry.destination,
     );
     return result;
   }
@@ -188,8 +193,7 @@ class FakeDownloadsClient implements DownloadsClient {
     registry = DownloadsRegistry(
       version: registry.version,
       items: {...registry.items, key: entry},
-      destinationSettled: registry.destinationSettled,
-      destinationChoice: registry.destinationChoice,
+      destination: registry.destination,
     );
   }
 
@@ -207,9 +211,34 @@ class FakeDownloadsClient implements DownloadsClient {
     registry = DownloadsRegistry(
       version: registry.version,
       items: registry.items,
-      destinationSettled: true,
-      destinationChoice: path,
+      destination: path == null
+          ? const DownloadDestination.cache()
+          : DownloadDestination.explicit(path),
     );
+    return settings = {...settings, 'downloadsDir': path};
+  }
+
+  /// As the Rust side does: the server takes the destination like any
+  /// other, and the record becomes the default applied only while nothing
+  /// has been chosen -- a folder the user chose stays on record while this
+  /// stands in for it.
+  @override
+  Future<Map<String, dynamic>> applyDefaultDirectory(String path) async {
+    directories.add(path);
+    defaultsApplied.add(path);
+    callLog?.add('downloads.applyDefaultDirectory');
+    final error = setDirectoryError;
+    if (error != null) throw error;
+    if (unusableDirectories.contains(path)) {
+      throw ArgumentError.value(path, 'downloadsDir', 'cannot be created');
+    }
+    if (!registry.destination.isChosen) {
+      registry = DownloadsRegistry(
+        version: registry.version,
+        items: registry.items,
+        destination: DownloadDestination.platformDefault(path),
+      );
+    }
     return settings = {...settings, 'downloadsDir': path};
   }
 

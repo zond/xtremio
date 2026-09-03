@@ -314,9 +314,19 @@ abstract interface class DownloadsClient {
   /// instead of opening a player on a dead URL.
   Future<DownloadOpenResult> open(String key);
 
-  /// Points the downloads at [path], or back at the torrent cache with null.
-  /// Answers the server's settings afterwards; throws on a path it refuses.
+  /// Points the downloads at [path], or back at the torrent cache with null,
+  /// as the *user's* answer to where they go: the registry records it
+  /// ([DownloadsRegistry.destination]) and nothing the app applies on its
+  /// own overwrites it afterwards. Answers the server's settings; throws on
+  /// a path it refuses.
   Future<Map<String, dynamic>> setDirectory(String? path);
+
+  /// Points the downloads at [path] as a default the app resolved for this
+  /// platform, without answering for the user: the registry records it only
+  /// while nothing has been chosen, so a folder the server dropped at boot
+  /// stays on record while this stands in for it. Answers the server's
+  /// settings; throws on a path it refuses.
+  Future<Map<String, dynamic>> applyDefaultDirectory(String path);
 
   /// Where the files are being put (`settings.downloadsDir`), or null when
   /// they live in the torrent cache with everything else. Throws when the
@@ -342,6 +352,9 @@ typedef DownloadsRemoveFn = Future<String> Function({
 typedef DownloadsListFn = Future<String> Function();
 typedef DownloadsOpenFn = Future<String> Function({required String key});
 typedef DownloadsSetDirFn = Future<String> Function({String? path});
+typedef DownloadsApplyDefaultDirFn = Future<String> Function({
+  required String path,
+});
 
 /// Reading the destination back is reading the server's settings, which is
 /// `server_settings` — the same JSON `downloads_set_dir` answers with.
@@ -363,6 +376,7 @@ class RustDownloadsClient implements DownloadsClient {
     this.listDownloads = rust.downloadsList,
     this.openDownload = rust.downloadsOpen,
     this.setDownloadsDir = rust.downloadsSetDir,
+    this.applyDefaultDownloadsDir = rust.downloadsApplyDefaultDir,
     this.readSettings = rust_server.serverSettings,
     this.openEvents = rust.downloadsEvents,
   });
@@ -372,6 +386,7 @@ class RustDownloadsClient implements DownloadsClient {
   final DownloadsListFn listDownloads;
   final DownloadsOpenFn openDownload;
   final DownloadsSetDirFn setDownloadsDir;
+  final DownloadsApplyDefaultDirFn applyDefaultDownloadsDir;
   final DownloadsSettingsFn readSettings;
   final DownloadsEventsFn openEvents;
 
@@ -404,6 +419,10 @@ class RustDownloadsClient implements DownloadsClient {
   @override
   Future<Map<String, dynamic>> setDirectory(String? path) async =>
       _object(await setDownloadsDir(path: path));
+
+  @override
+  Future<Map<String, dynamic>> applyDefaultDirectory(String path) async =>
+      _object(await applyDefaultDownloadsDir(path: path));
 
   @override
   Future<String?> directory() async =>

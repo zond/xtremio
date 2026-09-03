@@ -261,18 +261,24 @@ connection.
   `downloads_set_dir`, which is `POST /settings` with its validation (the
   path must be absolute, creatable, writable and not at or above a cache
   root). Everywhere else nothing is written and the server keeps deciding.
-  An answer already given is never overridden: the registry's
-  `destinationSettled` and `destinationChoice` (set by
-  `downloads_set_dir`, and never unset) are what start-up asks, because a
-  null `downloadsDir` is not only the unset state -- it is also "put them
-  back with the cache" chosen by hand, and what the server writes for
-  itself when it clears a destination it cannot use at boot (an SD card
-  that is not in the device). The recorded path tells those two apart: one
-  that the settings no longer have is the server having dropped it, so
-  start-up asks for it again and falls back to the platform default (on
-  Android the external files directory, never the purgeable cache) when
-  the volume is really gone. A `downloadsDir` set by a build from before
-  the flag counts as answered too. The Downloads
+  An answer already given is never overridden: what start-up asks is the
+  registry's own record of where the downloads were answered to go
+  (`Registry::destination`, written as `destinationSettled` and
+  `destinationChoice`), because a null `downloadsDir` is not only the
+  unset state -- it is also "put them back with the cache" chosen by hand,
+  and what the server writes for itself when it clears a destination it
+  cannot use at boot (an SD card that is not in the device). The record
+  says which of four situations it is: nothing asked, the platform default
+  the app applied itself (`downloads_apply_default_dir`, which does *not*
+  answer for the user), the cache on purpose, or a folder chosen
+  (`downloads_set_dir`). A chosen folder the settings no longer have is
+  the server having dropped it, so start-up asks for it again -- and if
+  the volume is really gone the platform default stands in (on Android the
+  external files directory, never the purgeable cache) while the folder
+  stays on record, so the next launch tries it again and the Downloads
+  screen can say which folder is missing. A `downloadsDir` left by a build
+  from before any of this was recorded is adopted as the answer rather
+  than overwritten. The Downloads
   screen's picker offers the same directories
   (`getExternalStorageDirectories()`, so an SD card is among them) plus a
   typed path off Android. With a destination set, each pin

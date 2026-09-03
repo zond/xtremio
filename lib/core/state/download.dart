@@ -167,14 +167,119 @@ final class DownloadView {
   String toString() => 'DownloadView($key, ${state.wireName})';
 }
 
+/// Which answer the registry holds about where the downloads go.
+enum DownloadDestinationKind {
+  /// Nobody has been asked yet, so a start-up may apply the platform's own
+  /// default.
+  unset,
+
+  /// The app applied that default because nothing had been chosen. Settled,
+  /// but nobody's answer: another build's default may replace it, and no
+  /// screen presents it as something the user picked.
+  platformDefault,
+
+  /// `Default (with the cache)`, chosen on purpose: a null `downloadsDir`,
+  /// and not an open question.
+  cache,
+
+  /// A folder the user chose.
+  explicit,
+}
+
+/// Where the downloads were last answered to go, and by whom: the
+/// registry's `destinationSettled`/`destinationChoice` pair, read as the one
+/// thing it describes.
+///
+/// It lives in the registry rather than in the server's settings because
+/// `downloadsDir` cannot say any of this -- a null there is both "with the
+/// torrent cache, on purpose" and "nobody has been asked" -- and because the
+/// server clears a `downloadsDir` it cannot prepare at boot, which would
+/// take the answer with it.
+final class DownloadDestination {
+  const DownloadDestination._(this.kind, this.path);
+
+  /// Nobody has been asked.
+  const DownloadDestination.unset()
+    : this._(DownloadDestinationKind.unset, null);
+
+  /// The platform default the app applied on its own, at [path].
+  const DownloadDestination.platformDefault(String path)
+    : this._(DownloadDestinationKind.platformDefault, path);
+
+  /// The torrent cache, chosen on purpose.
+  const DownloadDestination.cache()
+    : this._(DownloadDestinationKind.cache, null);
+
+  /// The folder the user chose, spelled the way the server stored it
+  /// (the server resolves a path before it keeps it).
+  const DownloadDestination.explicit(String path)
+    : this._(DownloadDestinationKind.explicit, path);
+
+  /// Reads the pair the registry carries, as forgivingly as the Rust side
+  /// writes it: a bare string is a folder chosen (the shape every build so
+  /// far has written), an object names its own kind, and a shape this build
+  /// does not know falls back on the two things always readable -- whether
+  /// the question was settled, and whether a path was named.
+  factory DownloadDestination.fromJson(bool settled, Object? choice) {
+    DownloadDestination named(String? path) => path != null
+        ? DownloadDestination.explicit(path)
+        : settled
+        ? const DownloadDestination.cache()
+        : const DownloadDestination.unset();
+    if (choice is String) return named(choice);
+    if (choice is Map<String, dynamic>) {
+      final path = choice['path'] as String?;
+      switch (choice['kind']) {
+        case 'platformDefault':
+          // A default that names no directory has applied nothing.
+          return path == null
+              ? const DownloadDestination.unset()
+              : DownloadDestination.platformDefault(path);
+        case 'cache':
+          return const DownloadDestination.cache();
+        case 'unset':
+          return const DownloadDestination.unset();
+        default:
+          return named(path);
+      }
+    }
+    return named(null);
+  }
+
+  final DownloadDestinationKind kind;
+
+  /// The folder it names, where it names one.
+  final String? path;
+
+  /// Whether where the downloads go has been answered at all -- by the
+  /// user, or by the platform default a first run applies.
+  bool get isSettled => kind != DownloadDestinationKind.unset;
+
+  /// Whether the answer is the user's own, which is what a default must
+  /// never overwrite.
+  bool get isChosen =>
+      kind == DownloadDestinationKind.cache ||
+      kind == DownloadDestinationKind.explicit;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DownloadDestination && other.kind == kind && other.path == path;
+
+  @override
+  int get hashCode => Object.hash(kind, path);
+
+  @override
+  String toString() =>
+      'DownloadDestination(${kind.name}${path == null ? '' : ', $path'})';
+}
+
 /// `downloads.json` as a whole: what `downloads_list` answers and what a
 /// progress event carries.
 final class DownloadsRegistry {
   const DownloadsRegistry({
     this.version = 1,
     this.items = const {},
-    this.destinationSettled = false,
-    this.destinationChoice,
+    this.destination = const DownloadDestination.unset(),
   });
 
   /// The file format's version, so a payload from a newer build is
@@ -184,21 +289,14 @@ final class DownloadsRegistry {
   /// Every download, by [DownloadView.key].
   final Map<String, DownloadView> items;
 
-  /// Whether where the downloads go has been answered -- by the user on the
-  /// Downloads screen, or by the platform default a first run applies. It
-  /// is the registry's, not the server's, because `downloadsDir` is null
-  /// both for "nobody has chosen" and for "put them back with the cache",
-  /// and because the server clears a destination it cannot use at boot.
-  /// Set by [DownloadsClient.setDirectory], and never unset.
-  final bool destinationSettled;
-
-  /// Which destination was answered, spelled the way the server stored it.
-  /// Null is "with the torrent cache, on purpose" when [destinationSettled]
-  /// -- and nothing recorded when it is not. Kept so a start-up can compare
-  /// it with the live `downloadsDir`: a path recorded here that the
-  /// settings no longer have is a destination the server cleared at boot
-  /// because it could not prepare it, and one worth asking for again.
-  final String? destinationChoice;
+  /// Where the downloads were answered to go, and by whom.
+  /// [DownloadsClient.setDirectory] records the user's own answer,
+  /// [DownloadsClient.applyDefaultDirectory] the platform default the app
+  /// stands in with. Kept so a start-up can compare it with the live
+  /// `downloadsDir`: a folder recorded here that the settings no longer
+  /// have is one the server cleared at boot because it could not prepare
+  /// it, and one worth asking for again.
+  final DownloadDestination destination;
 
   /// Nothing downloaded, and what a failed read falls back to.
   static const DownloadsRegistry empty = DownloadsRegistry();
@@ -212,8 +310,10 @@ final class DownloadsRegistry {
           if (entry.value is Map<String, dynamic>)
             entry.key: DownloadView(entry.value as Map<String, dynamic>),
       },
-      destinationSettled: json['destinationSettled'] == true,
-      destinationChoice: json['destinationChoice'] as String?,
+      destination: DownloadDestination.fromJson(
+        json['destinationSettled'] == true,
+        json['destinationChoice'],
+      ),
     );
   }
 
@@ -252,12 +352,12 @@ final class DownloadsRegistry {
   DownloadsRegistry merge(DownloadsRegistry update) => DownloadsRegistry(
     version: update.version,
     items: {...items, ...update.items},
-    // Progress events carry only the entries that moved and say nothing
-    // about the destination, so the flag only ever turns on and the path
-    // recorded is never forgotten -- an event's null means "not said", not
-    // "back to the cache".
-    destinationSettled: destinationSettled || update.destinationSettled,
-    destinationChoice: update.destinationChoice ?? destinationChoice,
+    // An update that says nothing about the destination is not an update
+    // that unsettles it: an unset destination in one means "not said", not
+    // "nobody has answered after all".
+    destination: update.destination.isSettled
+        ? update.destination
+        : destination,
   );
 
   @override

@@ -46,52 +46,140 @@ Future<String?> platformDefaultDestination() async {
 
 String _inside(String root) => '$root/$downloadsFolderName';
 
-/// Points [client] at [resolve]'s directory unless the question has
-/// already been answered, which is what start-up does once.
+/// What a start-up did about where the downloads go, so a caller (and a
+/// test) can see which of the situations it was in.
+enum DownloadDestinationOutcome {
+  /// Nothing to do: this platform has no default of its own and nobody has
+  /// answered, so the server keeps deciding.
+  nothing,
+
+  /// Nobody had answered and the platform's default was applied -- recorded
+  /// as the app's doing, not as an answer.
+  appliedPlatformDefault,
+
+  /// A destination was already in force and was left exactly where it was.
+  kept,
+
+  /// A `downloadsDir` that predates the registry's record was adopted as
+  /// the answer, so a server that drops it later can be corrected.
+  adoptedExisting,
+
+  /// The folder chosen was missing from the settings -- the server clears a
+  /// `downloadsDir` it cannot prepare at boot -- and went back.
+  restoredChoice,
+
+  /// The folder chosen could not be prepared at all: it is still on record,
+  /// and the platform default stands in for it meanwhile.
+  choiceUnavailable,
+
+  /// Nothing could be read or written; the downloads stay where the server
+  /// puts them.
+  failed,
+}
+
+/// Settles where the downloads go, which is what start-up does once.
 ///
-/// "Answered" is the registry's `destinationSettled` and
-/// `destinationChoice`, not a non-null `downloadsDir`: choosing
-/// `Default (with the cache)` on the Downloads screen writes null on
-/// purpose, and reading that as "nobody has chosen" would silently move
-/// the downloads on the next launch. A `downloadsDir` already set --
-/// including one a build from before the flag wrote -- counts as answered
-/// too, so an upgrade does not move anything.
+/// The registry's record ([DownloadsRegistry.destination]) is the question's
+/// answer, not the server's `downloadsDir`: a null there is both "with the
+/// cache, on purpose" and "nobody has been asked", and the server clears a
+/// `downloadsDir` it cannot prepare at boot -- an SD card that is not in the
+/// device -- which on Android would otherwise park every download in a cache
+/// the OS may reclaim mid-file, the very thing the platform default exists
+/// to avoid.
 ///
-/// The case worth acting on is the third one: settled on a *path* that the
-/// settings no longer have. The server clears a `downloadsDir` it cannot
-/// prepare at boot (an SD card that is not in the device) and persists the
-/// null, which on Android would otherwise park every download in the app
-/// cache the OS may reclaim mid-file -- the very thing the platform
-/// default exists to avoid. So the recorded path is asked for again; if it
-/// is really gone the platform default takes over, and never the cache.
+/// So, by what the registry holds:
 ///
-/// A platform with no default of its own changes nothing -- the server
-/// keeps deciding -- and nothing is asked of it either. Failure is not
-/// worth a word on screen: the downloads still work where the server puts
-/// them, and the picker on the Downloads screen can still move them.
-Future<void> applyDefaultDestination(
+/// * a folder the user chose is put back whenever the settings no longer
+///   have it, and if it cannot be prepared it *stays on record* while
+///   [resolve]'s default stands in for it -- the card may be back next
+///   time, and the Downloads screen can say which folder is missing;
+/// * `Default (with the cache)` is an answer like any other and is left
+///   alone;
+/// * a default this app applied before is re-applied only if the server
+///   lost it;
+/// * nothing answered means a first run: the platform's default is applied
+///   and recorded as the app's, or -- on a platform with none -- nothing is
+///   asked of the server at all. A `downloadsDir` already there (a build
+///   from before any of this was recorded) is adopted as the answer rather
+///   than overwritten.
+///
+/// Failure is not worth a word on screen: the downloads still work where
+/// the server puts them, and the picker on the Downloads screen can still
+/// move them.
+Future<DownloadDestinationOutcome> applyDefaultDestination(
   DownloadsClient client, {
   DownloadDestinationResolver resolve = platformDefaultDestination,
 }) async {
   try {
-    final path = await resolve();
-    if (path == null) return;
-    final registry = await client.list();
-    if (await client.directory() != null) return;
-    final chosen = registry.destinationChoice;
-    if (chosen == null) {
-      if (registry.destinationSettled) return;
-      await client.setDirectory(path);
-      return;
+    final destination = (await client.list()).destination;
+    switch (destination.kind) {
+      case DownloadDestinationKind.cache:
+        return DownloadDestinationOutcome.kept;
+      case DownloadDestinationKind.explicit:
+        return await _restore(client, destination.path!, resolve);
+      case DownloadDestinationKind.platformDefault:
+      case DownloadDestinationKind.unset:
+        return await _default(client, destination, resolve);
     }
-    try {
-      await client.setDirectory(chosen);
-      return;
-    } catch (error) {
-      if (kDebugMode) debugPrint('downloads destination $chosen: $error');
-    }
-    await client.setDirectory(path);
   } catch (error) {
-    if (kDebugMode) debugPrint('default downloads destination: $error');
+    if (kDebugMode) debugPrint('downloads destination: $error');
+    return DownloadDestinationOutcome.failed;
   }
+}
+
+/// Puts [chosen] back when the settings no longer have it, and falls back on
+/// the platform default -- without touching the record -- when it cannot be
+/// prepared.
+Future<DownloadDestinationOutcome> _restore(
+  DownloadsClient client,
+  String chosen,
+  DownloadDestinationResolver resolve,
+) async {
+  if (await client.directory() == chosen) {
+    return DownloadDestinationOutcome.kept;
+  }
+  try {
+    await client.setDirectory(chosen);
+    return DownloadDestinationOutcome.restoredChoice;
+  } catch (error) {
+    if (kDebugMode) debugPrint('downloads destination $chosen: $error');
+  }
+  final fallback = await resolve();
+  if (fallback != null) {
+    try {
+      await client.applyDefaultDirectory(fallback);
+    } catch (error) {
+      if (kDebugMode) debugPrint('downloads destination $fallback: $error');
+    }
+  }
+  return DownloadDestinationOutcome.choiceUnavailable;
+}
+
+/// Applies this platform's default where nothing has been chosen: on a first
+/// run, and again if the server lost the default a run before applied.
+Future<DownloadDestinationOutcome> _default(
+  DownloadsClient client,
+  DownloadDestination destination,
+  DownloadDestinationResolver resolve,
+) async {
+  final fallback = await resolve();
+  // A platform with no default of its own changes nothing -- the server
+  // keeps deciding -- and nothing is asked of it either.
+  if (fallback == null) {
+    return destination.isSettled
+        ? DownloadDestinationOutcome.kept
+        : DownloadDestinationOutcome.nothing;
+  }
+  final live = await client.directory();
+  if (live != null) {
+    // A destination with nothing on record is one an older build set, or
+    // something outside the app did: it is where the downloads already are,
+    // so it is adopted rather than moved -- and being on record is what
+    // lets a start-up put it back when the server drops it.
+    if (destination.isSettled) return DownloadDestinationOutcome.kept;
+    await client.setDirectory(live);
+    return DownloadDestinationOutcome.adoptedExisting;
+  }
+  await client.applyDefaultDirectory(fallback);
+  return DownloadDestinationOutcome.appliedPlatformDefault;
 }

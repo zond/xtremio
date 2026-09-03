@@ -119,9 +119,14 @@ and the bytes. Keep it that way:
 - **Where the files go is asked, not assumed.** The destination is the
   server's `downloadsDir` setting: read it with `DownloadsClient.directory`
   and write it with `setDirectory`, which is `downloads_set_dir` and its
-  validation. The registry records the answer (`destinationSettled` and
-  `destinationChoice`) because the server clears a `downloadsDir` it
-  cannot prepare at boot; start-up reads both
+  validation. The registry records *what was answered and by whom*
+  (`Registry::destination`, on the wire the `destinationSettled` and
+  `destinationChoice` pair): nothing asked, the platform default the app
+  applied, the cache on purpose, or a folder chosen. A default the app
+  applies goes through `applyDefaultDirectory`
+  (`downloads_apply_default_dir`), never `setDirectory`, so standing in
+  for a folder the server dropped at boot does not erase which folder that
+  was. Start-up reads the record
   (`lib/features/downloads/destination.dart`) and no screen invents a
   path.
 - Downloads are control calls like any other: over FFI, never HTTP (see

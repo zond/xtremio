@@ -252,56 +252,101 @@ void main() {
       );
     });
 
-    test('a settled destination is read, and an event cannot unsettle it', () {
-      expect(
-        DownloadsRegistry.fromJson(const {
-          'version': 1,
-          'items': <String, dynamic>{},
-        }).destinationSettled,
-        isFalse,
-        reason: 'a registry from before the flag has settled nothing',
-      );
-      final settled = DownloadsRegistry.fromJson(const {
-        'version': 1,
-        'items': <String, dynamic>{},
-        'destinationSettled': true,
-      });
-      expect(settled.destinationSettled, isTrue);
+    test('the four answers about where downloads go are told apart', () {
+      DownloadDestination read(Map<String, dynamic> json) =>
+          DownloadsRegistry.fromJson({
+            'version': 1,
+            'items': const <String, dynamic>{},
+            ...json,
+          }).destination;
 
-      // Progress events say nothing about the destination, so folding one
-      // in must not report the question as open again.
-      expect(settled.merge(DownloadsRegistry.empty).destinationSettled, isTrue);
-      expect(DownloadsRegistry.empty.merge(settled).destinationSettled, isTrue);
+      expect(
+        read(const {}),
+        const DownloadDestination.unset(),
+        reason: 'a registry from before the keys has answered nothing',
+      );
+      expect(
+        read(const {'destinationSettled': true}),
+        const DownloadDestination.cache(),
+        reason: 'settled with no path is "with the torrent cache", on purpose',
+      );
+      expect(
+        read(const {
+          'destinationSettled': true,
+          'destinationChoice': '/sdcard/files/downloads',
+        }),
+        const DownloadDestination.explicit('/sdcard/files/downloads'),
+        reason: 'a recorded path is the folder the user chose',
+      );
+      expect(
+        read(const {
+          'destinationSettled': true,
+          'destinationChoice': {
+            'kind': 'platformDefault',
+            'path': '/sdcard/files/downloads',
+          },
+        }),
+        const DownloadDestination.platformDefault('/sdcard/files/downloads'),
+        reason: 'and a default the app applied is not an answer at all',
+      );
+
+      expect(const DownloadDestination.unset().isSettled, isFalse);
+      expect(
+        const DownloadDestination.platformDefault('/x').isChosen,
+        isFalse,
+        reason: 'settled, but nobody chose it',
+      );
+      expect(const DownloadDestination.platformDefault('/x').isSettled, isTrue);
+      expect(const DownloadDestination.cache().isChosen, isTrue);
+      expect(const DownloadDestination.explicit('/x').isChosen, isTrue);
+      expect(const DownloadDestination.explicit('/x').path, '/x');
     });
 
-    test('the destination chosen is read, and an event cannot forget it', () {
+    test('a shape this build does not know still reads as an answer', () {
+      DownloadDestination read(Object? choice) => DownloadsRegistry.fromJson({
+        'version': 1,
+        'items': const <String, dynamic>{},
+        'destinationSettled': true,
+        'destinationChoice': choice,
+      }).destination;
+
       expect(
-        DownloadsRegistry.fromJson(const {
-          'version': 1,
-          'items': <String, dynamic>{},
-          'destinationSettled': true,
-        }).destinationChoice,
-        isNull,
-        reason: 'null is the answer "with the torrent cache"',
+        read(const {'kind': 'somethingNewer', 'path': '/x'}),
+        const DownloadDestination.explicit('/x'),
+        reason: 'a kind from a newer build still names a folder',
       );
+      expect(
+        read(const {'kind': 'somethingNewer'}),
+        const DownloadDestination.cache(),
+        reason: 'and one that names none is what the flag says',
+      );
+      expect(
+        read(const {'kind': 'platformDefault'}),
+        const DownloadDestination.unset(),
+        reason: 'a default that names no folder has applied nothing',
+      );
+      expect(read(42), const DownloadDestination.cache());
+    });
+
+    test('an update cannot unsettle the destination', () {
       final chosen = DownloadsRegistry.fromJson(const {
         'version': 1,
         'items': <String, dynamic>{},
         'destinationSettled': true,
         'destinationChoice': '/sdcard/files/downloads',
       });
-      expect(chosen.destinationChoice, '/sdcard/files/downloads');
 
-      // A progress event carries neither key, and folding one in must not
-      // read as "back to the cache" -- which is what would send the next
-      // start-up looking for a destination to restore.
+      // An update that says nothing about the destination must not read as
+      // "nobody has answered" -- which is what would send the next start-up
+      // moving the downloads to a default.
       expect(
-        chosen.merge(DownloadsRegistry.empty).destinationChoice,
-        '/sdcard/files/downloads',
+        chosen.merge(DownloadsRegistry.empty).destination,
+        const DownloadDestination.explicit('/sdcard/files/downloads'),
       );
       expect(
-        DownloadsRegistry.empty.merge(chosen).destinationChoice,
-        '/sdcard/files/downloads',
+        DownloadsRegistry.empty.merge(chosen).destination,
+        const DownloadDestination.explicit('/sdcard/files/downloads'),
+        reason: 'and a listing that carries one is taken',
       );
     });
   });
