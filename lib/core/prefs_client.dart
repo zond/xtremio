@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../src/rust/api/prefs.dart' as rust;
+import 'buffer_ahead.dart';
 
 /// The app's own preferences, over the Rust side's small JSON file
 /// (`rust/src/prefs.rs`, `<storage_dir>/xtremio_prefs.json`).
@@ -73,9 +74,18 @@ class AppPrefs extends ChangeNotifier {
   /// False — grouped, the engine's own order — is the default.
   static const String streamsFlatKey = 'streamsFlat';
 
+  /// The `bufferAhead` key: how far ahead playback buffers by default (see
+  /// [BufferAhead]). The player takes this unless the viewer overrides it
+  /// for the playback on screen.
+  static const String bufferAheadKey = 'bufferAhead';
+
   bool _streamsFlat = false;
 
   bool get streamsFlat => _streamsFlat;
+
+  BufferAhead _bufferAhead = BufferAhead.normal;
+
+  BufferAhead get bufferAhead => _bufferAhead;
 
   /// Reads every stored preference. Called once at start-up, before any
   /// screen that reads one can be on the stack, so the first list is
@@ -92,11 +102,20 @@ class AppPrefs extends ChangeNotifier {
       if (kDebugMode) debugPrint('preferences unavailable: $error');
       return;
     }
+    var changed = false;
     final flat = stored[streamsFlatKey];
     if (flat is bool && flat != _streamsFlat) {
       _streamsFlat = flat;
-      notifyListeners();
+      changed = true;
     }
+    // An unparseable value -- a name a newer build wrote, a number -- reads
+    // as "not set", which is the default, not a failure.
+    final buffer = BufferAhead.parse(stored[bufferAheadKey]);
+    if (buffer != null && buffer != _bufferAhead) {
+      _bufferAhead = buffer;
+      changed = true;
+    }
+    if (changed) notifyListeners();
   }
 
   Future<void> setStreamsFlat(bool value) async {
@@ -104,6 +123,13 @@ class AppPrefs extends ChangeNotifier {
     _streamsFlat = value;
     notifyListeners();
     await _write(streamsFlatKey, value);
+  }
+
+  Future<void> setBufferAhead(BufferAhead value) async {
+    if (_bufferAhead == value) return;
+    _bufferAhead = value;
+    notifyListeners();
+    await _write(bufferAheadKey, value.stored);
   }
 
   Future<void> _write(String key, Object? value) async {

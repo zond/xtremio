@@ -2,6 +2,7 @@
 library;
 
 export 'actions.dart';
+export 'buffer_ahead.dart';
 export 'core_client.dart';
 export 'core_events.dart';
 export 'core_field_notifier.dart';
