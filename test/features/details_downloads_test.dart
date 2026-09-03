@@ -6,6 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/widgets/download_badge.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fake_downloads_client.dart';
@@ -63,6 +64,13 @@ Map<String, dynamic> entry({
   'downloaded': downloaded,
   'state': state,
 };
+
+/// The affordance with [tooltip] on the movie's torrent stream tile. The
+/// header shows the same states, so a bare tooltip finder matches twice.
+Finder onStreamTile(String tooltip) => find.descendant(
+  of: find.widgetWithText(ListTile, '1080p'),
+  matching: find.byTooltip(tooltip),
+);
 
 DownloadsRegistry registryOf(List<Map<String, dynamic>> entries) =>
     DownloadsRegistry(
@@ -428,17 +436,17 @@ void main() {
     ) async {
       await pumpWith(tester, 'complete', done: 1000000);
 
-      expect(find.byTooltip(kDownloadedTooltip), findsOneWidget);
+      expect(onStreamTile(kDownloadedTooltip), findsOneWidget);
       expect(find.byTooltip(kDownloadTooltip), findsNothing);
     });
 
     testWidgets('shows how far along it is while it arrives', (tester) async {
       await pumpWith(tester, 'downloading', done: 500000);
 
-      expect(find.byTooltip('Downloading 50%'), findsOneWidget);
+      expect(onStreamTile('Downloading 50%'), findsOneWidget);
       final ring = tester.widget<CircularProgressIndicator>(
         find.descendant(
-          of: find.byTooltip('Downloading 50%'),
+          of: onStreamTile('Downloading 50%'),
           matching: find.byType(CircularProgressIndicator),
         ),
       );
@@ -449,10 +457,153 @@ void main() {
     testWidgets('offers to try again when it stopped', (tester) async {
       await pumpWith(tester, 'error', done: 10);
 
-      expect(find.byTooltip(kDownloadRetryTooltip), findsOneWidget);
+      expect(onStreamTile(kDownloadRetryTooltip), findsOneWidget);
       await tester.tap(find.byTooltip(kDownloadRetryTooltip));
       await tester.pumpAndSettle();
       expect(find.text('Downloading Night of the Living Dead'), findsOneWidget);
+    });
+  });
+
+  group('badges', () {
+    testWidgets('an episode kept on the device says so on its tile', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadSeriesEpisodeMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          entry(
+            metaId: seriesId,
+            videoId: pilotId,
+            stream: {'infoHash': 'aaaa', 'fileIdx': 3},
+            state: 'complete',
+            size: 10,
+            downloaded: 10,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(
+        harness(core, downloads, type: 'series', id: seriesId),
+      );
+      await tester.pumpAndSettle();
+
+      final badge = find.byType(DownloadBadge);
+      expect(badge, findsOneWidget);
+      expect(
+        find.ancestor(of: badge, matching: find.byType(ListTile)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.ancestor(of: badge, matching: find.byType(ListTile)),
+          matching: find.text('Pilot'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the header counts what of a series is kept', (tester) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadSeriesEpisodeMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          entry(
+            metaId: seriesId,
+            videoId: pilotId,
+            stream: {'infoHash': 'aaaa', 'fileIdx': 3},
+            state: 'complete',
+            size: 10,
+            downloaded: 10,
+          ),
+          entry(
+            metaId: seriesId,
+            videoId: '$seriesId:1:2',
+            stream: {'infoHash': 'aaaa', 'fileIdx': 4},
+            state: 'downloading',
+            size: 10,
+            downloaded: 5,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(
+        harness(core, downloads, type: 'series', id: seriesId),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 downloaded · 1 downloading'), findsOneWidget);
+    });
+
+    testWidgets('a movie header says the state of the one download', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          entry(
+            metaId: movieId,
+            videoId: movieId,
+            stream: {'infoHash': movieHash, 'fileIdx': 0},
+            state: 'downloading',
+            size: 4,
+            downloaded: 3,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Downloading 75%'), findsOneWidget);
+    });
+
+    testWidgets('nothing downloaded puts nothing in the header', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DownloadSummary), findsNothing);
+    });
+
+    test('the summary line counts by state', () {
+      DownloadView view(String videoId, String state) => DownloadView(
+        entry(
+          metaId: seriesId,
+          videoId: videoId,
+          stream: const {'infoHash': 'aaaa'},
+          state: state,
+        ),
+      );
+
+      expect(DownloadSummary.label(const [], metaId: seriesId), isNull);
+      expect(
+        DownloadSummary.label([view(seriesId, 'complete')], metaId: seriesId),
+        'Downloaded',
+        reason: 'the title itself is a movie, not a count of one',
+      );
+      expect(
+        DownloadSummary.label([
+          view('$seriesId:1:1', 'complete'),
+          view('$seriesId:1:2', 'queued'),
+          view('$seriesId:1:3', 'error'),
+        ], metaId: seriesId),
+        '1 downloaded · 1 downloading · 1 stopped',
+      );
     });
   });
 
@@ -479,8 +630,8 @@ void main() {
     await tester.pumpWidget(harness(core, downloads));
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip(kDownloadTooltip), findsOneWidget);
-    expect(find.byTooltip(kDownloadedTooltip), findsNothing);
+    expect(onStreamTile(kDownloadTooltip), findsOneWidget);
+    expect(onStreamTile(kDownloadedTooltip), findsNothing);
   });
 
   testWidgets('progress from the feed reaches the tile', (tester) async {
@@ -505,6 +656,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('Downloading 25%'), findsOneWidget);
+    expect(onStreamTile('Downloading 25%'), findsOneWidget);
   });
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
+import '../../widgets/download_badge.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/remote_press.dart';
@@ -427,6 +428,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           meta: meta,
           isWide: isWide,
           isInLibrary: state.isInLibrary,
+          downloads: _downloads?.ofMeta(widget.id) ?? const [],
           onGenre: _openGenre,
           onToggleLibrary: () => _toggleLibrary(state, meta),
         ),
@@ -453,6 +455,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               isSelected: video.id == state.streamPath?.id,
               isWatched: state.isWatched(video),
               isReleased: video.isReleased(now),
+              download: _downloads?.forVideo(widget.id, video.id),
               onTap: () => _selectVideo(video),
               onLongPress: () => _toggleWatched(state, video),
             );
@@ -594,6 +597,7 @@ class _MetaHeader extends StatelessWidget {
     required this.meta,
     required this.isWide,
     required this.isInLibrary,
+    required this.downloads,
     required this.onGenre,
     required this.onToggleLibrary,
   });
@@ -603,6 +607,9 @@ class _MetaHeader extends StatelessWidget {
 
   /// `libraryItem.removed == false`: the bookmark is filled.
   final bool isInLibrary;
+
+  /// Every download of this title, episodes included; empty for none.
+  final List<DownloadView> downloads;
   final ValueChanged<ResourceRequest> onGenre;
   final VoidCallback onToggleLibrary;
 
@@ -639,6 +646,10 @@ class _MetaHeader extends StatelessWidget {
             ),
           ],
         ),
+        if (downloads.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          DownloadSummary(downloads: downloads, metaId: meta.id),
+        ],
         if (rating != null) ...[
           const SizedBox(height: 4),
           Row(
@@ -839,12 +850,17 @@ class _EpisodeTile extends StatelessWidget {
     required this.isReleased,
     required this.onTap,
     required this.onLongPress,
+    this.download,
   });
 
   final VideoInfo video;
   final bool isSelected;
   final bool isWatched;
   final bool isReleased;
+
+  /// This episode's download, whatever source it was taken from; null when
+  /// it is not kept on the device.
+  final DownloadView? download;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
@@ -854,6 +870,24 @@ class _EpisodeTile extends StatelessWidget {
     if (date == null) return null;
     String two(int n) => n.toString().padLeft(2, '0');
     return '${date.year}-${two(date.month)}-${two(date.day)}';
+  }
+
+  /// The watched check (or the selection's play arrow), with the download
+  /// badge in front of it when this episode is kept on the device.
+  Widget? _trailing(ThemeData theme) {
+    final download = this.download;
+    final state = isWatched
+        ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+        : isSelected
+        ? const Icon(Icons.play_arrow)
+        : null;
+    if (download == null) return state;
+    final badge = DownloadBadge(download: download);
+    if (state == null) return badge;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [badge, const SizedBox(width: 8), state],
+    );
   }
 
   @override
@@ -877,11 +911,7 @@ class _EpisodeTile extends StatelessWidget {
               [?date, if (!isReleased) 'Upcoming'].join(' · '),
               style: theme.textTheme.bodySmall,
             ),
-      trailing: isWatched
-          ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
-          : isSelected
-          ? const Icon(Icons.play_arrow)
-          : null,
+      trailing: _trailing(theme),
     );
     if (!DeviceScope.isTv(context)) return tile;
     return RemotePress(onTap: onTap, onLongPress: onLongPress, child: tile);
