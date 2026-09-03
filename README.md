@@ -75,9 +75,11 @@ Rust engine for addons, catalogs, library, and playback state) and
 > would load the same shared `player` field and start an engine beside it. On Android the
 > app picks that folder itself on a first run: its own external files
 > directory, which the system leaves alone, rather than the cache it may
-> reclaim mid-download. A download runs only while the app is up, though
-> -- there is no foreground service yet, so Android freezing the process
-> stops it until the app is opened again. A stream whose
+> reclaim mid-download. On Android a download goes on
+> after the user leaves the app: a `dataSync` foreground service holds the
+> process up with an ongoing notification -- how many titles, how far
+> along, tappable to the Downloads screen, with a Cancel all on it -- for
+> exactly as long as something is unfinished. A stream whose
 > video is already kept from another release is offered as a replacement,
 > and a *finished* one is named in a confirmation first, because taking the
 > new pin deletes the old file. Downloading a
@@ -125,8 +127,8 @@ The point of Xtremio is to go past what existing Stremio apps do:
   it is never evicted, managed from a screen of its own, put somewhere the
   platform will not purge it, and played straight off the disk as a
   `file://` stream — so a finished download needs no server, no network and
-  no torrent. What is left is a foreground service, so a download that is
-  still running survives the app leaving the screen on Android.
+  no torrent, and on Android a foreground service keeps it going after the
+  user leaves the app.
 - **Cloud storage sources** (e.g. Google Drive) — stream from a personal cloud
   drive, most naturally via a Stremio addon that resolves cloud files to
   playable URLs. Provider OAuth / API-key setup is the fiddly part.
@@ -360,10 +362,15 @@ connection.
   the next boot's re-pin and for a finished one never (its bytes stay
   where they were downloaded, and the registry keeps naming that path).
   A download whose volume is not mounted reads as `missing` rather than
-  as an error. **No background downloads on Android yet** -- there is no
-  foreground service, so a download only advances while the app is
-  running; the registry and the server's own pin set survive the process
-  dying, and the boot re-pin picks the unfinished ones up again.
+  as an error. **On Android a download keeps going while the app is
+  away**: `DownloadsForegroundService`
+  (`lib/features/downloads/downloads_service.dart`) puts a `dataSync`
+  foreground service up over the `xtremio/downloads` channel as soon as
+  one entry is unfinished and takes it down when none is (ANDROID.md,
+  "Downloads while the app is away", for what Android still reserves the
+  right to do to it). The registry and the server's own pin set survive
+  the process dying either way, and the boot re-pin picks the unfinished
+  ones up again.
 - **A finished download is played from the file, not from the server.**
   `downloads_open(key)` answers the `file://` URL of a download whose
   bytes are all here and whose file really is where it was left, and

@@ -192,19 +192,93 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
   may purge `getCacheDir()`. "Clear storage" in the app info screen does
   delete them; the registry (`<files>/core/downloads.json`) goes at the
   same time, so the two stay consistent.
-- **Downloads only advance while the app is running.** There is no
-  foreground service yet, so once Android freezes or kills the process the
-  torrent stops with it; a notification and a `FOREGROUND_SERVICE_DATA_SYNC`
-  service are the follow-up. Nothing is lost when it happens: librqbit
-  persists the torrent and its verified pieces, the server persists its pin
-  set, and start-up re-pins every unfinished registry entry, so reopening
-  the app continues where it stopped. A *finished* download needs nothing
-  running at all — it is played straight off the file.
+- **A download keeps going after the user leaves the app**, held up by a
+  foreground service; see "Downloads while the app is away" below for what
+  that does and does not promise. Nothing is lost when the process does go:
+  librqbit persists the torrent and its verified pieces, the server
+  persists its pin set, and start-up re-pins every unfinished registry
+  entry, so reopening the app continues where it stopped. A *finished*
+  download needs nothing running at all — it is played straight off the
+  file.
 - **Moving the destination moves nothing that is already there.** The
   server relocates a torrent only when it is pinned again, which for an
   unfinished download happens at the next start-up. Files a finished
   download left behind stay where they were downloaded; the registry keeps
   naming that path.
+
+## Downloads while the app is away
+
+Android freezes the process of an app the user has left, and the whole
+download stack — the embedded `stream-server` and librqbit — lives in the
+Flutter process. A `dataSync` foreground service is how an app asks to keep
+running; it hosts nothing, and nothing moved process for it.
+
+**What is on the device side.** `DownloadsService.kt` is the service,
+`DownloadsChannel.kt` the `xtremio/downloads` method channel `MainActivity`
+installs beside `xtremio/device` (a separate concern: that one is asked
+once, at start-up, what kind of device this is). Dart calls `start`,
+`update`, `stop`, `requestNotificationPermission` and `takePendingOpen`;
+the platform calls back `open` (the notification was tapped) and
+`cancelAll` (its action was pressed), because the registry is behind the
+FFI and only Dart can act on either.
+
+**What decides when it runs.** `DownloadsForegroundService`
+(`lib/features/downloads/downloads_service.dart`), from the one
+`DownloadsClient` the app holds: the service goes up as soon as one entry
+is unfinished (neither complete nor paused, the same test
+`Entry::unfinished` makes in `rust/src/downloads.rs`) and comes down the
+moment none is. Playing or seeding is not a reason to hold it. The progress
+feed only carries rows that *moved*, so a row for a key no listing has
+mentioned is read as "something was added" and answered with a fresh
+listing, and a removal — which has no event at all — is caught by
+re-reading the listing every 5 s while the service is up. At rest neither
+costs anything.
+
+**The notification.** One ongoing notification on a low-importance channel
+(`xtremio.downloads`, `IMPORTANCE_LOW`, no sound, no vibration, no badge),
+so it never buzzes: `Downloading 3 titles` over `1.2 GB of 4.0 GB · 30%`,
+with a progress bar — indeterminate while any one of the downloads still
+has no length (a magnet resolving), since a percentage of only the entries
+that know theirs would be a percentage of the wrong number. Tapping the
+body opens the app on the Downloads screen. Its one action is **Cancel
+all**, which drops every unfinished entry with its part-file: there is no
+pause for a pinned file in the registry today, and inventing one on a
+notification would be a promise the server cannot keep.
+
+**The permissions.** `FOREGROUND_SERVICE` and
+`FOREGROUND_SERVICE_DATA_SYNC` in the manifest, the service declared with
+`android:foregroundServiceType="dataSync"`, and `POST_NOTIFICATIONS` asked
+for at runtime on API 33+ — the first time a download actually starts,
+never at launch, and once a run so it cannot nag. A refusal costs the
+notification and nothing else: the service still runs and the download
+still finishes. There is no storage permission and there still must not
+be.
+
+**What Android still reserves the right to do.** A foreground service is
+not a guarantee of life. The system may kill the process under memory
+pressure; Doze and the per-app battery optimisation may throttle or park
+the sockets, so an idle screen-off device can slow a download right down;
+and Android 15 (API 35) puts a running-time budget on `dataSync` services
+(about 6 hours in 24), after which the system stops it. Swiping the app
+out of recents stops it outright, on purpose: `android:stopWithTask="true"`
+on the service, because the Flutter engine goes at the same moment and a
+notification nobody can move on or take down is worse than none. All of
+those end the same way — the pin set and the registry are on disk, and the
+next launch re-pins every unfinished entry and picks up where the bytes
+stopped.
+
+**Verifying it on a device.** None of this can be seen from a unit test.
+The Kotlin that has no Android in it (`DownloadsProgressBar`) has a JVM
+test (`./gradlew :app:testDebugUnitTest`); the service, the notification
+and the permission dialog need a device or an emulator:
+
+```bash
+adb shell dumpsys activity services com.zond.xtremio   # the service and its type
+adb shell dumpsys notification --noredact | grep -A5 xtremio.downloads
+adb shell am start -n com.zond.xtremio/.MainActivity   # start a download, then:
+adb shell input keyevent KEYCODE_HOME                  # leave the app
+adb shell dumpsys deviceidle force-idle                # and watch what Doze does
+```
 
 ## Running on an emulator (headless, KVM)
 
