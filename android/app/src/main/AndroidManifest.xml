@@ -43,6 +43,31 @@
                 <!-- Show in the Android TV / Google TV home launcher. -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
+            <!-- stremio:// deep links, which is how every addon site's
+                 Install button (stremio-addons.net's included) hands over an
+                 addon: it takes the addon's own manifest URL and swaps the
+                 scheme, so https://host/manifest.json arrives here as
+                 stremio://host/manifest.json. The app opens that addon's
+                 details screen; nothing is installed without a press.
+
+                 BROWSABLE is what lets a link in a browser reach the app;
+                 DEFAULT is required for an implicit VIEW intent to match.
+                 No android:host and no android:autoVerify: the host in these
+                 URLs is the addon's own domain, which could be anyone's, so
+                 there is no domain to claim and App Links verification (which
+                 needs assetlinks.json served from that domain) is impossible
+                 by construction. A custom scheme is all this can be, and it
+                 is what the official Stremio app registers too.
+
+                 The activity is singleTop, so a link arriving while the app
+                 is already up is delivered to the running instance through
+                 onNewIntent rather than starting a second one. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="stremio"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
