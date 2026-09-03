@@ -12,13 +12,15 @@
 //! - `downloads`: the offline-downloads registry over the server's pins
 //! - `server`: the in-process stream-server (torrent/archive bytes over HTTP)
 //! - `guard`: panic containment at the FFI boundary
-//! - `logging`: the process-wide tracing subscriber
+//! - `logging`: the process-wide tracing subscriber and its in-memory ring
+//! - `diagnostics`: what this binary was built from (the pinned revisions)
 //! - `android`: JNI hooks the Kotlin side calls before Dart starts (Android only)
 
 #[cfg(target_os = "android")]
 pub mod android;
 pub mod api;
 pub mod core;
+pub mod diagnostics;
 pub mod downloads;
 pub mod env;
 mod frb_generated;

@@ -7,6 +7,7 @@
 // ignore_for_file: argument_type_not_assignable
 
 import 'api/core.dart';
+import 'api/diagnostics.dart';
 import 'api/downloads.dart';
 import 'api/hello.dart';
 import 'api/server.dart';
@@ -52,6 +53,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   CoreInitResult dco_decode_core_init_result(dynamic raw);
+
+  @protected
+  DiagnosticsSnapshot dco_decode_diagnostics_snapshot(dynamic raw);
 
   @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
@@ -116,6 +120,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   CoreInitResult sse_decode_core_init_result(SseDeserializer deserializer);
+
+  @protected
+  DiagnosticsSnapshot sse_decode_diagnostics_snapshot(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
@@ -197,6 +206,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_core_init_result(
     CoreInitResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_diagnostics_snapshot(
+    DiagnosticsSnapshot self,
     SseSerializer serializer,
   );
 

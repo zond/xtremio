@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 2080246582;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -839765316;
 
 // Section: executor
 
@@ -310,6 +310,37 @@ fn wire__crate__api__core__core_shutdown_impl(
                     })(),
                 )
             }
+        },
+    )
+}
+fn wire__crate__api__diagnostics__diagnostics_snapshot_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "diagnostics_snapshot",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::diagnostics::diagnostics_snapshot()?;
+                    std::result::Result::Ok(output_ok)
+                })(),
+            )
         },
     )
 }
@@ -867,6 +898,24 @@ impl SseDecode for crate::api::core::CoreInitResult {
     }
 }
 
+impl SseDecode for crate::api::diagnostics::DiagnosticsSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_coreVersion = <String>::sse_decode(deserializer);
+        let mut var_streamServerRev = <Option<String>>::sse_decode(deserializer);
+        let mut var_stremioCoreRev = <Option<String>>::sse_decode(deserializer);
+        let mut var_serverBaseUrl = <Option<String>>::sse_decode(deserializer);
+        let mut var_logLines = <Vec<String>>::sse_decode(deserializer);
+        return crate::api::diagnostics::DiagnosticsSnapshot {
+            core_version: var_coreVersion,
+            stream_server_rev: var_streamServerRev,
+            stremio_core_rev: var_stremioCoreRev,
+            server_base_url: var_serverBaseUrl,
+            log_lines: var_logLines,
+        };
+    }
+}
+
 impl SseDecode for i64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -994,28 +1043,28 @@ fn pde_ffi_dispatcher_primary_impl(
         4 => wire__crate__api__core__core_get_state_impl(port, ptr, rust_vec_len, data_len),
         5 => wire__crate__api__core__core_init_impl(port, ptr, rust_vec_len, data_len),
         8 => wire__crate__api__core__core_shutdown_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__downloads__downloads_add_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__downloads__downloads_apply_default_dir_impl(
+        10 => wire__crate__api__downloads__downloads_add_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__downloads__downloads_apply_default_dir_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => wire__crate__api__downloads__downloads_events_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__downloads__downloads_list_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__downloads__downloads_open_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__downloads__downloads_remove_impl(port, ptr, rust_vec_len, data_len),
-        15 => {
+        12 => wire__crate__api__downloads__downloads_events_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__downloads__downloads_list_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__downloads__downloads_open_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__downloads__downloads_remove_impl(port, ptr, rust_vec_len, data_len),
+        16 => {
             wire__crate__api__downloads__downloads_set_dir_impl(port, ptr, rust_vec_len, data_len)
         }
-        16 => wire__crate__api__hello__init_app_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__server__server_settings_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__server__server_start_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__server__server_stop_impl(port, ptr, rust_vec_len, data_len),
-        21 => {
+        17 => wire__crate__api__hello__init_app_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__server__server_settings_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__server__server_start_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__server__server_stop_impl(port, ptr, rust_vec_len, data_len),
+        22 => {
             wire__crate__api__server__server_torrent_stats_impl(port, ptr, rust_vec_len, data_len)
         }
-        22 => {
+        23 => {
             wire__crate__api__server__server_update_settings_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),
@@ -1033,7 +1082,8 @@ fn pde_ffi_dispatcher_sync_impl(
         1 => wire__crate__api__hello__bridge_version_impl(ptr, rust_vec_len, data_len),
         6 => wire__crate__api__core__core_is_initialized_impl(ptr, rust_vec_len, data_len),
         7 => wire__crate__api__hello__core_schema_version_impl(ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__server__server_base_url_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__diagnostics__diagnostics_snapshot_impl(ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__server__server_base_url_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1077,6 +1127,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::core::CoreInitResult>
     for crate::api::core::CoreInitResult
 {
     fn into_into_dart(self) -> crate::api::core::CoreInitResult {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::diagnostics::DiagnosticsSnapshot {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.core_version.into_into_dart().into_dart(),
+            self.stream_server_rev.into_into_dart().into_dart(),
+            self.stremio_core_rev.into_into_dart().into_dart(),
+            self.server_base_url.into_into_dart().into_dart(),
+            self.log_lines.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::diagnostics::DiagnosticsSnapshot
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::diagnostics::DiagnosticsSnapshot>
+    for crate::api::diagnostics::DiagnosticsSnapshot
+{
+    fn into_into_dart(self) -> crate::api::diagnostics::DiagnosticsSnapshot {
         self
     }
 }
@@ -1146,6 +1220,17 @@ impl SseEncode for crate::api::core::CoreInitResult {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Option<String>>::sse_encode(self.server_base_url, serializer);
         <u32>::sse_encode(self.schema_version, serializer);
+    }
+}
+
+impl SseEncode for crate::api::diagnostics::DiagnosticsSnapshot {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.core_version, serializer);
+        <Option<String>>::sse_encode(self.stream_server_rev, serializer);
+        <Option<String>>::sse_encode(self.stremio_core_rev, serializer);
+        <Option<String>>::sse_encode(self.server_base_url, serializer);
+        <Vec<String>>::sse_encode(self.log_lines, serializer);
     }
 }
 
