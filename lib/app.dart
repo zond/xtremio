@@ -9,6 +9,7 @@ import 'features/player/playback_engine.dart';
 import 'shell/device_profile.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
+import 'shell/tv_density.dart';
 
 /// Builds a [PlaybackEngine] for a player with the profile's
 /// `hardwareDecoding`; [MediaKitEngine.new] fits.
@@ -173,11 +174,28 @@ class _XtremioAppState extends State<XtremioApp> {
     super.dispose();
   }
 
+  /// The television's text scale over whatever the platform asks for; see
+  /// [TvDensity]. `MaterialApp.builder` is where it goes, so it reaches the
+  /// routes the navigator pushes (the player, details) and not only the
+  /// shell.
+  Widget _scaleText(BuildContext context, Widget? child) => MediaQuery(
+    data: MediaQuery.of(context).copyWith(
+      textScaler: TvDensity.textScaler(MediaQuery.textScalerOf(context)),
+    ),
+    child: child ?? const SizedBox.shrink(),
+  );
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: const Color(0xFF7B5BF5),
       brightness: Brightness.dark,
+    );
+    final isTv = widget.device.isTv;
+    final theme = ThemeData(
+      useMaterial3: true,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: const Color(0xFF0E0B16),
     );
 
     return DeviceScope(
@@ -190,11 +208,8 @@ class _XtremioAppState extends State<XtremioApp> {
           child: MaterialApp(
             title: 'Xtremio',
             debugShowCheckedModeBanner: false,
-            theme: ThemeData(
-              useMaterial3: true,
-              colorScheme: colorScheme,
-              scaffoldBackgroundColor: const Color(0xFF0E0B16),
-            ),
+            theme: isTv ? TvDensity.theme(theme) : theme,
+            builder: isTv ? _scaleText : null,
             navigatorObservers: [if (kDebugMode) RouteLogObserver()],
             home: const RootShell(),
           ),
