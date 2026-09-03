@@ -38,17 +38,27 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// And the [DeviceScope]: [device] is what start-up detected
 /// ([DeviceProfile.detect] in `main.dart`), so every screen can ask
 /// `DeviceScope.isTv(context)` for the remote-driven layout.
+///
+/// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
+/// the Rust side keeps a single progress sink. The app builds a
+/// [RustDownloadsClient] unless [downloads] hands it one, and disposes only
+/// the one it built itself.
 class XtremioApp extends StatefulWidget {
   const XtremioApp({
     super.key,
     required this.core,
     this.initInfo,
     this.engineBuilder,
+    this.downloads,
     this.device = DeviceProfile.fallback,
   });
 
   final CoreClient core;
   final CoreInitInfo? initInfo;
+
+  /// The offline downloads, for tests that want a fake. Read once, when the
+  /// app comes up: handing over a different client later changes nothing.
+  final DownloadsClient? downloads;
 
   /// The device the app runs on; tests put the app on a TV through it.
   final DeviceProfile device;
@@ -65,6 +75,11 @@ class _XtremioAppState extends State<XtremioApp> {
   late final AppLifecycleListener _lifecycle;
   StreamSubscription<CoreEvent>? _events;
 
+  /// The one downloads client, and whether disposing it is ours to do: a
+  /// client handed in belongs to whoever handed it in.
+  late final DownloadsClient _downloads;
+  late final bool _ownsDownloads;
+
   /// The `ctx` field, for the settings a new player is created with.
   /// Created in [initState] so its first pull is in flight from start-up;
   /// created lazily it would come into being — empty — inside the first
@@ -80,6 +95,8 @@ class _XtremioAppState extends State<XtremioApp> {
   void initState() {
     super.initState();
     _ctx = CoreFieldNotifier(widget.core, CoreField.ctx);
+    _ownsDownloads = widget.downloads == null;
+    _downloads = widget.downloads ?? RustDownloadsClient();
     _lifecycle = AppLifecycleListener(
       onExitRequested: _onExitRequested,
       onResume: _onResume,
@@ -169,6 +186,8 @@ class _XtremioAppState extends State<XtremioApp> {
   @override
   void dispose() {
     _events?.cancel();
+    // Lets go of the progress stream the client holds open on the Rust side.
+    if (_ownsDownloads) _downloads.dispose();
     _ctx.dispose();
     _lifecycle.dispose();
     super.dispose();
@@ -192,15 +211,18 @@ class _XtremioAppState extends State<XtremioApp> {
       child: CoreScope(
         client: widget.core,
         initInfo: widget.initInfo,
-        child: PlaybackScope(
-          createEngine: _createEngine,
-          child: MaterialApp(
-            title: 'Xtremio',
-            debugShowCheckedModeBanner: false,
-            theme: isTv ? TvDensity.theme(theme) : theme,
-            builder: isTv ? TvMediaQuery.builder : null,
-            navigatorObservers: [if (kDebugMode) RouteLogObserver()],
-            home: const RootShell(),
+        child: DownloadsScope(
+          client: _downloads,
+          child: PlaybackScope(
+            createEngine: _createEngine,
+            child: MaterialApp(
+              title: 'Xtremio',
+              debugShowCheckedModeBanner: false,
+              theme: isTv ? TvDensity.theme(theme) : theme,
+              builder: isTv ? TvMediaQuery.builder : null,
+              navigatorObservers: [if (kDebugMode) RouteLogObserver()],
+              home: const RootShell(),
+            ),
           ),
         ),
       ),

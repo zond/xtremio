@@ -222,7 +222,12 @@ connection.
   not out of the file), and a wholly unreadable file is moved aside as
   `downloads.json.corrupt-<seconds>` before an empty one takes its place. At boot every
   entry that is not complete is pinned again, on a blocking thread, since
-  a pin waits on magnet metadata and nothing on screen waits on it.
+  a pin waits on magnet metadata and nothing on screen waits on it. The UI
+  reaches all of that through one `DownloadsClient`
+  (`lib/core/downloads_client.dart`), which `XtremioApp` builds and
+  disposes and a `DownloadsScope` hands down the tree -- one client,
+  because the progress sink is one -- with `DownloadView`
+  (`lib/core/state/download.dart`) reading the registry it answers with.
 - **Settings are the engine's.** `ctx.profile.settings` is stremio-core's
   `Settings` struct (camelCase; `docs/phase3-design.md` §4 lists it) and
   the only way to change one is `Ctx::UpdateSettings` with the *entire*
