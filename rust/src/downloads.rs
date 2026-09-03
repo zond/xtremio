@@ -394,8 +394,16 @@ impl Registry {
 /// Where the registry lives. Errors before `core_init` has pointed storage
 /// at the app directory.
 fn registry_path() -> anyhow::Result<PathBuf> {
-    crate::env::storage_dir()
-        .map(|dir| dir.join(FILE_NAME))
+    registry_path_in(crate::env::storage_dir())
+}
+
+/// The same, against a storage directory handed in rather than read from
+/// the process-global one: `storage_dir` is set once by `core_init` and
+/// shared by every test in the lib binary, so what "there is no storage
+/// directory" does is answered here, where no other test can set one
+/// halfway through.
+fn registry_path_in(dir: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+    dir.map(|dir| dir.join(FILE_NAME))
         .ok_or_else(|| anyhow::anyhow!("storage directory is not set; is the core initialized?"))
 }
 
@@ -1801,7 +1809,14 @@ mod tests {
 
     #[test]
     fn the_registry_needs_a_storage_dir() {
-        // The lib test binary never calls `core_init`, so storage is unset.
-        assert!(registry_path().is_err());
+        assert!(
+            registry_path_in(None).is_err(),
+            "with no storage directory there is nowhere to keep the registry"
+        );
+        assert_eq!(
+            registry_path_in(Some(PathBuf::from("/storage"))).unwrap(),
+            PathBuf::from("/storage").join(FILE_NAME),
+            "and with one it is a file next to the buckets"
+        );
     }
 }
