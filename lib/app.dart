@@ -40,6 +40,10 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// ([DeviceProfile.detect] in `main.dart`), so every screen can ask
 /// `DeviceScope.isTv(context)` for the remote-driven layout.
 ///
+/// It holds the app's one navigator key too, so something outside the widget
+/// tree — a `stremio://` deep link arriving from the platform — can push a
+/// route.
+///
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
 /// [RustDownloadsClient] unless [downloads] hands it one, and disposes only
@@ -85,6 +89,11 @@ class XtremioApp extends StatefulWidget {
 }
 
 class _XtremioAppState extends State<XtremioApp> {
+  /// The one navigator, reachable without a [BuildContext]: a deep link is
+  /// delivered by the platform, not by a widget, so it has nothing else to
+  /// navigate with.
+  final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
+
   late final AppLifecycleListener _lifecycle;
   StreamSubscription<CoreEvent>? _events;
 
@@ -234,6 +243,7 @@ class _XtremioAppState extends State<XtremioApp> {
             child: MaterialApp(
               title: 'Xtremio',
               debugShowCheckedModeBanner: false,
+              navigatorKey: _navigator,
               theme: isTv ? TvDensity.theme(theme) : theme,
               builder: isTv ? TvMediaQuery.builder : null,
               navigatorObservers: [if (kDebugMode) RouteLogObserver()],
