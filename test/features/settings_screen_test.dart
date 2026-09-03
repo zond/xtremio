@@ -105,4 +105,38 @@ void main() {
       expect(action.action, CoreActions.unload(action.field!).action);
     }
   });
+
+  testWidgets('the developer download tile keeps the test torrent on the '
+      'device', (tester) async {
+    final core = FakeCoreClient(
+      state: {CoreField.ctx: loadCtxLoggedOutFixture()},
+    );
+    final downloads = FakeDownloadsClient();
+    addTearDown(downloads.dispose);
+    await tester.pumpWidget(
+      CoreScope(
+        client: core,
+        child: DownloadsScope(
+          client: downloads,
+          child: const MaterialApp(home: SettingsScreen()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Download test torrent'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Download test torrent'));
+    await tester.pumpAndSettle();
+
+    expect(downloads.added, hasLength(1));
+    expect(
+      downloads.added.single.stream.infoHash,
+      'dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c',
+    );
+    expect(find.text('Downloading the test torrent.'), findsOneWidget);
+  });
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
+import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../player/player_screen.dart';
 import 'account_section.dart';
@@ -189,6 +190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: 'Play test HTTP stream',
               stream: DevStreams.bigBuckBunnyHttp,
             ),
+            const _DevDownloadTile(),
           ],
         ],
       ),
@@ -222,6 +224,66 @@ class _DevPlayTile extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Debug-only: keeps the test torrent on the device through the same
+/// `DownloadsClient` a stream tile's download button uses, so the download
+/// path can be proven on a device with no addon installed. The entry lands
+/// in the registry under a meta id of its own, which is also what removes
+/// it again from the Downloads screen.
+class _DevDownloadTile extends StatelessWidget {
+  const _DevDownloadTile();
+
+  /// What the entry is keyed by: a hand-built stream belongs to no meta, so
+  /// it names itself.
+  static const String metaId = 'dev:bigbuckbunny';
+
+  static const String title = 'Download test torrent';
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: const Icon(Icons.download_outlined),
+    title: const Text(title),
+    subtitle: const Text('Keeps the public torrent on this device'),
+    trailing: const Icon(Icons.download),
+    onTap: () => _start(context),
+  );
+
+  /// The same call the download button makes, with the little the dev
+  /// stream knows about itself: no meta snapshot and no addon requests, so
+  /// the row renders and plays but records no library progress.
+  Future<void> _start(BuildContext context) async {
+    final client = DownloadsScope.maybeOf(context);
+    if (client == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    DownloadAddResult? result;
+    Object? thrown;
+    try {
+      result = await client.add(
+        DownloadRequest(
+          metaId: metaId,
+          videoId: metaId,
+          type: 'movie',
+          name: DevStreams.bigBuckBunnyTorrent['name'] as String,
+          stream: StreamInfo(DevStreams.bigBuckBunnyTorrent),
+        ),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+    final failure = result?.error;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          thrown != null
+              ? 'The test download could not be started.'
+              : failure != null
+              ? downloadFailureMessage(failure)
+              : 'Downloading the test torrent.',
+        ),
+      ),
+    );
+  }
 }
 
 /// Shown in place of a settings section until the `ctx` field is in (a
