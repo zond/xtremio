@@ -114,6 +114,15 @@ class _AddonsScreenState extends State<AddonsScreen> {
     Navigator.of(context).push(AddonDetailsScreen.route(transportUrl));
   }
 
+  /// Pulls the account's addons again, so one installed on the website (or
+  /// in another Stremio client) shows up here.
+  void _refreshFromAccount() {
+    _client?.dispatch(CoreActions.pullAddonsFromAPI());
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text(AddonDirectoryBar.refreshingMessage)),
+    );
+  }
+
   Future<void> _addByUrl() async {
     final url = await showDialog<String>(
       context: context,
@@ -157,6 +166,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
                 return Column(
                   children: [
                     if (profile.addonsLocked) const AddonsLockedBanner(),
+                    AddonDirectoryBar(onRefresh: _refreshFromAccount),
                     Expanded(
                       child: TabBarView(
                         children: [
@@ -199,6 +209,72 @@ class _AddonsScreenState extends State<AddonsScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Where to find addons this catalog does not list, and how one installed
+/// there arrives here.
+///
+/// stremio-addons.net is the community's directory; its Install button
+/// hands the platform a `stremio://` link, which this app registers and
+/// opens as an addon details screen. It is a link out to the browser
+/// through the [ExternalLinkScope] and never an in-app web view.
+///
+/// [onRefresh] is the other half, and the only half a television has: a
+/// remote cannot work a browser, so a TV user installs on a phone or a
+/// laptop *into their Stremio account* and pulls it down here. That is what
+/// the line under the buttons says.
+///
+/// It sits above the tabs so both of them have it, and it is two ordinary
+/// buttons so the D-pad reaches them like anything else.
+class AddonDirectoryBar extends StatelessWidget {
+  const AddonDirectoryBar({super.key, required this.onRefresh});
+
+  /// Pulls the account's addon list again (`PullAddonsFromAPI`).
+  final VoidCallback onRefresh;
+
+  static const String directoryUrl = 'https://stremio-addons.net';
+  static const String directoryLabel = 'Find more addons at stremio-addons.net';
+  static const String refreshLabel = 'Refresh addons from account';
+  static const String refreshingMessage = 'Refreshing addons from your account';
+  static const String explanation =
+      'Installing one there into your Stremio account brings it here after '
+      'a refresh.';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            children: [
+              TextButton.icon(
+                onPressed: () => openInBrowser(context, directoryUrl),
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text(directoryLabel),
+              ),
+              TextButton.icon(
+                onPressed: onRefresh,
+                icon: const Icon(Icons.sync, size: 18),
+                label: const Text(refreshLabel),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              explanation,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -531,8 +607,10 @@ class _Failed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Scrollable: with the directory bar above it this panel does not fit a
+    // 600 px-tall window, and a clipped Retry button is worse than a scroll.
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
