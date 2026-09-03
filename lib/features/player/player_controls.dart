@@ -27,6 +27,8 @@ class PlayerTopBar extends StatelessWidget {
     required this.onStats,
     required this.onSettings,
     required this.onNext,
+    this.onCast,
+    this.castOn = false,
     this.firstFocusNode,
   });
 
@@ -44,6 +46,15 @@ class PlayerTopBar extends StatelessWidget {
 
   /// Null hides the button (no next episode).
   final VoidCallback? onNext;
+
+  /// Opens the list of receivers. Null hides the button, which is the case
+  /// whenever there is nothing to cast to: no Cast SDK on this platform, no
+  /// receiver found yet, or a television, which is a receiver itself and
+  /// never a sender.
+  final VoidCallback? onCast;
+
+  /// A receiver has the stream, so the button says so and stays lit.
+  final bool castOn;
 
   /// Attached to the back button: what the player focuses when the remote
   /// moves focus up onto this bar.
@@ -82,6 +93,15 @@ class PlayerTopBar extends StatelessWidget {
                 style: textTheme.titleMedium?.copyWith(color: Colors.white),
               ),
             ),
+            if (onCast != null)
+              IconButton(
+                key: const ValueKey('cast'),
+                tooltip: castOn ? 'Casting' : 'Cast to a device',
+                color: Colors.white,
+                isSelected: castOn,
+                onPressed: onCast,
+                icon: Icon(castOn ? Icons.cast_connected : Icons.cast),
+              ),
             if (onNext != null)
               IconButton(
                 key: const ValueKey('next'),

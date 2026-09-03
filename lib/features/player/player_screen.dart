@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' show InternetAddress, Platform;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -9,6 +10,10 @@ import 'package:flutter/services.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../widgets/remote_press.dart';
+import '../cast/cast_client.dart';
+import '../cast/cast_compatibility.dart';
+import '../cast/cast_widgets.dart';
+import '../details/stream_facts.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import 'language_names.dart';
@@ -256,6 +261,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _openRetryTimer;
   String? _openError;
 
+  /// Casting: the sender, the LAN media listener a cast URL is served from,
+  /// the receivers found so far and the one that has the stream.
+  ///
+  /// [_castingTo] non-null is the whole of "this screen is a remote now":
+  /// local playback is paused, the engine's own reports are ignored, and
+  /// what is drawn and what reaches the core both come from [_castStatus].
+  CastClient? _cast;
+  LanMediaControl? _lanMedia;
+  List<CastDevice> _castDevices = const [];
+  CastDevice? _castingTo;
+  CastStatus _castStatus = const CastStatus(state: CastPlayerState.idle);
+
+  /// Whether this screen turned the LAN media listener on, and so owes it
+  /// an off. A stream the receiver fetches straight from its own host needs
+  /// no listener at all, and must not leave one running.
+  bool _lanMediaOn = false;
+
+  /// The last sample mpv gave for the open media, taken while the cast
+  /// sheet is up: the one place the compatibility check can hear what the
+  /// file actually is instead of what its name claims.
+  PlaybackStats? _lastStats;
+  StreamSubscription<PlaybackStats>? _castStatsSubscription;
+
+  /// The receiver has reported the media finished and the core has been
+  /// told. A receiver keeps saying so; the core hears it once.
+  bool _castEnded = false;
+
+  bool get _casting => _castingTo != null;
+
   bool _controlsVisible = true;
   Timer? _controlsTimer;
   bool _menuOpen = false;
@@ -358,6 +392,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _fullscreenOn = true;
       _fullscreen?.enter().ignore();
     }
+
+    _wireCast(CastScope.of(context), CastScope.lanMediaOf(context));
 
     final engine = PlaybackScope.of(context)();
     _engine = engine;
@@ -510,8 +546,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String get _device => Platform.operatingSystem;
 
   void _onPosition(Duration position) {
-    if (_handedOver) return;
+    if (_handedOver || _casting) return;
     _position.value = position;
+    _reportTime(position);
+  }
+
+  /// Tells the core where playback has got to, no more often than
+  /// [PlayerScreen.timeReportInterval]. Shared by the local engine and the
+  /// receiver, so continue-watching is kept the same way either way.
+  void _reportTime(Duration position) {
     if (_opened == null || _duration == Duration.zero) return;
     final last = _lastReported;
     if (last != null &&
@@ -767,12 +810,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _torrentStatsRequest != null;
 
   void _onPlaying(bool playing) {
-    if (_handedOver) return;
+    // While a receiver has the stream the local engine is paused on
+    // purpose, and its report says nothing about what is being watched.
+    if (_handedOver || _casting) return;
     if (playing) _onMediaLoaded();
     if (_playing != playing) {
       setState(() => _playing = playing);
       _showControls();
     }
+    _reportPlaying(playing);
+  }
+
+  /// Tells the core whether playback is running, once per change. Shared by
+  /// the local engine and the receiver, which are never both playing.
+  void _reportPlaying(bool playing) {
     if (_opened == null || playing == _lastPlaying) return;
     _lastPlaying = playing;
     _client?.dispatch(CoreActions.playerPausedChanged(!playing));
@@ -785,7 +836,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onCompleted(bool completed) {
-    if (!completed || _opened == null || _handedOver) return;
+    if (!completed || _opened == null || _handedOver || _casting) return;
     _client?.dispatch(CoreActions.playerEnded());
     // `bingeWatching` off: the episode just ends; the Next button remains.
     if (_state?.nextVideo != null && _settings.bingeWatching) _startUpNext();
@@ -867,7 +918,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // --- Transport -----------------------------------------------------------
 
   void _togglePlay() {
-    _engine?.playOrPause();
+    if (_casting) {
+      final cast = _cast;
+      (_castStatus.state.isPlaying ? cast?.pause() : cast?.play())?.ignore();
+    } else {
+      _engine?.playOrPause();
+    }
     _showControls();
   }
 
@@ -879,7 +935,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ? upper
         : target;
     _position.value = clamped;
-    _engine?.seek(clamped);
+    if (_casting) {
+      // The receiver will report the new position itself; showing it at
+      // once keeps the bar from snapping back while the round trip runs.
+      setState(() => _castStatus = _castStatus.at(clamped));
+      _cast?.seek(clamped).ignore();
+    } else {
+      _engine?.seek(clamped);
+    }
     if (_opened != null && _duration > Duration.zero) {
       _client?.dispatch(
         CoreActions.playerSeek(
@@ -1322,6 +1385,250 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  // --- Casting -------------------------------------------------------------
+
+  /// Takes the sender and the LAN media listener from the scope and starts
+  /// looking for receivers, once, when the screen comes up.
+  ///
+  /// Discovery costs radio and battery, so it runs while a player is open
+  /// and not for the life of the app; [dispose] stops it. A television
+  /// starts none of it: a TV *is* a receiver, and the button that would
+  /// open this is never built there.
+  void _wireCast(CastClient client, LanMediaControl lanMedia) {
+    _cast = client;
+    _lanMedia = lanMedia;
+    if (_isTv || !client.isSupported) return;
+    _castDevices = client.currentDevices;
+    _subscriptions.addAll([
+      client.devices.listen(_onCastDevices),
+      client.session.listen(_onCastSession),
+      client.status.listen(_onCastStatus),
+    ]);
+    client.startDiscovery().ignore();
+  }
+
+  /// Whether there is anything to cast to, which is the whole condition for
+  /// the button being on the bar: a sender platform, not a television, and
+  /// a receiver that has actually answered.
+  bool get _castAvailable =>
+      !_isTv &&
+      (_cast?.isSupported ?? false) &&
+      (_castDevices.isNotEmpty || _casting);
+
+  void _onCastDevices(List<CastDevice> devices) {
+    if (!mounted) return;
+    setState(() => _castDevices = devices);
+  }
+
+  /// The session as the sender sees it. A null while this screen thinks it
+  /// is casting means the session ended somewhere else -- the receiver's
+  /// own remote, the system notification, another phone -- and playback
+  /// comes back to this device exactly as if Stop had been pressed here.
+  void _onCastSession(CastDevice? device) {
+    if (!mounted || device != null || !_casting) return;
+    unawaited(_stopCast(disconnect: false));
+  }
+
+  /// What the receiver reports: what is drawn, and what the core is told.
+  ///
+  /// The same three actions local playback dispatches -- `TimeChanged`,
+  /// `PausedChanged`, `Ended` -- so the library and continue-watching do not
+  /// notice which device the pixels were on.
+  void _onCastStatus(CastStatus status) {
+    if (!mounted) return;
+    setState(() => _castStatus = status);
+    if (!_casting || _opened == null) return;
+    final duration = status.duration;
+    if (duration != null && duration > Duration.zero) _duration = duration;
+    _position.value = status.position;
+    _reportTime(status.position);
+    _reportPlaying(status.state.isPlaying);
+    // A receiver keeps repeating "idle, finished" once it is done; the core
+    // is told the once, as mpv's own completion tells it once.
+    if (status.ended && !_castEnded) {
+      _castEnded = true;
+      _client?.dispatch(CoreActions.playerEnded());
+    }
+  }
+
+  /// The receivers, and Stop when one of them has the stream.
+  ///
+  /// mpv is sampled while the sheet is up, because the compatibility check
+  /// would rather hear what the decoder is actually reading than what the
+  /// release name claims. The subscription is what makes the engine sample
+  /// at all, so it is held for exactly as long as the list is open.
+  Future<void> _openCastSheet() async {
+    _castStatsSubscription = _engine?.stats.listen((stats) {
+      _lastStats = stats;
+    });
+    await _showSheet(
+      (context) => CastDeviceSheet(
+        devices: _castDevices,
+        connected: _castingTo,
+        onSelect: (device) {
+          Navigator.of(context).pop();
+          unawaited(_startCast(device));
+        },
+        onDisconnect: () {
+          Navigator.of(context).pop();
+          unawaited(_stopCast());
+        },
+      ),
+    );
+    await _castStatsSubscription?.cancel();
+    _castStatsSubscription = null;
+  }
+
+  /// What the stream says about itself, for the compatibility check: the
+  /// stream the engine resolved when there is one, else the one this screen
+  /// was opened with.
+  StreamFacts get _streamFacts =>
+      StreamFacts.of(_state?.selectedStream ?? StreamInfo(widget.stream));
+
+  /// Hands the stream to [device], or explains why it cannot be.
+  ///
+  /// Nothing is loaded until every step has answered: the stream has to be
+  /// one a receiver could play at all, the session has to start, and a URL
+  /// the receiver can actually fetch has to exist. A failure at any point
+  /// leaves nothing behind -- no session, no LAN listener -- and says what
+  /// happened.
+  Future<void> _startCast(CastDevice device) async {
+    final cast = _cast;
+    final local = _opened;
+    if (cast == null || local == null || !mounted) return;
+    final state = _state;
+    final compatibility = CastCompatibility.of(
+      url: local,
+      facts: _streamFacts,
+      filename: castFilename(state),
+      stats: _lastStats,
+    );
+    if (compatibility is CastRefused) {
+      await _explainCast(compatibility.explanation);
+      return;
+    }
+    if (!await cast.connect(device)) {
+      await _explainCast('Could not start a session with ${device.name}.');
+      return;
+    }
+    final url = await _castUrl(local, device);
+    if (url == null) {
+      await _endLanMedia();
+      await cast.disconnect();
+      await _explainCast(
+        '${device.name} cannot reach this device over the network, so there '
+        'is no address to give it. Casting a loopback URL it could never '
+        'fetch would only look like it worked.',
+      );
+      return;
+    }
+    if (!mounted) return;
+    final position = _position.value;
+    // Local playback stops here, before the receiver starts: two copies of
+    // the same film, a few seconds apart, is nobody's idea of casting.
+    await _engine?.pause();
+    setState(() {
+      _castingTo = device;
+      _castEnded = false;
+      _castStatus = CastStatus(
+        state: CastPlayerState.buffering,
+        position: position,
+        duration: _duration > Duration.zero ? _duration : null,
+      );
+    });
+    await cast.load(
+      CastMedia(
+        url: url,
+        contentType: (compatibility as CastReady).contentType,
+        title: state?.title ?? '',
+      ),
+      start: position,
+    );
+  }
+
+  /// The URL to give [device] for the stream this player has open, or null
+  /// when there is none it could fetch.
+  ///
+  /// A stream served from somewhere else on the internet is handed over as
+  /// it is; the receiver has a network connection of its own. Only a URL on
+  /// this device needs the server's LAN media listener, which is therefore
+  /// the only case that starts one.
+  Future<Uri?> _castUrl(Uri local, CastDevice device) async {
+    if (!_isLoopback(local.host)) return local;
+    final lan = _lanMedia;
+    if (lan == null) return null;
+    try {
+      await lan.setLanMedia(enabled: true);
+    } catch (error) {
+      if (kDebugMode) debugPrint('LAN media listener refused: $error');
+      return null;
+    }
+    _lanMediaOn = true;
+    final base = await lan.lanMediaBaseUrl(peerIp: device.address);
+    if (base == null) return null;
+    return local.replace(
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : null,
+    );
+  }
+
+  static bool _isLoopback(String host) =>
+      host == 'localhost' ||
+      (InternetAddress.tryParse(host)?.isLoopback ?? false);
+
+  /// Ends the session and brings playback back to this device, at the point
+  /// the receiver had reached.
+  ///
+  /// [disconnect] false when the session is already gone (it ended
+  /// elsewhere) and there is nothing left to end.
+  Future<void> _stopCast({bool disconnect = true}) async {
+    if (!_casting) return;
+    final position = _castStatus.position;
+    _castingTo = null;
+    if (mounted) setState(() {});
+    if (disconnect) await _cast?.disconnect();
+    await _endLanMedia();
+    if (!mounted) return;
+    _position.value = position;
+    await _engine?.seek(position);
+    await _engine?.play();
+  }
+
+  /// Closes the LAN media listener, if this screen is what opened it. The
+  /// listener exists for the length of a session and no longer, so every
+  /// way out of one comes through here: Stop, a session that ended
+  /// elsewhere, a failed start, and [dispose].
+  Future<void> _endLanMedia() async {
+    if (!_lanMediaOn) return;
+    _lanMediaOn = false;
+    try {
+      await _lanMedia?.setLanMedia(enabled: false);
+    } catch (error) {
+      if (kDebugMode) debugPrint('could not stop the LAN listener: $error');
+    }
+  }
+
+  /// Leaving the player while a receiver has the stream: the session goes
+  /// and so does the listener. Leaving the receiver playing would mean
+  /// leaving a socket open to the network for it, which is exactly what
+  /// must not outlive a session.
+  Future<void> _teardownCast() async {
+    _castingTo = null;
+    await _cast?.disconnect();
+    await _endLanMedia();
+  }
+
+  /// Says why casting did not happen. A dialog, because it is the answer to
+  /// something that was asked for and it is worth reading.
+  Future<void> _explainCast(String explanation) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => CastRefusedDialog(explanation: explanation),
+    );
+  }
+
   // --- Keyboard ------------------------------------------------------------
 
   /// Moves focus onto the shown controls: [direction] down lands on
@@ -1526,6 +1833,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    _castStatsSubscription?.cancel();
+    // Whatever else is true when this screen goes, nothing of ours is left
+    // on the LAN: the session ends and the listener with it. The
+    // subscriptions below are cancelled first, so nothing reports back into
+    // a disposed screen while this runs.
+    _cast?.stopDiscovery().ignore();
+    if (_casting || _lanMediaOn) unawaited(_teardownCast());
     _cancelOpenRetry();
     _statsHoverTimer?.cancel();
     _controlsTimer?.cancel();
@@ -1595,15 +1909,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget build(BuildContext context) {
     final state = _state;
     final engine = _engine;
-    final startup = _startupOverlayShown;
-    final status = startup ? null : _statusText(state);
+    final casting = _casting;
+    // While a receiver has the stream there is no video here, nothing is
+    // buffering here and no torrent is starting up for this screen: every
+    // overlay about local playback is about a player that is paused.
+    final startup = _startupOverlayShown && !casting;
+    final status = startup || casting ? null : _statusText(state);
     final stall = status != null && _stallOverlayShown(state);
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= PlayerScreen.wideBreakpoint;
     final shown = _controlsShown;
     final nextVideo = state?.nextVideo;
     final upNext = _upNextSecondsLeft;
-    final hasVideo = engine != null && _opened != null;
+    final hasVideo = engine != null && _opened != null && !casting;
     final seekStep = _seekStep;
     if (_isTv) _scheduleFocusCheck();
     return Scaffold(
@@ -1634,6 +1952,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       )
                     : const SizedBox.expand(),
               ),
+              // Above the tap-to-show-controls surface rather than inside
+              // it: its buttons are the only thing on screen while a
+              // receiver has the stream, and they must not have to win an
+              // arena against the video's double-tap-to-seek first.
+              if (casting)
+                SafeArea(
+                  child: CastRemotePanel(
+                    deviceName: _castingTo!.name,
+                    title: state?.title ?? '',
+                    status: _castStatus,
+                    onPlayPause: _togglePlay,
+                    onSeek: _seekTo,
+                    onStop: () => unawaited(_stopCast()),
+                    playPauseFocusNode: _isTv ? _playPauseFocus : null,
+                  ),
+                ),
               if (hasVideo && _statsVisible)
                 SafeArea(
                   child: Padding(
@@ -1695,7 +2029,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             statsOn: _statsPinned ?? false,
                             onStats: _toggleStatsPinned,
                             onSettings: _openSettings,
-                            onNext: nextVideo == null ? null : _playNext,
+                            onNext: nextVideo == null || casting
+                                ? null
+                                : _playNext,
+                            onCast: _castAvailable ? _openCastSheet : null,
+                            castOn: casting,
                             firstFocusNode: _topBarFocus,
                           ),
                           Expanded(

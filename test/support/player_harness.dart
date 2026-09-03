@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
@@ -27,6 +28,8 @@ class PlayerHarness {
     this.configureEngine,
     this.device,
     this.downloads,
+    this.cast,
+    this.lanMedia,
   }) : fixture = player ?? loadPlayerFixture() {
     core = FakeCoreClient(
       state: {
@@ -72,6 +75,12 @@ class PlayerHarness {
   /// what the screen has to keep working without.
   final DownloadsClient? downloads;
 
+  /// The cast sender and the LAN media listener above the screen, or null
+  /// for no [CastScope] at all -- which is what a player without casting
+  /// runs under, and what leaves the button off the bar.
+  final CastClient? cast;
+  final LanMediaControl? lanMedia;
+
   Map<String, dynamic> get selected =>
       fixture['selected'] as Map<String, dynamic>;
 
@@ -99,9 +108,13 @@ class PlayerHarness {
     );
     final device = this.device;
     final downloads = this.downloads;
-    final scoped = downloads == null
+    final cast = this.cast;
+    final casted = cast == null
         ? app
-        : DownloadsScope(client: downloads, child: app);
+        : CastScope(client: cast, lanMedia: lanMedia, child: app);
+    final scoped = downloads == null
+        ? casted
+        : DownloadsScope(client: downloads, child: casted);
     return KeyedSubtree(
       key: ObjectKey(this),
       child: device == null
