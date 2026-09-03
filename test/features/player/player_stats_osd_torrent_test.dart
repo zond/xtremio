@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -149,6 +150,80 @@ void main() {
     await tester.pump(PlayerScreen.torrentStatsOverlayInterval);
     await tester.pump();
     expect(stats.requests.length, greaterThan(whileStalled));
+  });
+
+  testWidgets('hovering back keeps the numbers the panel last showed', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final harness = await pumpPlaying(tester);
+    final stats = harness.torrentStats;
+    stats.response = swarm;
+
+    // On a desktop the panel comes up on hover and goes down when the
+    // pointer rests, which is not a request to forget the swarm.
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.text('video surface')));
+    await pumpEvents(tester);
+    expect(row('speed    1.5 MB/s'), findsOneWidget);
+    await tester.pump(PlayerScreen.statsHoverTimeout);
+    await tester.pump();
+    expect(overlay, findsNothing);
+
+    // Moving again: the panel is back with what it last showed while the
+    // poll it sent is still out -- no flicker through a blank panel.
+    stats.holdAnswers = true;
+    await mouse.moveBy(const Offset(10, 0));
+    await pumpEvents(tester);
+    expect(overlay, findsOneWidget);
+    expect(stats.heldCount, 1);
+    expect(row('speed    1.5 MB/s'), findsOneWidget);
+    expect(row('torrent  waiting for the server'), findsNothing);
+
+    // The answer replaces them when it lands.
+    stats.response = const TorrentStats(
+      phase: TorrentPhase.ready,
+      downloadSpeed: 250000,
+      peerDiscovery: PeerDiscovery(seen: 12, live: 1),
+    );
+    stats.answer();
+    await pumpEvents(tester);
+    expect(row('speed    250 kB/s'), findsOneWidget);
+  });
+
+  testWidgets('numbers nobody was watching are not what a stall shows', (
+    tester,
+  ) async {
+    final harness = await pumpPlaying(tester);
+    final stats = harness.torrentStats;
+    stats.response = swarm;
+
+    // Measured with the panel up, then the panel goes down and the
+    // polling with it.
+    await pressShiftI(tester);
+    expect(row('speed    1.5 MB/s'), findsOneWidget);
+    await pressShiftI(tester);
+    expect(overlay, findsNothing);
+
+    // A stall, some time later: what was measured back then describes
+    // then, so the player waits for the server rather than showing it.
+    stats.holdAnswers = true;
+    harness.engine.emitBuffering(true);
+    await pumpEvents(tester);
+    await pressShiftI(tester);
+    expect(row('torrent  waiting for the server'), findsOneWidget);
+    expect(row('speed    1.5 MB/s'), findsNothing);
+
+    stats.response = const TorrentStats(
+      phase: TorrentPhase.ready,
+      downloadSpeed: 250000,
+      peerDiscovery: PeerDiscovery(seen: 12, live: 1),
+    );
+    stats.answer();
+    await pumpEvents(tester);
+    expect(row('speed    250 kB/s'), findsOneWidget);
   });
 
   testWidgets('a direct stream has no swarm rows and asks nothing', (

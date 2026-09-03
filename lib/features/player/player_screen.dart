@@ -531,19 +531,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// `setState`.
   void _stopTorrentStats() {
     _pauseTorrentStats();
+    _torrentStats = null;
     _torrentStatsRequest = null;
     _torrentStatsFallback = null;
   }
 
-  /// Stops polling but keeps the torrent, so a stall can pick it up again.
-  /// The last answer goes with the timer: by the time playback stalls it
-  /// describes a start-up minutes ago, and a card showing it would be
-  /// stating the past as the present.
+  /// Stops polling but keeps the torrent, so a stall or the stats OSD can
+  /// pick it up again. The last answer outlives the timer, because a pause
+  /// is often only the panel going away for a moment (hovering off, on a
+  /// desktop) and the numbers it showed are still the numbers to show when
+  /// it comes back; [_syncTorrentStats] is where they are dropped as too
+  /// old to show.
   void _pauseTorrentStats() {
     _torrentStatsTimer?.cancel();
     _torrentStatsTimer = null;
     _torrentStatsCadence = null;
-    _torrentStats = null;
   }
 
   /// Keeps the polling in step with whoever wants the numbers, from
@@ -562,14 +564,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ? PlayerScreen.torrentStatsOverlayInterval
         : null;
     if (cadence == null) {
-      if (_torrentStatsTimer != null || _torrentStats != null) {
-        setState(_pauseTorrentStats);
-      }
+      _pauseTorrentStats();
       return;
     }
     if (_torrentStatsTimer != null && _torrentStatsCadence == cadence) return;
     // A stall that starts under an open OSD (or ends under one) changes
-    // only the pace: the last answer stands until the next one lands.
+    // only the pace: the last answer stands until the next one lands. The
+    // same goes for a panel that comes back before the answer does. Wanting
+    // the numbers again after nothing was showing them is another matter:
+    // those describe a start-up, or a stall, however long ago, and the
+    // stall card showing them would be stating the past as the present.
+    if (_torrentStatsTimer == null && !_statsVisible) _torrentStats = null;
     _torrentStatsTimer?.cancel();
     _torrentStatsCadence = cadence;
     _torrentStatsTimer = Timer.periodic(cadence, (_) => _pollTorrentStats());
