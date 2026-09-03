@@ -13,10 +13,11 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
+use xtremio_core::api::core::{core_init, core_shutdown, CoreConfig};
 use xtremio_core::api::downloads::{
     downloads_add, downloads_list, downloads_remove, downloads_set_dir,
 };
-use xtremio_core::api::server::{server_start, server_stop, ServerConfig};
+use xtremio_core::api::server::{server_start, ServerConfig};
 
 /// Whole 16 KiB pieces per file, so no piece straddles the two and "this
 /// file is complete" means only its own bytes are on disk.
@@ -334,6 +335,31 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert_eq!(pins.len(), 1, "{pins:?}");
     assert_eq!(pins[0].file_idx, missing_idx);
 
+    // And booting is what does that in the app: `core_init` starts the
+    // re-pin behind it, so the pin comes back without anything on screen
+    // having waited for a magnet to resolve.
+    xtremio_core::server::unpin_download(&info_hash, missing_idx, false)?;
+    assert!(xtremio_core::server::downloads()?.is_empty());
+    core_init(CoreConfig {
+        storage_dir: storage.display().to_string(),
+        cache_dir: tmp.path().join("cache").join("core").display().to_string(),
+        server: Some(ServerConfig {
+            config_dir: tmp.path().join("server").display().to_string(),
+            cache_dir: cache_root.display().to_string(),
+            port: 0,
+            fallback_to_ephemeral: true,
+        }),
+    })?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let pins = xtremio_core::server::downloads()?;
+        if pins.len() == 1 && pins[0].file_idx == missing_idx {
+            break;
+        }
+        assert!(Instant::now() < deadline, "init never re-pinned: {pins:?}");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
     // The destination directory goes through the server's own validation.
     let error = downloads_set_dir(Some("relative/dir".into())).unwrap_err();
     assert!(error.to_string().contains("absolute"), "{error}");
@@ -385,6 +411,6 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         "nothing unknown was invented on the way through"
     );
 
-    server_stop()?;
+    core_shutdown()?;
     Ok(())
 }

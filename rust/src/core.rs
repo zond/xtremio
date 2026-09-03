@@ -4,7 +4,8 @@
 //! Boot order (mirrors stremio-core-web's `initialize_runtime`): start the
 //! embedded server -> point storage at the app dir -> run schema migrations
 //! -> hydrate the persisted buckets -> retarget a loopback server URL at the
-//! embedded server -> build the model -> `Runtime::new` -> pump events.
+//! embedded server -> build the model -> `Runtime::new` -> pump events ->
+//! re-pin the unfinished offline downloads in the background.
 //!
 //! Login and logout replace the profile settings with stremio-core's
 //! defaults, which point the streaming server back at loopback:11470, so the
@@ -302,6 +303,22 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     *RUNTIME
         .write()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(runtime);
+
+    // The server persists its own pin set, but a registry entry can outlive
+    // it (a purged cache dir, a downloads volume that was not mounted last
+    // boot), so every unfinished download is pinned again. Off the boot
+    // path: a pin blocks while a magnet resolves its metadata, and nothing
+    // on screen waits for it.
+    if server_base_url.is_some() {
+        XtremioEnv::exec_concurrent(async {
+            if let Err(error) =
+                tokio::task::spawn_blocking(crate::downloads::repin_unfinished).await
+            {
+                tracing::warn!(%error, "re-pinning the offline downloads panicked");
+            }
+        });
+    }
+
     tracing::info!(?server_base_url, "stremio-core runtime started");
     Ok(InitOutcome {
         server_base_url,
