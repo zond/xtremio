@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_stats.dart';
 import 'package:xtremio/features/player/playback_stats_overlay.dart';
+import 'package:xtremio/features/player/torrent_stats.dart';
 
 void main() {
   test('parses mpv property strings', () {
@@ -90,6 +91,63 @@ void main() {
     expect(
       PlaybackStatsOverlay.describe(const PlaybackStats()),
       everyElement(contains('-')),
+    );
+  });
+
+  test('the swarm rows say peers, and the phase only until it is ready', () {
+    // Nothing back from the server yet: the panel says so rather than
+    // showing zeros it has not measured.
+    expect(PlaybackStatsOverlay.describeTorrent(null), [
+      'torrent  waiting for the server',
+    ]);
+
+    // Ready: no phase row, and the counts are connections out of addresses
+    // found -- peers, never seeds, which the server does not count.
+    expect(
+      PlaybackStatsOverlay.describeTorrent(
+        const TorrentStats(
+          phase: TorrentPhase.ready,
+          peerDiscovery: PeerDiscovery(seen: 12),
+        ),
+      ),
+      ['speed    0 B/s', 'peers    0 connected / 12 found'],
+    );
+
+    // Not ready: the phase leads, with the percentage of whatever it is
+    // the server is measuring.
+    expect(
+      PlaybackStatsOverlay.describeTorrent(
+        const TorrentStats(
+          phase: TorrentPhase.buffering,
+          initialWindowReadyBytes: 1048576,
+          initialWindowBytes: 4194304,
+          downloadSpeed: 1500000,
+          peerDiscovery: PeerDiscovery(seen: 9, live: 4),
+        ),
+      ),
+      [
+        'torrent  buffering head 25%',
+        'speed    1.5 MB/s',
+        'peers    4 connected / 9 found',
+      ],
+    );
+    expect(
+      PlaybackStatsOverlay.describeTorrent(
+        const TorrentStats(
+          phase: TorrentPhase.checking,
+          checkedBytes: 3,
+          checkTotalBytes: 4,
+        ),
+      ),
+      contains('torrent  checking 75%'),
+    );
+
+    // The server's own reason for stopping gets a row of its own.
+    expect(
+      PlaybackStatsOverlay.describeTorrent(
+        const TorrentStats(phase: TorrentPhase.error, error: 'disk full'),
+      ),
+      containsAllInOrder(['torrent  stopped', 'error    disk full']),
     );
   });
 }

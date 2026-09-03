@@ -87,6 +87,12 @@ class PlayerScreen extends StatefulWidget {
   /// only has to keep a few numbers honest.
   static const Duration torrentStallStatsInterval = Duration(seconds: 2);
 
+  /// How often it is polled when nothing is waiting for the torrent but
+  /// the stats OSD is up: playback is fine, and the panel was opened on
+  /// purpose to watch the swarm, so the numbers must move -- slowly, since
+  /// no frame depends on them.
+  static const Duration torrentStatsOverlayInterval = Duration(seconds: 5);
+
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
 
@@ -212,9 +218,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// torrent -- what is polled *for* -- and the timer is what says whether
   /// anything is waiting on it: every
   /// [PlayerScreen.torrentStatsInterval] until the media loads, then off
-  /// until playback stalls, then every
-  /// [PlayerScreen.torrentStallStatsInterval] until it resumes
-  /// ([_syncStallStats]). An engine error and dispose end both.
+  /// until something wants the numbers again -- a stall, at
+  /// [PlayerScreen.torrentStallStatsInterval], or the stats OSD, at the
+  /// slower [PlayerScreen.torrentStatsOverlayInterval] ([_syncTorrentStats],
+  /// which also owns [_torrentStatsCadence], the period the running timer
+  /// was built with). An engine error and dispose end both.
   ///
   /// The request asks for the stream's file, which focuses it and reports
   /// its initial window; when the server has no answer for that (an index
@@ -224,6 +232,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   TorrentStatsRequest? _torrentStatsRequest;
   TorrentStatsRequest? _torrentStatsFallback;
   Timer? _torrentStatsTimer;
+  Duration? _torrentStatsCadence;
   bool _torrentStatsFetching = false;
   TorrentStats? _torrentStats;
 
@@ -480,7 +489,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // the polling back, at once if the media arrived already stalled.
       _pauseTorrentStats();
     });
-    _syncStallStats();
+    _syncTorrentStats();
     _maybeAutoPickSubtitles();
   }
 
@@ -510,6 +519,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStatsRequest = request;
     final fallback = request.torrentLevel;
     _torrentStatsFallback = fallback == request ? null : fallback;
+    _torrentStatsCadence = PlayerScreen.torrentStatsInterval;
     _torrentStatsTimer = Timer.periodic(
       PlayerScreen.torrentStatsInterval,
       (_) => _pollTorrentStats(),
@@ -532,31 +542,41 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _pauseTorrentStats() {
     _torrentStatsTimer?.cancel();
     _torrentStatsTimer = null;
+    _torrentStatsCadence = null;
     _torrentStats = null;
   }
 
-  /// Keeps the stall polling in step with the engine, from
-  /// [_onMediaLoaded] and [_onBuffering]: once the media has loaded, a
-  /// torrent's stats are worth asking for exactly while playback is
-  /// stalled. Anything else -- playing again, a direct stream, a failure
-  /// that cleared the request -- leaves no timer behind.
-  void _syncStallStats() {
+  /// Keeps the polling in step with whoever wants the numbers, from
+  /// [_onMediaLoaded], [_onBuffering] and every change of the stats OSD's
+  /// visibility. Once the media has loaded a torrent's stats are worth
+  /// asking for while playback is stalled (the stall card measures them)
+  /// and, more slowly, while the OSD shows them -- playback being fine is
+  /// no reason for a panel someone opened to freeze. Anything else -- no
+  /// watcher, a direct stream, a failure that cleared the request --
+  /// leaves no timer behind.
+  void _syncTorrentStats() {
     if (!_mediaLoaded || _torrentStatsRequest == null) return;
-    if (!_buffering) {
+    final cadence = _buffering
+        ? PlayerScreen.torrentStallStatsInterval
+        : _statsVisible
+        ? PlayerScreen.torrentStatsOverlayInterval
+        : null;
+    if (cadence == null) {
       if (_torrentStatsTimer != null || _torrentStats != null) {
         setState(_pauseTorrentStats);
       }
       return;
     }
-    if (_torrentStatsTimer != null) return;
-    _torrentStatsTimer = Timer.periodic(
-      PlayerScreen.torrentStallStatsInterval,
-      (_) => _pollTorrentStats(),
-    );
+    if (_torrentStatsTimer != null && _torrentStatsCadence == cadence) return;
+    // A stall that starts under an open OSD (or ends under one) changes
+    // only the pace: the last answer stands until the next one lands.
+    _torrentStatsTimer?.cancel();
+    _torrentStatsCadence = cadence;
+    _torrentStatsTimer = Timer.periodic(cadence, (_) => _pollTorrentStats());
     // Unlike the start-up poll this one goes out at once: the stream
     // request created the torrent's engine long ago, so there is no
-    // ordering to respect, and a stall wants its numbers now, not in two
-    // seconds.
+    // ordering to respect, and whoever just started watching wants numbers
+    // now, not in two seconds.
     _pollTorrentStats();
   }
 
@@ -625,7 +645,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onBuffering(bool buffering) {
     setState(() => _buffering = buffering);
-    _syncStallStats();
+    _syncTorrentStats();
     _restartControlsTimer();
   }
 
@@ -780,8 +800,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _showControls();
   }
 
-  void _toggleStatsPinned() =>
-      setState(() => _statsPinned = !(_statsPinned ?? false));
+  void _toggleStatsPinned() {
+    setState(() => _statsPinned = !(_statsPinned ?? false));
+    // The panel carries the torrent's numbers: showing it is what asks the
+    // server for them, hiding it is what stops.
+    _syncTorrentStats();
+  }
 
   // --- Tracks --------------------------------------------------------------
 
@@ -1324,15 +1348,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _showControls();
     _statsHoverTimer?.cancel();
     _statsHoverTimer = Timer(PlayerScreen.statsHoverTimeout, () {
-      if (mounted && _statsHover) setState(() => _statsHover = false);
+      if (!mounted || !_statsHover) return;
+      setState(() => _statsHover = false);
+      _syncTorrentStats();
     });
-    if (!_statsHover) setState(() => _statsHover = true);
+    if (!_statsHover) {
+      setState(() => _statsHover = true);
+      _syncTorrentStats();
+    }
   }
 
   void _onPointerLeft() {
     _statsHoverTimer?.cancel();
     _statsHoverTimer = null;
-    if (_statsHover) setState(() => _statsHover = false);
+    if (!_statsHover) return;
+    setState(() => _statsHover = false);
+    _syncTorrentStats();
   }
 
   // --- Lifecycle -----------------------------------------------------------
@@ -1456,6 +1487,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       child: PlaybackStatsOverlay(
                         stats: engine.stats,
                         source: _opened,
+                        isTorrent: _torrentStatsRequest != null,
+                        torrent: _torrentStats,
                       ),
                     ),
                   ),

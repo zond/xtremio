@@ -1,20 +1,41 @@
 import 'package:flutter/material.dart';
 
+import '../../shell/device_profile.dart';
 import 'playback_stats.dart';
+import 'torrent_progress_card.dart';
+import 'torrent_stats.dart';
 
 /// The stats OSD: a small translucent monospace panel listing what the
-/// engine reports in [PlaybackStats].
+/// engine reports in [PlaybackStats], and for a torrent what the embedded
+/// server reports about the swarm feeding it ([torrent]).
 ///
 /// Subscribes to [stats] for as long as it is mounted, so whoever shows it
 /// controls when the engine samples: mount it to start, unmount to stop.
+/// The torrent rows are polled by the player, which keeps them coming for
+/// as long as this panel is up.
 class PlaybackStatsOverlay extends StatelessWidget {
-  const PlaybackStatsOverlay({super.key, required this.stats, this.source});
+  const PlaybackStatsOverlay({
+    super.key,
+    required this.stats,
+    this.source,
+    this.isTorrent = false,
+    this.torrent,
+  });
 
   final Stream<PlaybackStats> stats;
 
   /// The URL libmpv is playing, shown as the last line (a torrent reads
   /// `http://127.0.0.1:11470/<infoHash>/<fileIdx>?tr=…`).
   final Uri? source;
+
+  /// The stream is a torrent the embedded server is serving: the swarm
+  /// rows belong in the panel, even before [torrent] has arrived. False for
+  /// a direct HTTP stream, which has no swarm to describe.
+  final bool isTorrent;
+
+  /// The latest `stats.json` for that torrent, or null while the player's
+  /// poll has not answered yet.
+  final TorrentStats? torrent;
 
   static const TextStyle _style = TextStyle(
     color: Colors.white,
@@ -24,8 +45,17 @@ class PlaybackStatsOverlay extends StatelessWidget {
     height: 1.35,
   );
 
+  /// The font size the panel uses on a television. The set's global text
+  /// scale alone leaves the 11pt monospace of a desktop unreadable from a
+  /// sofa, and this panel is the one place where the numbers are the whole
+  /// point of looking.
+  static const double tvFontSize = 16;
+
   @override
   Widget build(BuildContext context) {
+    final style = DeviceScope.isTv(context)
+        ? _style.copyWith(fontSize: tvFontSize)
+        : _style;
     return StreamBuilder<PlaybackStats>(
       stream: stats,
       builder: (context, snapshot) {
@@ -45,13 +75,16 @@ class PlaybackStatsOverlay extends StatelessWidget {
                     in sample == null
                         ? const ['stats: collecting…']
                         : describe(sample))
-                  Text(line, style: _style),
+                  Text(line, style: style),
+                if (isTorrent)
+                  for (final line in describeTorrent(torrent))
+                    Text(line, style: style),
                 if (source != null)
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 480),
                     child: Text(
                       'url      $source',
-                      style: _style,
+                      style: style,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -75,6 +108,44 @@ class PlaybackStatsOverlay extends StatelessWidget {
     'bitrate  ${formatBitrate(s.videoBitrate)}',
     'cache    ${_cache(s)}',
   ];
+
+  /// The torrent rows, in the same label column as the mpv ones: what the
+  /// swarm is doing right now. Null stats means the poll has not answered
+  /// for this torrent yet.
+  ///
+  /// The counts are connections -- peers, never "seeds": the server counts
+  /// who has handshaked (`live`) and how many addresses the search has
+  /// turned up (`seen`), not who has the whole file. The phase is worth a
+  /// row only while the torrent is not ready; once it is, the speed and the
+  /// peers are the news.
+  static List<String> describeTorrent(TorrentStats? s) {
+    if (s == null) return const ['torrent  waiting for the server'];
+    final error = s.error;
+    return [
+      if (s.phase != TorrentPhase.ready) 'torrent  ${_phase(s)}',
+      'speed    ${TorrentProgressCard.formatSpeed(s.downloadSpeed)}',
+      'peers    ${s.peerDiscovery.live} connected'
+          ' / ${s.peerDiscovery.seen} found',
+      if (error != null) 'error    $error',
+    ];
+  }
+
+  /// The phase, with the percentage of whatever it is measuring when the
+  /// server measures one.
+  static String _phase(TorrentStats s) => switch (s.phase) {
+    TorrentPhase.resolvingMetadata => 'resolving metadata',
+    TorrentPhase.checking => TorrentProgressCard.withPercent(
+      'checking',
+      s.checkProgress,
+    ),
+    TorrentPhase.buffering => TorrentProgressCard.withPercent(
+      'buffering head',
+      s.initialWindowProgress,
+    ),
+    TorrentPhase.ready => 'ready',
+    TorrentPhase.error => 'stopped',
+    TorrentPhase.unknown => 'unknown',
+  };
 
   static String _fps(double? fps) => fps == null ? '-' : fps.toStringAsFixed(2);
 
