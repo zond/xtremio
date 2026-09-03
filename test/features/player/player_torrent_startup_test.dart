@@ -86,6 +86,52 @@ void main() {
       expect(failed, isNot(TorrentStats.fromJson(const {'phase': 'error'})));
     });
 
+    test('keeps an unknown swarm null rather than calling it zero', () {
+      final scraped = TorrentStats.fromJson(const {
+        'phase': 'ready',
+        'peers': 5,
+        'connectedSeeders': 2,
+        'swarmSeeders': 137,
+        'swarmLeechers': 402,
+        'swarmScrapeAgeSecs': 240,
+      });
+      expect(scraped.connectedSeeders, 2);
+      expect(scraped.swarmSeeders, 137);
+      expect(scraped.swarmLeechers, 402);
+      expect(scraped.swarmScrapeAge, const Duration(minutes: 4));
+
+      // No tracker answered: the three swarm fields are null (or absent),
+      // which is "we could not ask" and must not become a 0. The connected
+      // counts are still counts.
+      final unscraped = TorrentStats.fromJson(const {
+        'phase': 'ready',
+        'peers': 5,
+        'connectedSeeders': 0,
+        'swarmSeeders': null,
+        'swarmLeechers': null,
+        'swarmScrapeAgeSecs': null,
+      });
+      expect(unscraped.connectedSeeders, 0);
+      expect(unscraped.swarmSeeders, isNull);
+      expect(unscraped.swarmLeechers, isNull);
+      expect(unscraped.swarmScrapeAge, isNull);
+      expect(
+        TorrentStats.fromJson(const {'phase': 'ready'}).swarmSeeders,
+        isNull,
+      );
+
+      // A swarm nobody seeds is a real answer, and not the same value.
+      final empty = TorrentStats.fromJson(const {
+        'phase': 'ready',
+        'peers': 5,
+        'swarmSeeders': 0,
+        'swarmLeechers': 0,
+        'swarmScrapeAgeSecs': 12,
+      });
+      expect(empty.swarmSeeders, 0);
+      expect(empty, isNot(unscraped));
+    });
+
     test(
       'derives the request from the stream the way the core builds its URL',
       () {

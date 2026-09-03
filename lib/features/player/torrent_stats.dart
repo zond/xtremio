@@ -88,6 +88,10 @@ final class TorrentStats {
     this.peerDiscovery = const PeerDiscovery(),
     this.downloadSpeed = 0,
     this.peers = 0,
+    this.connectedSeeders = 0,
+    this.swarmSeeders,
+    this.swarmLeechers,
+    this.swarmScrapeAge,
     this.error,
   });
 
@@ -111,6 +115,31 @@ final class TorrentStats {
   /// Connected peers (`peers`).
   final int peers;
 
+  /// How many of [peers] hold the whole torrent, i.e. can serve any piece
+  /// (`connectedSeeders`). Never more than [peers]: it counts our own
+  /// connections, not the swarm -- for the swarm read [swarmSeeders].
+  final int connectedSeeders;
+
+  /// Seeders in the whole swarm as the torrent's trackers report them
+  /// (`swarmSeeders`), or null when we could not ask: a torrent with no
+  /// trackers, a private one, or trackers that have not answered.
+  ///
+  /// Null is not zero. The server never sends 0 for "unknown" precisely
+  /// because a swarm with nobody seeding is a real and different state, so
+  /// nothing here may turn a null into a 0 either, and what shows it must
+  /// keep the two apart.
+  final int? swarmSeeders;
+
+  /// Leechers in the whole swarm (`swarmLeechers`); null under the same
+  /// rules as [swarmSeeders].
+  final int? swarmLeechers;
+
+  /// How long ago the freshest tracker scrape behind [swarmSeeders] and
+  /// [swarmLeechers] came back (`swarmScrapeAgeSecs`), so a display can say
+  /// how current they are: they are a snapshot, not a measurement. Null
+  /// exactly when those two are.
+  final Duration? swarmScrapeAge;
+
   /// Why the phase is [TorrentPhase.error], when the server says (`error`:
   /// a magnet whose add timed out or failed); null otherwise.
   final String? error;
@@ -128,6 +157,13 @@ final class TorrentStats {
           : const PeerDiscovery(),
       downloadSpeed: (json['downloadSpeed'] as num?)?.toDouble() ?? 0,
       peers: _int(json['peers']),
+      connectedSeeders: _int(json['connectedSeeders']),
+      swarmSeeders: _intOrNull(json['swarmSeeders']),
+      swarmLeechers: _intOrNull(json['swarmLeechers']),
+      swarmScrapeAge: switch (_intOrNull(json['swarmScrapeAgeSecs'])) {
+        final seconds? => Duration(seconds: seconds),
+        null => null,
+      },
       error: json['error'] as String?,
     );
   }
@@ -155,6 +191,10 @@ final class TorrentStats {
       other.peerDiscovery == peerDiscovery &&
       other.downloadSpeed == downloadSpeed &&
       other.peers == peers &&
+      other.connectedSeeders == connectedSeeders &&
+      other.swarmSeeders == swarmSeeders &&
+      other.swarmLeechers == swarmLeechers &&
+      other.swarmScrapeAge == swarmScrapeAge &&
       other.error == error;
 
   @override
@@ -167,6 +207,10 @@ final class TorrentStats {
     peerDiscovery,
     downloadSpeed,
     peers,
+    connectedSeeders,
+    swarmSeeders,
+    swarmLeechers,
+    swarmScrapeAge,
     error,
   );
 }
