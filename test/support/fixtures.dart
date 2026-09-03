@@ -98,7 +98,8 @@ Map<String, dynamic> loadLibraryFixture() =>
 /// downloads of two torrents it builds itself — a movie that finished
 /// (`tt0063350:tt0063350`), an episode two thirds of the way through
 /// (`tt0903747:tt0903747:1:1`) and one with nothing on disk yet
-/// (`tt0903747:tt0903747:1:2`). The paths are the recorder's temporary
-/// directory.
+/// (`tt0903747:tt0903747:1:2`). The paths and the timestamps are fixed by
+/// the recorder, so re-recording an unchanged registry changes no bytes and
+/// the tests here can quote them.
 Map<String, dynamic> loadDownloadsFixture() =>
     loadFixture('downloads_registry.json');

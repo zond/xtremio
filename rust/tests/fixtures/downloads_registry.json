@@ -1,11 +1,13 @@
 {
+  "destinationChoice": null,
+  "destinationSettled": false,
   "items": {
     "tt0063350:tt0063350": {
       "announce": [
         "udp://tracker.invalid:1337/announce"
       ],
-      "completedAt": "2026-09-03T06:52:48.292426130Z",
-      "createdAt": "2026-09-03T06:52:48.292426130Z",
+      "completedAt": "2026-01-01T00:00:00.123456789Z",
+      "createdAt": "2026-01-01T00:00:00.123456789Z",
       "downloaded": 32768,
       "error": null,
       "fileIdx": 1,
@@ -29,7 +31,7 @@
         }
       },
       "name": "Night of the Living Dead",
-      "path": "/tmp/.tmpaA6dw9/cache/server/rqbit-downloads/Night.of.the.Living.Dead.1968.1080p.BluRay/night.of.the.living.dead.1968.1080p.mkv",
+      "path": "/downloads/cache/server/rqbit-downloads/Night.of.the.Living.Dead.1968.1080p.BluRay/night.of.the.living.dead.1968.1080p.mkv",
       "poster": "https://images.metahub.space/poster/medium/tt0063350/img",
       "size": 32768,
       "state": "complete",
@@ -63,7 +65,7 @@
         "udp://tracker.invalid:1337/announce"
       ],
       "completedAt": null,
-      "createdAt": "2026-09-03T06:52:48.296613081Z",
+      "createdAt": "2026-01-01T00:00:01.123456789Z",
       "downloaded": 32768,
       "error": null,
       "fileIdx": 1,
@@ -94,7 +96,7 @@
         }
       },
       "name": "Breaking Bad: Pilot",
-      "path": "/tmp/.tmpaA6dw9/cache/server/rqbit-downloads/Breaking.Bad.S01.1080p.BluRay/Breaking.Bad.S01E01.1080p.mkv",
+      "path": "/downloads/cache/server/rqbit-downloads/Breaking.Bad.S01.1080p.BluRay/Breaking.Bad.S01E01.1080p.mkv",
       "poster": "https://images.metahub.space/poster/medium/tt0903747/img",
       "size": 49152,
       "state": "downloading",
@@ -127,7 +129,7 @@
         "udp://tracker.invalid:1337/announce"
       ],
       "completedAt": null,
-      "createdAt": "2026-09-03T06:52:48.300836661Z",
+      "createdAt": "2026-01-01T00:00:02.123456789Z",
       "downloaded": 0,
       "error": null,
       "fileIdx": 0,
@@ -158,7 +160,7 @@
         }
       },
       "name": "Breaking Bad: Cat's in the Bag...",
-      "path": "/tmp/.tmpaA6dw9/cache/server/rqbit-downloads/Breaking.Bad.S01.1080p.BluRay/Breaking.Bad.S01E02.1080p.mkv",
+      "path": "/downloads/cache/server/rqbit-downloads/Breaking.Bad.S01.1080p.BluRay/Breaking.Bad.S01E02.1080p.mkv",
       "poster": "https://images.metahub.space/poster/medium/tt0903747/img",
       "size": 32768,
       "state": "downloading",

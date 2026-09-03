@@ -71,7 +71,7 @@ void main() {
       expect(movie.error, isNull);
       expect(movie.progress, 1);
       expect(movie.sizeLabel, '32.8 kB');
-      expect(movie.createdAt, DateTime.utc(2026, 9, 3, 6, 52, 48, 292, 426));
+      expect(movie.createdAt, DateTime.utc(2026, 1, 1, 0, 0, 0, 123, 456));
       expect(movie.completedAt, movie.createdAt);
       expect(movie.lastPlayedAt, isNull);
     });

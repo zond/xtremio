@@ -18,7 +18,7 @@ const movieKey = 'tt0063350:tt0063350';
 
 /// Where the recorded registry says the movie's file is, as a URL.
 const movieFileUrl =
-    'file:///tmp/.tmpaA6dw9/cache/server/rqbit-downloads/'
+    'file:///downloads/cache/server/rqbit-downloads/'
     'Night.of.the.Living.Dead.1968.1080p.BluRay/'
     'night.of.the.living.dead.1968.1080p.mkv';
 const pilotKey = 'tt0903747:tt0903747:1:1';

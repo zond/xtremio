@@ -758,6 +758,38 @@ fn write_partial(path: &std::path::Path, len: usize, valid: usize) {
     std::fs::write(path, data).expect("write partial payload");
 }
 
+/// Rewrites the two things a recording captures that say nothing about the
+/// contract and differ on every run: the fresh temporary directory in every
+/// `path`, and the wall clock in `createdAt`/`completedAt`. With them fixed,
+/// re-recording an unchanged registry leaves the file byte-identical -- and
+/// re-recording is safe, instead of turning the Dart tests that quote a path
+/// or a date red for a change that touched neither.
+///
+/// The stamps go up in entry order, because that is what a list sorted
+/// newest-first has to sort back; the sub-second digits are the server's own
+/// nanosecond precision, which a Dart `DateTime` truncates to microseconds.
+fn stabilize(registry: &mut serde_json::Value, tmp: &std::path::Path) {
+    const ROOT: &str = "/downloads";
+    let tmp = tmp.display().to_string();
+    let Some(items) = registry
+        .get_mut("items")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+    for (index, (_key, entry)) in items.iter_mut().enumerate() {
+        if let Some(path) = entry.get("path").and_then(serde_json::Value::as_str) {
+            entry["path"] = serde_json::Value::String(path.replace(&tmp, ROOT));
+        }
+        let stamp = format!("2026-01-01T00:00:{index:02}.123456789Z");
+        for key in ["createdAt", "completedAt"] {
+            if entry.get(key).is_some_and(serde_json::Value::is_string) {
+                entry[key] = serde_json::Value::String(stamp.clone());
+            }
+        }
+    }
+}
+
 fn write_fixture(name: &str, value: &serde_json::Value) -> anyhow::Result<()> {
     let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     std::fs::create_dir_all(&fixtures)?;
@@ -777,8 +809,8 @@ fn write_fixture(name: &str, value: &serde_json::Value) -> anyhow::Result<()> {
 /// The three rows are the three shapes a downloads list has to draw: a movie
 /// that finished, an episode partway through (its first two pieces are on
 /// disk, its last one is not), and an episode with nothing on disk yet. The
-/// paths are this recorder's temporary directory; nothing reads them back as
-/// a location, only as the string a row shows.
+/// paths are fixed by [`stabilize`]; nothing reads them back as a location,
+/// only as the string a row shows.
 #[test]
 #[ignore = "rewrites a committed fixture, and takes the process globals the lifecycle test takes"]
 fn record_registry_fixture() -> anyhow::Result<()> {
@@ -940,7 +972,8 @@ fn record_registry_fixture() -> anyhow::Result<()> {
     });
     assert_eq!(pending["downloaded"], 0, "{pending}");
 
-    let registry = list();
+    let mut registry = list();
+    stabilize(&mut registry, tmp.path());
     write_fixture("downloads_registry.json", &registry)?;
     println!("recorded downloads_registry.json: {registry:#}");
     Ok(())
