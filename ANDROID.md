@@ -249,7 +249,9 @@ notification would be a promise the server cannot keep.
 `FOREGROUND_SERVICE_DATA_SYNC` in the manifest, the service declared with
 `android:foregroundServiceType="dataSync"`, and `POST_NOTIFICATIONS` asked
 for at runtime on API 33+ — the first time a download actually starts,
-never at launch, and once a run so it cannot nag. A refusal costs the
+never at launch, and once a run so it cannot nag. A download found
+unfinished when the app opens is not a download starting: it puts the
+service up silently and the question waits for one that really begins. A refusal costs the
 notification and nothing else: the service still runs and the download
 still finishes. There is no storage permission and there still must not
 be.

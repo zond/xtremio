@@ -119,7 +119,7 @@ void main() {
     test('a download already on its way puts it up at start-up', () async {
       final service = await running();
 
-      expect(serviceMethods(), ['requestNotificationPermission', 'start']);
+      expect(serviceMethods(), ['start']);
       expect(service.isRunning, isTrue);
       expect(lastOf('start').arguments, {
         'title': 'Downloading 1 title',
@@ -249,8 +249,20 @@ void main() {
       expect(methods(), contains('requestNotificationPermission'));
     });
 
-    test('is asked for once a run, however many downloads there are', () async {
+    test('is not asked for at launch, whatever was left unfinished', () async {
       final service = await running();
+
+      expect(service.isRunning, isTrue);
+      expect(methods(), isNot(contains('requestNotificationPermission')));
+    });
+
+    test('is asked for once a run, however many downloads there are', () async {
+      final service = build();
+      await service.start();
+      final first = viewAt('tt1', 0);
+      client.registry = registryOf([first]);
+      client.emitProgress([rowOf(first)]);
+      await settle();
       client.registry = DownloadsRegistry.empty;
       await settle();
       expect(service.isRunning, isFalse);
@@ -272,7 +284,12 @@ void main() {
       'refused, the service still runs and the download is left alone',
       () async {
         notificationsGranted = false;
-        final service = await running();
+        final service = build();
+        await service.start();
+        final added = viewAt('tt1', 25);
+        client.registry = registryOf([added]);
+        client.emitProgress([rowOf(added)]);
+        await settle();
 
         expect(serviceMethods(), ['requestNotificationPermission', 'start']);
         expect(service.isRunning, isTrue);

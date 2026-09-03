@@ -187,6 +187,11 @@ class DownloadsForegroundService {
   bool _asked = false;
   bool _disposed = false;
 
+  /// True until [start]'s own listing has been acted on. A download found
+  /// unfinished at launch is not a download starting, and start-up is the
+  /// one moment the notification question must not be asked.
+  bool _startingUp = true;
+
   /// Whether the service is up as far as this side knows.
   @visibleForTesting
   bool get isRunning => _running;
@@ -209,6 +214,7 @@ class DownloadsForegroundService {
       if (kDebugMode) debugPrint('downloads feed for the notification: $error');
     }
     await refresh();
+    _startingUp = false;
     await _takePendingOpen();
   }
 
@@ -313,11 +319,13 @@ class DownloadsForegroundService {
 
   /// Asks for `POST_NOTIFICATIONS`, once, and only now — a download has
   /// actually started, which is the only moment the question means
-  /// anything. The answer is not acted on: a refused notification does not
-  /// stop the service, it only leaves it silent, and downloads run either
-  /// way. Asking once a run is also what keeps this from nagging.
+  /// anything. Never at launch: a download already unfinished when the app
+  /// opens puts the service up silently, and the question waits for one
+  /// that really begins. The answer is not acted on either — a refused
+  /// notification does not stop the service, it only leaves it invisible,
+  /// and the download finishes either way.
   Future<void> _requestNotifications() async {
-    if (_asked) return;
+    if (_asked || _startingUp) return;
     _asked = true;
     await _invoke('requestNotificationPermission');
   }
