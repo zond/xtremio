@@ -338,6 +338,39 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     let readded = add("tt-missing", &info_hash, missing_idx);
     assert_eq!(readded["entry"]["createdAt"], created_at, "{readded}");
 
+    // One file, two metas -- the same torrent offered as a stream of a
+    // Cinemeta id and of an anime id -- is one pin on the server, which
+    // keeps a plain set with no reference count. Dropping one of the two
+    // entries must leave the pin, and the bytes, to the other: unpinning
+    // here would delete the survivor's file underneath a row still claiming
+    // a complete download that nothing will ever correct.
+    add("tt-shared-a", &info_hash, have_idx);
+    add("tt-shared-b", &info_hash, have_idx);
+    let removed = json(&downloads_remove("tt-shared-a:tt-shared-a".into(), true)?);
+    assert_eq!(
+        removed,
+        serde_json::json!({"removed": true, "unpinned": false, "deletedFiles": false}),
+        "the pin the other entry names is not this entry's to drop"
+    );
+    assert!(
+        managed.join("have.bin").is_file(),
+        "and its bytes are still there"
+    );
+    let pins = xtremio_core::server::downloads()?;
+    assert!(
+        pins.iter().any(|pin| pin.file_idx == have_idx),
+        "the server still pins the file the survivor plays: {pins:?}"
+    );
+    assert_eq!(
+        list()["items"]["tt-shared-b:tt-shared-b"]["fileIdx"],
+        have_idx,
+        "and the survivor is still on record"
+    );
+    // The last entry naming it does take the pin with it.
+    let removed = json(&downloads_remove("tt-shared-b:tt-shared-b".into(), false)?);
+    assert_eq!(removed["unpinned"], true, "{removed}");
+    assert!(managed.join("have.bin").is_file(), "without the bytes");
+
     // With `deleteFiles` the bytes go. The other file of the same torrent is
     // still pinned, so only this one is deleted and the torrent lives on.
     add("tt-have", &info_hash, have_idx);

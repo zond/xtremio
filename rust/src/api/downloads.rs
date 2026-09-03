@@ -48,8 +48,11 @@ pub fn downloads_add(request_json: String) -> anyhow::Result<String> {
 /// pin, only that file while others stay pinned. Answers
 /// `{"removed":…,"unpinned":…,"deletedFiles":…}`, where `deletedFiles`
 /// reports what actually left the disk rather than echoing the flag, and
-/// `removed: false` means the registry had no such entry. Errors when the
-/// server is not running, leaving the entry in place.
+/// `removed: false` means the registry had no such entry. When another
+/// download names that same file — one torrent streamed under two metas —
+/// only the entry goes and `unpinned` is `false`; the pin, and the bytes,
+/// are the other one's too. Errors when the server is not running, leaving
+/// the entry in place.
 pub fn downloads_remove(key: String, delete_files: bool) -> anyhow::Result<String> {
     guarded(|| {
         let outcome = crate::downloads::remove(&key, delete_files)?;

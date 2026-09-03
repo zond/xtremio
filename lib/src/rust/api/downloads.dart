@@ -38,8 +38,11 @@ Future<String> downloadsAdd({required String requestJson}) => RustLib
 /// pin, only that file while others stay pinned. Answers
 /// `{"removed":…,"unpinned":…,"deletedFiles":…}`, where `deletedFiles`
 /// reports what actually left the disk rather than echoing the flag, and
-/// `removed: false` means the registry had no such entry. Errors when the
-/// server is not running, leaving the entry in place.
+/// `removed: false` means the registry had no such entry. When another
+/// download names that same file — one torrent streamed under two metas —
+/// only the entry goes and `unpinned` is `false`; the pin, and the bytes,
+/// are the other one's too. Errors when the server is not running, leaving
+/// the entry in place.
 Future<String> downloadsRemove({
   required String key,
   required bool deleteFiles,

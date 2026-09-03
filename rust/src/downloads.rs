@@ -808,6 +808,21 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
     })
 }
 
+/// Whether an entry other than `key` names the same `(infoHash, fileIdx)` --
+/// one torrent that is a stream of two metas (a Cinemeta id and an anime id
+/// for the same film), downloaded from both.
+///
+/// The server's pin registry is a set with no reference count, so a single
+/// unpin serves every entry naming that file: dropping one of them has to
+/// leave the pin, and the bytes, to the others.
+fn pin_is_shared(registry: &Registry, key: &str, info_hash: &str, file_idx: usize) -> bool {
+    registry.items.iter().any(|(other, entry)| {
+        other != key
+            && entry.info_hash.eq_ignore_ascii_case(info_hash)
+            && entry.file_idx == file_idx
+    })
+}
+
 /// Drops the pin the entry at `key` used to hold, when the download being
 /// recorded is a different file (the user pressed Download on a second
 /// stream for the same title, or retried at another index). The registry is
@@ -834,12 +849,7 @@ fn release_replaced_pin(key: &str, info_hash: &str, file_idx: usize) {
     if previous.info_hash.eq_ignore_ascii_case(info_hash) && previous.file_idx == file_idx {
         return;
     }
-    let shared = registry.items.iter().any(|(other, entry)| {
-        other != key
-            && entry.info_hash.eq_ignore_ascii_case(&previous.info_hash)
-            && entry.file_idx == previous.file_idx
-    });
-    if shared {
+    if pin_is_shared(&registry, key, &previous.info_hash, previous.file_idx) {
         tracing::info!(
             key,
             file_idx = previous.file_idx,
@@ -877,14 +887,37 @@ pub struct RemoveOutcome {
 /// Unpins `key` and forgets it. With `delete_files` the data goes too. An
 /// entry the registry does not have is not an error — the pin is dropped
 /// anyway when its coordinates are known, and there is nothing to forget.
+///
+/// Another entry naming the same file keeps it: the pin is that entry's as
+/// much as this one's, so only the registry row goes and the answer says so
+/// (`unpinned: false`). Unpinning anyway would delete the survivor's bytes
+/// under it, or at best leave it unpinned and evictable while its row keeps
+/// claiming a complete download.
 pub fn remove(key: &str, delete_files: bool) -> anyhow::Result<RemoveOutcome> {
-    let Some(entry) = load()?.items.get(key).cloned() else {
+    let registry = load()?;
+    let Some(entry) = registry.items.get(key).cloned() else {
         return Ok(RemoveOutcome {
             removed: false,
             unpinned: false,
             deleted_files: false,
         });
     };
+    if pin_is_shared(&registry, key, &entry.info_hash, entry.file_idx) {
+        tracing::info!(
+            key,
+            file_idx = entry.file_idx,
+            "another download names this file; forgetting the entry, keeping the pin"
+        );
+        update(|registry| {
+            registry.items.remove(key);
+            Ok(())
+        })?;
+        return Ok(RemoveOutcome {
+            removed: true,
+            unpinned: false,
+            deleted_files: false,
+        });
+    }
     // The unpin comes first: dropping the registry entry for a pin the
     // server still holds would leave a download nothing can find again.
     let outcome = crate::server::unpin_download(&entry.info_hash, entry.file_idx, delete_files)?;
