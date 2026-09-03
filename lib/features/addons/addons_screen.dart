@@ -353,6 +353,8 @@ class _InstalledTab extends StatelessWidget {
                     return AddonTile(
                       addon: addon,
                       onTap: () => onOpen(addon),
+                      memoryId: 'installed/${addon.transportUrl}',
+                      defaultFocus: index == 0,
                       trailing: PopupMenuButton<_InstalledAction>(
                         tooltip: 'More',
                         onSelected: (action) => switch (action) {
@@ -518,6 +520,8 @@ class _CommunityTab extends StatelessWidget {
                       return AddonTile(
                         addon: addon,
                         onTap: () => onOpen(addon),
+                        memoryId: 'community/${addon.transportUrl}',
+                        defaultFocus: index == 0,
                         trailing: _CommunityAction(
                           addon: addon,
                           installed: profile.isAddonInstalled(
