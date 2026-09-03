@@ -241,8 +241,32 @@ connection.
   and additive like the downloads registry: a write is a read-modify-write
   of one key, a key from a newer build survives it, and a file that cannot
   be parsed reads as "nothing set" rather than as a failure. Today it holds
-  one key, `streamsFlat` (the Details screen's flat-vs-grouped sources
-  list). Nothing secret goes in it.
+  two keys: `streamsFlat` (the Details screen's flat-vs-grouped sources
+  list) and `bufferAhead` (how far ahead playback buffers, below). Nothing
+  secret goes in it.
+- **How far ahead playback buffers is the viewer's choice.** The streaming
+  server reads ahead of the play head by a window sized for a healthy
+  connection and a patient player; a spotty link, or a receiver with a
+  shallower buffer than mpv's, wants more, and a fast link on mobile data
+  wants less. The server takes that as `?buffer=normal|large|maximum` on
+  the stream URL (x1, x2, x4 on the playback read-ahead; the startup window
+  is the same under all three, so nothing starts more slowly). The app adds
+  it in `withBufferAhead` (`lib/core/buffer_ahead.dart`) to the URL
+  stremio-core resolved, and only for a torrent served over http(s) -- an
+  addon's own host and an offline `file://` URL know nothing about it. It
+  is additive on the wire: a server that predates the parameter ignores it.
+  Settings -> Player -> "Buffer ahead" is the standing choice
+  (`AppPrefs.bufferAhead`); the player's own settings sheet overrides it
+  for the playback on screen and reverts with the next one. Changing it
+  mid-playback re-opens the stream at the position it is at -- one `open`
+  on the same engine, no `Load Player` and no restart -- because the window
+  only reaches libmpv through the URL it is already fetching. The top of
+  the scale is not a window at all: **"Download the whole file"** pins the
+  stream as an offline download while it plays, which is the existing
+  mechanism (it appears in Downloads and is deleted there, and the server's
+  free-space check guards it exactly as it guards a pin from Details). A
+  device that cannot fit the file is told so, with the numbers the server
+  refused on, and left buffering as far ahead as it can instead.
 - **The server is in-process**: `stream_server::start` runs on its own
   thread and runtime; the core's `streaming_server_url` is retargeted to it
   when the persisted profile points at loopback (a remote server URL set by
