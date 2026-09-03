@@ -2,10 +2,11 @@
 //!
 //! `stream_server::start` runs the server on its own OS thread with its own
 //! tokio runtime, so torrent hashing and disk I/O never compete with the
-//! stremio-core runtime or FRB's thread pool. We keep a single global
-//! [`ServerHandle`] and expose start/stop/base_url around it, plus the
-//! bearer token its control API requires: `Env::fetch` attaches it to the
-//! engine's requests to the server, and nothing else ever sees it. The
+//! stremio-core runtime or FRB's thread pool. We keep a single
+//! [`ServerHandle`] -- in [`ServerState`], the server's field of the
+//! process's [`AppState`] -- and expose start/stop/base_url around it, plus
+//! the bearer token its control API requires: `Env::fetch` attaches it to
+//! the engine's requests to the server, and nothing else ever sees it. The
 //! app's own control calls (torrent stats, server settings) go through the
 //! handle's library API here, never over HTTP.
 
@@ -17,19 +18,47 @@ use anyhow::Context;
 use stream_server::{DownloadInfo, EngineStats, ServerHandle, ServerSettings, UnpinOutcome};
 use url::Url;
 
+use crate::state::AppState;
+
 /// stremio-core's default `streaming_server_url` port; preferred so a
 /// previously persisted profile keeps pointing at the embedded server.
 pub const DEFAULT_PORT: u16 = stream_server::DEFAULT_HTTP_PORT;
 
-// A `RwLock`, not a `Mutex`: `with_handle`'s blocking library calls
-// (`engine_stats`, `file_stats`, `settings`, `update_settings`) and
-// `token_for` (called from `Env::fetch` on stremio-core's tokio workers,
-// including the single-worker sequential runtime) all just need to observe
-// the running handle, so they take a read lock and run concurrently with
-// each other; only `start`/`stop`, which replace the handle, take the
-// write lock. A slow stats poll must never stall an addon/catalog fetch
-// waiting on `token_for`.
-static SERVER: RwLock<Option<ServerHandle>> = RwLock::new(None);
+/// The embedded server's half of [`AppState`]: the running handle, or
+/// nothing.
+///
+/// A `RwLock`, not a `Mutex`: [`with_handle`]'s blocking library calls
+/// (`engine_stats`, `file_stats`, `settings`, `update_settings`) and
+/// [`token_for`] (called from `Env::fetch` on stremio-core's tokio workers,
+/// including the single-worker sequential runtime) all just need to observe
+/// the running handle, so they take a read lock and run concurrently with
+/// each other; only `start`/`stop`, which replace the handle, take the
+/// write lock. A slow stats poll must never stall an addon/catalog fetch
+/// waiting on `token_for`, which is what
+/// `with_handle_readers_run_concurrently_with_token_for` holds us to.
+///
+/// The same reasoning is why this is a lock of its own inside `AppState`
+/// rather than one lock around the whole of it.
+#[derive(Default)]
+pub struct ServerState {
+    handle: RwLock<Option<ServerHandle>>,
+}
+
+impl ServerState {
+    /// A poisoned lock only means a previous holder panicked; the Option is
+    /// still a valid value.
+    fn read(&self) -> RwLockReadGuard<'_, Option<ServerHandle>> {
+        self.handle
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn write(&self) -> RwLockWriteGuard<'_, Option<ServerHandle>> {
+        self.handle
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
 
 /// How to start the embedded server.
 #[derive(Clone, Debug)]
@@ -43,20 +72,6 @@ pub struct StartConfig {
     /// If binding `port` fails (another Stremio server is running), retry
     /// with an ephemeral port instead of failing.
     pub fallback_to_ephemeral: bool,
-}
-
-fn read() -> RwLockReadGuard<'static, Option<ServerHandle>> {
-    // A poisoned lock only means a previous holder panicked; the Option is
-    // still a valid value.
-    SERVER
-        .read()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-fn write() -> RwLockWriteGuard<'static, Option<ServerHandle>> {
-    SERVER
-        .write()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn url_of(handle: &ServerHandle) -> anyhow::Result<Url> {
@@ -83,8 +98,15 @@ fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
 /// (`http://127.0.0.1:<port>/`). Idempotent: a running server's URL is
 /// returned as-is, regardless of the config passed.
 pub fn start(config: StartConfig) -> anyhow::Result<Url> {
+    start_in(&crate::state::state(), config)
+}
+
+/// [`start`] against a given state. `core::init` starts the server as part
+/// of booting and passes the state it is building, so both halves are the
+/// same instance even if a shutdown lands in between.
+pub(crate) fn start_in(app: &AppState, config: StartConfig) -> anyhow::Result<Url> {
     crate::logging::init();
-    let mut guard = write();
+    let mut guard = app.server.write();
     if let Some(handle) = guard.as_ref() {
         return url_of(handle);
     }
@@ -111,9 +133,19 @@ pub fn start(config: StartConfig) -> anyhow::Result<Url> {
     Ok(url)
 }
 
-/// Stops the server and waits for its thread to exit. Ok if not running.
+/// Stops the server and waits for its thread to exit. Ok if not running --
+/// and with no state at all there is nothing that could be.
 pub fn stop() -> anyhow::Result<()> {
-    let handle = write().take();
+    match crate::state::current() {
+        Some(app) => stop_in(&app),
+        None => Ok(()),
+    }
+}
+
+/// [`stop`] against a given state, which is how `core::shutdown` stops the
+/// server it already took out of the process.
+pub(crate) fn stop_in(app: &AppState) -> anyhow::Result<()> {
+    let handle = app.server.write().take();
     if let Some(handle) = handle {
         handle
             .shutdown()
@@ -126,7 +158,15 @@ pub fn stop() -> anyhow::Result<()> {
 
 /// Base URL of the running server, if any.
 pub fn base_url() -> Option<Url> {
-    read().as_ref().and_then(|handle| url_of(handle).ok())
+    crate::state::current().and_then(|app| base_url_in(&app))
+}
+
+/// [`base_url`] against a given state.
+pub(crate) fn base_url_in(app: &AppState) -> Option<Url> {
+    app.server
+        .read()
+        .as_ref()
+        .and_then(|handle| url_of(handle).ok())
 }
 
 /// Runs `f` against the running server's handle. The handle's library calls
@@ -136,11 +176,14 @@ pub fn base_url() -> Option<Url> {
 /// alongside `Env::fetch`) run in parallel instead of serialising on each
 /// other; only `start`/`stop` exclude them.
 fn with_handle<T>(f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>) -> anyhow::Result<T> {
-    let guard = read();
-    let handle = guard
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("embedded server is not running"))?;
+    let app = crate::state::current().ok_or_else(not_running)?;
+    let guard = app.server.read();
+    let handle = guard.as_ref().ok_or_else(not_running)?;
     f(handle)
+}
+
+fn not_running() -> anyhow::Error {
+    anyhow::anyhow!("embedded server is not running")
 }
 
 /// A torrent's `stats.json` as the server's library API answers it: the
@@ -213,9 +256,12 @@ pub fn update_settings(patch: serde_json::Value) -> anyhow::Result<ServerSetting
 /// Whether `url` addresses the running embedded server: same scheme, host
 /// and (effective) port as [`base_url`]. False when no server runs.
 pub fn is_embedded_url(url: &Url) -> bool {
-    read()
-        .as_ref()
-        .is_some_and(|handle| is_embedded_url_locked(handle, url))
+    crate::state::current().is_some_and(|app| {
+        app.server
+            .read()
+            .as_ref()
+            .is_some_and(|handle| is_embedded_url_locked(handle, url))
+    })
 }
 
 /// [`is_embedded_url`]'s check against an already-locked `handle`; the sole
@@ -237,7 +283,8 @@ fn same_authority(a: &Url, b: &Url) -> bool {
 /// no credentials. Never log or serialize the token: it is what keeps other
 /// local processes out of the server's settings.
 pub fn token_for(url: &Url) -> Option<String> {
-    let guard = read();
+    let app = crate::state::current()?;
+    let guard = app.server.read();
     let handle = guard.as_ref()?;
     if is_embedded_url_locked(handle, url) {
         handle.auth_token().map(str::to_owned)

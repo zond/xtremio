@@ -30,6 +30,8 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub struct AppState {
     /// The stremio-core runtime, its event sink and the pending buffer.
     pub core: crate::core::CoreState,
+    /// The embedded stream-server's handle while it runs.
+    pub server: crate::server::ServerState,
 }
 
 /// The one process static. `None` until something needs the state, and

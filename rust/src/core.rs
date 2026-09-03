@@ -235,7 +235,7 @@ fn retarget_loopback_settings(settings: &mut Settings, embedded: &Url) -> bool {
 /// retargeted copy when the current URL is loopback but not the embedded
 /// server; a remote URL, or no embedded server, leaves everything alone.
 fn reapply_loopback_retarget(app: &AppState) {
-    let Some(embedded) = server::base_url() else {
+    let Some(embedded) = server::base_url_in(app) else {
         return;
     };
     let guard = app.core.runtime();
@@ -264,13 +264,13 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     let already_up = app.core.runtime().is_some();
     if already_up {
         return Ok(InitOutcome {
-            server_base_url: server::base_url(),
+            server_base_url: server::base_url_in(&app),
             schema_version: SCHEMA_VERSION,
         });
     }
 
     let server_base_url = match config.server {
-        Some(server_config) => Some(server::start(server_config)?),
+        Some(server_config) => Some(server::start_in(&app, server_config)?),
         None => None,
     };
 
@@ -428,12 +428,12 @@ pub fn get_state(field: &str) -> anyhow::Result<String> {
 /// being torn down. Whatever this call took is dropped when it returns.
 pub fn shutdown() -> anyhow::Result<()> {
     let Some(app) = crate::state::take() else {
-        return server::stop();
+        return Ok(());
     };
     if app.core.runtime_mut().take().is_some() {
         tracing::info!("stremio-core runtime stopped");
     }
-    server::stop()
+    server::stop_in(&app)
 }
 
 #[cfg(test)]
