@@ -44,6 +44,10 @@ void main() {
 
   testWidgets('nothing on the remote leaves fullscreen', (tester) async {
     final harness = await pumpPlayer(tester, device: tv);
+    // Read before a key is touched, or the totals below prove nothing: a
+    // player that ignored the television and entered fullscreen *because*
+    // of the F key would end on the same 1 enter and 0 exits.
+    expect(harness.fullscreen.enters, 1, reason: 'fullscreen already');
 
     await press(tester, LogicalKeyboardKey.keyF);
     await press(tester, LogicalKeyboardKey.select);
