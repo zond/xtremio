@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../widgets/remote_field_exit.dart';
 
 /// Settings → Account, over `ctx.profile.auth`.
 ///
@@ -277,34 +278,46 @@ class _AccountSectionState extends State<AccountSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            key: AccountSection.emailFieldKey,
+          // On a TV the D-pad has to be able to leave each field again.
+          RemoteFieldExit(
             controller: _email,
-            enabled: !_pending,
-            keyboardType: TextInputType.emailAddress,
-            autocorrect: false,
-            autofillHints: const [AutofillHints.email],
-            decoration: const InputDecoration(labelText: 'Email'),
+            child: TextField(
+              key: AccountSection.emailFieldKey,
+              controller: _email,
+              enabled: !_pending,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            key: AccountSection.passwordFieldKey,
+          RemoteFieldExit(
             controller: _password,
-            enabled: !_pending,
-            obscureText: true,
-            autofillHints: const [AutofillHints.password],
-            decoration: const InputDecoration(labelText: 'Password'),
-            onSubmitted: _registering ? null : (_) => _submit(),
+            child: TextField(
+              key: AccountSection.passwordFieldKey,
+              controller: _password,
+              enabled: !_pending,
+              obscureText: true,
+              autofillHints: const [AutofillHints.password],
+              decoration: const InputDecoration(labelText: 'Password'),
+              onSubmitted: _registering ? null : (_) => _submit(),
+            ),
           ),
           if (_registering) ...[
             const SizedBox(height: 8),
-            TextField(
-              key: AccountSection.confirmPasswordFieldKey,
+            RemoteFieldExit(
               controller: _confirmPassword,
-              enabled: !_pending,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Confirm password'),
-              onSubmitted: (_) => _submit(),
+              child: TextField(
+                key: AccountSection.confirmPasswordFieldKey,
+                controller: _confirmPassword,
+                enabled: !_pending,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm password',
+                ),
+                onSubmitted: (_) => _submit(),
+              ),
             ),
             CheckboxListTile(
               key: AccountSection.tosCheckboxKey,

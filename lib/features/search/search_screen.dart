@@ -6,6 +6,7 @@ import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/poster_tile.dart';
+import '../../widgets/remote_field_exit.dart';
 import '../details/meta_details_screen.dart';
 
 /// Searches every installed addon that supports the `search` extra
@@ -241,81 +242,7 @@ class _SearchField extends StatelessWidget {
               ),
       ),
     );
-    if (!isTv) return field;
-    return Actions(
-      actions: <Type, Action<Intent>>{
-        ExtendSelectionByCharacterIntent:
-            _LeaveFieldAction<ExtendSelectionByCharacterIntent>(
-              controller: controller,
-              axis: Axis.horizontal,
-            ),
-        ExtendSelectionVerticallyToAdjacentLineIntent:
-            _LeaveFieldAction<ExtendSelectionVerticallyToAdjacentLineIntent>(
-              controller: controller,
-              axis: Axis.vertical,
-            ),
-      },
-      child: field,
-    );
-  }
-}
-
-/// The D-pad's way out of a single-line text field on a TV.
-///
-/// [EditableText] claims every arrow key while it has focus: its selection
-/// actions are enabled whenever the selection is valid, so an arrow at the
-/// edge of the text does nothing and the remote is stuck in the field. An
-/// [Actions] with these above the field overrides the field's own actions
-/// ([EditableText] makes them overridable): a horizontal step past the
-/// start or end of the text, or any vertical step (one line has no line
-/// above or below), moves focus in that direction instead. Any other step
-/// is the field's own caret movement.
-class _LeaveFieldAction<T extends DirectionalTextEditingIntent>
-    extends ContextAction<T> {
-  _LeaveFieldAction({required this.controller, required this.axis});
-
-  final TextEditingController controller;
-  final Axis axis;
-
-  bool _leaves(bool forward) {
-    if (axis == Axis.vertical) return true;
-    final value = controller.value;
-    if (!value.selection.isValid) return true;
-    final offset = value.selection.extentOffset;
-    return forward ? offset >= value.text.length : offset <= 0;
-  }
-
-  TraversalDirection _direction(bool forward) => switch (axis) {
-    Axis.horizontal =>
-      forward ? TraversalDirection.right : TraversalDirection.left,
-    Axis.vertical => forward ? TraversalDirection.down : TraversalDirection.up,
-  };
-
-  @override
-  bool isEnabled(T intent, [BuildContext? context]) =>
-      _leaves(intent.forward) ||
-      (callingAction?._isEnabledWith(intent, context) ?? false);
-
-  @override
-  Object? invoke(T intent, [BuildContext? context]) {
-    if (_leaves(intent.forward)) {
-      primaryFocus?.focusInDirection(_direction(intent.forward));
-      return null;
-    }
-    final calling = callingAction;
-    return calling is ContextAction<T>
-        ? calling.invoke(intent, context)
-        : calling?.invoke(intent);
-  }
-}
-
-extension on Action<Intent> {
-  /// [Action.isEnabled], with the context when the action wants one.
-  bool _isEnabledWith(Intent intent, BuildContext? context) {
-    final action = this;
-    return action is ContextAction<Intent>
-        ? action.isEnabled(intent, context)
-        : action.isEnabled(intent);
+    return RemoteFieldExit(controller: controller, child: field);
   }
 }
 
