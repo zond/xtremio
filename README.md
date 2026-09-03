@@ -188,6 +188,21 @@ connection.
   screen reads its own `library` field (`LibraryWithFilters<NotRemovedFilter>`,
   snake_case keys such as `next_page`). Typed FRB structs can be added
   for hot paths later if profiling asks for it.
+- **What the crate keeps between calls is one value** (`rust/src/state.rs`):
+  `AppState`, grouped by concern (`core` — the Runtime, its event sink and
+  the events buffered before one arrives; `server` — the running handle;
+  `downloads` — the registry file's lock, the progress sink and the ticker
+  flag), behind the one process static there is. `core_init` creates it, or
+  adopts the one the event-stream subscribe made just before it, and
+  `core_shutdown` takes the whole value out of the process, so a second
+  boot starts clean instead of inheriting the first one's sinks. Every lock
+  is a field inside it, never one around it: a caller clones the `Arc` and
+  takes only what it needs, so nothing coarse is held across the server's
+  blocking calls. What stays a `static` says why it has to
+  (`env.rs`'s `STORAGE_DIR`, because `Env` is a trait on a *type* with no
+  `self` to hang a directory on; the tokio runtimes and the HTTP client,
+  which are process-wide by nature; `logging.rs`'s `INIT`, which guards
+  `tracing`'s own global).
 - **The engine runs on our `Env`** (`rust/src/env.rs`): reqwest + rustls for
   HTTP, one JSON file per bucket under the app-support directory with
   temp-then-fsync-then-rename writes, and two lib-owned tokio runtimes
