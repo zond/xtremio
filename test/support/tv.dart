@@ -74,3 +74,8 @@ String? focusedTileName(WidgetTester tester) {
   );
   return tester.widget<Text>(texts.first).data;
 }
+
+/// The message of the [Tooltip] around the widget holding primary focus (an
+/// icon button's label), null when it has none.
+String? focusedTooltip() =>
+    _focusedContext()?.findAncestorWidgetOfExactType<Tooltip>()?.message;

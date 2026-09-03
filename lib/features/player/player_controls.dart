@@ -1,12 +1,17 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import '../../shell/device_profile.dart';
 import 'seek_bar.dart';
 import 'time_format.dart';
 
 const _gradientBlack = Color(0xCC000000);
 
 /// The bar over the top edge of the video: back, title, and the menus.
+///
+/// Every button here is focusable, so a remote reaches the menus once the
+/// player has moved focus onto the bar ([firstFocusNode] is where it lands:
+/// the leftmost control, with the rest a right press away).
 class PlayerTopBar extends StatelessWidget {
   const PlayerTopBar({
     super.key,
@@ -18,6 +23,7 @@ class PlayerTopBar extends StatelessWidget {
     required this.onStats,
     required this.onSettings,
     required this.onNext,
+    this.firstFocusNode,
   });
 
   final String title;
@@ -35,6 +41,10 @@ class PlayerTopBar extends StatelessWidget {
   /// Null hides the button (no next episode).
   final VoidCallback? onNext;
 
+  /// Attached to the back button: what the player focuses when the remote
+  /// moves focus up onto this bar.
+  final FocusNode? firstFocusNode;
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -50,7 +60,15 @@ class PlayerTopBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(4, 4, 8, 16),
         child: Row(
           children: [
-            const BackButton(color: Colors.white),
+            IconButton(
+              // A [BackButton] in all but name; that one takes no focus
+              // node, and the remote has to be able to land on this one.
+              tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+              color: Colors.white,
+              focusNode: firstFocusNode,
+              onPressed: () => Navigator.maybePop(context),
+              icon: const BackButtonIcon(),
+            ),
             Expanded(
               child: Text(
                 title,
@@ -173,6 +191,10 @@ class PlayerCenterControls extends StatelessWidget {
 /// The bar over the bottom edge: seek bar, transport, time, volume and
 /// fullscreen. [wide] puts the transport here; otherwise
 /// [PlayerCenterControls] carries it.
+///
+/// On a television the seek bar joins the buttons as a focus stop (left and
+/// right seek while it holds focus), so the whole bar is reachable with the
+/// D-pad.
 class PlayerBottomBar extends StatelessWidget {
   const PlayerBottomBar({
     super.key,
@@ -195,6 +217,7 @@ class PlayerBottomBar extends StatelessWidget {
     required this.onVolume,
     required this.onMute,
     required this.onFullscreen,
+    this.playPauseFocusNode,
   });
 
   final bool wide;
@@ -221,8 +244,13 @@ class PlayerBottomBar extends StatelessWidget {
   final VoidCallback onMute;
   final VoidCallback onFullscreen;
 
+  /// Attached to the play/pause button of the [wide] transport: what the
+  /// player focuses when the remote moves focus down onto this bar.
+  final FocusNode? playPauseFocusNode;
+
   @override
   Widget build(BuildContext context) {
+    final isTv = DeviceScope.isTv(context);
     final seekBar = ValueListenableBuilder<Duration>(
       valueListenable: position,
       builder: (context, position, _) => ValueListenableBuilder<Duration>(
@@ -234,6 +262,8 @@ class PlayerBottomBar extends StatelessWidget {
           onSeek: onSeek,
           onScrubStart: onScrubStart,
           onScrubEnd: onScrubEnd,
+          focusable: isTv,
+          seekStep: seekStep,
         ),
       ),
     );
@@ -269,6 +299,7 @@ class PlayerBottomBar extends StatelessWidget {
                   IconButton(
                     tooltip: playing ? 'Pause (Space)' : 'Play (Space)',
                     color: Colors.white,
+                    focusNode: playPauseFocusNode,
                     iconSize: 32,
                     onPressed: onPlayPause,
                     icon: Icon(playing ? Icons.pause : Icons.play_arrow),

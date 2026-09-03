@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
+import 'package:xtremio/features/player/seek_bar.dart';
+import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/player_harness.dart';
 import '../../support/tv.dart';
@@ -149,6 +153,128 @@ void main() {
       await press(tester, LogicalKeyboardKey.mediaStop);
       expect(find.byType(PlayerScreen), findsNothing);
       expect(find.text('Play'), findsOneWidget);
+    });
+  });
+
+  group('the control bar', () {
+    testWidgets('down lands on play/pause, up walks the bar and off it', (
+      tester,
+    ) async {
+      final harness = await pumpOnTv(tester);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+
+      // Down: play/pause in the bottom bar, and select presses it.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<PlayerBottomBar>(), isTrue);
+      expect(find.byTooltip('Play (Space)'), findsOneWidget);
+      expect(
+        tester
+            .getRect(find.byTooltip('Play (Space)'))
+            .contains(FocusManager.instance.primaryFocus!.rect.center),
+        isTrue,
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(harness.engine.playOrPauseCalls, 1);
+
+      // Up from the transport row reaches the seek bar, then the top bar,
+      // then the video again.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<SeekBar>(), isTrue);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<PlayerTopBar>(), isTrue);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+
+      // Up from the video is the top bar directly; down leaves it again.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<PlayerTopBar>(), isTrue);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<SeekBar>(), isTrue);
+    });
+
+    testWidgets('right walks the top bar to the menus and select opens one', (
+      tester,
+    ) async {
+      final harness = await pumpOnTv(tester);
+      harness.engine.emitTracks(
+        const PlaybackTracks(
+          audio: [
+            TrackInfo(id: '1', title: 'English'),
+            TrackInfo(id: '2', title: 'German'),
+          ],
+        ),
+      );
+      await pumpEvents(tester);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<PlayerTopBar>(), isTrue);
+      for (var i = 0; i < 6 && focusedTooltip() != 'Audio track (A)'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusedTooltip(), 'Audio track (A)');
+
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(AudioMenu), findsOneWidget);
+    });
+
+    testWidgets('left and right seek while the seek bar has focus', (
+      tester,
+    ) async {
+      final harness = await pumpOnTv(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<SeekBar>(), isTrue);
+
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(harness.engine.seeks, [
+        const Duration(seconds: 75),
+        const Duration(seconds: 85),
+        const Duration(seconds: 75),
+      ]);
+      expect(focusIn<SeekBar>(), isTrue, reason: 'focus stays on the bar');
+    });
+
+    testWidgets('the controls do not fade while a control has focus', (
+      tester,
+    ) async {
+      final harness = await pumpOnTv(tester);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<PlayerBottomBar>(), isTrue);
+      await tester.pump(PlayerScreen.controlsTimeout * 3);
+      await tester.pumpAndSettle();
+      expect(controlsOpacity(tester), 1);
+
+      // Focus back on the video: the idle timer runs again.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+      await tester.pump(PlayerScreen.controlsTimeout);
+      await tester.pumpAndSettle();
+      expect(controlsOpacity(tester), 0);
+    });
+
+    testWidgets('up and down keep changing the volume off a TV', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final harness = PlayerHarness();
+      await harness.pump(tester);
+      harness.engine.emitDuration(total);
+      await pumpEvents(tester);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(harness.engine.volumes, [95.0, 100.0]);
+      expect(focusIn<PlayerBottomBar>(), isFalse);
+      expect(
+        tester.widget<SeekBar>(find.byType(SeekBar)).focusable,
+        isFalse,
+        reason: 'the seek bar is a focus stop on a television only',
+      );
     });
   });
 }

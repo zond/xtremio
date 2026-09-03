@@ -40,9 +40,13 @@ import 'up_next_card.dart';
 ///
 /// On a TV ([DeviceScope.isTv]) the remote drives it: the D-pad's centre
 /// brings the controls up when they are hidden and toggles play/pause when
-/// they show, and the media keys (play, pause, play/pause, stop, fast
-/// forward, rewind, next and previous track) do what they say. The media
-/// keys work off a TV too; nothing else about the keyboard changes there.
+/// they show, up and down move focus onto the shown control bar (and off
+/// it again at its edges), where select presses the focused control and the
+/// seek bar seeks with left/right, and the media keys (play, pause,
+/// play/pause, stop, fast forward, rewind, next and previous track) do what
+/// they say. The controls do not fade while a control holds focus. The
+/// media keys work off a TV too; nothing else about the keyboard changes
+/// there.
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -123,6 +127,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// [DeviceScope.isTv], read with the dependencies.
   bool _isTv = false;
 
+  /// The controls' own focus scope on a TV: what [_controlFocused] asks
+  /// whether the remote is on the bar, and what keeps the D-pad inside it.
+  /// Off a TV the controls are not wrapped in it at all, so desktop
+  /// traversal is what it always was.
+  final FocusScopeNode _controlsScope = FocusScopeNode(
+    debugLabel: 'player controls',
+  );
+
+  /// Where focus lands when the remote moves down (the bottom bar's
+  /// play/pause) and up (the top bar's back button) onto the controls.
+  final FocusNode _playPauseFocus = FocusNode(debugLabel: 'play/pause');
+  final FocusNode _topBarFocus = FocusNode(debugLabel: 'player top bar');
+
   Uri? _opened;
   Duration _duration = Duration.zero;
   final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
@@ -195,7 +212,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _lifecycle = AppLifecycleListener(onHide: _onAppHidden);
+    _controlsScope.addListener(_onControlsFocusChange);
   }
+
+  /// A control took or lost focus: the controls may not fade while one has
+  /// it, and they must start fading again once it is gone.
+  void _onControlsFocusChange() {
+    if (!mounted) return;
+    setState(() {});
+    _restartControlsTimer();
+  }
+
+  /// The remote is on the control bar rather than on the video.
+  bool get _controlFocused => _isTv && _controlsScope.hasFocus;
 
   @override
   void didChangeDependencies() {
@@ -492,6 +521,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _playing &&
       !_menuOpen &&
       !_scrubbing &&
+      !_controlFocused &&
       _opened != null &&
       _upNextSecondsLeft == null &&
       !_startupOverlayShown &&
@@ -919,6 +949,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // --- Keyboard ------------------------------------------------------------
 
+  /// Moves focus onto the shown control bar: [direction] down lands on
+  /// play/pause in the bottom bar, up on the top bar. False when that
+  /// control is not on screen (the narrow layout's transport lives in the
+  /// middle of the video), leaving the key to whatever it means otherwise.
+  bool _focusControls(TraversalDirection direction) {
+    final node = direction == TraversalDirection.up
+        ? _topBarFocus
+        : _playPauseFocus;
+    if (node.context == null) return false;
+    node.requestFocus();
+    return true;
+  }
+
+  /// Up or down with a control focused: the next stop in that direction
+  /// inside the bar, or back to the video when the bar ends there.
+  void _moveWithinControls(TraversalDirection direction) {
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused != null && focused.focusInDirection(direction)) return;
+    _focusNode.requestFocus();
+  }
+
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final keyboard = HardwareKeyboard.instance;
@@ -932,6 +983,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final shownBefore = _controlsShown;
     _showControls();
 
+    // A control on the bar has the remote: select presses it and left/right
+    // walk the bar (the seek bar seeks; both are handled below us, before
+    // this ever runs). Up and down leave the control, and the bar itself.
+    if (_controlFocused) {
+      if (key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.arrowDown) {
+        if (event is KeyDownEvent) {
+          _moveWithinControls(
+            key == LogicalKeyboardKey.arrowUp
+                ? TraversalDirection.up
+                : TraversalDirection.down,
+          );
+        }
+        return KeyEventResult.handled;
+      }
+      if (RemotePress.activateKeys.contains(key) ||
+          key == LogicalKeyboardKey.arrowLeft ||
+          key == LogicalKeyboardKey.arrowRight ||
+          key == LogicalKeyboardKey.tab) {
+        return KeyEventResult.ignored;
+      }
+    }
+
     // The remote's centre key (and Enter, a gamepad's A) on a TV: hidden
     // controls come up, showing ones mean play/pause. Off a TV these keys
     // keep their default meaning (nothing, on the video itself).
@@ -939,6 +1013,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (!_isTv) return KeyEventResult.ignored;
       if (event is KeyDownEvent && shownBefore) _togglePlay();
       return KeyEventResult.handled;
+    }
+
+    // Up and down on a TV are how the remote reaches the controls; the
+    // television has its own volume keys. The first press only brings the
+    // controls back when they had faded.
+    if (_isTv &&
+        (key == LogicalKeyboardKey.arrowUp ||
+            key == LogicalKeyboardKey.arrowDown)) {
+      if (event is! KeyDownEvent) return KeyEventResult.handled;
+      if (!shownBefore) return KeyEventResult.handled;
+      final direction = key == LogicalKeyboardKey.arrowUp
+          ? TraversalDirection.up
+          : TraversalDirection.down;
+      if (_focusControls(direction)) return KeyEventResult.handled;
     }
 
     // Shift+I toggles the stats OSD, as in mpv; only the initial press.
@@ -1057,6 +1145,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _buffer.dispose();
     _tracks.dispose();
     _focusNode.dispose();
+    _controlsScope.removeListener(_onControlsFocusChange);
+    _controlsScope.dispose();
+    _playPauseFocus.dispose();
+    _topBarFocus.dispose();
     super.dispose();
   }
 
@@ -1172,64 +1264,69 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 child: IgnorePointer(
                   ignoring: !shown,
                   child: SafeArea(
-                    child: Column(
-                      children: [
-                        PlayerTopBar(
-                          title: state?.title ?? '',
-                          subtitlesOn: _tracks.value.activeSubtitleId != null,
-                          onSubtitles: _openSubtitleMenu,
-                          onAudio: _tracks.value.audio.length > 1
-                              ? _openAudioMenu
-                              : null,
-                          statsOn: _statsPinned ?? false,
-                          onStats: _toggleStatsPinned,
-                          onSettings: _openSettings,
-                          onNext: nextVideo == null ? null : _playNext,
-                        ),
-                        Expanded(
-                          child: !wide && hasVideo && status == null && !startup
-                              ? Center(
-                                  child: PlayerCenterControls(
-                                    playing: _playing,
-                                    seekStep: seekStep,
-                                    onPlayPause: _togglePlay,
-                                    onSeekBack: () => _seekBy(-seekStep),
-                                    onSeekForward: () => _seekBy(seekStep),
-                                  ),
-                                )
-                              : const SizedBox.expand(),
-                        ),
-                        if (hasVideo)
-                          PlayerBottomBar(
-                            wide: wide,
-                            playing: _playing,
-                            seekStep: seekStep,
-                            position: _position,
-                            buffered: _buffer,
-                            duration: _duration,
-                            showRemaining: _showRemaining,
-                            volume: _volume,
-                            fullscreen: _fullscreenOn,
-                            onPlayPause: _togglePlay,
-                            onSeekBack: () => _seekBy(-seekStep),
-                            onSeekForward: () => _seekBy(seekStep),
-                            onSeek: _seekTo,
-                            onScrubStart: () {
-                              _scrubbing = true;
-                              _controlsTimer?.cancel();
-                            },
-                            onScrubEnd: () {
-                              _scrubbing = false;
-                              _restartControlsTimer();
-                            },
-                            onToggleTimeDisplay: () => setState(
-                              () => _showRemaining = !_showRemaining,
-                            ),
-                            onVolume: _setVolume,
-                            onMute: _toggleMute,
-                            onFullscreen: _toggleFullscreen,
+                    child: _controlsFocus(
+                      Column(
+                        children: [
+                          PlayerTopBar(
+                            title: state?.title ?? '',
+                            subtitlesOn: _tracks.value.activeSubtitleId != null,
+                            onSubtitles: _openSubtitleMenu,
+                            onAudio: _tracks.value.audio.length > 1
+                                ? _openAudioMenu
+                                : null,
+                            statsOn: _statsPinned ?? false,
+                            onStats: _toggleStatsPinned,
+                            onSettings: _openSettings,
+                            onNext: nextVideo == null ? null : _playNext,
+                            firstFocusNode: _topBarFocus,
                           ),
-                      ],
+                          Expanded(
+                            child:
+                                !wide && hasVideo && status == null && !startup
+                                ? Center(
+                                    child: PlayerCenterControls(
+                                      playing: _playing,
+                                      seekStep: seekStep,
+                                      onPlayPause: _togglePlay,
+                                      onSeekBack: () => _seekBy(-seekStep),
+                                      onSeekForward: () => _seekBy(seekStep),
+                                    ),
+                                  )
+                                : const SizedBox.expand(),
+                          ),
+                          if (hasVideo)
+                            PlayerBottomBar(
+                              wide: wide,
+                              playing: _playing,
+                              seekStep: seekStep,
+                              position: _position,
+                              buffered: _buffer,
+                              duration: _duration,
+                              showRemaining: _showRemaining,
+                              volume: _volume,
+                              fullscreen: _fullscreenOn,
+                              onPlayPause: _togglePlay,
+                              onSeekBack: () => _seekBy(-seekStep),
+                              onSeekForward: () => _seekBy(seekStep),
+                              onSeek: _seekTo,
+                              onScrubStart: () {
+                                _scrubbing = true;
+                                _controlsTimer?.cancel();
+                              },
+                              onScrubEnd: () {
+                                _scrubbing = false;
+                                _restartControlsTimer();
+                              },
+                              onToggleTimeDisplay: () => setState(
+                                () => _showRemaining = !_showRemaining,
+                              ),
+                              onVolume: _setVolume,
+                              onMute: _toggleMute,
+                              onFullscreen: _toggleFullscreen,
+                              playPauseFocusNode: _playPauseFocus,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1254,6 +1351,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
     );
   }
+
+  /// The controls in their own focus scope on a TV, so the D-pad walks the
+  /// bar and this screen can tell whether the remote is on it. Off a TV
+  /// they are the bare column they have always been.
+  Widget _controlsFocus(Widget controls) =>
+      _isTv ? FocusScope(node: _controlsScope, child: controls) : controls;
 
   String? _statusText(PlayerState? state) {
     if (_engineError != null) return 'Playback failed: $_engineError';
