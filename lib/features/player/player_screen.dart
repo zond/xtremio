@@ -83,6 +83,15 @@ class PlayerScreen extends StatefulWidget {
   /// up (from `open` until the engine reports the media loaded).
   static const Duration torrentStatsInterval = Duration(milliseconds: 500);
 
+  /// How many times an `open` that failed while the torrent was still
+  /// starting up is tried again before the failure is shown.
+  static const int torrentOpenRetries = 4;
+
+  /// The wait before the first of those retries; each further attempt waits
+  /// one more multiple of it (0.7s, 1.4s, 2.1s, 2.8s: about seven seconds
+  /// of patience in all, which is the order of a slow metadata fetch).
+  static const Duration torrentOpenRetryBackoff = Duration(milliseconds: 700);
+
   /// How often it is polled once playback has begun and then stalled.
   /// Slower: nothing is waiting on the first frame any more, and a stall
   /// only has to keep a few numbers honest.
@@ -236,6 +245,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Duration? _torrentStatsCadence;
   bool _torrentStatsFetching = false;
   TorrentStats? _torrentStats;
+
+  /// The open being retried: the state and start position [_opened] was
+  /// opened with, how many retries it has had, the timer waiting to make
+  /// the next one, and the failure that would be shown if there were no
+  /// more. All of it is reset by the next `open`.
+  PlayerState? _openState;
+  Duration _openStart = Duration.zero;
+  int _openRetries = 0;
+  Timer? _openRetryTimer;
+  String? _openError;
 
   bool _controlsVisible = true;
   Timer? _controlsTimer;
@@ -441,12 +460,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ? Duration(milliseconds: progress.timeOffset)
         : Duration.zero;
     _position.value = start;
-    _engine
-        ?.open(url, start: start)
-        .then((_) => _reportVideoParams(state, url))
-        .catchError((Object error) {
-          if (mounted && _opened == url) _failPlayback('$error');
-        });
+    _cancelOpenRetry();
+    _openState = state;
+    _openStart = start;
+    _openRetries = 0;
+    _openError = null;
+    _open(url);
     // After `open` is on its way: the stream request creates the torrent's
     // engine with everything the URL carries (its `f=` filters included);
     // a stats request that got there first would create it from the bare
@@ -454,6 +473,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _startTorrentStats(state);
     setState(() => _engineError = null);
     _restartControlsTimer();
+  }
+
+  /// Issues the engine's `open` for [url], with the start position the
+  /// current stream was resolved with. Every failure goes through
+  /// [_failPlayback], which decides whether it is worth another attempt --
+  /// which is why a retry is this call again and nothing else.
+  void _open(Uri url) {
+    final state = _openState;
+    _engine
+        ?.open(url, start: _openStart)
+        .then((_) {
+          if (state != null) _reportVideoParams(state, url);
+        })
+        .catchError((Object error) {
+          if (mounted && _opened == url) _failPlayback('$error');
+        });
   }
 
   /// Tells the engine what it can know about the file, which is what makes
@@ -502,6 +537,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// subtitle auto-pick waits for, and the end of the start-up overlay.
   void _onMediaLoaded() {
     if (_mediaLoaded || _opened == null || _handedOver) return;
+    _cancelOpenRetry();
     setState(() {
       _mediaLoaded = true;
       // The start-up cadence is over. The torrent is not: a stall brings
@@ -515,12 +551,85 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onEngineError(String error) => _failPlayback(error);
 
   /// Shows "Playback failed: [error]" in place of whatever was waiting for
-  /// the media (the start-up overlay included, whose polling ends here).
+  /// the media (the start-up overlay included, whose polling ends here) --
+  /// unless the torrent is still starting up, in which case the open is
+  /// simply tried again ([_scheduleOpenRetry]).
   void _failPlayback(String error) {
+    if (_scheduleOpenRetry(error)) return;
+    _cancelOpenRetry();
     setState(() {
       _engineError = error;
       _stopTorrentStats();
     });
+  }
+
+  // --- Retrying a slow torrent's open --------------------------------------
+
+  /// Whether a failed `open` is worth another attempt.
+  ///
+  /// Only for a torrent the embedded server is serving, only before the
+  /// media has loaded, and only while the server says the torrent is not
+  /// ready yet -- still resolving its metadata, hash-checking, or filling
+  /// the initial window -- or has not answered about it at all, which is
+  /// where a start-up spends its first seconds. mpv gives up on the first
+  /// refusal; the server, at that moment, has nothing to serve yet and is
+  /// perfectly entitled to say so.
+  ///
+  /// A direct HTTP stream, a torrent the server has given up on
+  /// ([TorrentPhase.error]), a phase we do not recognise, and a `ready`
+  /// torrent that still would not open are all real failures: nothing about
+  /// them will be different in a second.
+  bool get _retryableTorrentStart {
+    if (!mounted || _handedOver || _mediaLoaded) return false;
+    if (_torrentStatsRequest == null) return false;
+    final stats = _torrentStats;
+    if (stats == null) return true;
+    return switch (stats.phase) {
+      TorrentPhase.resolvingMetadata ||
+      TorrentPhase.checking ||
+      TorrentPhase.buffering => true,
+      TorrentPhase.ready || TorrentPhase.error || TorrentPhase.unknown => false,
+    };
+  }
+
+  /// Answers [error] with another attempt instead of a failure, and says so.
+  ///
+  /// The start-up card stays up untouched meanwhile -- the poller behind it
+  /// was never stopped -- so what the user sees is the torrent still
+  /// starting, which is exactly what is happening. At most one attempt is
+  /// ever waiting: `open`'s rejection and the engine's error stream both
+  /// land here for the same failure.
+  bool _scheduleOpenRetry(String error) {
+    if (!_retryableTorrentStart ||
+        _openRetries >= PlayerScreen.torrentOpenRetries) {
+      return false;
+    }
+    _openError = error;
+    if (_openRetryTimer != null) return true;
+    _openRetries++;
+    _openRetryTimer = Timer(
+      PlayerScreen.torrentOpenRetryBackoff * _openRetries,
+      _retryOpen,
+    );
+    return true;
+  }
+
+  void _retryOpen() {
+    _openRetryTimer = null;
+    final url = _opened;
+    if (!mounted || _handedOver || url == null) return;
+    // The wait is also how the server gets to change its mind: a torrent
+    // that failed while we were being patient is a failure after all.
+    if (!_retryableTorrentStart) {
+      _failPlayback(_openError ?? 'the torrent could not be opened');
+      return;
+    }
+    _open(url);
+  }
+
+  void _cancelOpenRetry() {
+    _openRetryTimer?.cancel();
+    _openRetryTimer = null;
   }
 
   // --- Torrent start-up ----------------------------------------------------
@@ -1417,6 +1526,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    _cancelOpenRetry();
     _statsHoverTimer?.cancel();
     _controlsTimer?.cancel();
     _upNextTimer?.cancel();

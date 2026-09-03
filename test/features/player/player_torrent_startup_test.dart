@@ -41,6 +41,16 @@ void main() {
     await tester.pump();
   }
 
+  /// Long enough for every retry a torrent's open gets while the server
+  /// says it is still starting up (see player_open_retry_test): what is
+  /// still failing after this is a failure.
+  Future<void> exhaustOpenRetries(WidgetTester tester) async {
+    for (var i = 0; i < PlayerScreen.torrentOpenRetries + 2; i++) {
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+    }
+  }
+
   group('TorrentStats', () {
     test('parses the phase fields stream-server adds to stats.json', () {
       final stats = TorrentStats.fromJson({
@@ -544,8 +554,12 @@ void main() {
     final harness = PlayerHarness();
     await harness.pump(tester);
     expect(overlay, findsOneWidget);
+    // A torrent the server is still starting up buys a few more attempts
+    // first, so what ends the overlay is a failure that survives them.
+    harness.engine.openError = 'no stream';
     harness.engine.emitError('no stream');
     await pumpEvents(tester);
+    await exhaustOpenRetries(tester);
     expect(overlay, findsNothing);
     expect(find.text('Playback failed: no stream'), findsOneWidget);
     final polled = harness.torrentStats.requests.length;
@@ -558,6 +572,7 @@ void main() {
       configureEngine: (engine) => engine.openError = 'unsupported URL',
     );
     await harness.pump(tester);
+    await exhaustOpenRetries(tester);
     expect(overlay, findsNothing);
     expect(find.text('Playback failed: unsupported URL'), findsOneWidget);
     final polled = harness.torrentStats.requests.length;
