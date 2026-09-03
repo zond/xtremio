@@ -132,6 +132,49 @@ class PlayerSettingsSection extends StatelessWidget {
   }
 }
 
+/// Settings → Player → "Buffer ahead": how far ahead playback reads, and
+/// the option that stops buffering and keeps the file instead.
+///
+/// This one is *not* a `profile.settings` field. It is the app's own choice
+/// (`AppPrefs.bufferAhead`, `rust/src/prefs.rs`), because it is about this
+/// device's connection and disk rather than about the account, and because
+/// stremio-core's `Settings` has no field for it. So it takes an [AppPrefs]
+/// rather than a [SettingWriter], and it renders whether or not the `ctx`
+/// field has arrived.
+class BufferAheadSection extends StatelessWidget {
+  const BufferAheadSection({super.key, required this.prefs});
+
+  final AppPrefs prefs;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.hourglass_bottom_outlined),
+      title: const Text('Buffer ahead'),
+      subtitle: Text(prefs.bufferAhead.description),
+      trailing: DropdownButton<BufferAhead>(
+        // The same key shape a `profile.settings` control gets, so a test
+        // finds this one the same way.
+        key: settingKey(AppPrefs.bufferAheadKey),
+        value: prefs.bufferAhead,
+        underline: const SizedBox.shrink(),
+        items: [
+          for (final choice in BufferAhead.values)
+            DropdownMenuItem<BufferAhead>(
+              value: choice,
+              child: Text(choice.label),
+            ),
+        ],
+        onChanged: (selected) {
+          if (selected != null && selected != prefs.bufferAhead) {
+            prefs.setBufferAhead(selected);
+          }
+        },
+      ),
+    );
+  }
+}
+
 /// Subtitles: size and colours, the same values the player's own settings
 /// sheet edits.
 class SubtitlesSettingsSection extends StatelessWidget {

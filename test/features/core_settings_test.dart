@@ -5,6 +5,7 @@ import 'package:xtremio/features/settings/core_settings.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 
 import '../support/fake_core_client.dart';
+import '../support/fake_prefs_client.dart';
 import '../support/fixtures.dart';
 
 /// Settings → Player / Subtitles / Interface / Streaming server: every
@@ -29,6 +30,7 @@ void main() {
     Map<String, dynamic>? ctx,
     Uri? embeddedUrl,
     bool embeddedServer = true,
+    AppPrefs? prefs,
   }) async {
     tester.view.physicalSize = const Size(900, 3600);
     tester.view.devicePixelRatio = 1;
@@ -46,11 +48,12 @@ void main() {
         schemaVersion: 25,
       ),
     );
+    const screen = MaterialApp(home: SettingsScreen());
     await tester.pumpWidget(
       CoreScope(
         client: core,
         initInfo: core.initInfo,
-        child: const MaterialApp(home: SettingsScreen()),
+        child: prefs == null ? screen : PrefsScope(prefs: prefs, child: screen),
       ),
     );
     await tester.pumpAndSettle();
@@ -227,6 +230,59 @@ void main() {
       await tester.tap(find.text('French (fra)').last);
       await tester.pumpAndSettle();
       expect(core.dispatched, isEmpty);
+    });
+  });
+
+  group('buffer ahead', () {
+    // Not a `profile.settings` field: it is the app's own preference (this
+    // device's connection and disk, not the account), so it writes to the
+    // preferences file and dispatches nothing at all.
+    testWidgets('writes the picked choice to the preferences, not the core', (
+      tester,
+    ) async {
+      final stored = FakePrefsClient();
+      final prefs = AppPrefs(client: stored);
+      final core = await pumpSettings(tester, prefs: prefs);
+
+      expect(prefs.bufferAhead, BufferAhead.normal);
+      await pick(tester, AppPrefs.bufferAheadKey, BufferAhead.large.label);
+
+      expect(prefs.bufferAhead, BufferAhead.large);
+      expect(core.dispatched, isEmpty, reason: '${core.dispatched}');
+      // And it survives a restart: a fresh AppPrefs over the same file.
+      final restarted = AppPrefs(client: stored);
+      await restarted.load();
+      expect(restarted.bufferAhead, BufferAhead.large);
+    });
+
+    testWidgets('shows the stored choice and what it costs', (tester) async {
+      final prefs = AppPrefs(
+        client: FakePrefsClient({
+          AppPrefs.bufferAheadKey: BufferAhead.wholeFile.stored,
+        }),
+      );
+      await prefs.load();
+      await pumpSettings(tester, prefs: prefs);
+
+      expect(
+        tester
+            .widget<DropdownButton<BufferAhead>>(
+              find.byKey(settingKey(AppPrefs.bufferAheadKey)),
+            )
+            .value,
+        BufferAhead.wholeFile,
+      );
+      // The trade-off is on the tile, not buried in a help page.
+      expect(find.text(BufferAhead.wholeFile.description), findsOneWidget);
+    });
+
+    testWidgets('is offered before the settings have arrived', (tester) async {
+      // It does not come out of `ctx`, so it must not wait for it the way
+      // the `profile.settings` controls do.
+      final prefs = AppPrefs(client: FakePrefsClient());
+      await pumpSettings(tester, ctx: const {}, prefs: prefs);
+
+      expect(find.byKey(settingKey(AppPrefs.bufferAheadKey)), findsOneWidget);
     });
   });
 

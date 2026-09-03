@@ -33,6 +33,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// so two changes in a row do not send the pre-first-change map.
   Map<String, dynamic>? _pending;
 
+  /// The app's own preferences, for "Buffer ahead". From the [PrefsScope]
+  /// the app puts above every screen; a screen mounted without one (a widget
+  /// test that does not care where the choice goes) gets [_ownPrefs], which
+  /// persists nothing.
+  AppPrefs? _prefsOrNull;
+  AppPrefs? _ownPrefs;
+
+  AppPrefs get _prefs => _prefsOrNull!;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -44,6 +53,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _server = CoreFieldNotifier(client, CoreField.streamingServer);
       _ctx = CoreFieldNotifier(client, CoreField.ctx)..addListener(_onCtx);
     }
+    // Reading the scope here is what subscribes to it, so a choice changed
+    // in the player is already shown when this screen comes back.
+    final prefs =
+        PrefsScope.maybeOf(context) ?? (_ownPrefs ??= AppPrefs.inMemory());
+    if (_prefsOrNull != prefs) {
+      _prefsOrNull?.removeListener(_onPrefs);
+      _prefsOrNull = prefs..addListener(_onPrefs);
+    }
+  }
+
+  void _onPrefs() {
+    if (mounted) setState(() {});
   }
 
   /// A `ctx` pull landed: the engine's settings are the authority again.
@@ -56,6 +77,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _server?.dispose();
     _ctx?.removeListener(_onCtx);
     _ctx?.dispose();
+    _prefsOrNull?.removeListener(_onPrefs);
+    _ownPrefs?.dispose();
     super.dispose();
   }
 
@@ -122,6 +145,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.of(context).push(DownloadsScreen.route()),
           ),
           const _SectionHeader('Player'),
+          // Not a `profile.settings` field, so it is outside `_withSettings`
+          // and shows whether or not the `ctx` field has arrived.
+          BufferAheadSection(prefs: _prefs),
           _withSettings(
             (settings, write) =>
                 PlayerSettingsSection(settings: settings, onSetting: write),

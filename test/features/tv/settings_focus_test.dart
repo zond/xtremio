@@ -9,6 +9,7 @@ import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 
 import '../../support/fake_core_client.dart';
+import '../../support/fake_prefs_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
@@ -25,14 +26,17 @@ FakeCoreClient fakeCore({Uri? embeddedUrl}) => FakeCoreClient(
   initInfo: CoreInitInfo(serverBaseUrl: embeddedUrl, schemaVersion: 25),
 );
 
-Widget harness(FakeCoreClient core) => DeviceScope(
-  profile: tv,
-  child: CoreScope(
-    client: core,
-    initInfo: core.initInfo,
-    child: const MaterialApp(home: SettingsScreen()),
-  ),
-);
+Widget harness(FakeCoreClient core, {AppPrefs? prefs}) {
+  const screen = MaterialApp(home: SettingsScreen());
+  return DeviceScope(
+    profile: tv,
+    child: CoreScope(
+      client: core,
+      initInfo: core.initInfo,
+      child: prefs == null ? screen : PrefsScope(prefs: prefs, child: screen),
+    ),
+  );
+}
 
 /// The settings map of the last `UpdateSettings` dispatched.
 Map<String, dynamic> lastSettings(FakeCoreClient core) {
@@ -130,6 +134,38 @@ void main() {
     expect(
       find.byKey(StreamingServerSection.remoteUrlFieldKey),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('the remote reaches Buffer ahead and picks a choice', (
+    tester,
+  ) async {
+    // It is the app's own preference rather than a `profile.settings`
+    // field, but on a television that changes nothing: it has to be walked
+    // to and chosen with the same four keys as its neighbours.
+    useScreen(tester, tvSize);
+    final prefs = AppPrefs(client: FakePrefsClient());
+    final core = fakeCore();
+    await tester.pumpWidget(harness(core, prefs: prefs));
+    await tester.pumpAndSettle();
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await downTo(tester, BufferAhead.normal.label);
+    expect(focusIn<DropdownButton<BufferAhead>>(), isTrue);
+
+    await press(tester, LogicalKeyboardKey.select);
+    expect(find.text(BufferAhead.wholeFile.label), findsWidgets);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    final picked = focusedLabel(tester);
+    expect(picked, isNot(BufferAhead.normal.label));
+    await press(tester, LogicalKeyboardKey.select);
+
+    expect(prefs.bufferAhead.label, picked);
+    expect(core.dispatched, isEmpty, reason: 'it is not a core setting');
+    expect(
+      focusIn<DropdownButton<BufferAhead>>(),
+      isTrue,
+      reason: 'focus returns',
     );
   });
 
