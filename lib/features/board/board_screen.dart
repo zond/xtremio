@@ -255,34 +255,52 @@ final class _CatalogRow extends _BoardRow {
 /// Shared geometry of one row: a header, then a horizontal strip whose tile
 /// width follows from the strip height and the poster shape.
 class _RowLayout {
-  const _RowLayout(this.extent);
+  const _RowLayout(this.extent, {this.textFactor = 1});
 
   final double extent;
 
-  static const double headerHeight = 52;
+  /// How much bigger text is here than at the size these constants were
+  /// picked for: a television scales it up, and so does a system-wide
+  /// accessibility setting anywhere. The header and the caption are text in
+  /// boxes of a fixed height, so both boxes grow with it -- at the row's
+  /// expense, since the extent is what the list scrolls by.
+  final double textFactor;
+
+  static const double baseHeaderHeight = 52;
   static const double bottomPadding = 8;
   static const EdgeInsets stripPadding = EdgeInsets.symmetric(horizontal: 16);
   static const double tileSpacing = 12;
 
+  /// The text scale in play, as a plain factor.
+  static double textFactorOf(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(100) / 100;
+
+  double get headerHeight => baseHeaderHeight * textFactor;
+
   double get stripHeight => extent - headerHeight - bottomPadding;
 
-  double get imageHeight => stripHeight - PosterTile.captionHeight;
+  double get imageHeight => stripHeight - PosterTile.captionHeight * textFactor;
 
   double tileWidthFor(String posterShape) =>
       (imageHeight * PosterImage.aspectRatioFor(posterShape)).roundToDouble();
 }
 
 class _RowHeader extends StatelessWidget {
-  const _RowHeader({required this.title, this.subtitle});
+  const _RowHeader({required this.title, required this.height, this.subtitle});
 
   final String title;
+
+  /// [_RowLayout.headerHeight]: the row's geometry decides it, since what
+  /// is left over is the strip.
+  final double height;
+
   final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SizedBox(
-      height: _RowLayout.headerHeight,
+      height: height,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         child: Column(
@@ -329,10 +347,13 @@ class _ContinueWatchingRowView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final layout = _RowLayout(extent);
+    final layout = _RowLayout(
+      extent,
+      textFactor: _RowLayout.textFactorOf(context),
+    );
     return Column(
       children: [
-        const _RowHeader(title: 'Continue watching'),
+        _RowHeader(title: 'Continue watching', height: layout.headerHeight),
         Expanded(
           child: _HorizontalStrip(
             itemCount: state.items.length,
@@ -377,10 +398,17 @@ class _CatalogRowView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final layout = _RowLayout(extent);
+    final layout = _RowLayout(
+      extent,
+      textFactor: _RowLayout.textFactorOf(context),
+    );
     return Column(
       children: [
-        _RowHeader(title: row.title, subtitle: row.subtitle),
+        _RowHeader(
+          title: row.title,
+          subtitle: row.subtitle,
+          height: layout.headerHeight,
+        ),
         Expanded(child: _content(layout)),
         const SizedBox(height: _RowLayout.bottomPadding),
       ],

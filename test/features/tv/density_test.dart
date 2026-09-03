@@ -148,6 +148,27 @@ void main() {
       expect(onTv.height, greaterThan(onDesktop.height));
     });
 
+    testWidgets('the rows have room for the scaled-up text', (tester) async {
+      // The header is text in a box of a fixed height, and the row extent
+      // is what the list scrolls by, so a bigger text scale has to come
+      // out of the strip rather than out of the bottom of the header.
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        XtremioApp(
+          core: FakeCoreClient(
+            state: {
+              CoreField.board: loadBoardFixture(),
+              CoreField.continueWatchingPreview: loadContinueWatchingFixture(),
+            },
+          ),
+          device: tv,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a television gets no scrollbar to drag', (tester) async {
       await pumpBoard(tester, device: tv);
 
