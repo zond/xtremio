@@ -88,7 +88,7 @@ in one of two ways: stremio-core's `StreamingServer` model through
 (`server_torrent_stats`, `server_settings`, `server_update_settings`) and
 `rust/src/api/downloads.rs` (`downloads_add`, `downloads_remove`,
 `downloads_list`, `downloads_open`, `downloads_set_dir`,
-`downloads_events`). A new need goes in one of those, as a Rust function
+`downloads_apply_default_dir`, `downloads_events`). A new need goes in one of those, as a Rust function
 returning JSON, not as a `dart:io` `HttpClient` call.
 
 ## The downloads registry
@@ -102,7 +102,11 @@ and the bytes. Keep it that way:
   the last-known copy so the list and `downloads_open` still work with no
   server, and that is all it is. Never compute or advance progress
   locally, and do not add a field the server could answer that is not a
-  cached echo of it — that is two truths, and one of them stale.
+  cached echo of it — that is two truths, and one of them stale. Because
+  it is a cache, a tick that moved nothing but `downloaded` does not
+  rewrite the file (a state, a path, an error or a finished file still
+  does, at once), and what a tick *pushes* is the narrow `progress` row,
+  never the whole entry — `downloads_list` is what carries an entry.
 - **The file is forgiving and additive.** Entries are camelCase, unknown
   keys survive a round trip, and an entry this build cannot parse is
   written back verbatim. A new field is optional with a default; nothing
