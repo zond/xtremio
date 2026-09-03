@@ -204,39 +204,39 @@ connection.
   chosen file of a torrent wanted and un-evictable
   (`ServerHandle::pin_download`, a validated `downloadsDir` setting,
   `pinned`/`complete` per file in `stats.json`); `rust/src/downloads.rs`
-  keeps everything it has no idea about in `<storage_dir>/downloads.json`
-  — keyed `"{metaId}:{videoId}"`, holding the raw stream JSON `Load
-  Player` takes back, a `MetaItem` snapshot so Details renders offline,
-  and `createdAt`/`completedAt`/`lastPlayedAt`. The FFI is
+  keeps everything it has no idea about in `<storage_dir>/downloads.json` —
+  keyed `"{metaId}:{videoId}"`, holding the raw stream JSON `Load Player`
+  takes back, a `MetaItem` snapshot so Details renders offline, and
+  `createdAt`/`completedAt`/`lastPlayedAt`. The FFI is
   `rust/src/api/downloads.rs`: `downloads_add(request_json)`,
   `downloads_remove(key, delete_files)`, `downloads_list()`,
   `downloads_open(key)`, `downloads_set_dir(path)` and a
   `downloads_events()` stream that ticks about once a second, only while
-  something is unfinished, and pushes just the entries that moved. Progress is merged from the server's
-  `downloads()`, never stored twice. Downloading a second stream for a
-  title replaces the entry and releases the pin it replaces (with its
-  bytes, unless another entry names the same file), so no torrent is left
-  downloading behind the registry's back. That sharing cuts the other way
-  too: the server's pins are a set with no reference count, so removing one
-  of two entries that name the same file drops only the registry row and
-  answers `unpinned: false`, leaving the pin — and the bytes — to the one
-  still playing it. A stream that names no `fileIdx` (or
-  the `-1` sentinel the player's URL carries) is resolved the way the media
-  route resolves `/{infoHash}/-1` — the `fileMustInclude` match, else the
-  largest media file — so what is kept offline is the file that streamed,
-  not file 0. A refused pin comes back as
-  `{"ok":false,"error":{"kind":…}}` — `insufficientSpace` carries the
-  byte counts, the rest the server's client-safe message, which names no
-  local path — because a full disk is something to show, not an
-  exception. Reading the registry is forgiving on purpose, and never at
-  the cost of what is on disk: a file from a newer build keeps its
-  `version` and its unknown keys, an entry this build cannot parse is kept
-  verbatim and written back untouched (it is left out of the list payload,
-  not out of the file), and a wholly unreadable file is moved aside as
-  `downloads.json.corrupt-<seconds>` before an empty one takes its place. At boot every
-  entry that is not complete is pinned again, on a blocking thread, since
-  a pin waits on magnet metadata and nothing on screen waits on it. The UI
-  reaches all of that through one `DownloadsClient`
+  something is unfinished, and pushes just the entries that moved. Progress
+  is merged from the server's `downloads()`, never stored twice.
+  Downloading a second stream for a title replaces the entry and releases
+  the pin it replaces (with its bytes, unless another entry names the same
+  file), so no torrent is left downloading behind the registry's back. That
+  sharing cuts the other way too: the server's pins are a set with no
+  reference count, so removing one of two entries that name the same file
+  drops only the registry row and answers `unpinned: false`, leaving the
+  pin — and the bytes — to the one still playing it. A stream that names no
+  `fileIdx` (or the `-1` sentinel the player's URL carries) is resolved the
+  way the media route resolves `/{infoHash}/-1` — the `fileMustInclude`
+  match, else the largest media file — so what is kept offline is the file
+  that streamed, not file 0. A refused pin comes back as
+  `{"ok":false,"error":{"kind":…}}` — `insufficientSpace` carries the byte
+  counts, the rest the server's client-safe message, which names no local
+  path — because a full disk is something to show, not an exception.
+  Reading the registry is forgiving on purpose, and never at the cost of
+  what is on disk: a file from a newer build keeps its `version` and its
+  unknown keys, an entry this build cannot parse is kept verbatim and
+  written back untouched (it is left out of the list payload, not out of
+  the file), and a wholly unreadable file is moved aside as
+  `downloads.json.corrupt-<seconds>` before an empty one takes its place.
+  At boot every entry that is not complete is pinned again, on a blocking
+  thread, since a pin waits on magnet metadata and nothing on screen waits
+  on it. The UI reaches all of that through one `DownloadsClient`
   (`lib/core/downloads_client.dart`), which `XtremioApp` builds and
   disposes and a `DownloadsScope` hands down the tree -- one client,
   because the progress sink is one -- with `DownloadView`
