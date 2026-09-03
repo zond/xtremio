@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -27,6 +29,20 @@ DownloadsRegistry withStoppedPilot() {
   pilot['state'] = 'error';
   pilot['error'] = 'this torrent is not managed right now';
   return DownloadsRegistry.fromJson(json);
+}
+
+/// A client whose listing waits, so the screen can be looked at before the
+/// first one has landed.
+class GatedListingClient extends FakeDownloadsClient {
+  GatedListingClient({super.registry});
+
+  final Completer<void> gate = Completer<void>();
+
+  @override
+  Future<DownloadsRegistry> list() async {
+    await gate.future;
+    return super.list();
+  }
 }
 
 void main() {
@@ -145,6 +161,10 @@ void main() {
 
       expect(find.text('Downloads could not be read'), findsOneWidget);
       expect(find.text('Nothing downloaded'), findsNothing);
+      // The header counts a listing, and there is none: three downloads
+      // are on the disk, so "0 downloads · 0 B" would be the same lie.
+      expect(find.text('0 downloads · 0 B on this device'), findsNothing);
+      expect(find.text('Not known right now'), findsOneWidget);
 
       downloads.listError = null;
       await tester.tap(find.text('Try again'));
@@ -152,6 +172,25 @@ void main() {
 
       expect(find.text('Downloads could not be read'), findsNothing);
       expect(find.text('Night of the Living Dead'), findsOneWidget);
+      expect(find.text('3 downloads · 65.5 kB on this device'), findsOneWidget);
+    });
+
+    testWidgets('the header counts nothing before the first listing', (
+      tester,
+    ) async {
+      useTallViewport(tester);
+      final downloads = GatedListingClient(registry: recorded());
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
+      await tester.pump();
+
+      expect(find.text('0 downloads · 0 B on this device'), findsNothing);
+      expect(find.text('…'), findsOneWidget);
+
+      downloads.gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('3 downloads · 65.5 kB on this device'), findsOneWidget);
     });
 
     testWidgets('progress from the feed moves a row', (tester) async {

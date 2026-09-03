@@ -236,11 +236,19 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final downloads = _downloads;
     final registry = downloads?.registry ?? DownloadsRegistry.empty;
     final items = registry.newestFirst;
+    // The header counts a listing, so it only speaks when there is one:
+    // "0 downloads · 0 B" over a listing that failed is the same lie the
+    // empty state below stopped telling.
+    final counted =
+        downloads != null && downloads.isLoaded && downloads.error == null;
     return Scaffold(
       appBar: AppBar(title: const Text('Downloads')),
       body: ListView(
         children: [
-          _StorageHeader(registry: registry),
+          _StorageHeader(
+            registry: counted ? registry : null,
+            failed: downloads?.error != null,
+          ),
           _DestinationControl(
             destination: _destination,
             isKnown: _destinationKnown,
@@ -274,11 +282,24 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   }
 }
 
-/// How much of the device these downloads take, and how many there are.
+/// How much of the device these downloads take, and how many there are --
+/// or that this is not known, which is not the same as none.
 class _StorageHeader extends StatelessWidget {
-  const _StorageHeader({required this.registry});
+  const _StorageHeader({required this.registry, required this.failed});
 
-  final DownloadsRegistry registry;
+  /// The listing to count, or null when there is none: before the first
+  /// one lands, and after one that failed.
+  final DownloadsRegistry? registry;
+
+  /// Whether the last listing failed -- the difference between "not yet"
+  /// and "not answerable right now".
+  final bool failed;
+
+  /// Shown instead of a count when the listing failed.
+  static const String unknownLabel = 'Not known right now';
+
+  /// ... and while the first one is still out.
+  static const String waitingLabel = '…';
 
   /// `3 downloads · 4.2 GB on this device`.
   static String label(DownloadsRegistry registry) {
@@ -289,11 +310,20 @@ class _StorageHeader extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    leading: const Icon(Icons.sd_storage_outlined),
-    title: const Text('Storage'),
-    subtitle: Text(label(registry)),
-  );
+  Widget build(BuildContext context) {
+    final registry = this.registry;
+    return ListTile(
+      leading: const Icon(Icons.sd_storage_outlined),
+      title: const Text('Storage'),
+      subtitle: Text(
+        registry != null
+            ? label(registry)
+            : failed
+            ? unknownLabel
+            : waitingLabel,
+      ),
+    );
+  }
 }
 
 /// Where the files go: a choice of directories where the platform has them
