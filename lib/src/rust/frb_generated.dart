@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/core.dart';
+import 'api/downloads.dart';
 import 'api/hello.dart';
 import 'api/server.dart';
 
@@ -71,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1813915307;
+  int get rustContentHash => 696867131;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -98,6 +99,19 @@ abstract class RustLibApi extends BaseApi {
   int crateApiHelloCoreSchemaVersion();
 
   Future<void> crateApiCoreCoreShutdown();
+
+  Future<String> crateApiDownloadsDownloadsAdd({required String requestJson});
+
+  Stream<String> crateApiDownloadsDownloadsEvents();
+
+  Future<String> crateApiDownloadsDownloadsList();
+
+  Future<String> crateApiDownloadsDownloadsRemove({
+    required String key,
+    required bool deleteFiles,
+  });
+
+  Future<String> crateApiDownloadsDownloadsSetDir({String? path});
 
   Future<void> crateApiHelloInitApp();
 
@@ -338,6 +352,159 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "core_shutdown", argNames: []);
 
   @override
+  Future<String> crateApiDownloadsDownloadsAdd({required String requestJson}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(requestJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiDownloadsDownloadsAddConstMeta,
+        argValues: [requestJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDownloadsDownloadsAddConstMeta =>
+      const TaskConstMeta(
+        debugName: "downloads_add",
+        argNames: ["requestJson"],
+      );
+
+  @override
+  Stream<String> crateApiDownloadsDownloadsEvents() {
+    final sink = RustStreamSink<String>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_StreamSink_String_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 10,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: sse_decode_AnyhowException,
+          ),
+          constMeta: kCrateApiDownloadsDownloadsEventsConstMeta,
+          argValues: [sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiDownloadsDownloadsEventsConstMeta =>
+      const TaskConstMeta(debugName: "downloads_events", argNames: ["sink"]);
+
+  @override
+  Future<String> crateApiDownloadsDownloadsList() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiDownloadsDownloadsListConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDownloadsDownloadsListConstMeta =>
+      const TaskConstMeta(debugName: "downloads_list", argNames: []);
+
+  @override
+  Future<String> crateApiDownloadsDownloadsRemove({
+    required String key,
+    required bool deleteFiles,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(key, serializer);
+          sse_encode_bool(deleteFiles, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiDownloadsDownloadsRemoveConstMeta,
+        argValues: [key, deleteFiles],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDownloadsDownloadsRemoveConstMeta =>
+      const TaskConstMeta(
+        debugName: "downloads_remove",
+        argNames: ["key", "deleteFiles"],
+      );
+
+  @override
+  Future<String> crateApiDownloadsDownloadsSetDir({String? path}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_opt_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiDownloadsDownloadsSetDirConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDownloadsDownloadsSetDirConstMeta =>
+      const TaskConstMeta(debugName: "downloads_set_dir", argNames: ["path"]);
+
+  @override
   Future<void> crateApiHelloInitApp() {
     return handler.executeNormal(
       NormalTask(
@@ -346,7 +513,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 14,
             port: port_,
           );
         },
@@ -370,7 +537,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -395,7 +562,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 16,
             port: port_,
           );
         },
@@ -423,7 +590,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 17,
             port: port_,
           );
         },
@@ -450,7 +617,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 18,
             port: port_,
           );
         },
@@ -484,7 +651,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 19,
             port: port_,
           );
         },
@@ -517,7 +684,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 20,
             port: port_,
           );
         },

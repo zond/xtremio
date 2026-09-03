@@ -7,6 +7,7 @@
 // ignore_for_file: argument_type_not_assignable
 
 import 'api/core.dart';
+import 'api/downloads.dart';
 import 'api/hello.dart';
 import 'api/server.dart';
 

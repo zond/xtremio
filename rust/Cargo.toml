@@ -60,6 +60,13 @@ aws-lc-sys = { version = "0.45", features = ["bindgen"] }
 [dev-dependencies]
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 tempfile = "3"
+# Real .torrent fixtures for tests/downloads.rs (`librqbit::create_torrent`),
+# so the offline-downloads test needs no network and no peer: the same git pin
+# stream-server's enginefs uses, so nothing extra is compiled.
+librqbit = { git = "https://github.com/zond/rqbit", branch = "feat/configurable-stream-lookahead", default-features = false, features = [
+    "rust-tls",
+    "http-api-client",
+] }
 
 # REQUIRED: stremio-core's workspace member stremio-watched-bitfield pins
 # `flate2 = "1.0.*"` (< 1.1) while stream-server's tree (zip, async-compression
