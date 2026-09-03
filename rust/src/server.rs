@@ -10,7 +10,7 @@
 //! app's own control calls (torrent stats, server settings) go through the
 //! handle's library API here, never over HTTP.
 
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -90,9 +90,22 @@ fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
         public_base_url: None,
         config_dir: Some(config.config_dir.clone()),
         cache_dir: Some(config.cache_dir.clone()),
+        lan_media_addr: Some(LAN_MEDIA_ADDR),
         ..stream_server::ServerConfig::embedded()
     })
 }
+
+/// Where the LAN media listener binds when a cast session turns it on: every
+/// interface (a receiver is on the LAN, not on loopback) on a port the OS
+/// picks, so nothing collides with another Stremio server or a second
+/// instance of this app.
+///
+/// Configuring it is what makes [`set_lan_media`] able to start it at all
+/// ([`stream_server::ServerConfig::lan_media_addr`] is `None` by default and
+/// then there is nothing to start). It also means `stream_server::run` binds
+/// it once at boot, which is why [`start_in`] shuts it again immediately:
+/// see [`lan_media_off`].
+const LAN_MEDIA_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0);
 
 /// Starts the server if it is not running and returns its base URL
 /// (`http://127.0.0.1:<port>/`). Idempotent: a running server's URL is
@@ -128,9 +141,29 @@ pub(crate) fn start_in(app: &AppState, config: StartConfig) -> anyhow::Result<Ur
         Err(error) => return Err(error.context("start embedded server")),
     };
     let url = url_of(&handle)?;
+    // The LAN media listener exists for the length of a cast session and no
+    // longer, and `stream_server::run` binds a configured `lan_media_addr`
+    // once at boot regardless of the `lanMediaEnabled` veto. So the first
+    // thing a freshly started server is told is to close it again: whatever
+    // a previous run persisted, and however the last session ended, the app
+    // comes up with nothing of ours listening on the LAN.
+    lan_media_off(&handle);
     tracing::info!(%url, "embedded stream-server started");
     *guard = Some(handle);
     Ok(url)
+}
+
+/// Closes the LAN media listener on `handle`, best effort, and drops the
+/// `lanMediaEnabled` permission with it. Used where the answer has to be
+/// "off" and there is nobody left to report a failure to: start-up, and the
+/// end of a cast session.
+fn lan_media_off(handle: &ServerHandle) {
+    if let Err(error) = handle.set_lan_media(false) {
+        tracing::warn!(%error, "could not stop the LAN media listener");
+    }
+    if let Err(error) = allow_lan_media(handle, false) {
+        tracing::warn!(%error, "could not clear the lanMediaEnabled setting");
+    }
 }
 
 /// Stops the server and waits for its thread to exit. Ok if not running --
@@ -147,6 +180,11 @@ pub fn stop() -> anyhow::Result<()> {
 pub(crate) fn stop_in(app: &AppState) -> anyhow::Result<()> {
     let handle = app.server.write().take();
     if let Some(handle) = handle {
+        // Before the shutdown, not instead of it: the server closes the LAN
+        // listener as part of going down anyway, but this is also what puts
+        // the `lanMediaEnabled` veto back on disk, so a process that is
+        // killed after this point leaves nothing permitted behind.
+        lan_media_off(&handle);
         handle
             .shutdown()
             .context("signal embedded server shutdown")?;
@@ -259,6 +297,74 @@ pub fn settings() -> anyhow::Result<ServerSettings> {
 /// persistence) and returns the settings afterwards.
 pub fn update_settings(patch: serde_json::Value) -> anyhow::Result<ServerSettings> {
     with_handle(|handle| handle.update_settings(patch))
+}
+
+/// Starts or stops the LAN media listener -- the server's second HTTP
+/// listener, which serves media bytes to the local network and mounts no
+/// control route at all (deliberately not `/proxy` and not `/ftp`) -- and
+/// answers the address it is bound to afterwards: `Some` after a start,
+/// `None` after a stop.
+///
+/// This is what a cast session turns on and off, and the only thing that
+/// ever should: a Chromecast cannot fetch from a loopback-only server, and
+/// nothing else about this app wants a socket open to the LAN.
+///
+/// The server keeps a `lanMediaEnabled` setting that vetoes the listener
+/// outright and defaults to `false`, so enabling carries that permission
+/// with it and disabling takes it back. That way the persisted answer to
+/// "may this app serve the LAN" is `false` whenever no session is running,
+/// and a start the server performs by itself at boot cannot serve anything
+/// this app did not ask for in the same breath.
+pub fn set_lan_media(enabled: bool) -> anyhow::Result<Option<SocketAddr>> {
+    with_handle(|handle| {
+        if !enabled {
+            let addr = handle.set_lan_media(false)?;
+            allow_lan_media(handle, false)?;
+            return Ok(addr);
+        }
+        allow_lan_media(handle, true)?;
+        match handle.set_lan_media(true) {
+            Ok(addr) => Ok(addr),
+            Err(error) => {
+                // Nothing is listening, so the permission must not be left
+                // standing either.
+                allow_lan_media(handle, false).ok();
+                Err(error)
+            }
+        }
+    })
+}
+
+/// Writes the `lanMediaEnabled` setting when it is not already `allowed`,
+/// through the same path `POST /settings` takes (validation, the engine
+/// update and persistence). Turning it off there also stops a listener that
+/// is still running, which is why the off direction is safe to rely on.
+fn allow_lan_media(handle: &ServerHandle, allowed: bool) -> anyhow::Result<()> {
+    if handle.settings()?.lan_media_enabled == allowed {
+        return Ok(());
+    }
+    handle.update_settings(serde_json::json!({ "lanMediaEnabled": allowed }))?;
+    Ok(())
+}
+
+/// Whether the LAN media listener is running right now. False when no server
+/// is running either -- "nothing of ours is on the LAN" is the same answer.
+pub fn lan_media_running() -> bool {
+    with_handle(|handle| Ok(handle.lan_media_running())).unwrap_or(false)
+}
+
+/// The base URL to hand a receiver at `peer`, e.g.
+/// `http://192.168.1.20:39271/`: the host is the local interface that shares
+/// `peer`'s subnet, so a media URL built on it is one that receiver can
+/// actually connect back to (the first interface on a host with a VPN or a
+/// container bridge regularly is not).
+///
+/// `None` when the listener is not running, or when no local interface can
+/// reach `peer` -- which is the answer that says this receiver cannot be
+/// cast to, rather than one to paper over with a loopback URL it could
+/// never fetch.
+pub fn lan_media_base_url(peer: IpAddr) -> Option<Url> {
+    with_handle(|handle| Ok(handle.lan_media_base_url(peer))).unwrap_or(None)
 }
 
 /// Whether `url` addresses the running embedded server: same scheme, host

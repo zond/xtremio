@@ -52,6 +52,48 @@ Future<String> serverUpdateSettings({required String patchJson}) => RustLib
     .api
     .crateApiServerServerUpdateSettings(patchJson: patchJson);
 
+/// Starts or stops the server's LAN media listener and answers the address
+/// it is bound to afterwards (`"0.0.0.0:39271"`), or null after a stop.
+///
+/// The listener is a second HTTP listener serving media bytes to the local
+/// network -- what a Chromecast fetches from, since it cannot reach the
+/// loopback one. It mounts no control route at all, and deliberately not
+/// `/proxy` or `/ftp`, so a stream that is only playable through the proxy
+/// cannot be cast; the caller has to notice that itself rather than hand a
+/// receiver a URL that will 404.
+///
+/// It exists for the length of a cast session and no longer. Turning it on
+/// also grants the server's `lanMediaEnabled` permission and turning it off
+/// takes it back, so the persisted answer to "may this app serve the LAN" is
+/// no whenever nothing is casting. Errors when the server is not running or
+/// the bind fails; in either case nothing is listening afterwards.
+Future<String?> serverSetLanMedia({required bool enabled}) =>
+    RustLib.instance.api.crateApiServerServerSetLanMedia(enabled: enabled);
+
+/// Whether the LAN media listener is running. False when the server is not
+/// running either -- both mean nothing of ours is on the LAN.
+bool serverLanMediaRunning() =>
+    RustLib.instance.api.crateApiServerServerLanMediaRunning();
+
+/// The base URL to give a receiver at `peer_ip` (`"http://192.168.1.20:39271/"`),
+/// so a media URL built on it names an interface that receiver can connect
+/// back to -- the one sharing the receiver's subnet, since the first
+/// interface on a host with a VPN or a container bridge regularly is not.
+///
+/// `peer_ip` is null when the receiver's address is not known. The Cast SDK
+/// does not report one, so in practice it usually is: the answer is then the
+/// first non-loopback interface, which is what the server falls back to for
+/// a peer it cannot place on any subnet, and is right on a device with one
+/// network. It is a parameter, and not simply left out, because a receiver
+/// whose address *is* known deserves the better answer.
+///
+/// Null when the listener is not running, when `peer_ip` is given but is not
+/// an IP address, or when the host has nothing but loopback -- all of which
+/// mean this receiver cannot be handed a URL, and none of which may be
+/// answered with a loopback URL it could never fetch.
+Future<String?> serverLanMediaBaseUrl({String? peerIp}) =>
+    RustLib.instance.api.crateApiServerServerLanMediaBaseUrl(peerIp: peerIp);
+
 /// Where and how the embedded server runs. Directories are decided by Dart
 /// (path_provider) and created by Rust if missing.
 class ServerConfig {
