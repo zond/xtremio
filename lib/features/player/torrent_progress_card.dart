@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'torrent_stats.dart';
+
 /// One line of what a torrent-progress card says, derived from the server's
 /// stats: a phase label (with the percentage when there is one), the
 /// progress for a determinate bar (null for an indeterminate one), and an
@@ -91,6 +93,26 @@ class TorrentProgressCard extends StatelessWidget {
   /// A label with the percentage appended when there is one to append.
   static String withPercent(String label, double? progress) =>
       progress == null ? label : '$label ${(progress * 100).round()}%';
+
+  /// Who is on the other end, in the convention every torrent client
+  /// uses: `seeds 2 of 137 · peers 5 · 12 found`. The first number is
+  /// connections that hold the whole file, the second the swarm's own
+  /// seeder count from the trackers, then live connections and, when the
+  /// search has turned up more addresses than that, how many.
+  ///
+  /// A swarm nobody could ask about (`swarmSeeders` null) simply loses its
+  /// half of the first part -- `seeds 2` -- rather than printing a 0, a
+  /// dash or a "?", every one of which would read as an answer about the
+  /// swarm.
+  static String formatSwarm(TorrentStats stats) {
+    final swarm = stats.swarmSeeders;
+    final seen = stats.peerDiscovery.seen;
+    return [
+      'seeds ${stats.connectedSeeders}${swarm == null ? '' : ' of $swarm'}',
+      'peers ${stats.peers}',
+      if (seen > stats.peers) '$seen found',
+    ].join(' · ');
+  }
 
   /// Bytes per second in human units: `850 kB/s`, `4.2 MB/s`.
   static String formatSpeed(double bytesPerSecond) {

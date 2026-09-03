@@ -12,8 +12,8 @@ import 'torrent_stats.dart';
 /// target is the *head* of the file (the initial priority window) plus a
 /// hash check, so once playback is past the head there is nothing whose
 /// completion can be drawn: the bar goes indeterminate and the numbers --
-/// speed and peers, zeros included, which during a stall is exactly the
-/// answer -- carry the news.
+/// speed, seeds and peers, zeros included, which during a stall is exactly
+/// the answer -- carry the news.
 class TorrentStallOverlay extends StatelessWidget {
   const TorrentStallOverlay({super.key, required this.stats});
 
@@ -77,16 +77,12 @@ class TorrentStallOverlay extends StatelessWidget {
   }
 
   /// What the swarm is doing right now. Unlike start-up this always says,
-  /// zeros and all: `0 B/s · 0 peers · 12 found` is the whole diagnosis of
-  /// a stall. The counts are connections -- peers, never "seeds": the
-  /// server counts who is connected, not who has the whole file.
-  static String _detail(TorrentStats stats) {
-    final peers = stats.peers;
-    final found = stats.peerDiscovery.seen;
-    return [
-      TorrentProgressCard.formatSpeed(stats.downloadSpeed),
-      '$peers ${peers == 1 ? 'peer' : 'peers'}',
-      if (found > peers) '$found found',
-    ].join(' · ');
-  }
+  /// zeros and all: `0 B/s · seeds 0 · peers 0 · 12 found` is the whole
+  /// diagnosis of a stall, and whether any of those connections is a seed
+  /// is the difference between a slow swarm and one that cannot finish the
+  /// file at all.
+  static String _detail(TorrentStats stats) => [
+    TorrentProgressCard.formatSpeed(stats.downloadSpeed),
+    TorrentProgressCard.formatSwarm(stats),
+  ].join(' · ');
 }

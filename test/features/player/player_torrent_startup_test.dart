@@ -230,6 +230,25 @@ void main() {
         ).detail,
         'No peers found yet',
       );
+      // Nothing is connected here, so there is no seed of ours to count --
+      // but a tracker that answered can still say the swarm is worth the
+      // wait, and that is the one number this moment gains.
+      expect(
+        TorrentStartupOverlay.describe(
+          const TorrentStats(
+            phase: TorrentPhase.buffering,
+            swarmSeeders: 137,
+            peerDiscovery: PeerDiscovery(seen: 7, connecting: 2),
+          ),
+        ).detail,
+        '7 found · 2 connecting · 137 seeds in the swarm',
+      );
+      expect(
+        TorrentStartupOverlay.describe(
+          const TorrentStats(phase: TorrentPhase.buffering, swarmSeeders: 1),
+        ).detail,
+        'No peers found yet · 1 seed in the swarm',
+      );
 
       final buffering = TorrentStartupOverlay.describe(
         const TorrentStats(
@@ -239,18 +258,22 @@ void main() {
           peerDiscovery: PeerDiscovery(seen: 9, live: 3),
           downloadSpeed: 2500000,
           peers: 3,
+          connectedSeeders: 1,
+          swarmSeeders: 137,
         ),
       );
       expect(buffering.label, 'Buffering start… 50%');
       expect(buffering.progress, 0.5);
-      expect(buffering.detail, '2.5 MB/s · 3 peers');
+      expect(buffering.detail, '2.5 MB/s · seeds 1 of 137 · peers 3 · 9 found');
 
+      // Nobody could be asked about the swarm: the count of ours stands
+      // alone rather than being written as a share of an unknown.
       final ready = TorrentStartupOverlay.describe(
         const TorrentStats(phase: TorrentPhase.ready, peers: 1),
       );
       expect(ready.label, 'Starting playback…');
       expect(ready.progress, 1);
-      expect(ready.detail, '1 peer');
+      expect(ready.detail, 'seeds 0 · peers 1');
 
       final failed = TorrentStartupOverlay.describe(
         const TorrentStats(phase: TorrentPhase.error),
@@ -335,10 +358,15 @@ void main() {
       peerDiscovery: PeerDiscovery(seen: 9, live: 4),
       downloadSpeed: 1500000,
       peers: 4,
+      connectedSeeders: 2,
+      swarmSeeders: 137,
     );
     await poll(tester);
     expect(overlayText('Buffering start… 75%'), findsOneWidget);
-    expect(overlayText('1.5 MB/s · 4 peers'), findsOneWidget);
+    expect(
+      overlayText('1.5 MB/s · seeds 2 of 137 · peers 4 · 9 found'),
+      findsOneWidget,
+    );
     expect(progressBar(tester).value, 0.75);
 
     stats.response = const TorrentStats(phase: TorrentPhase.ready, peers: 4);

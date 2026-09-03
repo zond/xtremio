@@ -47,13 +47,23 @@ class TorrentStartupOverlay extends StatelessWidget {
         if (stats.peerDiscovery.live == 0 && stats.peers == 0) {
           final found = stats.peerDiscovery.seen;
           final connecting = stats.peerDiscovery.connecting;
+          // Nothing is connected yet, so there is no seed to count; the
+          // swarm's own seeder count, when a tracker answered, is the one
+          // thing here that says whether the wait is worth it.
+          final swarm = stats.swarmSeeders;
           return TorrentProgressStatus(
             label: 'Finding peers…',
             progress: progress,
-            detail: found == 0
-                ? 'No peers found yet'
-                : '$found found'
-                      '${connecting > 0 ? ' · $connecting connecting' : ''}',
+            detail: [
+              if (found == 0)
+                'No peers found yet'
+              else ...[
+                '$found found',
+                if (connecting > 0) '$connecting connecting',
+              ],
+              if (swarm != null)
+                '$swarm ${swarm == 1 ? 'seed' : 'seeds'} in the swarm',
+            ].join(' · '),
           );
         }
         return TorrentProgressStatus(
@@ -83,13 +93,14 @@ class TorrentStartupOverlay extends StatelessWidget {
     }
   }
 
-  /// Speed and peers, whichever are non-zero; null when both are.
+  /// Speed and the swarm, whichever are there; null when neither is. The
+  /// swarm line only appears once something is connected -- before that
+  /// the "Finding peers…" branch above is saying it better.
   static String? _detail(TorrentStats stats) {
     final parts = <String>[
       if (stats.downloadSpeed > 0)
         TorrentProgressCard.formatSpeed(stats.downloadSpeed),
-      if (stats.peers > 0)
-        '${stats.peers} ${stats.peers == 1 ? 'peer' : 'peers'}',
+      if (stats.peers > 0) TorrentProgressCard.formatSwarm(stats),
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }

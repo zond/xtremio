@@ -102,8 +102,10 @@ void main() {
       'torrent  waiting for the server',
     ]);
 
-    // Ready: no phase row, and the counts are connections out of addresses
-    // found -- peers, never seeds, which the server does not count.
+    // Ready: no phase row. Our connections are two rows (how many hold the
+    // whole file, and how many are connected out of the addresses found),
+    // and the swarm is a third -- here one no tracker answered for, which
+    // says so instead of reporting a zero swarm.
     expect(
       PlaybackStatsOverlay.describeTorrent(
         const TorrentStats(
@@ -111,11 +113,17 @@ void main() {
           peerDiscovery: PeerDiscovery(seen: 12),
         ),
       ),
-      ['speed    0 B/s', 'peers    0 connected / 12 found'],
+      [
+        'speed    0 B/s',
+        'seeds    0 connected',
+        'peers    0 connected / 12 found',
+        'swarm    not reported',
+      ],
     );
 
     // Not ready: the phase leads, with the percentage of whatever it is
-    // the server is measuring.
+    // the server is measuring. With a scrape behind it the swarm row
+    // carries both sides of the swarm and how old the snapshot is.
     expect(
       PlaybackStatsOverlay.describeTorrent(
         const TorrentStats(
@@ -123,15 +131,42 @@ void main() {
           initialWindowReadyBytes: 1048576,
           initialWindowBytes: 4194304,
           downloadSpeed: 1500000,
+          peers: 4,
+          connectedSeeders: 2,
+          swarmSeeders: 137,
+          swarmLeechers: 402,
+          swarmScrapeAge: Duration(minutes: 4),
           peerDiscovery: PeerDiscovery(seen: 9, live: 4),
         ),
       ),
       [
         'torrent  buffering head 25%',
         'speed    1.5 MB/s',
+        'seeds    2 connected',
         'peers    4 connected / 9 found',
+        'swarm    137 seeds / 402 peers · 4 min ago',
       ],
     );
+
+    // A swarm the trackers say is empty is an answer, and reads as one --
+    // the row a client must not confuse with "not reported" above.
+    expect(
+      PlaybackStatsOverlay.describeTorrent(
+        const TorrentStats(
+          phase: TorrentPhase.ready,
+          swarmSeeders: 0,
+          swarmLeechers: 0,
+          swarmScrapeAge: Duration(seconds: 12),
+        ),
+      ),
+      contains('swarm    0 seeds / 0 peers · 12 s ago'),
+    );
+    expect(PlaybackStatsOverlay.formatAge(const Duration(seconds: 59)), '59 s');
+    expect(
+      PlaybackStatsOverlay.formatAge(const Duration(minutes: 59)),
+      '59 min',
+    );
+    expect(PlaybackStatsOverlay.formatAge(const Duration(minutes: 90)), '1 h');
     expect(
       PlaybackStatsOverlay.describeTorrent(
         const TorrentStats(
@@ -193,9 +228,10 @@ void main() {
     await tester.pump();
 
     // The panel stays a panel in the corner: as wide as the row it holds
-    // to, and no taller than the two lines that row is cut off at.
+    // to, and no taller than its rows plus the two lines the error is cut
+    // off at -- a bound the paragraph would blow through if it wrapped.
     final size = tester.getSize(find.byType(PlaybackStatsOverlay));
     expect(size.width, lessThan(PlaybackStatsOverlay.wideRowWidth + 40));
-    expect(size.height, lessThan(120));
+    expect(size.height, lessThan(140));
   });
 }

@@ -131,19 +131,50 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// swarm is doing right now. Null stats means the poll has not answered
   /// for this torrent yet.
   ///
-  /// The counts are connections -- peers, never "seeds": the server counts
-  /// who has handshaked (`live`) and how many addresses the search has
-  /// turned up (`seen`), not who has the whole file. The phase is worth a
-  /// row only while the torrent is not ready; once it is, the speed and the
-  /// peers are the news.
+  /// Three rows say three different things and the panel keeps them apart.
+  /// `seeds` and `peers` are *our connections*: how many have handshaked
+  /// (`live`), how many addresses the search has turned up (`seen`), and
+  /// how many of the connections hold the whole file. `swarm` is not a
+  /// measurement at all but what the trackers last said about everyone,
+  /// which is why it carries its age -- and why it says so plainly when
+  /// nobody answered, since a swarm we could not ask about is not an empty
+  /// one. The phase is worth a row only while the torrent is not ready;
+  /// once it is, the numbers are the news.
   static List<String> describeTorrent(TorrentStats? s) {
     if (s == null) return const ['torrent  waiting for the server'];
     return [
       if (s.phase != TorrentPhase.ready) 'torrent  ${_phase(s)}',
       'speed    ${TorrentProgressCard.formatSpeed(s.downloadSpeed)}',
+      'seeds    ${s.connectedSeeders} connected',
       'peers    ${s.peerDiscovery.live} connected'
           ' / ${s.peerDiscovery.seen} found',
+      'swarm    ${_swarm(s)}',
     ];
+  }
+
+  /// The swarm row's numbers: what the trackers reported and how long ago,
+  /// or `not reported` when none of them answered. Never a 0 in that case
+  /// -- "nobody is seeding this" and "we could not ask" are different news
+  /// and this is the row that has to tell them apart.
+  static String _swarm(TorrentStats s) {
+    final seeders = s.swarmSeeders;
+    final leechers = s.swarmLeechers;
+    if (seeders == null && leechers == null) return 'not reported';
+    final counts = [
+      if (seeders != null) '$seeders seeds',
+      if (leechers != null) '$leechers peers',
+    ].join(' / ');
+    final age = s.swarmScrapeAge;
+    return age == null ? counts : '$counts · ${formatAge(age)} ago';
+  }
+
+  /// How old a tracker scrape is, in one coarse unit: `12 s`, `4 min`,
+  /// `1 h`. The panel only has to say whether the numbers are current, and
+  /// the server drops anything older than an hour anyway.
+  static String formatAge(Duration age) {
+    if (age.inMinutes < 1) return '${age.inSeconds} s';
+    if (age.inHours < 1) return '${age.inMinutes} min';
+    return '${age.inHours} h';
   }
 
   /// The server's own reason for stopping, as its own row under the swarm,

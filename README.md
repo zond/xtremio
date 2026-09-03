@@ -481,7 +481,11 @@ connection.
   playback…", `error` → "The torrent failed to start" with the server's
   `error` string as the detail; no answer yet → "Connecting to server…".
   The bar is determinate whenever there is a percentage; `downloadSpeed`
-  and `peers` show when non-zero. Polling pauses when the media loads (see
+  and, once anything is connected, the swarm line (`seeds 2 of 137 ·
+  peers 5 · 12 found`) show when non-zero. While it is still finding
+  peers there is no connection to call a seed, so that line is the
+  `peerDiscovery` counts plus, when a tracker answered, `137 seeds in the
+  swarm`. Polling pauses when the media loads (see
   the stall card below) and ends on an engine error and on dispose; direct
   HTTP streams get nothing extra. The `TorrentStatsClient` comes from
   `PlaybackScope`, so tests feed phases through a fake. The stream's
@@ -499,9 +503,14 @@ connection.
   *indeterminate* bar (past the head of the file the server measures no
   target, so a full bar would be a lie), `error` is "The torrent stopped"
   with the server's reason. The detail line always says `downloadSpeed`
-  and the peer counts, zeros included — during a stall `0 B/s · 0 peers ·
-  12 found` is the diagnosis. They are *peers*, never "seeds": the
-  server's counters are connections, not the swarm's seeders. Playback
+  and the swarm, zeros included — during a stall `0 B/s · seeds 0 ·
+  peers 0 · 12 found` is the diagnosis, and whether any of those
+  connections is a *seed* (`connectedSeeders`) is the difference between
+  a slow swarm and one that cannot finish the file at all. When the
+  server's tracker scrape knows the swarm's own seeder count it is
+  written as `seeds 2 of 137`; when no tracker answered (`swarmSeeders`
+  null) the "of" half is simply left off, never printed as a 0 or a dash,
+  because a swarm we could not ask about is not an empty one. Playback
   resuming drops the card, the timer and the last answer; an answer that
   arrives after the stall ended is discarded.
 - **Next episode.** `player.nextVideo`/`nextStream` come from the core.
@@ -764,11 +773,16 @@ CPU), codec and resolution, video bitrate, and demuxer cache / buffering
 state, sampled twice a second only while it is on screen.
 
 For a torrent it also carries the swarm, from the same `stats.json` the
-start-up and stall cards read: download speed, `<live> connected /
-<seen> found` peers, the phase (with its percentage) while the torrent is
-not ready yet, and the server's reason when it stopped. Those counts are
-connections, never seeds -- the server does not yet count who has the whole
-file. They are polled while the panel is up, every five seconds when
+start-up and stall cards read: download speed, `<connectedSeeders>
+connected` seeds, `<live> connected / <seen> found` peers, a `swarm` row,
+the phase (with its percentage) while the torrent is not ready yet, and
+the server's reason when it stopped. The first two rows are *our
+connections* — who we are talking to, and how many of them hold the whole
+file. The `swarm` row is not a measurement at all but what the torrent's
+trackers last said about everyone (`137 seeds / 402 peers · 4 min ago`,
+the age being `swarmScrapeAgeSecs`), and it reads `not reported` when no
+tracker answered, since a swarm nobody could ask about is not an empty
+one. They are polled while the panel is up, every five seconds when
 playback is fine and at the faster stall cadence when it is not, so opening
 the panel is what asks and closing it is what stops -- as does minimising
 the app, which is nobody watching either. What the panel last showed stays
