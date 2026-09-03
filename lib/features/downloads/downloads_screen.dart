@@ -237,7 +237,15 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             onSelect: _setDestination,
           ),
           const Divider(height: 1),
-          if (downloads != null && downloads.isLoaded && items.isEmpty)
+          // A listing that failed is not an empty one: saying "nothing
+          // downloaded" to someone whose disk is full of downloads is a lie,
+          // and there would be nothing to do about it.
+          if (downloads != null && downloads.error != null)
+            _ListingFailed(onRetry: downloads.refresh),
+          if (downloads != null &&
+              downloads.error == null &&
+              downloads.isLoaded &&
+              items.isEmpty)
             const _NothingDownloaded(),
           for (final view in items)
             _DownloadRow(
@@ -481,6 +489,33 @@ class _DeleteDialog extends StatelessWidget {
         child: const Text(deleteLabel),
       ),
     ],
+  );
+}
+
+/// The listing itself failed -- a broken bridge, since the Rust side
+/// answers off the disk when the server cannot be asked. What was listed
+/// before (if anything) stays below; this says why nothing newer arrived
+/// and offers the only useful action.
+class _ListingFailed extends StatelessWidget {
+  const _ListingFailed({required this.onRetry});
+
+  final Future<void> Function() onRetry;
+
+  static const String message = 'Downloads could not be read';
+  static const String retryLabel = 'Try again';
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: Icon(
+      Icons.cloud_off_outlined,
+      color: Theme.of(context).colorScheme.error,
+    ),
+    title: const Text(message),
+    subtitle: const Text('The app could not ask what is kept on this device.'),
+    trailing: TextButton(
+      onPressed: () => onRetry(),
+      child: const Text(retryLabel),
+    ),
   );
 }
 

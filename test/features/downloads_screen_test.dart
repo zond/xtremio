@@ -111,6 +111,27 @@ void main() {
       expect(find.text('0 downloads · 0 B on this device'), findsOneWidget);
     });
 
+    testWidgets('a listing that failed says so, and retries', (tester) async {
+      useTallViewport(tester);
+      // A broken bridge: the registry is on disk, the app just cannot read
+      // it. Telling the user nothing is downloaded would be a lie.
+      final downloads = FakeDownloadsClient(registry: recorded())
+        ..listError = StateError('the bridge is gone');
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Downloads could not be read'), findsOneWidget);
+      expect(find.text('Nothing downloaded'), findsNothing);
+
+      downloads.listError = null;
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Downloads could not be read'), findsNothing);
+      expect(find.text('Night of the Living Dead'), findsOneWidget);
+    });
+
     testWidgets('progress from the feed moves a row', (tester) async {
       useTallViewport(tester);
       final downloads = FakeDownloadsClient(registry: recorded());
