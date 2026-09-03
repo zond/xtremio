@@ -671,6 +671,16 @@ frames, the **hwdec** in use (or `software` when libmpv is decoding on the
 CPU), codec and resolution, video bitrate, and demuxer cache / buffering
 state, sampled twice a second only while it is on screen.
 
+For a torrent it also carries the swarm, from the same `stats.json` the
+start-up and stall cards read: download speed, `<live> connected /
+<seen> found` peers, the phase (with its percentage) while the torrent is
+not ready yet, and the server's reason when it stopped. Those counts are
+connections, never seeds -- the server does not yet count who has the whole
+file. They are polled while the panel is up, every five seconds when
+playback is fine and at the faster stall cadence when it is not, so opening
+the panel is what asks and closing it is what stops. On a television the
+whole panel is set in a larger size, since it is read from a sofa.
+
 ## Getting started
 
 ```bash
