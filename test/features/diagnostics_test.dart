@@ -5,6 +5,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_report.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
 
+import '../support/diagnostics_capture.dart';
 import '../support/fake_diagnostics_client.dart';
 
 /// The in-app diagnostics: what the core's log ring says, what it must
@@ -128,6 +129,64 @@ void main() {
           'Failed to open http://127.0.0.1:11470/'
           'dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c/-1';
       expect(redactSecrets(failing), failing);
+    });
+  });
+
+  group('DiagnosticsLog', () {
+    test('drops everything when nothing is listening', () {
+      DiagnosticsLog.sink = null;
+      DiagnosticsLog.reset();
+      // A widget test that arranged nothing must not reach FFI, and an app
+      // whose core is not up yet must not throw over a log line.
+      expect(() => DiagnosticsLog.info('player', 'open'), returnsNormally);
+    });
+
+    test('counts a line that repeats instead of writing it again', () {
+      final lines = captureDiagnostics();
+      DiagnosticsLog.info('player', 'stalled');
+      DiagnosticsLog.info('player', 'stalled');
+      DiagnosticsLog.info('player', 'stalled');
+      DiagnosticsLog.error('player', 'gave up');
+      expect(lines, [
+        'info player stalled',
+        'info player last line repeated 2 times',
+        'error player gave up',
+      ]);
+    });
+
+    test('writes a URL without its query or its credentials', () {
+      // The embedded server's own URL is worth having whole; an addon's is
+      // where a key rides, and it rides in the query.
+      expect(
+        DiagnosticsLog.url(Uri.parse('http://127.0.0.1:11470/abc123/-1?tr=x')),
+        'http://127.0.0.1:11470/abc123/-1?…',
+      );
+      expect(
+        DiagnosticsLog.url(Uri.parse('https://user:pw@host/path?apiKey=k')),
+        'https://host/path?…',
+      );
+      expect(
+        DiagnosticsLog.url(Uri.parse('file:///home/someone/Videos/ep.mkv')),
+        'file://…/ep.mkv',
+      );
+    });
+
+    test('captures an unhandled Flutter error', () {
+      final lines = captureDiagnostics();
+      captureUnhandledErrors();
+      final previous = FlutterError.onError;
+      addTearDown(() => FlutterError.onError = previous);
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: StateError('a listener blew up'),
+          library: 'xtremio test',
+          context: ErrorDescription('while doing something'),
+        ),
+      );
+      expect(
+        lines.single,
+        'error flutter Bad state: a listener blew up (while doing something)',
+      );
     });
   });
 

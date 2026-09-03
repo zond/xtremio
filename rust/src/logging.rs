@@ -103,6 +103,43 @@ pub fn init() {
     });
 }
 
+/// The longest message the Dart side may record. A ring line is meant to
+/// be read in a paste; a stack trace or a whole JSON body would push out
+/// the lines around it, which are what give it meaning.
+pub const MAX_APP_MESSAGE: usize = 400;
+
+/// Records one line the *Dart* side produced -- a player open, an engine
+/// error, an unhandled Flutter error -- into the same ring as everything
+/// else.
+///
+/// It goes in as a real `tracing` event rather than straight into the ring,
+/// so it gets the one clock, the one format, the one filter and (on
+/// Android) the same logcat re-emission with no second path to keep in
+/// step. That is also what keeps the two sides in order: the ring is
+/// append-only and both sides stamp from `Utc::now()` as they push.
+///
+/// `target` names the Dart source (`player`, `flutter`); the tracing target
+/// stays this crate's, since that is what the filter is written against.
+pub fn record_app_event(level: &str, target: &str, message: &str) {
+    let message = truncate(message, MAX_APP_MESSAGE);
+    let target = truncate(target, 64);
+    match level.to_ascii_lowercase().as_str() {
+        "error" => tracing::error!(target: "xtremio_core::app", "{target}: {message}"),
+        "warn" | "warning" => tracing::warn!(target: "xtremio_core::app", "{target}: {message}"),
+        "debug" => tracing::debug!(target: "xtremio_core::app", "{target}: {message}"),
+        _ => tracing::info!(target: "xtremio_core::app", "{target}: {message}"),
+    }
+}
+
+/// `text` at most `max` characters (not bytes: a multi-byte character must
+/// not be cut in half), with an ellipsis when something was dropped.
+fn truncate(text: &str, max: usize) -> String {
+    match text.char_indices().nth(max) {
+        None => text.to_string(),
+        Some((end, _)) => format!("{}…", &text[..end]),
+    }
+}
+
 /// Formats every event into [`RING`] -- and, on Android, into logcat.
 struct RingLayer;
 
@@ -210,6 +247,30 @@ mod tests {
             format_line(at, &Level::ERROR, "enginefs", "", "error=timeout"),
             "2026-09-03T12:34:56.789Z ERROR enginefs: error=timeout"
         );
+    }
+
+    #[test]
+    fn an_app_event_lands_in_the_ring_like_any_other_line() {
+        init();
+        record_app_event("error", "player", "open failed marker-app-event");
+        let lines = recent_lines();
+        let line = lines
+            .iter()
+            .find(|line| line.contains("marker-app-event"))
+            .unwrap_or_else(|| panic!("app event not captured: {lines:?}"));
+        assert!(line.contains("ERROR xtremio_core::app: player: "), "{line}");
+    }
+
+    #[test]
+    fn a_long_app_message_is_cut_rather_than_filling_the_ring() {
+        let long = "x".repeat(MAX_APP_MESSAGE * 2);
+        let cut = truncate(&long, MAX_APP_MESSAGE);
+        assert_eq!(cut.chars().count(), MAX_APP_MESSAGE + 1);
+        assert!(cut.ends_with('…'), "{cut}");
+        // A message that fits is untouched, and a multi-byte character is
+        // never cut in half.
+        assert_eq!(truncate("héllo", MAX_APP_MESSAGE), "héllo");
+        assert_eq!(truncate("héllo", 2), "hé…");
     }
 
     #[test]

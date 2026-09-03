@@ -11,6 +11,10 @@ import 'src/rust/frb_generated.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Before anything that could fail: an unhandled error is the one line a
+  // report most needs, and until the core is up there is nowhere to put it
+  // (`DiagnosticsLog` drops what it cannot write).
+  captureUnhandledErrors();
   // libmpv must be loaded before the first Player is constructed.
   MediaKit.ensureInitialized();
   // Once, before the first frame: whether this is a TV decides the layout
@@ -42,6 +46,9 @@ class XtremioBootstrap extends StatefulWidget {
   /// support and cache directories.
   static Future<(CoreClient, CoreInitInfo)> bootCore() async {
     await RustLib.init();
+    // The ring exists as soon as the library does: from here the Dart side
+    // logs into the same one the Rust side fills.
+    DiagnosticsLog.useCoreRing();
     final client = RustCoreClient();
     final Directory support = await getApplicationSupportDirectory();
     final Directory cache = await getApplicationCacheDirectory();

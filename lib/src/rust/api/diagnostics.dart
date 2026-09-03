@@ -12,6 +12,33 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 DiagnosticsSnapshot diagnosticsSnapshot() =>
     RustLib.instance.api.crateApiDiagnosticsDiagnosticsSnapshot();
 
+/// Records one line from the Dart side into the same ring the Rust log
+/// fills, so a report can explain a failure that happened above the FFI --
+/// a player open that was refused and retried, an engine error out of
+/// media_kit, an unhandled Flutter error. Without this the ring holds only
+/// the Rust half of a session and a playback failure leaves no trace in it
+/// at all.
+///
+/// Sync on purpose: the line is written where it happened, so the ring's
+/// order stays the order things occurred in rather than the order a worker
+/// pool got to them. `level` is `error`/`warn`/`info`/`debug` (anything
+/// else is info) and `target` names the Dart source (`player`, `flutter`).
+/// A message longer than [`crate::logging::MAX_APP_MESSAGE`] is cut.
+///
+/// **Nothing secret may be passed here.** The caller sanitizes (no event
+/// args, no auth material, no manifest URL with a key), and the Dart side
+/// redacts again on the way to the clipboard; this is the middle of that
+/// sandwich, not a place to be careless.
+void diagnosticsLog({
+  required String level,
+  required String target,
+  required String message,
+}) => RustLib.instance.api.crateApiDiagnosticsDiagnosticsLog(
+  level: level,
+  target: target,
+  message: message,
+);
+
 /// Everything the Rust side can say about itself in one call.
 class DiagnosticsSnapshot {
   /// `xtremio_core`'s crate version.

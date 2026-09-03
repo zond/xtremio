@@ -6,6 +6,7 @@ import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/torrent_startup_overlay.dart';
 
+import '../support/diagnostics_capture.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_torrent_stats_client.dart';
@@ -164,6 +165,77 @@ void main() {
       );
     },
   );
+
+  testWidgets('puts the playback itself in the diagnostics log', (
+    tester,
+  ) async {
+    // The failure a report is most often asked to explain happens up here,
+    // above the FFI: what was opened, that it kept stopping, what mpv said
+    // when it gave up. None of it is in the Rust half of the log.
+    final lines = captureDiagnostics();
+    final fixture = loadPlayerFixture();
+    final selected = fixture['selected'] as Map<String, dynamic>;
+    final core = FakeCoreClient(state: {CoreField.player: fixture});
+    final engine = FakePlaybackEngine();
+    await tester.pumpWidget(
+      harness(core, engine, stream: selected['stream'] as Map<String, dynamic>),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      lines.singleWhere((line) => line.contains('open http')),
+      matches(RegExp(r'^info player open http://127\.0\.0\.1:\d+/\S+ ')),
+    );
+    // The URL is the one libmpv fetches, with its query dropped: `buffer=`
+    // is harmless but an addon's own URL would carry a key there.
+    expect(lines.join('\n'), isNot(contains('?tr=')));
+
+    engine.emitDuration(const Duration(minutes: 10));
+    await tester.pump();
+    engine.emitBuffering(true);
+    await tester.pump();
+    engine.emitBuffering(false);
+    await tester.pump();
+    engine.emitError('Failed to open the stream.');
+    await tester.pump();
+
+    expect(lines, [
+      anyOf(startsWith('info player open http')),
+      startsWith('info player media loaded'),
+      startsWith('warn player stalled at 0s (stall 1)'),
+      startsWith('info player playing again after'),
+      'error player engine error: Failed to open the stream.',
+      'error player playback failed: Failed to open the stream.',
+    ]);
+  });
+
+  testWidgets('keeps a playback that stalls forever from filling the ring', (
+    tester,
+  ) async {
+    final lines = captureDiagnostics();
+    final fixture = loadPlayerFixture();
+    final selected = fixture['selected'] as Map<String, dynamic>;
+    final core = FakeCoreClient(state: {CoreField.player: fixture});
+    final engine = FakePlaybackEngine();
+    await tester.pumpWidget(
+      harness(core, engine, stream: selected['stream'] as Map<String, dynamic>),
+    );
+    await tester.pumpAndSettle();
+    engine.emitDuration(const Duration(minutes: 10));
+    await tester.pump();
+
+    for (var i = 0; i < 60; i++) {
+      engine.emitBuffering(true);
+      await tester.pump();
+      engine.emitBuffering(false);
+      await tester.pump();
+    }
+    final stalls = lines.where((line) => line.contains('stalled at')).toList();
+    // The first ten one by one, then every tenth: the pattern still shows
+    // and the other 350 lines of the ring survive.
+    expect(stalls, hasLength(15));
+    expect(stalls.last, contains('(stall 60)'));
+  });
 
   testWidgets('resumes from the library position', (tester) async {
     final fixture = loadPlayerFixture();

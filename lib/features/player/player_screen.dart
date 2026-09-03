@@ -287,6 +287,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   PlayerState? _openState;
   Duration _openStart = Duration.zero;
   int _openRetries = 0;
+
+  /// When the current `open` was issued, how many times playback has run
+  /// out of data since, and when the stall on now began -- the report's
+  /// side of a playback that keeps stopping. See [_logStall].
+  DateTime? _openedAt;
+  int _stalls = 0;
+  DateTime? _stallStart;
+
+  /// How many stalls are written out one by one before only every tenth is.
+  static const int _stallsLogged = 10;
   Timer? _openRetryTimer;
   String? _openError;
 
@@ -541,6 +551,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _openStart = start;
     _openRetries = 0;
     _openError = null;
+    _stalls = 0;
+    _openedAt = DateTime.now();
+    DiagnosticsLog.info(
+      'player',
+      'open ${DiagnosticsLog.url(_mediaUrl(url))} '
+          '(${state.selectedStream?.kind.name ?? 'stream'}) at ${start.inSeconds}s',
+    );
     _open(url);
     // After `open` is on its way: the stream request creates the torrent's
     // engine with everything the URL carries (its `f=` filters included);
@@ -563,7 +580,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (state != null) _reportVideoParams(state, url);
         })
         .catchError((Object error) {
-          if (mounted && _opened == url) _failPlayback('$error');
+          if (!mounted || _opened != url) return;
+          DiagnosticsLog.error('player', 'open rejected: $error');
+          _failPlayback('$error');
         });
   }
 
@@ -636,6 +655,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _openStart = _position.value;
     _openRetries = 0;
     _openError = null;
+    DiagnosticsLog.info(
+      'player',
+      're-opening for buffer=${_bufferAhead.wire} at ${_openStart.inSeconds}s',
+    );
     _open(url);
   }
 
@@ -768,6 +791,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onMediaLoaded() {
     if (_mediaLoaded || _opened == null || _handedOver) return;
     _cancelOpenRetry();
+    final openedAt = _openedAt;
+    DiagnosticsLog.info(
+      'player',
+      'media loaded'
+          '${openedAt == null ? '' : ' after ${DateTime.now().difference(openedAt).inMilliseconds}ms'}',
+    );
     setState(() {
       _mediaLoaded = true;
       // The start-up cadence is over. The torrent is not: a stall brings
@@ -778,7 +807,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _maybeAutoPickSubtitles();
   }
 
-  void _onEngineError(String error) => _failPlayback(error);
+  void _onEngineError(String error) {
+    DiagnosticsLog.error('player', 'engine error: $error');
+    _failPlayback(error);
+  }
 
   /// Shows "Playback failed: [error]" in place of whatever was waiting for
   /// the media (the start-up overlay included, whose polling ends here) --
@@ -786,6 +818,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// simply tried again ([_scheduleOpenRetry]).
   void _failPlayback(String error) {
     if (_scheduleOpenRetry(error)) return;
+    DiagnosticsLog.error('player', 'playback failed: $error');
     _cancelOpenRetry();
     setState(() {
       _engineError = error;
@@ -837,6 +870,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _openError = error;
     if (_openRetryTimer != null) return true;
     _openRetries++;
+    DiagnosticsLog.warn(
+      'player',
+      'open refused while the torrent is ${_torrentStats?.phase.name ?? 'starting'}; '
+          'retry $_openRetries of ${PlayerScreen.torrentOpenRetries}',
+    );
     _openRetryTimer = Timer(
       PlayerScreen.torrentOpenRetryBackoff * _openRetries,
       _retryOpen,
@@ -1017,9 +1055,41 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onBuffering(bool buffering) {
+    _logStall(buffering);
     setState(() => _buffering = buffering);
     _syncTorrentStats();
     _restartControlsTimer();
+  }
+
+  /// Puts a stall and its end in the report -- the shape of a playback that
+  /// keeps stopping, which is invisible in the Rust half of the log.
+  ///
+  /// Bounded rather than complete: a playback that stalls every few seconds
+  /// for an hour would otherwise be the only thing left in a 400-line ring.
+  /// The first [_stallsLogged] of them are written one by one, and after
+  /// that every tenth, so the pattern still shows and the rest of the
+  /// session survives.
+  void _logStall(bool buffering) {
+    if (buffering) {
+      _stalls++;
+      _stallStart = DateTime.now();
+      if (_stalls <= _stallsLogged || _stalls % 10 == 0) {
+        DiagnosticsLog.warn(
+          'player',
+          'stalled at ${_position.value.inSeconds}s (stall $_stalls)',
+        );
+      }
+      return;
+    }
+    final started = _stallStart;
+    _stallStart = null;
+    if (started == null) return;
+    if (_stalls <= _stallsLogged || _stalls % 10 == 0) {
+      DiagnosticsLog.info(
+        'player',
+        'playing again after ${DateTime.now().difference(started).inMilliseconds}ms',
+      );
+    }
   }
 
   void _onCompleted(bool completed) {
@@ -1558,6 +1628,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
     _handedOver = true;
+    DiagnosticsLog.info('player', 'handing over to the next episode');
     final streamRequest = state.streamRequest ?? widget.streamRequest;
     final subtitlesPath = state.subtitlesPath ?? widget.subtitlesPath;
     navigator.pushReplacement(
