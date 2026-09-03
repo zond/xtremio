@@ -403,6 +403,44 @@ void main() {
     expect(firstTile - rows, closeTo(52 * 28 / 16, 0.01));
   });
 
+  testWidgets('the posters keep their size when the text scale grows', (
+    tester,
+  ) async {
+    // The row is what the list scrolls by, so growing the header and the
+    // caption inside a fixed extent takes the difference out of the poster
+    // -- and past about 2.1x takes it below zero, which is not a cramped
+    // layout but a `NOT NORMALIZED` constraints failure. The extent grows
+    // with the text instead.
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    Future<Size> posterAt(double scale) async {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      await tester.pumpWidget(
+        KeyedSubtree(
+          key: ValueKey(scale),
+          child: harness(fakeCore(continueWatching: {'items': <Object>[]})),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return tester.getSize(find.byType(PosterImage).first);
+    }
+
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final unscaled = await posterAt(1);
+    final scaled = await posterAt(2.5);
+
+    expect(tester.takeException(), isNull);
+    // The width follows from the height the layout reserved for the image,
+    // so an unchanged width is the reservation holding; the drawn image is
+    // never smaller, since the captions ask for less than was set aside.
+    expect(scaled.width, unscaled.width);
+    expect(scaled.height, greaterThanOrEqualTo(unscaled.height));
+    final list = tester.widget<ListView>(find.byKey(const Key('board-rows')));
+    expect(list.itemExtent, greaterThan(BoardScreen.rowExtentFor(400)));
+  });
+
   testWidgets('rows are shorter on phone widths', (tester) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;

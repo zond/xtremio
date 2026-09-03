@@ -128,10 +128,7 @@ class _BoardScreenState extends State<BoardScreen> {
   /// overscan) when that widens what has been requested so far.
   void _updateRange() {
     if (!mounted || _client == null) return;
-    final extent = BoardScreen.rowExtentFor(
-      MediaQuery.sizeOf(context).width,
-      isTv: DeviceScope.isTv(context),
-    );
+    final extent = _RowLayout.of(context).extent;
     final position = _scroll.hasClients ? _scroll.position : null;
     final offset = position?.pixels ?? 0;
     final viewport =
@@ -187,10 +184,7 @@ class _BoardScreenState extends State<BoardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final extent = BoardScreen.rowExtentFor(
-      MediaQuery.sizeOf(context).width,
-      isTv: DeviceScope.isTv(context),
-    );
+    final layout = _RowLayout.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Board')),
       body: ListenableBuilder(
@@ -210,20 +204,20 @@ class _BoardScreenState extends State<BoardScreen> {
           return ListView.builder(
             key: const Key('board-rows'),
             controller: _scroll,
-            itemExtent: extent,
+            itemExtent: layout.extent,
             padding: const EdgeInsets.only(bottom: 16),
             itemCount: rows.length,
             itemBuilder: (context, index) => switch (rows[index]) {
               _ContinueWatchingRow(:final state) => _ContinueWatchingRowView(
                 state: state,
-                extent: extent,
+                layout: layout,
                 isFirstRow: index == 0,
                 onOpen: (item) =>
                     _openDetails(item.type, item.id, videoId: item.videoId),
               ),
               _CatalogRow(:final row) => _CatalogRowView(
                 row: row,
-                extent: extent,
+                layout: layout,
                 isFirstRow: index == 0,
                 onOpen: (item) => _openDetails(item.type, item.id),
                 onSeeAll: () => _openCatalog(row),
@@ -255,16 +249,27 @@ final class _CatalogRow extends _BoardRow {
 /// Shared geometry of one row: a header, then a horizontal strip whose tile
 /// width follows from the strip height and the poster shape.
 class _RowLayout {
-  const _RowLayout(this.extent, {this.textFactor = 1});
+  const _RowLayout(this.baseExtent, {this.textFactor = 1});
 
-  final double extent;
+  /// The row's height at text scale 1: what [BoardScreen.rowExtentFor]
+  /// picked for this window.
+  final double baseExtent;
 
   /// How much bigger text is here than at the size these constants were
   /// picked for: a television scales it up, and so does a system-wide
   /// accessibility setting anywhere. The header and the caption are text in
-  /// boxes of a fixed height, so both boxes grow with it -- at the row's
-  /// expense, since the extent is what the list scrolls by.
+  /// boxes of a fixed height, so both boxes grow with it -- and so does the
+  /// row, rather than the strip between them shrinking.
   final double textFactor;
+
+  /// The row geometry [context] is in.
+  static _RowLayout of(BuildContext context) => _RowLayout(
+    BoardScreen.rowExtentFor(
+      MediaQuery.sizeOf(context).width,
+      isTv: DeviceScope.isTv(context),
+    ),
+    textFactor: textFactorOf(context),
+  );
 
   static const double baseHeaderHeight = 52;
   static const double bottomPadding = 8;
@@ -287,6 +292,15 @@ class _RowLayout {
   /// header is being drawn nearly twice the size.
   static double textFactorOf(BuildContext context) =>
       MediaQuery.textScalerOf(context).scale(probeFontSize) / probeFontSize;
+
+  /// What the list scrolls by: [baseExtent] plus exactly the room the two
+  /// text boxes gained. The poster between them therefore keeps the same
+  /// height at every text scale, instead of being squeezed -- past 2.1x it
+  /// used to go negative, and a negative box is not a cramped layout but a
+  /// `NOT NORMALIZED` constraints failure.
+  double get extent =>
+      baseExtent +
+      (baseHeaderHeight + PosterTile.captionHeight) * (textFactor - 1);
 
   double get headerHeight => baseHeaderHeight * textFactor;
 
@@ -345,13 +359,13 @@ class _RowHeader extends StatelessWidget {
 class _ContinueWatchingRowView extends StatelessWidget {
   const _ContinueWatchingRowView({
     required this.state,
-    required this.extent,
+    required this.layout,
     required this.isFirstRow,
     required this.onOpen,
   });
 
   final ContinueWatchingState state;
-  final double extent;
+  final _RowLayout layout;
 
   /// The row's first tile is where TV focus starts on a fresh Board.
   final bool isFirstRow;
@@ -360,10 +374,6 @@ class _ContinueWatchingRowView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final layout = _RowLayout(
-      extent,
-      textFactor: _RowLayout.textFactorOf(context),
-    );
     return Column(
       children: [
         _RowHeader(title: 'Continue watching', height: layout.headerHeight),
@@ -394,14 +404,14 @@ class _ContinueWatchingRowView extends StatelessWidget {
 class _CatalogRowView extends StatelessWidget {
   const _CatalogRowView({
     required this.row,
-    required this.extent,
+    required this.layout,
     required this.isFirstRow,
     required this.onOpen,
     required this.onSeeAll,
   });
 
   final CatalogRow row;
-  final double extent;
+  final _RowLayout layout;
 
   /// The row's first tile is where TV focus starts on a fresh Board.
   final bool isFirstRow;
@@ -411,10 +421,6 @@ class _CatalogRowView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final layout = _RowLayout(
-      extent,
-      textFactor: _RowLayout.textFactorOf(context),
-    );
     return Column(
       children: [
         _RowHeader(
