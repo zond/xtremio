@@ -5,9 +5,25 @@ import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
+import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fixtures.dart';
+
+/// A [TextScaler] that is whatever [scale] says, however unlike a
+/// multiplication that is.
+@immutable
+class _TableTextScaler extends TextScaler {
+  const _TableTextScaler(this._table);
+
+  final double Function(double) _table;
+
+  @override
+  double scale(double fontSize) => _table(fontSize);
+
+  @override
+  double get textScaleFactor => scale(14) / 14;
+}
 
 void main() {
   // CoreScope sits above MaterialApp, as in the app, so pushed routes see it.
@@ -335,6 +351,56 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(AddonsScreen), findsOneWidget);
+  });
+
+  /// A [TextScaler] shaped like the font-scale tables Android 14 and later
+  /// use: body sizes are lifted hard, the curve flattens as the size grows,
+  /// and it is anchored so that 100sp still maps to 100dp. A scaler like
+  /// this is the reason a layout may not probe the scale at a large round
+  /// number and call the answer "the text scale".
+  const from = <double>[8, 10, 12, 14, 18, 20, 24, 30, 100];
+  const to = <double>[16, 20, 24, 26, 30, 32, 34, 38, 100];
+
+  double nonLinearScale(double fontSize) {
+    for (var i = 1; i < from.length; i++) {
+      if (fontSize > from[i]) continue;
+      final t = (fontSize - from[i - 1]) / (from[i] - from[i - 1]);
+      return to[i - 1] + t * (to[i] - to[i - 1]);
+    }
+    return fontSize;
+  }
+
+  Widget scaledHarness(FakeCoreClient core, TextScaler scaler) => CoreScope(
+    client: core,
+    child: MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: scaler),
+        child: child!,
+      ),
+      home: const BoardScreen(),
+    ),
+  );
+
+  testWidgets('the row header grows with a non-linear text scale', (
+    tester,
+  ) async {
+    // The header is a fixed box of text, so it has to be measured against
+    // the scale of the text it holds -- 16sp here, lifted to 28 -- and not
+    // against the scaler's behaviour at some far larger size, which the
+    // Android tables deliberately leave at 1.0.
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final core = fakeCore(continueWatching: {'items': <Object>[]});
+    await tester.pumpWidget(
+      scaledHarness(core, _TableTextScaler(nonLinearScale)),
+    );
+    await tester.pumpAndSettle();
+
+    final rows = tester.getTopLeft(find.byKey(const Key('board-rows'))).dy;
+    final firstTile = tester.getTopLeft(find.byType(PosterTile).first).dy;
+    // 16sp is drawn at 28: the header box is 1.75x its unscaled height.
+    expect(firstTile - rows, closeTo(52 * 28 / 16, 0.01));
   });
 
   testWidgets('rows are shorter on phone widths', (tester) async {

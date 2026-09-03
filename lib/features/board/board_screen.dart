@@ -271,9 +271,22 @@ class _RowLayout {
   static const EdgeInsets stripPadding = EdgeInsets.symmetric(horizontal: 16);
   static const double tileSpacing = 12;
 
-  /// The text scale in play, as a plain factor.
+  /// The size the scale is probed at: about what the header's title and a
+  /// poster's caption are set in, and small enough to sit in the part of
+  /// the curve that actually moves.
+  static const double probeFontSize = 16;
+
+  /// The text scale in play here, as a plain factor.
+  ///
+  /// Probed at [probeFontSize] rather than at some large round number,
+  /// because a [TextScaler] need not be linear: Android 14 and later scale
+  /// fonts through a lookup table that lifts body sizes hard and then
+  /// flattens out, and AOSP's tables are anchored so that 100sp maps to
+  /// 100dp at *every* font setting. A probe at 100 therefore comes back
+  /// 1.0 however large the viewer asked for their text, while the 16sp
+  /// header is being drawn nearly twice the size.
   static double textFactorOf(BuildContext context) =>
-      MediaQuery.textScalerOf(context).scale(100) / 100;
+      MediaQuery.textScalerOf(context).scale(probeFontSize) / probeFontSize;
 
   double get headerHeight => baseHeaderHeight * textFactor;
 
