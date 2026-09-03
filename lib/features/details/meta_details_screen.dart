@@ -80,9 +80,10 @@ import 'stream_sources.dart';
 /// sort and across the whole list -- so what survives is the best-ranked
 /// instance, and a source two addons described differently cannot show up
 /// in two sections -- and says "Also from ..." when another *addon* had
-/// it, silently when one addon merely repeated itself. The grouped list keeps a copy in each addon's own group -- the
-/// groups are what that layout is for -- marked the same way, and collapses
-/// only an addon's repeats of its own. Either way the surviving row carries
+/// it, silently when one addon merely repeated itself. The grouped list
+/// keeps a copy in each addon's own group -- the groups are what that
+/// layout is for -- marked the same way, and collapses only an addon's
+/// repeats of its own. Either way the surviving row carries
 /// the *union* of every listing's trackers ([StreamSourceIndex]), so the
 /// stream handed to playback, to a download and to the stats poll asks
 /// every tracker anybody named.
@@ -839,7 +840,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// list, and the section says so where the tap can see it.
   List<Widget> _streamSlivers(MetaDetailsState state, MetaItem meta) {
     final isFlat = _prefs?.streamsFlat ?? false;
-    const order = StreamOrder.peersPerSize;
+    final order = _prefs?.streamsOrder ?? StreamOrder.peersPerSize;
     final lastUsed = state.lastUsedStream;
     final groups = state.allStreamGroups;
     final noneYet =
@@ -866,6 +867,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             isLoading: true,
             flat: isFlat,
             onFlatChanged: _setFlatStreams,
+            order: order,
+            onOrderChanged: _setStreamsOrder,
           ),
         ),
         const SliverToBoxAdapter(
@@ -1017,6 +1020,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           state: state,
           flat: isFlat,
           onFlatChanged: _setFlatStreams,
+          order: order,
+          onOrderChanged: _setStreamsOrder,
         ),
       ),
       if (foundNothing)
@@ -1096,6 +1101,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// Puts the sources list in one layout or the other, for everything the
   /// app shows from now on: the preference is global, not this title's.
   void _setFlatStreams(bool value) => _prefs?.setStreamsFlat(value);
+
+  /// Puts every resolution section in one order or another, again for
+  /// everything the app shows from now on rather than for this title.
+  void _setStreamsOrder(StreamOrder value) => _prefs?.setStreamsOrder(value);
 
   /// Which of [sections] are drawn open, resolving [_openSections] against
   /// what this title actually offers (see that field for the three cases).
@@ -1741,15 +1750,26 @@ class _StreamsHeader extends StatelessWidget {
     this.isLoading = false,
     this.flat = false,
     this.onFlatChanged,
+    this.order = StreamOrder.peersPerSize,
+    this.onOrderChanged,
   });
 
   final MetaDetailsState state;
 
-  /// Whether the list below is the flat, sorted one.
+  /// Whether the list below is the one cut into resolution sections.
   final bool flat;
 
   /// Flips the layout; null draws no toggle at all.
   final ValueChanged<bool>? onFlatChanged;
+
+  /// What order the streams inside each section are in. Only the sectioned
+  /// layout has such an order to choose -- the grouped one is the addons'
+  /// own ranking, which is the whole point of it -- so the chips are drawn
+  /// only there.
+  final StreamOrder order;
+
+  /// Picks that order; null draws no chips.
+  final ValueChanged<StreamOrder>? onOrderChanged;
 
   /// The episode the section is about; null takes the state's selection.
   /// A tap that has not been answered yet names the tapped episode here,
@@ -1771,35 +1791,59 @@ class _StreamsHeader extends StatelessWidget {
             if (video.title.isNotEmpty) video.title,
           ].join(' · ')
         : null;
+    final onOrderChanged = this.onOrderChanged;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Streams',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Streams',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(subtitle, style: theme.textTheme.bodySmall),
+                  ],
                 ),
-                if (subtitle != null)
-                  Text(subtitle, style: theme.textTheme.bodySmall),
-              ],
-            ),
+              ),
+              if (onFlatChanged != null)
+                IconButton(
+                  tooltip: flat ? kGroupedStreamsTooltip : kFlatStreamsTooltip,
+                  icon: Icon(flat ? Icons.view_agenda_outlined : Icons.sort),
+                  onPressed: () => onFlatChanged!(!flat),
+                ),
+              if (isLoading || state.isLoadingStreams)
+                const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
           ),
-          if (onFlatChanged != null)
-            IconButton(
-              tooltip: flat ? kGroupedStreamsTooltip : kFlatStreamsTooltip,
-              icon: Icon(flat ? Icons.view_agenda_outlined : Icons.sort),
-              onPressed: () => onFlatChanged!(!flat),
-            ),
-          if (isLoading || state.isLoadingStreams)
-            const SizedBox.square(
-              dimension: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          // A Wrap rather than a row of segments: three labels have to fit
+          // a phone's width and a 480 dp pane on a television, and the
+          // chips are each a focus stop a remote can reach.
+          if (flat && onOrderChanged != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 4),
+              child: FilterChips<StreamOrder>(
+                options: [
+                  for (final choice in StreamOrder.values)
+                    FilterOption(
+                      label: choice.label,
+                      selected: choice == order,
+                      request: choice,
+                    ),
+                ],
+                onSelect: onOrderChanged,
+              ),
             ),
         ],
       ),

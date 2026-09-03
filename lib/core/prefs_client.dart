@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../src/rust/api/prefs.dart' as rust;
 import 'buffer_ahead.dart';
+import 'stream_order.dart';
 
 /// The app's own preferences, over the Rust side's small JSON file
 /// (`rust/src/prefs.rs`, `<storage_dir>/xtremio_prefs.json`).
@@ -70,9 +71,16 @@ class AppPrefs extends ChangeNotifier {
   final PrefsClient? client;
 
   /// The `streamsFlat` key: whether the Details screen lists every addon's
-  /// streams as one flat, sorted list instead of a section per addon.
-  /// False — grouped, the engine's own order — is the default.
+  /// streams together, in a collapsible section per resolution, instead of
+  /// a section per addon. False — grouped by addon, the engine's own order
+  /// — is the default.
   static const String streamsFlatKey = 'streamsFlat';
+
+  /// The `streamsOrder` key: what order the streams inside one resolution
+  /// section of that list are in (see [StreamOrder]). Global for the same
+  /// reason [streamsFlatKey] is — an order chosen on one title is the order
+  /// the next title comes up in.
+  static const String streamsOrderKey = 'streamsOrder';
 
   /// The `bufferAhead` key: how far ahead playback buffers by default (see
   /// [BufferAhead]). The player takes this unless the viewer overrides it
@@ -82,6 +90,10 @@ class AppPrefs extends ChangeNotifier {
   bool _streamsFlat = false;
 
   bool get streamsFlat => _streamsFlat;
+
+  StreamOrder _streamsOrder = StreamOrder.peersPerSize;
+
+  StreamOrder get streamsOrder => _streamsOrder;
 
   BufferAhead _bufferAhead = BufferAhead.normal;
 
@@ -110,6 +122,11 @@ class AppPrefs extends ChangeNotifier {
     }
     // An unparseable value -- a name a newer build wrote, a number -- reads
     // as "not set", which is the default, not a failure.
+    final order = StreamOrder.parse(stored[streamsOrderKey]);
+    if (order != null && order != _streamsOrder) {
+      _streamsOrder = order;
+      changed = true;
+    }
     final buffer = BufferAhead.parse(stored[bufferAheadKey]);
     if (buffer != null && buffer != _bufferAhead) {
       _bufferAhead = buffer;
@@ -123,6 +140,13 @@ class AppPrefs extends ChangeNotifier {
     _streamsFlat = value;
     notifyListeners();
     await _write(streamsFlatKey, value);
+  }
+
+  Future<void> setStreamsOrder(StreamOrder value) async {
+    if (_streamsOrder == value) return;
+    _streamsOrder = value;
+    notifyListeners();
+    await _write(streamsOrderKey, value.stored);
   }
 
   Future<void> setBufferAhead(BufferAhead value) async {

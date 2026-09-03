@@ -173,7 +173,7 @@ Future<void> stepLeftAndDownTo<T extends Widget>(
 /// Presses up until the control tooltipped [tooltip] has focus: what is
 /// between the top stream and the header's controls is the list's own
 /// business (a section header, the order chips) and not this test's.
-Future<void> pressUpTo(
+Future<void> pressUpToTooltip(
   WidgetTester tester,
   String tooltip, {
   int limit = 8,
@@ -413,6 +413,51 @@ void main() {
       expect(focusedLabel(tester), '720p');
     });
 
+    testWidgets('the order chips take the D-pad, and select picks one', (
+      tester,
+    ) async {
+      final stored = FakePrefsClient({'streamsFlat': true});
+      final prefs = AppPrefs(client: stored);
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      await mountFlat(tester, prefs: prefs);
+
+      // Up from the first stream: its own section header, then the chips
+      // that say what order the sections are in.
+      for (var i = 0; i < 4 && !focusIn<ChoiceChip>(); i++) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      expect(focusIn<ChoiceChip>(), isTrue);
+      expect(focusInPane(), isTrue);
+
+      // And along them, which is what makes all three reachable.
+      for (
+        var i = 0;
+        i < 4 && focusedLabel(tester) != StreamOrder.largest.label;
+        i++
+      ) {
+        await press(tester, LogicalKeyboardKey.arrowLeft);
+      }
+      expect(focusedLabel(tester), StreamOrder.largest.label);
+
+      await press(tester, LogicalKeyboardKey.select);
+      expect(prefs.streamsOrder, StreamOrder.largest);
+      expect(stored.stored['streamsOrder'], 'largest');
+      expect(
+        focusedLabel(tester),
+        StreamOrder.largest.label,
+        reason: 'focus stayed on the chip that was pressed',
+      );
+      expect(
+        tester
+            .widget<ChoiceChip>(
+              find.widgetWithText(ChoiceChip, StreamOrder.largest.label),
+            )
+            .selected,
+        isTrue,
+      );
+    });
+
     testWidgets('the remote reaches the toggle and select groups them again', (
       tester,
     ) async {
@@ -422,7 +467,7 @@ void main() {
       await prefs.load();
       await mountFlat(tester, prefs: prefs);
 
-      await pressUpTo(tester, kGroupedStreamsTooltip);
+      await pressUpToTooltip(tester, kGroupedStreamsTooltip);
       expect(focusInPane(), isTrue);
 
       await press(tester, LogicalKeyboardKey.select);

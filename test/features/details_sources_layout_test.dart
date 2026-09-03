@@ -107,6 +107,21 @@ List<Map<String, dynamic>> oneResolution() => [
   ]),
 ];
 
+/// The rows [oneResolution] draws, top to bottom.
+List<String> rows(WidgetTester tester) {
+  final titles = [
+    for (final name in [
+      'Fat 1080p',
+      'Middle 1080p',
+      'Lonely 1080p',
+      'Sizeless 1080p',
+      'Peerless 1080p',
+    ])
+      (name, topOf(name)),
+  ]..sort((a, b) => a.$2.compareTo(b.$2));
+  return [for (final row in titles) row.$1];
+}
+
 double topOf(String text) => _tester!.getTopLeft(find.text(text)).dy;
 
 /// Opens or closes the section headed [resolution]. Found by its key
@@ -341,21 +356,6 @@ void main() {
   });
 
   group('the order inside a section', () {
-    /// The rows of the one section, top to bottom.
-    List<String> rows(WidgetTester tester) {
-      final titles = [
-        for (final name in [
-          'Fat 1080p',
-          'Middle 1080p',
-          'Lonely 1080p',
-          'Sizeless 1080p',
-          'Peerless 1080p',
-        ])
-          (name, topOf(name)),
-      ]..sort((a, b) => a.$2.compareTo(b.$2));
-      return [for (final row in titles) row.$1];
-    }
-
     testWidgets('is peers per megabyte, which the biggest file can win', (
       tester,
     ) async {
@@ -417,6 +417,105 @@ void main() {
       // visible without opening anything.
       expect(badges('Fat 1080p'), contains('8 GB'));
       expect(badges('Fat 1080p'), contains('200 seeders'));
+    });
+  });
+
+  group('the section order is the viewer to pick', () {
+    Future<void> pick(WidgetTester tester, StreamOrder order) async {
+      await tester.tap(find.widgetWithText(ChoiceChip, order.label));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a chip re-orders the section and stores the choice', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final stored = FakePrefsClient({'streamsFlat': true});
+      final prefs = AppPrefs(client: stored);
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      await tester.pumpWidget(harness(coreWith(oneResolution()), prefs: prefs));
+      await tester.pumpAndSettle();
+
+      // Peers per megabyte to begin with, and nothing written for it: a
+      // default is not a choice.
+      expect(rows(tester).first, 'Fat 1080p');
+      expect(stored.stored, {'streamsFlat': true});
+
+      await pick(tester, StreamOrder.largest);
+      // Largest first, with the one whose size nobody gave last -- after
+      // the smallest known file, not among the big ones.
+      expect(rows(tester), [
+        'Fat 1080p',
+        'Peerless 1080p',
+        'Middle 1080p',
+        'Lonely 1080p',
+        'Sizeless 1080p',
+      ]);
+      expect(stored.stored['streamsOrder'], 'largest');
+
+      await pick(tester, StreamOrder.mostPeers);
+      // Most peers first, and now it is the one with no peer count that
+      // goes last.
+      expect(rows(tester), [
+        'Fat 1080p',
+        'Sizeless 1080p',
+        'Middle 1080p',
+        'Lonely 1080p',
+        'Peerless 1080p',
+      ]);
+      expect(stored.stored['streamsOrder'], 'mostPeers');
+
+      await pick(tester, StreamOrder.peersPerSize);
+      expect(rows(tester).first, 'Fat 1080p');
+      expect(rows(tester)[1], 'Middle 1080p');
+      expect(stored.stored['streamsOrder'], 'peersPerSize');
+    });
+
+    testWidgets('the choice survives a rebuild and a fresh start', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final stored = FakePrefsClient({'streamsFlat': true});
+      final first = AppPrefs(client: stored);
+      addTearDown(first.dispose);
+      await first.load();
+      await tester.pumpWidget(harness(coreWith(oneResolution()), prefs: first));
+      await tester.pumpAndSettle();
+      await pick(tester, StreamOrder.largest);
+      expect(rows(tester)[1], 'Peerless 1080p');
+
+      // Another title, the same preference above it.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(harness(coreWith(oneResolution()), prefs: first));
+      await tester.pumpAndSettle();
+      expect(rows(tester)[1], 'Peerless 1080p');
+
+      // And the app comes up again: a new AppPrefs over the same file,
+      // read before the first sources list is built.
+      await tester.pumpWidget(const SizedBox());
+      final restarted = AppPrefs(client: stored);
+      addTearDown(restarted.dispose);
+      await restarted.load();
+      expect(restarted.streamsOrder, StreamOrder.largest);
+      await tester.pumpWidget(
+        harness(coreWith(oneResolution()), prefs: restarted),
+      );
+      await tester.pumpAndSettle();
+      expect(rows(tester)[1], 'Peerless 1080p');
+    });
+
+    testWidgets('is not offered where there are no sections to order', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(harness(coreWith(oneResolution())));
+      await tester.pumpAndSettle();
+
+      // Grouped is each addon's own ranking, which is the point of it.
+      expect(find.byType(ChoiceChip), findsNothing);
+      await flip(tester, kFlatStreamsTooltip);
+      expect(find.byType(ChoiceChip), findsNWidgets(StreamOrder.values.length));
     });
   });
 

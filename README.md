@@ -25,18 +25,37 @@ Rust engine for addons, catalogs, library, and playback state) and
 > streams every installed addon returns with quality hints parsed into
 > chips. The sources list has two layouts and a toggle in its header to
 > pick one: grouped (a section per addon, in profile order, each addon's
-> own ranking intact) is the default, and flat is every addon's answers in
-> one list sorted by resolution, then seeders, then size, each row naming
-> the addon it came from and badged with what could actually be read off
-> the stream -- nothing is badged that is not known. The choice is global
-> and persisted (`streamsFlat` in the preferences file), so it follows the
-> user to the next title and survives a restart. **One release is one
+> own ranking intact) is the default, and the other cuts every addon's
+> answers into **one collapsible section per resolution**, highest first,
+> with the streams nothing could be read from last in a section that says
+> it does not know rather than guessing a rung. Only the best section is
+> open to start with, so playback stays one tap away, and a *closed*
+> header still says how many streams it holds and the best swarm among
+> them -- an empty-looking 2160p and a healthy one are different answers.
+> The section a viewer opens stays open (falling back to the best one when
+> the next title has nothing of that resolution). Inside a section the
+> order is **peers per megabyte** -- ascending size over peers -- because
+> every stream in the list is the same film: duration is constant, so size
+> is bitrate, bitrate is the demand and peers are the supply, which makes
+> the smallest size per peer the best first guess at a stream that arrives
+> faster than it is watched. Chips in the header offer largest first or
+> most peers instead. A stream missing either number cannot be ranked by
+> the ratio and sits after every ranked one in the addons' own order --
+> never as a zero and never as a best guess -- while a swarm known to be
+> empty is ranked, and ranked last of the ranked. Each row names the addon
+> it came from and is badged with what could actually be read off the
+> stream, size and peers included -- nothing is badged that is not known.
+> Both choices are global and persisted (`streamsFlat` and `streamsOrder`
+> in the preferences file), so they follow the user to the next title and
+> survive a restart. **One release is one
 > row**: two addons offering the same torrent (or one addon offering it
 > twice) collapse on what they *are* -- info hash plus file index, or the
 > direct URL, the identity a download pin already uses -- never on what
 > they look like, so two different releases with the same resolution and
-> size both stay. The flat list collapses after sorting, so the
-> best-ranked instance is the one kept, and it says "Also from ..." when
+> size both stay. The sectioned list collapses after sorting and across
+> the whole list, so the best-ranked instance is the one kept and a source
+> two addons described differently cannot appear in two sections; it says
+> "Also from ..." when
 > another addon had it too (silently when one addon simply repeated
 > itself); the grouped list keeps a copy in each addon's group, marked the
 > same way, since the groups are what that layout is for. The row that
@@ -254,8 +273,10 @@ connection.
   and additive like the downloads registry: a write is a read-modify-write
   of one key, a key from a newer build survives it, and a file that cannot
   be parsed reads as "nothing set" rather than as a failure. Today it holds
-  two keys: `streamsFlat` (the Details screen's flat-vs-grouped sources
-  list) and `bufferAhead` (how far ahead playback buffers, below). Nothing
+  three keys: `streamsFlat` (the Details screen's sources list, sectioned
+  by resolution rather than grouped by addon), `streamsOrder` (what order
+  the streams inside one of those sections are in) and `bufferAhead` (how
+  far ahead playback buffers, below). Nothing
   secret goes in it.
 - **How far ahead playback buffers is the viewer's choice.** The streaming
   server reads ahead of the play head by a window sized for a healthy
