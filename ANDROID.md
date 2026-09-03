@@ -118,15 +118,26 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
   external files directory is world-readable over adb
   (`adb shell ls /sdcard/Android/data/com.zond.xtremio/files/downloads`).
 
-  *Once* means once ever, not once per launch: the registry records that
-  the question was answered (`destinationSettled` in
+  *Once* means once ever, not once per launch: the registry records both
+  that the question was answered and which answer it was
+  (`destinationSettled` and `destinationChoice` in
   `<files>/core/downloads.json`, written by `downloads_set_dir`), and
-  start-up reads that rather than "is `downloadsDir` null?". Null is an
+  start-up reads those rather than "is `downloadsDir` null?". Null is an
   answer too — it is what the Downloads screen writes for "Default (with
-  the cache)", and what the server writes for itself when a persisted
-  destination is unusable at boot, an SD card that is not in the device
-  being the case to expect. Neither is quietly replaced on the next
-  launch.
+  the cache)" — and it is not quietly replaced on the next launch.
+
+  The two are not the same null, which is why the path is recorded and not
+  just the flag. The server clears a `downloadsDir` it cannot prepare at
+  boot (an SD card that is not in the device) and persists the null, and
+  on Android the fallback that leaves is `getApplicationCacheDirectory()`
+  — the purgeable directory this whole section exists to stay out of. So
+  a recorded path that the settings no longer have is read as the server
+  having dropped it: start-up asks for that path again, and if the volume
+  is really gone it applies the external files directory instead. Never
+  the cache. An install upgraded from a build before `destinationChoice`
+  has no path on record; if its destination was cleared it reads as
+  "Default (with the cache)" and has to be re-picked on the Downloads
+  screen.
 - **No permission is involved.** An app's own external files directory
   needs none on `minSdk` 24 (`getExternalFilesDir`, which is what
   path_provider's `getExternalStorageDirectory()` returns), and it must

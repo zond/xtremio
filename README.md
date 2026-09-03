@@ -262,12 +262,17 @@ connection.
   path must be absolute, creatable, writable and not at or above a cache
   root). Everywhere else nothing is written and the server keeps deciding.
   An answer already given is never overridden: the registry's
-  `destinationSettled` (set by `downloads_set_dir`, and never unset) is
-  what start-up asks, because a null `downloadsDir` is not only the unset
-  state -- it is also "put them back with the cache" chosen by hand, and
-  what the server writes for itself when it clears a destination it cannot
-  use at boot (an SD card that is not in the device). A `downloadsDir` set
-  by a build from before the flag counts as answered too. The Downloads
+  `destinationSettled` and `destinationChoice` (set by
+  `downloads_set_dir`, and never unset) are what start-up asks, because a
+  null `downloadsDir` is not only the unset state -- it is also "put them
+  back with the cache" chosen by hand, and what the server writes for
+  itself when it clears a destination it cannot use at boot (an SD card
+  that is not in the device). The recorded path tells those two apart: one
+  that the settings no longer have is the server having dropped it, so
+  start-up asks for it again and falls back to the platform default (on
+  Android the external files directory, never the purgeable cache) when
+  the volume is really gone. A `downloadsDir` set by a build from before
+  the flag counts as answered too. The Downloads
   screen's picker offers the same directories
   (`getExternalStorageDirectories()`, so an SD card is among them) plus a
   typed path off Android. With a destination set, each pin
