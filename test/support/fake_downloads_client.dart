@@ -63,18 +63,28 @@ class FakeDownloadsClient implements DownloadsClient {
 
   bool disposed = false;
 
-  final StreamController<DownloadsRegistry> _updates =
-      StreamController<DownloadsRegistry>.broadcast();
+  final StreamController<DownloadsUpdate> _updates =
+      StreamController<DownloadsUpdate>.broadcast();
 
   @override
-  Stream<DownloadsRegistry> get updates => _updates.stream;
+  Stream<DownloadsUpdate> get updates => _updates.stream;
 
-  /// Pushes a progress event carrying [update]'s entries, as the Rust
-  /// ticker would, and folds it into [registry] so a later [list] agrees
-  /// with what the listeners just saw.
+  /// Pushes the narrow rows the Rust ticker really sends -- `{"key",
+  /// "downloaded","size","state","path","error","completedAt"}` -- and
+  /// folds them into [registry] so a later [list] agrees with what the
+  /// listeners just saw.
+  void emitProgress(Iterable<Map<String, dynamic>> rows) {
+    final update = DownloadsProgressUpdate([
+      for (final row in rows) DownloadProgress(row),
+    ]);
+    registry = update.applyTo(registry);
+    _updates.add(update);
+  }
+
+  /// Pushes a whole listing envelope, the other shape the feed can carry.
   void emit(DownloadsRegistry update) {
     registry = registry.merge(update);
-    _updates.add(update);
+    _updates.add(DownloadsListingUpdate(update));
   }
 
   /// The same for one entry.

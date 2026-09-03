@@ -350,4 +350,110 @@ void main() {
       );
     });
   });
+
+  group('a progress event', () {
+    /// The listing a screen already has.
+    DownloadsRegistry listed() => DownloadsRegistry(
+      items: {
+        'tt1:tt1': const DownloadView({
+          'metaId': 'tt1',
+          'videoId': 'tt1',
+          'name': 'A Film',
+          'infoHash': 'abcdabcd',
+          'meta': {'id': 'tt1'},
+          'size': 100,
+          'downloaded': 10,
+          'state': 'downloading',
+        }),
+      },
+    );
+
+    test('is read as rows, and a listing envelope still as a listing', () {
+      final update = DownloadsUpdate.fromJson(const {
+        'version': 1,
+        'progress': [
+          {
+            'key': 'tt1:tt1',
+            'downloaded': 100,
+            'size': 100,
+            'state': 'complete',
+            'path': '/downloads/a.mkv',
+            'error': null,
+            'completedAt': '2026-01-01T00:00:00Z',
+          },
+        ],
+      });
+      final row = (update as DownloadsProgressUpdate).rows.single;
+      expect(row.key, 'tt1:tt1');
+      expect(row.downloaded, 100);
+      expect(row.size, 100);
+      expect(row.state, DownloadState.complete);
+      expect(row.path, '/downloads/a.mkv');
+      expect(row.error, isNull);
+      expect(row.completedAt, DateTime.utc(2026));
+
+      expect(
+        DownloadsUpdate.fromJson(const {
+          'version': 1,
+          'items': {
+            'tt1:tt1': {'metaId': 'tt1', 'videoId': 'tt1'},
+          },
+        }),
+        isA<DownloadsListingUpdate>(),
+        reason: 'the shape every build before the narrow rows pushed',
+      );
+    });
+
+    test('is laid over the entry it names, not put in its place', () {
+      final merged = DownloadsUpdate.fromJson(const {
+        'version': 1,
+        'progress': [
+          {
+            'key': 'tt1:tt1',
+            'downloaded': 100,
+            'size': 100,
+            'state': 'complete',
+            'path': '/downloads/a.mkv',
+            'error': null,
+            'completedAt': '2026-01-01T00:00:00Z',
+          },
+        ],
+      }).applyTo(listed());
+
+      final view = merged['tt1:tt1']!;
+      expect(view.downloaded, 100);
+      expect(view.isComplete, isTrue);
+      expect(view.path, '/downloads/a.mkv');
+      expect(view.completedAt, DateTime.utc(2026));
+      expect(view.name, 'A Film', reason: 'the row carries none of this');
+      expect(view.meta, isNotNull);
+      expect(view.infoHash, 'abcdabcd');
+    });
+
+    test('says nothing about a field it leaves out', () {
+      final merged = DownloadsUpdate.fromJson(const {
+        'version': 1,
+        'progress': [
+          {'key': 'tt1:tt1', 'downloaded': 50},
+        ],
+      }).applyTo(listed());
+
+      final view = merged['tt1:tt1']!;
+      expect(view.downloaded, 50);
+      expect(view.size, 100, reason: 'a field not in the row is not a null');
+      expect(view.state, DownloadState.downloading);
+    });
+
+    test('for an entry nothing has listed yet is dropped', () {
+      final merged = DownloadsUpdate.fromJson(const {
+        'version': 1,
+        'progress': [
+          {'key': 'tt9:tt9', 'downloaded': 5},
+        ],
+      }).applyTo(listed());
+
+      expect(merged.length, 1);
+      expect(merged['tt9:tt9'], isNull);
+    });
+  });
 }

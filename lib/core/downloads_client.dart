@@ -333,10 +333,11 @@ abstract interface class DownloadsClient {
   /// server cannot be asked.
   Future<String?> directory();
 
-  /// Progress, as it happens: each event carries only the entries that
-  /// moved, so fold them into a [list] with [DownloadsRegistry.merge].
-  /// Broadcast, and nothing is buffered for a late subscriber.
-  Stream<DownloadsRegistry> get updates;
+  /// Progress, as it happens: each event carries only what moved -- the
+  /// ticker's narrow rows, or a whole listing envelope -- so fold them into
+  /// a [list] with [DownloadsUpdate.applyTo]. Broadcast, and nothing is
+  /// buffered for a late subscriber.
+  Stream<DownloadsUpdate> get updates;
 
   /// Releases the progress subscription. The client is done afterwards.
   Future<void> dispose();
@@ -390,7 +391,7 @@ class RustDownloadsClient implements DownloadsClient {
   final DownloadsSettingsFn readSettings;
   final DownloadsEventsFn openEvents;
 
-  StreamController<DownloadsRegistry>? _controller;
+  StreamController<DownloadsUpdate>? _controller;
   StreamSubscription<String>? _events;
   bool _disposed = false;
 
@@ -429,10 +430,10 @@ class RustDownloadsClient implements DownloadsClient {
       _object(await readSettings())['downloadsDir'] as String?;
 
   @override
-  Stream<DownloadsRegistry> get updates {
-    if (_disposed) return const Stream<DownloadsRegistry>.empty();
+  Stream<DownloadsUpdate> get updates {
+    if (_disposed) return const Stream<DownloadsUpdate>.empty();
     final controller = _controller ??=
-        StreamController<DownloadsRegistry>.broadcast();
+        StreamController<DownloadsUpdate>.broadcast();
     _events ??= openEvents().listen(
       (payload) {
         final update = _parse(payload);
@@ -449,7 +450,7 @@ class RustDownloadsClient implements DownloadsClient {
   /// over instead of sitting on a dead one, and let go of both halves so a
   /// later look at [updates] opens a fresh stream rather than handing back
   /// the closed one.
-  void _endFeed(StreamController<DownloadsRegistry> controller) {
+  void _endFeed(StreamController<DownloadsUpdate> controller) {
     _events = null;
     if (identical(_controller, controller)) _controller = null;
     controller.close();
@@ -468,9 +469,9 @@ class RustDownloadsClient implements DownloadsClient {
   /// event is a nicety, and the next [list] is the truth anyway. What is
   /// logged is why it could not be read -- a `FormatException` quotes the
   /// text it choked on, and an event's contents are not for the log.
-  static DownloadsRegistry? _parse(String payload) {
+  static DownloadsUpdate? _parse(String payload) {
     try {
-      return DownloadsRegistry.fromJson(_object(payload));
+      return DownloadsUpdate.fromJson(_object(payload));
     } on Object catch (error) {
       if (kDebugMode) {
         final reason = error is FormatException ? error.message : error;

@@ -8,6 +8,14 @@ import 'package:xtremio/core/core.dart';
 import '../support/fake_downloads_client.dart';
 import '../support/fixtures.dart';
 
+/// One tick of the ticker, exactly as `downloads_events` pushes it: the row
+/// that moved, and of it only what moves.
+const String progressEvent =
+    '{"version":1,"progress":[{"key":"tt0903747:tt0903747:1:1",'
+    '"downloaded":49152,"size":49152,"state":"complete","path":'
+    '"/downloads/s01e01.mkv","error":null,"completedAt":'
+    '"2026-01-01T00:00:00Z"}]}';
+
 /// A [RustDownloadsClient] over recorded answers instead of the FFI: the
 /// generated functions are what it stands on, and standing them in is how
 /// the encoding and the parsing get tested without pinning a torrent.
@@ -319,25 +327,51 @@ void main() {
   group('the progress stream', () {
     test('is opened once and shared, whoever listens', () async {
       final client = rust.client;
-      final first = <int>[];
-      final second = <int>[];
-      client.updates.listen((update) => first.add(update.length));
-      client.updates.listen((update) => second.add(update.length));
+      final first = <DownloadsUpdate>[];
+      final second = <DownloadsUpdate>[];
+      client.updates.listen(first.add);
+      client.updates.listen(second.add);
       await pumpEventQueue();
 
-      rust.events.add('{"version":1,"items":{"a:b":{"metaId":"a"}}}');
+      rust.events.add(progressEvent);
       await pumpEventQueue();
 
       expect(rust.opened, 1, reason: 'the Rust side keeps one event sink');
-      expect(first, [1]);
-      expect(second, [1]);
+      expect(first.single, isA<DownloadsProgressUpdate>());
+      expect(second.single, isA<DownloadsProgressUpdate>());
     });
 
     test('carries only what moved, to lay over a full listing', () async {
       rust.listAnswer = jsonEncode(loadDownloadsFixture());
       final client = rust.client;
       final full = await client.list();
-      final seen = <DownloadsRegistry>[];
+      final seen = <DownloadsUpdate>[];
+      client.updates.listen(seen.add);
+      await pumpEventQueue();
+
+      rust.events.add(progressEvent);
+      await pumpEventQueue();
+
+      expect((seen.single as DownloadsProgressUpdate).rows.length, 1);
+      final merged = seen.single.applyTo(full);
+      expect(merged.length, 3, reason: 'the listing, not just the row');
+      final moved = merged['tt0903747:tt0903747:1:1']!;
+      expect(moved.progress, 1);
+      expect(moved.state, DownloadState.complete);
+      expect(moved.path, '/downloads/s01e01.mkv');
+      expect(
+        moved.name,
+        full['tt0903747:tt0903747:1:1']!.name,
+        reason: 'and everything the narrow row does not carry is still there',
+      );
+      expect(moved.meta, isNotNull);
+    });
+
+    test('a listing envelope is still read, whole', () async {
+      // The narrow rows are what the ticker sends; the full envelope is
+      // what every build before it sent, and reading it costs nothing.
+      final client = rust.client;
+      final seen = <DownloadsUpdate>[];
       client.updates.listen(seen.add);
       await pumpEventQueue();
 
@@ -345,34 +379,30 @@ void main() {
         jsonEncode({
           'version': 1,
           'items': {
-            'tt0903747:tt0903747:1:1': {
-              'metaId': 'tt0903747',
-              'videoId': 'tt0903747:1:1',
-              'size': 49152,
-              'downloaded': 49152,
-              'state': 'complete',
-            },
+            'tt1:tt1': {'metaId': 'tt1', 'videoId': 'tt1', 'state': 'complete'},
           },
         }),
       );
       await pumpEventQueue();
 
-      expect(seen.single.length, 1);
-      final merged = full.merge(seen.single);
-      expect(merged.length, 3);
-      expect(merged['tt0903747:tt0903747:1:1']!.progress, 1);
+      final update = seen.single as DownloadsListingUpdate;
+      expect(update.registry.length, 1);
+      expect(
+        update.applyTo(DownloadsRegistry.empty)['tt1:tt1']!.isComplete,
+        isTrue,
+      );
     });
 
     test('a payload this build cannot read is skipped, not fatal', () async {
       final client = rust.client;
-      final seen = <DownloadsRegistry>[];
+      final seen = <DownloadsUpdate>[];
       final errors = <Object>[];
       client.updates.listen(seen.add, onError: errors.add);
       await pumpEventQueue();
 
       rust.events.add('not json at all');
       rust.events.add('[1,2,3]');
-      rust.events.add('{"version":1,"items":{"a:b":{"metaId":"a"}}}');
+      rust.events.add(progressEvent);
       await pumpEventQueue();
 
       expect(seen, hasLength(1));
@@ -417,7 +447,7 @@ void main() {
 
     test('dispose lets go of the Rust stream and stays let go', () async {
       final client = rust.client;
-      final seen = <DownloadsRegistry>[];
+      final seen = <DownloadsUpdate>[];
       client.updates.listen(seen.add);
       await pumpEventQueue();
       expect(rust.events.hasListener, isTrue);
@@ -426,12 +456,12 @@ void main() {
       await pumpEventQueue();
       expect(rust.events.hasListener, isFalse);
 
-      rust.events.add('{"version":1,"items":{"a:b":{"metaId":"a"}}}');
+      rust.events.add(progressEvent);
       await pumpEventQueue();
       expect(seen, isEmpty);
 
       // And asking again does not quietly open a second sink.
-      final after = <DownloadsRegistry>[];
+      final after = <DownloadsUpdate>[];
       client.updates.listen(after.add);
       await pumpEventQueue();
       expect(rust.opened, 1);
@@ -548,20 +578,24 @@ void main() {
         registry: DownloadsRegistry.fromJson(loadDownloadsFixture()),
       );
       addTearDown(client.dispose);
-      final seen = <DownloadsRegistry>[];
+      final seen = <DownloadsUpdate>[];
       client.updates.listen(seen.add);
       await pumpEventQueue();
 
-      client.emitEntry(const {
-        'metaId': 'tt0903747',
-        'videoId': 'tt0903747:1:1',
-        'size': 49152,
-        'downloaded': 49152,
-        'state': 'complete',
-      });
+      client.emitProgress(const [
+        {
+          'key': 'tt0903747:tt0903747:1:1',
+          'downloaded': 49152,
+          'size': 49152,
+          'state': 'complete',
+        },
+      ]);
       await pumpEventQueue();
 
-      expect(seen.single.length, 1);
+      expect(
+        (seen.single as DownloadsProgressUpdate).rows.single.key,
+        'tt0903747:tt0903747:1:1',
+      );
       expect(
         (await client.list())['tt0903747:tt0903747:1:1']!.isComplete,
         isTrue,

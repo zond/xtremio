@@ -8,9 +8,10 @@ import '../../core/core.dart';
 /// screen comes up, every progress event folded into it, and a fresh
 /// listing after anything the screen itself changed.
 ///
-/// A progress event carries only the entries that moved, which is why the
-/// registry is kept here and merged into rather than replaced — and why an
-/// entry that was *removed* needs a [refresh], not an event.
+/// A progress event carries only what moved -- the six numbers of a row,
+/// not the entry -- which is why the registry is kept here and updates are
+/// laid over it rather than replacing it, and why an entry that was
+/// *removed* needs a [refresh], not an event.
 ///
 /// A failed listing is a value ([error]), not a throw: the Rust side
 /// answers what is on disk when the server cannot be asked, so the only way
@@ -24,7 +25,7 @@ class DownloadsController extends ChangeNotifier {
 
   final DownloadsClient client;
 
-  StreamSubscription<DownloadsRegistry>? _updates;
+  StreamSubscription<DownloadsUpdate>? _updates;
   bool _disposed = false;
 
   /// Every download known, newest listing merged with the progress since.
@@ -79,9 +80,9 @@ class DownloadsController extends ChangeNotifier {
     );
   }
 
-  void _onUpdate(DownloadsRegistry update) {
+  void _onUpdate(DownloadsUpdate update) {
     if (_disposed) return;
-    registry = registry.merge(update);
+    registry = update.applyTo(registry);
     notifyListeners();
   }
 

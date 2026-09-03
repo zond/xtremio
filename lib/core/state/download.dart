@@ -167,6 +167,105 @@ final class DownloadView {
   String toString() => 'DownloadView($key, ${state.wireName})';
 }
 
+/// One row's progress, as the feed reports it: what moves while a download
+/// runs, keyed by the entry it belongs to.
+///
+/// The whole entry is what a listing is for. A progress event carries these
+/// six fields instead -- the `MetaItem` snapshot, the raw stream JSON and
+/// the two addon requests would otherwise be decoded on the UI isolate once
+/// a second per row, to say that a byte count moved.
+final class DownloadProgress {
+  const DownloadProgress(this.json);
+
+  final Map<String, dynamic> json;
+
+  /// The fields a row carries besides its [key], in the order the Rust side
+  /// writes them.
+  static const List<String> fields = [
+    'downloaded',
+    'size',
+    'state',
+    'path',
+    'error',
+    'completedAt',
+  ];
+
+  /// The entry this belongs to, `"{metaId}:{videoId}"`.
+  String get key => json['key'] as String? ?? '';
+
+  int get downloaded => (json['downloaded'] as num?)?.toInt() ?? 0;
+  int get size => (json['size'] as num?)?.toInt() ?? 0;
+  DownloadState get state => DownloadState.parse(json['state']);
+  String? get path => json['path'] as String?;
+  String? get error => json['error'] as String?;
+  DateTime? get completedAt {
+    final value = json['completedAt'];
+    return value is String ? DateTime.tryParse(value) : null;
+  }
+
+  /// What to lay over the entry [key] names, verbatim: a field the event
+  /// left out is not a field set to null.
+  Map<String, dynamic> get changes => {
+    for (final field in fields)
+      if (json.containsKey(field)) field: json[field],
+  };
+
+  @override
+  String toString() => 'DownloadProgress($key, $downloaded/$size)';
+}
+
+/// What the progress feed carries: the narrow rows the ticker pushes, or a
+/// whole listing envelope. Either is folded into what a screen already has
+/// with [applyTo].
+sealed class DownloadsUpdate {
+  const DownloadsUpdate();
+
+  /// Reads whichever shape arrived. A `progress` array is the ticker's
+  /// narrow event; anything else is read as a listing, which is what every
+  /// build before the narrow one pushed.
+  factory DownloadsUpdate.fromJson(Map<String, dynamic> json) {
+    final progress = json['progress'];
+    if (progress is List) {
+      return DownloadsProgressUpdate([
+        for (final row in progress)
+          if (row is Map<String, dynamic>) DownloadProgress(row),
+      ]);
+    }
+    return DownloadsListingUpdate(DownloadsRegistry.fromJson(json));
+  }
+
+  /// [registry] with this update laid over it.
+  DownloadsRegistry applyTo(DownloadsRegistry registry);
+}
+
+/// The rows that moved.
+final class DownloadsProgressUpdate extends DownloadsUpdate {
+  const DownloadsProgressUpdate(this.rows);
+
+  final List<DownloadProgress> rows;
+
+  @override
+  DownloadsRegistry applyTo(DownloadsRegistry registry) =>
+      registry.withProgress(rows);
+
+  @override
+  String toString() => 'DownloadsProgressUpdate(${rows.length} rows)';
+}
+
+/// A whole registry envelope, entries and destination and all.
+final class DownloadsListingUpdate extends DownloadsUpdate {
+  const DownloadsListingUpdate(this.registry);
+
+  final DownloadsRegistry registry;
+
+  @override
+  DownloadsRegistry applyTo(DownloadsRegistry registry) =>
+      registry.merge(this.registry);
+
+  @override
+  String toString() => 'DownloadsListingUpdate($registry)';
+}
+
 /// Which answer the registry holds about where the downloads go.
 enum DownloadDestinationKind {
   /// Nobody has been asked yet, so a start-up may apply the platform's own
@@ -345,10 +444,28 @@ final class DownloadsRegistry {
     return sorted;
   }
 
-  /// This registry with [update]'s rows laid over it. A progress event
-  /// carries only the entries that moved, so folding one in is how a screen
-  /// keeps the full picture between full listings; an entry that was
-  /// *removed* is in no event, and only a fresh listing drops it.
+  /// This registry with [rows]' numbers laid over the entries they name.
+  /// A row for an entry no listing has brought yet is dropped: there is
+  /// nothing to lay it over, and the next listing carries the whole of it
+  /// anyway.
+  DownloadsRegistry withProgress(Iterable<DownloadProgress> rows) {
+    final merged = {...items};
+    for (final row in rows) {
+      final entry = merged[row.key];
+      if (entry == null) continue;
+      merged[row.key] = DownloadView({...entry.json, ...row.changes});
+    }
+    return DownloadsRegistry(
+      version: version,
+      items: merged,
+      destination: destination,
+    );
+  }
+
+  /// This registry with [update]'s entries laid over it. A listing update
+  /// carries only what it knows about, so folding one in is how a screen
+  /// keeps the full picture; an entry that was *removed* is in no update,
+  /// and only a fresh listing drops it.
   DownloadsRegistry merge(DownloadsRegistry update) => DownloadsRegistry(
     version: update.version,
     items: {...items, ...update.items},
