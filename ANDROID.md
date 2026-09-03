@@ -120,9 +120,83 @@ adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb shell am start -n com.zond.xtremio/.MainActivity
 ```
 
-For D-pad/leanback work, use `system-images;android-36;android-tv;x86_64`
-(or `arm64-v8a` on an arm64 host; a 32-bit `x86` image also exists but is
-not needed) instead — same flow, with `-d tv_1080p` for the AVD.
+## Running on an Android TV emulator
+
+Same flow, a different image and device profile. The TV AVD is what the
+D-pad work is verified against.
+
+```bash
+yes | sdkmanager --install "system-images;android-36;android-tv;x86_64"
+echo no | avdmanager create avd -n xtremio_tv36 \
+  -k "system-images;android-36;android-tv;x86_64" -d tv_1080p
+
+emulator -avd xtremio_tv36 -no-window -no-audio -no-boot-anim -no-snapshot \
+  -gpu swiftshader_indirect -memory 4096 &
+adb wait-for-device
+until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 5; done
+
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb shell am start -n com.zond.xtremio/.MainActivity
+```
+
+**Use the x86_64 TV image, not the 32-bit `x86` one.** API 36 publishes
+both `system-images;android-36;android-tv;x86` and
+`…;android-tv;x86_64` (below API 36 the Intel TV images are 32-bit only),
+but Flutter 3.47 cannot package a 32-bit x86 APK at all:
+`flutter build apk --debug --target-platform android-x86` is rejected
+outright (`"android-x86" is not an allowed value for option
+"--target-platform"`, exit 64), and the Gradle plugin's `PLATFORM_ARCH_MAP`
+lists arm, arm64 and x64 only. cargokit *does* know the target
+(`i686-linux-android`, `rust_builder/cargokit/build_tool/lib/src/target.dart`),
+but nothing downstream would put the resulting `.so` in an APK — which is
+why the vendored copy is patched to stop adding that ABI (see
+`rust_builder/README.md`). So on a 32-bit-only TV image the app cannot be
+installed at all; use the x86_64 image on an x86_64 host, `arm64-v8a` on an
+arm64 host, or a physical box with the arm64 APK.
+
+The ordinary emulator debug APK is what installs here — no separate build:
+
+```bash
+flutter build apk --debug --target-platform android-x64
+```
+
+**Checking the device answers "television".** The app's layout keys on
+`DeviceProfile.detect()`, so it is worth confirming what the image reports:
+
+```bash
+adb shell dumpsys uimode | grep mCurUiMode   # 0x24 → & 0x0f = 4 = UI_MODE_TYPE_TELEVISION
+adb shell pm list features | grep leanback   # android.software.leanback (+ _only)
+```
+
+(The TV AVD also claims `android.hardware.touchscreen`, which a real TV box
+does not; nothing in the layout depends on `hasTouch`, only on `isTv`.)
+
+### Driving it with the remote
+
+Every keycode the app listens for, as `adb shell input keyevent <name>`:
+
+| Key | Keycode | What the app does with it |
+|---|---|---|
+| D-pad up/down/left/right | `KEYCODE_DPAD_UP` `_DOWN` `_LEFT` `_RIGHT` (19-22) | Moves focus (rows, columns, rail ↔ body); in the player: seek left/right, controls up/down |
+| Centre | `KEYCODE_DPAD_CENTER` (23) | Activates the focused tile/button; on the player's video, play/pause and wake the controls |
+| Centre, held | `input keyevent --longpress 23` | The long press: mark watched (episode), the library item's action menu |
+| Context menu | `KEYCODE_MENU` (82) | The same menu as the long press |
+| Back | `KEYCODE_BACK` (4) | Pops the route; leaves the player |
+| Play/pause | `KEYCODE_MEDIA_PLAY_PAUSE` (85), `KEYCODE_MEDIA_PLAY` (126), `KEYCODE_MEDIA_PAUSE` (127) | Play/pause |
+| Rewind / fast-forward | `KEYCODE_MEDIA_REWIND` (89), `KEYCODE_MEDIA_FAST_FORWARD` (90) | Seek by the profile's seek step |
+| Next / previous | `KEYCODE_MEDIA_NEXT` (87), `KEYCODE_MEDIA_PREVIOUS` (88) | Next episode; previous restarts the current one |
+
+A walk from the Board to playback, headless:
+
+```bash
+K() { adb shell input keyevent "$@"; sleep 1; }
+K KEYCODE_DPAD_RIGHT   # rail → first poster
+K KEYCODE_DPAD_CENTER  # open Details
+K KEYCODE_DPAD_DOWN; K KEYCODE_DPAD_CENTER   # pick a stream → player
+K KEYCODE_MEDIA_PLAY_PAUSE
+adb shell screencap -p /sdcard/tv.png && adb pull /sdcard/tv.png
+adb logcat -d | grep -iE "flutter|xtremio|FATAL"
+```
 
 **Verify:**
 
@@ -205,7 +279,48 @@ bottom of `ci.yml` — verified manually instead):
   and transparently fell back to IPv4 — expected on this emulator network
   configuration, not an app issue.
 
-**Not verified this session:** a physical device or Android TV box (none
+**Not verified in that session:** a physical device or Android TV box (none
 attached), the arm64 build's *runtime* behavior (only the x86_64 slice of the
 debug APK was actually run, though the arm64 slice built cleanly), release
 builds, and end-to-end torrent playback on Android.
+
+### The TV layout on a TV emulator (2026-09-03)
+
+Verified on a headless `xtremio_tv36` AVD
+(`system-images;android-36;android-tv;x86_64`, `-d tv_1080p`, 1920x1080,
+`-gpu swiftshader_indirect`) with the x86_64 debug APK, driven entirely by
+`adb shell input keyevent` and read back with `adb shell screencap`.
+
+- The image answers television: `mCurUiMode=0x24` (`& 0x0f` = 4 =
+  `UI_MODE_TYPE_TELEVISION`) and `android.software.leanback`, so
+  `DeviceProfile.detect()` reports `isTv`. It also claims
+  `android.hardware.touchscreen`, which a real TV box does not; nothing in
+  the layout depends on `hasTouch`.
+- The Board came up in the TV layout: rail at every width, 5% of every edge
+  held clear, the first poster autofocused with its ring, ten-foot posters
+  and text. D-pad right/left/up/down walked the row and the rows, the centre
+  key opened Details, and back returned to the Board with focus where it
+  had been.
+- Left from the body's first column landed on the rail, up/down walked the
+  destinations, and the centre key switched tabs; focus moving down the
+  Settings list scrolled it.
+- The player (Settings → Developer → "Play test HTTP stream") opened
+  immersive-fullscreen with no system bars, and drew neither the volume
+  slider nor the fullscreen button — the remote's controls only. The centre
+  key and `KEYCODE_MEDIA_PLAY_PAUSE` toggled play/pause, the centre key woke
+  the faded controls, and back popped the player (`route pop: player`).
+- The embedded server reached **Ready** at `http://127.0.0.1:11470/`; no
+  `FATAL`/`AndroidRuntime` lines for the whole run.
+- **Two things this run turned up.** The row header overflowed by 6 px under
+  the TV's 1.15x text scale — fixed (the header now grows with the text
+  scale, and the widget test reproduces the same 6 px). And on Settings the
+  D-pad gets **stuck in the streaming-server radio group**: `RadioGroup`
+  takes the up/down keys to move the selection, so the remote cannot walk
+  past it to the Developer entries below, and it silently flips the server
+  choice on the way. Not fixed yet; reach those entries with
+  `adb shell input swipe` meanwhile.
+- **Not verified:** decoded video. Position stayed at `0:00 / 0:10` with the
+  transport in its playing state — libmpv renders nothing under
+  swiftshader on this AVD (playback has never been exercised on an emulator
+  in any session). Torrent playback, a physical TV box and a real remote
+  are all still untried.

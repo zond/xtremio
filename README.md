@@ -45,6 +45,25 @@ Rust engine for addons, catalogs, library, and playback state) and
 > engine's own settings (player, subtitles, interface, streaming server)
 > and the state of the embedded server. The design notes behind phase 3
 > are in [docs/phase3-design.md](docs/phase3-design.md).
+>
+> **Android TV / Google TV** is supported as a first-class layout, not as a
+> phone app on a big screen. At start-up `DeviceProfile.detect()` asks the
+> `xtremio/device` platform channel what kind of device this is:
+> `MainActivity` answers `isTv` (`UiModeManager.currentModeType ==
+> UI_MODE_TYPE_TELEVISION`, or the `android.software.leanback` feature) and
+> `hasTouch` (`FEATURE_TOUCHSCREEN`); every other platform answers locally
+> without a channel call, and any error means "a phone". The answer goes
+> down the tree as a `DeviceScope`, and that is the only thing the TV
+> layout keys on — which is also how the widget tests put a screen on a
+> television. When it says television: the shell keeps the rail at every
+> width and gives each tab its own focus memory, tiles carry a focus ring
+> and scroll themselves into view, the D-pad walks rows and columns (a held
+> centre key is a long press, the context-menu key opens the same menu a
+> long press does), the player takes the remote's centre and media keys and
+> is immersive-fullscreen the whole time it is up, posters and text grow
+> (1.15x text, a roomier density, 48 dp targets), the shell holds 5% of
+> every edge clear of overscan, and the controls a remote cannot work (the
+> volume slider, the fullscreen toggle, scrollbar thumbs) are not drawn.
 
 ## Goals (beyond current Stremio clients)
 
@@ -359,8 +378,10 @@ CMake and `media_kit_libs_video` supplies libmpv there.
 ### Android
 
 The debug APK builds and boots on a headless x86_64 emulator (Discover
-loading a Cinemeta catalog with posters end to end); a physical device or
-Android TV box has not been tried yet. See [ANDROID.md](ANDROID.md) for the
+loading a Cinemeta catalog with posters end to end) and on a headless
+Android TV emulator, where Board → Details → player was driven entirely by
+`adb shell input keyevent`; a physical device or TV box has not been tried
+yet, and no emulator session has ever decoded video. See [ANDROID.md](ANDROID.md) for the
 full build/run reference, the manifest and network decisions, and exactly
 what has been verified so far.
 
@@ -435,10 +456,12 @@ show the embedded server starting and no "Expect rustls-platform-verifier to
 be initialized"; `adb forward tcp:11470 tcp:11470 && curl -s
 http://127.0.0.1:11470/heartbeat` reaches the server (if 11470 was taken the
 app fell back to an ephemeral port, read it from logcat); Discover showing
-Cinemeta posters proves HTTPS end to end. For D-pad work use the
-`system-images;android-36;android-tv;x86_64` image (with `-d tv_1080p`)
-instead. A physical phone/TV box (USB debugging, `adb devices` shows
-`device`) takes the arm64 APK the same way.
+Cinemeta posters proves HTTPS end to end. For D-pad work create a second
+AVD from `system-images;android-36;android-tv;x86_64` with `-d tv_1080p`
+and drive it with `adb shell input keyevent` — the same x86_64 debug APK
+installs on it; ANDROID.md lists the keycodes. A physical phone/TV box
+(USB debugging, `adb devices` shows `device`) takes the arm64 APK the same
+way.
 
 ## Platform support
 
@@ -451,7 +474,7 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 | **Windows (desktop)** | ✅ First-class | Same as Linux. |
 | **macOS (desktop)** | ✅ First-class | Native Rust + media_kit; needs a Mac to build. |
 | **Android** | ✅ Supported | Rust cross-compiles to the NDK; embedded as a native lib. Proven by existing Stremio clients. Primary mobile target. |
-| **Android TV / Google TV** | ✅ Supported | Chromecast with Google TV, the Google TV Streamer, and other Android TV boxes all run Android — the same APK installs (leanback manifest is in place). The real work is a **D-pad/remote-focused UI**, not the build. Low-RAM devices (the 2 GB Chromecast) make the lightweight pure-Rust server and a bounded piece cache matter. |
+| **Android TV / Google TV** | ✅ Supported | Chromecast with Google TV, the Google TV Streamer, and other Android TV boxes all run Android — the same APK installs (leanback manifest is in place). The **D-pad/remote-focused UI** is in: focus traversal, remote keys in the player, ten-foot density and overscan, all keyed on the `xtremio/device` channel's answer (see Status). Verified on a headless `android-36;android-tv;x86_64` AVD; a physical box is still untried. Low-RAM devices (the 2 GB Chromecast) make the lightweight pure-Rust server and a bounded piece cache matter. |
 | **iOS** | ⚠️ With effort | Rust + media_kit build for iOS, but: background execution is throttled (a torrent server suspends when backgrounded), and **the App Store is out** (App Store terms are incompatible with GPL-3, which the shipped binary is — see License). Sideload / TestFlight / AltStore only. |
 | **Web** | ❌ Not possible | A browser **cannot do BitTorrent** — no raw sockets (only HTTP/WebSocket/WebRTC), so the torrent swarm is unreachable, and there's no way to run a local server or libmpv. WebTorrent only reaches the tiny WebRTC-capable subset of peers. The only "web" that works is a *thin client talking to a separate streaming server* (the stremio-web model) — a different architecture, not this app. |
 
