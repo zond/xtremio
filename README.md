@@ -35,9 +35,13 @@ Rust engine for addons, catalogs, library, and playback state) and
 > that hands off to the next episode, and a pre-playback progress overlay
 > for torrents that shows the server's start-up phase (checking existing
 > data, finding peers, buffering the start) with percentages and download
-> speed instead of a bare spinner. A debug-only Settings entry plays a
-> public Big Buck Bunny torrent to prove the torrent path without any
-> addon. **Library** lists every added title over the engine's
+> speed instead of a bare spinner, and an open that fails while the torrent
+> is still resolving, checking or buffering is retried a few times behind
+> that card rather than failing outright. **Settings → Developer** ships in
+> release builds: entries that play or download a public Big Buck Bunny
+> torrent to prove the torrent path without any addon, and **Diagnostics**,
+> which shows the core's recent log (its own and the embedded server's) and
+> copies it, redacted, to the clipboard. **Library** lists every added title over the engine's
 > `LibraryWithFilters` model (type and sort filters, cumulative paging,
 > long-press to remove, mark watched, rewind or mute notifications), and
 > the details header has a bookmark to add or remove a title. **Downloads**
@@ -582,6 +586,32 @@ Then either **Discover → a title → a stream**, or **Settings → Developer �
 embedded server; "Play test HTTP stream" is the direct-play path). The
 stats OSD (Shift+I) ends with the URL libmpv is playing, so a torrent
 should read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
+
+### Diagnostics off a device
+
+**Settings → Developer → Diagnostics** shows the last few hundred `tracing`
+lines the Rust core kept in memory -- its own and the embedded
+stream-server's, which share the one subscriber (`rust/src/logging.rs`) --
+under a header naming the build, the device, the embedded server and the
+pinned `stream-server` / `stremio-core` revisions, and copies the lot to the
+clipboard. This section is in release builds on purpose: it is the only way
+to get a log off a phone without ADB.
+
+Everything shown and copied goes through `redactSecrets`
+(`lib/features/diagnostics/diagnostics_report.dart`) first: the embedded
+server's bearer token, any `Authorization` value, auth and API keys,
+passwords and the path of an addon manifest URL (a debrid key rides there)
+never reach the clipboard. Nothing in that class is logged in the first
+place -- this is the second lock, not the first.
+
+The header's app version and commit are whatever the build passed in; with
+nothing passed they read `unknown`:
+
+```bash
+flutter build apk --release \
+  --dart-define=XTREMIO_VERSION="$(grep '^version:' pubspec.yaml | cut -d' ' -f2)" \
+  --dart-define=XTREMIO_GIT_COMMIT="$(git rev-parse --short HEAD)"
+```
 
 `flutter run -d linux` itself has not been exercised yet (this was developed
 on a host without the GTK toolchain); cargokit builds the crate through

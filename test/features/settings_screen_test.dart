@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
+import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 
@@ -10,6 +11,50 @@ import '../support/fake_downloads_client.dart';
 import '../support/fixtures.dart';
 
 void main() {
+  testWidgets(
+    'the Developer section, Diagnostics first, ships in every build',
+    (tester) async {
+      // It used to be `if (!kReleaseMode)`, which is exactly the build the
+      // owner is testing on a phone: the entries that reproduce a playback
+      // failure, and the log that explains one, were missing from the only
+      // build that could hit it. They ship now.
+      final core = FakeCoreClient(
+        state: {CoreField.ctx: loadCtxLoggedOutFixture()},
+      );
+      await tester.pumpWidget(
+        CoreScope(
+          client: core,
+          child: const MaterialApp(home: SettingsScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // To the bottom of the list: the section is the last thing in it.
+      await tester.scrollUntilVisible(
+        find.text('Download test torrent'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Developer'), findsOneWidget);
+      expect(find.widgetWithText(ListTile, 'Diagnostics'), findsOneWidget);
+      expect(
+        find.widgetWithText(ListTile, 'Play test torrent'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(ListTile, 'Play test HTTP stream'),
+        findsOneWidget,
+      );
+      // Clearly test content, not something that looks like a real title.
+      expect(find.textContaining('Big Buck Bunny (torrent)'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(ListTile, 'Diagnostics'));
+      await tester.pumpAndSettle();
+      expect(find.byType(DiagnosticsScreen), findsOneWidget);
+      expect(core.dispatched, isEmpty, reason: 'the engine is not involved');
+    },
+  );
+
   testWidgets('the Downloads tile opens the Downloads screen', (tester) async {
     final core = FakeCoreClient(
       state: {CoreField.ctx: loadCtxLoggedOutFixture()},

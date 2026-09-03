@@ -1,9 +1,9 @@
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
+import '../diagnostics/diagnostics_screen.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../player/player_screen.dart';
@@ -178,28 +178,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
               initInfo == null ? 'unknown' : 'v${initInfo.schemaVersion}',
             ),
           ),
-          if (!kReleaseMode) ...[
-            const _SectionHeader('Developer'),
-            _DevPlayTile(
-              icon: Icons.cloud_download_outlined,
-              title: 'Play test torrent',
-              stream: DevStreams.bigBuckBunnyTorrent,
+          const _SectionHeader('Developer'),
+          ListTile(
+            leading: const Icon(Icons.bug_report_outlined),
+            title: const Text('Diagnostics'),
+            subtitle: const Text('Recent logs, and a copy button for them'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const DiagnosticsScreen(),
+              ),
             ),
-            _DevPlayTile(
-              icon: Icons.link,
-              title: 'Play test HTTP stream',
-              stream: DevStreams.bigBuckBunnyHttp,
-            ),
-            const _DevDownloadTile(),
-          ],
+          ),
+          const _DevPlayTile(
+            icon: Icons.cloud_download_outlined,
+            title: 'Play test torrent',
+            stream: DevStreams.bigBuckBunnyTorrent,
+          ),
+          const _DevPlayTile(
+            icon: Icons.link,
+            title: 'Play test HTTP stream',
+            stream: DevStreams.bigBuckBunnyHttp,
+          ),
+          const _DevDownloadTile(),
         ],
       ),
     );
   }
 }
 
-/// Debug-only: plays a hand-built stream through the same core Player path
-/// an addon stream takes, so playback can be proven without any addon.
+/// Plays a hand-built stream through the same core Player path an addon
+/// stream takes, so playback can be proven without any addon. Ships in
+/// release builds: it is how the owner reproduces a playback failure on the
+/// device it happened on. The content is public-domain test footage and the
+/// tile says so.
 class _DevPlayTile extends StatelessWidget {
   const _DevPlayTile({
     required this.icon,
@@ -215,7 +227,7 @@ class _DevPlayTile extends StatelessWidget {
   Widget build(BuildContext context) => ListTile(
     leading: Icon(icon),
     title: Text(title),
-    subtitle: Text(stream['description'] as String),
+    subtitle: Text('${stream['name']} · ${stream['description']}'),
     trailing: const Icon(Icons.play_arrow),
     onTap: () => Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -226,11 +238,12 @@ class _DevPlayTile extends StatelessWidget {
   );
 }
 
-/// Debug-only: keeps the test torrent on the device through the same
-/// `DownloadsClient` a stream tile's download button uses, so the download
-/// path can be proven on a device with no addon installed. The entry lands
-/// in the registry under a meta id of its own, which is also what removes
-/// it again from the Downloads screen.
+/// Keeps the test torrent on the device through the same `DownloadsClient`
+/// a stream tile's download button uses, so the download path can be proven
+/// on a device with no addon installed. The entry lands in the registry
+/// under a meta id of its own, which is also what removes it again from the
+/// Downloads screen -- with the same confirmation every other removal asks
+/// for, which is why this is safe to ship.
 class _DevDownloadTile extends StatelessWidget {
   const _DevDownloadTile();
 
