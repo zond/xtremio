@@ -610,8 +610,18 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     std::fs::write(&registry_file, recorded)?;
 
     // The destination directory goes through the server's own validation.
+    assert_eq!(
+        list()["destinationSettled"],
+        false,
+        "nobody has answered where the downloads go yet"
+    );
     let error = downloads_set_dir(Some("relative/dir".into())).unwrap_err();
     assert!(error.to_string().contains("absolute"), "{error}");
+    assert_eq!(
+        list()["destinationSettled"],
+        false,
+        "a path the server refused settles nothing"
+    );
     let destination = tmp.path().join("offline");
     let settings = json(&downloads_set_dir(Some(destination.display().to_string()))?);
     assert_eq!(
@@ -620,6 +630,36 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         "{settings}"
     );
     assert!(destination.is_dir(), "created on the spot");
+    assert_eq!(
+        list()["destinationSettled"],
+        true,
+        "and the answer is recorded, so a platform default stops applying"
+    );
+
+    // Back to the torrent cache is an answer too, and the flag is what says
+    // so: the setting itself is null again, exactly as it was at start-up.
+    let settings = json(&downloads_set_dir(None)?);
+    assert_eq!(
+        settings["downloadsDir"],
+        serde_json::Value::Null,
+        "{settings}"
+    );
+    assert_eq!(
+        list()["destinationSettled"],
+        true,
+        "choosing the default is still choosing"
+    );
+    let on_disk = json(&std::fs::read_to_string(&registry_file)?);
+    assert_eq!(
+        on_disk["destinationSettled"], true,
+        "and it is in the file, not only in the answer: {on_disk}"
+    );
+    let settings = json(&downloads_set_dir(Some(destination.display().to_string()))?);
+    assert_eq!(
+        settings["downloadsDir"],
+        destination.to_string_lossy().as_ref(),
+        "{settings}"
+    );
 
     // A registry the app cannot read must not take the app down with it: the
     // list is empty rather than an error, and the next write starts over --

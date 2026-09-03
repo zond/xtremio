@@ -256,6 +256,15 @@ fn phase(info: &DownloadInfo) -> String {
 pub struct Registry {
     pub version: u32,
     pub items: BTreeMap<String, Entry>,
+    /// Whether where the downloads go has been settled -- by the user, or
+    /// by the platform default a first run applies. Set by [`set_dir`],
+    /// including the `None` that puts the files back in the torrent cache,
+    /// and never unset: a `downloadsDir` of null is *also* an answer, and
+    /// without this flag a start-up default could not tell it apart from a
+    /// question nobody has been asked yet. It lives here rather than in the
+    /// server's settings because the server clears a `downloadsDir` it
+    /// cannot use at boot, which would take the answer with it.
+    pub destination_settled: bool,
     /// Entries this build could not parse, exactly as they were on disk.
     /// They are invisible to everything but [`Registry::serialize`], which
     /// writes them back among the items: a forgiving read plus a whole-file
@@ -270,6 +279,7 @@ impl Default for Registry {
         Self {
             version: VERSION,
             items: BTreeMap::new(),
+            destination_settled: false,
             unreadable: BTreeMap::new(),
         }
     }
@@ -289,9 +299,10 @@ impl Serialize for Registry {
         for (key, raw) in &self.unreadable {
             items.entry(key.clone()).or_insert_with(|| raw.clone());
         }
-        let mut registry = serializer.serialize_struct("Registry", 2)?;
+        let mut registry = serializer.serialize_struct("Registry", 3)?;
         registry.serialize_field("version", &self.version)?;
         registry.serialize_field("items", &items)?;
+        registry.serialize_field("destinationSettled", &self.destination_settled)?;
         registry.end()
     }
 }
@@ -326,10 +337,15 @@ impl Registry {
                 "downloads registry was written by a newer build; unknown keys are kept as-is"
             );
         }
+        let destination_settled = value
+            .get("destinationSettled")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
         let Some(items) = value.get("items").and_then(serde_json::Value::as_object) else {
             tracing::warn!("downloads registry has no items object; starting empty");
             return Self {
                 version,
+                destination_settled,
                 ..Self::default()
             };
         };
@@ -351,6 +367,7 @@ impl Registry {
         Self {
             version,
             items: parsed,
+            destination_settled,
             unreadable,
         }
     }
@@ -1101,8 +1118,23 @@ pub fn list() -> anyhow::Result<Registry> {
 
 /// Points the server's `downloadsDir` at `path` (or unsets it with `None`),
 /// with the validation and persistence `POST /settings` does.
+///
+/// A path the server accepts also settles the destination
+/// ([`Registry::destination_settled`]), `None` included: from here on the
+/// answer is the app's, and a platform default must not overwrite it. A
+/// path the server refuses settles nothing -- it raises before this. That
+/// the flag could not be written is worth a warning and no more: the
+/// setting itself is already in place, and failing the call would be the
+/// worse lie.
 pub fn set_dir(path: Option<String>) -> anyhow::Result<stream_server::ServerSettings> {
-    crate::server::update_settings(serde_json::json!({ "downloadsDir": path }))
+    let settings = crate::server::update_settings(serde_json::json!({ "downloadsDir": path }))?;
+    if let Err(error) = update(|registry| {
+        registry.destination_settled = true;
+        Ok(())
+    }) {
+        tracing::warn!(%error, "could not record that the downloads destination was settled");
+    }
+    Ok(settings)
 }
 
 /// Installs the progress sink, replacing any previous one, and starts the
@@ -1261,6 +1293,34 @@ mod tests {
     #[test]
     fn key_is_meta_and_video() {
         assert_eq!(entry("tt1", "tt1:1:2").key(), "tt1:tt1:1:2");
+    }
+
+    /// The destination flag is part of the file, not something derived
+    /// from the settings: it survives a round trip, and a registry written
+    /// before the flag existed reads as nothing settled.
+    #[test]
+    fn destination_settled_survives_the_file() {
+        let registry = Registry {
+            destination_settled: true,
+            ..Registry::default()
+        };
+        let bytes = serde_json::to_vec(&registry).unwrap();
+        assert_eq!(Registry::parse(&bytes), registry);
+        assert!(
+            String::from_utf8(bytes)
+                .unwrap()
+                .contains(r#""destinationSettled":true"#),
+            "under its camelCase name, like every other key"
+        );
+
+        assert!(
+            !Registry::parse(br#"{"version":1,"items":{}}"#).destination_settled,
+            "a file from before the flag has settled nothing"
+        );
+        assert!(
+            Registry::parse(br#"{"version":1,"destinationSettled":true}"#).destination_settled,
+            "and it is kept even when the items object is unreadable"
+        );
     }
 
     /// A registry survives a round-trip, and reading is forgiving in the
