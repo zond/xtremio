@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:xtremio/features/player/playback_engine.dart';
 
 /// [TorrentStatsClient] for widget tests: answers every poll with
@@ -28,10 +30,38 @@ class FakeTorrentStatsClient implements TorrentStatsClient {
   /// fakes, for tests about the order of calls across them.
   List<String>? callLog;
 
+  /// Holds every answer until [answer] is called, instead of returning one
+  /// in the same microtask the poll went out in. A poll that is out and
+  /// unanswered leaves frames a test can draw and look at, which is how a
+  /// test sees what the screen shows *while* it waits for the server.
+  bool holdAnswers = false;
+
+  final List<(TorrentStatsRequest, Completer<TorrentStats?>)> _held = [];
+
+  /// How many polls are out and waiting for [answer].
+  int get heldCount => _held.length;
+
+  /// Answers every held poll with what this client would return now, so a
+  /// test can change [response] after the poll went out and still say when
+  /// the new numbers land.
+  void answer() {
+    final held = List.of(_held);
+    _held.clear();
+    for (final (request, completer) in held) {
+      completer.complete(_responseFor(request));
+    }
+  }
+
   @override
   Future<TorrentStats?> fetch(TorrentStatsRequest request) async {
     requests.add(request);
     callLog?.add('stats');
-    return responses.containsKey(request) ? responses[request] : response;
+    if (!holdAnswers) return _responseFor(request);
+    final completer = Completer<TorrentStats?>();
+    _held.add((request, completer));
+    return completer.future;
   }
+
+  TorrentStats? _responseFor(TorrentStatsRequest request) =>
+      responses.containsKey(request) ? responses[request] : response;
 }

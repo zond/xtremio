@@ -112,20 +112,34 @@ void main() {
     expect(row('speed    1.5 MB/s'), findsOneWidget);
     final whilePlaying = stats.requests.length;
 
-    // Playback stalls: the numbers on screen stay the ones last measured
-    // -- no blank panel -- and the polling picks up to the stall cadence.
+    // Playback stalls: the pace picks up to the stall cadence, and the
+    // numbers on screen stay the ones last measured until the next answer
+    // lands -- no blank panel. Holding that answer is what makes the wait
+    // a frame the test can look at; the real client takes a round trip.
+    stats.holdAnswers = true;
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
+    expect(stats.requests.length, greaterThan(whilePlaying));
+    expect(stats.heldCount, 1);
     expect(row('speed    1.5 MB/s'), findsOneWidget);
+    expect(row('torrent  waiting for the server'), findsNothing);
+
+    // The answer lands, and only then do the numbers change.
     stats.response = const TorrentStats(
       phase: TorrentPhase.ready,
       peerDiscovery: PeerDiscovery(seen: 9),
     );
-    await tester.pump(PlayerScreen.torrentStallStatsInterval);
-    await tester.pump();
-    expect(stats.requests.length, greaterThan(whilePlaying));
+    stats.answer();
+    await pumpEvents(tester);
     expect(row('speed    0 B/s'), findsOneWidget);
     expect(row('peers    0 connected / 9 found'), findsOneWidget);
+
+    // And the stall cadence keeps them coming.
+    stats.holdAnswers = false;
+    final whileStalling = stats.requests.length;
+    await tester.pump(PlayerScreen.torrentStallStatsInterval);
+    await tester.pump();
+    expect(stats.requests.length, greaterThan(whileStalling));
 
     // Playing again: the panel is still up, so the numbers still come.
     harness.engine.emitBuffering(false);
