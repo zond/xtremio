@@ -100,11 +100,19 @@ Future<String> downloadsSetDir({String? path}) =>
 Future<String> downloadsApplyDefaultDir({required String path}) =>
     RustLib.instance.api.crateApiDownloadsDownloadsApplyDefaultDir(path: path);
 
-/// Progress, one JSON string per change: the same envelope as
-/// [`downloads_list`], carrying only the entries that moved. The ticker
-/// behind it runs about once a second and only while something is
-/// unfinished, so a screen with nothing downloading costs nothing. Nothing
-/// is buffered for a late subscriber — call `downloads_list` for the full
-/// picture and treat these as updates to it.
+/// Progress, one JSON string per change:
+/// `{"version":1,"progress":[{"key","downloaded","size","state","path",
+/// "error","completedAt"}]}` — only the rows that moved, and of each row
+/// only what moves. Deliberately not the `downloads_list` envelope: the
+/// entry carries a `MetaItem` snapshot, the raw stream JSON and two addon
+/// requests, and pushing those once a second per row is a large blob to
+/// serialize here and to decode on the UI isolate, for six numbers. Fold
+/// them into a listing by `key`.
+///
+/// The ticker behind it runs about once a second and only while something
+/// is unfinished, so a screen with nothing downloading costs nothing, and a
+/// row is in an event only when its numbers changed. Nothing is buffered
+/// for a late subscriber — call `downloads_list` for the full picture and
+/// treat these as updates to it.
 Stream<String> downloadsEvents() =>
     RustLib.instance.api.crateApiDownloadsDownloadsEvents();

@@ -215,10 +215,18 @@ connection.
   `createdAt`/`completedAt`/`lastPlayedAt`. The FFI is
   `rust/src/api/downloads.rs`: `downloads_add(request_json)`,
   `downloads_remove(key, delete_files)`, `downloads_list()`,
-  `downloads_open(key)`, `downloads_set_dir(path)` and a
-  `downloads_events()` stream that ticks about once a second, only while
-  something is unfinished, and pushes just the entries that moved. Progress
-  is merged from the server's `downloads()`, never stored twice.
+  `downloads_open(key)`, `downloads_set_dir(path)`,
+  `downloads_apply_default_dir(path)` and a `downloads_events()` stream that
+  ticks about once a second, only while something is unfinished, and pushes
+  just the rows that moved -- and of each row only what moves
+  (`{"version":1,"progress":[{"key","downloaded","size","state","path",
+  "error","completedAt"}]}`, not the whole entry with its meta snapshot and
+  stream JSON, which is what a `downloads_list` is for). The file follows
+  the same rule: a tick that moved nothing but a byte count does not
+  rewrite it, since that number is a cache of the server's own and the next
+  write that matters carries it; a state, a path, an error or a finished
+  file goes to disk at once. Progress is merged from the server's
+  `downloads()`, never stored twice.
   Downloading a second stream for a title replaces the entry and releases
   the pin it replaces (with its bytes, unless another entry names the same
   file), so no torrent is left downloading behind the registry's back. That

@@ -532,13 +532,16 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
             .expect("a progress event"),
     );
     assert_eq!(event["version"], 1, "{event}");
+    let rows = event["progress"].as_array().expect("the rows that moved");
+    assert_eq!(rows.len(), 1, "only what changed is pushed: {event}");
+    assert_eq!(rows[0]["key"], "tt-missing:tt-missing", "{event}");
     assert_eq!(
-        event["items"]["tt-missing:tt-missing"]["downloaded"], 0,
+        rows[0]["downloaded"], 0,
         "the live number replaced the bogus one: {event}"
     );
     assert!(
-        event["items"]["tt-have:tt-have"].is_null(),
-        "only what changed is pushed: {event}"
+        rows[0]["meta"].is_null() && rows[0]["stream"].is_null(),
+        "and a tick carries what moves, not the whole entry: {event}"
     );
 
     // Re-pinning at init: the server forgets a pin (as a purged cache dir or

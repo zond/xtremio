@@ -23,7 +23,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -41,6 +41,17 @@ const FILE_NAME: &str = "downloads.json";
 /// How often [`ticker`] merges live progress while anything is unfinished.
 const TICK: Duration = Duration::from_secs(1);
 
+/// How long a change to nothing but `downloaded` may wait for the disk.
+///
+/// The registry's byte count is a cache of the server's own -- [`refresh`]
+/// merges it in, and the app never computes progress itself -- so what a
+/// skipped write costs is a stale number in a listing taken with no server
+/// to ask, until the next write that matters. What writing every tick costs
+/// is a whole-file rewrite and an fsync per second for the length of a
+/// download, on a phone. Anything that is not a byte count -- a state, a
+/// path, an error, a finished file -- goes to disk at once.
+const PROGRESS_WRITE_INTERVAL: Duration = Duration::from_secs(30);
+
 /// How long [`resolve_media_file`] waits for the file list of a stream that
 /// names no `fileIdx`. The same wait the server gives a magnet's metadata
 /// (`enginefs::METADATA_RESOLVE_TIMEOUT`, which it does not re-export), so
@@ -54,6 +65,18 @@ const METADATA_POLL: Duration = Duration::from_millis(250);
 /// the progress ticker and the init-time re-pin all run on different
 /// threads and must not lose each other's edits.
 static FILE_LOCK: Mutex<()> = Mutex::new(());
+
+/// When the registry was last written, so a progress-only change can wait
+/// for [`PROGRESS_WRITE_INTERVAL`]. Behind [`FILE_LOCK`] with the file
+/// itself.
+static LAST_WRITE: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// The last progress delivered per key, so the ticker does not repeat
+/// itself: with a write skipped the registry on disk stays behind the
+/// server's numbers, and every tick would otherwise "change" the same row
+/// back to the same values. Cleared whenever a new sink arrives -- it has
+/// the whole picture from `downloads_list` and needs no reminder.
+static LAST_SENT: Mutex<BTreeMap<String, Progress>> = Mutex::new(BTreeMap::new());
 
 /// Receives one serialized progress payload; returns `false` once closed.
 pub type EventSink = Box<dyn Fn(String) -> bool + Send + Sync>;
@@ -248,6 +271,50 @@ fn phase(info: &DownloadInfo) -> String {
         .ok()
         .and_then(|value| value.as_str().map(str::to_owned))
         .unwrap_or_default()
+}
+
+/// What moves while a download runs, for one row: the six fields a progress
+/// event carries, and nothing else.
+///
+/// The whole entry -- the `MetaItem` snapshot, the raw stream JSON, the two
+/// addon requests -- is what [`list`] is for. Pushing all of that once a
+/// second per row means serializing a large blob here and decoding it on the
+/// UI isolate there, for six numbers; a screen folds these into the listing
+/// it already has ([`Entry`] keyed by [`Progress::key`]).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Progress {
+    /// The registry key, `"{metaId}:{videoId}"`.
+    pub key: String,
+    pub downloaded: u64,
+    pub size: u64,
+    pub state: State,
+    pub path: Option<String>,
+    pub error: Option<String>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+impl Progress {
+    fn of(key: &str, entry: &Entry) -> Self {
+        Self {
+            key: key.to_owned(),
+            downloaded: entry.downloaded,
+            size: entry.size,
+            state: entry.state,
+            path: entry.path.clone(),
+            error: entry.error.clone(),
+            completed_at: entry.completed_at,
+        }
+    }
+}
+
+/// What a progress event is on the wire: `{"version":1,"progress":[…]}`.
+/// A different shape from the `downloads_list` envelope on purpose, so a
+/// reader can tell a narrow update from a full listing without guessing.
+#[derive(Debug, Serialize)]
+struct ProgressEvent<'a> {
+    version: u32,
+    progress: &'a [Progress],
 }
 
 /// Where the downloads were last answered to go, and by whom.
@@ -544,16 +611,60 @@ pub fn load() -> anyhow::Result<Registry> {
 /// The file lock is held throughout, so two concurrent updates cannot lose
 /// each other's edits.
 pub fn update<T>(f: impl FnOnce(&mut Registry) -> anyhow::Result<T>) -> anyhow::Result<T> {
+    update_when(f, |_, _| true)
+}
+
+/// The same, with a say in whether the change is worth a write. `needed` is
+/// asked what `f` did -- the registry before and after -- and a `false`
+/// leaves the file as it was, edits and all: the caller must be one whose
+/// change the next write picks up again anyway. [`refresh`] is that caller,
+/// and the only one.
+fn update_when<T>(
+    f: impl FnOnce(&mut Registry) -> anyhow::Result<T>,
+    needed: impl FnOnce(&Registry, &Registry) -> bool,
+) -> anyhow::Result<T> {
     let _guard = file_lock();
     let mut registry = load_locked()?;
     let before = registry.clone();
     let result = f(&mut registry)?;
-    if registry != before {
+    if registry != before && needed(&before, &registry) {
         let bytes = serde_json::to_vec(&registry)?;
         crate::env::write_atomically(&registry_path()?, &bytes)
             .map_err(|error| anyhow::anyhow!("write downloads registry: {error}"))?;
+        *LAST_WRITE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Instant::now());
     }
     Ok(result)
+}
+
+/// Whether a refresh's changes have to reach the disk now: everything but a
+/// byte count does, and a byte count does too once the last write is
+/// [`PROGRESS_WRITE_INTERVAL`] old.
+fn refresh_needs_a_write(before: &Registry, after: &Registry) -> bool {
+    !only_downloaded_moved(before, after)
+        || LAST_WRITE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_none_or(|last| last.elapsed() >= PROGRESS_WRITE_INTERVAL)
+}
+
+/// Whether the only difference between the two is how many bytes are on
+/// disk. Compared by laying `after`'s byte count over `before`'s entry, so a
+/// field added later is a difference until someone says otherwise.
+fn only_downloaded_moved(before: &Registry, after: &Registry) -> bool {
+    if before.items.len() != after.items.len() || before.destination != after.destination {
+        return false;
+    }
+    after.items.iter().all(|(key, entry)| {
+        before.items.get(key).is_some_and(|was| {
+            *entry
+                == Entry {
+                    downloaded: entry.downloaded,
+                    ..was.clone()
+                }
+        })
+    })
 }
 
 /// Why a pin could not be taken, in the shape the UI shows. Every message is
@@ -1167,30 +1278,44 @@ pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
     })
 }
 
-/// Merges the server's live download stats into the registry, writes it back
-/// when anything moved, and returns just the entries that changed (in the
-/// same envelope [`list`] answers, so one Dart parser reads both).
-pub fn refresh() -> anyhow::Result<Registry> {
+/// What a [`refresh`] found.
+pub struct Refresh {
+    /// The registry as it now stands, live progress merged in -- which is
+    /// not always what is on disk: a tick that only moved byte counts leaves
+    /// the file alone (see [`PROGRESS_WRITE_INTERVAL`]), so this, and not a
+    /// re-read, is what a listing answers with.
+    pub registry: Registry,
+    /// The rows that moved, narrow enough to push once a second.
+    pub moved: Vec<Progress>,
+}
+
+/// Merges the server's live download stats into the registry and reports
+/// what moved. The file is rewritten for anything but a byte count, and for
+/// a byte count no more often than [`PROGRESS_WRITE_INTERVAL`].
+pub fn refresh() -> anyhow::Result<Refresh> {
     let live = crate::server::downloads()?;
     let now = Utc::now();
-    let mut version = VERSION;
-    let changed = update(|registry| {
-        version = registry.version;
-        let mut changed = BTreeMap::new();
-        for (key, entry) in registry.items.iter_mut() {
-            let before = entry.clone();
-            if let Some(info) = live.iter().find(|info| {
-                info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
-                    && info.file_idx == entry.file_idx
-            }) {
-                entry.apply_live(info, now);
+    let mut merged = Registry::default();
+    let moved = update_when(
+        |registry| {
+            let mut moved = Vec::new();
+            for (key, entry) in registry.items.iter_mut() {
+                let before = entry.clone();
+                if let Some(info) = live.iter().find(|info| {
+                    info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
+                        && info.file_idx == entry.file_idx
+                }) {
+                    entry.apply_live(info, now);
+                }
+                if *entry != before {
+                    moved.push(Progress::of(key, entry));
+                }
             }
-            if *entry != before {
-                changed.insert(key.clone(), entry.clone());
-            }
-        }
-        Ok(changed)
-    })?;
+            merged = registry.clone();
+            Ok(moved)
+        },
+        refresh_needs_a_write,
+    )?;
     // A refresh is also where an entry can go *back* to unfinished -- a
     // torrent that is checking again, a file that went away, a pin the
     // server lost -- and nothing else would restart the poll: `add` and
@@ -1198,10 +1323,9 @@ pub fn refresh() -> anyhow::Result<Registry> {
     // afterwards, so progress would stay silent for the rest of the
     // session.
     ensure_ticker();
-    Ok(Registry {
-        version,
-        items: changed,
-        ..Registry::default()
+    Ok(Refresh {
+        registry: merged,
+        moved,
     })
 }
 
@@ -1212,10 +1336,16 @@ pub fn refresh() -> anyhow::Result<Registry> {
 /// keeping them) but are left out here: the caller could not read them
 /// either, and the list is a payload, not the file.
 pub fn list() -> anyhow::Result<Registry> {
-    if let Err(error) = refresh() {
-        tracing::debug!(%error, "listing downloads without live progress");
-    }
-    let registry = load()?;
+    let registry = match refresh() {
+        // What the refresh merged, not a re-read: a tick that only moved
+        // byte counts leaves the file behind on purpose, and a listing off
+        // the disk would then be the one place showing the older numbers.
+        Ok(refreshed) => refreshed.registry,
+        Err(error) => {
+            tracing::debug!(%error, "listing downloads without live progress");
+            load()?
+        }
+    };
     Ok(Registry {
         unreadable: BTreeMap::new(),
         ..registry
@@ -1287,14 +1417,37 @@ pub fn set_event_sink(sink: EventSink) {
     *EVENT_SINK
         .write()
         .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(sink);
+    last_sent().clear();
     ensure_ticker();
 }
 
-fn emit(changed: &Registry) {
-    if changed.items.is_empty() {
+fn last_sent() -> std::sync::MutexGuard<'static, BTreeMap<String, Progress>> {
+    LAST_SENT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Pushes the rows that moved, leaving out any whose numbers the sink was
+/// already given: a row is in an event because it changed, and a tick whose
+/// write was skipped keeps finding the same difference against the disk.
+fn emit(moved: &[Progress]) {
+    let fresh: Vec<Progress> = {
+        let mut sent = last_sent();
+        let mut fresh = Vec::new();
+        for row in moved {
+            if sent.insert(row.key.clone(), row.clone()).as_ref() != Some(row) {
+                fresh.push(row.clone());
+            }
+        }
+        fresh
+    };
+    if fresh.is_empty() {
         return;
     }
-    let payload = match serde_json::to_string(changed) {
+    let payload = match serde_json::to_string(&ProgressEvent {
+        version: VERSION,
+        progress: &fresh,
+    }) {
         Ok(payload) => payload,
         Err(error) => {
             tracing::warn!(%error, "could not serialize a downloads progress event");
@@ -1355,7 +1508,7 @@ async fn ticker() {
     loop {
         tokio::time::sleep(TICK).await;
         match tokio::task::spawn_blocking(refresh).await {
-            Ok(Ok(changed)) => emit(&changed),
+            Ok(Ok(refreshed)) => emit(&refreshed.moved),
             Ok(Err(error)) => tracing::debug!(%error, "downloads progress tick failed"),
             Err(error) => tracing::warn!(%error, "downloads progress tick panicked"),
         }
@@ -1981,6 +2134,167 @@ mod tests {
             serde_json::to_value(OpenFailure::Unknown).unwrap(),
             "unknown"
         );
+    }
+
+    /// A progress event is the six fields that move and the key they move
+    /// under -- not the entry, whose meta snapshot, raw stream JSON and two
+    /// addon requests would be serialized here and decoded on the UI isolate
+    /// once a second for the length of a download.
+    #[test]
+    fn a_progress_event_carries_what_moves_and_nothing_else() {
+        let mut entry = entry("tt1", "tt1");
+        entry.meta = Some(serde_json::json!({"id": "tt1", "name": "A Film"}));
+        entry.stream_request = Some(serde_json::json!({"base": "https://addon"}));
+        entry.downloaded = 512;
+        entry.size = 1024;
+        entry.state = State::Downloading;
+        entry.path = Some("/downloads/a.mkv".into());
+
+        let progress = Progress::of("tt1:tt1", &entry);
+        let payload = serde_json::to_value(ProgressEvent {
+            version: VERSION,
+            progress: std::slice::from_ref(&progress),
+        })
+        .unwrap();
+        assert_eq!(
+            payload,
+            serde_json::json!({
+                "version": 1,
+                "progress": [{
+                    "key": "tt1:tt1",
+                    "downloaded": 512,
+                    "size": 1024,
+                    "state": "downloading",
+                    "path": "/downloads/a.mkv",
+                    "error": null,
+                    "completedAt": null,
+                }],
+            }),
+            "the narrow event, under camelCase names like the rest of the file"
+        );
+        assert!(
+            !payload.to_string().contains("A Film"),
+            "and nothing of the entry the list already carries"
+        );
+    }
+
+    /// The disk write is what a tick can skip, not the event: byte counts
+    /// are a cache of the server's own numbers and the next write that
+    /// matters carries them, while a state, a path, an error or a finished
+    /// file goes down at once.
+    #[test]
+    fn only_a_moved_byte_count_may_wait_for_the_disk() {
+        let one = |change: fn(&mut Entry)| {
+            let mut before = Registry::default();
+            before.items.insert("tt1:tt1".into(), entry("tt1", "tt1"));
+            let mut after = before.clone();
+            change(after.items.get_mut("tt1:tt1").unwrap());
+            (before, after)
+        };
+
+        let (before, after) = one(|entry| entry.downloaded = 4096);
+        assert!(only_downloaded_moved(&before, &after));
+        for (what, change) in [
+            (
+                "a state",
+                (|entry: &mut Entry| entry.state = State::Complete) as fn(&mut Entry),
+            ),
+            ("a path", |entry| {
+                entry.path = Some("/downloads/a.mkv".into())
+            }),
+            ("an error", |entry| entry.error = Some("no peers".into())),
+            ("a finished file", |entry| {
+                entry.completed_at = Some(Utc::now())
+            }),
+            ("a size", |entry| entry.size = 1024),
+        ] {
+            let (before, after) = one(change);
+            assert!(
+                !only_downloaded_moved(&before, &after),
+                "{what} has to reach the disk"
+            );
+        }
+
+        let (before, mut after) = one(|entry| entry.downloaded = 4096);
+        after.items.insert("tt2:tt2".into(), entry("tt2", "tt2"));
+        assert!(!only_downloaded_moved(&before, &after), "an entry appeared");
+        let (before, mut after) = one(|entry| entry.downloaded = 4096);
+        after.destination = Destination::Cache;
+        assert!(
+            !only_downloaded_moved(&before, &after),
+            "and where the downloads go is not progress at all"
+        );
+    }
+
+    /// What that means for the file: a tick that only moved a byte count
+    /// leaves it exactly as it was, and the next change that matters
+    /// rewrites it with everything since.
+    #[test]
+    fn a_progress_only_tick_does_not_rewrite_the_file() {
+        crate::env::with_storage_dir(|dir| {
+            let file = dir.join(FILE_NAME);
+            update(|registry| {
+                registry.items.insert("tt1:tt1".into(), entry("tt1", "tt1"));
+                Ok(())
+            })
+            .expect("first write");
+            let written = std::fs::read(&file).expect("the registry is on disk");
+
+            update_when(
+                |registry| {
+                    registry.items.get_mut("tt1:tt1").unwrap().downloaded = 4096;
+                    Ok(())
+                },
+                refresh_needs_a_write,
+            )
+            .expect("tick");
+            assert_eq!(
+                std::fs::read(&file).unwrap(),
+                written,
+                "a byte count alone is not worth an fsync a second"
+            );
+
+            update_when(
+                |registry| {
+                    let entry = registry.items.get_mut("tt1:tt1").unwrap();
+                    entry.downloaded = 8192;
+                    entry.state = State::Complete;
+                    Ok(())
+                },
+                refresh_needs_a_write,
+            )
+            .expect("tick");
+            let after = String::from_utf8(std::fs::read(&file).unwrap()).unwrap();
+            assert!(after.contains(r#""state":"complete""#), "{after}");
+            assert!(
+                after.contains(r#""downloaded":8192"#),
+                "with the numbers since: {after}"
+            );
+        });
+    }
+
+    /// A row is pushed because it moved, so the same numbers are not pushed
+    /// twice -- which is what a tick whose write was skipped keeps finding
+    /// against the file.
+    #[test]
+    fn a_row_that_has_not_moved_is_not_pushed_again() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        set_event_sink(Box::new(move |event| tx.send(event).is_ok()));
+
+        let mut entry = entry("tt1", "tt1");
+        entry.downloaded = 4096;
+        let progress = Progress::of("tt1:tt1", &entry);
+        emit(std::slice::from_ref(&progress));
+        let event = rx.try_recv().expect("the row moved");
+        assert!(event.contains(r#""downloaded":4096"#), "{event}");
+
+        emit(std::slice::from_ref(&progress));
+        assert!(rx.try_recv().is_err(), "the same numbers say nothing new");
+
+        entry.downloaded = 8192;
+        emit(&[Progress::of("tt1:tt1", &entry)]);
+        let event = rx.try_recv().expect("and a row that moved does");
+        assert!(event.contains(r#""downloaded":8192"#), "{event}");
     }
 
     #[test]

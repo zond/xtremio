@@ -115,12 +115,20 @@ pub fn downloads_apply_default_dir(path: String) -> anyhow::Result<String> {
     })
 }
 
-/// Progress, one JSON string per change: the same envelope as
-/// [`downloads_list`], carrying only the entries that moved. The ticker
-/// behind it runs about once a second and only while something is
-/// unfinished, so a screen with nothing downloading costs nothing. Nothing
-/// is buffered for a late subscriber — call `downloads_list` for the full
-/// picture and treat these as updates to it.
+/// Progress, one JSON string per change:
+/// `{"version":1,"progress":[{"key","downloaded","size","state","path",
+/// "error","completedAt"}]}` — only the rows that moved, and of each row
+/// only what moves. Deliberately not the `downloads_list` envelope: the
+/// entry carries a `MetaItem` snapshot, the raw stream JSON and two addon
+/// requests, and pushing those once a second per row is a large blob to
+/// serialize here and to decode on the UI isolate, for six numbers. Fold
+/// them into a listing by `key`.
+///
+/// The ticker behind it runs about once a second and only while something
+/// is unfinished, so a screen with nothing downloading costs nothing, and a
+/// row is in an event only when its numbers changed. Nothing is buffered
+/// for a late subscriber — call `downloads_list` for the full picture and
+/// treat these as updates to it.
 pub fn downloads_events(sink: StreamSink<String>) -> anyhow::Result<()> {
     guarded(|| {
         crate::downloads::set_event_sink(Box::new(move |event| sink.add(event).is_ok()));

@@ -249,27 +249,43 @@ impl Env for XtremioEnv {
     }
 }
 
+/// Points storage at a fresh temporary directory for the length of `f`.
+///
+/// `STORAGE_DIR` is process-global and the whole lib test binary shares it,
+/// so every test that wants one takes this -- here, and not in a module's
+/// own test mod -- and they queue behind each other instead of pulling the
+/// directory out from under one another.
+#[cfg(test)]
+static STORAGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+pub(crate) fn with_storage_dir<T>(f: impl FnOnce(&Path) -> T) -> T {
+    let _guard = STORAGE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let tmp = tempfile::tempdir().expect("tempdir");
+    set_storage_dir(tmp.path()).expect("set storage dir");
+    let result = f(tmp.path());
+    set_storage_dir_raw(None);
+    result
+}
+
+/// The same with storage pointed nowhere, which is what everything sees
+/// before `core_init` has run.
+#[cfg(test)]
+pub(crate) fn without_storage_dir<T>(f: impl FnOnce() -> T) -> T {
+    let _guard = STORAGE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    set_storage_dir_raw(None);
+    f()
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
     use stremio_core::constants::{SCHEMA_VERSION, SCHEMA_VERSION_STORAGE_KEY};
 
     use super::*;
-
-    /// STORAGE_DIR is process-global; serialize the tests that touch it.
-    static STORAGE_LOCK: Mutex<()> = Mutex::new(());
-
-    fn with_storage_dir<T>(f: impl FnOnce(&Path) -> T) -> T {
-        let _guard = STORAGE_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let tmp = tempfile::tempdir().expect("tempdir");
-        set_storage_dir(tmp.path()).expect("set storage dir");
-        let result = f(tmp.path());
-        set_storage_dir_raw(None);
-        result
-    }
 
     #[derive(Debug, PartialEq, Serialize, Deserialize)]
     struct Item {
@@ -343,14 +359,12 @@ mod tests {
 
     #[test]
     fn storage_unavailable_until_dir_is_set() {
-        let _guard = STORAGE_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        set_storage_dir_raw(None);
-        let error = block_on(XtremioEnv::get_storage::<Item>("item")).unwrap_err();
-        assert_eq!(error, EnvError::StorageUnavailable);
-        let error = block_on(XtremioEnv::set_storage("item", Some(&1u32))).unwrap_err();
-        assert_eq!(error, EnvError::StorageUnavailable);
+        without_storage_dir(|| {
+            let error = block_on(XtremioEnv::get_storage::<Item>("item")).unwrap_err();
+            assert_eq!(error, EnvError::StorageUnavailable);
+            let error = block_on(XtremioEnv::set_storage("item", Some(&1u32))).unwrap_err();
+            assert_eq!(error, EnvError::StorageUnavailable);
+        });
     }
 
     #[test]
