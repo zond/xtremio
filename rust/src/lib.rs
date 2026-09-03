@@ -31,3 +31,4 @@ pub mod model;
 pub mod prefs;
 pub mod server;
 pub mod state;
+pub mod storage;

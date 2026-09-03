@@ -74,6 +74,14 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       // A device that will not say what it is does not cost us the log.
       osVersion = 'unknown';
     }
+    // Same again for the storage: a server that is not running, or a
+    // walk that failed, costs that line and nothing else.
+    ServerStorage? storage;
+    try {
+      storage = await widget.client.storage();
+    } catch (error) {
+      storage = null;
+    }
     if (!mounted) return;
     setState(() {
       _lines = snapshot.logLines.length;
@@ -81,6 +89,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         snapshot: snapshot,
         platform: widget.client.platform,
         osVersion: osVersion,
+        storage: storage,
         at: widget.now(),
       );
       _error = null;

@@ -4,6 +4,7 @@ import '../../core/core.dart';
 import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
 import '../diagnostics/diagnostics_screen.dart';
+import '../diagnostics/server_storage_screen.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../player/player_screen.dart';
@@ -211,6 +212,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const DiagnosticsScreen(),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.sd_storage_outlined),
+            title: const Text('Server storage'),
+            subtitle: const Text(
+              'What the cache costs against its limit, and the room left',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ServerStorageScreen(),
               ),
             ),
           ),

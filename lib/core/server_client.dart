@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../src/rust/api/server.dart' as rust;
+import 'state/server_storage.dart';
 
 /// stremio-core's default streaming-server port, preferred so a persisted
 /// profile that points at `http://127.0.0.1:11470` still reaches us.
@@ -39,6 +40,23 @@ abstract interface class LanMediaControl {
   Future<Uri?> lanMediaBaseUrl({String? peerIp});
 }
 
+/// What the storage screen needs from the server: the numbers, and the one
+/// way there is to ask for a sweep.
+///
+/// Behind an interface so the screen can be driven by a fake -- it is the
+/// only screen that can stop the server, and a test must be able to check
+/// that it asked first.
+abstract interface class ServerCacheControl {
+  /// What the cache costs and how much room is left. Throws when the
+  /// server is not running.
+  Future<ServerStorage> storage();
+
+  /// Asks the server to reclaim its cache now, answering its base URL
+  /// afterwards. **Restarts it**, which stops whatever is playing: there
+  /// is no other trigger (see `server_clean_cache`).
+  Future<Uri> cleanCache();
+}
+
 /// Thin Dart facade over the embedded, in-process `stream-server`.
 ///
 /// The server is a process-wide singleton on the Rust side; this class only
@@ -49,7 +67,7 @@ abstract interface class LanMediaControl {
 /// HTTP routes run: the Dart side never speaks HTTP to the server (those
 /// routes want a bearer token only the Rust side knows); the player fetches
 /// media from the open stream routes.
-class ServerClient implements LanMediaControl {
+class ServerClient implements LanMediaControl, ServerCacheControl {
   const ServerClient();
 
   /// Starts the server (idempotent) and returns its base URL.
@@ -95,6 +113,27 @@ class ServerClient implements LanMediaControl {
     Map<String, dynamic> patch,
   ) async =>
       _object(await rust.serverUpdateSettings(patchJson: jsonEncode(patch)));
+
+  /// What the server's storage costs right now: the cache against its
+  /// `cacheSize` limit, and the room left on the volumes it writes to.
+  ///
+  /// Walks the cache directory on the Rust side, so it is a worker call
+  /// rather than a property; throws when the server is not running (there
+  /// is no cache root to name then). stream-server answers neither number
+  /// itself today -- see `server_storage_report`.
+  @override
+  Future<ServerStorage> storage() async =>
+      ServerStorage.fromJson(_object(await rust.serverStorageReport()));
+
+  /// Asks the server to reclaim its cache now.
+  ///
+  /// It restarts the server to do it, because stream-server offers no
+  /// other trigger: its cleaner sweeps on a debounce after cache writes,
+  /// on an hourly poll, and once at start-up. **Whatever is playing
+  /// stops.** The sweep runs after this returns, so [storage] read
+  /// immediately afterwards may still show the old size.
+  @override
+  Future<Uri> cleanCache() async => Uri.parse(await rust.serverCleanCache());
 
   /// A torrent's `stats.json`: the per-file stats when [fileIdx] is set,
   /// the torrent-level ones otherwise. [trackers] is the stream's

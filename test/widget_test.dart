@@ -146,6 +146,16 @@ void main() {
       'settings': {'type': 'Ready', 'content': {}},
     });
     await tester.pumpAndSettle();
+    // Back up the list: the streaming-server tile is above the developer
+    // section this test scrolled down to, and a `ListView` builds only
+    // what is near the viewport.
+    await tester.scrollUntilVisible(
+      find.text('Ready · http://127.0.0.1:11470/'),
+      -100,
+      scrollable: find.byWidgetPredicate(
+        (widget) => widget is Scrollable && widget.axis == Axis.vertical,
+      ),
+    );
     expect(find.text('Ready · http://127.0.0.1:11470/'), findsOneWidget);
   });
 }

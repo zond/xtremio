@@ -52,6 +52,45 @@ Future<String> serverUpdateSettings({required String patchJson}) => RustLib
     .api
     .crateApiServerServerUpdateSettings(patchJson: patchJson);
 
+/// What the server's storage costs right now, as JSON: the cache
+/// directory, the bytes under it, the `cacheSize` limit, and the free and
+/// total space of the volume it is on (plus the downloads volume when that
+/// is a different filesystem).
+///
+/// The first question about a playback that misbehaves is whether the
+/// device is full -- bytes arriving with no verified progress is what
+/// failing writes look like -- and the second is whether the cache is over
+/// its limit. stream-server answers neither today: its cleaner is private
+/// and there is no route or library call for either number, so this walks
+/// the cache root itself and asks the filesystem for the rest.
+///
+/// Blocks the FRB worker (a settings call and a directory walk); never
+/// call it from the UI thread. Errors when the server is not running.
+Future<String> serverStorageReport() =>
+    RustLib.instance.api.crateApiServerServerStorageReport();
+
+/// Asks the embedded server to reclaim its cache now, and answers its base
+/// URL afterwards.
+///
+/// It does that by restarting it, because there is no other way to ask.
+/// stream-server's cleaner is a private module with no `ServerHandle` call
+/// and no route: it sweeps on a debounce after cache writes, on an hourly
+/// poll, and -- since the first tick of that poll fires immediately --
+/// once at start-up. Evicting from out here instead is not an option: only
+/// the server knows which files a live engine is writing, and deleting one
+/// of those breaks the playback holding it. The restart is also what makes
+/// the current engines' files evictable, since it drops them.
+///
+/// **This stops whatever is playing**: the media routes go down with the
+/// server. Ask first. The sweep itself runs on the server's own runtime
+/// after this returns, so a report read immediately afterwards may still
+/// show the old size.
+///
+/// Errors when the server is not running, and when it cannot be started
+/// again -- in which case nothing is running afterwards.
+Future<String> serverCleanCache() =>
+    RustLib.instance.api.crateApiServerServerCleanCache();
+
 /// Starts or stops the server's LAN media listener and answers the address
 /// it is bound to afterwards (`"0.0.0.0:39271"`), or null after a stop.
 ///

@@ -134,6 +134,7 @@ String formatDiagnostics({
   required String platform,
   required String osVersion,
   required DateTime at,
+  ServerStorage? storage,
   String appVersion = kAppVersion,
   String gitCommit = kGitCommit,
 }) {
@@ -146,6 +147,11 @@ String formatDiagnostics({
     'core: xtremio_core ${snapshot.coreVersion}',
     'platform: $platform · $osVersion',
     'server: ${serverUrl == null ? 'not running' : 'running · $serverUrl'}',
+    // In the header, not in the log: a full device and a cache over its
+    // limit are the first two things to look at when playback misbehaves,
+    // and a line nobody could read is `unknown` rather than absent.
+    ...?storage?.reportLines,
+    if (storage == null) ...ServerStorage.unknownReportLines,
     'stream-server: ${snapshot.streamServerRev ?? 'unknown'}',
     'stremio-core: ${snapshot.stremioCoreRev ?? 'unknown'}',
     'log: ${snapshot.logLines.length} lines, oldest first',

@@ -256,8 +256,27 @@ void main() {
           logLines: ['one', 'two'],
         ),
         platform: 'android',
-        osVersion: 'Android 14 (API 34)',
+        osVersion: 'Android 14 (API 34) · Google Pixel 7',
         at: DateTime.utc(2026, 9, 3, 15, 4, 19),
+        // The state the owner's phone was actually in: a cache well over
+        // its limit on a volume with nothing left, which is what "the
+        // downloads run fast and the buffer stays at 0%" looks like from
+        // here. It belongs above the log, not in it.
+        storage: ServerStorage(
+          cacheDir: '/data/user/0/com.zond.xtremio/cache/server',
+          cacheUsedBytes: 17000000000,
+          cacheLimitBytes: 10737418240,
+          cacheVolume: const StorageVolume(
+            path: '/data/user/0/com.zond.xtremio/cache/server',
+            freeBytes: 402653184,
+            totalBytes: 57000000000,
+          ),
+          downloadsVolume: const StorageVolume(
+            path: '/storage/emulated/0/Android/data/com.zond.xtremio/files',
+            freeBytes: 12000000000,
+            totalBytes: 128000000000,
+          ),
+        ),
         appVersion: '1.0.0+1',
         gitCommit: '577fe03',
       );
@@ -266,8 +285,13 @@ void main() {
         'taken: 2026-09-03T15:04:19.000Z',
         'app: 1.0.0+1 (commit 577fe03)',
         'core: xtremio_core 0.1.0',
-        'platform: android · Android 14 (API 34)',
+        'platform: android · Android 14 (API 34) · Google Pixel 7',
         'server: running · http://127.0.0.1:11470/',
+        'cache: 17.0 GB of 10.7 GB limit · '
+            '/data/user/0/com.zond.xtremio/cache/server',
+        'disk: 403 MB free of 57.0 GB',
+        'downloads: 12.0 GB free of 128 GB · '
+            '/storage/emulated/0/Android/data/com.zond.xtremio/files',
         'stream-server: 7c46427bc09075b98f5febe10f2a90143e44d826',
         'stremio-core: 00265b3bad7158535fccf1e119e10d6ad492183e',
         'log: 2 lines, oldest first',
@@ -288,6 +312,10 @@ void main() {
         at: DateTime.utc(2026),
       );
       expect(text, contains('app: unknown'));
+      // A server that is not running costs those two lines their numbers
+      // and nothing else.
+      expect(text, contains('cache: unknown'));
+      expect(text, contains('disk: unknown'));
       expect(text, isNot(contains('(commit')));
       expect(text, contains('server: not running'));
       expect(text, contains('stream-server: unknown'));

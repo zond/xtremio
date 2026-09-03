@@ -6248,6 +6248,7 @@ dependencies = [
  "aws-lc-sys",
  "chrono",
  "flutter_rust_bridge",
+ "fs4",
  "futures",
  "http",
  "jni",

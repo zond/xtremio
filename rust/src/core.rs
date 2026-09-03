@@ -234,7 +234,7 @@ fn retarget_loopback_settings(settings: &mut Settings, embedded: &Url) -> bool {
 /// server URL is loopback:11470). Dispatches `UpdateSettings` with the
 /// retargeted copy when the current URL is loopback but not the embedded
 /// server; a remote URL, or no embedded server, leaves everything alone.
-fn reapply_loopback_retarget(app: &AppState) {
+pub(crate) fn reapply_loopback_retarget(app: &AppState) {
     let Some(embedded) = server::base_url_in(app) else {
         return;
     };

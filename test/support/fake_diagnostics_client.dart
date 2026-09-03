@@ -7,6 +7,7 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
     DiagnosticsSnapshot? snapshot,
     this.platform = 'android',
     this.os = 'Android 14 (API 34)',
+    this.storageReport,
     this.error,
   }) : _snapshot =
            snapshot ??
@@ -19,6 +20,17 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
            );
 
   final DiagnosticsSnapshot _snapshot;
+
+  /// What [storage] answers, or null for a server that is not running --
+  /// which the report must survive with an `unknown` line.
+  ServerStorage? storageReport;
+
+  @override
+  Future<ServerStorage> storage() async {
+    final report = storageReport;
+    if (report == null) throw StateError('embedded server is not running');
+    return report;
+  }
 
   /// Thrown by [snapshot] instead of answering: the core not being up.
   Object? error;

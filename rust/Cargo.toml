@@ -36,6 +36,11 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "h
 # a download picks the file the media route would play. Already in the graph
 # (tracing-subscriber's env-filter, stream-server), nothing new is compiled.
 regex = "1"
+# Free space and total space of the volume the server writes to
+# (`src/storage.rs`), for the "is the device full" line of a diagnostics
+# report. Already in the graph through the server's own enginefs, so
+# nothing new is compiled.
+fs4 = "1.1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Names the failing JSON path when an addon response does not match the schema.

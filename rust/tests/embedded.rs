@@ -6,8 +6,8 @@
 
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
-    server_base_url, server_settings, server_start, server_stop, server_torrent_stats,
-    server_update_settings, ServerConfig,
+    server_base_url, server_clean_cache, server_settings, server_start, server_stop,
+    server_storage_report, server_torrent_stats, server_update_settings, ServerConfig,
 };
 
 /// A well-known public-domain torrent (Night of the Living Dead), never
@@ -114,6 +114,38 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     .await?
     .unwrap_err();
     assert!(error.to_string().contains("file index"), "{error}");
+
+    // What the storage costs: the cache root the server was given, the
+    // bytes under it (a fresh server has written a little), the limit from
+    // its own `cacheSize`, and the volume it is on.
+    let report = json(&tokio::task::spawn_blocking(server_storage_report).await??);
+    assert_eq!(
+        report["cacheDir"],
+        tmp.path().join("cache/server").display().to_string(),
+        "{report}"
+    );
+    assert!(report["cacheUsedBytes"].is_u64(), "{report}");
+    assert_eq!(report["cacheComplete"], true, "{report}");
+    assert!(
+        report["cacheVolume"]["totalBytes"].as_u64().unwrap_or(0) > 0,
+        "{report}"
+    );
+    // No downloadsDir is set here, so there is no second volume to name.
+    assert!(report["downloadsVolume"].is_null(), "{report}");
+
+    // Cleaning restarts the server -- the only way to ask its cleaner for a
+    // sweep now -- and it is running afterwards, answering the same way.
+    let cleaned = tokio::task::spawn_blocking(server_clean_cache).await??;
+    assert_eq!(url::Url::parse(&cleaned)?.host_str(), Some("127.0.0.1"));
+    assert_eq!(server_base_url()?.as_deref(), Some(cleaned.as_str()));
+    assert_eq!(heartbeat_status(&cleaned).await?, StatusCode::UNAUTHORIZED);
+    // The settings it was started with survive it (they are on disk), so
+    // the patch made above is still there.
+    assert_eq!(
+        json(&tokio::task::spawn_blocking(server_settings).await??)["btMaxConnections"],
+        77
+    );
+    let url = cleaned;
 
     // Idempotent: a second start returns the same URL without restarting.
     let again = tokio::task::spawn_blocking({

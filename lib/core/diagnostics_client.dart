@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../src/rust/api/diagnostics.dart' as rust;
+import 'server_client.dart';
+import 'state/server_storage.dart';
 
 export '../src/rust/api/diagnostics.dart' show DiagnosticsSnapshot;
 
@@ -24,12 +26,20 @@ abstract interface class DiagnosticsClient {
   /// Google Pixel 7`. Asynchronous because on Android it is a platform
   /// channel call -- `dart:io` only has the build fingerprint there.
   Future<String> osVersion();
+
+  /// What the embedded server's storage costs: the cache against its
+  /// limit, and the room left where it writes. Throws when the server is
+  /// not running, which costs the report those lines and nothing else.
+  Future<ServerStorage> storage();
 }
 
 /// [DiagnosticsClient] over FFI, `dart:io` and the `xtremio/device`
 /// channel.
 class RustDiagnosticsClient implements DiagnosticsClient {
-  const RustDiagnosticsClient({this.channel = deviceChannel});
+  const RustDiagnosticsClient({
+    this.channel = deviceChannel,
+    this.server = const ServerClient(),
+  });
 
   /// The same channel `DeviceProfile.detect` asks; `MainActivity` answers
   /// `os` with the release, the API level and the hardware.
@@ -37,11 +47,18 @@ class RustDiagnosticsClient implements DiagnosticsClient {
 
   final MethodChannel channel;
 
+  /// Where the storage numbers come from, over FFI like every other
+  /// control call.
+  final ServerClient server;
+
   @override
   rust.DiagnosticsSnapshot snapshot() => rust.diagnosticsSnapshot();
 
   @override
   String get platform => Platform.operatingSystem;
+
+  @override
+  Future<ServerStorage> storage() => server.storage();
 
   /// The platform's answer, or what `dart:io` says when there is nobody to
   /// ask.
