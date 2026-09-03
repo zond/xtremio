@@ -323,6 +323,53 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a large system font grows the row instead of the poster', (
+      tester,
+    ) async {
+      // The header and the caption are text in boxes of a fixed height, so
+      // both have to grow with the text -- and the row with them. What may
+      // not happen is the poster paying for it: the strip is what is left
+      // over between the two boxes, and squeezing it there shrank the
+      // picture and, far enough up the scale, went negative.
+      useScreen(tester, tvSize);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      Future<(double poster, double row)> measure(double systemScale) async {
+        tester.platformDispatcher.textScaleFactorTestValue = systemScale;
+        await tester.pumpWidget(
+          XtremioApp(
+            core: FakeCoreClient(
+              state: {
+                CoreField.board: loadBoardFixture(),
+                CoreField.continueWatchingPreview:
+                    loadContinueWatchingFixture(),
+              },
+            ),
+            device: tv,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'scale $systemScale');
+        return (
+          tester.getSize(find.byType(PosterImage).first).height,
+          tester.widget<ListView>(find.byType(ListView).first).itemExtent!,
+        );
+      }
+
+      // 3x on top of the television's own 1.15: past where the old
+      // arithmetic drove the picture to nothing.
+      final (posterAtOne, rowAtOne) = await measure(1);
+      final (posterHuge, rowHuge) = await measure(3);
+
+      expect(posterAtOne, greaterThan(100), reason: 'a real picture');
+      expect(
+        posterHuge,
+        greaterThanOrEqualTo(posterAtOne),
+        reason: 'the picture never pays for the text',
+      );
+      expect(rowHuge, greaterThan(rowAtOne), reason: 'the row grew instead');
+    });
+
     testWidgets('a television gets no scrollbar to drag', (tester) async {
       await pumpBoard(tester, device: tv);
 
