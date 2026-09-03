@@ -89,6 +89,25 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
   `android:banner` is the tile the TV home screen shows, a 320x180 xhdpi
   PNG at `res/drawable-xhdpi/banner.png` (the launcher icon is the wrong
   shape for it).
+- **`stremio://` intent-filter.** A second `intent-filter` on
+  `MainActivity` takes `VIEW` with `BROWSABLE` and `DEFAULT` for
+  `<data android:scheme="stremio"/>`. That is how an addon site's Install
+  button reaches the app: it swaps the scheme on the addon's own manifest
+  URL, so `https://host/manifest.json` is opened as
+  `stremio://host/manifest.json` and Xtremio shows that addon's details
+  screen (nothing is installed without a press — README, "Installing an
+  addon from the web"). No `android:host` and no `android:autoVerify`:
+  the host is the *addon's* domain, so there is no domain this app could
+  claim, and App Links verification (which serves `assetlinks.json` from
+  the claimed domain) is impossible by construction. `MainActivity` was
+  already `android:launchMode="singleTop"`, which is what makes a link
+  arriving while the app is up go to the running instance's `onNewIntent`
+  instead of starting a second one. To try it on a device or emulator:
+
+  ```bash
+  adb shell am start -a android.intent.action.VIEW \
+    -d "stremio://v3-cinemeta.strem.io/manifest.json"
+  ```
 - **`xtremio/device` channel.** `DeviceProfile.detect()`
   (`lib/shell/device_profile.dart`) runs once in `main()` before `runApp`
   and asks `MainActivity` for `{isTv, hasTouch}`: `isTv` is

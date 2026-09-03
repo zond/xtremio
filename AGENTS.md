@@ -136,6 +136,30 @@ and the bytes. Keep it that way:
 - Downloads are control calls like any other: over FFI, never HTTP (see
   above).
 
+## Deep links open an addon; they never install one
+
+A `stremio://host/manifest.json` link (what every addon site's Install
+button produces) opens that addon's details screen and stops there. Three
+rules hold it in place, and each has a test:
+
+- **Nothing is dispatched but the `Load`.** A link must never reach
+  `InstallAddon`. Landing on the screen with the Install button waiting is
+  the whole of it — a page the user merely visited cannot change their
+  profile.
+- **The URL is passed on unmodified.** `AddonDetails` in stremio-core
+  rewrites `stremio://` to `https://` itself, on the whole string
+  (`src/models/addon_details.rs`), so a port, a configuration in the path
+  and a query survive. Do not parse and rebuild it in Dart; stremio-web
+  does, and loses both.
+- **A link never logs the URL.** A manifest URL can carry a debrid API key,
+  which puts it in the same class as the auth material above. Log the
+  scheme, not the link.
+
+`lib/shell/deep_link.dart` decides what a link means, `XtremioApp` acts on
+it, and the platform registrations are listed in README, "Installing an
+addon from the web". A widget test drives links through `FakeDeepLinks`
+(`test/support/`); nothing in the tests touches `app_links`.
+
 ## Use cheaper models for mechanical work
 
 When an agent delegates, mechanical subtasks (formatting, renames, moving
