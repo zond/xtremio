@@ -33,6 +33,14 @@ class _Destination {
 /// scope with no focused child of its own): each tab has a [FocusMemory],
 /// so showing a tab puts focus on the tile it was on when the user left
 /// it, or on the tab's first tile the first time.
+///
+/// Selecting a destination with a pointer (a touch remote, a mouse) while
+/// a tile holds focus is the D-pad's select with the step onto the rail
+/// skipped, so the shell takes that step itself: it focuses the chosen
+/// destination before switching. Otherwise the leaving tile's node, still
+/// focused while its widget is torn down, is parked in the new tab's scope
+/// and keeps the tab's tile from autofocusing; and when it is disposed
+/// focus falls on the bare scope, where nothing shows it.
 class RootShell extends StatefulWidget {
   const RootShell({super.key});
 
@@ -57,6 +65,14 @@ class _RootShellState extends State<RootShell> {
     for (final _ in _destinations) FocusMemoryStore(),
   ];
 
+  /// Above the rail (TV only), so the shell can reach its destinations'
+  /// focus nodes: [NavigationRail] hands out none. Not focusable itself.
+  final FocusNode _railNode = FocusNode(
+    debugLabel: 'rail',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+
   static const _destinations = <_Destination>[
     _Destination('Board', Icons.home_outlined, Icons.home, BoardScreen()),
     _Destination(
@@ -80,13 +96,22 @@ class _RootShellState extends State<RootShell> {
     ),
   ];
 
-  void _select(int i) => setState(() => _index = i);
+  void _select(int i) {
+    if (DeviceScope.isTv(context)) _railDestination(i)?.requestFocus();
+    setState(() => _index = i);
+  }
+
+  /// The focus node of the rail's destination [i]: the destinations are the
+  /// rail's focusable widgets, in order.
+  FocusNode? _railDestination(int i) =>
+      _railNode.traversalDescendants.elementAtOrNull(i);
 
   @override
   void dispose() {
     for (final scope in _tabScopes) {
       scope.dispose();
     }
+    _railNode.dispose();
     super.dispose();
   }
 
@@ -122,7 +147,12 @@ class _RootShellState extends State<RootShell> {
       return Scaffold(
         body: Row(
           children: [
-            if (isTv) FocusTraversalGroup(child: rail) else rail,
+            if (isTv)
+              FocusTraversalGroup(
+                child: Focus(focusNode: _railNode, child: rail),
+              )
+            else
+              rail,
             const VerticalDivider(width: 1),
             Expanded(
               child: isTv

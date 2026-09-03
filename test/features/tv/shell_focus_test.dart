@@ -57,6 +57,20 @@ String? focusedTileName(WidgetTester tester) {
   return tester.widget<Text>(texts.first).data;
 }
 
+/// The label of the rail destination holding primary focus, null when focus
+/// is not on a destination.
+String? focusedRailLabel(WidgetTester tester) {
+  final context = FocusManager.instance.primaryFocus?.context;
+  if (context?.findAncestorWidgetOfExactType<NavigationRail>() == null) {
+    return null;
+  }
+  final texts = find.descendant(
+    of: find.byWidget(context!.widget),
+    matching: find.byType(Text),
+  );
+  return tester.widget<Text>(texts.first).data;
+}
+
 /// The Board's first catalog row (Cinemeta Popular movies), by name.
 List<String> popularNames() => [
   for (final item in CatalogsWithExtraState.fromJson(
@@ -168,6 +182,25 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusIn<LibraryScreen>(), isTrue);
     expect(focusIn<NavigationRail>(), isFalse);
+  });
+
+  testWidgets('tapping a destination while a tile is focused puts focus on '
+      'that destination', (tester) async {
+    useScreen(tester, const Size(1280, 720));
+    await tester.pumpWidget(harness(fakeCore()));
+    await tester.pumpAndSettle();
+    expect(focusIn<BoardScreen>(), isTrue);
+
+    // A touch remote or mouse taps the rail without focusing it first; the
+    // Library has nothing to restore, so focus must show on the rail, as it
+    // does after a select there, rather than sit on the tab's bare scope.
+    await tester.tap(find.text('Library'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LibraryScreen), findsOneWidget);
+    expect(focusedRailLabel(tester), 'Library');
+
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<LibraryScreen>(), isTrue);
   });
 
   testWidgets('coming back to a tab restores the tile that was focused', (
