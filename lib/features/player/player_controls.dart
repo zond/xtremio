@@ -343,12 +343,20 @@ class PlayerBottomBar extends StatelessWidget {
                           : Icons.volume_up,
                     ),
                   ),
-                  SizedBox(
-                    width: 120,
-                    child: Slider(
-                      value: volume.clamp(0, 100),
-                      max: 100,
-                      onChanged: onVolume,
+                  // A [Slider] takes every arrow key for itself, so a
+                  // remote that landed on it could never leave again. The
+                  // television has its own volume keys: right goes from
+                  // Mute straight on to fullscreen there, and the slider
+                  // stays for the pointers that can drag it.
+                  ExcludeFocus(
+                    excluding: isTv,
+                    child: SizedBox(
+                      width: 120,
+                      child: Slider(
+                        value: volume.clamp(0, 100),
+                        max: 100,
+                        onChanged: onVolume,
+                      ),
                     ),
                   ),
                 ],

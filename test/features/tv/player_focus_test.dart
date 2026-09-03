@@ -341,6 +341,56 @@ void main() {
       expect(focusIn<SeekBar>(), isTrue, reason: 'focus stays on the bar');
     });
 
+    testWidgets('right walks the transport row past the volume to fullscreen', (
+      tester,
+    ) async {
+      final harness = await pumpOnTv(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedTooltip(), 'Play (Space)');
+
+      // The volume slider is no stop on a television — the set has its own
+      // volume keys — so the walk along the row reaches the fullscreen
+      // button behind it instead of being trapped on a control that eats
+      // every arrow key.
+      for (var i = 0; i < 8 && focusedTooltip() != 'Fullscreen (F)'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusedTooltip(), 'Fullscreen (F)');
+      expect(
+        harness.engine.volumes,
+        isEmpty,
+        reason: 'walking the bar never touches the volume',
+      );
+
+      // And the remote can still leave the bar from the end of the row.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+    });
+
+    testWidgets('the volume slider stays a focus stop off a TV', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final harness = PlayerHarness();
+      await harness.pump(tester);
+      harness.engine.emitDuration(total);
+      await pumpEvents(tester);
+
+      expect(
+        tester
+            .widget<ExcludeFocus>(
+              find
+                  .ancestor(
+                    of: find.byType(Slider),
+                    matching: find.byType(ExcludeFocus),
+                  )
+                  .first,
+            )
+            .excluding,
+        isFalse,
+        reason: 'a pointer still drags the volume where there is one',
+      );
+    });
     testWidgets('the controls do not fade while a control has focus', (
       tester,
     ) async {
