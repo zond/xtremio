@@ -28,6 +28,13 @@ class FakeDownloadsClient implements DownloadsClient {
   /// queued entry built from the request).
   DownloadAddResult Function(DownloadRequest request)? onAdd;
 
+  /// Answers [remove] instead of the default (which forgets the entry and
+  /// reports that as a pin dropped). Set it for the outcome the default
+  /// cannot reach: `removed: true, unpinned: false`, one torrent under two
+  /// metas, where the row goes and the file stays. The entry is forgotten
+  /// only when the answer says [DownloadRemoveResult.removed].
+  DownloadRemoveResult Function(String key, bool deleteFiles)? onRemove;
+
   /// Thrown by the matching call when set, for the failure paths.
   Object? addError;
   Object? removeError;
@@ -84,13 +91,17 @@ class FakeDownloadsClient implements DownloadsClient {
     final error = removeError;
     if (error != null) throw error;
     final items = {...registry.items};
-    final had = items.remove(key) != null;
+    final had = items.containsKey(key);
+    final result =
+        onRemove?.call(key, deleteFiles) ??
+        DownloadRemoveResult(
+          removed: had,
+          unpinned: had,
+          deletedFiles: had && deleteFiles,
+        );
+    if (result.removed) items.remove(key);
     registry = DownloadsRegistry(version: registry.version, items: items);
-    return DownloadRemoveResult(
-      removed: had,
-      unpinned: had,
-      deletedFiles: had && deleteFiles,
-    );
+    return result;
   }
 
   @override

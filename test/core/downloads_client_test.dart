@@ -395,6 +395,49 @@ void main() {
   });
 
   group('FakeDownloadsClient', () {
+    test('onRemove reaches the outcome the default cannot', () async {
+      final client = FakeDownloadsClient(
+        registry: DownloadsRegistry.fromJson(loadDownloadsFixture()),
+      );
+      addTearDown(client.dispose);
+      // One torrent under two metas: the row goes, the file is the other
+      // download's and stays.
+      client.onRemove = (key, deleteFiles) => const DownloadRemoveResult(
+        removed: true,
+        unpinned: false,
+        deletedFiles: false,
+      );
+
+      final result = await client.remove(
+        'tt0063350:tt0063350',
+        deleteFiles: true,
+      );
+
+      expect(result.removed, isTrue);
+      expect(result.unpinned, isFalse);
+      expect(result.deletedFiles, isFalse);
+      expect(client.removed.single, (
+        key: 'tt0063350:tt0063350',
+        deleteFiles: true,
+      ), reason: 'the call is still recorded');
+      expect((await client.list())['tt0063350:tt0063350'], isNull);
+    });
+
+    test('a removal onRemove refuses leaves the row where it was', () async {
+      final client = FakeDownloadsClient(
+        registry: DownloadsRegistry.fromJson(loadDownloadsFixture()),
+      );
+      addTearDown(client.dispose);
+      client.onRemove = (key, deleteFiles) => const DownloadRemoveResult(
+        removed: false,
+        unpinned: false,
+        deletedFiles: false,
+      );
+
+      expect((await client.remove('tt0063350:tt0063350')).removed, isFalse);
+      expect((await client.list())['tt0063350:tt0063350'], isNotNull);
+    });
+
     test('accepts a download, then lists and removes it', () async {
       final client = FakeDownloadsClient();
       addTearDown(client.dispose);
