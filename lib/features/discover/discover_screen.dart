@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
@@ -18,6 +19,13 @@ import '../details/meta_details_screen.dart';
 /// `catalog` are a poster grid that loads the next page near the end of the
 /// scroll. The field is unloaded on dispose, unless another Discover screen
 /// has loaded it since.
+///
+/// On a TV the filter bar and the grid are separate [FocusTraversalGroup]s
+/// and the posters remember which one had focus for the shell's per-tab
+/// memory. A Discover pushed on top of another screen (a catalog's "See
+/// all", a genre chip) puts focus on its first poster, since nothing else
+/// on it holds any; the Discover tab does not, so selecting the tab keeps
+/// focus on the rail like the other tabs.
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key, this.request});
 
@@ -126,21 +134,29 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   Widget build(BuildContext context) {
     final state = ownState;
     final selectable = state?.selectable;
+    final isTv = DeviceScope.isTv(context);
     return Scaffold(
       appBar: AppBar(title: Text(state?.selectedCatalogName ?? 'Discover')),
       body: Column(
         children: [
           if (selectable != null && !selectable.isEmpty)
-            _FilterBar(selectable: selectable, onSelect: _select),
+            _tvGroup(
+              isTv,
+              _FilterBar(selectable: selectable, onSelect: _select),
+            ),
           Expanded(
             child: state == null
                 ? const Center(child: CircularProgressIndicator())
-                : _buildCatalog(state),
+                : _tvGroup(isTv, _buildCatalog(state)),
           ),
         ],
       ),
     );
   }
+
+  /// [child] as its own traversal group on a TV; [child] itself elsewhere.
+  static Widget _tvGroup(bool isTv, Widget child) =>
+      isTv ? FocusTraversalGroup(child: child) : child;
 
   Widget _buildCatalog(DiscoverState state) {
     final items = state.items;
@@ -152,6 +168,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       // with no catalogs, so no empty view is shown here).
       return const Center(child: CircularProgressIndicator());
     }
+    // Pushed on top of another screen (never as the shell's tab, which is
+    // part of the first route): the first poster is where TV focus starts.
+    final isPushed = ModalRoute.of(context)?.isFirst == false;
     return NotificationListener<ScrollNotification>(
       onNotification: (n) => _onScroll(n, state),
       child: GridView.builder(
@@ -175,6 +194,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 builder: (_) => MetaDetailsScreen(type: item.type, id: item.id),
               ),
             ),
+            memoryId: '${item.type}/${item.id}',
+            defaultFocus: isPushed && index == 0,
           );
         },
       ),
