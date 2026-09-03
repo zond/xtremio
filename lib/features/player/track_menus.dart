@@ -169,7 +169,14 @@ class PlayerSettingsSheet extends StatelessWidget {
     final onSetting = this.onSetting;
     return ListView(
       shrinkWrap: true,
-      padding: const EdgeInsets.only(bottom: 16),
+      // A `ListView` with no padding of its own takes the safe area out of
+      // `MediaQuery` -- which is how the subtitle and audio menus stay off
+      // a television's overscan band. Setting a padding opts out of that,
+      // so the band has to be added back by hand or the last setting ends
+      // up under the cropped edge of the panel.
+      padding: EdgeInsets.only(
+        bottom: 16 + MediaQuery.paddingOf(context).bottom,
+      ),
       children: [
         const _MenuHeader('Playback settings'),
         const _SectionLabel('Speed'),

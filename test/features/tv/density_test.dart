@@ -250,6 +250,45 @@ void main() {
     });
   });
 
+  group('the settings sheet', () {
+    testWidgets('the last setting of the player sheet stays out of the band', (
+      tester,
+    ) async {
+      // The subtitle and audio menus let their `ListView` take the band out
+      // of `MediaQuery` by leaving `padding` null. The settings sheet sets
+      // its own padding, which opts out of that, so it has to add the band
+      // back itself or its last row scrolls under the cropped edge.
+      useScreen(tester, tvSize);
+      final harness = PlayerHarness(device: tv);
+      await harness.pump(tester);
+      await tester.tap(find.byTooltip('Playback settings'));
+      await tester.pumpAndSettle();
+
+      final last = find.textContaining('Bitmap subtitles');
+      await tester.ensureVisible(last);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(last).bottom,
+        lessThanOrEqualTo(tvSize.height * 0.95),
+      );
+    });
+
+    testWidgets('a desktop sheet uses the pixels a television may not', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      final harness = PlayerHarness(device: DeviceProfile.fallback);
+      await harness.pump(tester);
+      await tester.tap(find.byTooltip('Playback settings'));
+      await tester.pumpAndSettle();
+
+      final last = find.textContaining('Bitmap subtitles');
+      await tester.ensureVisible(last);
+      await tester.pumpAndSettle();
+      expect(tester.getRect(last).bottom, greaterThan(tvSize.height * 0.95));
+    });
+  });
+
   group('the Board', () {
     testWidgets('a television gets bigger posters than a window of the same '
         'size', (tester) async {
