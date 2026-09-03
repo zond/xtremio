@@ -260,6 +260,12 @@ class _RowLayout {
   /// accessibility setting anywhere. The header and the caption are text in
   /// boxes of a fixed height, so both boxes grow with it -- and so does the
   /// row, rather than the strip between them shrinking.
+  ///
+  /// Never below 1: the boxes are an exact fit at scale 1 (52 dp of header
+  /// is 12 of padding around 40 of title and subtitle), and the padding is
+  /// fixed, so shrinking the box for a smaller system font -- Android's
+  /// "Small" is 0.85, and a GTK text-scaling-factor goes under 1 too --
+  /// overflows the text out of it. A small font just leaves the row roomy.
   final double textFactor;
 
   /// The row geometry [context] is in.
@@ -268,7 +274,7 @@ class _RowLayout {
       MediaQuery.sizeOf(context).width,
       isTv: DeviceScope.isTv(context),
     ),
-    textFactor: textFactorOf(context),
+    textFactor: math.max(1, textFactorOf(context)),
   );
 
   static const double baseHeaderHeight = 52;

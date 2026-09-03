@@ -441,6 +441,31 @@ void main() {
     expect(list.itemExtent, greaterThan(BoardScreen.rowExtentFor(400)));
   });
 
+  testWidgets('a small system font leaves the row header its size', (
+    tester,
+  ) async {
+    // The header and caption boxes are an exact fit at scale 1: 52 dp is 12
+    // of padding around 40 of title and subtitle. Growing them with the text
+    // is what a large font needs, but the same arithmetic run backwards on
+    // Android's "Small" (0.85) shrinks the box while the padding stays put,
+    // and the header's Column overflows. The boxes only ever grow.
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    tester.platformDispatcher.textScaleFactorTestValue = 0.85;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final core = fakeCore(continueWatching: {'items': <Object>[]});
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final list = tester.widget<ListView>(find.byKey(const Key('board-rows')));
+    expect(list.itemExtent, BoardScreen.rowExtentFor(400));
+    final rows = tester.getTopLeft(find.byKey(const Key('board-rows'))).dy;
+    final firstTile = tester.getTopLeft(find.byType(PosterTile).first).dy;
+    expect(firstTile - rows, closeTo(52, 0.01));
+  });
+
   testWidgets('rows are shorter on phone widths', (tester) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;
