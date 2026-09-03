@@ -4,6 +4,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
+import 'package:xtremio/features/player/torrent_progress_card.dart';
 import 'package:xtremio/features/player/torrent_startup_overlay.dart';
 
 import '../../support/player_harness.dart';
@@ -228,8 +229,8 @@ void main() {
         ).detail,
         isNull,
       );
-      expect(TorrentStartupOverlay.formatSpeed(850000), '850 kB/s');
-      expect(TorrentStartupOverlay.formatSpeed(512), '512 B/s');
+      expect(TorrentProgressCard.formatSpeed(850000), '850 kB/s');
+      expect(TorrentProgressCard.formatSpeed(512), '512 B/s');
     });
   });
 
