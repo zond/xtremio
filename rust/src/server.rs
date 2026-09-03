@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use anyhow::Context;
-use stream_server::{EngineStats, ServerHandle, ServerSettings};
+use stream_server::{DownloadInfo, EngineStats, ServerHandle, ServerSettings, UnpinOutcome};
 use url::Url;
 
 /// stremio-core's default `streaming_server_url` port; preferred so a
@@ -161,6 +161,42 @@ pub fn torrent_stats(
         Some(idx) => handle.file_stats(info_hash, idx, trackers),
         None => handle.engine_stats(info_hash, trackers),
     })
+}
+
+/// Pins `file_idx` of `info_hash` as an offline download: the engine is
+/// created with `trackers` when the hash is new, the file is kept wanted
+/// whatever else the torrent streams, and the torrent stops being evictable.
+/// Idempotent. The error is a `stream_server::PinDownloadError` behind
+/// `anyhow`, which `crate::downloads::PinFailure` classifies for the UI.
+pub fn pin_download(
+    info_hash: &str,
+    file_idx: usize,
+    trackers: &[String],
+) -> anyhow::Result<DownloadInfo> {
+    with_handle(|handle| handle.pin_download(info_hash, file_idx, trackers))
+}
+
+/// Drops the pin on `file_idx` of `info_hash`. With `delete_files` the data
+/// goes too (the whole torrent when this was its last pin, only that file
+/// while other pins hold). The outcome reports what actually happened, which
+/// is not `delete_files` echoed back.
+pub fn unpin_download(
+    info_hash: &str,
+    file_idx: usize,
+    delete_files: bool,
+) -> anyhow::Result<UnpinOutcome> {
+    with_handle(|handle| handle.unpin_download(info_hash, file_idx, delete_files))
+}
+
+/// Every pinned download the server knows about, with live progress.
+pub fn downloads() -> anyhow::Result<Vec<DownloadInfo>> {
+    with_handle(|handle| handle.downloads())
+}
+
+/// Where `file_idx` of `info_hash` is on disk, when the engine knows.
+/// Creates nothing.
+pub fn download_path(info_hash: &str, file_idx: usize) -> anyhow::Result<Option<String>> {
+    with_handle(|handle| handle.download_path(info_hash, file_idx))
 }
 
 /// The server's current settings (`GET /settings` → `values`).

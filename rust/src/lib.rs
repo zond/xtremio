@@ -7,6 +7,7 @@
 //! - `env`: the `stremio_core::runtime::Env` (HTTP, storage, executors)
 //! - `model`: the `#[derive(Model)]` app model and its JSON projection
 //! - `core`: the stremio-core Runtime (init, dispatch, state, events)
+//! - `downloads`: the offline-downloads registry over the server's pins
 //! - `server`: the in-process stream-server (torrent/archive bytes over HTTP)
 //! - `guard`: panic containment at the FFI boundary
 //! - `logging`: the process-wide tracing subscriber
@@ -16,6 +17,7 @@
 pub mod android;
 pub mod api;
 pub mod core;
+pub mod downloads;
 pub mod env;
 mod frb_generated;
 pub mod guard;

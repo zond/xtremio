@@ -100,7 +100,9 @@ pub fn block_on<F: Future>(future: F) -> F::Output {
 }
 
 /// Writes `bytes` to `path` atomically: temp file next to it, fsync, rename.
-fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+/// Shared with `crate::downloads`, whose registry wants the same guarantee
+/// as a stremio-core bucket: a crash mid-write can never leave half a file.
+pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
 
     if let Some(parent) = path.parent() {
