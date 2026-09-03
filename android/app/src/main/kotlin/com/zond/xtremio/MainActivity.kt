@@ -2,6 +2,7 @@ package com.zond.xtremio
 
 import android.app.UiModeManager
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
@@ -10,6 +11,13 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    /**
+     * The downloads foreground service's side of the conversation, alive
+     * for as long as the engine is. Held so the permission answer and the
+     * notification's intent can reach it, and so it can be let go of.
+     */
+    private var downloads: DownloadsChannel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before the Flutter engine starts Dart: RustLib.init() may
         // issue HTTPS requests right away.
@@ -31,7 +39,37 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // The downloads notification (lib/features/downloads/downloads_service.dart).
+        // A tap that launched the app is kept here rather than delivered:
+        // Dart installs its handler a moment later, and a call made before
+        // that would go nowhere.
+        downloads = DownloadsChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+            .apply { pendingOpen = opensDownloads(intent) }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // The notification's body, with the app already running.
+        if (opensDownloads(intent)) downloads?.openRequested()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        downloads?.onRequestPermissionsResult(requestCode, grantResults)
+    }
+
+    override fun onDestroy() {
+        downloads?.detach()
+        downloads = null
+        super.onDestroy()
+    }
+
+    private fun opensDownloads(intent: Intent?): Boolean =
+        intent?.getBooleanExtra(DownloadsService.EXTRA_OPEN_DOWNLOADS, false) == true
 
     // Android TV / Google TV: the system says it is in television mode, or
     // the leanback feature is present (a TV box whose UI mode is not yet

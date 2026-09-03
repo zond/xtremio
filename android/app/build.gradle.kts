@@ -38,6 +38,13 @@ repositories {
 dependencies {
     // Kotlin half of rustls-platform-verifier; the version tracks the crate.
     implementation("rustls:rustls-platform-verifier:${rustlsPlatformVerifierAndroid.second}")
+    // NotificationCompat and the permission/foreground-service helpers the
+    // downloads service is built on. The Flutter embedding pulls androidx
+    // core in transitively, but transitively is not on our compile
+    // classpath, so it is asked for by name.
+    implementation("androidx.core:core-ktx:1.17.0")
+    // Plain JVM tests, for the Kotlin that has no Android in it.
+    testImplementation("junit:junit:4.13.2")
 }
 
 android {

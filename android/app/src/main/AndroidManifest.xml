@@ -4,13 +4,30 @@
          debug/profile manifests, so without this a release APK is offline. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
-    <!-- Casting. The Google Cast SDK puts a media notification up while a
-         session runs, through its own MediaNotificationService (declared
-         below); on API 34+ a mediaPlayback foreground service needs this
-         permission to exist at all. Nothing else in the app runs a
-         foreground service: offline downloads still stop when the process
-         is frozen (see ANDROID.md). -->
+    <!-- Foreground services. Two of them, for two unrelated reasons:
+
+         - dataSync is the downloads service (.DownloadsService, declared
+           below). Android freezes the process of an app the user has left,
+           and the whole download stack (the embedded stream-server and
+           librqbit) lives in it, so without this a download only advances
+           while the app is on screen. dataSync is the type for "moving
+           bytes the user asked for"; the service hosts nothing itself.
+         - mediaPlayback is the Google Cast SDK's own media notification,
+           run by its MediaNotificationService (declared below); on API 34+
+           it needs the matching permission to exist at all.
+
+         The plain FOREGROUND_SERVICE also merges in from
+         flutter_chrome_cast's manifest, but this app now needs one of its
+         own, so it is declared here rather than borrowed. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+
+    <!-- API 33+ only, and asked for at runtime the first time a download
+         actually starts, never at launch. A refusal costs the progress
+         notification and nothing else: the service still runs and downloads
+         still finish. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <!-- android:banner is what the Android TV / Google TV home screen shows
          for the app: a 320x180 xhdpi PNG (drawable-xhdpi/banner.png), as the
@@ -93,6 +110,23 @@
         <meta-data
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.felnanuke.google_cast.GoogleCastOptionsProvider" />
+
+        <!-- Holds the process up while offline downloads are unfinished,
+             with the ongoing progress notification the system requires for
+             it. Started and stopped from Dart over the xtremio/downloads
+             channel (DownloadsChannel.kt), which is also the only thing
+             that knows what is being downloaded.
+
+             stopWithTask: swiping the app out of recents takes the Flutter
+             engine with it, and a notification nobody can move on or take
+             down is worse than none, so the service goes at the same time.
+             The downloads themselves lose nothing: librqbit keeps its
+             verified pieces and start-up re-pins every unfinished entry. -->
+        <service
+            android:name=".DownloadsService"
+            android:exported="false"
+            android:stopWithTask="true"
+            android:foregroundServiceType="dataSync" />
 
         <!-- The notification the Cast SDK puts up while a session runs, with
              the transport controls on it. It lives in Play services, not in
