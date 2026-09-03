@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 /// Offered when an episode ends and the engine knows the next one: counts
 /// down to playing it, with a way out.
+///
+/// Both buttons are focusable, so a remote can take the hand-off early or
+/// call it off once the player has moved focus onto the card.
 class UpNextCard extends StatelessWidget {
   const UpNextCard({
     super.key,
@@ -10,6 +13,7 @@ class UpNextCard extends StatelessWidget {
     required this.secondsLeft,
     required this.onPlay,
     required this.onDismiss,
+    this.playFocusNode,
   });
 
   /// `S1E2`-style label; may be empty.
@@ -18,6 +22,10 @@ class UpNextCard extends StatelessWidget {
   final int secondsLeft;
   final VoidCallback onPlay;
   final VoidCallback onDismiss;
+
+  /// Attached to "Play now": where the remote lands when it reaches the
+  /// card, with Cancel a left press away.
+  final FocusNode? playFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +59,7 @@ class UpNextCard extends StatelessWidget {
                   ),
                   TextButton(onPressed: onDismiss, child: const Text('Cancel')),
                   FilledButton.icon(
+                    focusNode: playFocusNode,
                     onPressed: onPlay,
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Play now'),

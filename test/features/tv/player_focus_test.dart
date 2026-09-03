@@ -7,6 +7,7 @@ import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/seek_bar.dart';
 import 'package:xtremio/features/player/track_menus.dart';
+import 'package:xtremio/features/player/up_next_card.dart';
 
 import '../../support/player_harness.dart';
 import '../../support/tv.dart';
@@ -154,6 +155,76 @@ void main() {
       await press(tester, LogicalKeyboardKey.mediaStop);
       expect(find.byType(PlayerScreen), findsNothing);
       expect(find.text('Play'), findsOneWidget);
+    });
+  });
+
+  group('the up-next countdown', () {
+    /// Ends the episode so the card counts down to the next one.
+    Future<PlayerHarness> pumpCountdown(WidgetTester tester) async {
+      final harness = await pumpOnTv(tester, withNext: true);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      harness.engine.emitCompleted();
+      await pumpEvents(tester);
+      expect(find.byType(UpNextCard), findsOneWidget);
+      return harness;
+    }
+
+    testWidgets('down reaches the card, right and left walk it', (
+      tester,
+    ) async {
+      final harness = await pumpCountdown(tester);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), 'Play now');
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focusedLabel(tester), 'Cancel');
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedLabel(tester), 'Play now');
+
+      // Select presses the button rather than toggling playback.
+      await press(tester, LogicalKeyboardKey.select);
+      expect(harness.engine.playOrPauseCalls, 0);
+      expect(harness.playerActions(), contains('NextVideo'));
+    });
+
+    testWidgets('select on the card cancels the hand-off', (tester) async {
+      final harness = await pumpCountdown(tester);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focusedLabel(tester), 'Cancel');
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(UpNextCard), findsNothing);
+      expect(harness.playerActions(), isNot(contains('NextVideo')));
+
+      // Down goes back to walking the control bar.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<PlayerBottomBar>(), isTrue);
+    });
+
+    testWidgets('the centre key on the video dismisses the countdown', (
+      tester,
+    ) async {
+      final harness = await pumpCountdown(tester);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+
+      // A tap on the video dismisses it; the remote's centre key is that
+      // tap, not a play/pause toggle.
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(UpNextCard), findsNothing);
+      expect(harness.engine.playOrPauseCalls, 0);
+      expect(harness.playerActions(), isNot(contains('NextVideo')));
+    });
+
+    testWidgets('leaving the card hands the remote back to the video', (
+      tester,
+    ) async {
+      await pumpCountdown(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), 'Play now');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
     });
   });
 

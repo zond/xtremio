@@ -138,10 +138,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
     debugLabel: 'player controls',
   );
 
+  /// The up-next card's own scope on a TV. It sits outside the control
+  /// bar in the stack, so it cannot share [_controlsScope], but it counts
+  /// as a control for everything the remote does.
+  final FocusScopeNode _upNextScope = FocusScopeNode(
+    debugLabel: 'player up next',
+  );
+
   /// Where focus lands when the remote moves down (the bottom bar's
-  /// play/pause) and up (the top bar's back button) onto the controls.
+  /// play/pause, or "Play now" while the countdown runs) and up (the top
+  /// bar's back button) onto the controls.
   final FocusNode _playPauseFocus = FocusNode(debugLabel: 'play/pause');
   final FocusNode _topBarFocus = FocusNode(debugLabel: 'player top bar');
+  final FocusNode _playNextFocus = FocusNode(debugLabel: 'play next');
 
   Uri? _opened;
   Duration _duration = Duration.zero;
@@ -216,6 +225,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.initState();
     _lifecycle = AppLifecycleListener(onHide: _onAppHidden);
     _controlsScope.addListener(_onControlsFocusChange);
+    _upNextScope.addListener(_onControlsFocusChange);
   }
 
   /// A control took or lost focus: the controls may not fade while one has
@@ -253,8 +263,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
   }
 
-  /// The remote is on the control bar rather than on the video.
-  bool get _controlFocused => _isTv && _controlsScope.hasFocus;
+  /// The remote is on a control (the bar or the up-next card) rather than
+  /// on the video.
+  bool get _controlFocused =>
+      _isTv && (_controlsScope.hasFocus || _upNextScope.hasFocus);
 
   @override
   void didChangeDependencies() {
@@ -979,13 +991,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // --- Keyboard ------------------------------------------------------------
 
-  /// Moves focus onto the shown control bar: [direction] down lands on
-  /// play/pause in the bottom bar, up on the top bar. False when that
-  /// control is not on screen (the narrow layout's transport lives in the
-  /// middle of the video), leaving the key to whatever it means otherwise.
+  /// Moves focus onto the shown controls: [direction] down lands on
+  /// play/pause in the bottom bar — or on the up-next card's "Play now"
+  /// while the countdown runs, as that is the decision in front of the
+  /// viewer — and up on the top bar. False when that control is not on
+  /// screen (the narrow layout's transport lives in the middle of the
+  /// video), leaving the key to whatever it means otherwise.
   bool _focusControls(TraversalDirection direction) {
     final node = direction == TraversalDirection.up
         ? _topBarFocus
+        : _upNextSecondsLeft != null
+        ? _playNextFocus
         : _playPauseFocus;
     if (node.context == null) return false;
     node.requestFocus();
@@ -1041,7 +1057,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // keep their default meaning (nothing, on the video itself).
     if (RemotePress.activateKeys.contains(key)) {
       if (!_isTv) return KeyEventResult.ignored;
-      if (event is KeyDownEvent && shownBefore) _togglePlay();
+      if (event is KeyDownEvent && shownBefore) {
+        // On the video the centre key is the tap that [_onVideoTap]
+        // handles, so with the countdown up it calls the hand-off off
+        // instead of toggling playback.
+        if (_upNextSecondsLeft != null) {
+          _dismissUpNext();
+        } else {
+          _togglePlay();
+        }
+      }
       return KeyEventResult.handled;
     }
 
@@ -1177,8 +1202,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _focusNode.dispose();
     _controlsScope.removeListener(_onControlsFocusChange);
     _controlsScope.dispose();
+    _upNextScope.removeListener(_onControlsFocusChange);
+    _upNextScope.dispose();
     _playPauseFocus.dispose();
     _topBarFocus.dispose();
+    _playNextFocus.dispose();
     super.dispose();
   }
 
@@ -1367,12 +1395,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   right: 16,
                   bottom: hasVideo ? 112 : 16,
                   child: SafeArea(
-                    child: UpNextCard(
-                      label: nextVideo.seasonEpisodeLabel,
-                      title: nextVideo.title,
-                      secondsLeft: upNext,
-                      onPlay: _playNext,
-                      onDismiss: _dismissUpNext,
+                    child: _upNextFocus(
+                      UpNextCard(
+                        label: nextVideo.seasonEpisodeLabel,
+                        title: nextVideo.title,
+                        secondsLeft: upNext,
+                        onPlay: _playNext,
+                        onDismiss: _dismissUpNext,
+                        playFocusNode: _playNextFocus,
+                      ),
                     ),
                   ),
                 ),
@@ -1388,6 +1419,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// they are the bare column they have always been.
   Widget _controlsFocus(Widget controls) =>
       _isTv ? FocusScope(node: _controlsScope, child: controls) : controls;
+
+  /// The up-next card in its own scope on a TV, for the same reasons: the
+  /// D-pad walks Cancel and "Play now", and leaving the card in either
+  /// vertical direction hands the remote back to the video.
+  Widget _upNextFocus(Widget card) =>
+      _isTv ? FocusScope(node: _upNextScope, child: card) : card;
 
   String? _statusText(PlayerState? state) {
     if (_engineError != null) return 'Playback failed: $_engineError';
