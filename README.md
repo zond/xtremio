@@ -291,8 +291,9 @@ connection.
   library API in `rust/src/api/server.rs` — `server_torrent_stats(info_hash,
   file_idx, trackers)` (the per-file or torrent-level `stats.json` as
   JSON), `server_settings()` and `server_update_settings(patch_json)`
-  (`GET`/`POST /settings`), plus `server_storage_report()` and
-  `server_clean_cache()` (see "What the server's storage costs") — wrapped by `ServerClient` in
+  (`GET`/`POST /settings`), plus `server_storage_report()`,
+  `server_cache_usage()` and `server_clean_cache_now()` (see "What the
+  server's storage costs") — wrapped by `ServerClient` in
   `lib/core/server_client.dart`. Nothing logs the token; the header value
   is marked sensitive. `media_kit`'s `Media.httpHeaders` could carry it to
   mpv should a media route ever need it; none does.
@@ -658,33 +659,34 @@ should read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
 
 ### What the server's storage costs
 
-**Settings → Developer → Server storage** answers the two questions a
-misbehaving playback raises first: is the device full, and is the cache
-over the limit its cleaner is supposed to hold it to. Both numbers are in
-the copied diagnostics header too, since they are what a person should look
-at before reading a single log line.
+**Settings → Developer → Server storage** answers the question a
+misbehaving playback raises first: is the cache over the limit its cleaner
+is supposed to hold it to. The same number is in the copied diagnostics
+header too (alongside the device's free space, which lives only there),
+since it is what a person should look at before reading a single log line.
 
-They are measured on the Rust side (`rust/src/storage.rs`,
-`server_storage_report()`): the cache root and the `cacheSize` limit come
-from the server's own settings over its library API, the size on disk is a
-walk of that root (offline downloads excluded — they are not cache, and the
-server's own cleaner walks past them too), and the free/total space comes
-from `fs4`. The downloads volume is named as well when it is a different
-filesystem. **stream-server answers neither number today**: it has no
-`ServerHandle` call and no route for cache usage, so this is the app
-measuring what the server writes.
+The cache-vs-limit number comes straight from the pinned server
+(`ServerHandle::cache_usage()`, `rust/src/server.rs`
+`cache_usage()`/`server_cache_usage()`): a read-only walk in the cleaner's
+own occupancy accounting (allocated blocks, not apparent length), reporting
+`totalBytes`/`limitBytes` and, separately, `protectedBytes`/
+`protectedFiles` — what a live engine is writing or a pinned download keeps
+right now, which a clean pass can never touch. The device's free/total
+space (a different concern — is the disk full, not is the cache over its
+limit) is still measured on the Rust side, in `rust/src/storage.rs`
+(`server_storage_report()`), and shown only in the diagnostics header.
 
-"Clean cache now" **restarts the embedded server**, and says so before it
-does. That is the only way to ask for a sweep: the cleaner
-(`server/src/cache_cleaner.rs`) runs on a debounce after writes to the cache
-directory and on an hourly poll whose first tick fires at start-up, and
-there is no `clean_cache` on the handle. Evicting from out here instead is
-not an option — only the server knows which files a live engine is writing
-(`protected_paths`), and deleting one of those breaks the playback holding
-it. The restart is also what makes the current engines' files evictable at
-all. Pinned downloads survive it (the server persists them), and the
-engine's `streaming_server_url` is retargeted afterwards in case the
-restart landed on a different port.
+"Clean cache now" runs `ServerHandle::clean_cache_now()`
+(`server_clean_cache_now()`) — the exact function the server's own
+scheduled sweep calls (`server/src/cache_cleaner.rs`, on a debounce after
+cache writes and hourly otherwise), only on demand. **Nothing here stops
+playback**: unlike restarting the server, which was the only way to ask for
+a sweep before the server exposed this call, the running server keeps
+answering throughout. The same protections apply as ever — nothing a live
+engine is writing or a pin keeps is ever evicted — so a clean that leaves
+the cache still over its limit is not a failure: the screen names what
+`protectedBytes`/`protectedFiles` (or the report's `protected`/
+`protectedFiles`) are holding, rather than saying the clean failed.
 
 ### Diagnostics off a device
 
