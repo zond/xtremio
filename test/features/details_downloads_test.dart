@@ -118,6 +118,13 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
+  /// The width the screens are actually used at.
+  void usePhoneViewport(WidgetTester tester) {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
+
   /// The movie fixture's meta item, as the screen hands it to the pin.
   Map<String, dynamic> movieMeta() =>
       MetaDetailsState.fromJson(loadMetaDetailsFixture()).meta!.json;
@@ -537,6 +544,46 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('1 downloaded · 1 downloading'), findsOneWidget);
+    });
+
+    testWidgets('the longest header count still fits a phone', (tester) async {
+      usePhoneViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadSeriesEpisodeMetaDetailsFixture()},
+      );
+      // All three states at once, which is the longest line the summary can
+      // build; on a phone the header column is narrower than it is wide.
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          for (final (episode, state) in const [
+            (1, 'complete'),
+            (2, 'complete'),
+            (3, 'complete'),
+            (4, 'downloading'),
+            (5, 'queued'),
+            (6, 'error'),
+          ])
+            entry(
+              metaId: seriesId,
+              videoId: '$seriesId:1:$episode',
+              stream: {'infoHash': 'aaaa', 'fileIdx': episode},
+              state: state,
+              size: 10,
+              downloaded: state == 'complete' ? 10 : 5,
+            ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(
+        harness(core, downloads, type: 'series', id: seriesId),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull, reason: 'the header overflowed');
+      expect(
+        find.text('3 downloaded · 2 downloading · 1 stopped'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a movie header says the state of the one download', (

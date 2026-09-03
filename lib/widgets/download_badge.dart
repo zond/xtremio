@@ -118,7 +118,17 @@ class DownloadSummary extends StatelessWidget {
             color: theme.colorScheme.primary,
           ),
         const SizedBox(width: 6),
-        Text(label, style: theme.textTheme.labelMedium),
+        // Flexible, because a Row gives a plain child unbounded width: the
+        // three-state line ("3 downloaded · 2 downloading · 1 stopped") is
+        // wider than a phone's header column and would overflow it.
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelMedium,
+          ),
+        ),
       ],
     );
   }
