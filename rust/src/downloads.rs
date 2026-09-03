@@ -252,11 +252,17 @@ fn phase(info: &DownloadInfo) -> String {
 
 /// `downloads.json` as a whole: the file shape, and what the list call and
 /// the progress events emit.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Registry {
     pub version: u32,
-    #[serde(default)]
     pub items: BTreeMap<String, Entry>,
+    /// Entries this build could not parse, exactly as they were on disk.
+    /// They are invisible to everything but [`Registry::serialize`], which
+    /// writes them back among the items: a forgiving read plus a whole-file
+    /// rewrite would otherwise *erase* an entry the next version wrote (or
+    /// a truncated one), while the server's pin for it lived on -- an
+    /// orphan the list cannot show and `remove` cannot reach.
+    unreadable: BTreeMap<String, serde_json::Value>,
 }
 
 impl Default for Registry {
@@ -264,7 +270,29 @@ impl Default for Registry {
         Self {
             version: VERSION,
             items: BTreeMap::new(),
+            unreadable: BTreeMap::new(),
         }
+    }
+}
+
+impl Serialize for Registry {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::{Error, SerializeStruct};
+
+        let mut items = serde_json::Map::with_capacity(self.items.len() + self.unreadable.len());
+        for (key, entry) in &self.items {
+            items.insert(
+                key.clone(),
+                serde_json::to_value(entry).map_err(Error::custom)?,
+            );
+        }
+        for (key, raw) in &self.unreadable {
+            items.entry(key.clone()).or_insert_with(|| raw.clone());
+        }
+        let mut registry = serializer.serialize_struct("Registry", 2)?;
+        registry.serialize_field("version", &self.version)?;
+        registry.serialize_field("items", &items)?;
+        registry.end()
     }
 }
 
@@ -281,6 +309,11 @@ impl Registry {
                 return Self::default();
             }
         };
+        Self::from_value(&value)
+    }
+
+    /// The parsed form of an already-decoded registry file.
+    fn from_value(value: &serde_json::Value) -> Self {
         let version = value
             .get("version")
             .and_then(serde_json::Value::as_u64)
@@ -297,23 +330,28 @@ impl Registry {
             tracing::warn!("downloads registry has no items object; starting empty");
             return Self {
                 version,
-                items: BTreeMap::new(),
+                ..Self::default()
             };
         };
         let mut parsed = BTreeMap::new();
+        let mut unreadable = BTreeMap::new();
         for (key, raw) in items {
             match serde_json::from_value::<Entry>(raw.clone()) {
                 Ok(entry) => {
                     parsed.insert(key.clone(), entry);
                 }
                 Err(error) => {
-                    tracing::warn!(key, %error, "unreadable download entry; dropping it")
+                    // Kept verbatim, not dropped: the next write would
+                    // otherwise erase it from disk for good.
+                    tracing::warn!(key, %error, "unreadable download entry; keeping it as it is");
+                    unreadable.insert(key.clone(), raw.clone());
                 }
             }
         }
         Self {
             version,
             items: parsed,
+            unreadable,
         }
     }
 }
@@ -334,10 +372,42 @@ fn file_lock() -> std::sync::MutexGuard<'static, ()> {
 
 fn load_locked() -> anyhow::Result<Registry> {
     let path = registry_path()?;
-    match std::fs::read(&path) {
-        Ok(bytes) => Ok(Registry::parse(&bytes)),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Registry::default()),
-        Err(error) => Err(anyhow::anyhow!("read downloads registry: {error}")),
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Registry::default())
+        }
+        Err(error) => return Err(anyhow::anyhow!("read downloads registry: {error}")),
+    };
+    match serde_json::from_slice::<serde_json::Value>(&bytes) {
+        Ok(value) if value.is_object() => Ok(Registry::from_value(&value)),
+        parsed => {
+            let reason = parsed
+                .err()
+                .map(|error| error.to_string())
+                .unwrap_or_else(|| "the file is not a JSON object".to_owned());
+            move_aside(&path, &reason);
+            Ok(Registry::default())
+        }
+    }
+}
+
+/// Renames a registry the app cannot read at all to
+/// `downloads.json.corrupt-<seconds>`, so the next write starts a fresh file
+/// instead of overwriting the one a human (or a later build) might still get
+/// something out of.
+fn move_aside(path: &std::path::Path, reason: &str) {
+    let aside = path.with_file_name(format!("{FILE_NAME}.corrupt-{}", Utc::now().timestamp()));
+    match std::fs::rename(path, &aside) {
+        Ok(()) => tracing::warn!(
+            reason,
+            "downloads registry is unreadable; moved aside and starting empty"
+        ),
+        Err(error) => tracing::warn!(
+            reason,
+            %error,
+            "downloads registry is unreadable and could not be moved aside; starting empty"
+        ),
     }
 }
 
@@ -856,16 +926,25 @@ pub fn refresh() -> anyhow::Result<Registry> {
     .map(|changed| Registry {
         version,
         items: changed,
+        ..Registry::default()
     })
 }
 
 /// The whole registry with live progress merged in. Falls back to what is on
 /// disk when the server cannot be asked, so the list still renders offline.
+///
+/// Entries this build cannot parse stay on disk (that is the whole point of
+/// keeping them) but are left out here: the caller could not read them
+/// either, and the list is a payload, not the file.
 pub fn list() -> anyhow::Result<Registry> {
     if let Err(error) = refresh() {
         tracing::debug!(%error, "listing downloads without live progress");
     }
-    load()
+    let registry = load()?;
+    Ok(Registry {
+        unreadable: BTreeMap::new(),
+        ..registry
+    })
 }
 
 /// Points the server's `downloadsDir` at `path` (or unsets it with `None`),
@@ -1041,7 +1120,7 @@ mod tests {
             Registry::parse(br#"{"version":1}"#),
             Registry {
                 version: 1,
-                items: BTreeMap::new()
+                ..Registry::default()
             }
         );
 
@@ -1053,7 +1132,7 @@ mod tests {
             "broken":{"videoId":"x"}}}"#;
         let parsed = Registry::parse(newer);
         assert_eq!(parsed.version, 9);
-        assert_eq!(parsed.items.len(), 1, "the unreadable entry was dropped");
+        assert_eq!(parsed.items.len(), 1, "one entry this build can read");
         let kept = &parsed.items["tt1:tt1"];
         assert_eq!(
             kept.state,
@@ -1067,6 +1146,20 @@ mod tests {
             round_tripped["items"]["tt1:tt1"]["futureField"],
             serde_json::json!({"a": 1}),
             "unknown keys are written back"
+        );
+        // The entry this build cannot read is written back *as it was*: a
+        // forgiving read plus a whole-file rewrite would otherwise erase a
+        // download the server is still pinning, with nothing left to find
+        // it by.
+        assert_eq!(
+            round_tripped["items"]["broken"],
+            serde_json::json!({"videoId": "x"}),
+            "{round_tripped}"
+        );
+        assert_eq!(
+            Registry::parse(&serde_json::to_vec(&parsed).unwrap()),
+            parsed,
+            "and again, unchanged"
         );
         // A downgrade never claims a newer file is this build's shape.
         assert_eq!(

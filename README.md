@@ -211,9 +211,12 @@ connection.
   `{"ok":false,"error":{"kind":…}}` — `insufficientSpace` carries the
   byte counts, the rest the server's client-safe message, which names no
   local path — because a full disk is something to show, not an
-  exception. Reading the registry is forgiving on purpose: a corrupt file
-  starts empty, an unparseable entry is dropped alone, and a file from a
-  newer build keeps its `version` and its unknown keys. At boot every
+  exception. Reading the registry is forgiving on purpose, and never at
+  the cost of what is on disk: a file from a newer build keeps its
+  `version` and its unknown keys, an entry this build cannot parse is kept
+  verbatim and written back untouched (it is left out of the list payload,
+  not out of the file), and a wholly unreadable file is moved aside as
+  `downloads.json.corrupt-<seconds>` before an empty one takes its place. At boot every
   entry that is not complete is pinned again, on a blocking thread, since
   a pin waits on magnet metadata and nothing on screen waits on it.
 - **Settings are the engine's.** `ctx.profile.settings` is stremio-core's

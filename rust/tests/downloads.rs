@@ -451,7 +451,9 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert!(destination.is_dir(), "created on the spot");
 
     // A registry the app cannot read must not take the app down with it: the
-    // list is empty rather than an error, and the next write starts over.
+    // list is empty rather than an error, and the next write starts over --
+    // but the file itself is moved aside first, not overwritten, so its
+    // bytes are still there to recover a pin from.
     let good = std::fs::read_to_string(&registry_file)?;
     std::fs::write(&registry_file, b"{ this is not JSON")?;
     assert_eq!(
@@ -459,6 +461,38 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         serde_json::json!({}),
         "corrupt reads empty"
     );
+    let aside: Vec<std::path::PathBuf> = std::fs::read_dir(&storage)?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("downloads.json.corrupt-"))
+        })
+        .collect();
+    assert_eq!(aside.len(), 1, "{aside:?}");
+    assert_eq!(std::fs::read_to_string(&aside[0])?, "{ this is not JSON");
+    assert!(!registry_file.exists(), "and the unreadable file is gone");
+
+    // An entry a *newer* build wrote is kept as it is, not dropped and then
+    // erased by the next write: the server is still pinning it.
+    std::fs::write(
+        &registry_file,
+        br#"{"version":9,"items":{"new:new":{"metaId":"new","videoId":"new","fileIdx":{"of":2}}}}"#,
+    )?;
+    assert_eq!(list()["items"], serde_json::json!({}), "unreadable to us");
+    xtremio_core::downloads::update(|registry| {
+        registry.items.remove("nothing:nothing");
+        Ok(())
+    })?;
+    add("tt-rewrite", &info_hash, have_idx);
+    let after = json(&std::fs::read_to_string(&registry_file)?);
+    assert_eq!(
+        after["items"]["new:new"]["fileIdx"],
+        serde_json::json!({"of": 2}),
+        "the entry survived a rewrite: {after}"
+    );
+    assert_eq!(after["version"], 9, "{after}");
+    json(&downloads_remove("tt-rewrite:tt-rewrite".into(), true)?);
 
     // An older, thinner entry -- only the fields version 1 requires -- still
     // loads, with defaults for everything it does not carry.
