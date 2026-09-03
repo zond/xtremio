@@ -7,6 +7,38 @@ import '../src/rust/api/server.dart' as rust;
 /// profile that points at `http://127.0.0.1:11470` still reaches us.
 const int kDefaultServerPort = 11470;
 
+/// Control over the server's LAN media listener, which is what a cast
+/// session needs and the only thing that ever turns it on.
+///
+/// A second HTTP listener serving media bytes to the local network -- a
+/// Chromecast cannot fetch from the loopback one -- with no control routes
+/// on it at all, and deliberately not `/proxy` or `/ftp`. It exists for the
+/// length of a cast session and no longer.
+///
+/// Behind an interface so the cast tests can assert that it is turned off
+/// when a session ends without a server to turn off.
+abstract interface class LanMediaControl {
+  /// Starts or stops the listener; answers the address it is bound to
+  /// afterwards (`0.0.0.0:39271`), or null after a stop. Throws when the
+  /// server is not running or the bind fails, in which case nothing is
+  /// listening.
+  Future<String?> setLanMedia({required bool enabled});
+
+  /// Whether the listener is running. False with no server running either:
+  /// both mean nothing of ours is on the LAN.
+  bool get lanMediaRunning;
+
+  /// The base URL to give a receiver at [peerIp], so a media URL built on it
+  /// names an interface that receiver can connect back to. [peerIp] null
+  /// when the receiver's address is not known -- the Cast SDK does not
+  /// report one -- which answers the host's first non-loopback interface.
+  ///
+  /// Null when the listener is not running or the host has nothing but
+  /// loopback: the receiver is out of reach, and a loopback URL would not
+  /// change that.
+  Future<Uri?> lanMediaBaseUrl({String? peerIp});
+}
+
 /// Thin Dart facade over the embedded, in-process `stream-server`.
 ///
 /// The server is a process-wide singleton on the Rust side; this class only
@@ -17,7 +49,7 @@ const int kDefaultServerPort = 11470;
 /// HTTP routes run: the Dart side never speaks HTTP to the server (those
 /// routes want a bearer token only the Rust side knows); the player fetches
 /// media from the open stream routes.
-class ServerClient {
+class ServerClient implements LanMediaControl {
   const ServerClient();
 
   /// Starts the server (idempotent) and returns its base URL.
@@ -80,6 +112,19 @@ class ServerClient {
       trackers: trackers,
     ),
   );
+
+  @override
+  Future<String?> setLanMedia({required bool enabled}) =>
+      rust.serverSetLanMedia(enabled: enabled);
+
+  @override
+  bool get lanMediaRunning => rust.serverLanMediaRunning();
+
+  @override
+  Future<Uri?> lanMediaBaseUrl({String? peerIp}) async {
+    final url = await rust.serverLanMediaBaseUrl(peerIp: peerIp);
+    return url == null ? null : Uri.parse(url);
+  }
 
   static Map<String, dynamic> _object(String json) =>
       jsonDecode(json) as Map<String, dynamic>;
