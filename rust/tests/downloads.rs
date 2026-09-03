@@ -635,6 +635,12 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         true,
         "and the answer is recorded, so a platform default stops applying"
     );
+    assert_eq!(
+        list()["destinationChoice"],
+        settings["downloadsDir"],
+        "and *which* answer it was, spelled the way the server stored it, \
+         so a start-up can see when the server has dropped it"
+    );
 
     // Back to the torrent cache is an answer too, and the flag is what says
     // so: the setting itself is null again, exactly as it was at start-up.
@@ -648,6 +654,11 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         list()["destinationSettled"],
         true,
         "choosing the default is still choosing"
+    );
+    assert_eq!(
+        list()["destinationChoice"],
+        serde_json::Value::Null,
+        "and the choice recorded is the null itself, not the path before it"
     );
     let on_disk = json(&std::fs::read_to_string(&registry_file)?);
     assert_eq!(

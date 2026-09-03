@@ -265,6 +265,16 @@ pub struct Registry {
     /// server's settings because the server clears a `downloadsDir` it
     /// cannot use at boot, which would take the answer with it.
     pub destination_settled: bool,
+    /// *Which* destination was settled, spelled the way the server stored
+    /// it (`prepare_downloads_dir` resolves symlinks, so the path handed to
+    /// [`set_dir`] is not always the one that comes back). `None` is both
+    /// "with the torrent cache, on purpose" and "nobody has been asked" --
+    /// [`Registry::destination_settled`] tells those apart. Kept so a
+    /// start-up can compare it with the server's live `downloadsDir`: when
+    /// a recorded path is gone from the settings the server cleared a
+    /// destination it could not prepare at boot, and the app can put it
+    /// back rather than leave the files wherever the fallback lands.
+    pub destination_choice: Option<String>,
     /// Entries this build could not parse, exactly as they were on disk.
     /// They are invisible to everything but [`Registry::serialize`], which
     /// writes them back among the items: a forgiving read plus a whole-file
@@ -280,6 +290,7 @@ impl Default for Registry {
             version: VERSION,
             items: BTreeMap::new(),
             destination_settled: false,
+            destination_choice: None,
             unreadable: BTreeMap::new(),
         }
     }
@@ -299,10 +310,11 @@ impl Serialize for Registry {
         for (key, raw) in &self.unreadable {
             items.entry(key.clone()).or_insert_with(|| raw.clone());
         }
-        let mut registry = serializer.serialize_struct("Registry", 3)?;
+        let mut registry = serializer.serialize_struct("Registry", 4)?;
         registry.serialize_field("version", &self.version)?;
         registry.serialize_field("items", &items)?;
         registry.serialize_field("destinationSettled", &self.destination_settled)?;
+        registry.serialize_field("destinationChoice", &self.destination_choice)?;
         registry.end()
     }
 }
@@ -341,11 +353,16 @@ impl Registry {
             .get("destinationSettled")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
+        let destination_choice = value
+            .get("destinationChoice")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
         let Some(items) = value.get("items").and_then(serde_json::Value::as_object) else {
             tracing::warn!("downloads registry has no items object; starting empty");
             return Self {
                 version,
                 destination_settled,
+                destination_choice,
                 ..Self::default()
             };
         };
@@ -368,6 +385,7 @@ impl Registry {
             version,
             items: parsed,
             destination_settled,
+            destination_choice,
             unreadable,
         }
     }
@@ -1120,16 +1138,21 @@ pub fn list() -> anyhow::Result<Registry> {
 /// with the validation and persistence `POST /settings` does.
 ///
 /// A path the server accepts also settles the destination
-/// ([`Registry::destination_settled`]), `None` included: from here on the
+/// ([`Registry::destination_settled`]) and is recorded as the answer
+/// ([`Registry::destination_choice`]), `None` included: from here on the
 /// answer is the app's, and a platform default must not overwrite it. A
-/// path the server refuses settles nothing -- it raises before this. That
-/// the flag could not be written is worth a warning and no more: the
-/// setting itself is already in place, and failing the call would be the
-/// worse lie.
+/// path the server refuses settles nothing -- it raises before this. What
+/// is recorded is what the settings came back with, not what was asked
+/// for, so it can be compared with the live `downloadsDir` later: the
+/// server resolves the path before it stores it. That the flag could not be
+/// written is worth a warning and no more: the setting itself is already in
+/// place, and failing the call would be the worse lie.
 pub fn set_dir(path: Option<String>) -> anyhow::Result<stream_server::ServerSettings> {
     let settings = crate::server::update_settings(serde_json::json!({ "downloadsDir": path }))?;
+    let stored = settings.downloads_dir.clone();
     if let Err(error) = update(|registry| {
         registry.destination_settled = true;
+        registry.destination_choice = stored.clone();
         Ok(())
     }) {
         tracing::warn!(%error, "could not record that the downloads destination was settled");
@@ -1319,6 +1342,37 @@ mod tests {
         );
         assert!(
             Registry::parse(br#"{"version":1,"destinationSettled":true}"#).destination_settled,
+            "and it is kept even when the items object is unreadable"
+        );
+    }
+
+    /// The answer itself is recorded next to the flag, so a start-up can
+    /// tell "with the cache, on purpose" from a destination the server
+    /// dropped at boot.
+    #[test]
+    fn destination_choice_survives_the_file() {
+        let registry = Registry {
+            destination_settled: true,
+            destination_choice: Some("/sdcard/downloads".into()),
+            ..Registry::default()
+        };
+        let bytes = serde_json::to_vec(&registry).unwrap();
+        assert_eq!(Registry::parse(&bytes), registry);
+        assert!(
+            String::from_utf8(bytes)
+                .unwrap()
+                .contains(r#""destinationChoice":"/sdcard/downloads""#),
+            "under its camelCase name, like every other key"
+        );
+
+        assert_eq!(
+            Registry::parse(br#"{"version":1,"destinationSettled":true}"#).destination_choice,
+            None,
+            "a file from before the key recorded no path"
+        );
+        assert_eq!(
+            Registry::parse(br#"{"version":1,"destinationChoice":"/x"}"#).destination_choice,
+            Some("/x".to_owned()),
             "and it is kept even when the items object is unreadable"
         );
     }
