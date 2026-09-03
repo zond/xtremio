@@ -27,9 +27,10 @@ void main() {
   Future<PlayerHarness> pumpOnTv(
     WidgetTester tester, {
     bool withNext = false,
+    AppPrefs? prefs,
   }) async {
     useScreen(tester, tvSize);
-    final harness = PlayerHarness(device: tv);
+    final harness = PlayerHarness(device: tv, prefs: prefs);
     if (withNext) harness.fixture['nextVideo'] = nextVideo;
     await harness.pump(tester);
     harness.engine.emitDuration(total);
@@ -319,6 +320,48 @@ void main() {
         focusedTooltip(),
         'Audio track (A)',
         reason: 'the neighbouring menu is one press away again',
+      );
+    });
+
+    testWidgets('the buffer-ahead chips are remote-reachable in the sheet', (
+      tester,
+    ) async {
+      // A control the remote cannot reach is a control a television does
+      // not have. The chips are the same shape as the speed ones, so this
+      // is really a check that nothing about them opts out of traversal.
+      final prefs = AppPrefs.inMemory();
+      await pumpOnTv(tester, prefs: prefs);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      for (var i = 0; i < 8 && focusedTooltip() != 'Playback settings'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusedTooltip(), 'Playback settings');
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(PlayerSettingsSheet), findsOneWidget);
+
+      // Down walks into the sheet and onto the first buffer chip.
+      for (
+        var i = 0;
+        i < 8 && focusedLabel(tester) != BufferAhead.normal.label;
+        i++
+      ) {
+        await press(tester, LogicalKeyboardKey.arrowDown);
+      }
+      expect(focusedLabel(tester), BufferAhead.normal.label);
+
+      // Right walks the scale, and the centre picks what is under it.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedLabel(tester), BufferAhead.large.label);
+      await press(tester, LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ChoiceChip>(
+              find.byKey(PlayerSettingsSheet.bufferChipKey(BufferAhead.large)),
+            )
+            .selected,
+        isTrue,
       );
     });
 

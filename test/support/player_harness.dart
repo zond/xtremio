@@ -30,6 +30,7 @@ class PlayerHarness {
     this.downloads,
     this.cast,
     this.lanMedia,
+    this.prefs,
   }) : fixture = player ?? loadPlayerFixture() {
     core = FakeCoreClient(
       state: {
@@ -81,6 +82,12 @@ class PlayerHarness {
   final CastClient? cast;
   final LanMediaControl? lanMedia;
 
+  /// The app's preferences above the screen ([AppPrefs.bufferAhead] is what
+  /// the player reads), or null for no [PrefsScope] at all -- which is what
+  /// a player mounted on its own runs under and what it has to keep working
+  /// without.
+  final AppPrefs? prefs;
+
   Map<String, dynamic> get selected =>
       fixture['selected'] as Map<String, dynamic>;
 
@@ -115,11 +122,15 @@ class PlayerHarness {
     final scoped = downloads == null
         ? casted
         : DownloadsScope(client: downloads, child: casted);
+    final prefs = this.prefs;
+    final withPrefs = prefs == null
+        ? scoped
+        : PrefsScope(prefs: prefs, child: scoped);
     return KeyedSubtree(
       key: ObjectKey(this),
       child: device == null
-          ? scoped
-          : DeviceScope(profile: device, child: scoped),
+          ? withPrefs
+          : DeviceScope(profile: device, child: withPrefs),
     );
   }
 

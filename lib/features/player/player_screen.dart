@@ -14,6 +14,7 @@ import '../cast/cast_client.dart';
 import '../cast/cast_compatibility.dart';
 import '../cast/cast_widgets.dart';
 import '../details/stream_facts.dart';
+import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import 'language_names.dart';
@@ -207,6 +208,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// screen then neither unloads the core's player nor reacts to its state.
   bool _handedOver = false;
 
+  /// The app's preferences, for [AppPrefs.bufferAhead]. From the
+  /// [PrefsScope] the app puts above every screen; a player mounted without
+  /// one (a widget test that does not care where the choice goes) gets
+  /// [_ownPrefs] instead, which persists nothing.
+  AppPrefs? _prefs;
+  AppPrefs? _ownPrefs;
+
+  /// This playback's read-ahead, when the viewer changed it in the settings
+  /// sheet. It lives on the screen and dies with it: the next playback is
+  /// back on [AppPrefs.bufferAhead], which is what "for this playback only"
+  /// means.
+  BufferAhead? _bufferOverride;
+
+  /// The pin for [BufferAhead.wholeFile] is in flight.
+  bool _keeping = false;
+
+  /// What to say about the buffer choice, shown in the settings sheet: a
+  /// refused pin, or that the file is being kept. Null once there is
+  /// nothing to say.
+  String? _bufferNote;
+
+  /// The three above as one value the open settings sheet listens to. The
+  /// sheet is a route of its own, so the screen's `setState` does not reach
+  /// it -- and the pin it starts is answered while it is still up.
+  final ValueNotifier<BufferAheadStatus> _bufferStatus = ValueNotifier(
+    const BufferAheadStatus(BufferAhead.normal),
+  );
+
   /// Set once moving on to the next episode has begun. Looking the episode
   /// up on the disk stands between the decision and the hand-over, and
   /// nothing on screen stops answering meanwhile, so without this a second
@@ -367,6 +396,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _isTv = DeviceScope.isTv(context);
+    // Reading the scope here is what subscribes to it, so a default changed
+    // in Settings while this player is on the stack is what the next
+    // playback opens with. Above the early return: the scope can change
+    // without the core client changing.
+    final prefs =
+        PrefsScope.maybeOf(context) ?? (_ownPrefs ??= AppPrefs.inMemory());
+    if (_prefs != prefs) {
+      _prefs?.removeListener(_onPrefsChanged);
+      _prefs = prefs..addListener(_onPrefsChanged);
+      _publishBuffer();
+    }
     if (_client != null) return;
     final client = CoreScope.of(context);
     _client = client;
@@ -518,13 +558,160 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _open(Uri url) {
     final state = _openState;
     _engine
-        ?.open(url, start: _openStart)
+        ?.open(_mediaUrl(url), start: _openStart)
         .then((_) {
           if (state != null) _reportVideoParams(state, url);
         })
         .catchError((Object error) {
           if (mounted && _opened == url) _failPlayback('$error');
         });
+  }
+
+  /// How far ahead this playback buffers: the viewer's override for the
+  /// playback on screen, else the app-wide default.
+  BufferAhead get _bufferAhead =>
+      _bufferOverride ?? _prefs?.bufferAhead ?? BufferAhead.normal;
+
+  /// The default changed in Settings while this player is up. It does not
+  /// disturb a playback that has an override of its own, and it does not
+  /// re-open one that has not: what the sheet shows is what the next
+  /// playback starts with.
+  void _onPrefsChanged() {
+    if (!mounted) return;
+    setState(_publishBuffer);
+  }
+
+  /// Republishes what the settings sheet shows about the buffer.
+  void _publishBuffer() {
+    _bufferStatus.value = BufferAheadStatus(
+      _bufferAhead,
+      busy: _keeping,
+      note: _bufferNote,
+    );
+  }
+
+  /// [url] as the engine should fetch it: the core's stream URL with
+  /// `buffer=` added when it is a torrent served by the streaming server.
+  ///
+  /// Only then. A `url` stream is an addon's own host, which knows nothing
+  /// about the parameter, and an offline `file://` URL has no server at the
+  /// other end at all; adding a query to either would be noise at best.
+  Uri _mediaUrl(Uri url) {
+    if (!url.isScheme('http') && !url.isScheme('https')) return url;
+    final stream = _state?.selectedStream ?? _state?.convertedStream;
+    if (stream?.infoHash == null) return url;
+    return withBufferAhead(url, _bufferAhead);
+  }
+
+  /// The viewer changed the buffer for this playback.
+  ///
+  /// The window itself only reaches the engine through the URL, and libmpv
+  /// is already fetching the old one, so a change of window re-opens the
+  /// stream at the position it is at -- one `open`, no reload of the
+  /// player, no `Load Player`, and the core's own idea of the stream
+  /// unchanged ([_opened] stays the URL the core published).
+  /// [BufferAhead.wholeFile] additionally pins the stream as an offline
+  /// download; the pin is what stores the file, so it outlives this
+  /// playback and is deleted from the Downloads screen like any other.
+  void _setBufferAhead(BufferAhead choice) {
+    if (choice == _bufferAhead) return;
+    final previousWire = _bufferAhead.wire;
+    setState(() {
+      _bufferOverride = choice;
+      _bufferNote = choice.storesTheFile
+          ? 'Keeping this file on the device. It will appear in Downloads.'
+          : null;
+      _publishBuffer();
+    });
+    if (choice.wire != previousWire) _reopenForBuffer();
+    if (choice.storesTheFile) unawaited(_keepWholeFile());
+  }
+
+  /// Re-opens the stream at the position it is playing at, so a new
+  /// `buffer=` takes effect without restarting the playback.
+  void _reopenForBuffer() {
+    final url = _opened;
+    if (url == null || _handedOver || _casting) return;
+    _cancelOpenRetry();
+    _openStart = _position.value;
+    _openRetries = 0;
+    _openError = null;
+    _open(url);
+  }
+
+  /// Pins what is playing as an offline download, which is what
+  /// [BufferAhead.wholeFile] is: the existing mechanism, not a second one.
+  ///
+  /// A refusal is shown rather than swallowed -- a device that cannot fit
+  /// the file is told so, with the numbers the server refused on -- and the
+  /// choice falls back to the widest window that needs no room.
+  Future<void> _keepWholeFile() async {
+    final client = DownloadsScope.maybeOf(context);
+    final state = _state;
+    final stream = state?.selectedStream;
+    final meta = state?.metaItem?.contentOrNull;
+    if (client == null || state == null || stream == null || meta == null) {
+      _failBuffer('This stream cannot be kept on the device.');
+      return;
+    }
+    final videoId = state.selectedVideoId ?? meta.id;
+    setState(() {
+      _keeping = true;
+      _publishBuffer();
+    });
+    DownloadAddResult? result;
+    Object? thrown;
+    try {
+      result = await client.add(
+        DownloadRequest(
+          metaId: meta.id,
+          videoId: videoId,
+          type: meta.type,
+          name: downloadName(meta, meta.videoById(videoId)),
+          poster: meta.poster,
+          stream: stream,
+          meta: meta.json,
+          streamRequest: state.streamRequest?.toJson(),
+          metaRequest: state.metaRequest?.toJson(),
+        ),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+    if (!mounted) return;
+    setState(() {
+      _keeping = false;
+      _publishBuffer();
+    });
+    if (thrown != null) {
+      _failBuffer('This stream could not be kept on the device.');
+      return;
+    }
+    final failure = result!.error;
+    if (failure != null) {
+      _failBuffer(downloadFailureMessage(failure));
+      return;
+    }
+    setState(() {
+      _bufferNote =
+          'Keeping this file on the device. It is in Downloads, where it '
+          'can be deleted.';
+      _publishBuffer();
+    });
+  }
+
+  /// The file cannot be kept: say why, and buffer as far ahead as the
+  /// server will instead, which is the most that can be done without room
+  /// on the disk.
+  void _failBuffer(String reason) {
+    if (!mounted) return;
+    setState(() {
+      _bufferOverride = BufferAhead.maximum;
+      _keeping = false;
+      _bufferNote = '$reason Buffering as far ahead as possible instead.';
+      _publishBuffer();
+    });
+    _reopenForBuffer();
   }
 
   /// Tells the engine what it can know about the file, which is what makes
@@ -1206,31 +1393,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _openSettings() => _showSheet(
     (context) => ValueListenableBuilder<Map<String, dynamic>?>(
       valueListenable: _ctx!,
-      builder: (context, _, _) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          final settings = _settings;
-          return PlayerSettingsSheet(
-            onDownloads: DownloadsScope.maybeOf(context) == null
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    _openDownloads();
-                  },
-            rate: _rate,
-            rates: PlayerScreen.rates,
-            onRate: (rate) {
-              _setRate(rate);
-              setSheetState(() {});
-            },
-            settings: settings,
-            onSetting: settings.isEmpty
-                ? null
-                : (key, value) {
-                    _updateSetting(key, value);
-                    setSheetState(() {});
-                  },
-          );
-        },
+      // The buffer choice is answered while the sheet is up (a whole-file
+      // pin waits on the server), so the sheet listens for it rather than
+      // reading it once.
+      builder: (context, _, _) => ValueListenableBuilder<BufferAheadStatus>(
+        valueListenable: _bufferStatus,
+        builder: (context, buffer, _) => StatefulBuilder(
+          builder: (context, setSheetState) {
+            final settings = _settings;
+            return PlayerSettingsSheet(
+              onDownloads: DownloadsScope.maybeOf(context) == null
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      _openDownloads();
+                    },
+              rate: _rate,
+              rates: PlayerScreen.rates,
+              onRate: (rate) {
+                _setRate(rate);
+                setSheetState(() {});
+              },
+              buffer: buffer,
+              onBufferAhead: _setBufferAhead,
+              settings: settings,
+              onSetting: settings.isEmpty
+                  ? null
+                  : (key, value) {
+                      _updateSetting(key, value);
+                      setSheetState(() {});
+                    },
+            );
+          },
+        ),
       ),
     ),
   );
@@ -1853,6 +2048,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final engine = _engine;
     _engine = null;
     if (engine != null) _disposeAfterFrame(engine);
+    _prefs?.removeListener(_onPrefsChanged);
+    _ownPrefs?.dispose();
+    _bufferStatus.dispose();
     _player?.removeListener(_onPlayerState);
     _player?.dispose();
     _ctx?.removeListener(_onCtx);

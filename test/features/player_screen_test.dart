@@ -78,11 +78,17 @@ void main() {
         'filename': null,
       });
 
-      // The torrent resolved to the embedded server; that is what got opened.
-      final expectedUrl = Uri.parse(
-        (fixture['stream']['content'][0]
-                as Map<String, dynamic>)['streaming_url']
-            as String,
+      // The torrent resolved to the embedded server; that is what got
+      // opened, with the read-ahead choice this playback is on
+      // (`AppPrefs.bufferAhead`, `normal` by default) named on it -- see
+      // player_buffer_test.dart.
+      final expectedUrl = withBufferAhead(
+        Uri.parse(
+          (fixture['stream']['content'][0]
+                  as Map<String, dynamic>)['streaming_url']
+              as String,
+        ),
+        BufferAhead.normal,
       );
       expect(engine.opened, [(expectedUrl, Duration.zero)]);
       expect(find.text('video surface'), findsOneWidget);

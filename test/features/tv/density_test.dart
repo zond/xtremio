@@ -264,8 +264,10 @@ void main() {
       await tester.tap(find.byTooltip('Playback settings'));
       await tester.pumpAndSettle();
 
+      // The sheet is longer than the screen, so its last row has to be
+      // scrolled to before it is built at all.
       final last = find.textContaining('Bitmap subtitles');
-      await tester.ensureVisible(last);
+      await tester.scrollUntilVisible(last, 120);
       await tester.pumpAndSettle();
       expect(
         tester.getRect(last).bottom,
@@ -283,7 +285,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final last = find.textContaining('Bitmap subtitles');
-      await tester.ensureVisible(last);
+      await tester.scrollUntilVisible(last, 120);
       await tester.pumpAndSettle();
       expect(tester.getRect(last).bottom, greaterThan(tvSize.height * 0.95));
     });

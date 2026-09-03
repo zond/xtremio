@@ -134,6 +134,20 @@ class AudioMenu extends StatelessWidget {
   }
 }
 
+/// What the player's settings sheet shows about the buffer: the choice in
+/// force for the playback on screen, whether the whole-file download it
+/// asked for is still being taken, and what to say about it (the device had
+/// no room; the file is being kept). Carried as one value so the sheet can
+/// listen to it while it is open -- the pin is answered after the sheet is
+/// already up.
+final class BufferAheadStatus {
+  const BufferAheadStatus(this.choice, {this.busy = false, this.note});
+
+  final BufferAhead choice;
+  final bool busy;
+  final String? note;
+}
+
 /// Playback speed and subtitle appearance, and the way out to what is kept
 /// on the device. The appearance is the profile's `subtitlesSize` /
 /// `subtitlesTextColor` / `subtitlesBackgroundColor`, so a pick here is an
@@ -147,11 +161,23 @@ class PlayerSettingsSheet extends StatelessWidget {
     required this.settings,
     required this.onSetting,
     this.onDownloads,
+    this.buffer = const BufferAheadStatus(BufferAhead.normal),
+    this.onBufferAhead,
   });
 
   final double rate;
   final List<double> rates;
   final ValueChanged<double> onRate;
+
+  /// How far ahead this playback is buffering, and what became of the
+  /// last choice.
+  final BufferAheadStatus buffer;
+
+  /// Changes it for this playback only; null when nothing can act on it
+  /// (no player below this sheet). Reverts to the app-wide default with
+  /// the next playback, which is what makes it worth having here as well
+  /// as in Settings.
+  final ValueChanged<BufferAhead>? onBufferAhead;
 
   /// The profile settings the style is read from.
   final ProfileSettings settings;
@@ -165,6 +191,10 @@ class PlayerSettingsSheet extends StatelessWidget {
   /// where the list has to be reachable from while something is playing;
   /// null when there is no downloads client above the player.
   final VoidCallback? onDownloads;
+
+  /// The chip for one buffer choice, so a test (and the remote) can find it.
+  static Key bufferChipKey(BufferAhead choice) =>
+      ValueKey('buffer-${choice.stored}');
 
   static String rateLabel(double rate) =>
       '${rate == rate.roundToDouble() ? rate.toInt() : rate}×';
@@ -195,6 +225,31 @@ class PlayerSettingsSheet extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: onDownloads,
           ),
+        _SectionLabel('Buffer ahead${buffer.busy ? ' …' : ''}'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              for (final choice in BufferAhead.values)
+                ChoiceChip(
+                  key: bufferChipKey(choice),
+                  label: Text(choice.label),
+                  selected: choice == buffer.choice,
+                  onSelected: onBufferAhead == null || buffer.busy
+                      ? null
+                      : (_) => onBufferAhead!(choice),
+                ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Text(
+            buffer.note ?? buffer.choice.description,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
         const _SectionLabel('Speed'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
