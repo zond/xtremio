@@ -174,17 +174,6 @@ class _XtremioAppState extends State<XtremioApp> {
     super.dispose();
   }
 
-  /// The television's text scale over whatever the platform asks for; see
-  /// [TvDensity]. `MaterialApp.builder` is where it goes, so it reaches the
-  /// routes the navigator pushes (the player, details) and not only the
-  /// shell.
-  Widget _scaleText(BuildContext context, Widget? child) => MediaQuery(
-    data: MediaQuery.of(context).copyWith(
-      textScaler: TvDensity.textScaler(MediaQuery.textScalerOf(context)),
-    ),
-    child: child ?? const SizedBox.shrink(),
-  );
-
   @override
   Widget build(BuildContext context) {
     final colorScheme = ColorScheme.fromSeed(
@@ -209,7 +198,7 @@ class _XtremioAppState extends State<XtremioApp> {
             title: 'Xtremio',
             debugShowCheckedModeBanner: false,
             theme: isTv ? TvDensity.theme(theme) : theme,
-            builder: isTv ? _scaleText : null,
+            builder: isTv ? TvMediaQuery.builder : null,
             navigatorObservers: [if (kDebugMode) RouteLogObserver()],
             home: const RootShell(),
           ),

@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/board/board_screen.dart';
+import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/shell/tv_density.dart';
@@ -10,6 +14,7 @@ import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fixtures.dart';
+import '../../support/player_harness.dart';
 import '../../support/tv.dart';
 
 /// A core whose board plans no catalogs, so the shell settles instead of
@@ -32,6 +37,30 @@ Future<BuildContext> pumpApp(
   await tester.pumpWidget(XtremioApp(core: fakeCore(), device: device));
   await tester.pumpAndSettle();
   return tester.element(find.byType(RootShell));
+}
+
+/// The Details screen of the recorded movie, as a pushed route would see
+/// it -- `TvMediaQuery` above it, exactly as `XtremioApp` installs it.
+Future<void> pumpDetails(
+  WidgetTester tester, {
+  required DeviceProfile device,
+}) async {
+  useScreen(tester, tvSize);
+  await tester.pumpWidget(
+    DeviceScope(
+      profile: device,
+      child: CoreScope(
+        client: FakeCoreClient(
+          state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+        ),
+        child: MaterialApp(
+          builder: device.isTv ? TvMediaQuery.builder : null,
+          home: const MetaDetailsScreen(type: 'movie', id: 'tt0063350'),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 /// The Board alone, over the recorded catalogs, on [device].
@@ -132,6 +161,92 @@ void main() {
 
       expect(tester.getTopLeft(find.byType(NavigationRail)), Offset.zero);
       expect(find.byKey(RootShell.overscanKey), findsNothing);
+    });
+
+    testWidgets('the band reaches the routes pushed over the shell', (
+      tester,
+    ) async {
+      // The shell is not the only thing a viewer looks at: Details and the
+      // player are pushed on top of it, and a set crops their corners just
+      // the same. The band therefore travels as `MediaQuery` padding from
+      // above the navigator, not as a `Padding` inside the shell.
+      useScreen(tester, tvSize);
+      final shell = await pumpApp(tester, device: tv);
+
+      late BuildContext pushed;
+      unawaited(
+        Navigator.of(shell).push(
+          MaterialPageRoute<void>(
+            builder: (context) {
+              pushed = context;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(MediaQuery.paddingOf(pushed), TvDensity.overscanPadding(tvSize));
+    });
+
+    testWidgets('a desktop pushes routes that use every pixel', (tester) async {
+      useScreen(tester, tvSize);
+      final shell = await pumpApp(tester, device: DeviceProfile.fallback);
+
+      late BuildContext pushed;
+      unawaited(
+        Navigator.of(shell).push(
+          MaterialPageRoute<void>(
+            builder: (context) {
+              pushed = context;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(MediaQuery.paddingOf(pushed), EdgeInsets.zero);
+    });
+
+    testWidgets('Details keeps its app bar out of the band', (tester) async {
+      useScreen(tester, tvSize);
+      await pumpDetails(tester, device: tv);
+
+      expect(
+        tester.getRect(find.byType(Scaffold)),
+        Rect.fromLTRB(
+          tvSize.width * 0.05,
+          tvSize.height * 0.05,
+          tvSize.width * 0.95,
+          tvSize.height * 0.95,
+        ),
+      );
+    });
+
+    testWidgets('Details on a desktop fills the window', (tester) async {
+      useScreen(tester, tvSize);
+      await pumpDetails(tester, device: DeviceProfile.fallback);
+
+      expect(tester.getRect(find.byType(Scaffold)), Offset.zero & tvSize);
+    });
+
+    testWidgets('the player keeps its controls on the panel and its picture '
+        'off it', (tester) async {
+      useScreen(tester, tvSize);
+      final harness = PlayerHarness(device: tv);
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 96));
+      harness.engine.emitPlaying(true);
+      await tester.pumpAndSettle();
+
+      // The seek bar and the transport row are what a remote is aimed at,
+      // so they stay inside the band; the video is not cropped to fit it.
+      expect(
+        tester.getRect(find.byType(PlayerBottomBar)).bottom,
+        lessThanOrEqualTo(tvSize.height * 0.95),
+      );
+      expect(tester.getRect(find.byType(Scaffold)), Offset.zero & tvSize);
     });
   });
 

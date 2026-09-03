@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'device_profile.dart';
+
 /// The ten-foot dimensions: what changes about sizes, spacing and text when
 /// [DeviceProfile.isTv] is true.
 ///
@@ -11,9 +13,9 @@ import 'package:flutter/material.dart';
 /// scaled by [textScale], and the shell holds [overscan] of the panel free
 /// at every edge because a television may not show it.
 ///
-/// Nothing here reads the device itself; `XtremioApp` and `RootShell` apply
-/// it when the [DeviceScope] says television, so every other screen simply
-/// inherits the theme and the text scale.
+/// Nothing here reads the device itself; `XtremioApp` applies [theme] and
+/// [TvMediaQuery] when the [DeviceScope] says television, so every other
+/// screen simply inherits the theme, the text scale and the band.
 abstract final class TvDensity {
   /// One step *roomier* than [VisualDensity.standard], for the ten-foot
   /// distance.
@@ -84,4 +86,61 @@ class _TvTextScaler extends TextScaler {
 
   @override
   String toString() => 'TvTextScaler($base × ${TvDensity.textScale})';
+}
+
+/// The television's text scale and overscan band, as the `MediaQuery` every
+/// route sees.
+///
+/// `XtremioApp` installs one of these through `MaterialApp.builder`, which
+/// wraps the navigator rather than the shell, so the screens pushed over the
+/// shell -- Details, the player -- get the same band the shell does. The
+/// band arrives as [MediaQueryData.padding] rather than as a `Padding`
+/// widget on purpose: a screen decides for itself which parts of it must
+/// stay on the panel (its chrome, through [TvSafeArea] or `SafeArea`) and
+/// which are meant to bleed off it (the video).
+class TvMediaQuery extends StatelessWidget {
+  const TvMediaQuery({super.key, required this.child});
+
+  final Widget child;
+
+  /// This widget as a `MaterialApp.builder`.
+  static Widget builder(BuildContext context, Widget? child) =>
+      TvMediaQuery(child: child ?? const SizedBox.shrink());
+
+  @override
+  Widget build(BuildContext context) {
+    final data = MediaQuery.of(context);
+    final overscan = TvDensity.overscanPadding(data.size);
+    return MediaQuery(
+      data: data.copyWith(
+        textScaler: TvDensity.textScaler(data.textScaler),
+        padding: data.padding + overscan,
+        viewPadding: data.viewPadding + overscan,
+      ),
+      child: child,
+    );
+  }
+}
+
+/// A [SafeArea] on a television, and nothing at all anywhere else.
+///
+/// What a screen wraps in one of these is what a set that overscans must
+/// still show: an app bar with the way back in its corner, a row of
+/// controls. Off a television it is not a `SafeArea` at all, so a phone's
+/// notch keeps being handled exactly where it always was.
+///
+/// The band is filled with the scaffold's own colour, so a route that has
+/// stepped out of it does not leave the route underneath showing through.
+class TvSafeArea extends StatelessWidget {
+  const TvSafeArea({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => DeviceScope.isTv(context)
+      ? ColoredBox(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: SafeArea(child: child),
+        )
+      : child;
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/tv_density.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/remote_press.dart';
@@ -216,57 +217,63 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final meta = state?.meta;
     if (state == null || meta == null) {
       final error = state?.metaError;
-      return Scaffold(
-        appBar: AppBar(),
-        body: Center(
-          child: error == null
-              ? const CircularProgressIndicator()
-              : Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Text(
-                    'Could not load this title: ${error.message}',
-                    textAlign: TextAlign.center,
+      return TvSafeArea(
+        child: Scaffold(
+          appBar: AppBar(),
+          body: Center(
+            child: error == null
+                ? const CircularProgressIndicator()
+                : Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Text(
+                      'Could not load this title: ${error.message}',
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
+          ),
         ),
       );
     }
-    return Scaffold(
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide =
-              constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
-          final info = _infoSlivers(state, meta, isWide: isWide);
-          final streams = _streamSlivers(state, meta);
-          if (!isWide) {
-            return CustomScrollView(slivers: [...info, ...streams]);
-          }
-          final paneWidth = (constraints.maxWidth * 0.38).clamp(320.0, 480.0);
-          final isTv = DeviceScope.isTv(context);
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: _tvGroup(isTv, CustomScrollView(slivers: info))),
-              const VerticalDivider(width: 1),
-              SizedBox(
-                width: paneWidth,
-                child: _tvGroup(
-                  isTv,
-                  CustomScrollView(
-                    slivers: [
-                      SliverPadding(
-                        padding: EdgeInsets.only(
-                          top: MediaQuery.paddingOf(context).top + 8,
+    return TvSafeArea(
+      child: Scaffold(
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide =
+                constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
+            final info = _infoSlivers(state, meta, isWide: isWide);
+            final streams = _streamSlivers(state, meta);
+            if (!isWide) {
+              return CustomScrollView(slivers: [...info, ...streams]);
+            }
+            final paneWidth = (constraints.maxWidth * 0.38).clamp(320.0, 480.0);
+            final isTv = DeviceScope.isTv(context);
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _tvGroup(isTv, CustomScrollView(slivers: info)),
+                ),
+                const VerticalDivider(width: 1),
+                SizedBox(
+                  width: paneWidth,
+                  child: _tvGroup(
+                    isTv,
+                    CustomScrollView(
+                      slivers: [
+                        SliverPadding(
+                          padding: EdgeInsets.only(
+                            top: MediaQuery.paddingOf(context).top + 8,
+                          ),
                         ),
-                      ),
-                      ...streams,
-                    ],
+                        ...streams,
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }

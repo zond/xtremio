@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/tv_density.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/shared_field_screen.dart';
 import 'addon_widgets.dart';
@@ -81,41 +82,43 @@ class _AddonDetailsScreenState extends State<AddonDetailsScreen> {
         final ctx = _ctx!.value;
         final profile = ctx == null ? null : ProfileState.fromCtx(ctx);
         final descriptor = state?.descriptor;
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(
-              descriptor?.manifest.name ?? 'Addon',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+        return TvSafeArea(
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(
+                descriptor?.manifest.name ?? 'Addon',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          body: AddonErrorSnackBars(
-            child: state == null || !state.isLoaded
-                ? const Center(child: CircularProgressIndicator())
-                : descriptor == null
-                ? (state.manifestError == null
-                      ? const Center(child: CircularProgressIndicator())
-                      : _ManifestError(
-                          transportUrl: state.transportUrl!,
-                          message: state.manifestError!.message,
-                          onRetry: _retry,
-                        ))
-                : _Details(
-                    state: state,
-                    descriptor: descriptor,
-                    profile: profile,
-                    onInstall: () => _client?.dispatch(
-                      CoreActions.installAddon(state.remoteDescriptor!),
+            body: AddonErrorSnackBars(
+              child: state == null || !state.isLoaded
+                  ? const Center(child: CircularProgressIndicator())
+                  : descriptor == null
+                  ? (state.manifestError == null
+                        ? const Center(child: CircularProgressIndicator())
+                        : _ManifestError(
+                            transportUrl: state.transportUrl!,
+                            message: state.manifestError!.message,
+                            onRetry: _retry,
+                          ))
+                  : _Details(
+                      state: state,
+                      descriptor: descriptor,
+                      profile: profile,
+                      onInstall: () => _client?.dispatch(
+                        CoreActions.installAddon(state.remoteDescriptor!),
+                      ),
+                      onUpgrade: () => _client?.dispatch(
+                        CoreActions.upgradeAddon(state.remoteDescriptor!),
+                      ),
+                      onUninstall: () => _client?.dispatch(
+                        CoreActions.uninstallAddon(state.localAddon!),
+                      ),
+                      onConfigure: () =>
+                          openAddonConfiguration(context, descriptor),
                     ),
-                    onUpgrade: () => _client?.dispatch(
-                      CoreActions.upgradeAddon(state.remoteDescriptor!),
-                    ),
-                    onUninstall: () => _client?.dispatch(
-                      CoreActions.uninstallAddon(state.localAddon!),
-                    ),
-                    onConfigure: () =>
-                        openAddonConfiguration(context, descriptor),
-                  ),
+            ),
           ),
         );
       },

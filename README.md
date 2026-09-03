@@ -61,9 +61,10 @@ Rust engine for addons, catalogs, library, and playback state) and
 > centre key is a long press, the context-menu key opens the same menu a
 > long press does), the player takes the remote's centre and media keys and
 > is immersive-fullscreen the whole time it is up, posters and text grow
-> (1.15x text, a roomier density, 48 dp targets), the shell holds 5% of
-> every edge clear of overscan, and the controls a remote cannot work (the
-> volume slider, the fullscreen toggle, scrollbar thumbs) are not drawn.
+> (1.15x text, a roomier density, 48 dp targets), every screen holds 5% of
+> every edge clear of overscan except the video itself, and the controls a
+> remote cannot work (the volume slider, the fullscreen toggle, scrollbar
+> thumbs) are not drawn.
 
 ## Goals (beyond current Stremio clients)
 

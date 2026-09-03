@@ -5,6 +5,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/shell/tv_density.dart';
 
 import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
@@ -82,7 +83,12 @@ class PlayerHarness {
         },
         fullscreen: fullscreen,
         torrentStats: torrentStats,
-        child: MaterialApp(home: home ?? screen()),
+        child: MaterialApp(
+          // As `XtremioApp` builds it: the television's text scale and
+          // overscan band reach the player through the navigator.
+          builder: (this.device?.isTv ?? false) ? TvMediaQuery.builder : null,
+          home: home ?? screen(),
+        ),
       ),
     );
     final device = this.device;

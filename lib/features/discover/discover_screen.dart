@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/tv_density.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
@@ -135,21 +136,23 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final state = ownState;
     final selectable = state?.selectable;
     final isTv = DeviceScope.isTv(context);
-    return Scaffold(
-      appBar: AppBar(title: Text(state?.selectedCatalogName ?? 'Discover')),
-      body: Column(
-        children: [
-          if (selectable != null && !selectable.isEmpty)
-            _tvGroup(
-              isTv,
-              _FilterBar(selectable: selectable, onSelect: _select),
+    return TvSafeArea(
+      child: Scaffold(
+        appBar: AppBar(title: Text(state?.selectedCatalogName ?? 'Discover')),
+        body: Column(
+          children: [
+            if (selectable != null && !selectable.isEmpty)
+              _tvGroup(
+                isTv,
+                _FilterBar(selectable: selectable, onSelect: _select),
+              ),
+            Expanded(
+              child: state == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : _tvGroup(isTv, _buildCatalog(state)),
             ),
-          Expanded(
-            child: state == null
-                ? const Center(child: CircularProgressIndicator())
-                : _tvGroup(isTv, _buildCatalog(state)),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

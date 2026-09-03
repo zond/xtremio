@@ -44,8 +44,9 @@ class _Destination {
 /// A television keeps [TvDensity.overscan] of every edge clear: sets crop
 /// or curve away the outermost few percent of the panel, and a rail label
 /// or a poster that falls in that band is simply not there for the viewer.
-/// The padding goes around the whole shell (rail included), not around the
-/// body alone, since it is the panel's edges that eat it.
+/// The band reaches the shell as `MediaQuery` padding (`TvMediaQuery`, so
+/// that the pushed routes get it too) and the shell keeps out of all of it,
+/// rail included, since it is the panel's edges that eat it.
 ///
 /// Selecting a destination with a pointer (a touch remote, a mouse) while
 /// a tile holds focus is the D-pad's select with the step onto the rail
@@ -57,7 +58,7 @@ class _Destination {
 class RootShell extends StatefulWidget {
   const RootShell({super.key});
 
-  /// The overscan padding around the shell on a television; see [RootShell].
+  /// The safe area the shell sits in on a television; see [RootShell].
   static const Key overscanKey = Key('tv-overscan');
 
   @override
@@ -205,13 +206,9 @@ class _RootShellState extends State<RootShell> {
         ],
       );
       return Scaffold(
-        body: isTv
-            ? Padding(
-                key: RootShell.overscanKey,
-                padding: TvDensity.overscanPadding(MediaQuery.sizeOf(context)),
-                child: row,
-              )
-            : row,
+        // The band itself comes down as `MediaQuery` padding from
+        // `TvMediaQuery`, so the shell only has to keep out of it.
+        body: isTv ? SafeArea(key: RootShell.overscanKey, child: row) : row,
       );
     }
 

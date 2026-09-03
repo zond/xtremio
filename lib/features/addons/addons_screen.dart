@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/tv_density.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/shared_field_screen.dart';
@@ -129,75 +130,77 @@ class _AddonsScreenState extends State<AddonsScreen> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Addons'),
-          actions: [
-            IconButton(
-              tooltip: 'Add addon',
-              icon: const Icon(Icons.add_link),
-              onPressed: _addByUrl,
-            ),
-          ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Installed'),
-              Tab(text: 'Community'),
+      child: TvSafeArea(
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Addons'),
+            actions: [
+              IconButton(
+                tooltip: 'Add addon',
+                icon: const Icon(Icons.add_link),
+                onPressed: _addByUrl,
+              ),
             ],
+            bottom: const TabBar(
+              tabs: [
+                Tab(text: 'Installed'),
+                Tab(text: 'Community'),
+              ],
+            ),
           ),
-        ),
-        body: AddonErrorSnackBars(
-          child: ListenableBuilder(
-            listenable: Listenable.merge([_installed!, _remote!, _ctx!]),
-            builder: (context, _) {
-              final ctx = _ctx!.value;
-              final profile = ctx == null
-                  ? const ProfileState({})
-                  : ProfileState.fromCtx(ctx);
-              final installedJson = _installed!.value;
-              final remoteJson = _remote!.value;
-              return Column(
-                children: [
-                  if (profile.addonsLocked) const AddonsLockedBanner(),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        _InstalledTab(
-                          state: installedJson == null
-                              ? null
-                              : InstalledAddonsState.fromJson(installedJson),
-                          locked: profile.addonsLocked,
-                          onSelect: (request) => _client?.dispatch(
-                            CoreActions.loadInstalledAddons(request),
+          body: AddonErrorSnackBars(
+            child: ListenableBuilder(
+              listenable: Listenable.merge([_installed!, _remote!, _ctx!]),
+              builder: (context, _) {
+                final ctx = _ctx!.value;
+                final profile = ctx == null
+                    ? const ProfileState({})
+                    : ProfileState.fromCtx(ctx);
+                final installedJson = _installed!.value;
+                final remoteJson = _remote!.value;
+                return Column(
+                  children: [
+                    if (profile.addonsLocked) const AddonsLockedBanner(),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          _InstalledTab(
+                            state: installedJson == null
+                                ? null
+                                : InstalledAddonsState.fromJson(installedJson),
+                            locked: profile.addonsLocked,
+                            onSelect: (request) => _client?.dispatch(
+                              CoreActions.loadInstalledAddons(request),
+                            ),
+                            onUninstall: (addon) => _client?.dispatch(
+                              CoreActions.uninstallAddon(addon),
+                            ),
+                            onConfigure: (addon) =>
+                                openAddonConfiguration(context, addon),
+                            onOpen: (addon) => _openDetails(addon.transportUrl),
                           ),
-                          onUninstall: (addon) => _client?.dispatch(
-                            CoreActions.uninstallAddon(addon),
+                          _CommunityTab(
+                            state: remoteJson == null
+                                ? null
+                                : RemoteAddonsState.fromJson(remoteJson),
+                            profile: profile,
+                            search: _search,
+                            onSelect: _selectRemote,
+                            onScroll: _onRemoteScroll,
+                            onInstall: (addon) => _client?.dispatch(
+                              CoreActions.installAddon(addon),
+                            ),
+                            onConfigure: (addon) =>
+                                openAddonConfiguration(context, addon),
+                            onOpen: (addon) => _openDetails(addon.transportUrl),
                           ),
-                          onConfigure: (addon) =>
-                              openAddonConfiguration(context, addon),
-                          onOpen: (addon) => _openDetails(addon.transportUrl),
-                        ),
-                        _CommunityTab(
-                          state: remoteJson == null
-                              ? null
-                              : RemoteAddonsState.fromJson(remoteJson),
-                          profile: profile,
-                          search: _search,
-                          onSelect: _selectRemote,
-                          onScroll: _onRemoteScroll,
-                          onInstall: (addon) => _client?.dispatch(
-                            CoreActions.installAddon(addon),
-                          ),
-                          onConfigure: (addon) =>
-                              openAddonConfiguration(context, addon),
-                          onOpen: (addon) => _openDetails(addon.transportUrl),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
