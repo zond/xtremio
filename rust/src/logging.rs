@@ -26,7 +26,15 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 
 /// Default filter when `RUST_LOG` is unset.
-pub const DEFAULT_FILTER: &str = "xtremio_core=info,stream_server=info,enginefs=warn";
+///
+/// `enginefs` at info rather than warn: it is the torrent engine, so a
+/// playback that stalls has its explanation there (what the reader is
+/// waiting for, which piece arrived, why a stream ended) and at warn the
+/// ring said nothing at all about the one subsystem a stalled playback is
+/// about. `librqbit` at warn for the same failure from below -- a peer
+/// that cannot be reached, a write that failed -- without its per-piece
+/// chatter, which would push everything else out of a 400-line ring.
+pub const DEFAULT_FILTER: &str = "xtremio_core=info,stream_server=info,enginefs=info,librqbit=warn";
 
 /// How many formatted lines the ring keeps; the oldest is dropped to make
 /// room. A few hundred is enough to cover a start-up and a failed playback
