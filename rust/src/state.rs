@@ -32,6 +32,8 @@ pub struct AppState {
     pub core: crate::core::CoreState,
     /// The embedded stream-server's handle while it runs.
     pub server: crate::server::ServerState,
+    /// The offline-downloads registry's locks, progress sink and ticker.
+    pub downloads: crate::downloads::DownloadsState,
 }
 
 /// The one process static. `None` until something needs the state, and

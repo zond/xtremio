@@ -22,12 +22,14 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 use stream_server::{DownloadInfo, PinDownloadError};
+
+use crate::state::AppState;
 
 /// Schema version of `downloads.json`. A file that names a higher one is
 /// read anyway (unknown keys survive in [`Entry::extra`]) and keeps its
@@ -61,31 +63,79 @@ const METADATA_WAIT: Duration = Duration::from_secs(90);
 /// How often [`resolve_media_file`] re-asks while that wait runs.
 const METADATA_POLL: Duration = Duration::from_millis(250);
 
-/// Serializes read-modify-write cycles on the registry file: the FFI calls,
-/// the progress ticker and the init-time re-pin all run on different
-/// threads and must not lose each other's edits.
-static FILE_LOCK: Mutex<()> = Mutex::new(());
-
-/// When the registry was last written, so a progress-only change can wait
-/// for [`PROGRESS_WRITE_INTERVAL`]. Behind [`FILE_LOCK`] with the file
-/// itself.
-static LAST_WRITE: Mutex<Option<Instant>> = Mutex::new(None);
-
-/// The last progress delivered per key, so the ticker does not repeat
-/// itself: with a write skipped the registry on disk stays behind the
-/// server's numbers, and every tick would otherwise "change" the same row
-/// back to the same values. Cleared whenever a new sink arrives -- it has
-/// the whole picture from `downloads_list` and needs no reminder.
-static LAST_SENT: Mutex<BTreeMap<String, Progress>> = Mutex::new(BTreeMap::new());
-
 /// Receives one serialized progress payload; returns `false` once closed.
 pub type EventSink = Box<dyn Fn(String) -> bool + Send + Sync>;
 
-static EVENT_SINK: RwLock<Option<EventSink>> = RwLock::new(None);
+/// What is known about the registry file, behind the lock that serializes
+/// read-modify-write cycles on it. `last_write` is only ever read or set
+/// while that lock is held, so it is a field of what the lock guards rather
+/// than a second lock to remember to take.
+#[derive(Default)]
+struct RegistryFile {
+    /// When the registry was last written, so a progress-only change can
+    /// wait for [`PROGRESS_WRITE_INTERVAL`].
+    last_write: Option<Instant>,
+}
 
-/// Whether a [`ticker`] task is running. Taken before [`FILE_LOCK`] wherever
-/// both are needed.
-static TICKING: Mutex<bool> = Mutex::new(false);
+/// The downloads half of [`AppState`]: the registry file's lock, what was
+/// last pushed to the sink, the sink, and whether the ticker runs.
+///
+/// Separate locks inside one value, deliberately. A pin or a listing blocks
+/// on the server for as long as a magnet takes to resolve; holding one lock
+/// across all of that would stall the progress sink and every other
+/// download call with it. The order, where two are needed, is `ticking`
+/// then `file` -- [`ensure_ticker`] is the only place that takes both.
+#[derive(Default)]
+pub struct DownloadsState {
+    /// Serializes read-modify-write cycles on the registry file: the FFI
+    /// calls, the progress ticker and the init-time re-pin all run on
+    /// different threads and must not lose each other's edits.
+    file: Mutex<RegistryFile>,
+    /// The last progress delivered per key, so the ticker does not repeat
+    /// itself: with a write skipped the registry on disk stays behind the
+    /// server's numbers, and every tick would otherwise "change" the same
+    /// row back to the same values. Cleared whenever a new sink arrives --
+    /// it has the whole picture from `downloads_list` and needs no
+    /// reminder.
+    last_sent: Mutex<BTreeMap<String, Progress>>,
+    event_sink: RwLock<Option<EventSink>>,
+    /// Whether a [`ticker`] task is running for this state.
+    ticking: Mutex<bool>,
+}
+
+/// A poisoned lock only means a previous holder panicked; the value behind
+/// it is still valid, so every accessor here reads through the poison.
+impl DownloadsState {
+    fn file(&self) -> MutexGuard<'_, RegistryFile> {
+        self.file
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn last_sent(&self) -> MutexGuard<'_, BTreeMap<String, Progress>> {
+        self.last_sent
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn sink(&self) -> RwLockReadGuard<'_, Option<EventSink>> {
+        self.event_sink
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn sink_mut(&self) -> RwLockWriteGuard<'_, Option<EventSink>> {
+        self.event_sink
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn ticking(&self) -> MutexGuard<'_, bool> {
+        self.ticking
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
 
 /// What a download is doing. Unknown values (a file from a newer build) read
 /// back as [`State::Queued`] rather than failing the whole entry.
@@ -554,12 +604,6 @@ fn registry_path_in(dir: Option<PathBuf>) -> anyhow::Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("storage directory is not set; is the core initialized?"))
 }
 
-fn file_lock() -> std::sync::MutexGuard<'static, ()> {
-    FILE_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
 fn load_locked() -> anyhow::Result<Registry> {
     let path = registry_path()?;
     let bytes = match std::fs::read(&path) {
@@ -603,7 +647,8 @@ fn move_aside(path: &std::path::Path, reason: &str) {
 
 /// The registry as it is on disk.
 pub fn load() -> anyhow::Result<Registry> {
-    let _guard = file_lock();
+    let app = crate::state::state();
+    let _guard = app.downloads.file();
     load_locked()
 }
 
@@ -611,7 +656,7 @@ pub fn load() -> anyhow::Result<Registry> {
 /// The file lock is held throughout, so two concurrent updates cannot lose
 /// each other's edits.
 pub fn update<T>(f: impl FnOnce(&mut Registry) -> anyhow::Result<T>) -> anyhow::Result<T> {
-    update_when(f, |_, _| true)
+    update_when(f, |_, _, _| true)
 }
 
 /// The same, with a say in whether the change is worth a write. `needed` is
@@ -621,31 +666,30 @@ pub fn update<T>(f: impl FnOnce(&mut Registry) -> anyhow::Result<T>) -> anyhow::
 /// and the only one.
 fn update_when<T>(
     f: impl FnOnce(&mut Registry) -> anyhow::Result<T>,
-    needed: impl FnOnce(&Registry, &Registry) -> bool,
+    needed: impl FnOnce(&RegistryFile, &Registry, &Registry) -> bool,
 ) -> anyhow::Result<T> {
-    let _guard = file_lock();
+    let app = crate::state::state();
+    let mut file = app.downloads.file();
     let mut registry = load_locked()?;
     let before = registry.clone();
     let result = f(&mut registry)?;
-    if registry != before && needed(&before, &registry) {
+    if registry != before && needed(&file, &before, &registry) {
         let bytes = serde_json::to_vec(&registry)?;
         crate::env::write_atomically(&registry_path()?, &bytes)
             .map_err(|error| anyhow::anyhow!("write downloads registry: {error}"))?;
-        *LAST_WRITE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Instant::now());
+        file.last_write = Some(Instant::now());
     }
     Ok(result)
 }
 
 /// Whether a refresh's changes have to reach the disk now: everything but a
 /// byte count does, and a byte count does too once the last write is
-/// [`PROGRESS_WRITE_INTERVAL`] old.
-fn refresh_needs_a_write(before: &Registry, after: &Registry) -> bool {
+/// [`PROGRESS_WRITE_INTERVAL`] old. Asked with the registry file's lock
+/// already held, which is what makes reading `last_write` here honest.
+fn refresh_needs_a_write(file: &RegistryFile, before: &Registry, after: &Registry) -> bool {
     !only_downloaded_moved(before, after)
-        || LAST_WRITE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        || file
+            .last_write
             .is_none_or(|last| last.elapsed() >= PROGRESS_WRITE_INTERVAL)
 }
 
@@ -1414,25 +1458,18 @@ fn record_destination(destination: Destination) {
 /// sink the way core events are: the full picture is one `downloads_list`
 /// away, so a late subscriber loses nothing that matters.
 pub fn set_event_sink(sink: EventSink) {
-    *EVENT_SINK
-        .write()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(sink);
-    last_sent().clear();
-    ensure_ticker();
-}
-
-fn last_sent() -> std::sync::MutexGuard<'static, BTreeMap<String, Progress>> {
-    LAST_SENT
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    let app = crate::state::state();
+    *app.downloads.sink_mut() = Some(sink);
+    app.downloads.last_sent().clear();
+    ensure_ticker_in(&app);
 }
 
 /// Pushes the rows that moved, leaving out any whose numbers the sink was
 /// already given: a row is in an event because it changed, and a tick whose
 /// write was skipped keeps finding the same difference against the disk.
-fn emit(moved: &[Progress]) {
+fn emit(app: &AppState, moved: &[Progress]) {
     let fresh: Vec<Progress> = {
-        let mut sent = last_sent();
+        let mut sent = app.downloads.last_sent();
         let mut fresh = Vec::new();
         for row in moved {
             if sent.insert(row.key.clone(), row.clone()).as_ref() != Some(row) {
@@ -1455,23 +1492,13 @@ fn emit(moved: &[Progress]) {
         }
     };
     let delivered = {
-        let guard = EVENT_SINK
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let guard = app.downloads.sink();
         guard.as_ref().map(|sink| sink(payload))
     };
     if delivered == Some(false) {
         tracing::info!("downloads event sink closed");
-        *EVENT_SINK
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+        *app.downloads.sink_mut() = None;
     }
-}
-
-fn ticking() -> std::sync::MutexGuard<'static, bool> {
-    TICKING
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Whether the progress poll is running. Nothing on the FFI surface needs
@@ -1479,7 +1506,7 @@ fn ticking() -> std::sync::MutexGuard<'static, bool> {
 /// look identical from outside until a download that nobody is polling for
 /// stops moving.
 pub fn is_ticking() -> bool {
-    *ticking()
+    crate::state::current().is_some_and(|app| *app.downloads.ticking())
 }
 
 /// True while any entry is neither complete nor paused — an errored one
@@ -1493,26 +1520,38 @@ fn anything_unfinished() -> bool {
 /// Starts the progress ticker unless one already runs or nothing is
 /// unfinished. Called after every add and whenever a sink arrives.
 pub fn ensure_ticker() {
-    let mut ticking = ticking();
+    ensure_ticker_in(&crate::state::state());
+}
+
+fn ensure_ticker_in(app: &Arc<AppState>) {
+    let mut ticking = app.downloads.ticking();
     if *ticking || !anything_unfinished() {
         return;
     }
     *ticking = true;
-    crate::env::CONCURRENT.spawn(ticker());
+    crate::env::CONCURRENT.spawn(ticker(Arc::clone(app)));
 }
 
 /// Merges live progress once a second and emits what changed, until nothing
 /// is unfinished any more. The merge itself blocks on the server's runtime,
 /// so it runs on a blocking thread rather than a `CONCURRENT` worker.
-async fn ticker() {
+///
+/// It holds the state it was started for, and stops as soon as that is no
+/// longer the process's: a shutdown retired its sink and its server, and a
+/// later `init` gets its own ticker rather than inheriting this one.
+async fn ticker(app: Arc<AppState>) {
     loop {
         tokio::time::sleep(TICK).await;
+        if !crate::state::is_current(&app) {
+            *app.downloads.ticking() = false;
+            return;
+        }
         match tokio::task::spawn_blocking(refresh).await {
-            Ok(Ok(refreshed)) => emit(&refreshed.moved),
+            Ok(Ok(refreshed)) => emit(&app, &refreshed.moved),
             Ok(Err(error)) => tracing::debug!(%error, "downloads progress tick failed"),
             Err(error) => tracing::warn!(%error, "downloads progress tick panicked"),
         }
-        let mut ticking = ticking();
+        let mut ticking = app.downloads.ticking();
         if !anything_unfinished() {
             *ticking = false;
             return;
@@ -2275,24 +2314,27 @@ mod tests {
 
     /// A row is pushed because it moved, so the same numbers are not pushed
     /// twice -- which is what a tick whose write was skipped keeps finding
-    /// against the file.
+    /// against the file. Against a state of this test's own: what has been
+    /// sent is a property of an `AppState`, so this neither disturbs the
+    /// process's sink nor cares what else ran first.
     #[test]
     fn a_row_that_has_not_moved_is_not_pushed_again() {
+        let app = AppState::default();
         let (tx, rx) = std::sync::mpsc::channel();
-        set_event_sink(Box::new(move |event| tx.send(event).is_ok()));
+        *app.downloads.sink_mut() = Some(Box::new(move |event| tx.send(event).is_ok()));
 
         let mut entry = entry("tt1", "tt1");
         entry.downloaded = 4096;
         let progress = Progress::of("tt1:tt1", &entry);
-        emit(std::slice::from_ref(&progress));
+        emit(&app, std::slice::from_ref(&progress));
         let event = rx.try_recv().expect("the row moved");
         assert!(event.contains(r#""downloaded":4096"#), "{event}");
 
-        emit(std::slice::from_ref(&progress));
+        emit(&app, std::slice::from_ref(&progress));
         assert!(rx.try_recv().is_err(), "the same numbers say nothing new");
 
         entry.downloaded = 8192;
-        emit(&[Progress::of("tt1:tt1", &entry)]);
+        emit(&app, &[Progress::of("tt1:tt1", &entry)]);
         let event = rx.try_recv().expect("and a row that moved does");
         assert!(event.contains(r#""downloaded":8192"#), "{event}");
     }
