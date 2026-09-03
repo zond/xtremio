@@ -448,12 +448,29 @@ connection.
   playback…", `error` → "The torrent failed to start" with the server's
   `error` string as the detail; no answer yet → "Connecting to server…".
   The bar is determinate whenever there is a percentage; `downloadSpeed`
-  and `peers` show when non-zero. Polling stops when the media loads, on
-  an engine error and on dispose; direct HTTP streams get nothing extra.
-  The `TorrentStatsClient` comes from `PlaybackScope`, so tests feed
-  phases through a fake. The stream's `fileMustInclude` (`f=`) filters
-  are not part of the library call: a stream without a `fileIdx` polls
-  the torrent-level stats.
+  and `peers` show when non-zero. Polling pauses when the media loads (see
+  the stall card below) and ends on an engine error and on dispose; direct
+  HTTP streams get nothing extra. The `TorrentStatsClient` comes from
+  `PlaybackScope`, so tests feed phases through a fake. The stream's
+  `fileMustInclude` (`f=`) filters are not part of the library call: a
+  stream without a `fileIdx` polls the torrent-level stats.
+- **Mid-playback stall card.** When playback that has started runs out of
+  data (`buffering` from the engine), a torrent gets the same card rather
+  than the spinner and sentence it used to: the polling that paused at
+  media-load resumes for as long as the stall lasts, at 2 s instead of
+  500 ms, with the first poll fired at once (the torrent's engine exists
+  by then, so there is no ordering to respect). The phases read in the
+  present tense — `checking` keeps its percentage, `buffering` means the
+  head window is still filling and its percentage is what playback is
+  waiting for, `ready`/unknown is "Buffering from the torrent…" with an
+  *indeterminate* bar (past the head of the file the server measures no
+  target, so a full bar would be a lie), `error` is "The torrent stopped"
+  with the server's reason. The detail line always says `downloadSpeed`
+  and the peer counts, zeros included — during a stall `0 B/s · 0 peers ·
+  12 found` is the diagnosis. They are *peers*, never "seeds": the
+  server's counters are connections, not the swarm's seeders. Playback
+  resuming drops the card, the timer and the last answer; an answer that
+  arrives after the stall ended is discarded.
 - **Next episode.** `player.nextVideo`/`nextStream` come from the core.
   On `Ended`, with `bingeWatching` on, an up-next card counts down
   `nextVideoNotificationDuration` (35 s by default); playing it dispatches
