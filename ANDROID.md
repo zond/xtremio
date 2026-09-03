@@ -120,9 +120,9 @@ adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb shell am start -n com.zond.xtremio/.MainActivity
 ```
 
-For D-pad/leanback work, use `system-images;android-36;android-tv;x86` (or
-`arm64-v8a` on an arm64 host; there is no x86_64 TV image) instead — same
-flow, with `-d tv_1080p` for the AVD.
+For D-pad/leanback work, use `system-images;android-36;android-tv;x86_64`
+(or `arm64-v8a` on an arm64 host; a 32-bit `x86` image also exists but is
+not needed) instead — same flow, with `-d tv_1080p` for the AVD.
 
 **Verify:**
 
