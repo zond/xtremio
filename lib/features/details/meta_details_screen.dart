@@ -18,6 +18,7 @@ import '../downloads/offline_play.dart';
 import '../downloads/remove_download_dialog.dart';
 import '../player/player_screen.dart';
 import 'stream_facts.dart';
+import 'stream_sources.dart';
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
 /// shows the meta item, its episodes (for a series) and every stream the
@@ -56,6 +57,21 @@ import 'stream_facts.dart';
 /// with the addon it came from. Everything around the streams is the same
 /// in both: the last-used shortcut, the addons that had nothing, the ones
 /// that failed, and the notice when nobody had anything.
+///
+/// One release is one row. Two addons offering the same torrent -- and one
+/// addon offering it twice -- are the same *content*, identified by
+/// [StreamInfo.sourceKey] (an info hash and a file index, or a direct URL:
+/// the identity a pin is already keyed by), never by what a row looks like.
+/// Two different releases with the same resolution and size are two
+/// sources and stay two rows. The flat list collapses them after the sort,
+/// so what survives is the best-ranked instance, and says "Also from ..."
+/// when another *addon* had it, silently when one addon merely repeated
+/// itself. The grouped list keeps a copy in each addon's own group -- the
+/// groups are what that layout is for -- marked the same way, and collapses
+/// only an addon's repeats of its own. Either way the surviving row carries
+/// the *union* of every listing's trackers ([StreamSourceIndex]), so the
+/// stream handed to playback, to a download and to the stats poll asks
+/// every tracker anybody named.
 ///
 /// An addon that answers a stream request with an error is not listed as an
 /// empty group but collected below the streams that worked, named from the
@@ -870,31 +886,78 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             addon: profile?.installedAddon(group.request.base),
           ),
     ];
+    // What the addons agree is one source, and what each of them said its
+    // trackers were. Both layouts collapse on it, and the row that
+    // survives plays and downloads with the union of those trackers.
+    final sources = StreamSourceIndex.of([
+      for (final group in listed)
+        for (final stream in group.streams)
+          (addon: _addonNameOf(profile, group), stream: stream),
+    ]);
     // The flat layout: every listed addon's streams in one list, in
     // [compareStreamFacts] order, each row named with the addon it came
     // from since it has no heading to sit under any more. Built only for
     // the layout that shows it -- parsing every stream costs a handful of
     // regexes each.
+    //
+    // Collapsed *after* the sort, so the instance that survives a
+    // duplicate is the best-ranked one rather than whichever addon was
+    // asked first.
     final flatStreams = isFlat
-        ? sortedByStreamFacts([
-            for (final group in listed)
-              for (final stream in group.streams)
-                (
-                  group: group,
-                  stream: stream,
-                  facts: StreamFacts.of(
-                    stream,
-                    addonName: _addonNameOf(profile, group),
+        ? _collapse(
+            sortedByStreamFacts([
+              for (final group in listed)
+                for (final stream in group.streams)
+                  (
+                    group: group,
+                    stream: stream,
+                    facts: StreamFacts.of(
+                      stream,
+                      addonName: _addonNameOf(profile, group),
+                    ),
+                    alsoFrom: const <String>[],
                   ),
+            ], (row) => row.facts!),
+            sources,
+            (row) => row.facts?.addonName ?? '',
+          )
+        : const <_SourceRow>[];
+    // The grouped layout: each addon's own ranking, with the addon's own
+    // repeats collapsed. A source two addons both offered stays in both
+    // groups -- the groups are the point of this layout -- and each row
+    // says the other addon has it too.
+    final grouped = isFlat
+        ? const <(StreamGroup, List<_SourceRow>)>[]
+        : [
+            for (final group in listed)
+              (
+                group,
+                _collapse(
+                  [
+                    for (final stream in group.streams)
+                      (
+                        group: group,
+                        stream: stream,
+                        facts: null,
+                        alsoFrom: const <String>[],
+                      ),
+                  ],
+                  sources,
+                  (_) => _addonNameOf(profile, group),
                 ),
-          ], (row) => row.facts)
-        : const <_FlatStream>[];
+              ),
+          ];
     final autofocusAt = isTv && lastUsed == null
-        ? _firstPlayable(listed)
+        ? _firstPlayable(grouped)
         : null;
     final flatAutofocusAt = isTv && lastUsed == null && isFlat
         ? flatStreams.indexWhere((row) => row.stream.isPlayable)
         : -1;
+    // The shortcut is the same source as one of the rows below, so it is
+    // handed the same merged trackers; nothing else about it changes.
+    final lastUsedStream = lastUsed == null
+        ? null
+        : sources.merged(lastUsed.$2);
     final videoId = state.streamPath?.id ?? meta.id;
     final downloads = _downloadsClient == null
         ? null
@@ -929,16 +992,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             title: Text('Pick an episode to see its streams'),
           ),
         ),
-      if (lastUsed != null)
+      if (lastUsedStream != null)
         SliverToBoxAdapter(
           child: _StreamTile(
-            stream: lastUsed.$2,
+            stream: lastUsedStream,
             highlighted: true,
             leadingIcon: Icons.history,
             titleOverride: 'Continue with last source',
-            onTap: () => _play(state, lastUsed.$1, lastUsed.$2),
+            onTap: () => _play(state, lastUsed!.$1, lastUsedStream),
             autofocus: isTv,
-            downloads: downloads?.forGroup(lastUsed.$1),
+            downloads: downloads?.forGroup(lastUsed!.$1),
           ),
         ),
       if (isFlat)
@@ -949,6 +1012,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             return _StreamTile(
               stream: row.stream,
               facts: row.facts,
+              alsoFrom: row.alsoFrom,
               highlighted:
                   lastUsed != null && row.stream.isSameSource(lastUsed.$2),
               onTap: row.stream.isPlayable
@@ -960,13 +1024,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           },
         )
       else ...[
-        for (final (index, group) in listed.indexed)
+        for (final (index, entry) in grouped.indexed)
           _StreamGroupSliver(
-            group: group,
+            group: entry.$1,
+            rows: entry.$2,
             lastUsed: lastUsed?.$2,
-            onPlay: (stream) => _play(state, group, stream),
+            onPlay: (stream) => _play(state, entry.$1, stream),
             autofocusIndex: autofocusAt?.$1 == index ? autofocusAt!.$2 : null,
-            downloads: downloads?.forGroup(group),
+            downloads: downloads?.forGroup(entry.$1),
           ),
       ],
       if (empties.isNotEmpty)
@@ -1019,11 +1084,40 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   static bool _answeredEmpty(StreamGroup group) =>
       group.streams.isEmpty && !group.isLoading;
 
-  /// The (group, stream) indices of the first playable stream, if any.
-  static (int, int)? _firstPlayable(List<StreamGroup> groups) {
-    for (final (g, group) in groups.indexed) {
-      for (final (s, stream) in group.streams.indexed) {
-        if (stream.isPlayable) return (g, s);
+  /// [rows] with every source listed once: the first row naming a source
+  /// stays and the later ones go, which after a sort is the best-ranked
+  /// instance. What survives carries the union of every listing's trackers
+  /// and the other addons that offered it, so the collapse hides an
+  /// option from nobody -- and when one addon simply repeated itself there
+  /// is no other addon to name and the row says nothing.
+  ///
+  /// A stream with no source key at all (an unknown variant) is never
+  /// folded into anything; it is its own row, however many there are.
+  static List<_SourceRow> _collapse(
+    List<_SourceRow> rows,
+    StreamSourceIndex sources,
+    String Function(_SourceRow row) addonOf,
+  ) {
+    final seen = <String>{};
+    return [
+      for (final row in rows)
+        if (row.stream.sourceKey == null || seen.add(row.stream.sourceKey!))
+          (
+            group: row.group,
+            stream: sources.merged(row.stream),
+            facts: row.facts,
+            alsoFrom: sources.alsoFrom(addonOf(row), row.stream),
+          ),
+    ];
+  }
+
+  /// The (group, row) indices of the first playable stream, if any.
+  static (int, int)? _firstPlayable(
+    List<(StreamGroup, List<_SourceRow>)> groups,
+  ) {
+    for (final (g, entry) in groups.indexed) {
+      for (final (s, row) in entry.$2.indexed) {
+        if (row.stream.isPlayable) return (g, s);
       }
     }
     return null;
@@ -1656,13 +1750,17 @@ class _ReplaceDialog extends StatelessWidget {
   );
 }
 
-/// One row of the flat sources list: the stream, the addon group it came
-/// from (a download records the request its stream came from, so the group
-/// has to travel with it) and what could be read out of it.
-typedef _FlatStream = ({
+/// One row of the sources list, in either layout: the stream as it will be
+/// played -- with the trackers every listing of it named -- the addon group
+/// it came from (a download records the request its stream came from, so
+/// the group has to travel with it), what could be read out of it (the flat
+/// list only; the grouped one has a heading and [StreamHints]) and the
+/// other addons that offered the same source.
+typedef _SourceRow = ({
   StreamGroup group,
   StreamInfo stream,
-  StreamFacts facts,
+  StreamFacts? facts,
+  List<String> alsoFrom,
 });
 
 /// What a stream tile knows about offline downloads: the entry for its
@@ -1735,6 +1833,7 @@ final class _StreamDownloads {
 class _StreamGroupSliver extends StatelessWidget {
   const _StreamGroupSliver({
     required this.group,
+    required this.rows,
     required this.lastUsed,
     required this.onPlay,
     this.autofocusIndex,
@@ -1742,6 +1841,11 @@ class _StreamGroupSliver extends StatelessWidget {
   });
 
   final StreamGroup group;
+
+  /// What to list under the heading: the group's streams with this addon's
+  /// own repeats collapsed and every one of them carrying the trackers the
+  /// other addons named for the same source.
+  final List<_SourceRow> rows;
 
   /// The stream pinned as "Continue with last source", highlighted here too.
   final StreamInfo? lastUsed;
@@ -1756,14 +1860,13 @@ class _StreamGroupSliver extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final streams = group.streams;
     final label = group.isFromMeta
         ? 'From ${group.addonLabel}'
         : group.addonLabel;
     // Nothing yet, as opposed to nothing at all: a group that settled on
     // no streams is not listed here at all any more, so the label with a
     // spinner under it can only mean the answer is still coming.
-    final waiting = streams.isEmpty && group.isLoading;
+    final waiting = rows.isEmpty && group.isLoading;
     return SliverMainAxisGroup(
       slivers: [
         SliverToBoxAdapter(
@@ -1789,12 +1892,13 @@ class _StreamGroupSliver extends StatelessWidget {
             ),
           ),
         SliverList.builder(
-          itemCount: streams.length,
+          itemCount: rows.length,
           itemBuilder: (context, index) {
-            final stream = streams[index];
+            final stream = rows[index].stream;
             final lastUsed = this.lastUsed;
             return _StreamTile(
               stream: stream,
+              alsoFrom: rows[index].alsoFrom,
               highlighted: lastUsed != null && stream.isSameSource(lastUsed),
               onTap: stream.isPlayable ? () => onPlay(stream) : null,
               autofocus: index == autofocusIndex,
@@ -2102,9 +2206,17 @@ class _StreamTile extends StatelessWidget {
     this.autofocus = false,
     this.downloads,
     this.facts,
+    this.alsoFrom = const [],
   });
 
   final StreamInfo stream;
+
+  /// The other addons that offered this very source, when more than one
+  /// did. The row is one of them (the best-ranked, or the one whose group
+  /// this is), and this is how it says the others are not missing but the
+  /// same thing again. Empty says nothing at all -- including for a source
+  /// one addon listed twice, which is the addon repeating itself.
+  final List<String> alsoFrom;
 
   /// In the flat list, what was read out of the stream: the row says which
   /// addon answered (there is no heading above it any more) and carries a
@@ -2143,14 +2255,19 @@ class _StreamTile extends StatelessWidget {
         ? null
         : hints.strip(stream.description);
     final isTv = DeviceScope.isTv(context);
+    final alsoFrom = this.alsoFrom.isEmpty
+        ? null
+        : alsoFromLabel(this.alsoFrom);
+    final lines =
+        [description, alsoFrom].nonNulls.length + (chips.isEmpty ? 0 : 1);
     final tile = ListTile(
       enabled: onTap != null,
       selected: highlighted,
       autofocus: autofocus,
       leading: Icon(leadingIcon ?? _iconFor(stream.kind)),
       title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
-      isThreeLine: description != null && chips.isNotEmpty,
-      subtitle: description == null && chips.isEmpty
+      isThreeLine: lines > 1,
+      subtitle: lines == 0
           ? null
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2160,6 +2277,15 @@ class _StreamTile extends StatelessWidget {
                     description,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                if (alsoFrom != null)
+                  Text(
+                    alsoFrom,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 if (chips.isNotEmpty)
                   Padding(

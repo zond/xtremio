@@ -46,6 +46,71 @@ final class StreamInfo {
     return false;
   }
 
+  /// [isSameSource] as a value that can be put in a map: the same
+  /// discriminating keys, joined. Null when the source has none of them
+  /// (an unknown variant), which is what [isSameSource] answers false for
+  /// -- so a stream with no key is never folded into another one.
+  ///
+  /// The info hash is lower-cased: stremio-core serializes it from the 20
+  /// bytes it parsed, so it already is, but a hand-written stream (a
+  /// developer fixture, an offline entry) need not be, and two spellings
+  /// of one hash are one torrent.
+  String? get sourceKey {
+    final infoHash = this.infoHash;
+    if (infoHash != null) {
+      return 'torrent:${infoHash.toLowerCase()}/$fileIdx';
+    }
+    final url = this.url;
+    if (url != null) return 'url:$url';
+    final ytId = this.ytId;
+    if (ytId != null) return 'yt:$ytId';
+    final externalUrl = this.externalUrl;
+    if (externalUrl != null) return 'external:$externalUrl';
+    return null;
+  }
+
+  /// The trackers the addon named for a torrent.
+  ///
+  /// `announce` is stremio-core's field; `sources` is the addon protocol's
+  /// own name for the same list, which the engine reads as an alias. Which
+  /// one is consulted mirrors the Rust side's `string_list`: the first key
+  /// that is an array wins, never both concatenated.
+  List<String> get trackers {
+    for (final key in const ['announce', 'sources']) {
+      final list = json[key];
+      if (list is List) return [...list.whereType<String>()];
+    }
+    return const [];
+  }
+
+  /// [this] with [trackers] as the trackers it carries, for a torrent that
+  /// several addons listed with different `announce` sets: the union is
+  /// what the server should be given, since every entry is a place the
+  /// swarm may answer from.
+  ///
+  /// Returns [this] unchanged when there is nothing to add, and for a
+  /// source that has no trackers at all (only a torrent does).
+  StreamInfo withTrackers(List<String> trackers) {
+    if (kind != StreamKind.torrent) return this;
+    final own = this.trackers;
+    if (own.length == trackers.length) {
+      var same = true;
+      for (var i = 0; i < own.length; i++) {
+        if (own[i] != trackers[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return this;
+    }
+    final merged = {...json, 'announce': trackers};
+    // `sources` says the same thing under the protocol's name, and
+    // stremio-core reads it as an alias of `announce` -- both keys at once
+    // is a duplicate field to it. The merged list replaces the pair.
+    merged.remove('sources');
+    return StreamInfo(merged);
+  }
+
   /// Which `StreamSource` variant this is, by the discriminating key.
   StreamKind get kind {
     if (infoHash != null) return StreamKind.torrent;

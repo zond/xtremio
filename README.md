@@ -30,7 +30,20 @@ Rust engine for addons, catalogs, library, and playback state) and
 > the addon it came from and badged with what could actually be read off
 > the stream -- nothing is badged that is not known. The choice is global
 > and persisted (`streamsFlat` in the preferences file), so it follows the
-> user to the next title and survives a restart. An addon that answered
+> user to the next title and survives a restart. **One release is one
+> row**: two addons offering the same torrent (or one addon offering it
+> twice) collapse on what they *are* -- info hash plus file index, or the
+> direct URL, the identity a download pin already uses -- never on what
+> they look like, so two different releases with the same resolution and
+> size both stay. The flat list collapses after sorting, so the
+> best-ranked instance is the one kept, and it says "Also from ..." when
+> another addon had it too (silently when one addon simply repeated
+> itself); the grouped list keeps a copy in each addon's group, marked the
+> same way, since the groups are what that layout is for. The row that
+> survives carries the **union of every listing's `announce` list**,
+> deduplicated and in first-seen order, and that merged stream is what
+> playback, a download and the stats poll are handed -- so the server adds
+> the torrent with every tracker any addon knew about. An addon that answered
 > with an error is named from the profile
 > rather than by its host and offers to be checked or uninstalled on the
 > spot; details routes are video-aware, so coming back from the player
