@@ -129,7 +129,10 @@ void main() {
         ),
       );
       expect(external.enabled, isFalse);
-      expect(find.text('No streams'), findsOneWidget);
+      // The addon that answered with nothing is a line below the streams,
+      // not a labelled section of its own.
+      expect(find.text('No streams'), findsNothing);
+      expect(find.text('1 addon had nothing for this title'), findsOneWidget);
       expect(find.text('EmptyContent'), findsNothing);
 
       // Leaving unloads the field.
@@ -634,10 +637,11 @@ void main() {
         findsOneWidget,
       );
 
-      // One section per addon: an empty one, a failed one, torrents with
-      // hints parsed into chips and the rest of the description kept.
-      expect(find.text('watchhub.strem.io'), findsOneWidget);
-      expect(find.text('No streams'), findsOneWidget);
+      // A section per addon that has something to show: the one that
+      // answered with nothing is a line below them, the one that failed
+      // has its own row, and the torrents keep their parsed hints.
+      expect(find.text('No streams'), findsNothing);
+      expect(find.text('1 addon had nothing for this episode'), findsOneWidget);
       expect(find.text('127.0.0.1'), findsOneWidget);
       expect(find.textContaining('Failed to fetch'), findsOneWidget);
       expect(find.text('torrentio.example'), findsOneWidget);
@@ -669,12 +673,18 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // One small spinner in the "Streams" header, no large one below it.
-      final spinner = tester.widget<CircularProgressIndicator>(
-        find.byType(CircularProgressIndicator),
-      );
-      expect(spinner.strokeWidth, 2);
+      // Small spinners only -- the "Streams" header's and the waiting
+      // group's own -- and no large one below them.
+      final spinners = tester
+          .widgetList<CircularProgressIndicator>(
+            find.byType(CircularProgressIndicator),
+          )
+          .toList();
+      expect(spinners, hasLength(2));
+      expect(spinners.every((s) => s.strokeWidth == 2), isTrue);
+      // The group that is still answering keeps its label and says so.
       expect(find.text('torrentio.example'), findsOneWidget);
+      expect(find.text(kLookingForStreams), findsOneWidget);
       expect(find.text('Pick an episode to see its streams'), findsNothing);
     });
 
@@ -690,9 +700,13 @@ void main() {
         find.textContaining('comes with no torrent addon'),
         findsOneWidget,
       );
-      // The addon that failed still says so on its own row.
+      // The addon that failed still says so on its own row, and the one
+      // that answered with nothing is counted below -- neither of them
+      // repeating the notice above.
       expect(find.textContaining('Failed to fetch'), findsOneWidget);
-      expect(find.text('No streams'), findsOneWidget);
+      expect(find.text('No streams'), findsNothing);
+      expect(find.text('1 addon had nothing for this episode'), findsOneWidget);
+      expect(find.text('No streams for this episode'), findsOneWidget);
 
       await tester.tap(find.text('Add an addon'));
       // (That screen spins over the fields this fake has no state for.)
@@ -1140,6 +1154,168 @@ void main() {
         hasLength(1),
         reason: 'expanding dispatches nothing',
       );
+    });
+  });
+
+  group('addons with nothing to say', () {
+    const youTubeUrl = 'https://v3-channels.strem.io/manifest.json';
+    const strangerUrl = 'https://mirror.example/stremio/manifest.json';
+    const localAddonUrl = 'http://127.0.0.1:11470/local-addon/manifest.json';
+
+    Map<String, dynamic> group(String base, Map<String, dynamic> content) => {
+      'request': {
+        'base': base,
+        'path': {
+          'resource': 'stream',
+          'type': 'movie',
+          'id': 'tt0063350',
+          'extra': <Object>[],
+        },
+      },
+      'content': content,
+    };
+
+    /// An addon that answered and had nothing, as the engine records it.
+    Map<String, dynamic> emptyGroup(String base) => group(base, {
+      'type': 'Err',
+      'content': {'type': 'EmptyContent'},
+    });
+
+    /// One still being waited on.
+    Map<String, dynamic> loadingGroup(String base) =>
+        group(base, {'type': 'Loading'});
+
+    /// One whose host is gone.
+    Map<String, dynamic> failedGroup(String base) => group(base, {
+      'type': 'Err',
+      'content': {
+        'type': 'Env',
+        'content': {'code': 1, 'message': 'Failed to fetch: 404 Not Found'},
+      },
+    });
+
+    /// The movie's own groups that answered with streams.
+    List<Map<String, dynamic>> playableGroups() => [
+      for (final g
+          in (loadMetaDetailsFixture()['streams'] as List<dynamic>)
+              .cast<Map<String, dynamic>>())
+        if ((g['content'] as Map)['type'] == 'Ready') g,
+    ];
+
+    /// The movie fixture with [streams] in place of its own, and the
+    /// default profile as `ctx` so the addons can be named. Pumped by hand
+    /// rather than settled: a waiting group's spinner never settles.
+    Future<FakeCoreClient> mount(
+      WidgetTester tester,
+      List<Map<String, dynamic>> streams,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: loadMetaDetailsFixture()
+            ..['streams'] = streams,
+          CoreField.ctx: loadCtxLoggedOutFixture(),
+        },
+      );
+      await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+      await tester.pump();
+      await tester.pump();
+      return core;
+    }
+
+    testWidgets('an empty answer is a line below the streams, not a section', (
+      tester,
+    ) async {
+      await mount(tester, [...playableGroups(), emptyGroup(youTubeUrl)]);
+
+      // Nothing is labelled with an addon that had nothing under it.
+      expect(find.text('No streams'), findsNothing);
+      expect(find.text('1 addon had nothing for this title'), findsOneWidget);
+      expect(find.text('1080p'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('1 addon had nothing for this title')).dy,
+        greaterThan(tester.getTopLeft(find.text('1080p')).dy),
+      );
+      // Named from the profile, and only in that line.
+      expect(find.text('YouTube'), findsOneWidget);
+    });
+
+    testWidgets('the summary counts them and expands to name them', (
+      tester,
+    ) async {
+      final core = await mount(tester, [
+        ...playableGroups(),
+        emptyGroup(youTubeUrl),
+        emptyGroup(strangerUrl),
+        emptyGroup(localAddonUrl),
+      ]);
+
+      expect(find.text('3 addons had nothing for this title'), findsOneWidget);
+      expect(find.text('YouTube, mirror.example, Local Files'), findsNothing);
+
+      await tester.tap(find.text('3 addons had nothing for this title'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('YouTube'), findsOneWidget);
+      expect(find.text('mirror.example'), findsOneWidget);
+      expect(
+        find.text('Local Files (without catalog support)'),
+        findsOneWidget,
+      );
+      expect(
+        core.dispatched,
+        hasLength(1),
+        reason: 'expanding dispatches nothing',
+      );
+    });
+
+    testWidgets('an addon still answering keeps its label and a spinner', (
+      tester,
+    ) async {
+      await mount(tester, [loadingGroup(youTubeUrl)]);
+
+      // Nothing yet, not nothing at all: it is still a section.
+      expect(find.text('v3-channels.strem.io'), findsOneWidget);
+      expect(find.text(kLookingForStreams), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNWidgets(2));
+      expect(find.textContaining('had nothing for this'), findsNothing);
+    });
+
+    testWidgets('empty, waiting, failed and populated each land in place', (
+      tester,
+    ) async {
+      await mount(tester, [
+        ...playableGroups(),
+        loadingGroup(youTubeUrl),
+        emptyGroup(strangerUrl),
+        failedGroup(localAddonUrl),
+      ]);
+
+      final stream = tester.getTopLeft(find.text('1080p')).dy;
+      final waiting = tester.getTopLeft(find.text(kLookingForStreams)).dy;
+      final empty = tester
+          .getTopLeft(find.text('1 addon had nothing for this title'))
+          .dy;
+      final failed = tester
+          .getTopLeft(find.text('Local Files (without catalog support)'))
+          .dy;
+      expect(stream, lessThan(waiting));
+      expect(waiting, lessThan(empty));
+      expect(empty, lessThan(failed));
+      expect(find.text('Failed to fetch: 404 Not Found'), findsOneWidget);
+      expect(find.text('No streams'), findsNothing);
+    });
+
+    testWidgets('everything empty still offers the Addons screen', (
+      tester,
+    ) async {
+      await mount(tester, [emptyGroup(youTubeUrl), emptyGroup(strangerUrl)]);
+
+      // The notice is what it always was, and the summary says how many
+      // addons that "nothing" came from rather than repeating it.
+      expect(find.text('No streams for this title'), findsOneWidget);
+      expect(find.text('Add an addon'), findsOneWidget);
+      expect(find.text('2 addons had nothing for this title'), findsOneWidget);
     });
   });
 }

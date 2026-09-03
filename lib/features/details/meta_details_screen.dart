@@ -52,6 +52,14 @@ import '../player/player_screen.dart';
 /// one summary row, so a profile full of dead mirrors does not bury the
 /// streams that still play.
 ///
+/// An addon that answered with *nothing* is not listed either: most stream
+/// addons have nothing for most episodes, and a labelled "No streams"
+/// section each pushed the real streams off the screen. They become one
+/// quiet line below the streams saying how many there were, which expands
+/// to name them. The three states stay apart: an addon still being waited
+/// on keeps its label and a spinner, one that answered with nothing is in
+/// that line, and one that failed has its own section.
+///
 /// On a TV the info column and the streams pane are separate
 /// [FocusTraversalGroup]s, focus starts on the stream the user most likely
 /// wants (the last used source, else the first playable one) as nothing
@@ -810,6 +818,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       for (final g in groups)
         if (!_hasFailed(g)) g,
     ];
+    // An addon that answered with nothing is not a section of its own
+    // either: most stream addons have nothing for most episodes, and a
+    // label plus "No streams" each was most of what the list showed.
+    final listed = [
+      for (final g in answered)
+        if (!_answeredEmpty(g)) g,
+    ];
+    final empties = [
+      for (final g in answered)
+        if (_answeredEmpty(g)) g,
+    ];
     final failures = [
       for (final group in groups)
         if (_hasFailed(group))
@@ -819,7 +838,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           ),
     ];
     final autofocusAt = isTv && lastUsed == null
-        ? _firstPlayable(answered)
+        ? _firstPlayable(listed)
         : null;
     final videoId = state.streamPath?.id ?? meta.id;
     final downloads = _downloadsClient == null
@@ -862,13 +881,24 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             downloads: downloads?.forGroup(lastUsed.$1),
           ),
         ),
-      for (final (index, group) in answered.indexed)
+      for (final (index, group) in listed.indexed)
         _StreamGroupSliver(
           group: group,
           lastUsed: lastUsed?.$2,
           onPlay: (stream) => _play(state, group, stream),
           autofocusIndex: autofocusAt?.$1 == index ? autofocusAt!.$2 : null,
           downloads: downloads?.forGroup(group),
+        ),
+      if (empties.isNotEmpty)
+        SliverToBoxAdapter(
+          child: _EmptyAddonsSummary(
+            names: [
+              for (final group in empties)
+                profile?.installedAddon(group.request.base)?.manifest.name ??
+                    group.addonLabel,
+            ],
+            isEpisode: state.hasVideos,
+          ),
         ),
       if (failures.isNotEmpty)
         SliverToBoxAdapter(
@@ -890,6 +920,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final error = group.error;
     return error != null && !error.isEmptyContent;
   }
+
+  /// Whether the addon has answered and had nothing: no streams, nothing
+  /// still on its way, and no failure (which [_hasFailed] takes first).
+  /// The engine's own "this addon has nothing for this video"
+  /// ([LoadableError.isEmptyContent]) is one of these, not a failure.
+  static bool _answeredEmpty(StreamGroup group) =>
+      group.streams.isEmpty && !group.isLoading;
 
   /// The (group, stream) indices of the first playable stream, if any.
   static (int, int)? _firstPlayable(List<StreamGroup> groups) {
@@ -1570,10 +1607,13 @@ final class _StreamDownloads {
   }
 }
 
-/// One addon's answer: its label and the streams under it, or "No streams"
-/// once it has settled on nothing. An addon that *failed* never reaches
-/// here — those are collected into [_FailedAddonsSection] below the streams
-/// that did arrive.
+/// One addon's answer: its label and the streams under it, or a spinner
+/// while they are still on their way.
+///
+/// Only groups with something to show reach here. An addon that *failed* is
+/// collected into [_FailedAddonsSection], and one that answered with
+/// nothing into [_EmptyAddonsSummary], both below the streams that did
+/// arrive.
 class _StreamGroupSliver extends StatelessWidget {
   const _StreamGroupSliver({
     required this.group,
@@ -1602,7 +1642,10 @@ class _StreamGroupSliver extends StatelessWidget {
     final label = group.isFromMeta
         ? 'From ${group.addonLabel}'
         : group.addonLabel;
-    final settledEmpty = streams.isEmpty && !group.isLoading;
+    // Nothing yet, as opposed to nothing at all: a group that settled on
+    // no streams is not listed here at all any more, so the label with a
+    // spinner under it can only mean the answer is still coming.
+    final waiting = streams.isEmpty && group.isLoading;
     return SliverMainAxisGroup(
       slivers: [
         SliverToBoxAdapter(
@@ -1616,9 +1659,16 @@ class _StreamGroupSliver extends StatelessWidget {
             ),
           ),
         ),
-        if (settledEmpty)
+        if (waiting)
           const SliverToBoxAdapter(
-            child: ListTile(dense: true, title: Text('No streams')),
+            child: ListTile(
+              dense: true,
+              leading: SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              title: Text(kLookingForStreams),
+            ),
           ),
         SliverList.builder(
           itemCount: streams.length,
@@ -1634,6 +1684,80 @@ class _StreamGroupSliver extends StatelessWidget {
             );
           },
         ),
+      ],
+    );
+  }
+}
+
+/// The addons that answered this video with nothing, as one quiet line
+/// below the streams that did arrive.
+///
+/// Most stream addons have nothing for most episodes, so listing each as a
+/// labelled section with "No streams" under it filled the pane with the
+/// addons that had nothing to say and pushed the ones that did off the
+/// screen. The count is kept, because "four addons were asked and had
+/// nothing" and "no addon has answered yet" are different answers, and the
+/// row expands to name them.
+class _EmptyAddonsSummary extends StatefulWidget {
+  const _EmptyAddonsSummary({required this.names, required this.isEpisode});
+
+  /// The addons, named from the profile where it knows them.
+  final List<String> names;
+
+  /// Whether the streams are an episode's, for the wording.
+  final bool isEpisode;
+
+  static String summaryLabel(int count, {required bool isEpisode}) =>
+      '$count ${count == 1 ? 'addon' : 'addons'} had nothing for this '
+      '${isEpisode ? 'episode' : 'title'}';
+
+  @override
+  State<_EmptyAddonsSummary> createState() => _EmptyAddonsSummaryState();
+}
+
+class _EmptyAddonsSummaryState extends State<_EmptyAddonsSummary> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final names = widget.names;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          dense: true,
+          leading: Icon(Icons.inbox_outlined, color: muted),
+          title: Text(
+            _EmptyAddonsSummary.summaryLabel(
+              names.length,
+              isEpisode: widget.isEpisode,
+            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+          ),
+          subtitle: _expanded
+              ? null
+              : Text(
+                  names.join(', '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+          trailing: Icon(
+            _expanded ? Icons.expand_less : Icons.expand_more,
+            color: muted,
+          ),
+          onTap: () => setState(() => _expanded = !_expanded),
+        ),
+        if (_expanded)
+          for (final name in names)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(72, 0, 16, 8),
+              child: Text(
+                name,
+                style: theme.textTheme.bodySmall?.copyWith(color: muted),
+              ),
+            ),
       ],
     );
   }

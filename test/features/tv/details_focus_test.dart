@@ -237,10 +237,12 @@ void main() {
         if (focusedLabel(tester) == '1080p') break;
         inPane.add(focusInPane());
       }
+      // Three stops: the two streams and the row summarising the addons
+      // that had nothing, which expands and so takes the remote too.
       expect(inPane.length, lessThan(41), reason: 'came back around');
-      expect(inPane.where((b) => b).length, 2);
-      expect(inPane.sublist(0, 2), [true, true]);
-      expect(inPane.sublist(2).any((b) => b), isFalse);
+      expect(inPane.where((b) => b).length, 3);
+      expect(inPane.sublist(0, 3), [true, true, true]);
+      expect(inPane.sublist(3).any((b) => b), isFalse);
     });
 
     testWidgets(
