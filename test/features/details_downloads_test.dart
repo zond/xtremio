@@ -91,6 +91,27 @@ class GatedDownloadsClient extends FakeDownloadsClient {
   }
 }
 
+/// A client whose *listing* waits, once a pin has been taken, so the tile
+/// can be looked at in the window between the pin landing and the registry
+/// catching up with it.
+class GatedListingClient extends FakeDownloadsClient {
+  final Completer<void> gate = Completer<void>();
+  bool _pinned = false;
+
+  @override
+  Future<DownloadAddResult> add(DownloadRequest request) async {
+    final result = await super.add(request);
+    _pinned = true;
+    return result;
+  }
+
+  @override
+  Future<DownloadsRegistry> list() async {
+    if (_pinned) await gate.future;
+    return super.list();
+  }
+}
+
 void main() {
   Widget harness(
     FakeCoreClient core,
@@ -289,6 +310,36 @@ void main() {
       downloads.gate.complete();
       await tester.pumpAndSettle();
       expect(downloads.added, hasLength(1));
+    });
+
+    testWidgets('the tile stays busy until the listing has the pin', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = GatedListingClient();
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip(kDownloadTooltip));
+      // The pin is taken; the listing that would put the entry on the tile
+      // is still out.
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byTooltip(kDownloadTooltip),
+        findsNothing,
+        reason: 'the tile would take a second press for the same pin',
+      );
+      expect(find.byTooltip(kDownloadStartingTooltip), findsOneWidget);
+
+      downloads.gate.complete();
+      await tester.pumpAndSettle();
+      expect(onStreamTile('Waiting to start'), findsOneWidget);
     });
   });
 

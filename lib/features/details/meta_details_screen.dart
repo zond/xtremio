@@ -288,9 +288,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       thrown = error;
     }
     if (!mounted) return;
-    setState(() => _pending.remove(key));
+    // The guard is held over the refresh as well: until the fresh listing
+    // has the entry, the tile has nothing to show for the pin and would
+    // offer the download again.
     await downloads.refresh();
     if (!mounted) return;
+    setState(() => _pending.remove(key));
 
     if (thrown != null) {
       _tell('This stream could not be downloaded.');
