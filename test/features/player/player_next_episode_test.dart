@@ -99,7 +99,7 @@ void main() {
     expect(find.byTooltip('Next episode (N)'), findsOneWidget);
     expect(find.byType(UpNextCard), findsNothing);
 
-    engine.emitCompleted();
+    engine.emitEnd();
     await pumpEvents(tester);
     expect(harness.playerActions(), contains('Ended'));
     expect(find.byType(UpNextCard), findsOneWidget);
@@ -119,7 +119,7 @@ void main() {
     // Let it run out: the core advances, a new player takes over with the
     // engine's stream for the episode, and this one does not unload the
     // core's player on its way out.
-    engine.emitCompleted();
+    engine.emitEnd();
     await pumpEvents(tester);
     await tester.pump(const Duration(seconds: 10));
     await tester.pumpAndSettle();
@@ -262,7 +262,7 @@ void main() {
 
     // The episode ends under the sheet: the end is reported, but the
     // countdown does not run, so nothing replaces the sheet's route.
-    harness.engine.emitCompleted();
+    harness.engine.emitEnd();
     await pumpEvents(tester);
     expect(harness.playerActions(), contains('Ended'));
     await tester.pump(const Duration(seconds: 15));
@@ -291,7 +291,7 @@ void main() {
     useWideViewport(tester);
     final harness = harnessWithNext();
     await harness.pump(tester);
-    harness.engine.emitCompleted();
+    harness.engine.emitEnd();
     await pumpEvents(tester);
     expect(find.byType(UpNextCard), findsOneWidget);
 
@@ -318,7 +318,7 @@ void main() {
     final harness = PlayerHarness();
     await harness.pump(tester);
     expect(find.byTooltip('Next episode (N)'), findsNothing);
-    harness.engine.emitCompleted();
+    harness.engine.emitEnd();
     await pumpEvents(tester);
     expect(find.byType(UpNextCard), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyN);

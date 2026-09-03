@@ -166,7 +166,7 @@ void main() {
       final harness = await pumpOnTv(tester, withNext: true);
       harness.engine.emitPlaying(true);
       await pumpEvents(tester);
-      harness.engine.emitCompleted();
+      harness.engine.emitEnd();
       await pumpEvents(tester);
       expect(find.byType(UpNextCard), findsOneWidget);
       return harness;

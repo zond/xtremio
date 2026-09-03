@@ -99,7 +99,7 @@ void main() {
   ) async {
     // The engine's default: 35 s.
     final harness = await pumpPlaying(tester, {}, withNext: true);
-    harness.engine.emitCompleted();
+    harness.engine.emitEnd();
     await pumpEvents(tester);
     expect(harness.playerActions(), contains('Ended'));
     expect(find.text('Playing in 35 s'), findsOneWidget);
@@ -119,7 +119,7 @@ void main() {
     final harness = await pumpPlaying(tester, {
       'nextVideoNotificationDuration': 0,
     }, withNext: true);
-    harness.engine.emitCompleted();
+    harness.engine.emitEnd();
     await pumpEvents(tester);
     expect(find.byType(UpNextCard), findsNothing);
     await tester.pumpAndSettle();
@@ -135,7 +135,7 @@ void main() {
       'bingeWatching': false,
       'nextVideoNotificationDuration': 0,
     }, withNext: true);
-    harness.engine.emitCompleted();
+    harness.engine.emitEnd();
     await pumpEvents(tester);
     expect(harness.playerActions(), contains('Ended'));
     expect(find.byType(UpNextCard), findsNothing);

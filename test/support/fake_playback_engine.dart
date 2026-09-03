@@ -13,6 +13,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   final _buffering = StreamController<bool>.broadcast();
   final _completed = StreamController<bool>.broadcast();
   final _errors = StreamController<String>.broadcast();
+  final _engineLog = StreamController<String>.broadcast();
   final _volume = StreamController<double>.broadcast();
   final _tracks = StreamController<PlaybackTracks>.broadcast();
   late final _stats = StreamController<PlaybackStats>.broadcast(
@@ -60,7 +61,23 @@ class FakePlaybackEngine implements PlaybackEngine {
   void emitPlaying(bool playing) => _playing.add(playing);
   void emitBuffering(bool buffering) => _buffering.add(buffering);
   void emitCompleted() => _completed.add(true);
+
+  /// The media reaching its end the way a real one does: the duration, the
+  /// position at it, then `completed`.
+  ///
+  /// The screen believes an ending only when the position agrees with one
+  /// (`PlayerScreen._endLooksReal`): libmpv reports a read that stopped
+  /// making progress as an end of file too, and that one is a stall.
+  void emitEnd({Duration duration = const Duration(minutes: 96)}) {
+    emitDuration(duration);
+    emitPosition(duration);
+    emitCompleted();
+  }
+
   void emitError(String error) => _errors.add(error);
+
+  /// One of mpv's own error-level log lines.
+  void emitEngineLog(String line) => _engineLog.add(line);
   void emitVolume(double volume) => _volume.add(volume);
   void emitTracks(PlaybackTracks tracks) => _tracks.add(tracks);
   void emitStats(PlaybackStats stats) => _stats.add(stats);
@@ -85,6 +102,9 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   @override
   Stream<String> get errors => _errors.stream;
+
+  @override
+  Stream<String> get engineLog => _engineLog.stream;
 
   @override
   Stream<double> get volume => _volume.stream;

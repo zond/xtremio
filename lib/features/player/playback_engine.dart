@@ -29,6 +29,12 @@ abstract interface class PlaybackEngine {
   Stream<bool> get completed;
   Stream<String> get errors;
 
+  /// What the backend itself says went wrong, verbatim -- mpv's own error
+  /// log, where the demuxer and ffmpeg write (`tcp: Connection timed out`).
+  /// Not an error the screen shows: a line for the diagnostics report,
+  /// which is the only place a failure on someone else's phone is legible.
+  Stream<String> get engineLog;
+
   /// Output volume, `0..100`.
   Stream<double> get volume;
 
@@ -147,6 +153,7 @@ class PlaybackScope extends InheritedWidget {
 /// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
 class MediaKitEngine implements PlaybackEngine {
   MediaKitEngine({bool hardwareDecoding = true}) : _player = Player() {
+    _overrides = _applyOverrides(_player.platform);
     _controller = VideoController(
       _player,
       configuration: configurationFor(hardwareDecoding: hardwareDecoding),
@@ -168,6 +175,42 @@ class MediaKitEngine implements PlaybackEngine {
   final Player _player;
   late final VideoController _controller;
   bool _disposed = false;
+
+  /// The mpv properties in [mpvOverrides], on their way to the backend.
+  /// [open] waits for it: a property mpv reads when it opens a stream is
+  /// worth nothing if it lands after the stream is open.
+  late final Future<void> _overrides;
+
+  /// mpv properties this app sets differently from media_kit's own
+  /// defaults, applied once per player.
+  ///
+  /// `network-timeout`: media_kit 1.2.6 starts libmpv with
+  /// `network-timeout=5` (`player/native/player/real.dart`), which is five
+  /// seconds for the *whole* read to make progress. Our own stream is a
+  /// torrent: on a thin swarm the embedded server legitimately takes
+  /// minutes to hand over the next piece, and there is nothing wrong while
+  /// it does. With mpv's `keep-open=yes` that timeout does not surface as
+  /// an error either -- it arrives as a false end of file, on which
+  /// media_kit's `play()` seeks back to 0, which is what "it plays ten
+  /// seconds and starts over" is. Five minutes is long enough that no
+  /// swarm trips it and short enough that a connection that is really gone
+  /// still ends up an error rather than a hang.
+  static const Map<String, String> mpvOverrides = {'network-timeout': '300'};
+
+  /// Sets [mpvOverrides] on the native backend. Only libmpv has
+  /// properties; any other backend keeps its own behaviour, and a player
+  /// torn down before it initialised is not an error worth surfacing.
+  static Future<void> _applyOverrides(PlatformPlayer? platform) async {
+    if (platform is! NativePlayer) return;
+    for (final MapEntry(:key, :value) in mpvOverrides.entries) {
+      try {
+        await platform.setProperty(key, value);
+      } catch (_) {
+        // Gone, or a build of libmpv without the property. Playback is
+        // still playback.
+      }
+    }
+  }
 
   /// The controller configuration for a `hardwareDecoding` setting:
   /// media_kit's default (GPU decode and render) when on, software
@@ -231,6 +274,11 @@ class MediaKitEngine implements PlaybackEngine {
 
   @override
   Stream<String> get errors => _player.stream.error;
+
+  @override
+  Stream<String> get engineLog => _player.stream.log
+      .where((entry) => entry.level == 'error')
+      .map((entry) => '${entry.prefix}: ${entry.text}');
 
   @override
   Stream<double> get volume => _player.stream.volume;
@@ -390,9 +438,10 @@ class MediaKitEngine implements PlaybackEngine {
   }
 
   @override
-  Future<void> open(Uri url, {Duration start = Duration.zero}) {
+  Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     _externalSubtitleUrls.clear();
-    return _player.open(Media(url.toString(), start: start));
+    await _overrides;
+    await _player.open(Media(url.toString(), start: start));
   }
 
   @override

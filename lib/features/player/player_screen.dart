@@ -93,6 +93,17 @@ class PlayerScreen extends StatefulWidget {
   /// starting up is tried again before the failure is shown.
   static const int torrentOpenRetries = 4;
 
+  /// How close to the duration a position has to be for an `Ended` from
+  /// the engine to be the media actually ending, and the fraction of the
+  /// duration that counts as the end regardless (a film whose last frames
+  /// nobody sits through). See `_endLooksReal`.
+  static const Duration endTolerance = Duration(seconds: 30);
+  static const double endFraction = 0.98;
+
+  /// How many times a stream that ended early is re-opened where it
+  /// stopped before that is called a failure.
+  static const int falseEndRecoveries = 3;
+
   /// The wait before the first of those retries; each further attempt waits
   /// one more multiple of it (0.7s, 1.4s, 2.1s, 2.8s: about seven seconds
   /// of patience in all, which is the order of a slow metadata fetch).
@@ -295,6 +306,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int _stalls = 0;
   DateTime? _stallStart;
 
+  /// How many times the engine has reported an end of file that was not
+  /// one for the media on screen. See [_onFalseEnd].
+  int _falseEnds = 0;
+
   /// How many stalls are written out one by one before only every tenth is.
   static const int _stallsLogged = 10;
   Timer? _openRetryTimer;
@@ -456,6 +471,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       engine.completed.listen(_onCompleted),
       engine.buffering.listen(_onBuffering),
       engine.errors.listen(_onEngineError),
+      engine.engineLog.listen(_onEngineLog),
       engine.volume.listen((v) => setState(() => _volume = v)),
       engine.tracks.listen(_onTracks),
     ]);
@@ -552,13 +568,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _openRetries = 0;
     _openError = null;
     _stalls = 0;
+    _falseEnds = 0;
     _openedAt = DateTime.now();
-    DiagnosticsLog.info(
-      'player',
-      'open ${DiagnosticsLog.url(_mediaUrl(url))} '
-          '(${state.selectedStream?.kind.name ?? 'stream'}) at ${start.inSeconds}s',
+    _open(
+      url,
+      reason: 'initial (${state.selectedStream?.kind.name ?? 'stream'})',
     );
-    _open(url);
     // After `open` is on its way: the stream request creates the torrent's
     // engine with everything the URL carries (its `f=` filters included);
     // a stats request that got there first would create it from the bare
@@ -572,8 +587,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// current stream was resolved with. Every failure goes through
   /// [_failPlayback], which decides whether it is worth another attempt --
   /// which is why a retry is this call again and nothing else.
-  void _open(Uri url) {
+  void _open(Uri url, {required String reason}) {
     final state = _openState;
+    DiagnosticsLog.info(
+      'player',
+      'open ${DiagnosticsLog.url(_mediaUrl(url))} '
+          'at ${_openStart.inSeconds}s ($reason)',
+    );
     _engine
         ?.open(_mediaUrl(url), start: _openStart)
         .then((_) {
@@ -648,18 +668,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Re-opens the stream at the position it is playing at, so a new
   /// `buffer=` takes effect without restarting the playback.
-  void _reopenForBuffer() {
+  void _reopenForBuffer() =>
+      _reopenAt(_resumePosition, reason: 'reopen-buffer=${_bufferAhead.wire}');
+
+  /// Where a re-open of the stream on screen should start.
+  ///
+  /// [_position] only means something once the media is in: media_kit
+  /// reports `position: 0` as soon as an `open` is issued, so a re-open
+  /// while the start-up card is still up would otherwise throw away the
+  /// position the playback was resumed at and start the film from the
+  /// beginning.
+  Duration get _resumePosition => _mediaLoaded ? _position.value : _openStart;
+
+  /// Re-opens the stream at [start] on the same engine -- no `Load Player`,
+  /// no new route, and the core's idea of the stream untouched.
+  void _reopenAt(Duration start, {required String reason}) {
     final url = _opened;
     if (url == null || _handedOver || _casting) return;
     _cancelOpenRetry();
-    _openStart = _position.value;
+    _openStart = start;
     _openRetries = 0;
     _openError = null;
-    DiagnosticsLog.info(
-      'player',
-      're-opening for buffer=${_bufferAhead.wire} at ${_openStart.inSeconds}s',
-    );
-    _open(url);
+    _open(url, reason: reason);
   }
 
   /// Pins what is playing as an offline download, which is what
@@ -807,6 +837,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _maybeAutoPickSubtitles();
   }
 
+  /// mpv's own error log. Not shown, only recorded: this is where the
+  /// demuxer and ffmpeg name what actually went wrong (`tcp: Connection
+  /// timed out`), which is the line a report needs and the one nobody can
+  /// read off a phone.
+  void _onEngineLog(String line) => DiagnosticsLog.warn('mpv', line);
+
   void _onEngineError(String error) {
     DiagnosticsLog.error('player', 'engine error: $error');
     _failPlayback(error);
@@ -892,7 +928,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _failPlayback(_openError ?? 'the torrent could not be opened');
       return;
     }
-    _open(url);
+    _open(url, reason: 'retry $_openRetries');
   }
 
   void _cancelOpenRetry() {
@@ -1094,10 +1130,70 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onCompleted(bool completed) {
     if (!completed || _opened == null || _handedOver || _casting) return;
+    final position = _position.value;
+    DiagnosticsLog.info(
+      'player',
+      'completed at ${position.inSeconds}s of '
+          '${_duration == Duration.zero ? 'unknown' : '${_duration.inSeconds}s'}',
+    );
+    if (!_endLooksReal(position)) {
+      _onFalseEnd(position);
+      return;
+    }
     _client?.dispatch(CoreActions.playerEnded());
     // `bingeWatching` off: the episode just ends; the Next button remains.
     if (_state?.nextVideo != null && _settings.bingeWatching) _startUpNext();
     _showControls();
+  }
+
+  /// Whether a `completed` from the engine is the film ending.
+  ///
+  /// It is not always. A read that stops making progress reaches mpv as an
+  /// end of file, and with `keep-open=yes` that is all it looks like: the
+  /// media "completed" ten seconds into a two-hour film. Reporting that to
+  /// the core marks the title watched and moves continue-watching to the
+  /// end, which is not something a later correction undoes.
+  ///
+  /// So an ending is believed when the position is at one: within
+  /// [PlayerScreen.endTolerance] of the duration, or past
+  /// [PlayerScreen.endFraction] of it. With no duration known there is
+  /// nothing to compare against, and only an ending that took longer than
+  /// the tolerance to arrive is believed at all.
+  bool _endLooksReal(Duration position) {
+    if (_duration <= Duration.zero) return position > PlayerScreen.endTolerance;
+    return _duration - position <= PlayerScreen.endTolerance ||
+        position >= _duration * PlayerScreen.endFraction;
+  }
+
+  /// An end of file that is not the end of the film: the stream stopped
+  /// producing data. Nothing is reported to the core -- no `Ended`, no
+  /// up-next -- and the position is kept, because it is still where the
+  /// viewer is.
+  ///
+  /// mpv sits at the end of the file with `keep-open=yes` and will not go
+  /// on by itself, so the stream is re-opened where playback stopped, which
+  /// is what recovers it. [PlayerScreen.falseEndRecoveries] of those and it
+  /// is a failure like any other: a stream that ends instantly every time
+  /// is broken, not slow.
+  void _onFalseEnd(Duration position) {
+    _falseEnds++;
+    if (_falseEnds > PlayerScreen.falseEndRecoveries) {
+      DiagnosticsLog.error(
+        'player',
+        'stream ended early $_falseEnds times; giving up',
+      );
+      _failPlayback('the stream stopped sending data');
+      return;
+    }
+    DiagnosticsLog.warn(
+      'player',
+      'end of file at ${position.inSeconds}s is not the end of the media; '
+          're-opening ($_falseEnds of ${PlayerScreen.falseEndRecoveries})',
+    );
+    setState(() => _buffering = true);
+    _syncTorrentStats();
+    _showControls();
+    _reopenAt(position, reason: 'failBuffer $_falseEnds');
   }
 
   void _onTracks(PlaybackTracks tracks) {

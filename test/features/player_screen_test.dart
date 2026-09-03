@@ -122,7 +122,7 @@ void main() {
       engine.emitPlaying(true);
       engine.emitPlaying(false);
       await tester.pump();
-      engine.emitCompleted();
+      engine.emitEnd();
       await tester.pump();
       final tail = core.dispatched
           .skipWhile((a) => a.action['args']?['action'] != 'PausedChanged')
@@ -136,6 +136,12 @@ void main() {
         {
           'action': 'PausedChanged',
           'args': {'paused': true},
+        },
+        // The end of the media is a position at the end of it, which the
+        // core hears about before the `Ended` that follows from it.
+        {
+          'action': 'TimeChanged',
+          'args': {'time': 5760000, 'duration': 5760000, 'device': 'linux'},
         },
         {'action': 'Ended'},
       ]);
