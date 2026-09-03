@@ -1887,7 +1887,36 @@ class _StreamTile extends StatelessWidget {
     final withTooltip = filename == null
         ? tile
         : Tooltip(message: filename, child: tile);
-    return isTv ? RemotePress(onTap: onTap, child: withTooltip) : withTooltip;
+    if (!isTv) return withTooltip;
+    return RemotePress(
+      onTap: onTap,
+      onLongPress: _remoteDownloadAction(),
+      child: withTooltip,
+    );
+  }
+
+  /// What the download button on this tile does, for a remote that cannot
+  /// press it.
+  ///
+  /// Directional traversal skips a node inside the focused one's rect, and
+  /// the button is inside the tile the remote activates as a whole, so on a
+  /// television it can be looked at and never reached. The tile's long
+  /// press -- hold select, or the remote's menu key -- is the "more
+  /// options" gesture everywhere else in the app, and here there is exactly
+  /// one option: whatever the button beside the play arrow would do. Null
+  /// while there is nothing to do (no client, a stream the server cannot
+  /// keep, a pin in flight, a download still arriving), which leaves a hold
+  /// meaning what it meant before -- a tap on release.
+  VoidCallback? _remoteDownloadAction() {
+    final downloads = this.downloads;
+    if (downloads == null || downloads.isPending(stream)) return null;
+    final entry = downloads.entryOf(stream);
+    if (entry == null) return downloads.starter(stream);
+    return switch (entry.state) {
+      DownloadState.complete => () => downloads.onDelete(entry),
+      DownloadState.error => downloads.starter(stream),
+      _ => null,
+    };
   }
 
   /// The download affordance (when there is one) beside the play one.

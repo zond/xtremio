@@ -44,7 +44,11 @@ Rust engine for addons, catalogs, library, and playback state) and
 > keeps a torrent stream on the device: the download button on a stream tile
 > pins the file through the embedded server and becomes a delete button once
 > the file is whole, so the tile that took a download is the tile that undoes
-> it -- asking, as the list does, whether the bytes go with the entry.
+> it -- asking, as the list does, whether the bytes go with the entry. On a
+> television that button cannot be focused (directional traversal skips a
+> node inside the focused one's rect, and it is inside the stream tile), so
+> the tile's long press -- hold select, or the remote's menu key -- does
+> whatever the button would.
 > Badges on the episode list and
 > the details header say what is kept and how far along, and the Downloads
 > screen (from Settings, or the "Downloaded" chip in the Library) lists

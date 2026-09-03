@@ -3,12 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/downloads/download_labels.dart';
+import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/remote_press.dart';
 
 import '../../support/fake_core_client.dart';
+import '../../support/fake_downloads_client.dart';
 import '../../support/fake_playback_engine.dart';
 import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
@@ -57,19 +60,23 @@ Widget harness(
   String id = 'tt0063350',
   String? videoId,
   DeviceProfile device = tv,
-}) => DeviceScope(
-  profile: device,
-  child: CoreScope(
-    client: core,
-    child: PlaybackScope(
-      createEngine: FakePlaybackEngine.new,
-      torrentStats: FakeTorrentStatsClient(),
-      child: MaterialApp(
-        home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
-      ),
+  DownloadsClient? downloads,
+}) {
+  Widget screen = PlaybackScope(
+    createEngine: FakePlaybackEngine.new,
+    torrentStats: FakeTorrentStatsClient(),
+    child: MaterialApp(
+      home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
     ),
-  ),
-);
+  );
+  if (downloads != null) {
+    screen = DownloadsScope(client: downloads, child: screen);
+  }
+  return DeviceScope(
+    profile: device,
+    child: CoreScope(client: core, child: screen),
+  );
+}
 
 /// Where the streams pane starts at [tvSize]: 38 % of the width, at most
 /// 480 px, on the right.
@@ -154,8 +161,8 @@ void main() {
       expect(focusedLabel(tester), '1080p');
     });
 
-    testWidgets('select on the stream opens the player; a held select is '
-        'still a tap', (tester) async {
+    testWidgets('select on the stream opens the player; with no downloads '
+        'client above, a held select is still a tap', (tester) async {
       useScreen(tester, tvSize);
       final core = FakeCoreClient(
         state: {
@@ -365,6 +372,100 @@ void main() {
       expect(find.text('Season 8 opener'), findsOneWidget);
       expect(find.text('Pilot'), findsNothing);
       expect(find.widgetWithText(OutlinedButton, 'Season: 8'), findsOneWidget);
+    });
+  });
+
+  group('downloads on a remote', () {
+    /// The one torrent of the movie fixture.
+    const movieHash = '11ea02584fa6351956f35671962ab46354d99060';
+    const movieId = 'tt0063350';
+
+    /// A registry holding the movie, downloaded and whole.
+    DownloadsRegistry downloaded() {
+      final entry = DownloadView({
+        'metaId': movieId,
+        'videoId': movieId,
+        'name': 'Night of the Living Dead',
+        'stream': {'infoHash': movieHash, 'fileIdx': 0},
+        'infoHash': movieHash,
+        'fileIdx': 0,
+        'size': 1000,
+        'downloaded': 1000,
+        'state': 'complete',
+        'path': '/downloads/night.mkv',
+      });
+      return DownloadsRegistry(items: {entry.key: entry});
+    }
+
+    testWidgets('holding select on a downloaded stream asks to remove it', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(registry: downloaded());
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads: downloads));
+      await tester.pumpAndSettle();
+
+      // The delete button is on the focused row and cannot be focused
+      // itself: a node inside the focused one's rect is not in any
+      // direction from it.
+      expect(focusedLabel(tester), '1080p');
+      expect(find.byTooltip(kDownloadDeleteTooltip), findsOneWidget);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedLabel(tester), '1080p');
+
+      await hold(tester, LogicalKeyboardKey.select, RemotePress.holdDuration);
+
+      expect(find.byType(PlayerScreen), findsNothing, reason: 'not a tap');
+      expect(find.text('Remove Night of the Living Dead?'), findsOneWidget);
+      await tester.tap(find.text(RemoveDownloadDialog.deleteLabel));
+      await tester.pumpAndSettle();
+      expect(downloads.removed, [
+        (key: '$movieId:$movieId', deleteFiles: true),
+      ]);
+    });
+
+    testWidgets('holding select on a stream that is not kept downloads it', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads: downloads));
+      await tester.pumpAndSettle();
+
+      expect(focusedLabel(tester), '1080p');
+      await hold(tester, LogicalKeyboardKey.select, RemotePress.holdDuration);
+
+      expect(find.byType(PlayerScreen), findsNothing, reason: 'not a tap');
+      expect(downloads.added.single.stream.infoHash, movieHash);
+    });
+
+    testWidgets('a tap still plays what is kept, rather than removing it', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: loadMetaDetailsFixture(),
+          CoreField.player: loadPlayerFixture(),
+        },
+      );
+      final downloads = FakeDownloadsClient(registry: downloaded());
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads: downloads));
+      await tester.pumpAndSettle();
+
+      await press(tester, LogicalKeyboardKey.select);
+
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(downloads.removed, isEmpty);
     });
   });
 }
