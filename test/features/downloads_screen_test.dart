@@ -276,10 +276,13 @@ void main() {
       expect(args['stream'], {
         'url': movieFileUrl,
         'name': 'Torrent',
+        'description': '1080p BluRay\n\u{1F464} 12 \u{1F4BE} 1.4 GB',
         'behaviorHints': {
           'filename': 'night.of.the.living.dead.1968.1080p.mkv',
+          // Kept so the core can still binge-match the next episode.
+          'bingeGroup': 'pdm-1080p',
         },
-      }, reason: 'the addon name is kept; the torrent coordinates are not');
+      }, reason: 'the addon labels are kept; the torrent coordinates are not');
       // The addon requests it was downloaded with, which are what keep
       // continue-watching moving while it plays offline.
       expect(

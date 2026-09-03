@@ -29,12 +29,16 @@ typedef OfflinePlayback = ({
 /// start-up overlay keys on `infoHash`, so an offline play would sit behind
 /// a "connecting to peers" panel that no peer would ever answer.
 ///
-/// The addon's own `name` and `subtitles` come along -- the source label
-/// reads the same as it did online, and the sidecars belong to the file
-/// however it is played -- and everything else is dropped.
-/// `behaviorHints.filename` is the file's real name on disk, which is what
-/// the player reports as the video parameters and what subtitle addons match
-/// on.
+/// The addon's own `name`, `description` and `subtitles` come along -- the
+/// source label reads the same as it did online, and the sidecars belong to
+/// the file however it is played -- and so does `behaviorHints.bingeGroup`,
+/// because the core decides the next episode's stream with
+/// `Stream::is_binge_match`, which only matches when *both* streams carry
+/// one: drop it and a downloaded episode never auto-advances, and Details'
+/// "continue with last source" tile stops resolving. Everything else is
+/// dropped. `behaviorHints.filename` is the file's real name on disk, which
+/// is what the player reports as the video parameters and what subtitle
+/// addons match on.
 Map<String, dynamic> offlineStream(DownloadView view, String url) {
   final stream = view.stream;
   final segments = Uri.parse(url).pathSegments;
@@ -42,10 +46,16 @@ Map<String, dynamic> offlineStream(DownloadView view, String url) {
       ? stream.filename
       : segments.last;
   final subtitles = stream.subtitlesJson;
+  final bingeGroup = stream.behaviorHints['bingeGroup'];
+  final hints = <String, dynamic>{
+    'filename': ?filename,
+    'bingeGroup': ?bingeGroup,
+  };
   return {
     'url': url,
     if (stream.name != null) 'name': stream.name,
-    if (filename != null) 'behaviorHints': {'filename': filename},
+    if (stream.description != null) 'description': stream.description,
+    if (hints.isNotEmpty) 'behaviorHints': hints,
     if (subtitles.isNotEmpty) 'subtitles': subtitles,
   };
 }
