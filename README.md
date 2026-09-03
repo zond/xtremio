@@ -203,7 +203,11 @@ connection.
   `downloads()`, never stored twice. Downloading a second stream for a
   title replaces the entry and releases the pin it replaces (with its
   bytes, unless another entry names the same file), so no torrent is left
-  downloading behind the registry's back. A stream that names no `fileIdx` (or
+  downloading behind the registry's back. That sharing cuts the other way
+  too: the server's pins are a set with no reference count, so removing one
+  of two entries that name the same file drops only the registry row and
+  answers `unpinned: false`, leaving the pin — and the bytes — to the one
+  still playing it. A stream that names no `fileIdx` (or
   the `-1` sentinel the player's URL carries) is resolved the way the media
   route resolves `/{infoHash}/-1` — the `fileMustInclude` match, else the
   largest media file — so what is kept offline is the file that streamed,
