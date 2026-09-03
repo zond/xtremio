@@ -438,6 +438,37 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         std::thread::sleep(Duration::from_millis(100));
     }
 
+    // A refresh that finds work re-arms the progress poll. With nothing
+    // unfinished on record the ticker stops; the next list -- which flips an
+    // entry back to unfinished against the server's live stats -- has to
+    // start it again, or that row sits at its stale numbers for the rest of
+    // the session with no event ever pushed.
+    let recorded = std::fs::read_to_string(&registry_file)?;
+    std::fs::write(&registry_file, br#"{"version":1,"items":{}}"#)?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while xtremio_core::downloads::is_ticking() {
+        assert!(Instant::now() < deadline, "the ticker never stopped");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    std::fs::write(
+        &registry_file,
+        format!(
+            r#"{{"version":1,"items":{{"stale:stale":{{"metaId":"stale","videoId":"stale",
+               "infoHash":"{info_hash}","fileIdx":{missing_idx},"state":"complete",
+               "size":1,"downloaded":1}}}}}}"#
+        ),
+    )?;
+    let entry = list()["items"]["stale:stale"].clone();
+    assert_ne!(
+        entry["state"], "complete",
+        "the live stats corrected it: {entry}"
+    );
+    assert!(
+        xtremio_core::downloads::is_ticking(),
+        "and the poll that pushes what happens next is running again"
+    );
+    std::fs::write(&registry_file, recorded)?;
+
     // The destination directory goes through the server's own validation.
     let error = downloads_set_dir(Some("relative/dir".into())).unwrap_err();
     assert!(error.to_string().contains("absolute"), "{error}");

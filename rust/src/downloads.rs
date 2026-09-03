@@ -906,7 +906,7 @@ pub fn refresh() -> anyhow::Result<Registry> {
     let live = crate::server::downloads()?;
     let now = Utc::now();
     let mut version = VERSION;
-    update(|registry| {
+    let changed = update(|registry| {
         version = registry.version;
         let mut changed = BTreeMap::new();
         for (key, entry) in registry.items.iter_mut() {
@@ -922,8 +922,15 @@ pub fn refresh() -> anyhow::Result<Registry> {
             }
         }
         Ok(changed)
-    })
-    .map(|changed| Registry {
+    })?;
+    // A refresh is also where an entry can go *back* to unfinished -- a
+    // torrent that is checking again, a file that went away, a pin the
+    // server lost -- and nothing else would restart the poll: `add` and
+    // `set_event_sink` are its only other callers and neither runs
+    // afterwards, so progress would stay silent for the rest of the
+    // session.
+    ensure_ticker();
+    Ok(Registry {
         version,
         items: changed,
         ..Registry::default()
@@ -993,6 +1000,14 @@ fn ticking() -> std::sync::MutexGuard<'static, bool> {
     TICKING
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Whether the progress poll is running. Nothing on the FFI surface needs
+/// it; the integration test does, because an armed ticker and a silent one
+/// look identical from outside until a download that nobody is polling for
+/// stops moving.
+pub fn is_ticking() -> bool {
+    *ticking()
 }
 
 /// True while any entry is neither complete nor paused — an errored one
