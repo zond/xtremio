@@ -769,6 +769,16 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
     let now = Utc::now();
     let entry = update(|registry| {
         let previous = registry.items.get(&key);
+        // Re-adding the *same* file is a retry, not a new download, and only
+        // a reading that counted bytes may move its numbers. `pin_download`
+        // can answer `checking` while it relocates the torrent, which
+        // `apply_live` treats as saying nothing at all -- so a row rebuilt
+        // from zero here would sit at `queued, 0 B` until the hash check
+        // ends, and its `completedAt` would be gone for good, that date
+        // being set once and never recomputed.
+        let same = previous.filter(|entry| {
+            entry.info_hash.eq_ignore_ascii_case(&info_hash) && entry.file_idx == file_idx
+        });
         let mut entry = Entry {
             meta_id: request.meta_id.clone(),
             video_id: request.video_id.clone(),
@@ -779,13 +789,15 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
             info_hash: info_hash.clone(),
             file_idx,
             announce: announce.clone(),
-            path: path.clone(),
-            size: 0,
-            downloaded: 0,
-            state: State::Queued,
+            path: path
+                .clone()
+                .or_else(|| same.and_then(|entry| entry.path.clone())),
+            size: same.map(|entry| entry.size).unwrap_or_default(),
+            downloaded: same.map(|entry| entry.downloaded).unwrap_or_default(),
+            state: same.map(|entry| entry.state).unwrap_or_default(),
             error: None,
             created_at: previous.and_then(|entry| entry.created_at).or(Some(now)),
-            completed_at: None,
+            completed_at: same.and_then(|entry| entry.completed_at),
             last_played_at: previous.and_then(|entry| entry.last_played_at),
             meta: request.meta.clone(),
             stream_request: request.stream_request.clone(),

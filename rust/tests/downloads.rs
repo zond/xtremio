@@ -307,6 +307,20 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert_eq!(pending["size"], MISSING_LEN, "{pending}");
     assert!(pending["completedAt"].is_null(), "{pending}");
 
+    // Pressing Download again on a finished title -- the button is not
+    // disabled yet, or the user is retrying after a scare -- is a retry of
+    // the same file, not a new download. `pin_download` relocating the
+    // torrent can answer `checking`, which says nothing about the bytes, so
+    // the row has to keep what it already knew; the date it finished above
+    // all, since that is set once and could never be recovered.
+    let readded = add("tt-have", &info_hash, have_idx);
+    assert_eq!(
+        readded["entry"]["completedAt"], complete["completedAt"],
+        "the date it finished survived the re-add: {readded}"
+    );
+    assert_eq!(readded["entry"]["state"], "complete", "{readded}");
+    assert_eq!(readded["entry"]["downloaded"], HAVE_LEN, "{readded}");
+
     // The registry is on disk, versioned, keyed by meta and video.
     let persisted = json(&std::fs::read_to_string(&registry_file)?);
     assert_eq!(persisted["version"], 1, "{persisted}");
