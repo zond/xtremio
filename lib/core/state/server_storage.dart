@@ -128,3 +128,119 @@ class ServerStorage {
     'disk: unknown',
   ];
 }
+
+/// What the server's cache currently occupies against its `cacheSize`
+/// limit, read without evicting anything
+/// (`ServerHandle::cache_usage`/`GET /cache.json`).
+///
+/// [totalBytes] and [limitBytes] are occupancy, not apparent length -- the
+/// server counts allocated blocks, the same accounting its cleaner uses --
+/// so this is the number to hold against the limit, and the one a
+/// part-streamed film's apparent length would badly overstate.
+/// [protectedBytes]/[protectedFiles] are what a live engine is writing or a
+/// pinned download keeps right now, which a clean pass can never touch:
+/// when they account for all of [totalBytes] and the cache is still over
+/// [limitBytes], cleaning cannot help until playback stops or something is
+/// unpinned.
+///
+/// The walk behind this call costs one `stat` per file currently in the
+/// cache and is not bounded server-side, so it belongs on screen-open, on
+/// an explicit refresh, and after a clean -- never on a timer.
+class CacheUsage {
+  const CacheUsage({
+    required this.totalBytes,
+    this.limitBytes,
+    required this.protectedBytes,
+    required this.protectedFiles,
+  });
+
+  factory CacheUsage.fromJson(Map<String, dynamic> json) => CacheUsage(
+    totalBytes: (json['totalBytes'] as num?)?.toInt() ?? 0,
+    limitBytes: (json['limitBytes'] as num?)?.toInt(),
+    protectedBytes: (json['protectedBytes'] as num?)?.toInt() ?? 0,
+    protectedFiles: (json['protectedFiles'] as num?)?.toInt() ?? 0,
+  );
+
+  /// Occupancy of the cache right now.
+  final int totalBytes;
+
+  /// The `cacheSize` setting in the same accounting. Null only when the
+  /// cache is truly unlimited, matching the setting's own null.
+  final int? limitBytes;
+
+  /// How much of [totalBytes] a clean pass may never touch: a live engine
+  /// is writing it, or a pinned download keeps it.
+  final int protectedBytes;
+
+  /// How many files that is.
+  final int protectedFiles;
+
+  /// Whether the cache is bigger than its configured limit.
+  bool get overLimit {
+    final limit = limitBytes;
+    return limit != null && totalBytes > limit;
+  }
+
+  /// Whether cleaning cannot help right now: everything over the limit is
+  /// what a live stream or a kept download is holding.
+  bool get nothingEvictable => overLimit && protectedBytes >= totalBytes;
+
+  /// `17.0 GB of 10.0 GB limit`, or `17.0 GB, no limit set`.
+  String get label {
+    final used = DownloadView.humanSize(totalBytes);
+    final limit = limitBytes;
+    return limit == null
+        ? '$used, no limit set'
+        : '$used of ${DownloadView.humanSize(limit)} limit';
+  }
+}
+
+/// What one on-demand clean pass found and did
+/// (`ServerHandle::clean_cache_now`/`POST /cache/clean`) -- the exact
+/// function the server's own scheduled sweep runs, so it respects exactly
+/// the same protections. Occupancy throughout, like [CacheUsage].
+class EvictionReport {
+  const EvictionReport({
+    required this.total,
+    required this.protected,
+    required this.protectedFiles,
+    required this.freed,
+    required this.deleted,
+    required this.limit,
+  });
+
+  factory EvictionReport.fromJson(Map<String, dynamic> json) => EvictionReport(
+    total: (json['total'] as num?)?.toInt() ?? 0,
+    protected: (json['protected'] as num?)?.toInt() ?? 0,
+    protectedFiles: (json['protectedFiles'] as num?)?.toInt() ?? 0,
+    freed: (json['freed'] as num?)?.toInt() ?? 0,
+    deleted: (json['deleted'] as num?)?.toInt() ?? 0,
+    limit: (json['limit'] as num?)?.toInt() ?? 0,
+  );
+
+  /// Occupancy of the cache once this pass finished.
+  final int total;
+
+  /// How much of [total] this pass could never touch: a live engine or a
+  /// pin.
+  final int protected;
+
+  /// How many files that is.
+  final int protectedFiles;
+
+  /// Occupancy this pass reclaimed.
+  final int freed;
+
+  /// How many files that took.
+  final int deleted;
+
+  /// The limit this run was given; `0` means "no limit" -- unlike
+  /// [CacheUsage.limitBytes] this is never null, matching the server's own
+  /// `EvictionReport::shortfall_message`.
+  final int limit;
+
+  /// Whether the run ended still over the limit. Not a failure: what is
+  /// left belongs to a live stream or a kept download, named by
+  /// [protected]/[protectedFiles].
+  bool get stillOverLimit => limit != 0 && total > limit;
+}

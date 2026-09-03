@@ -40,21 +40,20 @@ abstract interface class LanMediaControl {
   Future<Uri?> lanMediaBaseUrl({String? peerIp});
 }
 
-/// What the storage screen needs from the server: the numbers, and the one
-/// way there is to ask for a sweep.
+/// What the storage screen needs from the server: the cache's usage
+/// against its limit, and the one way there is to ask it to reclaim some.
 ///
-/// Behind an interface so the screen can be driven by a fake -- it is the
-/// only screen that can stop the server, and a test must be able to check
-/// that it asked first.
+/// Behind an interface so the screen can be driven by a fake in tests.
 abstract interface class ServerCacheControl {
-  /// What the cache costs and how much room is left. Throws when the
-  /// server is not running.
-  Future<ServerStorage> storage();
+  /// What the cache currently occupies against its limit, without evicting
+  /// anything. Throws when the server is not running.
+  Future<CacheUsage> cacheUsage();
 
-  /// Asks the server to reclaim its cache now, answering its base URL
-  /// afterwards. **Restarts it**, which stops whatever is playing: there
-  /// is no other trigger (see `server_clean_cache`).
-  Future<Uri> cleanCache();
+  /// Runs one eviction pass now and reports what it freed. Nothing here
+  /// stops playback -- the same protections the server's own scheduled
+  /// sweep uses apply, so a live stream or a pinned download is never
+  /// touched. Throws when the server is not running.
+  Future<EvictionReport> cleanCacheNow();
 }
 
 /// Thin Dart facade over the embedded, in-process `stream-server`.
@@ -119,21 +118,29 @@ class ServerClient implements LanMediaControl, ServerCacheControl {
   ///
   /// Walks the cache directory on the Rust side, so it is a worker call
   /// rather than a property; throws when the server is not running (there
-  /// is no cache root to name then). stream-server answers neither number
-  /// itself today -- see `server_storage_report`.
-  @override
+  /// is no cache root to name then). This is the disk-and-cache-directory
+  /// half of the picture -- the free/total space of the volumes the server
+  /// writes to, which stream-server does not report itself; for the
+  /// cache's own occupancy against its limit, [cacheUsage] is the
+  /// authoritative number (see `server_storage_report`).
   Future<ServerStorage> storage() async =>
       ServerStorage.fromJson(_object(await rust.serverStorageReport()));
 
-  /// Asks the server to reclaim its cache now.
-  ///
-  /// It restarts the server to do it, because stream-server offers no
-  /// other trigger: its cleaner sweeps on a debounce after cache writes,
-  /// on an hourly poll, and once at start-up. **Whatever is playing
-  /// stops.** The sweep runs after this returns, so [storage] read
-  /// immediately afterwards may still show the old size.
+  /// What the cache currently occupies against its `cacheSize` limit,
+  /// without evicting anything (`ServerHandle::cache_usage`). Throws when
+  /// the server is not running.
   @override
-  Future<Uri> cleanCache() async => Uri.parse(await rust.serverCleanCache());
+  Future<CacheUsage> cacheUsage() async =>
+      CacheUsage.fromJson(_object(await rust.serverCacheUsage()));
+
+  /// Runs one eviction pass now and reports what it freed
+  /// (`ServerHandle::clean_cache_now`) -- the exact function the server's
+  /// own scheduled sweep calls, so the same protections apply: nothing a
+  /// live engine is writing or a pin keeps is ever touched. Nothing here
+  /// stops playback. Throws when the server is not running.
+  @override
+  Future<EvictionReport> cleanCacheNow() async =>
+      EvictionReport.fromJson(_object(await rust.serverCleanCacheNow()));
 
   /// A torrent's `stats.json`: the per-file stats when [fileIdx] is set,
   /// the torrent-level ones otherwise. [trackers] is the stream's

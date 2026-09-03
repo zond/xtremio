@@ -5,17 +5,17 @@ import '../../core/core.dart';
 /// What the embedded server's storage costs, and the one way there is to
 /// ask it to reclaim some.
 ///
-/// This is the first screen to look at when playback misbehaves on a device
-/// nobody can attach a debugger to: bytes arriving with no progress is what
-/// a full disk looks like from the outside, and a cache well past its limit
-/// is what a cleaner reclaiming nothing looks like. The same two numbers
-/// are in the copied diagnostics header; this is where they can be watched
-/// and acted on.
+/// This is the first screen to look at when a cache well past its limit is
+/// what a cleaner reclaiming nothing looks like: the same cache-vs-limit
+/// number is in the copied diagnostics header (alongside the device's free
+/// space, which lives there and not here); this is where it can be watched
+/// and acted on. Cleaning no longer stops playback -- the server can sweep
+/// its cache on request now -- so the action needs no confirmation.
 class ServerStorageScreen extends StatefulWidget {
   const ServerStorageScreen({super.key, this.client = const ServerClient()});
 
   /// Where the numbers come from and what a clean is asked of; widget
-  /// tests hand over a fake rather than stopping a real server.
+  /// tests hand over a fake rather than reaching a real server.
   final ServerCacheControl client;
 
   @override
@@ -23,7 +23,7 @@ class ServerStorageScreen extends StatefulWidget {
 }
 
 class _ServerStorageScreenState extends State<ServerStorageScreen> {
-  ServerStorage? _storage;
+  CacheUsage? _usage;
   String? _error;
   bool _busy = false;
 
@@ -33,63 +33,40 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
     _read();
   }
 
+  /// Reads [CacheUsage]. Called on open, after a clean and on an explicit
+  /// refresh -- never on a timer: the walk behind it costs one `stat` per
+  /// file currently in the cache and is not bounded server-side.
   Future<void> _read() async {
     setState(() => _busy = true);
     try {
-      final storage = await widget.client.storage();
+      final usage = await widget.client.cacheUsage();
       if (!mounted) return;
       setState(() {
-        _storage = storage;
+        _usage = usage;
         _error = null;
         _busy = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _storage = null;
+        _usage = null;
         _error = '$error';
         _busy = false;
       });
     }
   }
 
-  /// Asks first, because this stops the server: a clean is a restart, and
-  /// the media routes go down with it.
+  /// Runs one eviction pass and reports honestly what happened: bytes
+  /// freed when the pass reclaimed something, and -- when the cache is
+  /// still over its limit afterwards -- that a live stream or a kept
+  /// download is holding what is left, never "clean failed" (nothing here
+  /// can fail short of the server not running).
   Future<void> _clean() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clean the cache now?'),
-        content: const Text(
-          'The server has no way to sweep its cache on request, so this '
-          'restarts it — which is what makes it sweep. Anything playing '
-          'will stop. Offline downloads are kept.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Restart and clean'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      await widget.client.cleanCache();
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'The server restarted and is sweeping its cache. '
-            'Refresh in a moment to see what it reclaimed.',
-          ),
-        ),
-      );
+      final report = await widget.client.cleanCacheNow();
+      messenger.showSnackBar(SnackBar(content: Text(_cleanMessage(report))));
     } catch (error) {
       messenger.showSnackBar(
         SnackBar(content: Text('Could not clean: $error')),
@@ -99,9 +76,23 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
     await _read();
   }
 
+  String _cleanMessage(EvictionReport report) {
+    if (report.freed > 0) {
+      final files = report.deleted == 1 ? 'file' : 'files';
+      return 'Freed ${DownloadView.humanSize(report.freed)} '
+          'from ${report.deleted} $files.';
+    }
+    if (report.stillOverLimit) {
+      return 'Nothing more can be freed right now -- a live stream or a '
+          'download you kept is holding '
+          '${DownloadView.humanSize(report.protected)}.';
+    }
+    return 'Nothing needed cleaning.';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final storage = _storage;
+    final usage = _usage;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Server storage'),
@@ -116,43 +107,35 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          if (storage == null)
+          if (usage == null)
             ListTile(
               leading: const Icon(Icons.help_outline),
               title: const Text('Storage unavailable'),
               subtitle: Text(_error ?? 'Reading…'),
             )
-          else ...[
+          else
             _Row(
               icon: Icons.folder_outlined,
               title: 'Torrent cache',
-              value: storage.cacheLabel,
-              detail: storage.cacheDir,
-              warning: storage.overLimit
-                  ? 'Over its limit: the server is not reclaiming it.'
+              value: usage.label,
+              detail: usage.protectedFiles > 0
+                  ? '${DownloadView.humanSize(usage.protectedBytes)} in '
+                        '${usage.protectedFiles} '
+                        '${usage.protectedFiles == 1 ? 'file' : 'files'} '
+                        'protected: a live stream or a kept download'
+                  : 'Nothing protected right now',
+              warning: usage.overLimit
+                  ? (usage.nothingEvictable
+                        ? 'Over its limit, and nothing is evictable right '
+                              'now.'
+                        : 'Over its limit.')
                   : null,
             ),
-            _Row(
-              icon: Icons.sd_storage_outlined,
-              title: 'Disk',
-              value: storage.cacheVolume.label,
-              detail: 'The volume the cache is on',
-              fraction: storage.cacheVolume.usedFraction,
-            ),
-            if (storage.downloadsVolume case final downloads?)
-              _Row(
-                icon: Icons.download_done_outlined,
-                title: 'Downloads volume',
-                value: downloads.label,
-                detail: downloads.path,
-                fraction: downloads.usedFraction,
-              ),
-          ],
           const Divider(height: 24),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: FilledButton.icon(
-              onPressed: _busy || storage == null ? null : _clean,
+              onPressed: _busy || usage == null ? null : _clean,
               icon: const Icon(Icons.cleaning_services_outlined),
               label: const Text('Clean cache now'),
             ),
@@ -161,11 +144,10 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
             padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Text(
               'The server sweeps its cache by itself about a minute after '
-              'the last write to it, and hourly otherwise. It offers no '
-              'call to sweep on request, so cleaning now restarts it — its '
-              'first sweep happens at start-up. Nothing here deletes '
-              'anything itself: only the server knows which files a running '
-              'playback is writing.',
+              'the last write to it, and hourly otherwise. Cleaning now '
+              'runs that same sweep on request, without stopping anything '
+              'that is playing. A file a live stream is writing or a '
+              'download you kept is never touched.',
             ),
           ),
         ],
@@ -182,7 +164,6 @@ class _Row extends StatelessWidget {
     required this.value,
     required this.detail,
     this.warning,
-    this.fraction,
   });
 
   final IconData icon;
@@ -190,10 +171,6 @@ class _Row extends StatelessWidget {
   final String value;
   final String detail;
   final String? warning;
-
-  /// How full, `0..1`, when that is known: a bar says "nearly gone" faster
-  /// than two numbers do.
-  final double? fraction;
 
   @override
   Widget build(BuildContext context) {
@@ -206,11 +183,6 @@ class _Row extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(value, style: theme.textTheme.bodyLarge),
-          if (fraction case final fraction?)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 2),
-              child: LinearProgressIndicator(value: fraction),
-            ),
           Text(detail, style: theme.textTheme.bodySmall),
           if (warning != null)
             Text(

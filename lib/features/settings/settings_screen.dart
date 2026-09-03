@@ -219,7 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.sd_storage_outlined),
             title: const Text('Server storage'),
             subtitle: const Text(
-              'What the cache costs against its limit, and the room left',
+              'What the cache costs against its limit, and a clean-now',
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
