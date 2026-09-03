@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
 import '../addons/addons_screen.dart';
@@ -398,9 +399,8 @@ class _SeeAllTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
+    return FocusableTile(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/state/meta_item_preview.dart';
+import 'focusable_tile.dart';
 
 /// A poster with the item's name underneath; falls back to a neutral box
 /// when there is no poster or it fails to load.
@@ -16,9 +17,8 @@ class PosterTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
+    return FocusableTile(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

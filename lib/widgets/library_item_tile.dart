@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/state/library.dart';
+import 'focusable_tile.dart';
 import 'poster_tile.dart';
 
 /// A library item as a poster: the watched fraction of its current video
@@ -33,11 +34,10 @@ class LibraryItemTile extends StatelessWidget {
     final theme = Theme.of(context);
     final progress = item.progress;
     final episode = item.seasonEpisodeLabel;
-    return InkWell(
+    return FocusableTile(
       onTap: onTap,
       onLongPress: onLongPress,
       onSecondaryTap: onLongPress,
-      borderRadius: BorderRadius.circular(8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
