@@ -238,14 +238,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   static String _streamKey(String videoId, StreamInfo stream) =>
       '$videoId|${stream.infoHash}|${stream.fileIdx}';
 
-  /// The download of [stream] for the video its tile belongs to, if the
-  /// registry has one. Only the entry pinned from *this* source counts: a
-  /// download of the same episode from another release is a different file,
-  /// and downloading this one replaces it.
-  DownloadView? _downloadFor(String videoId, StreamInfo stream) {
-    final entry = _downloads?.forVideo(widget.id, videoId);
-    return entry != null && entry.stream.isSameSource(stream) ? entry : null;
-  }
+  /// The download of one video, whatever source it was taken from. The
+  /// registry is keyed by meta and video, so there is at most one, and a
+  /// stream tile reads it two ways: as *its* download when the sources
+  /// match, and as the download it would replace when they do not.
+  DownloadView? _videoDownload(String videoId) =>
+      _downloads?.forVideo(widget.id, videoId);
 
   /// Pins [stream] as an offline download of the selected video, and puts
   /// the title in the library so playing it offline still records progress.
@@ -254,6 +252,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// not leave a title behind that the user never asked to keep. Whether it
   /// was in the library is read before the call, since the state this was
   /// built from is a moment old by the time the pin is taken.
+  ///
+  /// A finished download of the same video from another release is asked
+  /// about first: the pin replaces it, and the Rust side deletes the file
+  /// it replaced. Nothing undoes that, so it is not something a stray tap
+  /// gets to do.
   Future<void> _download(
     MetaDetailsState state,
     MetaItem meta,
@@ -264,6 +267,19 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final downloads = _downloads;
     if (client == null || downloads == null) return;
     final videoId = state.streamPath?.id ?? meta.id;
+    // Asked before the tile goes busy: the dialog is modal, so it is the
+    // guard against a second press while it stands, and a cancelled one
+    // leaves the tile exactly as it was.
+    final replaced = downloads.forVideo(widget.id, videoId);
+    if (replaced != null &&
+        replaced.isComplete &&
+        !replaced.stream.isSameSource(stream)) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => _ReplaceDialog(replaced: replaced),
+      );
+      if (confirmed != true || !mounted) return;
+    }
     final key = _streamKey(videoId, stream);
     if (!_pending.add(key)) return;
     setState(() {});
@@ -490,7 +506,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final downloads = _downloadsClient == null
         ? null
         : _StreamDownloads(
-            entryOf: (stream) => _downloadFor(videoId, stream),
+            videoEntry: () => _videoDownload(videoId),
             isPending: (stream) =>
                 _pending.contains(_streamKey(videoId, stream)),
             onDownload: (group, stream) =>
@@ -1022,19 +1038,52 @@ class _StreamsHeader extends StatelessWidget {
   }
 }
 
+/// Asks before a download replaces a finished one of the same video taken
+/// from another release. Popping `true` goes ahead; the file that is on
+/// the device is deleted by the Rust side as the new pin is taken, and
+/// there is no undo, which is why it is named here.
+class _ReplaceDialog extends StatelessWidget {
+  const _ReplaceDialog({required this.replaced});
+
+  final DownloadView replaced;
+
+  static const String replaceLabel = 'Replace it';
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Replace ${replaced.name}?'),
+    content: Text(
+      'It is already downloaded from another source. Downloading this '
+      'stream deletes those ${replaced.sizeLabel} and starts again from '
+      'nothing.',
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.of(context).pop(true),
+        child: const Text(replaceLabel),
+      ),
+    ],
+  );
+}
+
 /// What a stream tile knows about offline downloads: the entry for its
 /// stream if the registry has one, whether a pin for it is in flight, and
 /// how to start one. Bound to the addon group the tile sits in, because a
 /// pin records the request its stream came from.
 final class _StreamDownloads {
   const _StreamDownloads({
-    required this.entryOf,
+    required this.videoEntry,
     required this.isPending,
     required this.onDownload,
     this.group,
   });
 
-  final DownloadView? Function(StreamInfo stream) entryOf;
+  /// The download of the video these tiles belong to, from any source.
+  final DownloadView? Function() videoEntry;
   final bool Function(StreamInfo stream) isPending;
   final void Function(StreamGroup group, StreamInfo stream) onDownload;
 
@@ -1043,11 +1092,26 @@ final class _StreamDownloads {
   final StreamGroup? group;
 
   _StreamDownloads forGroup(StreamGroup group) => _StreamDownloads(
-    entryOf: entryOf,
+    videoEntry: videoEntry,
     isPending: isPending,
     onDownload: onDownload,
     group: group,
   );
+
+  /// The download taken from [stream] itself, if there is one.
+  DownloadView? entryOf(StreamInfo stream) {
+    final entry = videoEntry();
+    return entry != null && entry.stream.isSameSource(stream) ? entry : null;
+  }
+
+  /// The download this stream would replace: the same video kept from
+  /// another release, which is a different file. Pinning this one drops
+  /// that pin and the server deletes its bytes, so the tile has to say so
+  /// instead of looking like a first download.
+  DownloadView? replacedBy(StreamInfo stream) {
+    final entry = videoEntry();
+    return entry != null && !entry.stream.isSameSource(stream) ? entry : null;
+  }
 
   /// Starts the download of [stream]; null when the server has nothing to
   /// pin (only a torrent stream is a file it keeps) or one is already on
@@ -1245,13 +1309,19 @@ class _StreamTile extends StatelessWidget {
     final entry = downloads.entryOf(stream);
     final start = downloads.starter(stream);
     if (entry == null) {
-      return start == null
-          ? null
-          : IconButton(
-              tooltip: kDownloadTooltip,
-              icon: const Icon(Icons.download_outlined),
-              onPressed: start,
-            );
+      if (start == null) return null;
+      // The same video kept from another release: this button does not add
+      // a download, it swaps one for another and the old file goes. Say
+      // that here, where the press happens -- the summary in the header is
+      // scrolled away by the time a stream tile is reached on a phone.
+      final replaced = downloads.replacedBy(stream);
+      return IconButton(
+        tooltip: replaced == null ? kDownloadTooltip : kDownloadReplaceTooltip,
+        icon: Icon(
+          replaced == null ? Icons.download_outlined : Icons.swap_horiz,
+        ),
+        onPressed: start,
+      );
     }
     return switch (entry.state) {
       DownloadState.complete => IconTheme.merge(

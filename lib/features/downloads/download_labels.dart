@@ -18,6 +18,12 @@ const String kDownloadedTooltip = 'Downloaded';
 /// ... when the server reported a reason it stopped; pressing it pins again.
 const String kDownloadRetryTooltip = 'Download stopped — try again';
 
+/// ... on a stream whose video is already kept from *another* release.
+/// Pinning this one drops that pin, and the server deletes its file, so the
+/// button must not read like a first download.
+const String kDownloadReplaceTooltip =
+    'Download instead — replaces the copy already kept';
+
 /// What a download of [video] is called in a list: the title for a movie,
 /// `Breaking Bad: S1E1 · Pilot` for an episode. It is stored with the entry,
 /// so a Downloads screen has it without the meta.

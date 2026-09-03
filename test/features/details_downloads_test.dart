@@ -52,11 +52,13 @@ Map<String, dynamic> entry({
   required String videoId,
   required Map<String, dynamic> stream,
   required String state,
+  String name = '',
   int size = 0,
   int downloaded = 0,
 }) => {
   'metaId': metaId,
   'videoId': videoId,
+  'name': name,
   'stream': stream,
   'infoHash': stream['infoHash'],
   'fileIdx': stream['fileIdx'],
@@ -705,31 +707,104 @@ void main() {
     });
   });
 
-  testWidgets('a download of another source leaves this tile offering one', (
-    tester,
-  ) async {
-    useWideViewport(tester);
-    final core = FakeCoreClient(
-      state: {CoreField.metaDetails: loadMetaDetailsFixture()},
-    );
-    // The same movie, kept from a different release: pressing download here
-    // replaces that pin, so the tile must not read as done.
-    final downloads = FakeDownloadsClient(
+  group('a download of the same video from another source', () {
+    /// The movie kept from a different release, at [state].
+    FakeDownloadsClient keptElsewhere(String state) => FakeDownloadsClient(
       registry: registryOf([
         entry(
           metaId: movieId,
           videoId: movieId,
           stream: {'infoHash': 'ffff', 'fileIdx': 0},
-          state: 'complete',
+          state: state,
+          name: 'Night of the Living Dead',
+          size: 4200000000,
+          downloaded: state == 'complete' ? 4200000000 : 1000000,
         ),
       ]),
     );
-    addTearDown(downloads.dispose);
-    await tester.pumpWidget(harness(core, downloads));
-    await tester.pumpAndSettle();
 
-    expect(onStreamTile(kDownloadTooltip), findsOneWidget);
-    expect(onStreamTile(kDownloadedTooltip), findsNothing);
+    testWidgets('leaves this tile offering one, marked as a replacement', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      // Pressing download here replaces that pin, so the tile must neither
+      // read as done nor as an ordinary first download.
+      final downloads = keptElsewhere('complete');
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      expect(onStreamTile(kDownloadedTooltip), findsNothing);
+      expect(onStreamTile(kDownloadTooltip), findsNothing);
+      expect(onStreamTile(kDownloadReplaceTooltip), findsOneWidget);
+    });
+
+    testWidgets('asks before deleting the finished copy, and cancels', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = keptElsewhere('complete');
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(onStreamTile(kDownloadReplaceTooltip));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Replace Night of the Living Dead?'), findsOneWidget);
+      expect(find.textContaining('4.2 GB'), findsOneWidget);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(downloads.added, isEmpty, reason: 'nothing was deleted');
+      expect(onStreamTile(kDownloadReplaceTooltip), findsOneWidget);
+    });
+
+    testWidgets('pins once the replacement is confirmed', (tester) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = keptElsewhere('complete');
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(onStreamTile(kDownloadReplaceTooltip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Replace it'));
+      await tester.pumpAndSettle();
+
+      expect(downloads.added.single.stream.infoHash, movieHash);
+      expect(find.text('Downloading Night of the Living Dead'), findsOneWidget);
+    });
+
+    testWidgets('an unfinished one is replaced without a question', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      // There is no whole file to lose, so asking would be noise.
+      final downloads = keptElsewhere('downloading');
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(onStreamTile(kDownloadReplaceTooltip));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(downloads.added, hasLength(1));
+    });
   });
 
   testWidgets('progress from the feed reaches the tile', (tester) async {
