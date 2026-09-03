@@ -3,9 +3,11 @@ import 'package:xtremio/core/core.dart';
 
 import '../support/fixtures.dart';
 
-/// The keys `rust/src/downloads.rs` writes for one entry. Recorded, not
-/// guessed: a rename on the Rust side has to fail here rather than turn a
-/// row silently blank.
+/// The keys `rust/src/downloads.rs` writes for one entry, mirroring the set
+/// `offline_downloads_lifecycle` in `rust/tests/downloads.rs` asserts on the
+/// live `downloads_list` output. That test is what a rename over there has
+/// to fail; this one guards the recording, so every expectation below is
+/// read off a whole row rather than a truncated one.
 const _entryKeys = {
   'metaId',
   'videoId',
@@ -44,7 +46,7 @@ void main() {
       expect(registry.length, 3);
     });
 
-    test('an entry carries exactly the keys the Rust side writes', () {
+    test('every recorded entry is whole, not a truncated row', () {
       for (final download in registry.items.values) {
         expect(download.json.keys.toSet(), _entryKeys, reason: '$download');
       }

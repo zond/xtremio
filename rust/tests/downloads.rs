@@ -12,7 +12,7 @@
 //! The `#[ignore]`d recorder at the bottom writes the registry fixture the
 //! Dart tests read. It takes the same globals, so it runs on its own.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -274,6 +274,44 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert_eq!(
         added["entry"]["metaRequest"]["base"],
         "https://cinemeta.invalid/manifest.json"
+    );
+
+    // Every key one entry is written with. The Dart side reads these names
+    // off `downloads_list`, and its fixture is only a recording of them, so
+    // a rename over there has to fail here -- on every `cargo test`, not
+    // only when the recorder is run by hand.
+    let listed = list();
+    let keys: BTreeSet<&str> = listed["items"]["tt-have:tt-have"]
+        .as_object()
+        .expect("an entry is an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        keys,
+        BTreeSet::from([
+            "metaId",
+            "videoId",
+            "type",
+            "name",
+            "poster",
+            "stream",
+            "infoHash",
+            "fileIdx",
+            "announce",
+            "path",
+            "size",
+            "downloaded",
+            "state",
+            "error",
+            "createdAt",
+            "completedAt",
+            "lastPlayedAt",
+            "meta",
+            "streamRequest",
+            "metaRequest",
+        ]),
+        "the wire names Dart reads"
     );
 
     let added = add("tt-missing", &info_hash, missing_idx);
