@@ -86,6 +86,17 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
 - **Leanback entries** for Android TV / Google TV are already in
   `AndroidManifest.xml` (same APK runs on Android TV boxes, Chromecast with
   Google TV, and the Google TV Streamer — they're all just Android).
+  `android:banner` is the tile the TV home screen shows, a 320x180 xhdpi
+  PNG at `res/drawable-xhdpi/banner.png` (the launcher icon is the wrong
+  shape for it).
+- **`xtremio/device` channel.** `DeviceProfile.detect()`
+  (`lib/shell/device_profile.dart`) runs once in `main()` before `runApp`
+  and asks `MainActivity` for `{isTv, hasTouch}`: `isTv` is
+  `UiModeManager.currentModeType == UI_MODE_TYPE_TELEVISION` or the
+  `android.software.leanback` feature, `hasTouch` is `FEATURE_TOUCHSCREEN`.
+  The answer goes down the widget tree as `DeviceScope`, which is what the
+  remote-driven layout keys on. Any error on the channel means "a phone";
+  no other platform calls it (desktop is never a TV).
 
 ## Running on an emulator (headless, KVM)
 
@@ -109,8 +120,9 @@ adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb shell am start -n com.zond.xtremio/.MainActivity
 ```
 
-For D-pad/leanback work, use `system-images;android-36;android-tv;x86_64`
-instead — same flow.
+For D-pad/leanback work, use `system-images;android-36;android-tv;x86` (or
+`arm64-v8a` on an arm64 host; there is no x86_64 TV image) instead — same
+flow, with `-d tv_1080p` for the AVD.
 
 **Verify:**
 

@@ -436,7 +436,8 @@ be initialized"; `adb forward tcp:11470 tcp:11470 && curl -s
 http://127.0.0.1:11470/heartbeat` reaches the server (if 11470 was taken the
 app fell back to an ephemeral port, read it from logcat); Discover showing
 Cinemeta posters proves HTTPS end to end. For D-pad work use the
-`system-images;android-36;android-tv;x86_64` image instead. A physical
+`system-images;android-36;android-tv;x86` image instead (there is no x86_64
+TV image). A physical
 phone/TV box (USB debugging, `adb devices` shows `device`) takes the arm64
 APK the same way.
 
