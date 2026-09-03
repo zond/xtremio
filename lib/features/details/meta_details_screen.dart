@@ -718,6 +718,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               isWatched: state.isWatched(video),
               isReleased: video.isReleased(now),
               download: _downloads?.forVideo(widget.id, video.id),
+              onDeleteDownload: _deleteDownload,
               onTap: () => _selectVideo(video, reveal: true),
               onLongPress: () => _toggleWatched(state, video),
             );
@@ -1193,6 +1194,7 @@ class _EpisodeTile extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     this.download,
+    this.onDeleteDownload,
   });
 
   final VideoInfo video;
@@ -1203,6 +1205,9 @@ class _EpisodeTile extends StatelessWidget {
   /// This episode's download, whatever source it was taken from; null when
   /// it is not kept on the device.
   final DownloadView? download;
+
+  /// Removes [download], which the badge offers once the file is whole.
+  final void Function(DownloadView entry)? onDeleteDownload;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
@@ -1216,6 +1221,12 @@ class _EpisodeTile extends StatelessWidget {
 
   /// The watched check (or the selection's play arrow), with the download
   /// badge in front of it when this episode is kept on the device.
+  ///
+  /// The badge deletes the download once the file is whole. Not with a
+  /// remote, though: a button inside a tile the remote activates as a whole
+  /// cannot be focused, and this row's long press already means "watched",
+  /// so on a television the episode's copy is removed from its stream tile
+  /// -- select the episode, hold select on the release that is kept.
   Widget? _trailing(ThemeData theme) {
     final download = this.download;
     final state = isWatched
@@ -1224,7 +1235,11 @@ class _EpisodeTile extends StatelessWidget {
         ? const Icon(Icons.play_arrow)
         : null;
     if (download == null) return state;
-    final badge = DownloadBadge(download: download);
+    final onDelete = onDeleteDownload;
+    final badge = DownloadBadge(
+      download: download,
+      onDelete: onDelete == null ? null : () => onDelete(download),
+    );
     if (state == null) return badge;
     return Row(
       mainAxisSize: MainAxisSize.min,

@@ -664,6 +664,124 @@ void main() {
       );
     });
 
+    testWidgets('the badge of a finished episode deletes it, and asks first', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadSeriesEpisodeMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          entry(
+            metaId: seriesId,
+            videoId: pilotId,
+            stream: {'infoHash': 'aaaa', 'fileIdx': 3},
+            state: 'complete',
+            name: 'Breaking Bad: S1E1 · Pilot',
+            size: 10,
+            downloaded: 10,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(
+        harness(core, downloads, type: 'series', id: seriesId),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(DownloadBadge),
+          matching: find.byType(IconButton),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Remove Breaking Bad: S1E1 · Pilot?'), findsOneWidget);
+      await tester.tap(find.text(RemoveDownloadDialog.deleteLabel));
+      await tester.pumpAndSettle();
+
+      expect(downloads.removed, [
+        (key: '$seriesId:$pilotId', deleteFiles: true),
+      ]);
+      expect(find.text('Deleted Breaking Bad: S1E1 · Pilot.'), findsOneWidget);
+      // The listing no longer has it, so the row has no badge at all.
+      expect(find.byType(DownloadBadge), findsNothing);
+    });
+
+    testWidgets('a badge of a download still arriving is not a button', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadSeriesEpisodeMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          entry(
+            metaId: seriesId,
+            videoId: pilotId,
+            stream: {'infoHash': 'aaaa', 'fileIdx': 3},
+            state: 'downloading',
+            size: 10,
+            downloaded: 5,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(
+        harness(core, downloads, type: 'series', id: seriesId),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DownloadBadge), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(DownloadBadge),
+          matching: find.byType(IconButton),
+        ),
+        findsNothing,
+      );
+      expect(find.byTooltip('Downloading 50%'), findsOneWidget);
+    });
+
+    testWidgets('the header summary keeps its passive badge', (tester) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          entry(
+            metaId: movieId,
+            videoId: movieId,
+            stream: {'infoHash': movieHash, 'fileIdx': 0},
+            state: 'complete',
+            name: 'Night of the Living Dead',
+            size: 10,
+            downloaded: 10,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      final summary = find.byType(DownloadSummary);
+      expect(summary, findsOneWidget);
+      expect(
+        find.descendant(of: summary, matching: find.text('Downloaded')),
+        findsOneWidget,
+      );
+      // The one on the stream tile is the button; the header counts, and
+      // has nothing of its own to remove.
+      expect(
+        find.descendant(of: summary, matching: find.byType(IconButton)),
+        findsNothing,
+      );
+      expect(find.byTooltip(kDownloadDeleteTooltip), findsOneWidget);
+    });
+
     testWidgets('the header counts what of a series is kept', (tester) async {
       useWideViewport(tester);
       final core = FakeCoreClient(

@@ -7,17 +7,50 @@ import '../features/downloads/download_labels.dart';
 /// for: a ring of progress while the file arrives, a check once it is on
 /// the device, a warning when it stopped. The tooltip is the state in
 /// words, so the icon never has to carry the whole meaning.
+///
+/// With an [onDelete] the finished state is a button instead of the check,
+/// the same gesture the stream tile makes of it: the icon that says a title
+/// is kept is the one that stops keeping it. Every other state stays
+/// passive -- a download still arriving is undone by the tile that started
+/// it, where there is room to say why.
 class DownloadBadge extends StatelessWidget {
-  const DownloadBadge({super.key, required this.download, this.size = 18});
+  const DownloadBadge({
+    super.key,
+    required this.download,
+    this.size = 18,
+    this.onDelete,
+  });
 
   final DownloadView download;
 
   /// Edge of the square the badge draws in.
   final double size;
 
+  /// Removes this download, from the finished badge. Null leaves the badge
+  /// the passive indicator it has always been, which is what a header
+  /// summarising several downloads ([DownloadSummary]) wants: there is no
+  /// one of them to remove.
+  final VoidCallback? onDelete;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final onDelete = this.onDelete;
+    if (onDelete != null && download.state == DownloadState.complete) {
+      return IconButton(
+        tooltip: kDownloadDeleteTooltip,
+        color: scheme.primary,
+        icon: Icon(Icons.delete_outline, size: size),
+        // The default 48-square tap target is taller than the row this
+        // sits in; this is still a target, not the bare icon.
+        padding: EdgeInsets.zero,
+        constraints: BoxConstraints.tightFor(
+          width: size + 18,
+          height: size + 18,
+        ),
+        onPressed: onDelete,
+      );
+    }
     return Tooltip(
       message: downloadStateLabel(download),
       child: SizedBox.square(

@@ -50,7 +50,9 @@ Rust engine for addons, catalogs, library, and playback state) and
 > the tile's long press -- hold select, or the remote's menu key -- does
 > whatever the button would.
 > Badges on the episode list and
-> the details header say what is kept and how far along, and the Downloads
+> the details header say what is kept and how far along -- an episode's
+> badge is the same delete button once its file is whole, while the header's
+> counts several downloads and stays a count. The Downloads
 > screen (from Settings, or the "Downloaded" chip in the Library) lists
 > everything with its progress, plays a finished one, retries a stopped one,
 > deletes one with or without its bytes, and says where the files go --
