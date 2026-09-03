@@ -45,7 +45,10 @@ Rust engine for addons, catalogs, library, and playback state) and
 > screen (from Settings, or the "Downloaded" chip in the Library) lists
 > everything with its progress, plays a finished one, retries a stopped one,
 > deletes one with or without its bytes, and says where the files go --
-> a folder to pick on Android, a path to type elsewhere. Downloading a
+> a folder to pick on Android, a path to type elsewhere. A stream whose
+> video is already kept from another release is offered as a replacement,
+> and a *finished* one is named in a confirmation first, because taking the
+> new pin deletes the old file. Downloading a
 > title also adds it to the library, which is what makes the player record
 > progress with no network. **Addons**
 > (from Settings) lists the installed and community addons and installs,
