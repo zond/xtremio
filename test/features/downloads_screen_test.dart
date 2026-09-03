@@ -675,6 +675,65 @@ void main() {
       expect(downloads.directories, ['/media/downloads', null]);
     });
 
+    testWidgets('a folder chosen that the server has dropped is explained', (
+      tester,
+    ) async {
+      // The server clears a `downloadsDir` it cannot prepare at boot -- a
+      // card that is not in the device -- and start-up could not put it
+      // back, so the files are somewhere else meanwhile. Without a word
+      // here the row shows a folder nobody picked and no reason for it.
+      useTallViewport(tester);
+      final downloads = FakeDownloadsClient(
+        registry: const DownloadsRegistry(
+          destination: DownloadDestination.explicit(
+            '/storage/ABCD-1234/downloads',
+          ),
+        ),
+      )..settings = const {'downloadsDir': '/sdcard/files/downloads'};
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(
+        harness(
+          coreWithPlayer(),
+          downloads,
+          destinations: const ['/sdcard/files/downloads'],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          '/storage/ABCD-1234/downloads is not available. Downloads go to '
+          '/sdcard/files/downloads until it is.',
+        ),
+        findsOneWidget,
+      );
+
+      // And with the destination in force, nothing to explain.
+      expect(
+        DownloadsScreen.destinationMissing(
+          const DownloadDestination.explicit('/sdcard/files/downloads'),
+          '/sdcard/files/downloads',
+        ),
+        isNull,
+      );
+      expect(
+        DownloadsScreen.destinationMissing(
+          const DownloadDestination.platformDefault('/sdcard/files/downloads'),
+          null,
+        ),
+        isNull,
+        reason: 'a default the app applied is nobody\'s choice to miss',
+      );
+      expect(
+        DownloadsScreen.destinationMissing(
+          const DownloadDestination.explicit('/storage/ABCD-1234/downloads'),
+          null,
+        ),
+        '/storage/ABCD-1234/downloads is not available. Downloads go with '
+        'the cache until it is.',
+      );
+    });
+
     testWidgets('a folder the server refuses says so', (tester) async {
       useTallViewport(tester);
       final downloads = FakeDownloadsClient()

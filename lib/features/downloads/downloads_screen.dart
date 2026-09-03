@@ -56,6 +56,27 @@ class DownloadsScreen extends StatefulWidget {
   /// Heading of the destination control.
   static const String destinationTitle = 'Where downloads go';
 
+  /// What to say when the folder chosen is not the one in use, and nothing
+  /// when it is.
+  ///
+  /// The server clears a `downloadsDir` it cannot prepare at boot -- a card
+  /// that is not in the device -- and start-up puts the chosen folder back
+  /// when it can ([applyDefaultDestination]). When it cannot, the folder
+  /// stays on record and something else holds the downloads meanwhile,
+  /// which is worth a sentence: the row above would otherwise show a folder
+  /// nobody picked with nothing to say why.
+  static String? destinationMissing(DownloadDestination chosen, String? live) {
+    final path = chosen.path;
+    if (chosen.kind != DownloadDestinationKind.explicit ||
+        path == null ||
+        path == live) {
+      return null;
+    }
+    return live == null
+        ? '$path is not available. Downloads go with the cache until it is.'
+        : '$path is not available. Downloads go to $live until it is.';
+  }
+
   @override
   State<DownloadsScreen> createState() => _DownloadsScreenState();
 }
@@ -299,6 +320,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           ),
           _DestinationControl(
             destination: _destination,
+            chosen: registry.destination,
             isKnown: _destinationKnown,
             choices: _destinations,
             typed: _typed,
@@ -380,6 +402,7 @@ class _StorageHeader extends StatelessWidget {
 class _DestinationControl extends StatelessWidget {
   const _DestinationControl({
     required this.destination,
+    required this.chosen,
     required this.isKnown,
     required this.choices,
     required this.typed,
@@ -387,6 +410,11 @@ class _DestinationControl extends StatelessWidget {
   });
 
   final String? destination;
+
+  /// What the registry says was answered, which is not always what the
+  /// server has: a folder it could not prepare at boot is dropped from the
+  /// settings and stays on record here.
+  final DownloadDestination chosen;
 
   /// Whether the server has been asked yet; before that "default" would be
   /// a guess.
@@ -402,6 +430,9 @@ class _DestinationControl extends StatelessWidget {
     final subtitle = !isKnown
         ? 'Asking the server…'
         : destination ?? DownloadsScreen.defaultDestinationLabel;
+    final missing = isKnown
+        ? DownloadsScreen.destinationMissing(chosen, destination)
+        : null;
     if (choices.isEmpty) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -414,6 +445,14 @@ class _DestinationControl extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+            if (missing != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                missing,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
             const SizedBox(height: 8),
             TextField(
               controller: typed,
@@ -456,7 +495,18 @@ class _DestinationControl extends StatelessWidget {
     return ListTile(
       leading: const Icon(Icons.folder_outlined),
       title: const Text(DownloadsScreen.destinationTitle),
-      subtitle: Text(subtitle),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(subtitle),
+          if (missing != null)
+            Text(
+              missing,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+        ],
+      ),
       // The empty path stands for the default: a `PopupMenuButton` reads a
       // null selection as a dismissed menu and never reports it.
       trailing: PopupMenuButton<String>(
