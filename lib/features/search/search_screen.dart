@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/poster_tile.dart';
 import '../details/meta_details_screen.dart';
@@ -217,7 +218,10 @@ class _SearchField extends StatelessWidget {
   Widget build(BuildContext context) => TextField(
     key: const Key('search-field'),
     controller: controller,
-    autofocus: true,
+    // A keyboard is right there on a desktop or phone. On a TV taking focus
+    // as soon as the tab is selected would pull it off the rail, which no
+    // other tab does, and open the IME; the D-pad enters the field instead.
+    autofocus: !DeviceScope.isTv(context),
     textInputAction: TextInputAction.search,
     onChanged: onChanged,
     onSubmitted: onSubmitted,

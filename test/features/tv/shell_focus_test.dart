@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/features/library/library_screen.dart';
+import 'package:xtremio/features/search/search_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
@@ -88,6 +89,14 @@ Future<void> focusRailTop(WidgetTester tester) async {
     await press(tester, LogicalKeyboardKey.arrowUp);
   }
   expect(focusIn<NavigationRail>(), isTrue);
+}
+
+/// Walks focus from wherever it is to the rail's Search destination.
+Future<void> focusSearchDestination(WidgetTester tester) async {
+  await focusRailTop(tester);
+  await press(tester, LogicalKeyboardKey.arrowDown);
+  await press(tester, LogicalKeyboardKey.arrowDown);
+  expect(focusedRailLabel(tester), 'Search');
 }
 
 void useScreen(WidgetTester tester, Size size) {
@@ -286,5 +295,24 @@ void main() {
     // Right from the rail still enters the Board on the remembered tile.
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusIn<BoardScreen>(), isTrue);
+  });
+
+  testWidgets('select on Search keeps focus on the rail; right enters the '
+      'field', (tester) async {
+    useScreen(tester, const Size(1280, 720));
+    await tester.pumpWidget(harness(fakeCore()));
+    await tester.pumpAndSettle();
+
+    // The field autofocuses on a desktop or phone, where the keyboard is
+    // right there; on a TV it would take focus off the rail the moment the
+    // tab is selected, as no other tab does, and start the IME.
+    await focusSearchDestination(tester);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(find.byType(SearchScreen), findsOneWidget);
+    expect(focusedRailLabel(tester), 'Search');
+    expect(focusIn<TextField>(), isFalse);
+
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<TextField>(), isTrue);
   });
 }
