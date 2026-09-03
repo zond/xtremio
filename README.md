@@ -678,8 +678,13 @@ not ready yet, and the server's reason when it stopped. Those counts are
 connections, never seeds -- the server does not yet count who has the whole
 file. They are polled while the panel is up, every five seconds when
 playback is fine and at the faster stall cadence when it is not, so opening
-the panel is what asks and closing it is what stops. On a television the
-whole panel is set in a larger size, since it is read from a sofa.
+the panel is what asks and closing it is what stops -- as does minimising
+the app, which is nobody watching either. What the panel last showed stays
+with it while it is down, so hovering it back on a desktop shows the swarm
+rather than a blank waiting for the next answer; numbers nobody was
+watching are dropped instead, so a stall long afterwards starts from the
+server. On a television the whole panel is set in a larger size, since it
+is read from a sofa.
 
 ## Getting started
 
