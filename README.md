@@ -557,12 +557,25 @@ connection.
   pieces, not in percent**: librqbit credits verified pieces and nothing
   in between, so with 8-16 MiB pieces and a window inside one of them the
   percentage could only ever read 0 or 100, and it read 0 for tens of
-  seconds while the download ran perfectly. It reads "Waiting for the
-  first piece (16 MiB)…" ("next piece" mid-playback) with an estimate from
-  `downloadSpeed` when there is one, and an indeterminate bar, because
-  there is nothing between 0 and done to draw. A window that genuinely
-  spans several pieces keeps "Buffering start…" and its percentage, and a
-  server that sends no `pieceLength` keeps it too. `ready` → "Starting
+  seconds while the download ran perfectly. What moves instead is the
+  server's `inFlightPiece` -- the byte progress of the very piece the
+  reader is sitting on -- which reads "Waiting for piece 137, 6.3 of
+  16.0 MiB…" over a bar at `downloadedBytes/totalBytes`, with an estimate
+  from `downloadSpeed` for that piece's own remainder. The bar owes three
+  rules to what the number actually means (`stream-server`'s README, "The
+  in-flight piece"), and each has a test: **full is not finished** -- a
+  chunk counts when it is written, the hash is only checked once the last
+  one is in, so the bar holds at 97% while `verified` is false and lets
+  `verified` fill it; **it never runs backwards** -- a decrease is a piece
+  that failed its check and was discarded, so the bar stays where it got
+  to rather than animating down, while a *different* piece (the reader
+  moved) starts where that piece is, at once and with no transition; and
+  **null is not zero** -- no reader open, no metadata, no chunk map, or a
+  server from before the field -- and then it is the wording it always
+  had ("Waiting for the first piece (16 MiB)…", "next piece"
+  mid-playback) over the indeterminate sweep, never a bar sitting at 0. A
+  window that genuinely spans several pieces keeps "Buffering start…" and
+  its percentage, and a server that sends no `pieceLength` keeps it too. `ready` → "Starting
   playback…", `error` → "The torrent failed to start" with the server's
   `error` string as the detail; no answer yet → "Connecting to server…".
   The bar is determinate whenever there is a percentage; `downloadSpeed`
@@ -583,7 +596,8 @@ connection.
   500 ms, with the first poll fired at once (the torrent's engine exists
   by then, so there is no ordering to respect). The phases read in the
   present tense — `checking` keeps its percentage, `buffering` means the
-  head window is still filling and its percentage is what playback is
+  head window is still filling and its percentage — or, one piece wide,
+  the same in-flight piece the start-up card draws — is what playback is
   waiting for, `ready`/unknown is "Buffering from the torrent…" with an
   *indeterminate* bar (past the head of the file the server measures no
   target, so a full bar would be a lie), `error` is "The torrent stopped"
@@ -1021,8 +1035,11 @@ start-up and stall cards read: download speed, `<connectedSeeders>
 connected` seeds, `<live> connected / <seen> found` peers, a `swarm` row,
 the phase (with its percentage) while the torrent is not ready yet, the
 torrent's piece length -- the one number that explains why a wait is long,
-since nothing is readable until a whole piece is verified -- and
-the server's reason when it stopped. The first two rows are *our
+since nothing is readable until a whole piece is verified -- an `inflight`
+row naming the piece the open reader is sitting on and how far into it the
+bytes have come (`inflight #137 · 6.3 of 16.0 MiB · unverified`, where
+`unverified` is the difference between complete enough to be hashed and
+servable), and the server's reason when it stopped. The first two rows are *our
 connections* — who we are talking to, and how many of them hold the whole
 file. The `swarm` row is not a measurement at all but what the torrent's
 trackers last said about everyone (`137 seeds / 402 peers · 4 min ago`,

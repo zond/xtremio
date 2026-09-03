@@ -71,8 +71,17 @@ class TorrentStartupOverlay extends StatelessWidget {
         // advance and keep their percentage.
         if (stats.waitsForOnePiece) {
           final parts = [?detail, ?TorrentProgressCard.formatEta(stats)];
+          // The server reports how far into that one piece it is, so the
+          // wait is said in bytes and drawn as a bar that moves. Without
+          // it (no reader open yet, an older server) nothing is known
+          // about the inside of the piece, and naming it is still better
+          // than a percentage that can only read 0.
+          final piece = stats.inFlightPiece;
           return TorrentProgressStatus(
-            label: TorrentProgressCard.pieceWait(stats, first: true),
+            label: piece == null
+                ? TorrentProgressCard.pieceWait(stats, first: true)
+                : TorrentProgressCard.piecePosition(piece),
+            piece: piece,
             detail: parts.isEmpty ? null : parts.join(' · '),
           );
         }

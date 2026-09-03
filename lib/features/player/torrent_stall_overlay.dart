@@ -68,8 +68,14 @@ class TorrentStallOverlay extends StatelessWidget {
         // One piece wide: there is nothing between 0 and done to draw, so
         // the card says which piece it is waiting for and how big it is.
         if (stats.waitsForOnePiece) {
+          // With the server's sub-piece progress the wait is said in bytes
+          // and the bar moves; without it the piece is only named.
+          final piece = stats.inFlightPiece;
           return TorrentProgressStatus(
-            label: TorrentProgressCard.pieceWait(stats, first: false),
+            label: piece == null
+                ? TorrentProgressCard.pieceWait(stats, first: false)
+                : TorrentProgressCard.piecePosition(piece),
+            piece: piece,
             detail: [detail, ?TorrentProgressCard.formatEta(stats)].join(' · '),
           );
         }

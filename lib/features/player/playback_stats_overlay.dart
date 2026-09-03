@@ -153,6 +153,14 @@ class PlaybackStatsOverlay extends StatelessWidget {
       // becomes readable until a whole piece is verified.
       if (s.pieceLength case final piece?)
         'piece    ${TorrentProgressCard.formatPieceSize(piece)}',
+      // ...and how far the one piece the reader is sitting on has come,
+      // which is the only thing between 0 and done. `verified` is what
+      // says it can be served: a full byte count on its own only means
+      // it is complete enough to be hashed.
+      if (s.inFlightPiece case final piece?)
+        'inflight #${piece.index} · '
+            '${TorrentProgressCard.formatPieceBytes(piece.downloadedBytes, piece.totalBytes)}'
+            ' · ${piece.verified ? 'verified' : 'unverified'}',
     ];
   }
 

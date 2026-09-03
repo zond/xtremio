@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'torrent_stats.dart';
@@ -10,6 +12,7 @@ final class TorrentProgressStatus {
   const TorrentProgressStatus({
     required this.label,
     this.progress,
+    this.piece,
     this.detail,
     this.failed = false,
   });
@@ -18,6 +21,17 @@ final class TorrentProgressStatus {
 
   /// `0..1`, or null when nothing measurable is going on yet.
   final double? progress;
+
+  /// The single piece the reader is sitting on, when the server knows it.
+  /// It replaces [progress] as what the bar draws, because it is a
+  /// measurement of the very bytes the wait is for -- and it is drawn by
+  /// [PieceProgressBar], which owes it three honesty rules a plain
+  /// percentage does not.
+  ///
+  /// Null is "we do not know", not "nothing downloaded", so a null piece
+  /// falls back to [progress] rather than to a bar sitting at zero.
+  final InFlightPiece? piece;
+
   final String? detail;
 
   /// The server reported the torrent as failed: no progress to expect.
@@ -75,9 +89,15 @@ class TorrentProgressCard extends StatelessWidget {
               ),
               if (!status.failed) ...[
                 const SizedBox(height: 12),
-                // Determinate when there is a percentage; the indeterminate
-                // sweep is the only thing here that animates on its own.
-                LinearProgressIndicator(value: status.progress),
+                // The piece the reader waits on when the server knows it;
+                // otherwise determinate when there is a percentage, and the
+                // indeterminate sweep -- which says "something is happening
+                // that cannot be measured", never "zero" -- when there is
+                // not.
+                if (status.piece case final piece?)
+                  PieceProgressBar(piece: piece)
+                else
+                  LinearProgressIndicator(value: status.progress),
               ],
               if (detail != null) ...[
                 const SizedBox(height: 8),
@@ -132,6 +152,32 @@ class TorrentProgressCard extends StatelessWidget {
         : 'Waiting for the $which piece (${formatPieceSize(size)})…';
   }
 
+  /// The same wait once the server says how far into that piece it is:
+  /// `Waiting for piece 137, 6.3 of 16.0 MiB…`.
+  ///
+  /// Which piece it is comes from the server, so it is the piece's index
+  /// in the torrent rather than a number this counted itself; the bytes
+  /// are the piece's own, which is why a short last piece reads honestly.
+  static String piecePosition(InFlightPiece piece) =>
+      'Waiting for piece ${piece.index}, '
+      '${formatPieceBytes(piece.downloadedBytes, piece.totalBytes)}…';
+
+  /// `6.3 of 16.0 MiB`: two byte counts in the unit the larger of them
+  /// takes, named once. Binary units, like [formatPieceSize], because
+  /// piece lengths are powers of two.
+  static String formatPieceBytes(int part, int total) {
+    const units = ['B', 'kiB', 'MiB', 'GiB'];
+    var scale = 1.0;
+    var unit = 0;
+    while (total / scale >= 1024 && unit < units.length - 1) {
+      scale *= 1024;
+      unit++;
+    }
+    final digits = unit == 0 ? 0 : 1;
+    return '${(part / scale).toStringAsFixed(digits)} of '
+        '${(total / scale).toStringAsFixed(digits)} ${units[unit]}';
+  }
+
   /// `about 12 s left` at the current speed, or null when nothing is
   /// arriving or the wait is longer than the estimate is worth. An
   /// estimate, and it says so.
@@ -169,4 +215,70 @@ class TorrentProgressCard extends StatelessWidget {
     }
     return '${bytesPerSecond.round()} B/s';
   }
+}
+
+/// The bar for the one piece the reader is waiting on, which is the only
+/// thing on this card measuring bytes that are still moving -- and the only
+/// one that has to be careful about it.
+///
+/// Three rules, all of them the server's own (`stream-server`'s README,
+/// "The in-flight piece"), and none of them what a plain
+/// `LinearProgressIndicator(value: piece.progress)` would do:
+///
+/// * **Full is not finished.** `downloadedBytes` counts chunks the moment
+///   they are written to disk; the hash is only checked once the last one
+///   is in. So a full count means "complete enough to be hashed", and the
+///   bar holds at [unverifiedCap] until `verified` -- which is then what
+///   fills it.
+/// * **It never runs backwards.** A decrease is a piece that failed its
+///   hash check and was discarded, not progress being undone: the bar
+///   stays where it got to rather than animating down.
+/// * **A different piece is a different wait**, so it starts where that
+///   piece is, at once and with no transition -- the reader moved (a seek,
+///   a re-open), and nothing about the old piece's fill is news about the
+///   new one.
+///
+/// Nothing here animates: the value is drawn as it is, so "no transition"
+/// is the absence of one rather than one that is cancelled.
+class PieceProgressBar extends StatefulWidget {
+  const PieceProgressBar({super.key, required this.piece});
+
+  final InFlightPiece piece;
+
+  /// How full an unverified piece is allowed to draw. Short of the end on
+  /// purpose: the bytes are all on disk but none of them can be served
+  /// until the hash checks out, and a bar at the end would say they can.
+  static const double unverifiedCap = 0.97;
+
+  /// What [piece] on its own says the bar should read, before the
+  /// no-going-backwards rule the state applies on top.
+  static double target(InFlightPiece piece) =>
+      piece.verified ? 1 : math.min(piece.progress, unverifiedCap);
+
+  @override
+  State<PieceProgressBar> createState() => _PieceProgressBarState();
+}
+
+class _PieceProgressBarState extends State<PieceProgressBar> {
+  late int _index = widget.piece.index;
+  late double _value = PieceProgressBar.target(widget.piece);
+
+  @override
+  void didUpdateWidget(covariant PieceProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final piece = widget.piece;
+    final target = PieceProgressBar.target(piece);
+    // No `setState`: a build follows this call anyway, and there is no
+    // animation to start -- which is the point.
+    if (piece.index != _index) {
+      _index = piece.index;
+      _value = target;
+    } else if (target > _value) {
+      _value = target;
+    }
+    // A decrease within one piece is a failed hash check. Hold.
+  }
+
+  @override
+  Widget build(BuildContext context) => LinearProgressIndicator(value: _value);
 }

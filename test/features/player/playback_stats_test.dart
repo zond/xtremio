@@ -152,6 +152,42 @@ void main() {
       ],
     );
 
+    // With the server's sub-piece view the panel also says *which* piece
+    // the reader is sitting on and how far into it -- and whether that
+    // piece has passed its hash check, since a full byte count on its own
+    // only means it is complete enough to be hashed.
+    expect(
+      PlaybackStatsOverlay.describeTorrent(
+        const TorrentStats(
+          phase: TorrentPhase.buffering,
+          initialWindowReadyBytes: 0,
+          initialWindowBytes: 16777216,
+          pieceLength: 16777216,
+          inFlightPiece: InFlightPiece(
+            index: 137,
+            downloadedBytes: 6553600,
+            totalBytes: 16777216,
+          ),
+        ),
+      ).skip(5),
+      ['piece    16 MiB', 'inflight #137 · 6.3 of 16.0 MiB · unverified'],
+    );
+    expect(
+      PlaybackStatsOverlay.describeTorrent(
+        const TorrentStats(
+          phase: TorrentPhase.ready,
+          pieceLength: 16777216,
+          inFlightPiece: InFlightPiece(
+            index: 137,
+            downloadedBytes: 16777216,
+            totalBytes: 16777216,
+            verified: true,
+          ),
+        ),
+      ).last,
+      'inflight #137 · 16.0 of 16.0 MiB · verified',
+    );
+
     // A swarm the trackers say is empty is an answer, and reads as one --
     // the row a client must not confuse with "not reported" above.
     expect(

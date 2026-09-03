@@ -75,6 +75,87 @@ final class PeerDiscovery {
   int get hashCode => Object.hash(seen, queued, connecting, live);
 }
 
+/// Byte progress of the single piece the open reader is sitting on
+/// (`inFlightPiece`): the finer view of the one piece that decides when
+/// playback can go on.
+///
+/// A piece is the unit that becomes readable -- none of a 16 MiB piece can
+/// be served until all 16 MiB of it verifies -- so the have-bitfield the
+/// window is measured against is too coarse to show a waiting player
+/// anything but 0 or 100. This is the number that moves in between.
+///
+/// The whole object is null when the server does not know: no reader open
+/// on that file, no metadata yet, or a torrent with no chunk map. Null is
+/// "we do not know", never "nothing downloaded" -- the server sends null
+/// rather than a zeroed object precisely so the two stay apart.
+final class InFlightPiece {
+  const InFlightPiece({
+    required this.index,
+    required this.downloadedBytes,
+    required this.totalBytes,
+    this.verified = false,
+  });
+
+  /// The piece's index **in the torrent**, not in the file.
+  final int index;
+
+  /// Bytes of it written to disk. **This can go backwards**: a chunk
+  /// counts the moment it is written, the hash is only checked once every
+  /// chunk is in, and a piece that fails the check is discarded and drops
+  /// back to zero. See [verified].
+  final int downloadedBytes;
+
+  /// The piece's own length: [TorrentStats.pieceLength] for every piece
+  /// but the torrent's last, which is short. The server clamps it, so
+  /// nothing here multiplies anything itself.
+  final int totalBytes;
+
+  /// Whether the piece is in the have-bitfield and can be served. A full
+  /// [downloadedBytes] on its own only means "complete enough to be
+  /// hashed"; this is the only field that means ready.
+  final bool verified;
+
+  /// The server's own measure, `0..1`. It is bytes on disk, not bytes that
+  /// can be served -- what shows it has to hold short of full until
+  /// [verified] (see `PieceProgressBar`).
+  double get progress => (downloadedBytes / totalBytes).clamp(0, 1).toDouble();
+
+  /// The object for an `inFlightPiece` value, or null for the null the
+  /// server sends when it does not know -- and for anything malformed,
+  /// which is the same not-knowing.
+  static InFlightPiece? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final index = _intOrNull(value['index']);
+    final total = _intOrNull(value['totalBytes']);
+    if (index == null || total == null || total <= 0) return null;
+    return InFlightPiece(
+      index: index,
+      downloadedBytes: (_intOrNull(value['downloadedBytes']) ?? 0).clamp(
+        0,
+        total,
+      ),
+      totalBytes: total,
+      verified: value['verified'] == true,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is InFlightPiece &&
+      other.index == index &&
+      other.downloadedBytes == downloadedBytes &&
+      other.totalBytes == totalBytes &&
+      other.verified == verified;
+
+  @override
+  int get hashCode => Object.hash(index, downloadedBytes, totalBytes, verified);
+
+  @override
+  String toString() =>
+      'InFlightPiece(#$index, $downloadedBytes/$totalBytes, '
+      'verified: $verified)';
+}
+
 /// The slice of stream-server's per-torrent `stats.json` the pre-playback
 /// overlay shows. The response keeps the server.js-compatible shape
 /// stremio-core parses and adds the camelCase phase fields.
@@ -86,6 +167,7 @@ final class TorrentStats {
     this.initialWindowReadyBytes,
     this.initialWindowBytes,
     this.pieceLength,
+    this.inFlightPiece,
     this.peerDiscovery = const PeerDiscovery(),
     this.downloadSpeed = 0,
     this.peers = 0,
@@ -123,6 +205,15 @@ final class TorrentStats {
   /// say it in pieces when there is only one of them; see
   /// [windowPieces] and [initialWindowProgress].
   final int? pieceLength;
+
+  /// How far the one piece the reader is sitting on has come
+  /// (`inFlightPiece`), or null when the server does not know -- which is
+  /// not the same as zero; see [InFlightPiece].
+  ///
+  /// This is what turns "waiting for the first piece (16 MiB)" into
+  /// "waiting for piece 137, 6.3 of 16.0 MiB" and gives the bar something
+  /// to draw.
+  final InFlightPiece? inFlightPiece;
 
   final PeerDiscovery peerDiscovery;
 
@@ -170,6 +261,7 @@ final class TorrentStats {
       initialWindowReadyBytes: _intOrNull(json['initialWindowReadyBytes']),
       initialWindowBytes: _intOrNull(json['initialWindowBytes']),
       pieceLength: _intOrNull(json['pieceLength']),
+      inFlightPiece: InFlightPiece.fromJson(json['inFlightPiece']),
       peerDiscovery: discovery is Map<String, dynamic>
           ? PeerDiscovery.fromJson(discovery)
           : const PeerDiscovery(),
@@ -222,11 +314,23 @@ final class TorrentStats {
   /// How long the piece being waited for should take at the current
   /// download speed, when both are known and moving. An estimate, and
   /// named as one wherever it is shown.
+  ///
+  /// When the wait is one piece and the server says how far *into* that
+  /// piece it is, the remainder is the piece's -- which shrinks between
+  /// polls. The window's own bytes only move when a whole piece verifies,
+  /// so on their own they would hold the same estimate for the entire
+  /// wait.
   Duration? get windowEta {
-    final window = initialWindowBytes;
-    final ready = initialWindowReadyBytes ?? 0;
-    if (window == null || downloadSpeed <= 0) return null;
-    final remaining = window - ready;
+    if (downloadSpeed <= 0) return null;
+    final piece = inFlightPiece;
+    final int remaining;
+    if (waitsForOnePiece && piece != null) {
+      remaining = piece.totalBytes - piece.downloadedBytes;
+    } else {
+      final window = initialWindowBytes;
+      if (window == null) return null;
+      remaining = window - (initialWindowReadyBytes ?? 0);
+    }
     if (remaining <= 0) return null;
     final seconds = remaining / downloadSpeed;
     if (!seconds.isFinite || seconds > 3600) return null;
@@ -247,6 +351,7 @@ final class TorrentStats {
       other.initialWindowReadyBytes == initialWindowReadyBytes &&
       other.initialWindowBytes == initialWindowBytes &&
       other.pieceLength == pieceLength &&
+      other.inFlightPiece == inFlightPiece &&
       other.peerDiscovery == peerDiscovery &&
       other.downloadSpeed == downloadSpeed &&
       other.peers == peers &&
@@ -264,6 +369,7 @@ final class TorrentStats {
     initialWindowReadyBytes,
     initialWindowBytes,
     pieceLength,
+    inFlightPiece,
     peerDiscovery,
     downloadSpeed,
     peers,

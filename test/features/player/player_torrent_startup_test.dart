@@ -292,6 +292,238 @@ void main() {
     });
   });
 
+  group('the piece the reader is waiting on', () {
+    /// The same 16 MiB-piece torrent as above, only with the server's
+    /// sub-piece view of the one piece the wait is for. Everything the
+    /// have-bitfield can say is still 0; this is what moves.
+    TorrentStats waiting({
+      int downloaded = 6553600,
+      bool verified = false,
+      int index = 137,
+    }) => TorrentStats(
+      phase: TorrentPhase.buffering,
+      initialWindowReadyBytes: 0,
+      initialWindowBytes: 16777216,
+      pieceLength: 16777216,
+      inFlightPiece: InFlightPiece(
+        index: index,
+        downloadedBytes: downloaded,
+        totalBytes: 16777216,
+        verified: verified,
+      ),
+      peerDiscovery: const PeerDiscovery(seen: 9, live: 4),
+      downloadSpeed: 2000000,
+      peers: 4,
+      connectedSeeders: 2,
+    );
+
+    /// The card on its own, so the bar can be driven poll by poll without
+    /// a whole player around it.
+    Future<void> show(WidgetTester tester, TorrentStats stats) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: TorrentProgressCard(
+                status: TorrentStartupOverlay.describe(stats),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    double? barValue(WidgetTester tester) => tester
+        .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+        .value;
+
+    test('is parsed, and null stays null rather than becoming a zero', () {
+      final stats = TorrentStats.fromJson(const {
+        'phase': 'buffering',
+        'initialWindowReadyBytes': 0,
+        'initialWindowBytes': 16777216,
+        'pieceLength': 16777216,
+        'inFlightPiece': {
+          'index': 137,
+          'downloadedBytes': 6553600,
+          'totalBytes': 16777216,
+          'verified': false,
+        },
+      });
+      expect(
+        stats.inFlightPiece,
+        const InFlightPiece(
+          index: 137,
+          downloadedBytes: 6553600,
+          totalBytes: 16777216,
+        ),
+      );
+      expect(stats.inFlightPiece!.progress, closeTo(0.390625, 1e-9));
+
+      // "We do not know" -- no reader open, no metadata, no chunk map --
+      // is a null object, and must never be read as "nothing downloaded".
+      expect(
+        TorrentStats.fromJson(const {
+          'phase': 'buffering',
+          'inFlightPiece': null,
+        }).inFlightPiece,
+        isNull,
+      );
+      expect(
+        TorrentStats.fromJson(const {'phase': 'checking'}).inFlightPiece,
+        isNull,
+      );
+    });
+
+    testWidgets('says the bytes of that piece, and the bar moves', (
+      tester,
+    ) async {
+      final status = TorrentStartupOverlay.describe(waiting());
+      expect(status.label, 'Waiting for piece 137, 6.3 of 16.0 MiB…');
+      // The estimate is the piece's remainder, so it shrinks between
+      // polls instead of quoting the whole piece for the whole wait.
+      expect(status.detail, contains('about 6 s left'));
+
+      await show(tester, waiting());
+      expect(find.text('Waiting for piece 137, 6.3 of 16.0 MiB…'), findsOne);
+      expect(barValue(tester), closeTo(0.390625, 1e-9));
+
+      await show(tester, waiting(downloaded: 13107200));
+      expect(find.text('Waiting for piece 137, 12.5 of 16.0 MiB…'), findsOne);
+      expect(barValue(tester), closeTo(0.78125, 1e-9));
+    });
+
+    testWidgets('an unverified full piece does not read as done', (
+      tester,
+    ) async {
+      // Every byte is on disk, but none of it can be served until the
+      // hash checks out: a full bar here would be a promise the server
+      // has not made.
+      await show(tester, waiting(downloaded: 16777216));
+      expect(barValue(tester), PieceProgressBar.unverifiedCap);
+      expect(barValue(tester), lessThan(1));
+
+      // `verified` is what fills it.
+      await show(tester, waiting(downloaded: 16777216, verified: true));
+      expect(barValue(tester), 1);
+    });
+
+    testWidgets('never runs backwards when a piece fails its hash', (
+      tester,
+    ) async {
+      await show(tester, waiting(downloaded: 8388608));
+      expect(barValue(tester), closeTo(0.5, 1e-9));
+
+      // The piece failed its check and was discarded, so the count drops
+      // back. The bar holds where it got to rather than animating down --
+      // and nothing here animates at all, so there is no shrink to see
+      // even for a frame.
+      await show(tester, waiting(downloaded: 1048576));
+      expect(barValue(tester), closeTo(0.5, 1e-9));
+      await tester.pump(const Duration(seconds: 1));
+      expect(barValue(tester), closeTo(0.5, 1e-9));
+
+      // A different piece is a different wait: it starts where that piece
+      // is, at once.
+      await show(tester, waiting(index: 138, downloaded: 1048576));
+      expect(barValue(tester), closeTo(0.0625, 1e-9));
+      await tester.pump(const Duration(seconds: 1));
+      expect(barValue(tester), closeTo(0.0625, 1e-9));
+    });
+
+    testWidgets('a piece the server does not know draws no bar of its own', (
+      tester,
+    ) async {
+      const unknown = TorrentStats(
+        phase: TorrentPhase.buffering,
+        initialWindowReadyBytes: 0,
+        initialWindowBytes: 16777216,
+        pieceLength: 16777216,
+        peerDiscovery: PeerDiscovery(seen: 9, live: 4),
+        peers: 4,
+      );
+      final status = TorrentStartupOverlay.describe(unknown);
+      expect(status.piece, isNull);
+      expect(status.label, 'Waiting for the first piece (16 MiB)…');
+
+      await show(tester, unknown);
+      expect(find.byType(PieceProgressBar), findsNothing);
+      // Not a bar sitting at zero, which would say "nothing downloaded":
+      // the indeterminate sweep, which says only that something is
+      // happening that cannot be measured.
+      expect(barValue(tester), isNull);
+    });
+
+    testWidgets('a stall says the same thing in the present tense', (
+      tester,
+    ) async {
+      final stalled = TorrentStallOverlay.describe(waiting());
+      expect(stalled.label, 'Waiting for piece 137, 6.3 of 16.0 MiB…');
+      expect(stalled.piece, isNotNull);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(child: TorrentProgressCard(status: stalled)),
+          ),
+        ),
+      );
+      expect(barValue(tester), closeTo(0.390625, 1e-9));
+
+      // Without the sub-piece view it is the wording it always had.
+      expect(
+        TorrentStallOverlay.describe(
+          const TorrentStats(
+            phase: TorrentPhase.buffering,
+            initialWindowReadyBytes: 0,
+            initialWindowBytes: 16777216,
+            pieceLength: 16777216,
+            peers: 4,
+            peerDiscovery: PeerDiscovery(live: 4),
+          ),
+        ).label,
+        'Waiting for the next piece (16 MiB)…',
+      );
+    });
+
+    test('a window of several pieces keeps its percentage', () {
+      // The piece is known there too, but a window that really does span
+      // several of them has a percentage that advances, and that is what
+      // it shows -- the sub-piece view is for the wait that has none.
+      const spanning = TorrentStats(
+        phase: TorrentPhase.buffering,
+        initialWindowReadyBytes: 2097152,
+        initialWindowBytes: 8388608,
+        pieceLength: 2097152,
+        inFlightPiece: InFlightPiece(
+          index: 4,
+          downloadedBytes: 1048576,
+          totalBytes: 2097152,
+        ),
+        peerDiscovery: PeerDiscovery(seen: 9, live: 4),
+        peers: 4,
+      );
+      final status = TorrentStartupOverlay.describe(spanning);
+      expect(status.label, 'Buffering start… 25%');
+      expect(status.progress, 0.25);
+      expect(status.piece, isNull);
+    });
+
+    test('the byte pair is said in the unit the piece takes', () {
+      expect(
+        TorrentProgressCard.formatPieceBytes(6553600, 16777216),
+        '6.3 of 16.0 MiB',
+      );
+      // A short last piece reads as its own length, not a rounded one.
+      expect(
+        TorrentProgressCard.formatPieceBytes(6291456, 12058624),
+        '6.0 of 11.5 MiB',
+      );
+      expect(TorrentProgressCard.formatPieceBytes(512, 1024), '0.5 of 1.0 kiB');
+      expect(TorrentProgressCard.formatPieceBytes(3, 900), '3 of 900 B');
+    });
+  });
+
   group('TorrentStartupOverlay.describe', () {
     test('labels each phase, with a percentage where one exists', () {
       final connecting = TorrentStartupOverlay.describe(null);
