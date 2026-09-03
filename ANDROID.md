@@ -108,6 +108,28 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
   adb shell am start -a android.intent.action.VIEW \
     -d "stremio://v3-cinemeta.strem.io/manifest.json"
   ```
+- **Google Cast entries.** Three, all in the `<application>` block, and no
+  Gradle changes at all — everything else the Cast SDK needs (mediarouter,
+  `play-services-cast-framework`, its own `MediaIntentReceiver` and
+  `ReconnectionService`, the plain `FOREGROUND_SERVICE` permission) merges in
+  from `flutter_chrome_cast`'s own manifest:
+  - `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, without which the SDK's media
+    notification cannot run as a foreground service on API 34+.
+  - the `com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME`
+    meta-data naming `com.felnanuke.google_cast.GoogleCastOptionsProvider`.
+    The SDK instantiates that class by name before any app code runs, so it
+    has to be in the manifest and cannot be passed in; the plugin fills its
+    options in from what Dart hands
+    `GoogleCastContext.setSharedInstanceWithOptions`.
+  - `com.google.android.gms.cast.framework.media.MediaNotificationService`,
+    which lives in Play services; declaring it is what lets the SDK start it.
+
+  `MainActivity` is **unchanged**: the app drives sessions through the
+  session manager rather than the SDK's own `MediaRouteButton` dialog, so
+  there is no AppCompat host requirement. (`flutter_chrome_cast`'s own
+  example uses a plain `FlutterActivity` too.) The merge was verified with
+  `./gradlew :app:processReleaseManifest`; casting itself was not — there is
+  no Chromecast on this machine.
 - **`xtremio/device` channel.** `DeviceProfile.detect()`
   (`lib/shell/device_profile.dart`) runs once in `main()` before `runApp`
   and asks `MainActivity` for `{isTv, hasTouch}`: `isTv` is

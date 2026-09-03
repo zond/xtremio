@@ -730,6 +730,83 @@ installs on it; ANDROID.md lists the keycodes. A physical phone/TV box
 (USB debugging, `adb devices` shows `device`) takes the arm64 APK the same
 way.
 
+## Casting to a Chromecast
+
+A cast button on the player's top bar, once a receiver has answered. It hands
+the stream to the receiver **untouched** — the bytes the embedded server
+already serves, with no processing anywhere — and turns the player screen into
+a remote while the television plays. Media3 remuxing, which is what would let
+the other three quarters of the streams out there be cast, is not built.
+
+Because nothing is converted, the honest part of this is the refusal.
+
+**The compatibility rule, as implemented**
+(`lib/features/cast/cast_compatibility.dart`): MP4 or WebM, H.264 or HEVC
+video, AAC audio.
+
+- The **container** comes from `behaviorHints.filename`, the converted
+  stream's filename, or a URL path that ends in a real file name. A torrent's
+  streaming URL is `/{infoHash}/{fileIdx}` and says nothing, so the filename is
+  usually all there is — and a container nothing identifies is a **refusal**,
+  not a maybe. A guess here is a guess about whether the evening works.
+- The **codecs** come from mpv while the stream is playing locally
+  (`video-codec` and `audio-codec-name`, sampled while the receiver list is
+  open), and otherwise from what the release claims about itself — the
+  `StreamFacts` tags and the filename. A claim is believed when it says
+  something is *wrong* and never taken as proof that something is right, so a
+  codec nothing mentions passes on the container's strength alone, and mpv
+  overrules a release name that disagrees with the decoder.
+- A `/proxy` or `/ftp` URL is refused before any of that. Those routes are
+  each an open proxy and are deliberately not mounted on the LAN listener, so
+  a stream stremio-core plays through the proxy cannot be cast at all.
+
+A refusal is a dialog that says what is wrong and that the conversion which
+would fix it does not exist yet; `CastRefusal` names which rule refused, which
+is the seam Media3 fills.
+
+**The URL the receiver is given.** A Chromecast cannot fetch from
+`127.0.0.1`, so a loopback URL is rebuilt on the server's **LAN media
+listener** — a second HTTP listener with no control routes on it at all, and
+deliberately without `/proxy` and `/ftp` (`rust/src/server.rs`,
+`server_set_lan_media`). A stream served from somewhere else on the internet is
+handed over as it is; the receiver has a connection of its own, and no listener
+is started for it. If no local interface can reach the receiver, the app says
+the device is unreachable rather than casting a URL that could never be
+fetched.
+
+**The listener lives exactly as long as a session**, and that is made hard to
+get wrong rather than merely intended: it is closed when the session ends, when
+the session ends from the television or another phone, when a start fails, on
+`dispose`, and defensively right after the server starts — stream-server binds
+a configured `lan_media_addr` at boot, so `start_in` shuts it again as the
+first thing it does. Turning it on also grants the server's `lanMediaEnabled`
+veto and turning it off takes it back, so what is on disk while nothing is
+casting is "no".
+
+**While casting** the player screen shows the title, the position, play/pause,
+seek and stop, all from the receiver's own status — a pause from its remote
+shows up here too. Local playback is stopped and its own reports ignored, and
+ending the session resumes it where the receiver had got to. The core hears the
+same three actions local playback dispatches — `TimeChanged`, `PausedChanged`,
+`Ended` — so the library and continue-watching do not notice which device the
+pixels were on.
+
+The button is never built on Android TV: a TV is a receiver, not a sender.
+
+The pieces: `lib/features/cast/` (`cast_client.dart` — the interface,
+`CastScope` and the types; `google_cast_client.dart` — the implementation over
+[`flutter_chrome_cast`](https://pub.dev/packages/flutter_chrome_cast);
+`cast_compatibility.dart`; `cast_widgets.dart`), the session in
+`PlayerScreen`, and `LanMediaControl` on `ServerClient`. Widget tests drive it
+through `FakeCastClient`/`FakeLanMediaControl` (`test/support/`) and never
+touch the plugin; `rust/tests/lan_media.rs` drives the listener itself.
+
+**Not verified against a real Chromecast** — there is no receiver on this
+machine. What is verified: the LAN listener over real HTTP (it serves media
+routes, answers `/proxy` and `/heartbeat` with 404, and is gone after a stop
+and after a shutdown), the Android manifest merge, and every decision the app
+makes around a fake sender.
+
 ## Installing an addon from the web (`stremio://` links)
 
 Addon directories — [stremio-addons.net](https://stremio-addons.net) above
