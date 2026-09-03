@@ -216,6 +216,23 @@ connection.
   HTTP, one JSON file per bucket under the app-support directory with
   temp-then-fsync-then-rename writes, and two lib-owned tokio runtimes
   (concurrent + a single-worker sequential one for ordered persistence).
+- **The app's own preferences are a file beside those buckets**
+  (`rust/src/prefs.rs`, `<storage_dir>/xtremio_prefs.json`): a flat JSON
+  object of client-side choices -- how a list is laid out, which view a
+  screen comes up in -- written with the same atomic write. They are
+  deliberately *not* stremio-core `Settings` fields (that struct is the
+  engine's and is synced to the account; a field there means forking the
+  core) and deliberately not a Dart preferences package (the directory is
+  already ours). The FFI is `prefs_get_all()` and `prefs_set(key,
+  value_json)` (`rust/src/api/prefs.rs`) -- two calls, so a new choice
+  costs a key and no regenerated bindings -- wrapped by `PrefsClient` in
+  `lib/core/prefs_client.dart` and read once at start-up into `AppPrefs`,
+  which `XtremioApp` hands down as a `PrefsScope`. The file is forgiving
+  and additive like the downloads registry: a write is a read-modify-write
+  of one key, a key from a newer build survives it, and a file that cannot
+  be parsed reads as "nothing set" rather than as a failure. Today it holds
+  one key, `streamsFlat` (the Details screen's flat-vs-grouped sources
+  list). Nothing secret goes in it.
 - **The server is in-process**: `stream_server::start` runs on its own
   thread and runtime; the core's `streaming_server_url` is retargeted to it
   when the persisted profile points at loopback (a remote server URL set by

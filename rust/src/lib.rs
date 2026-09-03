@@ -10,6 +10,7 @@
 //!   state in, created by `core::init` and dropped by `core::shutdown`
 //! - `core`: the stremio-core Runtime (init, dispatch, state, events)
 //! - `downloads`: the offline-downloads registry over the server's pins
+//! - `prefs`: the app's own UI preferences, one small JSON file
 //! - `server`: the in-process stream-server (torrent/archive bytes over HTTP)
 //! - `guard`: panic containment at the FFI boundary
 //! - `logging`: the process-wide tracing subscriber and its in-memory ring
@@ -27,5 +28,6 @@ mod frb_generated;
 pub mod guard;
 pub mod logging;
 pub mod model;
+pub mod prefs;
 pub mod server;
 pub mod state;

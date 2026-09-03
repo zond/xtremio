@@ -2,7 +2,8 @@
 //!
 //! Everything the crate keeps between FFI calls -- the stremio-core
 //! `Runtime` and its event sink, the embedded server's handle, the downloads
-//! registry's locks and its progress sink -- lives in one [`AppState`],
+//! registry's locks and its progress sink, the preferences file's lock --
+//! lives in one [`AppState`],
 //! grouped by the concern that owns it, behind one process static. That is
 //! the whole point: "who owns this, and when does it go away" has a single
 //! answer instead of one per `static`.
@@ -34,6 +35,8 @@ pub struct AppState {
     pub server: crate::server::ServerState,
     /// The offline-downloads registry's locks, progress sink and ticker.
     pub downloads: crate::downloads::DownloadsState,
+    /// The preferences file's lock.
+    pub prefs: crate::prefs::PrefsState,
 }
 
 /// The one process static. `None` until something needs the state, and
