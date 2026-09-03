@@ -300,11 +300,26 @@ class RustDownloadsClient implements DownloadsClient {
     if (_disposed) return const Stream<DownloadsRegistry>.empty();
     final controller = _controller ??=
         StreamController<DownloadsRegistry>.broadcast();
-    _events ??= openEvents().listen((payload) {
-      final update = _parse(payload);
-      if (update != null) controller.add(update);
-    }, onError: controller.addError);
+    _events ??= openEvents().listen(
+      (payload) {
+        final update = _parse(payload);
+        if (update != null) controller.add(update);
+      },
+      onError: controller.addError,
+      onDone: () => _endFeed(controller),
+    );
     return controller.stream;
+  }
+
+  /// The Rust side keeps one event sink, so a second client replaces it and
+  /// ends this stream. Close the broadcast so listeners hear the feed is
+  /// over instead of sitting on a dead one, and let go of both halves so a
+  /// later look at [updates] opens a fresh stream rather than handing back
+  /// the closed one.
+  void _endFeed(StreamController<DownloadsRegistry> controller) {
+    _events = null;
+    if (identical(_controller, controller)) _controller = null;
+    controller.close();
   }
 
   @override

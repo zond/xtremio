@@ -307,6 +307,30 @@ void main() {
       expect(errors, hasLength(1));
     });
 
+    test(
+      'the Rust stream ending ends the feed, it does not go quiet',
+      () async {
+        final client = rust.client;
+        addTearDown(client.dispose);
+        var done = false;
+        client.updates.listen((_) {}, onDone: () => done = true);
+        await pumpEventQueue();
+        expect(rust.opened, 1);
+
+        // The Rust side keeps one event sink: a second client replaces it and
+        // this stream ends under the first one.
+        await rust.events.close();
+        await pumpEventQueue();
+
+        expect(done, isTrue, reason: 'a listener is told, not left waiting');
+
+        // And whoever was told can ask for the feed again.
+        client.updates.listen((_) {});
+        await pumpEventQueue();
+        expect(rust.opened, 2);
+      },
+    );
+
     test('dispose lets go of the Rust stream and stays let go', () async {
       final client = rust.client;
       final seen = <DownloadsRegistry>[];
