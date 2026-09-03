@@ -296,7 +296,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     // A television has no window to be one part of: the video fills the
     // screen from the moment the player opens, with the system bars out of
-    // the way, until the player is left ([dispose] leaves fullscreen).
+    // the way, until the player is left ([dispose] leaves fullscreen,
+    // unless this screen is handing over to the next episode's).
     if (_isTv) {
       _fullscreenOn = true;
       _fullscreen?.enter().ignore();
@@ -1223,7 +1224,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
-    if (_fullscreenOn) _fullscreen?.exit().ignore();
+    // A television gives the system its bars back when the player is
+    // really over, not when it hands over to the next episode: the
+    // replacement enters fullscreen while this screen is still alive, and
+    // is disposed of after it, so exiting here would drop the *new*
+    // player out of fullscreen. Off a television the successor makes no
+    // such claim, and the window leaves fullscreen as it always has.
+    if (_fullscreenOn && !(_isTv && _handedOver)) _fullscreen?.exit().ignore();
     final engine = _engine;
     _engine = null;
     if (engine != null) _disposeAfterFrame(engine);

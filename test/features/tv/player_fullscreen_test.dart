@@ -87,6 +87,36 @@ void main() {
     expect(harness.fullscreen.exits, 1);
   });
 
+  testWidgets('the hand-off to the next episode keeps the television '
+      'fullscreen', (tester) async {
+    useScreen(tester, tvSize);
+    final harness = PlayerHarness(device: tv);
+    harness.fixture['nextVideo'] = const {
+      'id': 'tt0063350:1:2',
+      'title': 'The Cellar',
+      'season': 1,
+      'episode': 2,
+    };
+    harness.fixture['nextStream'] = const {
+      'url': 'https://x.example/e2.mp4',
+      'name': 'Direct',
+    };
+    await harness.pump(tester);
+    harness.engine.emitDuration(total);
+    await pumpEvents(tester);
+    expect(harness.fullscreen.enters, 1);
+
+    // The next-track key hands over: a second player replaces this one,
+    // and this one is disposed once the replacement is in place. Leaving
+    // fullscreen on the way out would drop the *new* player out of it.
+    await press(tester, LogicalKeyboardKey.mediaTrackNext);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    expect(harness.engines, hasLength(2), reason: 'a new player took over');
+    expect(harness.fullscreen.exits, 0, reason: 'never left fullscreen');
+  });
+
   testWidgets('the controls a remote cannot work are not drawn', (
     tester,
   ) async {
