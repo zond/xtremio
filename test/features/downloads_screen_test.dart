@@ -66,6 +66,21 @@ class GatedListingClient extends FakeDownloadsClient {
   }
 }
 
+/// A client whose `open` waits, so a row can be tapped again while the
+/// registry round trip that stands between the tap and the player is still
+/// out.
+class GatedOpenClient extends FakeDownloadsClient {
+  GatedOpenClient({super.registry});
+
+  final Completer<void> gate = Completer<void>();
+
+  @override
+  Future<DownloadOpenResult> open(String key) async {
+    await gate.future;
+    return super.open(key);
+  }
+}
+
 void main() {
   /// Everything the screen and a pushed player need above them.
   Widget harness(
@@ -296,6 +311,40 @@ void main() {
         'id': 'tt0063350',
         'extra': <Object>[],
       });
+    });
+
+    testWidgets('a second tap while the file is looked up is dropped', (
+      tester,
+    ) async {
+      // `downloads_open` is a round trip, and the row stays hit-testable
+      // for as long as it is out. Two players would each load the shared
+      // `player` field and start an engine of their own, and the one left
+      // underneath would keep playing behind the one on top.
+      useTallViewport(tester);
+      final downloads = GatedOpenClient(registry: recorded());
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Night of the Living Dead'));
+      await tester.pump();
+      await tester.tap(find.text('Night of the Living Dead'));
+      await tester.pump();
+      downloads.gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(downloads.opens, [movieKey], reason: 'one lookup');
+      expect(
+        find.byType(PlayerScreen),
+        findsOneWidget,
+        reason: 'one player route, so one engine',
+      );
+      // Nothing but the screen is left under it: a second route would be
+      // a player that resumes the title all over again on the way back.
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      navigator.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayerScreen), findsNothing);
     });
 
     testWidgets('a download whose file went away streams it, and says so', (

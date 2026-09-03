@@ -91,6 +91,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   /// press that burns another worker for the same file.
   final Set<String> _retrying = {};
 
+  /// Whether a play is between its tap and its player. Asking the registry
+  /// for the file is a round trip and the row stays hit-testable across
+  /// it, so without this a second press pushes a second player: each one
+  /// loads the shared `player` field and starts an engine of its own, and
+  /// the one left underneath keeps its mpv alive and plays the title again
+  /// when the top one is backed out of.
+  bool _playing = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -178,9 +186,20 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   /// from outside the app. Then the addon's own stream is played instead --
   /// through the server, over the network -- and the row says so, rather
   /// than opening a player on a URL with no file behind it.
+  ///
+  /// A second press while that lookup is out is dropped ([_playing]).
   Future<void> _play(DownloadView view) async {
     final client = _client;
-    if (client == null) return;
+    if (client == null || _playing) return;
+    _playing = true;
+    try {
+      await _pushPlayer(client, view);
+    } finally {
+      _playing = false;
+    }
+  }
+
+  Future<void> _pushPlayer(DownloadsClient client, DownloadView view) async {
     final playback = await offlinePlayback(client, view);
     if (!mounted) return;
     final message = playback.message;
