@@ -204,7 +204,9 @@ class PlayerCenterControls extends StatelessWidget {
 ///
 /// On a television the seek bar joins the buttons as a focus stop (left and
 /// right seek while it holds focus), so the whole bar is reachable with the
-/// D-pad.
+/// D-pad, and the two controls a remote cannot work are left out: the
+/// volume slider (a drag; the set has its own volume keys) and the
+/// fullscreen button (the player is fullscreen the whole time it is up).
 class PlayerBottomBar extends StatelessWidget {
   const PlayerBottomBar({
     super.key,
@@ -349,14 +351,12 @@ class PlayerBottomBar extends StatelessWidget {
                           : Icons.volume_up,
                     ),
                   ),
-                  // A [Slider] takes every arrow key for itself, so a
-                  // remote that landed on it could never leave again. The
-                  // television has its own volume keys: right goes from
-                  // Mute straight on to fullscreen there, and the slider
-                  // stays for the pointers that can drag it.
-                  ExcludeFocus(
-                    excluding: isTv,
-                    child: SizedBox(
+                  // Only where something can drag it: a [Slider] takes
+                  // every arrow key for itself, so a remote that landed on
+                  // it could never leave again, and the set has its own
+                  // volume keys anyway. Mute stays, as a key does that.
+                  if (!isTv)
+                    SizedBox(
                       width: 120,
                       child: Slider(
                         value: volume.clamp(0, 100),
@@ -364,9 +364,8 @@ class PlayerBottomBar extends StatelessWidget {
                         onChanged: onVolume,
                       ),
                     ),
-                  ),
                 ],
-                fullscreenButton,
+                if (!isTv) fullscreenButton,
               ],
             ),
           ],

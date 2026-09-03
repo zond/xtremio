@@ -360,21 +360,23 @@ void main() {
       expect(focusIn<SeekBar>(), isTrue, reason: 'focus stays on the bar');
     });
 
-    testWidgets('right walks the transport row past the volume to fullscreen', (
+    testWidgets('right walks the transport row to its last button', (
       tester,
     ) async {
       final harness = await pumpOnTv(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedTooltip(), 'Play (Space)');
 
-      // The volume slider is no stop on a television — the set has its own
-      // volume keys — so the walk along the row reaches the fullscreen
-      // button behind it instead of being trapped on a control that eats
-      // every arrow key.
-      for (var i = 0; i < 8 && focusedTooltip() != 'Fullscreen (F)'; i++) {
+      // Neither the volume slider nor the fullscreen button is drawn on a
+      // television (no pointer to drag one, nothing to toggle in the
+      // other), so Mute ends the row: the walk reaches it instead of being
+      // trapped on a control that eats every arrow key, and stays there.
+      for (var i = 0; i < 8 && focusedTooltip() != 'Mute (M)'; i++) {
         await press(tester, LogicalKeyboardKey.arrowRight);
       }
-      expect(focusedTooltip(), 'Fullscreen (F)');
+      expect(focusedTooltip(), 'Mute (M)');
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedTooltip(), 'Mute (M)');
       expect(
         harness.engine.volumes,
         isEmpty,
@@ -395,21 +397,20 @@ void main() {
       harness.engine.emitDuration(total);
       await pumpEvents(tester);
 
+      // Tab, not the arrows: off a television those change the volume
+      // rather than move focus. Where there is a pointer the slider is
+      // drawn and takes its turn in the focus order like any other control.
+      expect(find.byType(Slider), findsOneWidget);
+      for (var i = 0; i < 20 && !focusIn<Slider>(); i++) {
+        await press(tester, LogicalKeyboardKey.tab);
+      }
       expect(
-        tester
-            .widget<ExcludeFocus>(
-              find
-                  .ancestor(
-                    of: find.byType(Slider),
-                    matching: find.byType(ExcludeFocus),
-                  )
-                  .first,
-            )
-            .excluding,
-        isFalse,
+        focusIn<Slider>(),
+        isTrue,
         reason: 'a pointer still drags the volume where there is one',
       );
     });
+
     testWidgets('the controls do not fade while a control has focus', (
       tester,
     ) async {

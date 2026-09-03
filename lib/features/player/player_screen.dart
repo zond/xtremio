@@ -294,6 +294,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     _fullscreen = PlaybackScope.fullscreenOf(context);
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
+    // A television has no window to be one part of: the video fills the
+    // screen from the moment the player opens, with the system bars out of
+    // the way, until the player is left ([dispose] leaves fullscreen).
+    if (_isTv) {
+      _fullscreenOn = true;
+      _fullscreen?.enter().ignore();
+    }
 
     final engine = PlaybackScope.of(context)();
     _engine = engine;
@@ -685,6 +692,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _toggleFullscreen() {
+    // Nothing to toggle on a television: it is fullscreen the whole time
+    // the player is up, and F/the centre key only wake the controls.
+    if (_isTv) {
+      _showControls();
+      return;
+    }
     final on = !_fullscreenOn;
     setState(() => _fullscreenOn = on);
     (on ? _fullscreen?.enter() : _fullscreen?.exit())?.ignore();
@@ -1157,7 +1170,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (event is! KeyDownEvent) break;
         // `escExitFullscreen` only decides whether Esc leaves fullscreen
         // first; otherwise it leaves the player, as in stremio-web.
-        if (_fullscreenOn && _settings.escExitFullscreen) {
+        if (!_isTv && _fullscreenOn && _settings.escExitFullscreen) {
           _toggleFullscreen();
         } else {
           Navigator.of(context).maybePop();
