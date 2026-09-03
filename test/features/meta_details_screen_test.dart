@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
@@ -967,6 +968,178 @@ void main() {
       await pumpReveal(tester);
       expect(tester.getTopLeft(find.text('Pilot')), pilot);
       expect(tester.getTopLeft(find.text('Streams')), streams);
+    });
+  });
+
+  group('failing addons', () {
+    const watchHubUrl = 'https://watchhub.strem.io/manifest.json';
+    const youTubeUrl = 'https://v3-channels.strem.io/manifest.json';
+    const localAddonUrl = 'http://127.0.0.1:11470/local-addon/manifest.json';
+    const strangerUrl = 'https://mirror.example/stremio/manifest.json';
+    const failure = 'Failed to fetch: 404 Not Found';
+
+    /// A stream group for the movie that came back `Err Env`, as the
+    /// engine records an addon whose host is gone.
+    Map<String, dynamic> failedGroup(String base) => {
+      'request': {
+        'base': base,
+        'path': {
+          'resource': 'stream',
+          'type': 'movie',
+          'id': 'tt0063350',
+          'extra': <Object>[],
+        },
+      },
+      'content': {
+        'type': 'Err',
+        'content': {
+          'type': 'Env',
+          'content': {'code': 1, 'message': failure},
+        },
+      },
+    };
+
+    /// The movie fixture with [streams] in place of its own, and the
+    /// default profile as `ctx` so the failing addons can be named.
+    Future<FakeCoreClient> mount(
+      WidgetTester tester,
+      List<Map<String, dynamic>> streams,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: loadMetaDetailsFixture()
+            ..['streams'] = streams,
+          CoreField.ctx: loadCtxLoggedOutFixture(),
+        },
+      );
+      await tester.pumpWidget(harness(core, FakePlaybackEngine()));
+      await tester.pumpAndSettle();
+      return core;
+    }
+
+    testWidgets('names the installed addon behind the error', (tester) async {
+      await mount(tester, [failedGroup(watchHubUrl)]);
+
+      expect(find.text('WatchHub'), findsOneWidget);
+      expect(find.text(failure), findsOneWidget);
+      expect(
+        find.text('watchhub.strem.io'),
+        findsNothing,
+        reason: 'the host is what the profile replaces',
+      );
+      expect(find.text('Check addon'), findsOneWidget);
+      expect(find.text('Uninstall'), findsOneWidget);
+    });
+
+    testWidgets('an addon that is not installed is still named by its host', (
+      tester,
+    ) async {
+      await mount(tester, [failedGroup(strangerUrl)]);
+
+      expect(find.text('mirror.example'), findsOneWidget);
+      expect(find.text(failure), findsOneWidget);
+      expect(find.text('Check addon'), findsOneWidget);
+      expect(
+        find.text('Uninstall'),
+        findsNothing,
+        reason: 'there is nothing installed to uninstall',
+      );
+    });
+
+    testWidgets('a protected addon cannot be uninstalled from here', (
+      tester,
+    ) async {
+      await mount(tester, [failedGroup(localAddonUrl)]);
+
+      expect(
+        find.text('Local Files (without catalog support)'),
+        findsOneWidget,
+      );
+      expect(find.text('Check addon'), findsOneWidget);
+      expect(find.text('Uninstall'), findsNothing);
+    });
+
+    testWidgets('uninstalling asks first, then sends the descriptor', (
+      tester,
+    ) async {
+      final core = await mount(tester, [failedGroup(watchHubUrl)]);
+      final descriptor = ProfileState.fromCtx(loadCtxLoggedOutFixture())
+          .installedAddon(watchHubUrl)!;
+
+      // A cancelled dialog changes nothing.
+      await tester.tap(find.text('Uninstall'));
+      await tester.pumpAndSettle();
+      expect(find.text('Uninstall WatchHub?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(core.dispatched.where((a) => a.field == CoreField.ctx), isEmpty);
+
+      await tester.tap(find.text('Uninstall'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Uninstall'));
+      await tester.pumpAndSettle();
+
+      expect(
+        core.dispatched.last.action,
+        CoreActions.uninstallAddon(descriptor).action,
+      );
+      expect(find.text('Uninstalled WatchHub'), findsOneWidget);
+    });
+
+    testWidgets('checking an addon opens its details on that manifest URL', (
+      tester,
+    ) async {
+      final core = await mount(tester, [failedGroup(watchHubUrl)]);
+
+      await tester.tap(find.text('Check addon'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(AddonDetailsScreen), findsOneWidget);
+      expect(
+        core.dispatched.last.action,
+        CoreActions.loadAddonDetails(watchHubUrl).action,
+      );
+    });
+
+    testWidgets('several failures collapse into one row below the streams', (
+      tester,
+    ) async {
+      final core = await mount(tester, [
+        ...(loadMetaDetailsFixture()['streams'] as List<dynamic>)
+            .cast<Map<String, dynamic>>(),
+        failedGroup(youTubeUrl),
+        failedGroup(strangerUrl),
+      ]);
+
+      // The playable stream is still the first thing in the section.
+      expect(find.text('1080p'), findsOneWidget);
+      expect(find.text(failure), findsNothing);
+      expect(find.text('2 addons did not answer'), findsOneWidget);
+      expect(find.text('YouTube, mirror.example'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('2 addons did not answer')).dy,
+        greaterThan(tester.getTopLeft(find.text('1080p')).dy),
+      );
+
+      await tester.tap(find.text('2 addons did not answer'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('YouTube'), findsOneWidget);
+      expect(find.text('mirror.example'), findsOneWidget);
+      expect(find.text(failure), findsNWidgets(2));
+      expect(find.text('Check addon'), findsNWidgets(2));
+      expect(
+        find.text('Uninstall'),
+        findsOneWidget,
+        reason: 'only the installed one can be dropped',
+      );
+      expect(
+        core.dispatched,
+        hasLength(1),
+        reason: 'expanding dispatches nothing',
+      );
     });
   });
 }

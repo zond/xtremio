@@ -23,7 +23,9 @@ Rust engine for addons, catalogs, library, and playback state) and
 > **Details** shows facts and genres, a season picker and episode list with
 > watched state for series (picking an episode loads its streams), and the
 > streams every installed addon returns with quality hints parsed into
-> chips; details routes are video-aware, so coming back from the player
+> chips; an addon that answered with an error is named from the profile
+> rather than by its host and offers to be checked or uninstalled on the
+> spot; details routes are video-aware, so coming back from the player
 > lands on the right episode. The **player** plays torrents through the
 > embedded server and HTTP streams directly, with its own controls (seek
 > bar with the buffered range, play/pause, seek buttons, volume,

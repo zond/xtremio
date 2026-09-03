@@ -8,6 +8,7 @@ import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/remote_press.dart';
 import '../../widgets/shared_field_screen.dart';
+import '../addons/addon_details_screen.dart';
 import '../addons/addons_screen.dart';
 import '../discover/discover_screen.dart';
 import '../downloads/download_labels.dart';
@@ -40,6 +41,14 @@ import '../player/player_screen.dart';
 /// see `docs/phase3-design.md` on `library_item`). Playing that same
 /// release afterwards plays the file on the device rather than streaming
 /// it, connection or not (`offline_play.dart`).
+///
+/// An addon that answers a stream request with an error is not listed as an
+/// empty group but collected below the streams that worked, named from the
+/// profile (`ctx`) rather than by the host in its manifest URL, with the two
+/// things worth doing about it: opening its details, whose manifest fetch is
+/// the reachability test, and uninstalling it. Several at once collapse into
+/// one summary row, so a profile full of dead mirrors does not bury the
+/// streams that still play.
 ///
 /// On a TV the info column and the streams pane are separate
 /// [FocusTraversalGroup]s, focus starts on the stream the user most likely
@@ -76,6 +85,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     with SharedFieldScreen<MetaDetailsScreen, MetaDetailsState> {
   CoreClient? _client;
   CoreFieldNotifier? _details;
+
+  /// `ctx`, for the installed addons: a stream group that failed carries
+  /// only the manifest URL it was asked at, and the profile is what turns
+  /// that into an addon with a name that can be uninstalled.
+  CoreFieldNotifier? _ctx;
 
   /// The downloads, when the app put a client above this screen (it always
   /// does; a test that does not care about downloads need not). Null leaves
@@ -136,9 +150,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final client = CoreScope.of(context);
     if (_client != client) {
       _details?.dispose();
+      _ctx?.dispose();
       _client = client;
       _details = CoreFieldNotifier(client, CoreField.metaDetails)
         ..addListener(onFieldChanged);
+      _ctx = CoreFieldNotifier(client, CoreField.ctx)
+        ..addListener(_onProfileChanged);
       _load(widget.videoId);
     }
     final downloads = DownloadsScope.maybeOf(context);
@@ -158,11 +175,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     if (mounted) setState(() {});
   }
 
+  void _onProfileChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     releaseField();
     _narrowScroll.dispose();
     _details?.dispose();
+    _ctx
+      ?..removeListener(_onProfileChanged)
+      ..dispose();
     _downloads
       ?..removeListener(_onDownloadsChanged)
       ..dispose();
@@ -213,6 +237,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       _awaitingVideoId != null && state.streamPath?.id != _awaitingVideoId;
 
   MetaDetailsState? get _state => ownState;
+
+  /// The profile behind `ctx`; null until its first pull comes back.
+  ProfileState? get _profile {
+    final ctx = _ctx?.value;
+    return ctx == null ? null : ProfileState.fromCtx(ctx);
+  }
 
   /// Dispatches `Load MetaDetails` for this title, showing [videoId]'s
   /// streams (or letting the engine guess), and takes the field over.
@@ -496,6 +526,32 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     );
   }
 
+  /// The addon behind a manifest URL. Its manifest fetch is the
+  /// reachability test a failing stream group asks for, and Install /
+  /// Uninstall are there too.
+  void _openAddonDetails(String transportUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'addon-details'),
+        builder: (_) => AddonDetailsScreen(transportUrl: transportUrl),
+      ),
+    );
+  }
+
+  /// Drops [addon] from the profile once the user has said so. Uninstalling
+  /// is a profile-wide change made from a screen about one title, so it is
+  /// never a single tap; the engine refreshes `ctx` itself, and the group
+  /// stays on screen until the next `Load` stops asking that addon.
+  Future<void> _uninstallAddon(AddonDescriptor addon) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _UninstallAddonDialog(name: addon.manifest.name),
+    );
+    if (confirmed != true || !mounted) return;
+    _client?.dispatch(CoreActions.uninstallAddon(addon));
+    _tell('Uninstalled ${addon.manifest.name}');
+  }
+
   void _openGenre(ResourceRequest request) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -696,8 +752,25 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // when nothing on the screen is focused yet, so streams arriving after
     // the user has moved on leave focus where it is.
     final isTv = DeviceScope.isTv(context);
+    // An addon that answered with an error has nothing to list, so it is
+    // pulled out of the run of groups and collected below the streams
+    // instead: several dead addons at once are one row there, not a wall
+    // of them above the streams that do work.
+    final profile = _profile;
+    final answered = [
+      for (final g in groups)
+        if (!_hasFailed(g)) g,
+    ];
+    final failures = [
+      for (final group in groups)
+        if (_hasFailed(group))
+          _AddonFailure(
+            group: group,
+            addon: profile?.installedAddon(group.request.base),
+          ),
+    ];
     final autofocusAt = isTv && lastUsed == null
-        ? _firstPlayable(groups)
+        ? _firstPlayable(answered)
         : null;
     final videoId = state.streamPath?.id ?? meta.id;
     final downloads = _downloadsClient == null
@@ -739,7 +812,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             downloads: downloads?.forGroup(lastUsed.$1),
           ),
         ),
-      for (final (index, group) in groups.indexed)
+      for (final (index, group) in answered.indexed)
         _StreamGroupSliver(
           group: group,
           lastUsed: lastUsed?.$2,
@@ -747,8 +820,25 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           autofocusIndex: autofocusAt?.$1 == index ? autofocusAt!.$2 : null,
           downloads: downloads?.forGroup(group),
         ),
+      if (failures.isNotEmpty)
+        SliverToBoxAdapter(
+          child: _FailedAddonsSection(
+            failures: failures,
+            locked: profile?.addonsLocked ?? false,
+            onCheck: (failure) => _openAddonDetails(failure.transportUrl),
+            onUninstall: (failure) => _uninstallAddon(failure.addon!),
+          ),
+        ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
     ];
+  }
+
+  /// Whether the addon answered with something other than streams: an
+  /// error that is not the ordinary "this addon has nothing for this
+  /// video" ([LoadableError.isEmptyContent]).
+  static bool _hasFailed(StreamGroup group) {
+    final error = group.error;
+    return error != null && !error.isEmptyContent;
   }
 
   /// The (group, stream) indices of the first playable stream, if any.
@@ -1410,6 +1500,10 @@ final class _StreamDownloads {
   }
 }
 
+/// One addon's answer: its label and the streams under it, or "No streams"
+/// once it has settled on nothing. An addon that *failed* never reaches
+/// here — those are collected into [_FailedAddonsSection] below the streams
+/// that did arrive.
 class _StreamGroupSliver extends StatelessWidget {
   const _StreamGroupSliver({
     required this.group,
@@ -1434,15 +1528,11 @@ class _StreamGroupSliver extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final error = group.error;
     final streams = group.streams;
     final label = group.isFromMeta
         ? 'From ${group.addonLabel}'
         : group.addonLabel;
-    final settledEmpty =
-        streams.isEmpty &&
-        (error?.isEmptyContent == true ||
-            (error == null && group.content != null));
+    final settledEmpty = streams.isEmpty && !group.isLoading;
     return SliverMainAxisGroup(
       slivers: [
         SliverToBoxAdapter(
@@ -1456,15 +1546,7 @@ class _StreamGroupSliver extends StatelessWidget {
             ),
           ),
         ),
-        if (error != null && !error.isEmptyContent)
-          SliverToBoxAdapter(
-            child: ListTile(
-              dense: true,
-              leading: const Icon(Icons.cloud_off_outlined),
-              title: Text(error.message),
-            ),
-          )
-        else if (settledEmpty)
+        if (settledEmpty)
           const SliverToBoxAdapter(
             child: ListTile(dense: true, title: Text('No streams')),
           ),
@@ -1485,6 +1567,213 @@ class _StreamGroupSliver extends StatelessWidget {
       ],
     );
   }
+}
+
+/// One addon that answered a stream request with an error, and the
+/// installed addon behind the manifest URL it was asked at.
+///
+/// The engine's stream groups carry the transport URL and nothing else, so
+/// without the profile a dead addon can only be named by its host — which
+/// is exactly the "a lot of 404s from domains I do not recognise" problem.
+/// With it, the row says which of the installed addons is broken and can
+/// offer to drop it.
+final class _AddonFailure {
+  const _AddonFailure({required this.group, required this.addon});
+
+  final StreamGroup group;
+
+  /// The installed addon at [transportUrl]; null when nothing is installed
+  /// under it any more (the state is a moment older than the profile).
+  final AddonDescriptor? addon;
+
+  String get transportUrl => group.request.base;
+
+  /// The addon's own name, falling back to the host it was asked at.
+  String get name => addon?.manifest.name ?? group.addonLabel;
+
+  String get message => group.error?.message ?? '';
+
+  /// Cinemeta and the local addon cannot be uninstalled, and neither can
+  /// one that is not in the profile to begin with.
+  bool get isRemovable => addon != null && !addon!.isProtected;
+}
+
+/// The addons that failed for this video, below the streams that worked.
+///
+/// One failure is the row itself. Several — a profile full of dead
+/// mirrors answers every request with the same wall of 404s — collapse
+/// into a single summary row naming them, which expands into the same
+/// rows, so the streams above stay the first thing on screen.
+class _FailedAddonsSection extends StatefulWidget {
+  const _FailedAddonsSection({
+    required this.failures,
+    required this.locked,
+    required this.onCheck,
+    required this.onUninstall,
+  });
+
+  final List<_AddonFailure> failures;
+
+  /// `profile.addonsLocked`: every install and uninstall fails until the
+  /// addon collection has been pulled, so the action is shown disabled
+  /// rather than offered and refused.
+  final bool locked;
+
+  final ValueChanged<_AddonFailure> onCheck;
+
+  /// Only called for a failure whose [_AddonFailure.isRemovable] holds.
+  final ValueChanged<_AddonFailure> onUninstall;
+
+  static const String checkLabel = 'Check addon';
+  static const String uninstallLabel = 'Uninstall';
+
+  /// The summary row of [count] failures.
+  static String summaryLabel(int count) => '$count addons did not answer';
+
+  @override
+  State<_FailedAddonsSection> createState() => _FailedAddonsSectionState();
+}
+
+class _FailedAddonsSectionState extends State<_FailedAddonsSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final failures = widget.failures;
+    Widget card(_AddonFailure failure) => _AddonFailureCard(
+      failure: failure,
+      locked: widget.locked,
+      onCheck: () => widget.onCheck(failure),
+      onUninstall: () => widget.onUninstall(failure),
+    );
+    if (failures.length == 1) return card(failures.single);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          dense: true,
+          leading: Icon(
+            Icons.cloud_off_outlined,
+            color: theme.colorScheme.error,
+          ),
+          title: Text(_FailedAddonsSection.summaryLabel(failures.length)),
+          subtitle: Text(
+            [for (final failure in failures) failure.name].join(', '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+          onTap: () => setState(() => _expanded = !_expanded),
+        ),
+        if (_expanded)
+          for (final failure in failures) card(failure),
+      ],
+    );
+  }
+}
+
+/// One dead addon: what it is called, what it said, and the two things to
+/// do about it — look at its manifest (the details screen fetches it, which
+/// is the reachability test) or drop it from the profile.
+class _AddonFailureCard extends StatelessWidget {
+  const _AddonFailureCard({
+    required this.failure,
+    required this.locked,
+    required this.onCheck,
+    required this.onUninstall,
+  });
+
+  final _AddonFailure failure;
+  final bool locked;
+  final VoidCallback onCheck;
+  final VoidCallback onUninstall;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.cloud_off_outlined,
+                size: 20,
+                color: theme.colorScheme.error,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(failure.name, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 2),
+                    Text(
+                      failure.message,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: onCheck,
+                  icon: const Icon(Icons.troubleshoot),
+                  label: const Text(_FailedAddonsSection.checkLabel),
+                ),
+                if (failure.isRemovable)
+                  TextButton.icon(
+                    onPressed: locked ? null : onUninstall,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text(_FailedAddonsSection.uninstallLabel),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Uninstalling from the details screen changes the whole profile, so it is
+/// asked about first.
+class _UninstallAddonDialog extends StatelessWidget {
+  const _UninstallAddonDialog({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Uninstall $name?'),
+    content: const Text(
+      'It stops being asked for streams everywhere in the app. You can '
+      'install it again from Addons with its manifest URL.',
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.of(context).pop(true),
+        child: const Text(_FailedAddonsSection.uninstallLabel),
+      ),
+    ],
+  );
 }
 
 /// One stream: its name, what is left of the description once the quality
