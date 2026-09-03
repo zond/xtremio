@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'core/core.dart';
+import 'features/addons/addon_details_screen.dart';
 import 'features/downloads/destination.dart';
 import 'features/player/playback_engine.dart';
+import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
@@ -42,7 +44,13 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 ///
 /// It holds the app's one navigator key too, so something outside the widget
 /// tree — a `stremio://` deep link arriving from the platform — can push a
-/// route.
+/// route. Deep links come from [deepLinks]: a `stremio://host/manifest.json`
+/// link (what every addon site's Install button produces, stremio-addons.net
+/// included) opens that addon's [AddonDetailsScreen] with the URL passed
+/// through untouched, and *nothing else* — a link never installs an addon,
+/// the Install button on that screen does. A link that arrives while a
+/// details screen is already up replaces it instead of stacking a second
+/// screen over the same core field.
 ///
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
@@ -58,6 +66,7 @@ class XtremioApp extends StatefulWidget {
     this.initInfo,
     this.engineBuilder,
     this.downloads,
+    this.deepLinks,
     this.defaultDestination = platformDefaultDestination,
     this.device = DeviceProfile.fallback,
   });
@@ -68,6 +77,10 @@ class XtremioApp extends StatefulWidget {
   /// The offline downloads, for tests that want a fake. Read once, when the
   /// app comes up: handing over a different client later changes nothing.
   final DownloadsClient? downloads;
+
+  /// Where `stremio://` links arrive from; tests hand in a fake instead of
+  /// the platform's own ([AppLinksDeepLinkSource]).
+  final DeepLinkSource? deepLinks;
 
   /// Where the downloads go on a first run: on Android the app's external
   /// files directory, which the OS does not purge, and null -- leave it to
@@ -94,8 +107,13 @@ class _XtremioAppState extends State<XtremioApp> {
   /// navigate with.
   final GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
 
+  /// What is on the navigator's stack, so a deep link can tell whether it is
+  /// landing on top of a details screen it should replace.
+  final _RouteStackObserver _routes = _RouteStackObserver();
+
   late final AppLifecycleListener _lifecycle;
   StreamSubscription<CoreEvent>? _events;
+  StreamSubscription<String>? _links;
 
   /// The one downloads client, and whether disposing it is ours to do: a
   /// client handed in belongs to whoever handed it in.
@@ -127,6 +145,7 @@ class _XtremioAppState extends State<XtremioApp> {
       onPause: _onAway,
     );
     _events = widget.core.events.listen(_onEvent);
+    unawaited(_startDeepLinks());
     unawaited(
       applyDefaultDestination(_downloads, resolve: widget.defaultDestination),
     );
@@ -137,6 +156,68 @@ class _XtremioAppState extends State<XtremioApp> {
     // Regardless of login: upgrades the bundled official addons.
     await _dispatch(CoreActions.pullAddonsFromAPI());
     if (await _isLoggedIn()) await _pullAccount(addons: false);
+  }
+
+  /// Subscribes to the platform's links and handles the one the app was
+  /// launched with. A platform with no implementation (or a widget test
+  /// without a fake) fails here and the app simply has no deep links.
+  Future<void> _startDeepLinks() async {
+    final links = widget.deepLinks ?? AppLinksDeepLinkSource();
+    try {
+      _links = links.links().listen(_onDeepLink, onError: _onDeepLinkError);
+      final initial = await links.initialLink();
+      // The stream may replay the launch link on its first listen; landing
+      // twice on the same addon is a no-op, so no bookkeeping is needed.
+      if (initial != null) _onDeepLink(initial);
+    } catch (error) {
+      _onDeepLinkError(error);
+    }
+  }
+
+  void _onDeepLinkError(Object error) {
+    if (kDebugMode) debugPrint('deep links unavailable: $error');
+  }
+
+  /// A `stremio://` link: the manifest URL in it opens that addon's details
+  /// screen. Nothing is installed — that stays a press on the Install button
+  /// there, so a link cannot add an addon behind the user's back.
+  void _onDeepLink(String link) {
+    final transportUrl = deepLinkAddonManifestUrl(link);
+    if (transportUrl == null) {
+      // The URL itself is not logged: an addon's manifest URL can carry the
+      // user's API key for a debrid service.
+      if (kDebugMode) {
+        debugPrint('deep link ignored: ${Uri.tryParse(link)?.scheme} link');
+      }
+      return;
+    }
+    _openAddonDetails(transportUrl);
+  }
+
+  /// Pushes the details screen for [transportUrl], replacing a details
+  /// screen already on top (the `addon_details` field holds one addon at a
+  /// time, so two of these stacked would render each other's state) and
+  /// doing nothing at all when that screen is already this addon's.
+  void _openAddonDetails(String transportUrl, {bool retry = true}) {
+    final navigator = _navigator.currentState;
+    if (navigator == null) {
+      // A link the app was launched with can arrive before the first build.
+      if (retry) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openAddonDetails(transportUrl, retry: false);
+        });
+      }
+      return;
+    }
+    final top = _routes.top?.settings;
+    if (top?.name != AddonDetailsScreen.routeName) {
+      navigator.push(AddonDetailsScreen.route(transportUrl));
+      return;
+    }
+    if (top?.arguments == transportUrl) return;
+    // The replacement claims the field before the replaced screen is
+    // disposed, so `SharedFieldOwnership` leaves it loaded.
+    navigator.pushReplacement(AddonDetailsScreen.route(transportUrl));
   }
 
   void _onAway() => _away = true;
@@ -211,6 +292,7 @@ class _XtremioAppState extends State<XtremioApp> {
   @override
   void dispose() {
     _events?.cancel();
+    _links?.cancel();
     // Lets go of the progress stream the client holds open on the Rust side.
     if (_ownsDownloads) _downloads.dispose();
     _ctx.dispose();
@@ -246,12 +328,42 @@ class _XtremioAppState extends State<XtremioApp> {
               navigatorKey: _navigator,
               theme: isTv ? TvDensity.theme(theme) : theme,
               builder: isTv ? TvMediaQuery.builder : null,
-              navigatorObservers: [if (kDebugMode) RouteLogObserver()],
+              navigatorObservers: [_routes, if (kDebugMode) RouteLogObserver()],
               home: const RootShell(),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// The navigator's stack, as the observers see it, so the app can ask what
+/// is on top without a [BuildContext].
+///
+/// Every route counts, dialogs and popup menus included: a link arriving
+/// while one of those is up is pushed over it rather than replacing it.
+class _RouteStackObserver extends NavigatorObserver {
+  final List<Route<dynamic>> _stack = [];
+
+  Route<dynamic>? get top => _stack.isEmpty ? null : _stack.last;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _stack.add(route);
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _stack.remove(route);
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _stack.remove(route);
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    final index = oldRoute == null ? -1 : _stack.indexOf(oldRoute);
+    if (index < 0 || newRoute == null) return;
+    _stack[index] = newRoute;
   }
 }

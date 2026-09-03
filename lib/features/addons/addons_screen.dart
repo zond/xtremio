@@ -111,11 +111,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
   }
 
   void _openDetails(String transportUrl) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => AddonDetailsScreen(transportUrl: transportUrl),
-      ),
-    );
+    Navigator.of(context).push(AddonDetailsScreen.route(transportUrl));
   }
 
   Future<void> _addByUrl() async {

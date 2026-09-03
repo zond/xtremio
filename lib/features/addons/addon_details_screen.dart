@@ -25,6 +25,20 @@ class AddonDetailsScreen extends StatefulWidget {
   /// The manifest URL, as typed or as a catalog entry carries it.
   final String transportUrl;
 
+  /// The `RouteSettings.name` every route showing this screen carries, with
+  /// the transport URL as the route's arguments. A `stremio://` deep link
+  /// arriving while one of these is on top replaces it rather than stacking
+  /// a second screen over the same core field; that is how it knows.
+  static const String routeName = 'addon-details';
+
+  /// The route to push for [transportUrl], named so a deep link recognises
+  /// it.
+  static MaterialPageRoute<void> route(String transportUrl) =>
+      MaterialPageRoute<void>(
+        settings: RouteSettings(name: routeName, arguments: transportUrl),
+        builder: (_) => AddonDetailsScreen(transportUrl: transportUrl),
+      );
+
   @override
   State<AddonDetailsScreen> createState() => _AddonDetailsScreenState();
 }
