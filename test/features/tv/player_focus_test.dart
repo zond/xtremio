@@ -9,6 +9,7 @@ import 'package:xtremio/features/player/seek_bar.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
 
+import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 import '../../support/tv.dart';
 
@@ -391,6 +392,34 @@ void main() {
       await tester.pump(PlayerScreen.controlsTimeout);
       await tester.pumpAndSettle();
       expect(controlsOpacity(tester), 0);
+    });
+
+    testWidgets('down reaches the bar while the stream is still resolving', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      // No resolved stream yet: no video surface, so no bottom bar to
+      // land on.
+      final harness = PlayerHarness(
+        player: loadPlayerFixture()..['stream'] = null,
+        device: tv,
+      );
+      // The spinner never settles, so this one pumps by hand.
+      await tester.pumpWidget(harness.build());
+      await pumpEvents(tester);
+      expect(find.text('Resolving stream…'), findsOneWidget);
+      expect(find.byType(PlayerBottomBar), findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await pumpEvents(tester);
+      expect(focusIn<PlayerTopBar>(), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await pumpEvents(tester);
+      expect(
+        harness.engine.volumes,
+        isEmpty,
+        reason: 'the television has its own volume keys',
+      );
     });
 
     testWidgets('up and down keep changing the volume off a TV', (

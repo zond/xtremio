@@ -1083,8 +1083,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     // Up and down on a TV are how the remote reaches the controls; the
-    // television has its own volume keys. The first press only brings the
-    // controls back when they had faded.
+    // television has its own volume keys, so they never fall through to
+    // the volume there. The first press only brings the controls back when
+    // they had faded. Down has nothing to land on while the stream is
+    // still resolving (there is no bottom bar without a video), so it
+    // falls back to the top bar, which is always built.
     if (_isTv &&
         (key == LogicalKeyboardKey.arrowUp ||
             key == LogicalKeyboardKey.arrowDown)) {
@@ -1093,7 +1096,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final direction = key == LogicalKeyboardKey.arrowUp
           ? TraversalDirection.up
           : TraversalDirection.down;
-      if (_focusControls(direction)) return KeyEventResult.handled;
+      if (!_focusControls(direction)) _focusControls(TraversalDirection.up);
+      return KeyEventResult.handled;
     }
 
     // Shift+I toggles the stats OSD, as in mpv; only the initial press.
