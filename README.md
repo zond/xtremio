@@ -38,7 +38,16 @@ Rust engine for addons, catalogs, library, and playback state) and
 > addon. **Library** lists every added title over the engine's
 > `LibraryWithFilters` model (type and sort filters, cumulative paging,
 > long-press to remove, mark watched, rewind or mute notifications), and
-> the details header has a bookmark to add or remove a title. **Addons**
+> the details header has a bookmark to add or remove a title. **Downloads**
+> keeps a torrent stream on the device: the download button on a stream tile
+> pins the file through the embedded server, badges on the episode list and
+> the details header say what is kept and how far along, and the Downloads
+> screen (from Settings, or the "Downloaded" chip in the Library) lists
+> everything with its progress, plays a finished one, retries a stopped one,
+> deletes one with or without its bytes, and says where the files go --
+> a folder to pick on Android, a path to type elsewhere. Downloading a
+> title also adds it to the library, which is what makes the player record
+> progress with no network. **Addons**
 > (from Settings) lists the installed and community addons and installs,
 > updates, uninstalls or configures one by manifest URL. **Settings** holds
 > the Stremio account (sign in, create an account, sync, log out), the

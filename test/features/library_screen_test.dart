@@ -2,18 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/widgets/library_item_tile.dart';
 
 import '../support/fake_core_client.dart';
+import '../support/fake_downloads_client.dart';
 import '../support/fixtures.dart';
 
 void main() {
-  // The scope sits above MaterialApp, as in the app, so pushed routes see it.
-  Widget harness(FakeCoreClient core) => CoreScope(
-    client: core,
-    child: const MaterialApp(home: LibraryScreen()),
-  );
+  // The scopes sit above MaterialApp, as in the app, so pushed routes see
+  // them.
+  Widget harness(FakeCoreClient core, {DownloadsClient? downloads}) =>
+      CoreScope(
+        client: core,
+        child: DownloadsScope(
+          client: downloads ?? FakeDownloadsClient(),
+          child: const MaterialApp(home: LibraryScreen()),
+        ),
+      );
 
   FakeCoreClient fakeCore({
     Map<String, dynamic>? library,
@@ -733,5 +740,27 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.byIcon(Icons.sync), findsOneWidget);
     });
+  });
+
+  testWidgets('the Downloaded chip opens what is kept on the device', (
+    tester,
+  ) async {
+    useNarrowScreen(tester);
+    final core = fakeCore();
+    final downloads = FakeDownloadsClient();
+    addTearDown(downloads.dispose);
+    await tester.pumpWidget(harness(core, downloads: downloads));
+    await tester.pumpAndSettle();
+    final before = core.dispatched.length;
+
+    await tester.tap(find.widgetWithText(ActionChip, 'Downloaded'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DownloadsScreen), findsOneWidget);
+    expect(
+      core.dispatched,
+      hasLength(before),
+      reason: 'nothing in the engine knows about downloads',
+    );
   });
 }

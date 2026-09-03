@@ -2,12 +2,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
+import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 
 import '../support/fake_core_client.dart';
+import '../support/fake_downloads_client.dart';
 import '../support/fixtures.dart';
 
 void main() {
+  testWidgets('the Downloads tile opens the Downloads screen', (tester) async {
+    final core = FakeCoreClient(
+      state: {CoreField.ctx: loadCtxLoggedOutFixture()},
+    );
+    final downloads = FakeDownloadsClient();
+    addTearDown(downloads.dispose);
+    await tester.pumpWidget(
+      CoreScope(
+        client: core,
+        child: DownloadsScope(
+          client: downloads,
+          child: const MaterialApp(home: SettingsScreen()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ListTile, 'Downloads'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DownloadsScreen), findsOneWidget);
+    expect(core.dispatched, isEmpty, reason: 'the engine has no downloads');
+  });
+
   testWidgets('the Addons tile opens the Addons screen', (tester) async {
     final core = FakeCoreClient(
       state: {

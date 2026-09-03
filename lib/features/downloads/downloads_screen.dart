@@ -328,7 +328,11 @@ class _DestinationControl extends StatelessWidget {
                   onSelect(path.trim().isEmpty ? null : path.trim()),
             ),
             const SizedBox(height: 8),
-            Row(
+            // A Wrap, not a Row: the two labels do not fit side by side on
+            // a phone.
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 FilledButton(
                   onPressed: () {
@@ -337,7 +341,6 @@ class _DestinationControl extends StatelessWidget {
                   },
                   child: const Text('Use this folder'),
                 ),
-                const SizedBox(width: 8),
                 TextButton(
                   onPressed: () {
                     typed.clear();

@@ -8,6 +8,7 @@ import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/library_item_tile.dart';
 import '../details/meta_details_screen.dart';
+import '../downloads/downloads_screen.dart';
 
 /// The library (`library`, a `LibraryWithFilters<NotRemovedFilter>`): every
 /// title added or followed, filtered by type and sorted.
@@ -22,6 +23,10 @@ import '../details/meta_details_screen.dart';
 /// refreshes this field on its own after each. The field is unloaded on
 /// dispose; the anonymous library is shown with a hint to sign in, and a
 /// signed-in profile gets a "Sync now" button.
+///
+/// The filter row also carries the way to the [DownloadsScreen]: what is
+/// kept on the device is a view of the library rather than a place of its
+/// own, and a chip next to the type filters is where one would look for it.
 ///
 /// On a TV the filter row and the grid are separate [FocusTraversalGroup]s,
 /// the tiles remember which one had focus for the shell's per-tab memory,
@@ -133,6 +138,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
     _client?.dispatch(CoreActions.syncLibraryWithAPI());
   }
 
+  void _openDownloads() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: 'downloads'),
+        builder: (_) => const DownloadsScreen(),
+      ),
+    );
+  }
+
   void _open(LibraryItemView item) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -206,7 +220,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
               if (state != null && state.isLoaded && !state.isLibraryEmpty)
                 _tvGroup(
                   context,
-                  _FilterRow(selectable: state.selectable, onSelect: _select),
+                  _FilterRow(
+                    selectable: state.selectable,
+                    onSelect: _select,
+                    onDownloads: _openDownloads,
+                  ),
                 ),
               if (!isLoggedIn && state != null && !state.isLibraryEmpty)
                 const _SignInHint(),
@@ -259,11 +277,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
 /// The types present in the library and the sort. Stateless: [onSelect]
 /// gets the request the engine attached to the chosen entry.
+///
+/// The "Downloaded" chip is not one of those: nothing in the engine knows
+/// about downloads, so it opens the Downloads screen rather than filtering
+/// this grid.
 class _FilterRow extends StatelessWidget {
-  const _FilterRow({required this.selectable, required this.onSelect});
+  const _FilterRow({
+    required this.selectable,
+    required this.onSelect,
+    required this.onDownloads,
+  });
 
   final LibrarySelectable selectable;
   final ValueChanged<LibraryRequest> onSelect;
+  final VoidCallback onDownloads;
+
+  static const String downloadedLabel = 'Downloaded';
 
   @override
   Widget build(BuildContext context) {
@@ -301,6 +330,11 @@ class _FilterRow extends StatelessWidget {
                 : FilterChips(options: types, onSelect: onSelect),
           if (sorts.isNotEmpty)
             FilterMenu(label: 'Sort', options: sorts, onSelect: onSelect),
+          ActionChip(
+            avatar: const Icon(Icons.download_done_outlined, size: 18),
+            label: const Text(downloadedLabel),
+            onPressed: onDownloads,
+          ),
         ],
       ),
     );

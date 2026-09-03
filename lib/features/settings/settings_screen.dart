@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
+import '../downloads/downloads_screen.dart';
 import '../player/player_screen.dart';
 import 'account_section.dart';
 import 'core_settings.dart';
 
-/// Settings: the account ([AccountSection] over `ctx.profile`), the way to
-/// the Addons screen, the controls over `ctx.profile.settings` (Player,
+/// Settings: the account ([AccountSection] over `ctx.profile`), the ways to
+/// the Addons and Downloads screens, the controls over
+/// `ctx.profile.settings` (Player,
 /// Subtitles, Interface, Streaming server; every change is one
 /// `UpdateSettings` with the whole map and that key changed), the state of
 /// the streaming server (from the `streaming_server` model field) and the
@@ -108,6 +110,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const AddonsScreen()),
+            ),
+          ),
+          const _SectionHeader('Downloads'),
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('Downloads'),
+            subtitle: const Text('Titles kept on this device, and where'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const DownloadsScreen()),
             ),
           ),
           const _SectionHeader('Player'),
