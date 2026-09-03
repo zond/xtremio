@@ -591,12 +591,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// looking at from the title the downloads were taken from: the tile that
   /// keeps an episode is two taps from the list that holds the rest.
   void _openDownloads() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'downloads'),
-        builder: (_) => const DownloadsScreen(),
-      ),
-    );
+    Navigator.of(context).push(DownloadsScreen.route());
   }
 
   /// The Addons screen, where a stream addon is installed by manifest URL.

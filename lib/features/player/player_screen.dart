@@ -1241,12 +1241,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// engine beside the one still playing, so the list is the one that only
   /// shows and removes ([DownloadsScreen.canPlay]).
   void _openDownloads() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'downloads'),
-        builder: (_) => const DownloadsScreen(canPlay: false),
-      ),
-    );
+    Navigator.of(context).push(DownloadsScreen.route(canPlay: false));
   }
 
   // --- Next episode --------------------------------------------------------

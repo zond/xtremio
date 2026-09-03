@@ -139,12 +139,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _openDownloads() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'downloads'),
-        builder: (_) => const DownloadsScreen(),
-      ),
-    );
+    Navigator.of(context).push(DownloadsScreen.route());
   }
 
   void _open(LibraryItemView item) {

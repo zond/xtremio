@@ -29,6 +29,17 @@ class DownloadsScreen extends StatefulWidget {
     this.canPlay = true,
   });
 
+  /// The name this screen's route carries, so something outside the tree
+  /// -- the downloads notification -- can tell whether it is already up
+  /// rather than stacking a second one over it.
+  static const String routeName = 'downloads';
+
+  /// The route every way in pushes, named so [routeName] means something.
+  static Route<void> route({bool canPlay = true}) => MaterialPageRoute<void>(
+    settings: const RouteSettings(name: routeName),
+    builder: (_) => DownloadsScreen(canPlay: canPlay),
+  );
+
   /// Whether a finished download can be played from here.
   ///
   /// False when the list is opened from a running player: a second

@@ -119,9 +119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Downloads'),
             subtitle: const Text('Titles kept on this device, and where'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const DownloadsScreen()),
-            ),
+            onTap: () => Navigator.of(context).push(DownloadsScreen.route()),
           ),
           const _SectionHeader('Player'),
           _withSettings(
