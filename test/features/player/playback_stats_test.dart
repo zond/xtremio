@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_stats.dart';
 import 'package:xtremio/features/player/playback_stats_overlay.dart';
@@ -142,12 +143,59 @@ void main() {
       contains('torrent  checking 75%'),
     );
 
-    // The server's own reason for stopping gets a row of its own.
+    // The server's own reason for stopping gets a row of its own, under
+    // the swarm rows rather than among them: it is the one row whose
+    // length the app does not decide.
+    const stopped = TorrentStats(phase: TorrentPhase.error, error: 'disk full');
     expect(
-      PlaybackStatsOverlay.describeTorrent(
-        const TorrentStats(phase: TorrentPhase.error, error: 'disk full'),
-      ),
-      containsAllInOrder(['torrent  stopped', 'error    disk full']),
+      PlaybackStatsOverlay.describeTorrent(stopped),
+      contains('torrent  stopped'),
     );
+    expect(
+      PlaybackStatsOverlay.describeTorrent(stopped),
+      isNot(contains('error    disk full')),
+    );
+    expect(
+      PlaybackStatsOverlay.describeTorrentError(stopped),
+      'error    disk full',
+    );
+    expect(
+      PlaybackStatsOverlay.describeTorrentError(
+        const TorrentStats(phase: TorrentPhase.ready),
+      ),
+      isNull,
+    );
+  });
+
+  testWidgets('a long error from the server does not take over the frame', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: PlaybackStatsOverlay(
+            stats: const Stream<PlaybackStats>.empty(),
+            isTorrent: true,
+            torrent: TorrentStats(
+              phase: TorrentPhase.error,
+              // The server passes its reason through verbatim, and some of
+              // them are a paragraph.
+              error: 'the torrent could not be added: ${'why ' * 60}',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The panel stays a panel in the corner: as wide as the row it holds
+    // to, and no taller than the two lines that row is cut off at.
+    final size = tester.getSize(find.byType(PlaybackStatsOverlay));
+    expect(size.width, lessThan(PlaybackStatsOverlay.wideRowWidth + 40));
+    expect(size.height, lessThan(120));
   });
 }

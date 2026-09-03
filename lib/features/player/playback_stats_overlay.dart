@@ -51,6 +51,29 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// point of looking.
   static const double tvFontSize = 16;
 
+  /// How wide the two rows carrying text from somewhere else -- the
+  /// server's reason for stopping, and the URL -- are allowed to get.
+  /// Every other row is short by construction; these two are as long as
+  /// whoever wrote them, and unbounded either one stretches the panel
+  /// across the picture.
+  static const double wideRowWidth = 480;
+
+  /// One of those rows: held to [wideRowWidth] and cut off with an
+  /// ellipsis rather than wrapping down the frame.
+  static Widget _wideRow(
+    String text,
+    TextStyle style, {
+    required int maxLines,
+  }) => ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: wideRowWidth),
+    child: Text(
+      text,
+      style: style,
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final style = DeviceScope.isTv(context)
@@ -76,19 +99,14 @@ class PlaybackStatsOverlay extends StatelessWidget {
                         ? const ['stats: collecting…']
                         : describe(sample))
                   Text(line, style: style),
-                if (isTorrent)
+                if (isTorrent) ...[
                   for (final line in describeTorrent(torrent))
                     Text(line, style: style),
+                  if (describeTorrentError(torrent) case final error?)
+                    _wideRow(error, style, maxLines: 2),
+                ],
                 if (source != null)
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 480),
-                    child: Text(
-                      'url      $source',
-                      style: style,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  _wideRow('url      $source', style, maxLines: 1),
               ],
             ),
           ),
@@ -120,14 +138,22 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// peers are the news.
   static List<String> describeTorrent(TorrentStats? s) {
     if (s == null) return const ['torrent  waiting for the server'];
-    final error = s.error;
     return [
       if (s.phase != TorrentPhase.ready) 'torrent  ${_phase(s)}',
       'speed    ${TorrentProgressCard.formatSpeed(s.downloadSpeed)}',
       'peers    ${s.peerDiscovery.live} connected'
           ' / ${s.peerDiscovery.seen} found',
-      if (error != null) 'error    $error',
     ];
+  }
+
+  /// The server's own reason for stopping, as its own row under the swarm,
+  /// or null when the torrent is not in trouble. It is not one of
+  /// [describeTorrent]'s rows because it is not one of the short ones: the
+  /// text is whatever the server said, so the panel shows it in the wide
+  /// row (see [_wideRow]).
+  static String? describeTorrentError(TorrentStats? s) {
+    final error = s?.error;
+    return error == null ? null : 'error    $error';
   }
 
   /// The phase, with the percentage of whatever it is measuring when the
