@@ -6,7 +6,7 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
   FakeDiagnosticsClient({
     DiagnosticsSnapshot? snapshot,
     this.platform = 'android',
-    this.osVersion = 'Android 14 (API 34)',
+    this.os = 'Android 14 (API 34)',
     this.error,
   }) : _snapshot =
            snapshot ??
@@ -26,8 +26,11 @@ class FakeDiagnosticsClient implements DiagnosticsClient {
   @override
   final String platform;
 
+  /// What [osVersion] answers.
+  final String os;
+
   @override
-  final String osVersion;
+  Future<String> osVersion() async => os;
 
   /// How many times the screen has asked.
   int reads = 0;

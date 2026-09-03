@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -43,31 +45,46 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   @override
   void initState() {
     super.initState();
-    _read();
+    unawaited(_read());
   }
 
-  /// Reads a fresh snapshot. Sync and cheap on the Rust side (a lock and a
-  /// clone), so there is nothing to await and nothing to leak.
-  void _read() {
+  /// Reads a fresh snapshot.
+  ///
+  /// The log itself is sync and cheap on the Rust side (a lock and a clone
+  /// of a few hundred short strings); what the device is has to be asked
+  /// for on Android, over the same channel the TV detection uses, so the
+  /// report is built once both have answered. Nothing here is slow enough
+  /// to need a spinner of its own.
+  Future<void> _read() async {
+    final DiagnosticsSnapshot snapshot;
     try {
-      final snapshot = widget.client.snapshot();
-      setState(() {
-        _lines = snapshot.logLines.length;
-        _report = formatDiagnostics(
-          snapshot: snapshot,
-          platform: widget.client.platform,
-          osVersion: widget.client.osVersion,
-          at: widget.now(),
-        );
-        _error = null;
-      });
+      snapshot = widget.client.snapshot();
     } catch (error) {
       setState(() {
         _report = null;
         _lines = 0;
         _error = '$error';
       });
+      return;
     }
+    String osVersion;
+    try {
+      osVersion = await widget.client.osVersion();
+    } catch (error) {
+      // A device that will not say what it is does not cost us the log.
+      osVersion = 'unknown';
+    }
+    if (!mounted) return;
+    setState(() {
+      _lines = snapshot.logLines.length;
+      _report = formatDiagnostics(
+        snapshot: snapshot,
+        platform: widget.client.platform,
+        osVersion: osVersion,
+        at: widget.now(),
+      );
+      _error = null;
+    });
   }
 
   Future<void> _copy() async {
@@ -93,7 +110,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         title: const Text('Diagnostics'),
         actions: [
           IconButton(
-            onPressed: _read,
+            onPressed: () => unawaited(_read()),
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
           ),

@@ -648,8 +648,11 @@ should read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
 **Settings → Developer → Diagnostics** shows the last few hundred `tracing`
 lines the Rust core kept in memory -- its own and the embedded
 stream-server's, which share the one subscriber (`rust/src/logging.rs`) --
-under a header naming the build, the device, the embedded server and the
-pinned `stream-server` / `stremio-core` revisions, and copies the lot to the
+under a header naming the build, the device (on Android the release, the
+API level and the model -- `dart:io` only has the build fingerprint there,
+which names none of them, and the model is what decides whether a codec is
+decoded on a chip or on the CPU), the embedded server and the pinned
+`stream-server` / `stremio-core` revisions, and copies the lot to the
 clipboard. This section is in release builds on purpose: it is the only way
 to get a log off a phone without ADB.
 

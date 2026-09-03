@@ -151,6 +151,42 @@ void main() {
     }
   });
 
+  group('describeAndroidOs', () {
+    test('says the release, the API level and the hardware', () {
+      // `Platform.operatingSystemVersion` on Android is the build
+      // fingerprint ("W1VVS36H.7-108-8-6"), which names none of the three
+      // -- and the hardware is what decides whether a codec is decoded on
+      // a chip or on the CPU.
+      expect(
+        describeAndroidOs({
+          'release': '14',
+          'sdkInt': 34,
+          'model': 'Pixel 7',
+          'manufacturer': 'Google',
+        }),
+        'Android 14 (API 34) · Google Pixel 7',
+      );
+      // A model that already names its maker does not say it twice.
+      expect(
+        describeAndroidOs({
+          'release': '11',
+          'sdkInt': 30,
+          'model': 'Nokia X20',
+          'manufacturer': 'Nokia',
+        }),
+        'Android 11 (API 30) · Nokia X20',
+      );
+      // What is missing is left out, never written as a blank or an
+      // invented "unknown".
+      expect(describeAndroidOs({'sdkInt': 33}), 'Android (API 33)');
+      expect(
+        describeAndroidOs({'release': '10', 'model': 'sdk_gphone64_x86_64'}),
+        'Android 10 · sdk_gphone64_x86_64',
+      );
+      expect(describeAndroidOs(const {}), 'Android');
+    });
+  });
+
   group('DiagnosticsLog', () {
     test('drops everything when nothing is listening', () {
       DiagnosticsLog.sink = null;

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -35,6 +36,19 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "profile" -> result.success(
                         mapOf("isTv" to isTv(), "hasTouch" to hasTouch()),
+                    )
+                    // What the Diagnostics header says this device is
+                    // (lib/core/diagnostics_client.dart). Dart's own
+                    // `Platform.operatingSystemVersion` is the build
+                    // fingerprint here ("W1VVS36H.7-108-8-6"), which names
+                    // neither the Android version nor the hardware.
+                    "os" -> result.success(
+                        mapOf(
+                            "release" to Build.VERSION.RELEASE,
+                            "sdkInt" to Build.VERSION.SDK_INT,
+                            "model" to Build.MODEL,
+                            "manufacturer" to Build.MANUFACTURER,
+                        ),
                     )
                     else -> result.notImplemented()
                 }
