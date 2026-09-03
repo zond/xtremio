@@ -14,6 +14,7 @@ import '../support/fixtures.dart';
 class _Recorder {
   final List<String> addRequests = [];
   final List<({String key, bool deleteFiles})> removals = [];
+  final List<String> openKeys = [];
   final List<String?> directories = [];
   int lists = 0;
   int settingsReads = 0;
@@ -27,6 +28,10 @@ class _Recorder {
   String addAnswer = '{"ok":true,"key":"tt1:tt1","entry":{"metaId":"tt1"}}';
   String removeAnswer = '{"removed":true,"unpinned":true,"deletedFiles":false}';
   String listAnswer = '{"version":1,"items":{}}';
+  String openAnswer =
+      '{"ok":true,"key":"tt1:tt1","url":"file:///films/A%20Film.mkv",'
+      '"entry":{"metaId":"tt1","videoId":"tt1","state":"complete",'
+      '"lastPlayedAt":"2026-09-03T10:00:00Z"}}';
   String setDirAnswer = '{"downloadsDir":null}';
   String settingsAnswer = '{"downloadsDir":null,"cacheSize":2147483648}';
 
@@ -42,6 +47,10 @@ class _Recorder {
     listDownloads: () async {
       lists++;
       return listAnswer;
+    },
+    openDownload: ({required String key}) async {
+      openKeys.add(key);
+      return openAnswer;
     },
     setDownloadsDir: ({String? path}) async {
       directories.add(path);
@@ -224,6 +233,38 @@ void main() {
       expect(rust.lists, 1);
       expect(registry.length, 3);
       expect(registry['tt0063350:tt0063350']!.isComplete, isTrue);
+    });
+
+    test('open names the key and reads back the file to play', () async {
+      final result = await rust.client.open('tt1:tt1');
+
+      expect(rust.openKeys, ['tt1:tt1']);
+      expect(result.ok, isTrue);
+      expect(result.url, 'file:///films/A%20Film.mkv');
+      expect(result.reason, isNull);
+      expect(
+        result.entry?.lastPlayedAt,
+        DateTime.utc(2026, 9, 3, 10),
+        reason:
+            'the stamped entry comes back, so a row shows it without a listing',
+      );
+    });
+
+    test('every refusal reason reads back, and a newer one is not', () async {
+      for (final reason in DownloadOpenFailure.values) {
+        rust.openAnswer =
+            '{"ok":false,"key":"tt1:tt1","reason":'
+            '"${reason.wireName}"}';
+        final result = await rust.client.open('tt1:tt1');
+        expect(result.ok, isFalse);
+        expect(result.reason, reason);
+        expect(result.url, isNull);
+      }
+      // A reason from a newer build: still a refusal, and still readable.
+      rust.openAnswer = '{"ok":false,"key":"tt1:tt1","reason":"onAnotherBox"}';
+      final result = await rust.client.open('tt1:tt1');
+      expect(result.ok, isFalse);
+      expect(result.reason, DownloadOpenFailure.unknown);
     });
 
     test('setDirectory passes the path, and null to unset it', () async {
@@ -544,6 +585,56 @@ void main() {
 
       client.listError = StateError('the server is not running');
       await expectLater(client.list(), throwsStateError);
+    });
+
+    test('open plays a finished entry off its path, and stamps it', () async {
+      final client = FakeDownloadsClient(
+        registry: DownloadsRegistry(
+          items: {
+            'tt1:tt1': const DownloadView({
+              'metaId': 'tt1',
+              'videoId': 'tt1',
+              'state': 'complete',
+              'path': '/downloads/abc/A Film.mkv',
+            }),
+            'tt2:tt2': const DownloadView({
+              'metaId': 'tt2',
+              'videoId': 'tt2',
+              'state': 'downloading',
+              'path': '/downloads/def/Half.mkv',
+            }),
+          },
+        ),
+      );
+
+      final played = await client.open('tt1:tt1');
+      expect(played.ok, isTrue);
+      expect(played.url, 'file:///downloads/abc/A%20Film.mkv');
+      expect(client.opens, ['tt1:tt1']);
+      expect(
+        (await client.list())['tt1:tt1']?.lastPlayedAt,
+        isNotNull,
+        reason: 'the fake stamps what the registry would',
+      );
+
+      expect(
+        (await client.open('tt2:tt2')).reason,
+        DownloadOpenFailure.incomplete,
+      );
+      expect(
+        (await client.open('tt9:tt9')).reason,
+        DownloadOpenFailure.unknown,
+      );
+      // The one the default cannot reach: a finished entry whose file went
+      // away with its volume.
+      client.onOpen = (_) => const DownloadOpenResult(
+        ok: false,
+        reason: DownloadOpenFailure.missing,
+      );
+      expect(
+        (await client.open('tt1:tt1')).reason,
+        DownloadOpenFailure.missing,
+      );
     });
 
     test('records the destination it was pointed at', () async {

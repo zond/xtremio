@@ -188,6 +188,72 @@ final class DownloadAddResult {
       ok ? 'DownloadAddResult(ok, $key)' : 'DownloadAddResult($error)';
 }
 
+/// Why a download could not be played off the device (`reason`).
+enum DownloadOpenFailure {
+  /// The registry has no such entry: it was removed while a screen still
+  /// held the row.
+  unknown('unknown'),
+
+  /// The bytes are not all here yet.
+  incomplete('incomplete'),
+
+  /// Whole as far as the registry knows, but the file is not where it was
+  /// left -- an unmounted downloads volume, or a deletion from outside the
+  /// app.
+  missing('missing');
+
+  const DownloadOpenFailure(this.wireName);
+
+  final String wireName;
+
+  /// A reason this build does not know reads as [unknown], which is what a
+  /// caller does with all of them anyway: say so and stream instead.
+  static DownloadOpenFailure parse(Object? value) => values.firstWhere(
+    (reason) => reason.wireName == value,
+    orElse: () => unknown,
+  );
+}
+
+/// What [DownloadsClient.open] answers: the file to play, or why there is
+/// none. A download whose file went away is a sentence and a fallback to
+/// streaming, not an exception.
+final class DownloadOpenResult {
+  const DownloadOpenResult({
+    required this.ok,
+    this.url,
+    this.entry,
+    this.reason,
+  });
+
+  /// Whether there is a file on this device to play.
+  final bool ok;
+
+  /// The `file://` URL for it; null when there is none.
+  final String? url;
+
+  /// The entry as it now stands, `lastPlayedAt` stamped; null when the open
+  /// was refused.
+  final DownloadView? entry;
+
+  /// Why it was refused; null when it was not.
+  final DownloadOpenFailure? reason;
+
+  factory DownloadOpenResult.fromJson(Map<String, dynamic> json) {
+    final entry = json['entry'];
+    final ok = json['ok'] == true;
+    return DownloadOpenResult(
+      ok: ok,
+      url: json['url'] as String?,
+      entry: entry is Map<String, dynamic> ? DownloadView(entry) : null,
+      reason: ok ? null : DownloadOpenFailure.parse(json['reason']),
+    );
+  }
+
+  @override
+  String toString() =>
+      ok ? 'DownloadOpenResult(ok)' : 'DownloadOpenResult(${reason?.wireName})';
+}
+
 /// What [DownloadsClient.remove] answers: what actually happened, rather
 /// than the flags echoed back.
 final class DownloadRemoveResult {
@@ -240,6 +306,14 @@ abstract interface class DownloadsClient {
   /// the server cannot be asked, so the list still renders offline.
   Future<DownloadsRegistry> list();
 
+  /// What to play the download [key] off the device with, and a note that
+  /// it was played: a finished download whose file is really there answers
+  /// its `file://` URL and takes a `lastPlayedAt` stamp. Anything else --
+  /// no such entry, not finished, or the file gone with its volume --
+  /// answers [DownloadOpenResult.reason] so the caller streams the title
+  /// instead of opening a player on a dead URL.
+  Future<DownloadOpenResult> open(String key);
+
   /// Points the downloads at [path], or back at the torrent cache with null.
   /// Answers the server's settings afterwards; throws on a path it refuses.
   Future<Map<String, dynamic>> setDirectory(String? path);
@@ -266,6 +340,7 @@ typedef DownloadsRemoveFn = Future<String> Function({
   required bool deleteFiles,
 });
 typedef DownloadsListFn = Future<String> Function();
+typedef DownloadsOpenFn = Future<String> Function({required String key});
 typedef DownloadsSetDirFn = Future<String> Function({String? path});
 
 /// Reading the destination back is reading the server's settings, which is
@@ -286,6 +361,7 @@ class RustDownloadsClient implements DownloadsClient {
     this.addDownload = rust.downloadsAdd,
     this.removeDownload = rust.downloadsRemove,
     this.listDownloads = rust.downloadsList,
+    this.openDownload = rust.downloadsOpen,
     this.setDownloadsDir = rust.downloadsSetDir,
     this.readSettings = rust_server.serverSettings,
     this.openEvents = rust.downloadsEvents,
@@ -294,6 +370,7 @@ class RustDownloadsClient implements DownloadsClient {
   final DownloadsAddFn addDownload;
   final DownloadsRemoveFn removeDownload;
   final DownloadsListFn listDownloads;
+  final DownloadsOpenFn openDownload;
   final DownloadsSetDirFn setDownloadsDir;
   final DownloadsSettingsFn readSettings;
   final DownloadsEventsFn openEvents;
@@ -319,6 +396,10 @@ class RustDownloadsClient implements DownloadsClient {
   @override
   Future<DownloadsRegistry> list() async =>
       DownloadsRegistry.fromJson(_object(await listDownloads()));
+
+  @override
+  Future<DownloadOpenResult> open(String key) async =>
+      DownloadOpenResult.fromJson(_object(await openDownload(key: key)));
 
   @override
   Future<Map<String, dynamic>> setDirectory(String? path) async =>

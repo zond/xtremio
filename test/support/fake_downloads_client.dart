@@ -20,6 +20,9 @@ class FakeDownloadsClient implements DownloadsClient {
   final List<({String key, bool deleteFiles})> removed = [];
   final List<String?> directories = [];
 
+  /// The keys [open] was called with, in order.
+  final List<String> opens = [];
+
   /// When set, every call also appends its name here: a log shared with the
   /// other fakes, for tests about the order of calls across them.
   List<String>? callLog;
@@ -35,8 +38,14 @@ class FakeDownloadsClient implements DownloadsClient {
   /// only when the answer says [DownloadRemoveResult.removed].
   DownloadRemoveResult Function(String key, bool deleteFiles)? onRemove;
 
+  /// Answers [open] instead of the default (which plays the entry's own
+  /// `path` when it is complete, and refuses with the reason the Rust side
+  /// would give otherwise).
+  DownloadOpenResult Function(String key)? onOpen;
+
   /// Thrown by the matching call when set, for the failure paths.
   Object? addError;
+  Object? openError;
   Object? removeError;
   Object? listError;
   Object? setDirectoryError;
@@ -111,6 +120,66 @@ class FakeDownloadsClient implements DownloadsClient {
     final error = listError;
     if (error != null) throw error;
     return registry;
+  }
+
+  @override
+  Future<DownloadOpenResult> open(String key) async {
+    opens.add(key);
+    callLog?.add('downloads.open');
+    final error = openError;
+    if (error != null) throw error;
+    final result = onOpen?.call(key) ?? _openFromRegistry(key);
+    if (result.ok) _stampPlayed(key);
+    return result;
+  }
+
+  /// What the Rust side answers for an entry it has: the file the registry
+  /// names when the download is finished and names one, and the reason it
+  /// cannot be played otherwise. A path is taken at its word here -- a fake
+  /// registry names files that were never written -- so a test that wants
+  /// the vanished-file path sets [onOpen].
+  DownloadOpenResult _openFromRegistry(String key) {
+    final view = registry[key];
+    if (view == null) {
+      return const DownloadOpenResult(
+        ok: false,
+        reason: DownloadOpenFailure.unknown,
+      );
+    }
+    if (!view.isComplete) {
+      return DownloadOpenResult(
+        ok: false,
+        entry: view,
+        reason: DownloadOpenFailure.incomplete,
+      );
+    }
+    final path = view.path;
+    if (path == null) {
+      return DownloadOpenResult(
+        ok: false,
+        entry: view,
+        reason: DownloadOpenFailure.missing,
+      );
+    }
+    return DownloadOpenResult(
+      ok: true,
+      url: Uri.file(path).toString(),
+      entry: view,
+    );
+  }
+
+  /// Stamps `lastPlayedAt`, as the registry does on an open it answered.
+  void _stampPlayed(String key) {
+    final view = registry[key];
+    if (view == null) return;
+    final entry = DownloadView({
+      ...view.json,
+      'lastPlayedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+    registry = DownloadsRegistry(
+      version: registry.version,
+      items: {...registry.items, key: entry},
+    );
   }
 
   @override
