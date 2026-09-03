@@ -11,6 +11,7 @@ class PlaybackStats {
     this.decoderDroppedFrames,
     this.hwdec,
     this.videoCodec,
+    this.audioCodec,
     this.width,
     this.height,
     this.videoBitrate,
@@ -28,6 +29,7 @@ class PlaybackStats {
     'decoder-frame-drop-count',
     'hwdec-current',
     'video-codec',
+    'audio-codec-name',
     'video-params/w',
     'video-params/h',
     'video-bitrate',
@@ -69,6 +71,7 @@ class PlaybackStats {
       decoderDroppedFrames: integer('decoder-frame-drop-count'),
       hwdec: text('hwdec-current'),
       videoCodec: text('video-codec'),
+      audioCodec: text('audio-codec-name'),
       width: integer('video-params/w'),
       height: integer('video-params/h'),
       videoBitrate: integer('video-bitrate'),
@@ -99,6 +102,12 @@ class PlaybackStats {
 
   /// `video-codec`, e.g. `h264 (High)`.
   final String? videoCodec;
+
+  /// `audio-codec-name`: the bare codec, e.g. `aac`, `eac3`, `dts`. Not
+  /// shown anywhere -- it is what the cast compatibility check asks mpv
+  /// about the audio, the one place the file itself can be believed over
+  /// what a release name claims.
+  final String? audioCodec;
 
   /// Decoded picture size (`video-params/w`, `video-params/h`).
   final int? width;
@@ -134,6 +143,7 @@ class PlaybackStats {
       other.decoderDroppedFrames == decoderDroppedFrames &&
       other.hwdec == hwdec &&
       other.videoCodec == videoCodec &&
+      other.audioCodec == audioCodec &&
       other.width == width &&
       other.height == height &&
       other.videoBitrate == videoBitrate &&
@@ -149,6 +159,7 @@ class PlaybackStats {
     decoderDroppedFrames,
     hwdec,
     videoCodec,
+    audioCodec,
     width,
     height,
     videoBitrate,
@@ -160,7 +171,8 @@ class PlaybackStats {
   @override
   String toString() =>
       'PlaybackStats(fps: $outputFps/$containerFps, dropped: $droppedFrames'
-      '/$decoderDroppedFrames, hwdec: $hwdec, codec: $videoCodec, '
+      '/$decoderDroppedFrames, hwdec: $hwdec, codec: $videoCodec'
+      '/$audioCodec, '
       '${width}x$height, bitrate: $videoBitrate, cache: $cacheDuration, '
       'pausedForCache: $pausedForCache, buffering: $cacheBufferingState)';
 }
