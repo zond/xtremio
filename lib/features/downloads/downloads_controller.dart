@@ -18,7 +18,7 @@ import '../../core/core.dart';
 /// something.
 class DownloadsController extends ChangeNotifier {
   DownloadsController(this.client) {
-    _updates = client.updates.listen(_onUpdate, onError: _onFeedError);
+    _listen();
     unawaited(refresh());
   }
 
@@ -52,6 +52,9 @@ class DownloadsController extends ChangeNotifier {
   /// those change which entries exist, and the progress feed only reports
   /// the ones that moved.
   Future<void> refresh() async {
+    // A feed that ended is picked up again here: the client opens a fresh
+    // one on the next look at `updates`, and nothing else would ever look.
+    _listen();
     try {
       final listing = await client.list();
       if (_disposed) return;
@@ -65,6 +68,17 @@ class DownloadsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Subscribes to the progress feed unless there already is a live
+  /// subscription.
+  void _listen() {
+    if (_disposed || _updates != null) return;
+    _updates = client.updates.listen(
+      _onUpdate,
+      onError: _onFeedError,
+      onDone: _onFeedDone,
+    );
+  }
+
   void _onUpdate(DownloadsRegistry update) {
     if (_disposed) return;
     registry = registry.merge(update);
@@ -76,6 +90,15 @@ class DownloadsController extends ChangeNotifier {
   /// screen, and every [refresh] still works.
   void _onFeedError(Object failure) {
     if (kDebugMode) debugPrint('downloads progress feed: $failure');
+  }
+
+  /// The feed closed -- the Rust side handed its one event sink to another
+  /// client. Let go of the dead subscription so the next [refresh] opens a
+  /// fresh one; without this, progress would stop arriving for good and
+  /// nothing on screen would say so.
+  void _onFeedDone() {
+    _updates?.cancel();
+    _updates = null;
   }
 
   @override
