@@ -8,6 +8,7 @@ import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../widgets/focusable_tile.dart';
 import 'device_profile.dart';
+import 'tv_density.dart';
 
 /// A top-level navigation destination and the screen it shows.
 class _Destination {
@@ -40,6 +41,12 @@ class _Destination {
 /// so showing a tab puts focus on the tile it was on when the user left
 /// it, or on the tab's first tile the first time.
 ///
+/// A television keeps [TvDensity.overscan] of every edge clear: sets crop
+/// or curve away the outermost few percent of the panel, and a rail label
+/// or a poster that falls in that band is simply not there for the viewer.
+/// The padding goes around the whole shell (rail included), not around the
+/// body alone, since it is the panel's edges that eat it.
+///
 /// Selecting a destination with a pointer (a touch remote, a mouse) while
 /// a tile holds focus is the D-pad's select with the step onto the rail
 /// skipped, so the shell takes that step itself: it focuses the chosen
@@ -49,6 +56,9 @@ class _Destination {
 /// focus falls on the bare scope, where nothing shows it.
 class RootShell extends StatefulWidget {
   const RootShell({super.key});
+
+  /// The overscan padding around the shell on a television; see [RootShell].
+  static const Key overscanKey = Key('tv-overscan');
 
   @override
   State<RootShell> createState() => _RootShellState();
@@ -166,35 +176,42 @@ class _RootShellState extends State<RootShell> {
             ),
         ],
       );
-      return Scaffold(
-        body: Row(
-          children: [
-            if (isTv)
-              FocusTraversalGroup(
-                child: Focus(
-                  focusNode: _railNode,
-                  onKeyEvent: _onRailKey,
-                  child: rail,
-                ),
-              )
-            else
-              rail,
-            const VerticalDivider(width: 1),
-            Expanded(
-              child: isTv
-                  ? FocusTraversalGroup(
-                      child: FocusScope(
-                        node: _tabScopes[_index],
-                        child: FocusMemory(
-                          store: _tabMemories[_index],
-                          child: body,
-                        ),
+      final row = Row(
+        children: [
+          if (isTv)
+            FocusTraversalGroup(
+              child: Focus(
+                focusNode: _railNode,
+                onKeyEvent: _onRailKey,
+                child: rail,
+              ),
+            )
+          else
+            rail,
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: isTv
+                ? FocusTraversalGroup(
+                    child: FocusScope(
+                      node: _tabScopes[_index],
+                      child: FocusMemory(
+                        store: _tabMemories[_index],
+                        child: body,
                       ),
-                    )
-                  : body,
-            ),
-          ],
-        ),
+                    ),
+                  )
+                : body,
+          ),
+        ],
+      );
+      return Scaffold(
+        body: isTv
+            ? Padding(
+                key: RootShell.overscanKey,
+                padding: TvDensity.overscanPadding(MediaQuery.sizeOf(context)),
+                child: row,
+              )
+            : row,
       );
     }
 

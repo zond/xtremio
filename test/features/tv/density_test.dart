@@ -84,6 +84,31 @@ void main() {
     });
   });
 
+  group('overscan', () {
+    testWidgets('a television holds every edge of the shell clear', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      await pumpApp(tester, device: tv);
+
+      // The rail is the leftmost, topmost thing the shell draws, so where
+      // it starts is the band the panel may eat.
+      expect(
+        tester.getTopLeft(find.byType(NavigationRail)),
+        Offset(tvSize.width * 0.05, tvSize.height * 0.05),
+      );
+      expect(find.byKey(RootShell.overscanKey), findsOneWidget);
+    });
+
+    testWidgets('a desktop window uses every pixel it has', (tester) async {
+      useScreen(tester, tvSize);
+      await pumpApp(tester, device: DeviceProfile.fallback);
+
+      expect(tester.getTopLeft(find.byType(NavigationRail)), Offset.zero);
+      expect(find.byKey(RootShell.overscanKey), findsNothing);
+    });
+  });
+
   group('text scale', () {
     testWidgets('a television scales text up', (tester) async {
       useScreen(tester, tvSize);
