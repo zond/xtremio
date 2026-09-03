@@ -78,8 +78,27 @@ Future<String> downloadsOpen({required String key}) =>
 /// torrent cache root) with null. Validated and persisted exactly as
 /// `POST /settings` does: the path must be absolute, creatable, writable and
 /// not at or above a cache root. Returns the settings afterwards as JSON.
+///
+/// This is the *user's* answer to where downloads go, and the registry
+/// records it as such (`destinationChoice`): the path for a folder chosen,
+/// null-with-`destinationSettled` for "back with the cache". Nothing the
+/// app applies on its own may overwrite either -- that is
+/// [`downloads_apply_default_dir`].
 Future<String> downloadsSetDir({String? path}) =>
     RustLib.instance.api.crateApiDownloadsDownloadsSetDir(path: path);
+
+/// Points the server's `downloadsDir` at a default the app resolved for
+/// this platform -- on Android the app's external files directory, which
+/// the OS does not reclaim -- with the same validation `downloads_set_dir`
+/// gets, and without recording it as an answer the user gave.
+///
+/// The registry's `destinationChoice` becomes this default only while
+/// nothing has been chosen. A folder the user chose that the server dropped
+/// at boot stays on record while this stands in for it, so the next
+/// start-up asks for that folder again and the screen can say which one is
+/// missing. Returns the settings afterwards as JSON.
+Future<String> downloadsApplyDefaultDir({required String path}) =>
+    RustLib.instance.api.crateApiDownloadsDownloadsApplyDefaultDir(path: path);
 
 /// Progress, one JSON string per change: the same envelope as
 /// [`downloads_list`], carrying only the entries that moved. The ticker

@@ -89,8 +89,30 @@ pub fn downloads_open(key: String) -> anyhow::Result<String> {
 /// torrent cache root) with null. Validated and persisted exactly as
 /// `POST /settings` does: the path must be absolute, creatable, writable and
 /// not at or above a cache root. Returns the settings afterwards as JSON.
+///
+/// This is the *user's* answer to where downloads go, and the registry
+/// records it as such (`destinationChoice`): the path for a folder chosen,
+/// null-with-`destinationSettled` for "back with the cache". Nothing the
+/// app applies on its own may overwrite either -- that is
+/// [`downloads_apply_default_dir`].
 pub fn downloads_set_dir(path: Option<String>) -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::downloads::set_dir(path)?).map_err(Into::into))
+}
+
+/// Points the server's `downloadsDir` at a default the app resolved for
+/// this platform -- on Android the app's external files directory, which
+/// the OS does not reclaim -- with the same validation `downloads_set_dir`
+/// gets, and without recording it as an answer the user gave.
+///
+/// The registry's `destinationChoice` becomes this default only while
+/// nothing has been chosen. A folder the user chose that the server dropped
+/// at boot stays on record while this stands in for it, so the next
+/// start-up asks for that folder again and the screen can say which one is
+/// missing. Returns the settings afterwards as JSON.
+pub fn downloads_apply_default_dir(path: String) -> anyhow::Result<String> {
+    guarded(|| {
+        serde_json::to_string(&crate::downloads::apply_default_dir(path)?).map_err(Into::into)
+    })
 }
 
 /// Progress, one JSON string per change: the same envelope as

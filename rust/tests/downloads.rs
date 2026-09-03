@@ -18,7 +18,8 @@ use std::time::{Duration, Instant};
 
 use xtremio_core::api::core::{core_init, core_shutdown, CoreConfig};
 use xtremio_core::api::downloads::{
-    downloads_add, downloads_list, downloads_open, downloads_remove, downloads_set_dir,
+    downloads_add, downloads_apply_default_dir, downloads_list, downloads_open, downloads_remove,
+    downloads_set_dir,
 };
 use xtremio_core::api::server::{server_start, ServerConfig};
 
@@ -671,6 +672,45 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         destination.to_string_lossy().as_ref(),
         "{settings}"
     );
+
+    // A default the app applies is not an answer. The server takes it like
+    // any other destination, but the folder the user chose stays on record,
+    // so the next start-up asks for that folder again instead of presenting
+    // the stand-in as what was wanted.
+    let fallback = tmp.path().join("fallback");
+    let settings = json(&downloads_apply_default_dir(
+        fallback.display().to_string(),
+    )?);
+    assert_eq!(
+        settings["downloadsDir"],
+        fallback.to_string_lossy().as_ref(),
+        "{settings}"
+    );
+    assert_eq!(
+        list()["destinationChoice"],
+        destination.to_string_lossy().as_ref(),
+        "the answer given is still the answer on record"
+    );
+
+    // With nothing answered it is all there is to record -- and it records
+    // itself as what it is, a default this build applied rather than a
+    // choice a later one has to keep.
+    xtremio_core::downloads::update(|registry| {
+        registry.destination = xtremio_core::downloads::Destination::Unset;
+        Ok(())
+    })?;
+    downloads_apply_default_dir(fallback.display().to_string())?;
+    assert_eq!(
+        list()["destinationChoice"],
+        serde_json::json!({
+            "kind": "platformDefault",
+            "path": fallback.to_string_lossy().as_ref(),
+        }),
+        "{}",
+        list()
+    );
+    assert_eq!(list()["destinationSettled"], true, "the question is closed");
+    downloads_set_dir(Some(destination.display().to_string()))?;
 
     // A registry the app cannot read must not take the app down with it: the
     // list is empty rather than an error, and the next write starts over --

@@ -250,31 +250,115 @@ fn phase(info: &DownloadInfo) -> String {
         .unwrap_or_default()
 }
 
+/// Where the downloads were last answered to go, and by whom.
+///
+/// It is the registry's business rather than the server's because the
+/// server's `downloadsDir` cannot say any of this: a null there is both
+/// "with the torrent cache, on purpose" and "nobody has been asked", and
+/// the server clears a `downloadsDir` it cannot prepare at boot -- which
+/// would take the answer with it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum Destination {
+    /// Nobody has been asked yet, so a start-up may point the server at
+    /// whatever this platform's default is.
+    #[default]
+    Unset,
+    /// The app applied this platform's own default because nothing had been
+    /// chosen. Not an answer: a build whose default lies elsewhere may
+    /// replace it, and nothing presents it as something the user picked.
+    PlatformDefault(String),
+    /// "Default (with the cache)", chosen on purpose: a null `downloadsDir`
+    /// and not an open question.
+    Cache,
+    /// A directory the user chose, spelled the way the server stored it
+    /// (`prepare_downloads_dir` resolves symlinks, so what [`set_dir`] was
+    /// handed is not always what comes back). Kept so a start-up can
+    /// compare it with the live `downloadsDir`: a recorded path the
+    /// settings no longer have is one the server dropped at boot, and the
+    /// app asks for it again rather than leaving the files in a cache the
+    /// OS may reclaim.
+    Explicit(String),
+}
+
+impl Destination {
+    /// Whether where the downloads go has been answered at all -- by the
+    /// user, or by the platform default a first run applies.
+    pub fn is_settled(&self) -> bool {
+        !matches!(self, Self::Unset)
+    }
+
+    /// Whether the answer is the user's own, which is what a default must
+    /// never overwrite.
+    pub fn is_chosen(&self) -> bool {
+        matches!(self, Self::Cache | Self::Explicit(_))
+    }
+
+    /// The directory it names, where it names one.
+    pub fn path(&self) -> Option<&str> {
+        match self {
+            Self::PlatformDefault(path) | Self::Explicit(path) => Some(path),
+            Self::Unset | Self::Cache => None,
+        }
+    }
+
+    /// What goes under `destinationChoice`. A user's answer keeps the shape
+    /// every build so far has written -- the path as a string, and null for
+    /// the cache, which `destinationSettled` tells apart from an open
+    /// question -- so an older build still reads it the way it always did.
+    /// Only the platform default, which no older build could record, needs
+    /// a shape of its own.
+    fn to_json(&self) -> serde_json::Value {
+        match self {
+            Self::Unset | Self::Cache => serde_json::Value::Null,
+            Self::Explicit(path) => serde_json::Value::String(path.clone()),
+            Self::PlatformDefault(path) => {
+                serde_json::json!({ "kind": "platformDefault", "path": path })
+            }
+        }
+    }
+
+    /// Reads the two keys back, forgivingly: a bare string is the path a
+    /// user chose (the shape written before this build), an object names
+    /// its own kind, and anything else -- a kind from a newer build among
+    /// it -- falls back on the two things always readable, whether the
+    /// question was settled and whether a path was named.
+    fn from_json(settled: bool, choice: Option<&serde_json::Value>) -> Self {
+        let named = |path: Option<&str>| match path {
+            Some(path) => Self::Explicit(path.to_owned()),
+            None if settled => Self::Cache,
+            None => Self::Unset,
+        };
+        match choice {
+            None | Some(serde_json::Value::Null) => named(None),
+            Some(serde_json::Value::String(path)) => named(Some(path)),
+            Some(value) => {
+                let path = value.get("path").and_then(serde_json::Value::as_str);
+                match value.get("kind").and_then(serde_json::Value::as_str) {
+                    // A platform default with no path names nothing, so it
+                    // answers nothing either.
+                    Some("platformDefault") => path
+                        .map(|path| Self::PlatformDefault(path.to_owned()))
+                        .unwrap_or(Self::Unset),
+                    Some("cache") => Self::Cache,
+                    Some("unset") => Self::Unset,
+                    _ => named(path),
+                }
+            }
+        }
+    }
+}
+
 /// `downloads.json` as a whole: the file shape, and what the list call and
 /// the progress events emit.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Registry {
     pub version: u32,
     pub items: BTreeMap<String, Entry>,
-    /// Whether where the downloads go has been settled -- by the user, or
-    /// by the platform default a first run applies. Set by [`set_dir`],
-    /// including the `None` that puts the files back in the torrent cache,
-    /// and never unset: a `downloadsDir` of null is *also* an answer, and
-    /// without this flag a start-up default could not tell it apart from a
-    /// question nobody has been asked yet. It lives here rather than in the
-    /// server's settings because the server clears a `downloadsDir` it
-    /// cannot use at boot, which would take the answer with it.
-    pub destination_settled: bool,
-    /// *Which* destination was settled, spelled the way the server stored
-    /// it (`prepare_downloads_dir` resolves symlinks, so the path handed to
-    /// [`set_dir`] is not always the one that comes back). `None` is both
-    /// "with the torrent cache, on purpose" and "nobody has been asked" --
-    /// [`Registry::destination_settled`] tells those apart. Kept so a
-    /// start-up can compare it with the server's live `downloadsDir`: when
-    /// a recorded path is gone from the settings the server cleared a
-    /// destination it could not prepare at boot, and the app can put it
-    /// back rather than leave the files wherever the fallback lands.
-    pub destination_choice: Option<String>,
+    /// Where the downloads were answered to go, and by whom: [`set_dir`]
+    /// records the user's own answer, [`apply_default_dir`] the platform
+    /// default the app stands in with. On the wire it is the pair of keys
+    /// it has always been, `destinationSettled` and `destinationChoice`.
+    pub destination: Destination,
     /// Entries this build could not parse, exactly as they were on disk.
     /// They are invisible to everything but [`Registry::serialize`], which
     /// writes them back among the items: a forgiving read plus a whole-file
@@ -289,8 +373,7 @@ impl Default for Registry {
         Self {
             version: VERSION,
             items: BTreeMap::new(),
-            destination_settled: false,
-            destination_choice: None,
+            destination: Destination::Unset,
             unreadable: BTreeMap::new(),
         }
     }
@@ -313,8 +396,8 @@ impl Serialize for Registry {
         let mut registry = serializer.serialize_struct("Registry", 4)?;
         registry.serialize_field("version", &self.version)?;
         registry.serialize_field("items", &items)?;
-        registry.serialize_field("destinationSettled", &self.destination_settled)?;
-        registry.serialize_field("destinationChoice", &self.destination_choice)?;
+        registry.serialize_field("destinationSettled", &self.destination.is_settled())?;
+        registry.serialize_field("destinationChoice", &self.destination.to_json())?;
         registry.end()
     }
 }
@@ -349,20 +432,18 @@ impl Registry {
                 "downloads registry was written by a newer build; unknown keys are kept as-is"
             );
         }
-        let destination_settled = value
-            .get("destinationSettled")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
-        let destination_choice = value
-            .get("destinationChoice")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned);
+        let destination = Destination::from_json(
+            value
+                .get("destinationSettled")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            value.get("destinationChoice"),
+        );
         let Some(items) = value.get("items").and_then(serde_json::Value::as_object) else {
             tracing::warn!("downloads registry has no items object; starting empty");
             return Self {
                 version,
-                destination_settled,
-                destination_choice,
+                destination,
                 ..Self::default()
             };
         };
@@ -384,8 +465,7 @@ impl Registry {
         Self {
             version,
             items: parsed,
-            destination_settled,
-            destination_choice,
+            destination,
             unreadable,
         }
     }
@@ -1145,27 +1225,58 @@ pub fn list() -> anyhow::Result<Registry> {
 /// Points the server's `downloadsDir` at `path` (or unsets it with `None`),
 /// with the validation and persistence `POST /settings` does.
 ///
-/// A path the server accepts also settles the destination
-/// ([`Registry::destination_settled`]) and is recorded as the answer
-/// ([`Registry::destination_choice`]), `None` included: from here on the
-/// answer is the app's, and a platform default must not overwrite it. A
-/// path the server refuses settles nothing -- it raises before this. What
-/// is recorded is what the settings came back with, not what was asked
-/// for, so it can be compared with the live `downloadsDir` later: the
-/// server resolves the path before it stores it. That the flag could not be
-/// written is worth a warning and no more: the setting itself is already in
-/// place, and failing the call would be the worse lie.
+/// This is the *user's* answer: a path the server accepts is recorded as
+/// [`Destination::Explicit`] and `None` as [`Destination::Cache`], and from
+/// here on no default may overwrite either. A path the server refuses
+/// records nothing -- it raises before this. What is recorded is what the
+/// settings came back with, not what was asked for, so it can be compared
+/// with the live `downloadsDir` later: the server resolves the path before
+/// it stores it. That the answer could not be written down is worth a
+/// warning and no more -- the setting itself is already in place, and
+/// failing the call would be the worse lie.
 pub fn set_dir(path: Option<String>) -> anyhow::Result<stream_server::ServerSettings> {
     let settings = crate::server::update_settings(serde_json::json!({ "downloadsDir": path }))?;
-    let stored = settings.downloads_dir.clone();
+    record_destination(match settings.downloads_dir.clone() {
+        Some(path) => Destination::Explicit(path),
+        None => Destination::Cache,
+    });
+    Ok(settings)
+}
+
+/// Points the server's `downloadsDir` at a default the app resolved for
+/// this platform, with the same validation [`set_dir`] gets -- and without
+/// answering the question on the user's behalf.
+///
+/// The recorded destination becomes [`Destination::PlatformDefault`] only
+/// while nothing has been chosen. A choice the server dropped at boot (an
+/// SD card that is not in the device) stays on record while the default
+/// stands in for it, so the next start-up asks for the chosen folder again
+/// and the UI can say which folder is missing rather than quietly
+/// presenting the fallback as what was wanted.
+pub fn apply_default_dir(path: String) -> anyhow::Result<stream_server::ServerSettings> {
+    let settings =
+        crate::server::update_settings(serde_json::json!({ "downloadsDir": path.clone() }))?;
+    let stored = settings.downloads_dir.clone().unwrap_or(path);
     if let Err(error) = update(|registry| {
-        registry.destination_settled = true;
-        registry.destination_choice = stored.clone();
+        if !registry.destination.is_chosen() {
+            registry.destination = Destination::PlatformDefault(stored.clone());
+        }
         Ok(())
     }) {
-        tracing::warn!(%error, "could not record that the downloads destination was settled");
+        tracing::warn!(%error, "could not record the downloads destination applied");
     }
     Ok(settings)
+}
+
+/// Writes down where the downloads were answered to go. A failure here is
+/// a warning: the server's setting is already in place either way.
+fn record_destination(destination: Destination) {
+    if let Err(error) = update(move |registry| {
+        registry.destination = destination;
+        Ok(())
+    }) {
+        tracing::warn!(%error, "could not record where the downloads were answered to go");
+    }
 }
 
 /// Installs the progress sink, replacing any previous one, and starts the
@@ -1326,62 +1437,127 @@ mod tests {
         assert_eq!(entry("tt1", "tt1:1:2").key(), "tt1:tt1:1:2");
     }
 
-    /// The destination flag is part of the file, not something derived
-    /// from the settings: it survives a round trip, and a registry written
-    /// before the flag existed reads as nothing settled.
+    /// Where the downloads go is part of the file, not something derived
+    /// from the settings, and the four answers it can hold are told apart
+    /// across a round trip.
     #[test]
-    fn destination_settled_survives_the_file() {
-        let registry = Registry {
-            destination_settled: true,
-            ..Registry::default()
+    fn the_destination_survives_the_file() {
+        for destination in [
+            Destination::Unset,
+            Destination::Cache,
+            Destination::Explicit("/sdcard/downloads".into()),
+            Destination::PlatformDefault("/sdcard/files/downloads".into()),
+        ] {
+            let registry = Registry {
+                destination: destination.clone(),
+                ..Registry::default()
+            };
+            let bytes = serde_json::to_vec(&registry).unwrap();
+            assert_eq!(
+                Registry::parse(&bytes),
+                registry,
+                "{destination:?} came back as something else"
+            );
+        }
+    }
+
+    /// The two keys keep the shape every build so far has written, so a
+    /// downgrade reads an answer rather than an open question -- and so
+    /// this build reads what those builds left behind.
+    #[test]
+    fn the_destination_is_written_the_way_it_always_was() {
+        let written = |destination: Destination| {
+            String::from_utf8(
+                serde_json::to_vec(&Registry {
+                    destination,
+                    ..Registry::default()
+                })
+                .unwrap(),
+            )
+            .unwrap()
         };
-        let bytes = serde_json::to_vec(&registry).unwrap();
-        assert_eq!(Registry::parse(&bytes), registry);
         assert!(
-            String::from_utf8(bytes)
-                .unwrap()
-                .contains(r#""destinationSettled":true"#),
-            "under its camelCase name, like every other key"
+            written(Destination::Explicit("/sdcard/downloads".into()))
+                .contains(r#""destinationSettled":true,"destinationChoice":"/sdcard/downloads""#),
+            "a chosen path is the path, under its camelCase name"
+        );
+        assert!(
+            written(Destination::Cache)
+                .contains(r#""destinationSettled":true,"destinationChoice":null"#),
+            "the cache is the null it has always been, settled"
+        );
+        assert!(
+            written(Destination::Unset)
+                .contains(r#""destinationSettled":false,"destinationChoice":null"#),
+            "and nothing answered is the null with nothing settled"
         );
 
-        assert!(
-            !Registry::parse(br#"{"version":1,"items":{}}"#).destination_settled,
-            "a file from before the flag has settled nothing"
+        assert_eq!(
+            Registry::parse(br#"{"version":1,"items":{}}"#).destination,
+            Destination::Unset,
+            "a file from before the keys has answered nothing"
         );
-        assert!(
-            Registry::parse(br#"{"version":1,"destinationSettled":true}"#).destination_settled,
-            "and it is kept even when the items object is unreadable"
+        assert_eq!(
+            Registry::parse(br#"{"version":1,"destinationSettled":true}"#).destination,
+            Destination::Cache,
+            "settled with no path recorded is the cache, on purpose"
+        );
+        assert_eq!(
+            Registry::parse(br#"{"version":1,"destinationSettled":true,"destinationChoice":"/x"}"#)
+                .destination,
+            Destination::Explicit("/x".into()),
+            "and a recorded path is the user's own answer"
         );
     }
 
-    /// The answer itself is recorded next to the flag, so a start-up can
-    /// tell "with the cache, on purpose" from a destination the server
-    /// dropped at boot.
+    /// A default the app applied is not an answer, and is the one shape an
+    /// older build could not have written -- so it is the only one written
+    /// as an object, and a shape this build cannot read falls back on the
+    /// two things it can always see.
     #[test]
-    fn destination_choice_survives_the_file() {
-        let registry = Registry {
-            destination_settled: true,
-            destination_choice: Some("/sdcard/downloads".into()),
-            ..Registry::default()
-        };
-        let bytes = serde_json::to_vec(&registry).unwrap();
-        assert_eq!(Registry::parse(&bytes), registry);
-        assert!(
-            String::from_utf8(bytes)
-                .unwrap()
-                .contains(r#""destinationChoice":"/sdcard/downloads""#),
-            "under its camelCase name, like every other key"
-        );
+    fn a_default_is_told_apart_from_an_answer() {
+        let applied = Destination::PlatformDefault("/sdcard/files/downloads".into());
+        assert!(applied.is_settled(), "the question is not open any more");
+        assert!(!applied.is_chosen(), "but nobody chose it");
+        assert_eq!(applied.path(), Some("/sdcard/files/downloads"));
+        assert!(Destination::Explicit("/x".into()).is_chosen());
+        assert!(Destination::Cache.is_chosen());
+        assert!(!Destination::Unset.is_settled());
 
         assert_eq!(
-            Registry::parse(br#"{"version":1,"destinationSettled":true}"#).destination_choice,
-            None,
-            "a file from before the key recorded no path"
+            Registry::parse(
+                br#"{"version":1,"destinationSettled":true,
+                     "destinationChoice":{"kind":"platformDefault","path":"/sdcard/files"}}"#
+            )
+            .destination,
+            Destination::PlatformDefault("/sdcard/files".into())
         );
         assert_eq!(
-            Registry::parse(br#"{"version":1,"destinationChoice":"/x"}"#).destination_choice,
-            Some("/x".to_owned()),
-            "and it is kept even when the items object is unreadable"
+            Registry::parse(
+                br#"{"version":1,"destinationSettled":true,
+                     "destinationChoice":{"kind":"somethingNewer","path":"/x"}}"#
+            )
+            .destination,
+            Destination::Explicit("/x".into()),
+            "a kind this build does not know still names a path"
+        );
+        assert_eq!(
+            Registry::parse(
+                br#"{"version":1,"destinationSettled":true,
+                     "destinationChoice":{"kind":"somethingNewer"}}"#
+            )
+            .destination,
+            Destination::Cache,
+            "and one that names none is the answer the flag reports"
+        );
+        assert_eq!(
+            Registry::parse(
+                br#"{"version":1,"destinationSettled":true,
+                     "destinationChoice":{"kind":"platformDefault"}}"#
+            )
+            .destination,
+            Destination::Unset,
+            "a default that names no directory has applied nothing"
         );
     }
 
