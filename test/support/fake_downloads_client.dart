@@ -40,6 +40,7 @@ class FakeDownloadsClient implements DownloadsClient {
   Object? removeError;
   Object? listError;
   Object? setDirectoryError;
+  Object? directoryError;
 
   bool disposed = false;
 
@@ -119,6 +120,14 @@ class FakeDownloadsClient implements DownloadsClient {
     final error = setDirectoryError;
     if (error != null) throw error;
     return settings = {...settings, 'downloadsDir': path};
+  }
+
+  @override
+  Future<String?> directory() async {
+    callLog?.add('downloads.directory');
+    final error = directoryError;
+    if (error != null) throw error;
+    return settings['downloadsDir'] as String?;
   }
 
   @override

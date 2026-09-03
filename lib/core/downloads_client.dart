@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../src/rust/api/downloads.dart' as rust;
+import '../src/rust/api/server.dart' as rust_server;
 import 'state/download.dart';
 import 'state/stream.dart';
 
@@ -24,6 +25,23 @@ final class DownloadRequest {
     this.streamRequest,
     this.metaRequest,
   });
+
+  /// The request that would add [view] again: what a retry sends after a
+  /// download stopped. Everything comes off the entry, the resolved
+  /// [fileIdx] included, so a retry cannot land on a different file than
+  /// the one already half on disk.
+  factory DownloadRequest.fromView(DownloadView view) => DownloadRequest(
+    metaId: view.metaId,
+    videoId: view.videoId,
+    stream: view.stream,
+    type: view.type,
+    name: view.name,
+    poster: view.poster,
+    fileIdx: view.fileIdx,
+    meta: view.meta,
+    streamRequest: view.streamRequest,
+    metaRequest: view.metaRequest,
+  );
 
   final String metaId;
 
@@ -226,6 +244,11 @@ abstract interface class DownloadsClient {
   /// Answers the server's settings afterwards; throws on a path it refuses.
   Future<Map<String, dynamic>> setDirectory(String? path);
 
+  /// Where the files are being put (`settings.downloadsDir`), or null when
+  /// they live in the torrent cache with everything else. Throws when the
+  /// server cannot be asked.
+  Future<String?> directory();
+
   /// Progress, as it happens: each event carries only the entries that
   /// moved, so fold them into a [list] with [DownloadsRegistry.merge].
   /// Broadcast, and nothing is buffered for a late subscriber.
@@ -244,6 +267,10 @@ typedef DownloadsRemoveFn = Future<String> Function({
 });
 typedef DownloadsListFn = Future<String> Function();
 typedef DownloadsSetDirFn = Future<String> Function({String? path});
+
+/// Reading the destination back is reading the server's settings, which is
+/// `server_settings` — the same JSON `downloads_set_dir` answers with.
+typedef DownloadsSettingsFn = Future<String> Function();
 typedef DownloadsEventsFn = Stream<String> Function();
 
 /// [DownloadsClient] over `rust/src/api/downloads.rs` — the same functions
@@ -260,6 +287,7 @@ class RustDownloadsClient implements DownloadsClient {
     this.removeDownload = rust.downloadsRemove,
     this.listDownloads = rust.downloadsList,
     this.setDownloadsDir = rust.downloadsSetDir,
+    this.readSettings = rust_server.serverSettings,
     this.openEvents = rust.downloadsEvents,
   });
 
@@ -267,6 +295,7 @@ class RustDownloadsClient implements DownloadsClient {
   final DownloadsRemoveFn removeDownload;
   final DownloadsListFn listDownloads;
   final DownloadsSetDirFn setDownloadsDir;
+  final DownloadsSettingsFn readSettings;
   final DownloadsEventsFn openEvents;
 
   StreamController<DownloadsRegistry>? _controller;
@@ -294,6 +323,10 @@ class RustDownloadsClient implements DownloadsClient {
   @override
   Future<Map<String, dynamic>> setDirectory(String? path) async =>
       _object(await setDownloadsDir(path: path));
+
+  @override
+  Future<String?> directory() async =>
+      _object(await readSettings())['downloadsDir'] as String?;
 
   @override
   Stream<DownloadsRegistry> get updates {

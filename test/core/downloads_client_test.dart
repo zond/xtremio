@@ -16,6 +16,7 @@ class _Recorder {
   final List<({String key, bool deleteFiles})> removals = [];
   final List<String?> directories = [];
   int lists = 0;
+  int settingsReads = 0;
 
   /// How many times the progress stream was opened. The Rust side keeps one
   /// event sink, so this must never go past 1 for one client.
@@ -27,6 +28,7 @@ class _Recorder {
   String removeAnswer = '{"removed":true,"unpinned":true,"deletedFiles":false}';
   String listAnswer = '{"version":1,"items":{}}';
   String setDirAnswer = '{"downloadsDir":null}';
+  String settingsAnswer = '{"downloadsDir":null,"cacheSize":2147483648}';
 
   RustDownloadsClient get client => RustDownloadsClient(
     addDownload: ({required String requestJson}) async {
@@ -44,6 +46,10 @@ class _Recorder {
     setDownloadsDir: ({String? path}) async {
       directories.add(path);
       return setDirAnswer;
+    },
+    readSettings: () async {
+      settingsReads++;
+      return settingsAnswer;
     },
     openEvents: () {
       opened++;
@@ -229,6 +235,43 @@ void main() {
 
       expect(rust.directories, ['/media/sd/xtremio', null]);
       expect(settings['downloadsDir'], '/media/sd/xtremio');
+    });
+
+    test('directory reads the destination out of the settings', () async {
+      rust.settingsAnswer = '{"downloadsDir":"/media/sd/xtremio"}';
+      expect(await rust.client.directory(), '/media/sd/xtremio');
+      expect(rust.settingsReads, 1);
+
+      rust.settingsAnswer = '{"cacheSize":2147483648}';
+      expect(
+        await rust.client.directory(),
+        isNull,
+        reason: 'unset means the torrent cache',
+      );
+    });
+
+    test('a retry sends the entry back as the request that made it', () async {
+      final view = DownloadView(
+        loadDownloadsFixture()['items']['tt0903747:tt0903747:1:1']
+            as Map<String, dynamic>,
+      );
+
+      await rust.client.add(DownloadRequest.fromView(view));
+
+      final sent = jsonDecode(rust.addRequests.single) as Map<String, dynamic>;
+      expect(sent['metaId'], 'tt0903747');
+      expect(sent['videoId'], 'tt0903747:1:1');
+      expect(sent['type'], 'series');
+      expect(sent['name'], 'Breaking Bad: Pilot');
+      expect(sent['stream'], view.stream.json);
+      expect(sent['meta'], view.meta);
+      expect(sent['streamRequest'], view.streamRequest);
+      expect(sent['metaRequest'], view.metaRequest);
+      expect(
+        sent['fileIdx'],
+        view.fileIdx,
+        reason: 'the file already half on disk, not another guess',
+      );
     });
   });
 
