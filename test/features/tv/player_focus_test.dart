@@ -340,6 +340,25 @@ void main() {
       ]);
       expect(focusIn<SeekBar>(), isTrue, reason: 'focus stays on the bar');
     });
+    testWidgets('the centre key plays and pauses from the seek bar', (
+      tester,
+    ) async {
+      final harness = await pumpOnTv(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<SeekBar>(), isTrue);
+
+      // The bar has nothing to press, so the centre key means there what
+      // it means on the video: play/pause.
+      await press(tester, LogicalKeyboardKey.select);
+      expect(harness.engine.playOrPauseCalls, 1);
+      expect(
+        harness.engine.seeks,
+        isEmpty,
+        reason: 'the centre key is no seek',
+      );
+      expect(focusIn<SeekBar>(), isTrue, reason: 'focus stays on the bar');
+    });
 
     testWidgets('right walks the transport row past the volume to fullscreen', (
       tester,

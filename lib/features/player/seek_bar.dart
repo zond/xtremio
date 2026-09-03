@@ -22,6 +22,7 @@ class SeekBar extends StatefulWidget {
     this.onScrubStart,
     this.onScrubEnd,
     this.focusable = false,
+    this.focusNode,
     this.seekStep = const Duration(seconds: 10),
   });
 
@@ -34,6 +35,10 @@ class SeekBar extends StatefulWidget {
 
   /// Whether the bar can hold focus and take the D-pad's left/right.
   final bool focusable;
+
+  /// The node it holds focus with, for an owner that needs to know when
+  /// the bar has the remote.
+  final FocusNode? focusNode;
 
   /// How far one left/right press seeks while focused (`seekTimeDuration`).
   final Duration seekStep;
@@ -93,6 +98,7 @@ class _SeekBarState extends State<SeekBar> {
         final drag = _drag;
         final progress = drag ?? _fraction(widget.position);
         return Focus(
+          focusNode: widget.focusNode,
           canRequestFocus: widget.focusable,
           skipTraversal: !widget.focusable,
           onKeyEvent: _onKeyEvent,

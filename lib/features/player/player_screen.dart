@@ -149,6 +149,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// play/pause, or "Play now" while the countdown runs) and up (the top
   /// bar's back button) onto the controls.
   final FocusNode _playPauseFocus = FocusNode(debugLabel: 'play/pause');
+
+  /// The seek bar's node on a television. It is the one stop on the bar
+  /// with nothing to press, so [_onKeyEvent] has to know when the remote
+  /// is on it and take the centre key itself.
+  final FocusNode _seekBarFocus = FocusNode(debugLabel: 'seek bar');
   final FocusNode _topBarFocus = FocusNode(debugLabel: 'player top bar');
   final FocusNode _playNextFocus = FocusNode(debugLabel: 'play next');
 
@@ -1044,6 +1049,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // A control on the bar has the remote: select presses it and left/right
     // walk the bar (the seek bar seeks; both are handled below us, before
     // this ever runs). Up and down leave the control, and the bar itself.
+    // The seek bar is the exception to select: it is not a button, so the
+    // key falls through to the play/pause below.
     if (_controlFocused) {
       if (key == LogicalKeyboardKey.arrowUp ||
           key == LogicalKeyboardKey.arrowDown) {
@@ -1056,7 +1063,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
         return KeyEventResult.handled;
       }
-      if (RemotePress.activateKeys.contains(key) ||
+      if ((RemotePress.activateKeys.contains(key) && !_seekBarFocus.hasFocus) ||
           key == LogicalKeyboardKey.arrowLeft ||
           key == LogicalKeyboardKey.arrowRight ||
           key == LogicalKeyboardKey.tab) {
@@ -1221,6 +1228,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _upNextScope.removeListener(_onControlsFocusChange);
     _upNextScope.dispose();
     _playPauseFocus.dispose();
+    _seekBarFocus.dispose();
     _topBarFocus.dispose();
     _playNextFocus.dispose();
     super.dispose();
@@ -1399,6 +1407,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               onMute: _toggleMute,
                               onFullscreen: _toggleFullscreen,
                               playPauseFocusNode: _playPauseFocus,
+                              seekBarFocusNode: _seekBarFocus,
                             ),
                         ],
                       ),

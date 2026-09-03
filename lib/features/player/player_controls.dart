@@ -228,6 +228,7 @@ class PlayerBottomBar extends StatelessWidget {
     required this.onMute,
     required this.onFullscreen,
     this.playPauseFocusNode,
+    this.seekBarFocusNode,
   });
 
   final bool wide;
@@ -258,6 +259,10 @@ class PlayerBottomBar extends StatelessWidget {
   /// player focuses when the remote moves focus down onto this bar.
   final FocusNode? playPauseFocusNode;
 
+  /// Attached to the seek bar where it is a focus stop: what the player
+  /// asks whether the remote is on the bar rather than on a button.
+  final FocusNode? seekBarFocusNode;
+
   @override
   Widget build(BuildContext context) {
     final isTv = DeviceScope.isTv(context);
@@ -273,6 +278,7 @@ class PlayerBottomBar extends StatelessWidget {
           onScrubStart: onScrubStart,
           onScrubEnd: onScrubEnd,
           focusable: isTv,
+          focusNode: seekBarFocusNode,
           seekStep: seekStep,
         ),
       ),
