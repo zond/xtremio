@@ -69,27 +69,41 @@ Future<String> serverUpdateSettings({required String patchJson}) => RustLib
 Future<String> serverStorageReport() =>
     RustLib.instance.api.crateApiServerServerStorageReport();
 
-/// Asks the embedded server to reclaim its cache now, and answers its base
-/// URL afterwards.
+/// What the server's cache currently occupies against its `cacheSize`
+/// limit, as JSON (`CacheUsage`: `totalBytes`, `limitBytes` -- null only
+/// when the cache is truly unlimited -- `protectedBytes`, `protectedFiles`).
+/// `protectedBytes`/`protectedFiles` are what a live engine or a pinned
+/// download is holding right now, which a clean pass can never take: when
+/// they equal `totalBytes` and the cache is still over `limitBytes`,
+/// cleaning cannot help until playback stops or something is unpinned.
 ///
-/// It does that by restarting it, because there is no other way to ask.
-/// stream-server's cleaner is a private module with no `ServerHandle` call
-/// and no route: it sweeps on a debounce after cache writes, on an hourly
-/// poll, and -- since the first tick of that poll fires immediately --
-/// once at start-up. Evicting from out here instead is not an option: only
-/// the server knows which files a live engine is writing, and deleting one
-/// of those breaks the playback holding it. The restart is also what makes
-/// the current engines' files evictable, since it drops them.
+/// Costs one `stat` per file currently in the cache -- the same walk the
+/// server's own cleaner already runs on every debounced or hourly pass --
+/// so one call per screen open or manual refresh is cheap, but it is not
+/// bounded or cached on the server side: do not poll it on a timer. Blocks
+/// the FRB worker; never call from the UI thread. Errors when the server is
+/// not running.
+Future<String> serverCacheUsage() =>
+    RustLib.instance.api.crateApiServerServerCacheUsage();
+
+/// Runs one eviction pass on the server's cache right now and answers what
+/// it did, as JSON (`EvictionReport`: `total`, `protected`,
+/// `protectedFiles`, `freed`, `deleted`, `limit`).
 ///
-/// **This stops whatever is playing**: the media routes go down with the
-/// server. Ask first. The sweep itself runs on the server's own runtime
-/// after this returns, so a report read immediately afterwards may still
-/// show the old size.
+/// This is the exact function the server's own scheduled sweep calls, so it
+/// respects exactly the same protections: nothing a live engine is writing
+/// or a pin keeps is ever touched, however far over the limit the cache is.
+/// **Nothing here stops playback** -- unlike the restart this replaces,
+/// which was the only way to ask stream-server's cleaner for a sweep before
+/// it exposed this call. When `total` is still over `limit` afterwards,
+/// that is not a failure: `protected`/`protectedFiles` name what is
+/// currently unreachable, and the fix is to stop the stream or unpin the
+/// download, not to run this again.
 ///
-/// Errors when the server is not running, and when it cannot be started
-/// again -- in which case nothing is running afterwards.
-Future<String> serverCleanCache() =>
-    RustLib.instance.api.crateApiServerServerCleanCache();
+/// Blocks the FRB worker; never call from the UI thread. Errors when the
+/// server is not running.
+Future<String> serverCleanCacheNow() =>
+    RustLib.instance.api.crateApiServerServerCleanCacheNow();
 
 /// Starts or stops the server's LAN media listener and answers the address
 /// it is bound to afterwards (`"0.0.0.0:39271"`), or null after a stop.

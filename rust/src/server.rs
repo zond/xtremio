@@ -15,7 +15,10 @@ use std::path::PathBuf;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use anyhow::Context;
-use stream_server::{DownloadInfo, EngineStats, ServerHandle, ServerSettings, UnpinOutcome};
+use stream_server::{
+    CacheUsage, DownloadInfo, EngineStats, EvictionReport, ServerHandle, ServerSettings,
+    UnpinOutcome,
+};
 use url::Url;
 
 use crate::state::AppState;
@@ -42,28 +45,9 @@ pub const DEFAULT_PORT: u16 = stream_server::DEFAULT_HTTP_PORT;
 #[derive(Default)]
 pub struct ServerState {
     handle: RwLock<Option<ServerHandle>>,
-    /// What the running server was started with, kept so it can be started
-    /// again the same way ([`restart`]). Not derived from the handle: the
-    /// directories are the app's answer, not the server's.
-    config: RwLock<Option<StartConfig>>,
 }
 
 impl ServerState {
-    /// The configuration the server was last started with, if any.
-    fn config(&self) -> Option<StartConfig> {
-        self.config
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
-    }
-
-    fn set_config(&self, config: Option<StartConfig>) {
-        *self
-            .config
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = config;
-    }
-
     /// A poisoned lock only means a previous holder panicked; the Option is
     /// still a valid value.
     fn read(&self) -> RwLockReadGuard<'_, Option<ServerHandle>> {
@@ -160,7 +144,6 @@ pub(crate) fn start_in(app: &AppState, config: StartConfig) -> anyhow::Result<Ur
         Err(error) => return Err(error.context("start embedded server")),
     };
     let url = url_of(&handle)?;
-    app.server.set_config(Some(config));
     // The LAN media listener exists for the length of a cast session and no
     // longer, and `stream_server::run` binds a configured `lan_media_addr`
     // once at boot regardless of the `lanMediaEnabled` veto. So the first
@@ -199,7 +182,6 @@ pub fn stop() -> anyhow::Result<()> {
 /// server it already took out of the process.
 pub(crate) fn stop_in(app: &AppState) -> anyhow::Result<()> {
     let handle = app.server.write().take();
-    app.server.set_config(None);
     if let Some(handle) = handle {
         // Before the shutdown, not instead of it: the server closes the LAN
         // listener as part of going down anyway, but this is also what puts
@@ -213,37 +195,6 @@ pub(crate) fn stop_in(app: &AppState) -> anyhow::Result<()> {
         tracing::info!("embedded stream-server stopped");
     }
     Ok(())
-}
-
-/// Stops the server and starts it again with the configuration it is
-/// running under, answering its base URL afterwards.
-///
-/// This exists to make the server clean its cache. Its cleaner
-/// (`server/src/cache_cleaner.rs`) runs on a debounce after writes to the
-/// cache directory and on an hourly poll -- and its first poll tick fires
-/// as soon as the server comes up, which is the only way to ask for a
-/// sweep now. stream-server exposes no `clean_cache` on `ServerHandle` and
-/// no route for it, and eviction cannot be done from out here: only the
-/// server knows which files a live engine is writing (its
-/// `protected_paths`), and deleting one of those breaks the playback that
-/// is holding it. The restart also drops every live engine, which is what
-/// makes their cache files evictable in the first place.
-///
-/// It costs whatever is playing: the media routes go down with the server.
-/// The caller is expected to have asked.
-///
-/// The preferred port is free by the time the new listener binds (the old
-/// thread is joined first), but an ephemeral fallback would still move the
-/// server, so the engine's `streaming_server_url` is retargeted afterwards
-/// exactly as a login does it.
-pub fn restart() -> anyhow::Result<Url> {
-    let app = crate::state::current().ok_or_else(not_running)?;
-    let config = app.server.config().ok_or_else(not_running)?;
-    stop_in(&app)?;
-    let url = start_in(&app, config)?;
-    crate::core::reapply_loopback_retarget(&app);
-    tracing::info!(%url, "embedded stream-server restarted");
-    Ok(url)
 }
 
 /// Base URL of the running server, if any.
@@ -349,6 +300,27 @@ pub fn settings() -> anyhow::Result<ServerSettings> {
 /// persistence) and returns the settings afterwards.
 pub fn update_settings(patch: serde_json::Value) -> anyhow::Result<ServerSettings> {
     with_handle(|handle| handle.update_settings(patch))
+}
+
+/// What the cache currently occupies against its `cacheSize` limit, without
+/// evicting anything: `totalBytes`/`limitBytes` in the cleaner's own
+/// occupancy accounting, and `protectedBytes`/`protectedFiles` for what a
+/// live engine or a pinned download is holding right now, which a clean
+/// pass can never take. One `stat` per file currently in the cache -- the
+/// same walk the cleaner itself runs on every debounced or hourly pass --
+/// so it is cheap to call once, but stream-server's own docs say not to
+/// poll it on a tight timer.
+pub fn cache_usage() -> anyhow::Result<CacheUsage> {
+    with_handle(|handle| handle.cache_usage())
+}
+
+/// Runs one eviction pass right now and reports what it freed -- the exact
+/// function the server's own scheduled sweep calls, so it can never be less
+/// careful: nothing a live engine is writing or a pin protects is touched,
+/// however far over the limit the cache is. Replaces restarting the server
+/// to make its start-up tick fire a sweep; nothing here stops playback.
+pub fn clean_cache_now() -> anyhow::Result<EvictionReport> {
+    with_handle(|handle| handle.clean_cache_now())
 }
 
 /// Starts or stops the LAN media listener -- the server's second HTTP

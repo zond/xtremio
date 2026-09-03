@@ -6,8 +6,8 @@
 
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
-    server_base_url, server_clean_cache, server_settings, server_start, server_stop,
-    server_storage_report, server_torrent_stats, server_update_settings, ServerConfig,
+    server_base_url, server_cache_usage, server_clean_cache_now, server_settings, server_start,
+    server_stop, server_storage_report, server_torrent_stats, server_update_settings, ServerConfig,
 };
 
 /// A well-known public-domain torrent (Night of the Living Dead), never
@@ -133,19 +133,29 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     // No downloadsDir is set here, so there is no second volume to name.
     assert!(report["downloadsVolume"].is_null(), "{report}");
 
-    // Cleaning restarts the server -- the only way to ask its cleaner for a
-    // sweep now -- and it is running afterwards, answering the same way.
-    let cleaned = tokio::task::spawn_blocking(server_clean_cache).await??;
-    assert_eq!(url::Url::parse(&cleaned)?.host_str(), Some("127.0.0.1"));
-    assert_eq!(server_base_url()?.as_deref(), Some(cleaned.as_str()));
-    assert_eq!(heartbeat_status(&cleaned).await?, StatusCode::UNAUTHORIZED);
-    // The settings it was started with survive it (they are on disk), so
-    // the patch made above is still there.
+    // What the cache occupies against its limit, read without evicting
+    // anything: a fresh server has written a little and nothing is
+    // protected (no live engine has any pinned file).
+    let usage = json(&tokio::task::spawn_blocking(server_cache_usage).await??);
+    assert!(usage["totalBytes"].is_u64(), "{usage}");
+    assert_eq!(usage["protectedBytes"], 0, "{usage}");
+    assert_eq!(usage["protectedFiles"], 0, "{usage}");
+
+    // Cleaning now runs the eviction pass in place -- no restart, so the
+    // server answers throughout and at the same URL afterwards.
+    let cleaned = json(&tokio::task::spawn_blocking(server_clean_cache_now).await??);
+    assert!(cleaned["total"].is_u64(), "{cleaned}");
+    assert!(cleaned["freed"].is_u64(), "{cleaned}");
+    assert!(cleaned["deleted"].is_u64(), "{cleaned}");
+    assert_eq!(server_base_url()?.as_deref(), Some(url.as_str()));
+    assert_eq!(heartbeat_status(&url).await?, StatusCode::UNAUTHORIZED);
+    // Nothing about the running server changed: the settings patched above
+    // are still there, unlike a restart which would merely have reloaded
+    // them from disk.
     assert_eq!(
         json(&tokio::task::spawn_blocking(server_settings).await??)["btMaxConnections"],
         77
     );
-    let url = cleaned;
 
     // Idempotent: a second start returns the same URL without restarting.
     let again = tokio::task::spawn_blocking({
