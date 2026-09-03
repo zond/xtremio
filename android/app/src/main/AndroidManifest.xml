@@ -4,6 +4,14 @@
          debug/profile manifests, so without this a release APK is offline. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Casting. The Google Cast SDK puts a media notification up while a
+         session runs, through its own MediaNotificationService (declared
+         below); on API 34+ a mediaPlayback foreground service needs this
+         permission to exist at all. Nothing else in the app runs a
+         foreground service: offline downloads still stop when the process
+         is frozen (see ANDROID.md). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+
     <!-- android:banner is what the Android TV / Google TV home screen shows
          for the app: a 320x180 xhdpi PNG (drawable-xhdpi/banner.png), as the
          leanback launcher wants; the square launcher icon would be letterboxed
@@ -74,6 +82,25 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- The Google Cast SDK reads its receiver id and launch options from
+             an OptionsProvider it instantiates itself, by name, before any
+             of our code runs, so it has to be named here and cannot be
+             passed in. This is the plugin's own provider, which the plugin
+             fills in from the options Dart passes to
+             GoogleCastContext.setSharedInstanceWithOptions
+             (lib/features/cast/google_cast_client.dart). -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.felnanuke.google_cast.GoogleCastOptionsProvider" />
+
+        <!-- The notification the Cast SDK puts up while a session runs, with
+             the transport controls on it. It lives in Play services, not in
+             this app; declaring it is what lets the SDK start it. -->
+        <service
+            android:name="com.google.android.gms.cast.framework.media.MediaNotificationService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
     <!-- Android TV / Google TV support. The same APK targets phones and TV:

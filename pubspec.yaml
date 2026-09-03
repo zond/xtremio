@@ -43,6 +43,7 @@ dependencies:
   media_kit_libs_video: ^1.0.7
   url_launcher: ^6.3.2
   app_links: ^7.2.1
+  flutter_chrome_cast: ^1.4.8
 
 dev_dependencies:
   flutter_test:

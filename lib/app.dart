@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 
 import 'core/core.dart';
 import 'features/addons/addon_details_screen.dart';
+import 'features/cast/cast_client.dart';
+import 'features/cast/google_cast_client.dart';
 import 'features/downloads/destination.dart';
 import 'features/player/playback_engine.dart';
 import 'shell/deep_link.dart';
@@ -57,6 +59,13 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// one can be on the stack, so the first list is already laid out the way
 /// it was left — and written through on every change.
 ///
+/// And the [CastScope]: one [CastClient] for the whole app, because the Cast
+/// SDK is a process-wide singleton behind it. Off Android and iOS the real
+/// one reports `isSupported` false and is never asked anything else, so it
+/// is built everywhere and costs nothing where it cannot work. The LAN media
+/// listener half of the scope is left to its default, the embedded server's
+/// own.
+///
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
 /// [RustDownloadsClient] unless [downloads] hands it one, and disposes only
@@ -71,6 +80,7 @@ class XtremioApp extends StatefulWidget {
     this.initInfo,
     this.engineBuilder,
     this.downloads,
+    this.cast,
     this.prefs,
     this.deepLinks,
     this.defaultDestination = platformDefaultDestination,
@@ -83,6 +93,10 @@ class XtremioApp extends StatefulWidget {
   /// The offline downloads, for tests that want a fake. Read once, when the
   /// app comes up: handing over a different client later changes nothing.
   final DownloadsClient? downloads;
+
+  /// The Cast sender, for tests that want a fake. Read once, when the app
+  /// comes up, like [downloads].
+  final CastClient? cast;
 
   /// The app's own preferences, for tests that want a fake client behind
   /// them. Read once, when the app comes up, like [downloads].
@@ -135,6 +149,10 @@ class _XtremioAppState extends State<XtremioApp> {
   late final AppPrefs _prefs;
   late final bool _ownsPrefs;
 
+  /// The one Cast sender, and the same rule again.
+  late final CastClient _cast;
+  late final bool _ownsCast;
+
   /// The `ctx` field, for the settings a new player is created with.
   /// Created in [initState] so its first pull is in flight from start-up;
   /// created lazily it would come into being — empty — inside the first
@@ -152,6 +170,8 @@ class _XtremioAppState extends State<XtremioApp> {
     _ctx = CoreFieldNotifier(widget.core, CoreField.ctx);
     _ownsDownloads = widget.downloads == null;
     _downloads = widget.downloads ?? RustDownloadsClient();
+    _ownsCast = widget.cast == null;
+    _cast = widget.cast ?? GoogleCastClient();
     _ownsPrefs = widget.prefs == null;
     _prefs = widget.prefs ?? AppPrefs(client: const RustPrefsClient());
     unawaited(_prefs.load());
@@ -313,6 +333,7 @@ class _XtremioAppState extends State<XtremioApp> {
     _links?.cancel();
     // Lets go of the progress stream the client holds open on the Rust side.
     if (_ownsDownloads) _downloads.dispose();
+    if (_ownsCast) _cast.dispose();
     if (_ownsPrefs) _prefs.dispose();
     _ctx.dispose();
     _lifecycle.dispose();
@@ -339,21 +360,24 @@ class _XtremioAppState extends State<XtremioApp> {
         initInfo: widget.initInfo,
         child: DownloadsScope(
           client: _downloads,
-          child: PrefsScope(
-            prefs: _prefs,
-            child: PlaybackScope(
-              createEngine: _createEngine,
-              child: MaterialApp(
-                title: 'Xtremio',
-                debugShowCheckedModeBanner: false,
-                navigatorKey: _navigator,
-                theme: isTv ? TvDensity.theme(theme) : theme,
-                builder: isTv ? TvMediaQuery.builder : null,
-                navigatorObservers: [
-                  _routes,
-                  if (kDebugMode) RouteLogObserver(),
-                ],
-                home: const RootShell(),
+          child: CastScope(
+            client: _cast,
+            child: PrefsScope(
+              prefs: _prefs,
+              child: PlaybackScope(
+                createEngine: _createEngine,
+                child: MaterialApp(
+                  title: 'Xtremio',
+                  debugShowCheckedModeBanner: false,
+                  navigatorKey: _navigator,
+                  theme: isTv ? TvDensity.theme(theme) : theme,
+                  builder: isTv ? TvMediaQuery.builder : null,
+                  navigatorObservers: [
+                    _routes,
+                    if (kDebugMode) RouteLogObserver(),
+                  ],
+                  home: const RootShell(),
+                ),
               ),
             ),
           ),
