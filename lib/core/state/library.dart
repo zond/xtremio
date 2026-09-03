@@ -7,6 +7,8 @@
 /// `_id`, `_ctime`, `_mtime` and `state.video_id`.
 library;
 
+import '../well_formed_text.dart';
+
 /// The lowercase wire names of `library_with_filters::Sort`.
 abstract final class LibrarySort {
   static const String lastWatched = 'lastwatched';
@@ -66,7 +68,7 @@ final class LibraryItemView {
 
   String get id => json['_id'] as String;
   String get type => json['type'] as String;
-  String get name => json['name'] as String? ?? '';
+  String get name => wellFormedText(json['name'] as String?) ?? '';
   String? get poster => json['poster'] as String?;
 
   /// `poster` | `landscape` | `square`.

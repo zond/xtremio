@@ -1,3 +1,5 @@
+import '../well_formed_text.dart';
+
 /// View over stremio-core's `MetaItemPreview` JSON as it appears in
 /// catalog pages. Only what the grids need; the raw map stays reachable.
 /// `MetaItem` extends it with the full-item fields.
@@ -8,7 +10,7 @@ class MetaItemPreview {
 
   String get id => json['id'] as String;
   String get type => json['type'] as String;
-  String get name => json['name'] as String? ?? '';
+  String get name => wellFormedText(json['name'] as String?) ?? '';
   String? get poster => json['poster'] as String?;
   String? get background => json['background'] as String?;
   String? get description => json['description'] as String?;

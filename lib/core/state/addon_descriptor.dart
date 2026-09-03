@@ -1,3 +1,5 @@
+import '../well_formed_text.dart';
+
 /// View over stremio-core's `Descriptor` JSON (camelCase): a manifest, the
 /// manifest URL it was fetched from, and the official/protected flags. The
 /// raw map is kept because `InstallAddon` / `UninstallAddon` /
@@ -48,8 +50,8 @@ final class AddonManifest {
 
   String get id => json['id'] as String? ?? '';
   String get version => json['version'] as String? ?? '';
-  String get name => json['name'] as String? ?? '';
-  String? get description => json['description'] as String?;
+  String get name => wellFormedText(json['name'] as String?) ?? '';
+  String? get description => wellFormedText(json['description'] as String?);
   String? get contactEmail => json['contactEmail'] as String?;
   String? get logo => json['logo'] as String?;
   String? get background => json['background'] as String?;

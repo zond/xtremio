@@ -1,4 +1,5 @@
 import '../resource.dart';
+import '../well_formed_text.dart';
 import 'meta_item_preview.dart';
 import 'stream.dart';
 
@@ -87,7 +88,7 @@ final class MetaLink {
 
   final Map<String, dynamic> json;
 
-  String get name => json['name'] as String? ?? '';
+  String get name => wellFormedText(json['name'] as String?) ?? '';
   String get category => json['category'] as String? ?? '';
   String? get url => json['url'] as String?;
 

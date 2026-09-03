@@ -1,16 +1,25 @@
+import '../well_formed_text.dart';
+
 /// View over stremio-core's `Stream` JSON (a flattened `StreamSource` plus
 /// name/description/behaviorHints). The raw map is kept because it is what
 /// `Load Player` takes back.
+///
+/// The three free-text fields come back through [wellFormedText]: an addon
+/// that sends half a surrogate pair (a title cut in the middle of a `👤`
+/// somewhere upstream) sends a string Flutter's text layout throws on, and
+/// the row it throws in is the one the viewer wanted to read. [json] itself
+/// is untouched, so what goes back to the engine is what the addon said.
 final class StreamInfo {
   const StreamInfo(this.json);
 
   final Map<String, dynamic> json;
 
-  String? get name => json['name'] as String?;
+  String? get name => wellFormedText(json['name'] as String?);
 
   /// `description`, or the legacy `title` older addons still send.
-  String? get description =>
-      json['description'] as String? ?? json['title'] as String?;
+  String? get description => wellFormedText(
+    json['description'] as String? ?? json['title'] as String?,
+  );
 
   String? get infoHash => json['infoHash'] as String?;
   int? get fileIdx => json['fileIdx'] as int?;
@@ -23,7 +32,7 @@ final class StreamInfo {
 
   /// `behaviorHints.filename`: the file the addon expects to play, when it
   /// says so (used for subtitle lookups and as a tooltip).
-  String? get filename => behaviorHints['filename'] as String?;
+  String? get filename => wellFormedText(behaviorHints['filename'] as String?);
 
   /// Subtitle files the addon attached to the stream itself (raw
   /// `Subtitles` JSON; `lib/core/state/player.dart` types them).
