@@ -14,6 +14,7 @@ import '../discover/discover_screen.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_controller.dart';
 import '../downloads/offline_play.dart';
+import '../downloads/remove_download_dialog.dart';
 import '../player/player_screen.dart';
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
@@ -503,6 +504,31 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     _tell('Downloading ${request.name}');
   }
 
+  /// Drops the download of [entry] once the user has said what should
+  /// happen to the file -- the Downloads list's own question, asked here so
+  /// the tile that started a download is the tile that undoes it.
+  ///
+  /// The dialog is modal, so it is the guard against a second press while
+  /// it stands, and a dismissed one removes nothing.
+  Future<void> _deleteDownload(DownloadView entry) async {
+    final client = _downloadsClient;
+    final downloads = _downloads;
+    if (client == null || downloads == null) return;
+    final deleteFiles = await askToRemoveDownload(context, entry);
+    if (deleteFiles == null || !mounted) return;
+    DownloadRemoveResult? result;
+    try {
+      result = await client.remove(entry.key, deleteFiles: deleteFiles);
+    } catch (_) {
+      if (mounted) _tell('This download could not be removed.');
+    }
+    // The tiles read the registry, so they only stop saying the title is
+    // kept once the fresh listing is in.
+    await downloads.refresh();
+    if (result == null || !mounted) return;
+    _tell(downloadRemovedMessage(result, entry));
+  }
+
   void _tell(String message) =>
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
@@ -781,6 +807,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                 _pending.contains(_streamKey(videoId, stream)),
             onDownload: (group, stream) =>
                 _download(state, meta, group, stream),
+            onDelete: _deleteDownload,
           );
     return [
       SliverToBoxAdapter(
@@ -1447,14 +1474,15 @@ class _ReplaceDialog extends StatelessWidget {
 }
 
 /// What a stream tile knows about offline downloads: the entry for its
-/// stream if the registry has one, whether a pin for it is in flight, and
-/// how to start one. Bound to the addon group the tile sits in, because a
-/// pin records the request its stream came from.
+/// stream if the registry has one, whether a pin for it is in flight, how
+/// to start one and how to drop one. Bound to the addon group the tile sits
+/// in, because a pin records the request its stream came from.
 final class _StreamDownloads {
   const _StreamDownloads({
     required this.videoEntry,
     required this.isPending,
     required this.onDownload,
+    required this.onDelete,
     this.group,
   });
 
@@ -1462,6 +1490,10 @@ final class _StreamDownloads {
   final DownloadView? Function() videoEntry;
   final bool Function(StreamInfo stream) isPending;
   final void Function(StreamGroup group, StreamInfo stream) onDownload;
+
+  /// Removes one, after asking what becomes of the file. Unlike a download
+  /// this needs no group: an entry names the stream it was taken from.
+  final void Function(DownloadView entry) onDelete;
 
   /// The addon group; null until [forGroup] binds one, which is when a tile
   /// can offer to download at all.
@@ -1471,6 +1503,7 @@ final class _StreamDownloads {
     videoEntry: videoEntry,
     isPending: isPending,
     onDownload: onDownload,
+    onDelete: onDelete,
     group: group,
   );
 
@@ -1869,9 +1902,10 @@ class _StreamTile extends StatelessWidget {
   }
 
   /// What the download side of the tile shows: a button to start one, a
-  /// ring while it arrives, a check once it is on the device, and the
-  /// error as a button that pins again. Nothing at all for a stream the
-  /// server cannot keep (anything but a torrent) or with no client above.
+  /// ring while it arrives, a button that deletes it once it is on the
+  /// device, and the error as a button that pins again. Nothing at all for
+  /// a stream the server cannot keep (anything but a torrent) or with no
+  /// client above.
   Widget? _downloadAffordance(BuildContext context) {
     final downloads = this.downloads;
     if (downloads == null) return null;
@@ -1899,12 +1933,16 @@ class _StreamTile extends StatelessWidget {
       );
     }
     return switch (entry.state) {
-      DownloadState.complete => IconTheme.merge(
-        data: IconThemeData(color: Theme.of(context).colorScheme.primary),
-        child: const _DownloadIndicator(
-          tooltip: kDownloadedTooltip,
-          icon: Icons.download_done,
-        ),
+      // The finished state is a button, not a tick: the picker that took
+      // the download is where the user is when they decide they do not
+      // want it any more, and the tick said the same thing while doing
+      // nothing. It keeps the primary colour of the tick it replaces, so
+      // the row still reads as "this one is on the device".
+      DownloadState.complete => IconButton(
+        tooltip: kDownloadDeleteTooltip,
+        color: Theme.of(context).colorScheme.primary,
+        icon: const Icon(Icons.delete_outline),
+        onPressed: () => downloads.onDelete(entry),
       ),
       DownloadState.error => IconButton(
         tooltip: kDownloadRetryTooltip,
@@ -1933,37 +1971,29 @@ class _StreamTile extends StatelessWidget {
   };
 }
 
-/// The non-pressable half of the download affordance: a progress ring (or
-/// a spinner while there is no fraction to show) or a finished icon, padded
-/// to the size of the [IconButton] it stands in for so the tile does not
-/// jump when the state changes.
+/// The non-pressable half of the download affordance: a progress ring, or
+/// a spinner while there is no fraction to show, padded to the size of the
+/// [IconButton] it stands in for so the tile does not jump when the state
+/// changes.
 class _DownloadIndicator extends StatelessWidget {
-  const _DownloadIndicator({required this.tooltip, this.progress, this.icon});
+  const _DownloadIndicator({required this.tooltip, this.progress});
 
   final String tooltip;
 
   /// `0..1` of the file; null spins.
   final double? progress;
 
-  /// Shown instead of a ring.
-  final IconData? icon;
-
   @override
-  Widget build(BuildContext context) {
-    final icon = this.icon;
-    return Tooltip(
-      message: tooltip,
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: SizedBox.square(
-          dimension: 20,
-          child: icon != null
-              ? Icon(icon, size: 20)
-              : CircularProgressIndicator(strokeWidth: 2, value: progress),
-        ),
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: Padding(
+      padding: const EdgeInsets.all(10),
+      child: SizedBox.square(
+        dimension: 20,
+        child: CircularProgressIndicator(strokeWidth: 2, value: progress),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _HintChip extends StatelessWidget {

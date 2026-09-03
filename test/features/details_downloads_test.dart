@@ -6,6 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/downloads/offline_play.dart';
+import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/widgets/download_badge.dart';
@@ -484,7 +485,7 @@ void main() {
   });
 
   group('a stream already downloaded', () {
-    Future<void> pumpWith(
+    Future<FakeDownloadsClient> pumpWith(
       WidgetTester tester,
       String state, {
       int done = 0,
@@ -500,6 +501,7 @@ void main() {
             videoId: movieId,
             stream: {'infoHash': movieHash, 'fileIdx': 0},
             state: state,
+            name: 'Night of the Living Dead',
             size: 1000000,
             downloaded: done,
           ),
@@ -508,15 +510,93 @@ void main() {
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(core, downloads));
       await tester.pumpAndSettle();
+      return downloads;
     }
 
-    testWidgets('shows it is on the device instead of offering it', (
+    testWidgets('offers to delete it instead of offering to download it', (
       tester,
     ) async {
       await pumpWith(tester, 'complete', done: 1000000);
 
-      expect(onStreamTile(kDownloadedTooltip), findsOneWidget);
+      expect(onStreamTile(kDownloadDeleteTooltip), findsOneWidget);
       expect(find.byTooltip(kDownloadTooltip), findsNothing);
+      // A tick said the same thing and did nothing; this is pressable.
+      expect(
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: onStreamTile(kDownloadDeleteTooltip),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    });
+
+    testWidgets('deleting from the tile keeps the file when asked to', (
+      tester,
+    ) async {
+      final downloads = await pumpWith(tester, 'complete', done: 1000000);
+
+      await tester.tap(onStreamTile(kDownloadDeleteTooltip));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove Night of the Living Dead?'), findsOneWidget);
+      await tester.tap(find.text(RemoveDownloadDialog.keepLabel));
+      await tester.pumpAndSettle();
+
+      expect(downloads.removed, [
+        (key: '$movieId:$movieId', deleteFiles: false),
+      ]);
+      expect(
+        find.text('Removed Night of the Living Dead from downloads.'),
+        findsOneWidget,
+      );
+      // The registry no longer has it, so the tile offers a download again.
+      expect(onStreamTile(kDownloadTooltip), findsOneWidget);
+    });
+
+    testWidgets('deleting from the tile takes the bytes when asked to', (
+      tester,
+    ) async {
+      final downloads = await pumpWith(tester, 'complete', done: 1000000);
+
+      await tester.tap(onStreamTile(kDownloadDeleteTooltip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(RemoveDownloadDialog.deleteLabel));
+      await tester.pumpAndSettle();
+
+      expect(downloads.removed, [
+        (key: '$movieId:$movieId', deleteFiles: true),
+      ]);
+      expect(find.text('Deleted Night of the Living Dead.'), findsOneWidget);
+    });
+
+    testWidgets('a dismissed question removes nothing', (tester) async {
+      final downloads = await pumpWith(tester, 'complete', done: 1000000);
+
+      await tester.tap(onStreamTile(kDownloadDeleteTooltip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(downloads.removed, isEmpty);
+      expect(onStreamTile(kDownloadDeleteTooltip), findsOneWidget);
+    });
+
+    testWidgets('a removal that threw is a sentence, not a crash', (
+      tester,
+    ) async {
+      final downloads = await pumpWith(tester, 'complete', done: 1000000);
+      downloads.removeError = StateError('the server is not running');
+
+      await tester.tap(onStreamTile(kDownloadDeleteTooltip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(RemoveDownloadDialog.deleteLabel));
+      await tester.pumpAndSettle();
+
+      expect(find.text('This download could not be removed.'), findsOneWidget);
+      expect(onStreamTile(kDownloadDeleteTooltip), findsOneWidget);
     });
 
     testWidgets('shows how far along it is while it arrives', (tester) async {
@@ -756,7 +836,7 @@ void main() {
       await tester.pumpWidget(harness(core, downloads));
       await tester.pumpAndSettle();
 
-      expect(onStreamTile(kDownloadedTooltip), findsNothing);
+      expect(onStreamTile(kDownloadDeleteTooltip), findsNothing);
       expect(onStreamTile(kDownloadTooltip), findsNothing);
       expect(onStreamTile(kDownloadReplaceTooltip), findsOneWidget);
     });

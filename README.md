@@ -42,7 +42,10 @@ Rust engine for addons, catalogs, library, and playback state) and
 > long-press to remove, mark watched, rewind or mute notifications), and
 > the details header has a bookmark to add or remove a title. **Downloads**
 > keeps a torrent stream on the device: the download button on a stream tile
-> pins the file through the embedded server, badges on the episode list and
+> pins the file through the embedded server and becomes a delete button once
+> the file is whole, so the tile that took a download is the tile that undoes
+> it -- asking, as the list does, whether the bytes go with the entry.
+> Badges on the episode list and
 > the details header say what is kept and how far along, and the Downloads
 > screen (from Settings, or the "Downloaded" chip in the Library) lists
 > everything with its progress, plays a finished one, retries a stopped one,
