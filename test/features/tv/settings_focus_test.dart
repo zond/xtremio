@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/settings/account_section.dart';
+import 'package:xtremio/features/settings/core_settings.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 
@@ -12,18 +13,23 @@ import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
 /// An anonymous profile with default settings, plus what Addons needs.
-FakeCoreClient fakeCore() => FakeCoreClient(
+///
+/// [embeddedUrl] is what `init` reported as the embedded stream server, so
+/// that the streaming-server section offers both of its choices.
+FakeCoreClient fakeCore({Uri? embeddedUrl}) => FakeCoreClient(
   state: {
     CoreField.ctx: loadCtxLoggedOutFixture(),
     CoreField.installedAddons: loadInstalledAddonsFixture(),
     CoreField.remoteAddons: loadRemoteAddonsFixture(),
   },
+  initInfo: CoreInitInfo(serverBaseUrl: embeddedUrl, schemaVersion: 25),
 );
 
 Widget harness(FakeCoreClient core) => DeviceScope(
   profile: tv,
   child: CoreScope(
     client: core,
+    initInfo: core.initInfo,
     child: const MaterialApp(home: SettingsScreen()),
   ),
 );
@@ -84,6 +90,47 @@ void main() {
     await downTo(tester, 'Addons');
     await press(tester, LogicalKeyboardKey.select);
     expect(find.byType(AddonsScreen), findsOneWidget);
+  });
+
+  testWidgets('the D-pad walks the streaming-server choices and off them', (
+    tester,
+  ) async {
+    useScreen(tester, tvSize);
+    final core = fakeCore(embeddedUrl: Uri.parse('http://127.0.0.1:11470'));
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await downTo(tester, 'Embedded server');
+    expect(core.dispatched, isEmpty, reason: 'walking onto one picks nothing');
+
+    // Flutter's RadioGroup takes all four arrow keys to move the
+    // *selection*, and wraps around at the ends: on a television that shut
+    // the remote inside the pair for good, rewriting the setting on every
+    // press. Down walks the choices and then leaves them.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), 'Remote server');
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), isNot('Embedded server'));
+    expect(focusedLabel(tester), isNot('Remote server'));
+
+    // And up walks back in, and out of the top.
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusedLabel(tester), 'Remote server');
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusedLabel(tester), 'Embedded server');
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusedLabel(tester), isNot('Embedded server'));
+    expect(focusedLabel(tester), isNot('Remote server'));
+    expect(core.dispatched, isEmpty, reason: 'nothing was chosen yet');
+
+    // Select is what picks one: the remote choice opens its URL field.
+    await downTo(tester, 'Remote server');
+    await press(tester, LogicalKeyboardKey.select);
+    expect(
+      find.byKey(StreamingServerSection.remoteUrlFieldKey),
+      findsOneWidget,
+    );
   });
 
   testWidgets('select flips a switch and picks from a choice menu', (

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
 import '../../widgets/remote_field_exit.dart';
 import '../player/language_names.dart';
 import '../player/playback_engine.dart';
@@ -394,83 +395,133 @@ class _StreamingServerSectionState extends State<StreamingServerSection> {
     widget.onSetting(ProfileSettings.streamingServerUrlKey, text);
   }
 
+  /// One of the two server choices: which server the engine streams from.
+  ///
+  /// A radio in the group off a television. On one it is a plain tile with
+  /// the radio's own icon instead, because [RadioGroup] claims all four
+  /// arrow keys while one of its radios has focus -- they move the
+  /// *selection*, wrapping around at the ends -- so a D-pad that walked
+  /// onto the pair could never leave it again, and rewrote the setting on
+  /// every press trying. As a tile the choice is a stop the D-pad walks
+  /// through and select presses, like every other tile on the screen.
+  Widget _choice({
+    required bool isTv,
+    required Key key,
+    required bool value,
+    required bool selected,
+    required bool enabled,
+    required String title,
+    Widget? subtitle,
+  }) {
+    if (!isTv) {
+      return RadioListTile<bool>(
+        key: key,
+        value: value,
+        enabled: enabled,
+        title: Text(title),
+        subtitle: subtitle,
+      );
+    }
+    return ListTile(
+      key: key,
+      enabled: enabled,
+      leading: Icon(
+        selected ? Icons.radio_button_checked : Icons.radio_button_off,
+      ),
+      title: Text(title),
+      subtitle: subtitle,
+      onTap: () => _pick(value),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final embedded = widget.embeddedUrl;
     final remote = _remote;
     final error = _error;
-    return RadioGroup<bool>(
-      groupValue: remote,
-      onChanged: _pick,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          RadioListTile<bool>(
-            key: StreamingServerSection.embeddedKey,
-            value: false,
-            enabled: embedded != null,
-            title: const Text('Embedded server'),
-            subtitle: Text(embedded?.toString() ?? 'Not running'),
-          ),
-          RadioListTile<bool>(
-            key: StreamingServerSection.remoteKey,
-            value: true,
-            title: const Text('Remote server'),
-            subtitle: remote
-                ? null
-                : const Text('A stream-server or Stremio service elsewhere'),
-          ),
-          if (remote)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        // On a TV the D-pad has to be able to leave the
-                        // field again.
-                        child: RemoteFieldExit(
+    final isTv = DeviceScope.isTv(context);
+    final choices = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _choice(
+          isTv: isTv,
+          key: StreamingServerSection.embeddedKey,
+          value: false,
+          selected: !remote,
+          enabled: embedded != null,
+          title: 'Embedded server',
+          subtitle: Text(embedded?.toString() ?? 'Not running'),
+        ),
+        _choice(
+          isTv: isTv,
+          key: StreamingServerSection.remoteKey,
+          value: true,
+          selected: remote,
+          enabled: true,
+          title: 'Remote server',
+          subtitle: remote
+              ? null
+              : const Text('A stream-server or Stremio service elsewhere'),
+        ),
+        if (remote)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      // On a TV the D-pad has to be able to leave the
+                      // field again.
+                      child: RemoteFieldExit(
+                        controller: _url,
+                        child: TextField(
+                          key: StreamingServerSection.remoteUrlFieldKey,
                           controller: _url,
-                          child: TextField(
-                            key: StreamingServerSection.remoteUrlFieldKey,
-                            controller: _url,
-                            keyboardType: TextInputType.url,
-                            autocorrect: false,
-                            decoration: const InputDecoration(
-                              labelText: 'Server URL',
-                              hintText: 'http://192.168.1.10:11470',
-                            ),
-                            onSubmitted: (_) => _save(),
+                          keyboardType: TextInputType.url,
+                          autocorrect: false,
+                          decoration: const InputDecoration(
+                            labelText: 'Server URL',
+                            hintText: 'http://192.168.1.10:11470',
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton.tonal(
-                        key: StreamingServerSection.saveRemoteUrlKey,
-                        onPressed: _save,
-                        child: const Text('Save'),
-                      ),
-                    ],
-                  ),
-                  if (error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        error,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
+                          onSubmitted: (_) => _save(),
                         ),
                       ),
                     ),
-                ],
-              ),
+                    const SizedBox(width: 12),
+                    FilledButton.tonal(
+                      key: StreamingServerSection.saveRemoteUrlKey,
+                      onPressed: _save,
+                      child: const Text('Save'),
+                    ),
+                  ],
+                ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      error,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+              ],
             ),
-        ],
-      ),
+          ),
+      ],
     );
+    // A television gets no [RadioGroup]: nothing under it is a radio, and
+    // the group exists to give the radios their keyboard behaviour.
+    return isTv
+        ? choices
+        : RadioGroup<bool>(
+            groupValue: remote,
+            onChanged: _pick,
+            child: choices,
+          );
   }
 }
 
