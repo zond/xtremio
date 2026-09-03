@@ -49,6 +49,35 @@ is patched to stop also adding the dropped android-x86 ABI, which Flutter
 3.47 can no longer package — see `rust_builder/README.md`). Output lands at
 `build/app/outputs/flutter-apk/app-debug.apk` (or `app-release.apk`).
 
+**The APK carries only the ABI(s) actually requested.** `--target-platform`
+by itself only controls what *Flutter* compiles and copies in — `libapp.so`,
+`libflutter.so`, and `libxtremio_core.so` via cargokit — never the prebuilt
+native libraries a plugin's AAR ships. `media_kit_libs_android_video` bundles
+`libmpv.so`, `libdartjni.so` and `libmediakitandroidhelper.so` for every ABI
+regardless of what was requested, and only AGP's `ndk.abiFilters` packaging
+filter prunes those. The Flutter Gradle plugin does set a default
+`abiFilters` itself, but always to all three ABIs it supports — that default
+exists only to keep 32-bit x86 out for Google Play, not to track
+`--target-platform` — so before this was fixed, a `--target-platform
+android-arm64` release build still shipped `armeabi-v7a` and `x86_64` copies
+of every plugin's libraries: an 83.1 MB APK for a build targeting one ABI,
+about 28 MB of it libraries for ABIs never asked for (verified with
+`unzip -l` — our own `libxtremio_core.so` was already correctly single-ABI).
+`android/app/build.gradle.kts` now re-derives `defaultConfig.ndk.abiFilters`
+from the same `-Ptarget-platform` Gradle property Flutter's own plugin reads,
+so the filter always matches what was actually requested:
+
+| Build | APK size | ABI dirs in the APK |
+|---|---|---|
+| `--target-platform android-arm64` (before the fix) | 83.1 MB | `arm64-v8a`, `armeabi-v7a`, `x86_64` |
+| `--target-platform android-arm64` (after) | 54.7 MB | `arm64-v8a` only |
+| `--target-platform android-x64` (after) | 61.6 MB | `x86_64` only |
+| no `--target-platform` (after) | 157.4 MB | all three, unchanged — Flutter's own default (arm, arm64, x64) is left alone |
+
+`--split-per-abi` is untouched by this (AGP's own ABI splits already produce
+one single-ABI APK per split), and so is `-P disable-abi-filtering=true`, the
+existing Flutter escape hatch out of ABI filtering entirely.
+
 ## Manifest and network decisions, and why
 
 - **`INTERNET` permission** is declared in the main manifest. Flutter's

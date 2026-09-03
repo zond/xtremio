@@ -70,6 +70,46 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Prune plugins' prebuilt native libraries down to the ABI(s) this
+        // build actually targets. `--target-platform` only controls what
+        // *Flutter itself* compiles and copies in (libapp.so, libflutter.so,
+        // libxtremio_core.so via cargokit) -- it never reaches the merged
+        // jniLibs from a plugin's AAR. media_kit_libs_android_video, for
+        // one, ships prebuilt libmpv/libdartjni/libmediakitandroidhelper for
+        // every ABI in its AAR regardless, and only `ndk.abiFilters` (an AGP
+        // packaging filter, not a Flutter one) prunes those. The Flutter
+        // Gradle plugin does set a default itself (`FlutterPlugin.
+        // configureAbiWithoutSplits`), but always to *all three* ABIs it
+        // supports -- that default exists only to keep 32-bit x86 out for
+        // Google Play, not to track what `--target-platform` actually asked
+        // for -- so without this, a single-ABI build still ships every
+        // plugin's libraries for the other two. Re-derive the filter from
+        // the same `-Ptarget-platform` Gradle property Flutter's own plugin
+        // reads (`FlutterPluginUtils.PROP_TARGET_PLATFORM`), so this follows
+        // whatever `flutter build apk` was told to build: a plain
+        // `flutter build apk` (no target-platform passed) leaves Flutter's
+        // own default -- all three ABIs -- untouched, and `--split-per-abi`
+        // is left alone too, since AGP's ABI splits already produce one
+        // single-ABI APK per split and don't need this override to do it.
+        val targetPlatformProperty = project.findProperty("target-platform") as String?
+        val isSplitPerAbi = (project.findProperty("split-per-abi") as String?)?.toBoolean() ?: false
+        val abiFilteringDisabled = (project.findProperty("disable-abi-filtering") as String?)?.toBoolean() ?: false
+        if (targetPlatformProperty != null && !isSplitPerAbi && !abiFilteringDisabled) {
+            val requestedAbis =
+                targetPlatformProperty.split(",").map { platform ->
+                    when (platform) {
+                        "android-arm" -> "armeabi-v7a"
+                        "android-arm64" -> "arm64-v8a"
+                        "android-x64" -> "x86_64"
+                        else -> throw GradleException("Unknown Flutter target-platform: $platform")
+                    }
+                }
+            ndk {
+                abiFilters.clear()
+                abiFilters.addAll(requestedAbis)
+            }
+        }
     }
 
     buildTypes {
