@@ -62,7 +62,16 @@ class FocusableTile extends StatefulWidget {
 class _FocusableTileState extends State<FocusableTile> {
   bool _focused = false;
 
-  bool _autofocus(FocusMemoryStore? memory) {
+  /// Decided once, when the tile is first built, and never again: a tile
+  /// autofocuses on appearing as the remembered (or default) tile, not on
+  /// later becoming it. A list that rebuilds an existing tile with another
+  /// item's id (an unkeyed strip whose rows shift when one is inserted
+  /// above them) must not pull focus off wherever the user has it; and
+  /// [Focus] re-applies autofocus whenever the flag turns true, so it has
+  /// to stay whatever it was.
+  late final bool _autofocus = _decideAutofocus(FocusMemory.maybeOf(context));
+
+  bool _decideAutofocus(FocusMemoryStore? memory) {
     if (memory == null) return widget.defaultFocus;
     final remembered = memory.lastFocused;
     if (remembered == null) return widget.defaultFocus;
@@ -100,7 +109,7 @@ class _FocusableTileState extends State<FocusableTile> {
       onLongPress: widget.onLongPress,
       onSecondaryTap: widget.onSecondaryTap,
       focusNode: widget.focusNode,
-      autofocus: _autofocus(FocusMemory.maybeOf(context)),
+      autofocus: _autofocus,
       onFocusChange: _onFocusChange,
       borderRadius: widget.borderRadius,
       child: FocusRing(

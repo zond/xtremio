@@ -106,17 +106,21 @@ void main() {
   });
 
   group('focus memory', () {
-    /// Three tiles a, b, c under [store] (or none); a is the default.
-    Widget remembered(FocusMemoryStore? store) {
+    /// Three tiles ([ids], a, b, c by default) under [store] (or none); the
+    /// first is the default.
+    Widget remembered(
+      FocusMemoryStore? store, {
+      List<String> ids = const ['a', 'b', 'c'],
+    }) {
       final row = Row(
         children: [
-          for (final id in ['a', 'b', 'c'])
+          for (final id in ids)
             SizedBox.square(
               dimension: 100,
               child: FocusableTile(
                 onTap: () {},
                 memoryId: id,
-                defaultFocus: id == 'a',
+                defaultFocus: id == ids.first,
                 child: Text('tile $id'),
               ),
             ),
@@ -175,6 +179,36 @@ void main() {
             .where((r) => r.focused),
         isEmpty,
       );
+    });
+
+    testWidgets('a tile rebuilt as the remembered one does not take focus', (
+      tester,
+    ) async {
+      // Focus is elsewhere (on a button outside the tiles' scope, as the
+      // rail is outside a tab's) and tile z is remembered but not built;
+      // then the strip shifts so that the widget that showed tile a now
+      // shows tile z. Autofocus was decided when the tile first appeared;
+      // becoming the remembered tile later must not steal focus.
+      final store = FocusMemoryStore()..lastFocused = 'z';
+      final button = FocusNode();
+      addTearDown(button.dispose);
+      Widget page(List<String> ids) => Column(
+        children: [
+          TextButton(focusNode: button, onPressed: () {}, child: Text('x')),
+          FocusScope(child: remembered(store, ids: ids)),
+        ],
+      );
+      await tester.pumpWidget(harness(page(['a', 'b', 'c'])));
+      button.requestFocus();
+      await tester.pumpAndSettle();
+      expect(button.hasPrimaryFocus, isTrue);
+
+      await tester.pumpWidget(harness(page(['z', 'b', 'c'])));
+      await tester.pumpAndSettle();
+
+      expect(find.text('tile z'), findsOneWidget);
+      expect(button.hasPrimaryFocus, isTrue);
+      expect(ringOf(tester, 'tile z'), isFalse);
     });
 
     testWidgets('without a memory the default tile still takes focus', (

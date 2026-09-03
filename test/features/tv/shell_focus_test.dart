@@ -14,19 +14,21 @@ import '../../support/fixtures.dart';
 const tv = DeviceProfile(isTv: true, hasTouch: false);
 
 /// A core with the Board, Library and Search tabs all able to settle.
-FakeCoreClient fakeCore() => FakeCoreClient(
-  state: {
-    CoreField.board: loadBoardFixture(),
-    CoreField.continueWatchingPreview: loadContinueWatchingFixture(),
-    CoreField.library: loadLibraryFixture(),
-    CoreField.ctx: loadCtxLoggedOutFixture(),
-    CoreField.search: {
-      'selected': null,
-      'catalogs': <Object>[],
-      'catalogLabels': <Object>[],
-    },
-  },
-);
+FakeCoreClient fakeCore({Map<String, dynamic>? continueWatching}) =>
+    FakeCoreClient(
+      state: {
+        CoreField.board: loadBoardFixture(),
+        CoreField.continueWatchingPreview:
+            continueWatching ?? loadContinueWatchingFixture(),
+        CoreField.library: loadLibraryFixture(),
+        CoreField.ctx: loadCtxLoggedOutFixture(),
+        CoreField.search: {
+          'selected': null,
+          'catalogs': <Object>[],
+          'catalogLabels': <Object>[],
+        },
+      },
+    );
 
 /// The shell as the app mounts it, on [device].
 Widget harness(FakeCoreClient core, {DeviceProfile device = tv}) => DeviceScope(
@@ -220,5 +222,36 @@ void main() {
 
     expect(find.byType(BoardScreen), findsOneWidget);
     expect(focusedTileName(tester), popular[0]);
+  });
+
+  testWidgets('a row arriving while the rail is focused leaves focus on the '
+      'rail', (tester) async {
+    useScreen(tester, const Size(1280, 720));
+    final core = fakeCore(continueWatching: {'items': <Object>[]});
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+    final popular = popularNames();
+    expect(focusedTileName(tester), popular[0]);
+
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusIn<NavigationRail>(), isTrue);
+
+    // The continue-watching row appears above the Popular row, so every row
+    // moves down one slot and the widgets that showed row n now show row
+    // n - 1, among them the tile the Board remembers. That is a rebuild,
+    // not a key press, so focus must stay where the user put it.
+    core.setState(
+      CoreField.continueWatchingPreview,
+      loadContinueWatchingFixture(),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Continue watching'), findsOneWidget);
+
+    expect(focusIn<NavigationRail>(), isTrue);
+    expect(focusedTileName(tester), isNull);
+
+    // Right from the rail still enters the Board on the remembered tile.
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<BoardScreen>(), isTrue);
   });
 }
