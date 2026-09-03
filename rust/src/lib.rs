@@ -6,6 +6,8 @@
 //!
 //! - `env`: the `stremio_core::runtime::Env` (HTTP, storage, executors)
 //! - `model`: the `#[derive(Model)]` app model and its JSON projection
+//! - `state`: the one process-global value the modules below keep their
+//!   state in, created by `core::init` and dropped by `core::shutdown`
 //! - `core`: the stremio-core Runtime (init, dispatch, state, events)
 //! - `downloads`: the offline-downloads registry over the server's pins
 //! - `server`: the in-process stream-server (torrent/archive bytes over HTTP)
@@ -24,3 +26,4 @@ pub mod guard;
 pub mod logging;
 pub mod model;
 pub mod server;
+pub mod state;

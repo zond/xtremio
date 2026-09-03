@@ -16,11 +16,15 @@
 //! around a Dart `StreamSink`, or by tests around a channel). Events emitted
 //! before a sink exists are buffered, bounded, so nothing is lost across the
 //! subscribe/init ordering.
+//!
+//! None of that is a `static` of its own: it is [`CoreState`], one field of
+//! the process's [`crate::state::AppState`], which `init` creates and
+//! `shutdown` takes away whole.
 
 use std::collections::VecDeque;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use anyhow::Context;
 use futures::StreamExt;
@@ -44,6 +48,7 @@ use url::Url;
 use crate::env::{self, XtremioEnv};
 use crate::model::{parse_field, XtremioModel, XtremioModelField};
 use crate::server;
+use crate::state::AppState;
 
 /// Capacity of the Runtime's event channel. `Runtime::emit` panics when it is
 /// full, so the pump must always be running while the Runtime exists.
@@ -54,9 +59,50 @@ const MAX_PENDING_EVENTS: usize = 1000;
 /// Receives one serialized `RuntimeEvent`; returns `false` once closed.
 pub type EventSink = Box<dyn Fn(String) -> bool + Send + Sync>;
 
-static RUNTIME: RwLock<Option<Runtime<XtremioEnv, XtremioModel>>> = RwLock::new(None);
-static EVENT_SINK: RwLock<Option<EventSink>> = RwLock::new(None);
-static PENDING_EVENTS: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
+/// The stremio-core half of [`AppState`]: the Runtime, where its events go
+/// and the ones with nowhere to go yet. Three locks rather than one because
+/// they are taken for unrelated reasons -- a dispatch reads the Runtime
+/// while the pump is delivering an event -- and never nested.
+#[derive(Default)]
+pub struct CoreState {
+    runtime: RwLock<Option<Runtime<XtremioEnv, XtremioModel>>>,
+    event_sink: RwLock<Option<EventSink>>,
+    pending_events: Mutex<VecDeque<String>>,
+}
+
+/// A poisoned lock only means a previous holder panicked; the value behind
+/// it is still valid, so every accessor here reads through the poison.
+impl CoreState {
+    fn runtime(&self) -> RwLockReadGuard<'_, Option<Runtime<XtremioEnv, XtremioModel>>> {
+        self.runtime
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn runtime_mut(&self) -> RwLockWriteGuard<'_, Option<Runtime<XtremioEnv, XtremioModel>>> {
+        self.runtime
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn sink(&self) -> RwLockReadGuard<'_, Option<EventSink>> {
+        self.event_sink
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn sink_mut(&self) -> RwLockWriteGuard<'_, Option<EventSink>> {
+        self.event_sink
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn pending(&self) -> MutexGuard<'_, VecDeque<String>> {
+        self.pending_events
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
 
 /// Everything `init` needs; directories are chosen by the host (Dart).
 #[derive(Clone, Debug)]
@@ -75,25 +121,33 @@ pub struct InitOutcome {
     pub schema_version: u32,
 }
 
-fn runtime_guard() -> std::sync::RwLockReadGuard<'static, Option<Runtime<XtremioEnv, XtremioModel>>>
-{
-    RUNTIME
-        .read()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+fn not_initialized() -> anyhow::Error {
+    anyhow::anyhow!("core is not initialized")
+}
+
+/// Runs `f` against the running Runtime. No state at all and a state with no
+/// Runtime in it are the same answer to the caller: the core is not up.
+fn with_runtime<T>(
+    f: impl FnOnce(&Runtime<XtremioEnv, XtremioModel>) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    let app = crate::state::current().ok_or_else(not_initialized)?;
+    let guard = app.core.runtime();
+    f(guard.as_ref().ok_or_else(not_initialized)?)
 }
 
 /// Whether `init` has completed and `shutdown` has not run since.
 pub fn is_initialized() -> bool {
-    runtime_guard().is_some()
+    crate::state::current().is_some_and(|app| app.core.runtime().is_some())
 }
 
 /// Installs the event sink, replaying anything buffered while none was set.
+/// Called before `init` by design, which is what creates the state.
 pub fn set_event_sink(sink: EventSink) {
-    let pending: Vec<String> = PENDING_EVENTS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .drain(..)
-        .collect();
+    set_event_sink_in(&crate::state::state(), sink);
+}
+
+fn set_event_sink_in(app: &AppState, sink: EventSink) {
+    let pending: Vec<String> = app.core.pending().drain(..).collect();
     let mut open = true;
     for event in pending {
         if !sink(event) {
@@ -101,35 +155,27 @@ pub fn set_event_sink(sink: EventSink) {
             break;
         }
     }
-    *EVENT_SINK
-        .write()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = open.then_some(sink);
+    *app.core.sink_mut() = open.then_some(sink);
 }
 
-fn emit(event: String) {
+fn emit(app: &AppState, event: String) {
     let delivered = {
-        let guard = EVENT_SINK
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let guard = app.core.sink();
         guard.as_ref().map(|sink| sink(event.clone()))
     };
     match delivered {
         Some(true) => {}
         Some(false) => {
             tracing::info!("core event sink closed; buffering events");
-            *EVENT_SINK
-                .write()
-                .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
-            buffer(event);
+            *app.core.sink_mut() = None;
+            buffer(app, event);
         }
-        None => buffer(event),
+        None => buffer(app, event),
     }
 }
 
-fn buffer(event: String) {
-    let mut pending = PENDING_EVENTS
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+fn buffer(app: &AppState, event: String) {
+    let mut pending = app.core.pending();
     if pending.len() >= MAX_PENDING_EVENTS {
         pending.pop_front();
     }
@@ -188,11 +234,11 @@ fn retarget_loopback_settings(settings: &mut Settings, embedded: &Url) -> bool {
 /// server URL is loopback:11470). Dispatches `UpdateSettings` with the
 /// retargeted copy when the current URL is loopback but not the embedded
 /// server; a remote URL, or no embedded server, leaves everything alone.
-fn reapply_loopback_retarget() {
+fn reapply_loopback_retarget(app: &AppState) {
     let Some(embedded) = server::base_url() else {
         return;
     };
-    let guard = runtime_guard();
+    let guard = app.core.runtime();
     let Some(runtime) = guard.as_ref() else {
         return;
     };
@@ -212,7 +258,11 @@ fn reapply_loopback_retarget() {
 /// Boots the engine. Idempotent: a second call returns the current outcome.
 pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     crate::logging::init();
-    if is_initialized() {
+    // The state may already exist: Dart subscribes to the event streams
+    // before it calls `core_init`, and that is what created it.
+    let app = crate::state::state();
+    let already_up = app.core.runtime().is_some();
+    if already_up {
         return Ok(InitOutcome {
             server_base_url: server::base_url(),
             schema_version: SCHEMA_VERSION,
@@ -281,10 +331,15 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
 
     // The pump must outlive every Runtime clone: a full channel panics inside
     // `Runtime::emit`. Per-event work is contained so the task never dies.
-    XtremioEnv::exec_concurrent(events.for_each(|event| {
+    // It holds the state it was started for, so an event still in flight
+    // when `shutdown` takes that state away is delivered to the sinks that
+    // asked for it and not to whatever a later `init` installs.
+    let pump = Arc::clone(&app);
+    XtremioEnv::exec_concurrent(events.for_each(move |event| {
+        let app = &pump;
         let _ = catch_unwind(AssertUnwindSafe(|| {
             match serde_json::to_string(&event) {
-                Ok(json) => emit(json),
+                Ok(json) => emit(app, json),
                 Err(error) => tracing::warn!(%error, "could not serialize runtime event"),
             }
             // After the event is out: Dart sees the login/logout first and the
@@ -294,15 +349,13 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
                 Event::UserAuthenticated { .. } | Event::UserLoggedOut { .. },
             ) = &event
             {
-                reapply_loopback_retarget();
+                reapply_loopback_retarget(app);
             }
         }));
         futures::future::ready(())
     }));
 
-    *RUNTIME
-        .write()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(runtime);
+    *app.core.runtime_mut() = Some(runtime);
 
     // The server persists its own pin set, but a registry entry can outlive
     // it (a purged cache dir, a downloads volume that was not mounted last
@@ -345,40 +398,39 @@ pub fn dispatch(action_json: &str) -> anyhow::Result<()> {
                 error.inner()
             )
         })?;
-    let guard = runtime_guard();
-    let runtime = guard
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("core is not initialized"))?;
-    runtime.dispatch(RuntimeAction {
-        field: envelope.field,
-        action: envelope.action,
-    });
-    Ok(())
+    with_runtime(|runtime| {
+        runtime.dispatch(RuntimeAction {
+            field: envelope.field,
+            action: envelope.action,
+        });
+        Ok(())
+    })
 }
 
 /// Serializes one model field (`snake_case` name) to JSON.
 pub fn get_state(field: &str) -> anyhow::Result<String> {
     let field = parse_field(field)?;
-    let guard = runtime_guard();
-    let runtime = guard
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("core is not initialized"))?;
-    let model = runtime
-        .model()
-        .map_err(|_| anyhow::anyhow!("core model lock is poisoned; re-initialize"))?;
-    model
-        .get_state_json(&field)
-        .context("serialize model field")
+    with_runtime(|runtime| {
+        let model = runtime
+            .model()
+            .map_err(|_| anyhow::anyhow!("core model lock is poisoned; re-initialize"))?;
+        model
+            .get_state_json(&field)
+            .context("serialize model field")
+    })
 }
 
 /// Drops the Runtime (no more dispatches) and stops the embedded server.
 /// The tokio runtimes stay alive for the process lifetime.
+///
+/// The whole [`AppState`] goes with it, and it goes *first*: from here on a
+/// sink, a dispatch or a subscribe addresses a fresh state, never the one
+/// being torn down. Whatever this call took is dropped when it returns.
 pub fn shutdown() -> anyhow::Result<()> {
-    let runtime = RUNTIME
-        .write()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .take();
-    if runtime.is_some() {
+    let Some(app) = crate::state::take() else {
+        return server::stop();
+    };
+    if app.core.runtime_mut().take().is_some() {
         tracing::info!("stremio-core runtime stopped");
     }
     server::stop()
@@ -411,41 +463,43 @@ mod tests {
         assert_eq!(profile.settings.streaming_server_url, remote);
     }
 
+    /// Against a state of this test's own, not the process's: buffering is a
+    /// property of an `AppState`, so nothing here has to be serialized
+    /// against another test or run in a particular order.
     #[test]
     fn events_are_buffered_until_a_sink_arrives_and_bounded() {
-        // Isolated from the Runtime: exercise emit/buffer directly.
-        *EVENT_SINK.write().unwrap() = None;
-        PENDING_EVENTS.lock().unwrap().clear();
+        let app = AppState::default();
         for i in 0..(MAX_PENDING_EVENTS + 5) {
-            emit(format!("e{i}"));
+            emit(&app, format!("e{i}"));
         }
-        assert_eq!(PENDING_EVENTS.lock().unwrap().len(), MAX_PENDING_EVENTS);
-        assert_eq!(PENDING_EVENTS.lock().unwrap().front().unwrap(), "e5");
+        assert_eq!(app.core.pending().len(), MAX_PENDING_EVENTS);
+        assert_eq!(app.core.pending().front().unwrap(), "e5");
 
         let (tx, rx) = std::sync::mpsc::channel();
-        set_event_sink(Box::new(move |event| tx.send(event).is_ok()));
+        set_event_sink_in(&app, Box::new(move |event| tx.send(event).is_ok()));
         let replayed: Vec<String> = rx.try_iter().collect();
         assert_eq!(replayed.len(), MAX_PENDING_EVENTS);
         assert_eq!(replayed[0], "e5");
-        assert!(PENDING_EVENTS.lock().unwrap().is_empty());
+        assert!(app.core.pending().is_empty());
 
-        emit("live".into());
+        emit(&app, "live".into());
         assert_eq!(rx.try_iter().collect::<Vec<_>>(), vec!["live".to_owned()]);
 
         // A closed sink is dropped and events buffer again.
         drop(rx);
-        emit("after-close".into());
-        assert!(EVENT_SINK.read().unwrap().is_none());
+        emit(&app, "after-close".into());
+        assert!(app.core.sink().is_none());
         assert_eq!(
-            PENDING_EVENTS.lock().unwrap().iter().collect::<Vec<_>>(),
+            app.core.pending().iter().collect::<Vec<_>>(),
             vec!["after-close"]
         );
-        PENDING_EVENTS.lock().unwrap().clear();
     }
 
     #[test]
     fn dispatch_and_get_state_fail_before_init() {
-        // Runs in the lib test binary where init is never called.
+        // Runs in the lib test binary, where nothing calls `init`: whether
+        // another test has created the state or not, its Runtime is `None`
+        // and both answers are the same.
         let error = dispatch(r#"{"action":{"action":"Unload"}}"#).unwrap_err();
         assert!(error.to_string().contains("not initialized"), "{error}");
         let error = get_state("ctx").unwrap_err();
