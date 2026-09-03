@@ -275,10 +275,15 @@ impl Env for XtremioEnv {
 
 /// Points storage at a fresh temporary directory for the length of `f`.
 ///
-/// `STORAGE_DIR` is process-global and the whole lib test binary shares it,
-/// so every test that wants one takes this -- here, and not in a module's
-/// own test mod -- and they queue behind each other instead of pulling the
-/// directory out from under one another.
+/// The last test-only lock in the crate, and it is here for the reason
+/// [`STORAGE_DIR`] is a static at all: an `Env` implementation is a type,
+/// so the storage directory cannot be a field of an `AppState` that a test
+/// could keep to itself. Every test that wants one takes this -- here, and
+/// not in a module's own test mod -- and they queue behind each other
+/// instead of pulling the directory out from under one another. Whatever
+/// can be said about a pure function is said about one instead
+/// (`registry_path_in`, `only_downloaded_moved`), and everything else now
+/// runs against its own `AppState`.
 #[cfg(test)]
 static STORAGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -409,13 +414,14 @@ mod tests {
         success: bool,
     }
 
+    /// The one lib test that starts the *process* state's embedded server,
+    /// and it has to: `fetch` reaches `crate::server::token_for` with no
+    /// argument to route it, because `Env` has no `self` (see
+    /// `STORAGE_DIR`). Every other test that wants a server builds an
+    /// `AppState` of its own instead; a second one here would have to
+    /// serialize with this.
     #[test]
     fn fetch_decodes_json_from_the_embedded_server() {
-        // The embedded server is a process-global singleton; serialize
-        // against `server`'s own start/stop test.
-        let _guard = crate::server::LIFECYCLE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tmp = tempfile::tempdir().expect("tempdir");
         let url = crate::server::start(crate::server::StartConfig {
             config_dir: tmp.path().join("server"),

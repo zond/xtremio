@@ -177,6 +177,14 @@ pub(crate) fn base_url_in(app: &AppState) -> Option<Url> {
 /// other; only `start`/`stop` exclude them.
 fn with_handle<T>(f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>) -> anyhow::Result<T> {
     let app = crate::state::current().ok_or_else(not_running)?;
+    with_handle_in(&app, f)
+}
+
+/// [`with_handle`] against a given state.
+fn with_handle_in<T>(
+    app: &AppState,
+    f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
     let guard = app.server.read();
     let handle = guard.as_ref().ok_or_else(not_running)?;
     f(handle)
@@ -284,6 +292,11 @@ fn same_authority(a: &Url, b: &Url) -> bool {
 /// local processes out of the server's settings.
 pub fn token_for(url: &Url) -> Option<String> {
     let app = crate::state::current()?;
+    token_for_in(&app, url)
+}
+
+/// [`token_for`] against a given state.
+fn token_for_in(app: &AppState, url: &Url) -> Option<String> {
     let guard = app.server.read();
     let handle = guard.as_ref()?;
     if is_embedded_url_locked(handle, url) {
@@ -292,13 +305,6 @@ pub fn token_for(url: &Url) -> Option<String> {
         None
     }
 }
-
-/// Serializes tests that start/stop the process-global embedded server:
-/// this module's lifecycle test and `env.rs`'s
-/// `fetch_decodes_json_from_the_embedded_server` both drive it and would
-/// otherwise race when `cargo test` runs unit tests in parallel.
-#[cfg(test)]
-pub(crate) static LIFECYCLE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 mod tests {
@@ -309,32 +315,40 @@ mod tests {
 
     /// `with_handle` (stats, settings) and `token_for` (`Env::fetch`) both
     /// only need to observe the running handle, so they must run
-    /// concurrently rather than serialise on `SERVER`: a slow stats poll
-    /// must never stall an addon/catalog fetch waiting on its bearer token.
-    /// Holds a read lock in one thread via `with_handle`'s closure (blocked
-    /// on a barrier then a sleep) and asserts `token_for` returns from
-    /// another thread almost immediately, well inside the sleep — with a
-    /// `Mutex` instead of a `RwLock` this would take as long as the sleep.
+    /// concurrently rather than serialise on `ServerState`'s lock: a slow
+    /// stats poll must never stall an addon/catalog fetch waiting on its
+    /// bearer token. Holds a read lock in one thread via `with_handle`'s
+    /// closure (blocked on a barrier then a sleep) and asserts `token_for`
+    /// returns from another thread almost immediately, well inside the
+    /// sleep — with a `Mutex` instead of a `RwLock` this would take as long
+    /// as the sleep.
+    ///
+    /// Against a state of its own, so it neither takes the process's
+    /// embedded server away from another test nor has to be serialized
+    /// against one: what is under test is a property of `ServerState`, and
+    /// starting a second server on its own ephemeral port and temp dirs is
+    /// how that gets said.
     #[test]
     fn with_handle_readers_run_concurrently_with_token_for() {
-        let _serialize = LIFECYCLE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-
+        let app = Arc::new(AppState::default());
         let tmp = tempfile::tempdir().expect("tempdir");
-        let url = start(StartConfig {
-            config_dir: tmp.path().join("server"),
-            cache_dir: tmp.path().join("cache"),
-            port: 0,
-            fallback_to_ephemeral: true,
-        })
+        let url = start_in(
+            &app,
+            StartConfig {
+                config_dir: tmp.path().join("server"),
+                cache_dir: tmp.path().join("cache"),
+                port: 0,
+                fallback_to_ephemeral: true,
+            },
+        )
         .expect("server start");
 
         let barrier = Arc::new(Barrier::new(2));
         let handle_thread = std::thread::spawn({
             let barrier = Arc::clone(&barrier);
+            let app = Arc::clone(&app);
             move || {
-                with_handle(|_handle| {
+                with_handle_in(&app, |_handle| {
                     // Reached only once `with_handle`'s read guard is held.
                     barrier.wait();
                     std::thread::sleep(Duration::from_millis(500));
@@ -345,14 +359,14 @@ mod tests {
 
         barrier.wait();
         let started = Instant::now();
-        let token = token_for(&url);
+        let token = token_for_in(&app, &url);
         let elapsed = started.elapsed();
 
         handle_thread
             .join()
             .expect("with_handle thread")
             .expect("with_handle closure");
-        stop().expect("server stop");
+        stop_in(&app).expect("server stop");
 
         assert!(token.is_some(), "server was still running");
         assert!(
