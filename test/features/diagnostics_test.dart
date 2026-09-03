@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -130,6 +132,23 @@ void main() {
           'dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c/-1';
       expect(redactSecrets(failing), failing);
     });
+  });
+
+  test('the build a person types stamps the header', () {
+    // `app: unknown` is what a plain `flutter build` produces, and it is
+    // the one line saying which build a report is about. The Makefile is
+    // the build that passes the two defines this file reads; renaming
+    // either without the other would silently bring the `unknown` back.
+    final makefile = File('Makefile').readAsStringSync();
+    expect(makefile, contains('--dart-define=XTREMIO_VERSION='));
+    expect(makefile, contains('--dart-define=XTREMIO_GIT_COMMIT='));
+    for (final target in ['apk:', 'apk-split:', 'linux:', 'run:']) {
+      expect(
+        makefile,
+        contains(target),
+        reason: 'every documented build stamps the header',
+      );
+    }
   });
 
   group('DiagnosticsLog', () {

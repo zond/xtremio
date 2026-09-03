@@ -660,12 +660,28 @@ passwords and the path of an addon manifest URL (a debrid key rides there)
 never reach the clipboard. Nothing in that class is logged in the first
 place -- this is the second lock, not the first.
 
-The header's app version and commit are whatever the build passed in; with
-nothing passed they read `unknown`:
+The header's app version and commit are whatever the build passed in as
+`--dart-define`s, and with nothing passed they read `unknown` -- which is
+the one line that says which build the rest of the report is about. A plain
+`flutter build` passes neither, so the build to type is the `Makefile`'s:
+
+```bash
+make apk          # release APK for a phone or TV box (arm64)
+make apk-split    # release APKs per ABI
+make linux        # release Linux desktop bundle
+make run          # flutter run, stamped the same way
+make version      # what would be stamped
+```
+
+Each of those adds `XTREMIO_VERSION` (from `pubspec.yaml`) and
+`XTREMIO_GIT_COMMIT` (`git rev-parse --short HEAD`, suffixed `-dirty` when
+the tree was not clean, because a report from a modified build must not
+name a commit as if it were that commit), and takes the usual extra flags
+through `FLAGS=`. Building by hand instead is the same two defines:
 
 ```bash
 flutter build apk --release \
-  --dart-define=XTREMIO_VERSION="$(grep '^version:' pubspec.yaml | cut -d' ' -f2)" \
+  --dart-define=XTREMIO_VERSION="$(sed -n 's/^version: //p' pubspec.yaml)" \
   --dart-define=XTREMIO_GIT_COMMIT="$(git rev-parse --short HEAD)"
 ```
 

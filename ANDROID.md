@@ -37,6 +37,19 @@ Always redirect to a log and check the real exit code — the first Rust
 cross-compile per target takes several minutes.
 
 ```bash
+make apk-debug                                                           # emulator only (x86_64)
+make apk                                                                 # release, arm64 only, no bindgen needed
+make apk-split                                                           # release, arm + arm64 + x64 APKs
+make apk-debug FLAGS="--target-platform android-arm64,android-x64"       # phone/TV + emulator
+```
+
+Those are the `flutter build apk` lines below plus the two `--dart-define`s
+that put a version and a commit in the Diagnostics header (see the Makefile,
+and README "Diagnostics off a device"); a build without them reports
+`app: unknown`, which is the one line saying which build a report is about.
+The plain commands, for anything the Makefile does not cover:
+
+```bash
 flutter build apk --debug --target-platform android-x64                  # emulator only
 flutter build apk --debug --target-platform android-arm64,android-x64    # phone/TV + emulator
 flutter build apk --release --target-platform android-arm64              # arm64 only, no bindgen needed
