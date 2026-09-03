@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
+import '../../widgets/filter_controls.dart';
 import '../../widgets/poster_tile.dart';
+import '../../widgets/remote_press.dart';
 import '../../widgets/shared_field_screen.dart';
 import '../discover/discover_screen.dart';
 import '../player/player_screen.dart';
@@ -15,6 +18,13 @@ import '../player/player_screen.dart';
 /// first sensible episode itself and every episode tap re-`Load`s the field
 /// with that video's stream path, so the streams list always follows the
 /// selection. Tapping a playable stream opens the player.
+///
+/// On a TV the info column and the streams pane are separate
+/// [FocusTraversalGroup]s, focus starts on the stream the user most likely
+/// wants (the last used source, else the first playable one) as nothing
+/// else on a freshly pushed screen holds any, the remote's menu key or a
+/// held select on an episode is its long press (toggle watched), and a long
+/// season list is picked from a [FilterMenu] rather than a dropdown.
 class MetaDetailsScreen extends StatefulWidget {
   const MetaDetailsScreen({
     super.key,
@@ -232,22 +242,26 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             return CustomScrollView(slivers: [...info, ...streams]);
           }
           final paneWidth = (constraints.maxWidth * 0.38).clamp(320.0, 480.0);
+          final isTv = DeviceScope.isTv(context);
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: CustomScrollView(slivers: info)),
+              Expanded(child: _tvGroup(isTv, CustomScrollView(slivers: info))),
               const VerticalDivider(width: 1),
               SizedBox(
                 width: paneWidth,
-                child: CustomScrollView(
-                  slivers: [
-                    SliverPadding(
-                      padding: EdgeInsets.only(
-                        top: MediaQuery.paddingOf(context).top + 8,
+                child: _tvGroup(
+                  isTv,
+                  CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: EdgeInsets.only(
+                          top: MediaQuery.paddingOf(context).top + 8,
+                        ),
                       ),
-                    ),
-                    ...streams,
-                  ],
+                      ...streams,
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -256,6 +270,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       ),
     );
   }
+
+  /// [child] as its own traversal group on a TV; [child] itself elsewhere.
+  static Widget _tvGroup(bool isTv, Widget child) =>
+      isTv ? FocusTraversalGroup(child: child) : child;
 
   /// Hero, facts and (for a series) the season selector and episode list.
   List<Widget> _infoSlivers(
@@ -330,6 +348,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final groups = state.allStreamGroups;
     final noneYet =
         state.hasVideos && state.streamPath == null && groups.isEmpty;
+    // On a TV focus starts on the stream the user most likely wants: the
+    // last used source, else the first playable one. Autofocus only takes
+    // when nothing on the screen is focused yet, so streams arriving after
+    // the user has moved on leave focus where it is.
+    final isTv = DeviceScope.isTv(context);
+    final autofocusAt = isTv && lastUsed == null
+        ? _firstPlayable(groups)
+        : null;
     return [
       SliverToBoxAdapter(child: _StreamsHeader(state: state)),
       if (noneYet)
@@ -347,16 +373,28 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             leadingIcon: Icons.history,
             titleOverride: 'Continue with last source',
             onTap: () => _play(state, lastUsed.$1, lastUsed.$2),
+            autofocus: isTv,
           ),
         ),
-      for (final group in groups)
+      for (final (index, group) in groups.indexed)
         _StreamGroupSliver(
           group: group,
           lastUsed: lastUsed?.$2,
           onPlay: (stream) => _play(state, group, stream),
+          autofocusIndex: autofocusAt?.$1 == index ? autofocusAt!.$2 : null,
         ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
     ];
+  }
+
+  /// The (group, stream) indices of the first playable stream, if any.
+  static (int, int)? _firstPlayable(List<StreamGroup> groups) {
+    for (final (g, group) in groups.indexed) {
+      for (final (s, stream) in group.streams.indexed) {
+        if (stream.isPlayable) return (g, s);
+      }
+    }
+    return null;
   }
 }
 
@@ -621,6 +659,27 @@ class _SeasonSelector extends StatelessWidget {
         ),
       );
     }
+    if (DeviceScope.isTv(context)) {
+      // The remote cannot pick from a DropdownMenu; the shared filter menu
+      // reads "Season: 3" (or "Season: Specials") and opens a focusable list.
+      // Full width, so that down from anything in the header above lands on
+      // it: directional traversal prefers what overlaps horizontally.
+      return SizedBox(
+        width: double.infinity,
+        child: FilterMenu<int>(
+          label: 'Season',
+          options: [
+            for (final season in seasons)
+              FilterOption(
+                label: season == 0 ? label(season) : '$season',
+                selected: season == selected,
+                request: season,
+              ),
+          ],
+          onSelect: onChanged,
+        ),
+      );
+    }
     return DropdownMenu<int>(
       key: ValueKey(selected),
       initialSelection: selected,
@@ -669,7 +728,7 @@ class _EpisodeTile extends StatelessWidget {
     final title = video.title.isEmpty && episode != null
         ? 'Episode $episode'
         : video.title;
-    return ListTile(
+    final tile = ListTile(
       selected: isSelected,
       enabled: isReleased,
       onTap: onTap,
@@ -688,6 +747,8 @@ class _EpisodeTile extends StatelessWidget {
           ? const Icon(Icons.play_arrow)
           : null,
     );
+    if (!DeviceScope.isTv(context)) return tile;
+    return RemotePress(onTap: onTap, onLongPress: onLongPress, child: tile);
   }
 }
 
@@ -797,6 +858,7 @@ class _StreamGroupSliver extends StatelessWidget {
     required this.group,
     required this.lastUsed,
     required this.onPlay,
+    this.autofocusIndex,
   });
 
   final StreamGroup group;
@@ -804,6 +866,9 @@ class _StreamGroupSliver extends StatelessWidget {
   /// The stream pinned as "Continue with last source", highlighted here too.
   final StreamInfo? lastUsed;
   final ValueChanged<StreamInfo> onPlay;
+
+  /// The stream (by index) where TV focus starts; null for none here.
+  final int? autofocusIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -851,6 +916,7 @@ class _StreamGroupSliver extends StatelessWidget {
               stream: stream,
               highlighted: lastUsed != null && stream.isSameSource(lastUsed),
               onTap: stream.isPlayable ? () => onPlay(stream) : null,
+              autofocus: index == autofocusIndex,
             );
           },
         ),
@@ -869,6 +935,7 @@ class _StreamTile extends StatelessWidget {
     this.highlighted = false,
     this.leadingIcon,
     this.titleOverride,
+    this.autofocus = false,
   });
 
   final StreamInfo stream;
@@ -876,6 +943,9 @@ class _StreamTile extends StatelessWidget {
   final bool highlighted;
   final IconData? leadingIcon;
   final String? titleOverride;
+
+  /// Where TV focus starts on the screen (see [MetaDetailsScreen]).
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -892,9 +962,11 @@ class _StreamTile extends StatelessWidget {
         : stream.name == null
         ? null
         : hints.strip(stream.description);
+    final isTv = DeviceScope.isTv(context);
     final tile = ListTile(
       enabled: onTap != null,
       selected: highlighted,
+      autofocus: autofocus,
       leading: Icon(leadingIcon ?? _iconFor(stream.kind)),
       title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
       isThreeLine: description != null && chips.isNotEmpty,
@@ -926,7 +998,10 @@ class _StreamTile extends StatelessWidget {
       onTap: onTap,
     );
     final filename = hints.filename;
-    return filename == null ? tile : Tooltip(message: filename, child: tile);
+    final withTooltip = filename == null
+        ? tile
+        : Tooltip(message: filename, child: tile);
+    return isTv ? RemotePress(onTap: onTap, child: withTooltip) : withTooltip;
   }
 
   static IconData _iconFor(StreamKind kind) => switch (kind) {
