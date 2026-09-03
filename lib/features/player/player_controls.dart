@@ -291,12 +291,6 @@ class PlayerBottomBar extends StatelessWidget {
       showRemaining: showRemaining,
       onTap: onToggleTimeDisplay,
     );
-    final fullscreenButton = IconButton(
-      tooltip: fullscreen ? 'Exit fullscreen (F)' : 'Fullscreen (F)',
-      color: Colors.white,
-      onPressed: onFullscreen,
-      icon: Icon(fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
-    );
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -365,7 +359,20 @@ class PlayerBottomBar extends StatelessWidget {
                       ),
                     ),
                 ],
-                if (!isTv) fullscreenButton,
+                // A television is fullscreen the whole time it is up, so
+                // the button is not built at all rather than built and
+                // thrown away on every tick of the position.
+                if (!isTv)
+                  IconButton(
+                    tooltip: fullscreen
+                        ? 'Exit fullscreen (F)'
+                        : 'Fullscreen (F)',
+                    color: Colors.white,
+                    onPressed: onFullscreen,
+                    icon: Icon(
+                      fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                    ),
+                  ),
               ],
             ),
           ],
