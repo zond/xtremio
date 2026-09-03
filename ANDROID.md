@@ -314,11 +314,11 @@ Verified on a headless `xtremio_tv36` AVD
 - **Two things this run turned up.** The row header overflowed by 6 px under
   the TV's 1.15x text scale — fixed (the header now grows with the text
   scale, and the widget test reproduces the same 6 px). And on Settings the
-  D-pad gets **stuck in the streaming-server radio group**: `RadioGroup`
-  takes the up/down keys to move the selection, so the remote cannot walk
-  past it to the Developer entries below, and it silently flips the server
-  choice on the way. Not fixed yet; reach those entries with
-  `adb shell input swipe` meanwhile.
+  D-pad got **stuck in the streaming-server radio group**: `RadioGroup`
+  takes the up/down keys to move the selection, so the remote could not
+  walk past it to the Developer entries below, and it silently flipped the
+  server choice on the way. Fixed: the two choices are plain tiles with the
+  radio's icon on a television, radios everywhere else.
 - **Not verified:** decoded video. Position stayed at `0:00 / 0:10` with the
   transport in its playing state — libmpv renders nothing under
   swiftshader on this AVD (playback has never been exercised on an emulator
