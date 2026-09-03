@@ -99,6 +99,13 @@ final class DownloadView {
 
   bool get isComplete => state == DownloadState.complete;
 
+  /// Still on its way: neither whole on the device nor paused. The same
+  /// test `Entry::unfinished` in `rust/src/downloads.rs` makes, which is
+  /// what decides whether the progress ticker keeps polling -- an errored
+  /// entry counts, because a peer can still turn up.
+  bool get isUnfinished =>
+      state != DownloadState.complete && state != DownloadState.paused;
+
   /// The server's reason this is not progressing, when it gave one. Never
   /// names a local path.
   String? get error => json['error'] as String?;

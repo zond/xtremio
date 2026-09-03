@@ -9,6 +9,8 @@ import 'features/addons/addon_details_screen.dart';
 import 'features/cast/cast_client.dart';
 import 'features/cast/google_cast_client.dart';
 import 'features/downloads/destination.dart';
+import 'features/downloads/downloads_screen.dart';
+import 'features/downloads/downloads_service.dart';
 import 'features/player/playback_engine.dart';
 import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
@@ -65,6 +67,12 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// is built everywhere and costs nothing where it cannot work. The LAN media
 /// listener half of the scope is left to its default, the embedded server's
 /// own.
+///
+/// On Android it also runs the downloads foreground service
+/// ([DownloadsForegroundService]): while anything is unfinished the process
+/// is held up by a `dataSync` service with an ongoing notification, so a
+/// download goes on after the user leaves the app. Its notification opens
+/// the [DownloadsScreen] from here, the way a deep link opens an addon.
 ///
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
@@ -144,6 +152,10 @@ class _XtremioAppState extends State<XtremioApp> {
   late final DownloadsClient _downloads;
   late final bool _ownsDownloads;
 
+  /// Android's downloads foreground service, kept in step with that client.
+  /// Built everywhere and inert off Android.
+  late final DownloadsForegroundService _downloadsService;
+
   /// The one preferences value, and whether disposing it is ours to do —
   /// the same rule as [_downloads].
   late final AppPrefs _prefs;
@@ -170,6 +182,11 @@ class _XtremioAppState extends State<XtremioApp> {
     _ctx = CoreFieldNotifier(widget.core, CoreField.ctx);
     _ownsDownloads = widget.downloads == null;
     _downloads = widget.downloads ?? RustDownloadsClient();
+    _downloadsService = DownloadsForegroundService(
+      client: _downloads,
+      openDownloads: _openDownloads,
+    );
+    unawaited(_downloadsService.start());
     _ownsCast = widget.cast == null;
     _cast = widget.cast ?? GoogleCastClient();
     _ownsPrefs = widget.prefs == null;
@@ -258,6 +275,24 @@ class _XtremioAppState extends State<XtremioApp> {
     navigator.pushReplacement(AddonDetailsScreen.route(transportUrl));
   }
 
+  /// Brings up the Downloads screen: what the downloads notification does
+  /// when it is tapped. A screen already on top is left where it is rather
+  /// than stacked over, and a tap that arrives before the first build (the
+  /// app was cold started by the notification) waits for the navigator.
+  void _openDownloads({bool retry = true}) {
+    final navigator = _navigator.currentState;
+    if (navigator == null) {
+      if (retry) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openDownloads(retry: false);
+        });
+      }
+      return;
+    }
+    if (_routes.top?.settings.name == DownloadsScreen.routeName) return;
+    navigator.push(DownloadsScreen.route());
+  }
+
   void _onAway() => _away = true;
 
   Future<void> _onResume() async {
@@ -331,6 +366,9 @@ class _XtremioAppState extends State<XtremioApp> {
   void dispose() {
     _events?.cancel();
     _links?.cancel();
+    // Takes the foreground service down before the client it reports on:
+    // without this side there is nobody to move the notification on.
+    unawaited(_downloadsService.dispose());
     // Lets go of the progress stream the client holds open on the Rust side.
     if (_ownsDownloads) _downloads.dispose();
     if (_ownsCast) _cast.dispose();
