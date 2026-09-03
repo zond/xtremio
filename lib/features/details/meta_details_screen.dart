@@ -24,6 +24,12 @@ import '../player/player_screen.dart';
 /// with that video's stream path, so the streams list always follows the
 /// selection. Tapping a playable stream opens the player.
 ///
+/// Below [MetaDetailsScreen.wideBreakpoint] the streams are not beside the
+/// episodes but far below them in the same scroll view, so a tap there has
+/// to be answered where it happened: the tile goes selected at once, the
+/// stream section is scrolled into view, and it says it is looking until
+/// the engine answers with that episode's streams.
+///
 /// A torrent stream can also be taken offline: the tile's download button
 /// pins it through the [DownloadsClient] with everything the play path
 /// hands the player (the raw stream, both addon requests) plus a meta
@@ -98,6 +104,31 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// selected episode) chooses one.
   int? _season;
 
+  /// The episode a tap asked for while the engine has not answered with its
+  /// streams yet. The field still describes the previous selection, so
+  /// until it catches up the screen follows this instead: the tile is the
+  /// selected one and the stream section says it is working, rather than
+  /// listing another episode's streams under this episode's name.
+  ///
+  /// Only a tap sets it. The pick this screen makes on the engine's behalf
+  /// (see [_maybePickInitialVideo]) is not a tap and gets no such feedback.
+  String? _awaitingVideoId;
+
+  /// The stream section's header, so a tap on an episode can scroll it into
+  /// view on a layout where it sits below the episode list. It is only in
+  /// the tree while the viewport has reached it: a sliver far below the
+  /// fold is never built, which is why [_narrowScroll] is here too.
+  final GlobalKey _streamsKey = GlobalKey();
+
+  /// The one scroll view of the narrow layout, whose end is the stream
+  /// section.
+  final ScrollController _narrowScroll = ScrollController();
+
+  /// What the last build laid out (see [MetaDetailsScreen.wideBreakpoint]).
+  /// On a wide layout the streams are already beside the episodes, so
+  /// nothing has to scroll.
+  bool _isWide = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -129,6 +160,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   @override
   void dispose() {
     releaseField();
+    _narrowScroll.dispose();
     _details?.dispose();
     _downloads
       ?..removeListener(_onDownloadsChanged)
@@ -159,8 +191,25 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   void reloadField() => _load(_requestedVideoId ?? ownState?.streamPath?.id);
 
   @override
-  void didReceiveOwnState(MetaDetailsState state) =>
-      _maybePickInitialVideo(state);
+  void didReceiveOwnState(MetaDetailsState state) {
+    if (_awaitingVideoId != null && state.streamPath?.id == _awaitingVideoId) {
+      // The answer to the tap: the section is no longer a spinner but the
+      // streams themselves, so put it back at the top of the screen.
+      _awaitingVideoId = null;
+      _revealStreams(atEnd: false);
+    }
+    _maybePickInitialVideo(state);
+  }
+
+  /// The episode the screen shows as selected: the tap in flight, else the
+  /// engine's own selection.
+  String? _selectedVideoId(MetaDetailsState state) =>
+      _awaitingVideoId ?? state.streamPath?.id;
+
+  /// Whether the streams on screen are the previous selection's, because a
+  /// tap has asked for another episode and nothing has come back yet.
+  bool _isAwaitingStreams(MetaDetailsState state) =>
+      _awaitingVideoId != null && state.streamPath?.id != _awaitingVideoId;
 
   MetaDetailsState? get _state => ownState;
 
@@ -168,6 +217,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// streams (or letting the engine guess), and takes the field over.
   void _load(String? videoId) {
     _requestedVideoId = videoId;
+    _awaitingVideoId = null;
     claimField();
     _client?.dispatch(
       CoreActions.loadMetaDetails(
@@ -190,9 +240,52 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     _selectVideo(video);
   }
 
-  void _selectVideo(VideoInfo video) {
-    if (mounted) setState(() => _season = video.season);
+  /// Shows [video]'s streams. [reveal] is a selection the user made (a tap
+  /// on an episode, the player asking for the next one) rather than one the
+  /// screen made for them, and on a narrow layout it is acknowledged where
+  /// the user is looking. On a wide one there is nothing to acknowledge:
+  /// the streams pane is beside the episode and answers for itself.
+  void _selectVideo(VideoInfo video, {bool reveal = false}) {
     _load(video.id);
+    final acknowledge = reveal && !_isWide;
+    if (acknowledge) _awaitingVideoId = video.id;
+    if (mounted) setState(() => _season = video.season);
+    if (acknowledge) _revealStreams(atEnd: true);
+  }
+
+  /// Brings the stream section into view when it is not already beside the
+  /// episode list. Below the breakpoint the two are one scroll view and the
+  /// streams are far below the tap, so without this the screen looks as if
+  /// nothing happened.
+  ///
+  /// It takes two goes, one per moment the user gets an answer, and they
+  /// scroll differently because of what the viewport has laid out. On the
+  /// tap the section is still below the fold: its header is in the tree but
+  /// has no place in the viewport yet, so `ensureVisible` has nothing to
+  /// measure and the scroll is to the end of the page instead -- which is
+  /// the section, everything it holds while it waits fitting on a screen.
+  /// Once the streams are in, the header is on screen and a real target:
+  /// it goes to the top and the list fills the screen under it.
+  ///
+  /// Always after the frame the state change schedules, so it measures the
+  /// section that is on its way in rather than the one going out.
+  void _revealStreams({required bool atEnd}) {
+    if (_isWide) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_narrowScroll.hasClients) return;
+      const duration = Duration(milliseconds: 250);
+      const curve = Curves.easeOut;
+      final header = atEnd ? null : _streamsKey.currentContext;
+      if (header == null) {
+        _narrowScroll.animateTo(
+          _narrowScroll.position.maxScrollExtent,
+          duration: duration,
+          curve: curve,
+        );
+      } else {
+        Scrollable.ensureVisible(header, duration: duration, curve: curve);
+      }
+    });
   }
 
   /// Bookmark: `AddToLibrary` with the meta item as received, or
@@ -386,7 +479,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   void _selectVideoId(String videoId) {
     final video = ownState?.meta?.videoById(videoId);
     if (video != null) {
-      _selectVideo(video);
+      _selectVideo(video, reveal: true);
     } else {
       _load(videoId);
     }
@@ -430,10 +523,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           builder: (context, constraints) {
             final isWide =
                 constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
+            _isWide = isWide;
             final info = _infoSlivers(state, meta, isWide: isWide);
             final streams = _streamSlivers(state, meta);
             if (!isWide) {
-              return CustomScrollView(slivers: [...info, ...streams]);
+              return CustomScrollView(
+                controller: _narrowScroll,
+                slivers: [...info, ...streams],
+              );
             }
             final paneWidth = (constraints.maxWidth * 0.38).clamp(320.0, 480.0);
             final isTv = DeviceScope.isTv(context);
@@ -524,11 +621,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             final video = episodes[index];
             return _EpisodeTile(
               video: video,
-              isSelected: video.id == state.streamPath?.id,
+              isSelected: video.id == _selectedVideoId(state),
               isWatched: state.isWatched(video),
               isReleased: video.isReleased(now),
               download: _downloads?.forVideo(widget.id, video.id),
-              onTap: () => _selectVideo(video),
+              onTap: () => _selectVideo(video, reveal: true),
               onLongPress: () => _toggleWatched(state, video),
             );
           },
@@ -541,12 +638,38 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// The streams for the selected video, the meta addon's own first. The
   /// engine lists every addon it asked from the moment of the request (as
   /// `Loading` groups), so the header's small spinner is the only loading
-  /// indicator needed; an empty list means no addon was asked.
+  /// indicator needed once they are in; an empty list means no addon was
+  /// asked. Between a tap and that first state there is nothing at all to
+  /// list, and the section says so where the tap can see it.
   List<Widget> _streamSlivers(MetaDetailsState state, MetaItem meta) {
     final lastUsed = state.lastUsedStream;
     final groups = state.allStreamGroups;
     final noneYet =
         state.hasVideos && state.streamPath == null && groups.isEmpty;
+    // A tapped episode whose streams have not arrived: everything below is
+    // still the previous selection's, so show none of it.
+    if (_isAwaitingStreams(state)) {
+      return [
+        SliverToBoxAdapter(
+          child: _StreamsHeader(
+            key: _streamsKey,
+            state: state,
+            video: meta.videoById(_awaitingVideoId!),
+            isLoading: true,
+          ),
+        ),
+        const SliverToBoxAdapter(
+          child: ListTile(
+            leading: SizedBox.square(
+              dimension: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            title: Text(kLookingForStreams),
+          ),
+        ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+      ];
+    }
     // On a TV focus starts on the stream the user most likely wants: the
     // last used source, else the first playable one. Autofocus only takes
     // when nothing on the screen is focused yet, so streams arriving after
@@ -566,7 +689,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                 _download(state, meta, group, stream),
           );
     return [
-      SliverToBoxAdapter(child: _StreamsHeader(state: state)),
+      SliverToBoxAdapter(
+        child: _StreamsHeader(key: _streamsKey, state: state),
+      ),
       if (noneYet)
         const SliverToBoxAdapter(
           child: ListTile(
@@ -1045,15 +1170,33 @@ class _EpisodeThumbnail extends StatelessWidget {
   }
 }
 
+/// What the stream section says between a tap on an episode and the
+/// engine's answer.
+const String kLookingForStreams = 'Looking for streams…';
+
 class _StreamsHeader extends StatelessWidget {
-  const _StreamsHeader({required this.state});
+  const _StreamsHeader({
+    super.key,
+    required this.state,
+    this.video,
+    this.isLoading = false,
+  });
 
   final MetaDetailsState state;
+
+  /// The episode the section is about; null takes the state's selection.
+  /// A tap that has not been answered yet names the tapped episode here,
+  /// which the state does not know about.
+  final VideoInfo? video;
+
+  /// Spins even when no addon group is loading yet (a tap whose `Load` has
+  /// not come back).
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final video = state.selectedVideo;
+    final video = this.video ?? state.selectedVideo;
     final meta = state.meta;
     final subtitle = video != null && meta != null && video.id != meta.id
         ? [
@@ -1080,7 +1223,7 @@ class _StreamsHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (state.isLoadingStreams)
+          if (isLoading || state.isLoadingStreams)
             const SizedBox.square(
               dimension: 16,
               child: CircularProgressIndicator(strokeWidth: 2),

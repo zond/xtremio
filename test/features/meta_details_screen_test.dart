@@ -67,10 +67,21 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
-  void usePhoneViewport(WidgetTester tester) {
-    tester.view.physicalSize = const Size(400, 3000);
+  /// Narrow. Tall by default so the lazy lists are built without scrolling;
+  /// a test about scrolling passes a real phone's height.
+  void usePhoneViewport(WidgetTester tester, {double height = 3000}) {
+    tester.view.physicalSize = Size(400, height);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+  }
+
+  /// Runs the scroll a tap on an episode starts. It is scheduled after the
+  /// frame of the tap, an animation needs a frame of its own to begin, and
+  /// the section's spinner means `pumpAndSettle` never returns.
+  Future<void> pumpReveal(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
   }
 
   Map<String, dynamic> loadArgs(CoreAction action) =>
@@ -812,6 +823,75 @@ void main() {
       expect(find.text('Pilot'), findsNothing);
     });
 
+    testWidgets('a tap on a phone brings the stream section to the tap', (
+      tester,
+    ) async {
+      usePhoneViewport(tester, height: 800);
+      final core = await mountSeries(tester);
+      const fold = 800.0;
+
+      await tester.ensureVisible(find.text("Cat's in the Bag..."));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Streams')).dy,
+        greaterThan(fold / 2),
+        reason: 'the stream section is at the bottom edge before the tap',
+      );
+
+      await tester.tap(find.text("Cat's in the Bag..."));
+      await tester.pump();
+
+      final tapped = tester.widget<ListTile>(
+        find.ancestor(
+          of: find.text("Cat's in the Bag..."),
+          matching: find.byType(ListTile),
+        ),
+      );
+      expect(tapped.selected, isTrue, reason: 'selected before the answer');
+      expect(
+        core.dispatched.last.action,
+        CoreActions.loadMetaDetails(
+          type: 'series',
+          id: seriesId,
+          videoId: '$seriesId:1:2',
+        ).action,
+      );
+
+      await pumpReveal(tester);
+      expect(find.text('S1E2 · Cat\'s in the Bag...'), findsOneWidget);
+      expect(
+        tester.getRect(find.text('Looking for streams…')).bottom,
+        lessThan(fold),
+        reason: 'the section was scrolled to the tap, saying what it does',
+      );
+    });
+
+    testWidgets('the answer to a tap replaces the looking-for-streams tile', (
+      tester,
+    ) async {
+      usePhoneViewport(tester, height: 800);
+      final core = await mountSeries(tester);
+
+      await tester.tap(find.text('Pilot'));
+      await pumpReveal(tester);
+      expect(find.text('Looking for streams…'), findsOneWidget);
+      final waiting = tester.getTopLeft(find.text('Streams')).dy;
+
+      final fixture = loadSeriesEpisodeMetaDetailsFixture();
+      (fixture['streams'] as List<dynamic>).add(torrentGroup(pilotId));
+      core.setState(CoreField.metaDetails, fixture);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Looking for streams…'), findsNothing);
+      // The streams themselves, with the section pulled up so the list
+      // under it is what fills the screen.
+      expect(tester.getTopLeft(find.text('Streams')).dy, lessThan(waiting));
+      expect(
+        tester.getRect(find.text('Torrentio\n1080p')).bottom,
+        lessThan(800),
+      );
+    });
+
     testWidgets('wide layouts put the streams in a side pane', (tester) async {
       useWideViewport(tester);
       await mountSeries(tester);
@@ -821,6 +901,12 @@ void main() {
       final streams = tester.getTopLeft(find.text('Streams'));
       final pilot = tester.getTopLeft(find.text('Pilot'));
       expect(streams.dx, greaterThan(pilot.dx));
+
+      // Nothing scrolls on a tap here: the section is already in view.
+      await tester.tap(find.text("Cat's in the Bag..."));
+      await pumpReveal(tester);
+      expect(tester.getTopLeft(find.text('Pilot')), pilot);
+      expect(tester.getTopLeft(find.text('Streams')), streams);
     });
   });
 }
