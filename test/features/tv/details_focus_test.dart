@@ -574,38 +574,37 @@ void main() {
       expect(core.dispatched, hasLength(loads + 1), reason: 'no Load');
     });
 
-    testWidgets('the season segments take the D-pad and select switches', (
+    testWidgets('the season pills take the D-pad and select switches', (
       tester,
     ) async {
       await mountSeries(tester);
       final meta = MetaDetailsState.fromJson(seriesWithTorrent()).meta!;
       expect(find.text('Pilot'), findsOneWidget);
 
-      await stepLeftAndDownTo<SegmentedButton<int>>(tester);
-      // Down from the header's right-hand controls lands on the last
-      // segment (Specials sit after the seasons); left walks the seasons.
-      expect(focusedLabel(tester), 'Specials');
-      for (var i = 0; i < 6 && focusedLabel(tester) != 'Season 2'; i++) {
+      // Down the header reaches the row at all only because the pills fill
+      // its width; packed at the left they are stepped over.
+      await stepLeftAndDownTo<ChoiceChip>(tester);
+      // The row is one focus stop per season, walked with left and right.
+      for (var i = 0; i < 8 && focusedLabel(tester) != '2'; i++) {
         await press(tester, LogicalKeyboardKey.arrowLeft);
       }
-      expect(focusedLabel(tester), 'Season 2');
-      expect(focusIn<SegmentedButton<int>>(), isTrue);
+      expect(focusedLabel(tester), '2');
+      expect(focusIn<ChoiceChip>(), isTrue);
 
       await press(tester, LogicalKeyboardKey.select);
       expect(find.text('Pilot'), findsNothing);
       expect(find.text(meta.videosOfSeason(2).first.title), findsOneWidget);
     });
 
-    testWidgets('many seasons are picked from a TV menu, not a dropdown', (
-      tester,
-    ) async {
+    testWidgets('every pill of a long series is built, so the D-pad walks '
+        'the whole row', (tester) async {
       useScreen(tester, tvSize);
       final fixture = seriesWithTorrent();
       final videos =
           fixture['metaItems'][0]['content']['content']['videos']
               as List<dynamic>;
-      // Nine seasons, one more than the segments can show.
-      for (var season = 6; season <= 9; season++) {
+      // Twenty seasons: several rows' worth at 1280 px.
+      for (var season = 6; season <= 20; season++) {
         videos.add({
           ...videos.first as Map<String, dynamic>,
           'id': '$seriesId:$season:1',
@@ -620,27 +619,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byType(SegmentedButton<int>), findsNothing);
-      expect(find.byType(DropdownMenu<int>), findsNothing);
-      final menu = find.widgetWithText(OutlinedButton, 'Season: 1');
-      expect(menu, findsOneWidget);
-
-      await stepLeftAndDownTo<OutlinedButton>(tester);
-      expect(focusedLabel(tester), 'Season: 1');
-      await press(tester, LogicalKeyboardKey.select);
-      expect(find.byType(MenuItemButton), findsNWidgets(10));
-      expect(focusedLabel(tester), '1', reason: 'the current season');
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(focusedLabel(tester), '1', reason: 'first entry: Specials last');
-      for (var i = 0; i < 7; i++) {
-        await press(tester, LogicalKeyboardKey.arrowDown);
+      await stepLeftAndDownTo<ChoiceChip>(tester);
+      for (var i = 0; i < 30 && focusedLabel(tester) != '1'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowLeft);
       }
-      expect(focusedLabel(tester), '8');
-      await press(tester, LogicalKeyboardKey.select);
+      expect(focusedLabel(tester), '1');
 
-      expect(find.text('Season 8 opener'), findsOneWidget);
+      // Right to the far end of the row. Directional focus only considers
+      // widgets that have been built, so a lazily built row would stop the
+      // D-pad at the last realised pill, halfway through the series.
+      for (var i = 0; i < 30 && focusedLabel(tester) != 'Specials'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusedLabel(tester), 'Specials');
+
+      await press(tester, LogicalKeyboardKey.select);
       expect(find.text('Pilot'), findsNothing);
-      expect(find.widgetWithText(OutlinedButton, 'Season: 8'), findsOneWidget);
     });
   });
 

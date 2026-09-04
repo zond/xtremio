@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
@@ -777,7 +778,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               child: _SeasonSelector(
                 seasons: seasons,
                 selected: season,
-                isWide: isWide,
                 onChanged: (season) => setState(() => _season = season),
               ),
             ),
@@ -1468,72 +1468,153 @@ class _ExpandableTextState extends State<_ExpandableText> {
   }
 }
 
-/// Season picker: a segmented button where there is room, a dropdown on
-/// phones or for very long series. Season 0 is labelled "Specials".
-class _SeasonSelector extends StatelessWidget {
+/// The seasons of a series, as one horizontally scrolling row of pills with
+/// the current one filled. Season 0 is `Specials`; every other pill is the
+/// bare number, beside a "Season" label so that a lone `3` says what it is.
+///
+/// One shape on every device, because a season is a single short token and
+/// a row of them is readable at a glance. The three controls this replaced
+/// -- segments where there was room, a menu on a television, a dropdown
+/// everywhere else -- all spent a press on opening and another on choosing,
+/// and the two that opened a list opened it as a very narrow, very tall
+/// column of digits, which on a remote is a long vertical crawl.
+///
+/// Two things it has to do that a plain row would not:
+///
+/// - **Every pill is built at once**: a [Row] inside a
+///   [SingleChildScrollView], never a lazy [ListView]. Flutter's
+///   directional traversal only considers widgets that have been built, so
+///   a lazily built row silently stops the D-pad at the last realised pill
+///   however many seasons the series has.
+/// - **The pills fill the row** whenever they fit, an even share of the
+///   width each. Directional focus prefers what overlaps it horizontally,
+///   so a short row packed at the left is stepped over by anything coming
+///   down the right-hand side of the header.
+/// - **The selected pill is scrolled into view** when the season changes or
+///   the row is built for another title, so season 12 does not open with
+///   the row parked at 1. Only the row moves: [ScrollPosition.ensureVisible]
+///   on its own position, rather than [Scrollable.ensureVisible], which
+///   would drag the page's vertical scroll along with it.
+class _SeasonSelector extends StatefulWidget {
   const _SeasonSelector({
     required this.seasons,
     required this.selected,
-    required this.isWide,
     required this.onChanged,
   });
 
   final List<int> seasons;
   final int selected;
-  final bool isWide;
   final ValueChanged<int> onChanged;
 
-  static String label(int season) =>
-      season == 0 ? 'Specials' : 'Season $season';
+  /// What one pill reads: the number alone, and season 0 by its name.
+  static String label(int season) => season == 0 ? 'Specials' : '$season';
+
+  /// How long the scroll that brings the selected pill into view takes.
+  static const Duration revealDuration = Duration(milliseconds: 200);
+
+  /// The space between two pills.
+  static const double _gap = 8;
+
+  @override
+  State<_SeasonSelector> createState() => _SeasonSelectorState();
+}
+
+class _SeasonSelectorState extends State<_SeasonSelector> {
+  final ScrollController _controller = ScrollController();
+
+  /// One key per season, so the reveal below can find the pill's box.
+  final Map<int, GlobalKey> _pills = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _revealSelected();
+  }
+
+  @override
+  void didUpdateWidget(_SeasonSelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected ||
+        !listEquals(oldWidget.seasons, widget.seasons)) {
+      _revealSelected();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Centres the selected pill in the row, once the frame that laid it out
+  /// is on screen: the pill of a season chosen this frame has no box yet.
+  void _revealSelected() {
+    final season = widget.selected;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) return;
+      final box = _pills[season]?.currentContext?.findRenderObject();
+      if (box == null) return;
+      _controller.position.ensureVisible(
+        box,
+        alignment: 0.5,
+        duration: _SeasonSelector.revealDuration,
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (isWide && seasons.length <= 8) {
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SegmentedButton<int>(
-          showSelectedIcon: false,
-          segments: [
-            for (final season in seasons)
-              ButtonSegment(value: season, label: Text(label(season))),
-          ],
-          selected: {selected},
-          onSelectionChanged: (selection) => onChanged(selection.first),
+    final theme = Theme.of(context);
+    _pills.removeWhere((season, _) => !widget.seasons.contains(season));
+    return Row(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: Text('Season', style: theme.textTheme.labelLarge),
         ),
-      );
-    }
-    if (DeviceScope.isTv(context)) {
-      // The remote cannot pick from a DropdownMenu; the shared filter menu
-      // reads "Season: 3" (or "Season: Specials") and opens a focusable list.
-      // Full width, so that down from anything in the header above lands on
-      // it: directional traversal prefers what overlaps horizontally.
-      return SizedBox(
-        width: double.infinity,
-        child: FilterMenu<int>(
-          label: 'Season',
-          options: [
-            for (final season in seasons)
-              FilterOption(
-                label: season == 0 ? label(season) : '$season',
-                selected: season == selected,
-                request: season,
-              ),
-          ],
-          onSelect: onChanged,
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // An even share of the row each, as a *minimum*: seasons that
+              // fit spread over the whole width, and a series with too many
+              // keeps them at their own width and scrolls. Filling the row
+              // is what keeps the pills reachable on a television, where
+              // directional focus coming down from the header prefers
+              // whatever overlaps it horizontally -- a short row packed at
+              // the left is stepped straight over into the episode list.
+              final share =
+                  (constraints.maxWidth -
+                      _SeasonSelector._gap * (widget.seasons.length - 1)) /
+                  widget.seasons.length;
+              return SingleChildScrollView(
+                controller: _controller,
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  spacing: _SeasonSelector._gap,
+                  children: [
+                    for (final season in widget.seasons)
+                      ConstrainedBox(
+                        key: _pills.putIfAbsent(season, GlobalKey.new),
+                        constraints: BoxConstraints(minWidth: share),
+                        child: ChoiceChip(
+                          label: Text(_SeasonSelector.label(season)),
+                          showCheckmark: false,
+                          selected: season == widget.selected,
+                          // Selected or not, every pill takes a press and is
+                          // a focus stop: a chip with no callback is
+                          // neither, which would leave a remote unable to
+                          // rest on the season already on screen.
+                          onSelected: (_) => widget.onChanged(season),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
-      );
-    }
-    return DropdownMenu<int>(
-      key: ValueKey(selected),
-      initialSelection: selected,
-      requestFocusOnTap: false,
-      dropdownMenuEntries: [
-        for (final season in seasons)
-          DropdownMenuEntry(value: season, label: label(season)),
       ],
-      onSelected: (season) {
-        if (season != null) onChanged(season);
-      },
     );
   }
 }

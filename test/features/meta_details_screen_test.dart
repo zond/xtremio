@@ -44,6 +44,29 @@ Map<String, dynamic> torrentGroup(String videoId) => {
   },
 };
 
+/// The season pills, in the order the row draws them: every [ChoiceChip]
+/// under the widget that also holds the row's own "Season" label.
+Finder seasonPills() => find.descendant(
+  of: find.ancestor(of: find.text('Season'), matching: find.byType(Row)).first,
+  matching: find.byType(ChoiceChip),
+);
+
+/// What each season pill reads.
+List<String?> seasonLabels(WidgetTester tester) => [
+  for (final pill in tester.widgetList<ChoiceChip>(seasonPills()))
+    (pill.label as Text).data,
+];
+
+/// The pill the row fills, and there is exactly one of those.
+String? selectedSeason(WidgetTester tester) {
+  final filled = [
+    for (final pill in tester.widgetList<ChoiceChip>(seasonPills()))
+      if (pill.selected) (pill.label as Text).data,
+  ];
+  expect(filled, hasLength(1), reason: 'one season is current');
+  return filled.single;
+}
+
 void main() {
   /// Grouped, not the sources list's sectioned default: this file is
   /// about the screen's own loading and routing, not resolution sections,
@@ -129,8 +152,7 @@ void main() {
       expect(find.text('7.8'), findsOneWidget, reason: 'IMDb rating');
       expect(find.widgetWithText(ActionChip, 'Horror'), findsOneWidget);
       expect(find.widgetWithText(ActionChip, 'Thriller'), findsOneWidget);
-      expect(find.byType(SegmentedButton<int>), findsNothing);
-      expect(find.byType(DropdownMenu<int>), findsNothing);
+      expect(find.text('Season'), findsNothing, reason: 'a movie has none');
 
       // Addon groups, a playable torrent with its size parsed into a chip,
       // disabled externals, an addon that answered with nothing.
@@ -600,21 +622,9 @@ void main() {
 
         expect(find.text('2008–2013 · 49 min · series'), findsOneWidget);
         expect(find.text('9.5'), findsOneWidget);
-        final selector = tester.widget<SegmentedButton<int>>(
-          find.byType(SegmentedButton<int>),
-        );
-        expect(
-          [for (final s in selector.segments) (s.label as Text).data],
-          [
-            'Season 1',
-            'Season 2',
-            'Season 3',
-            'Season 4',
-            'Season 5',
-            'Specials',
-          ],
-        );
-        expect(selector.selected, {1});
+        expect(find.text('Season'), findsOneWidget, reason: 'the row label');
+        expect(seasonLabels(tester), ['1', '2', '3', '4', '5', 'Specials']);
+        expect(selectedSeason(tester), '1');
         expect(find.text('Pilot'), findsOneWidget);
         expect(find.text("Cat's in the Bag..."), findsOneWidget);
         expect(find.text('2008-01-21'), findsOneWidget);
@@ -825,10 +835,7 @@ void main() {
       final args = loadArgs(core.dispatched.single);
       expect(args['streamPath']['id'], s2e1);
       expect(args['guessStream'], isFalse);
-      final selector = tester.widget<SegmentedButton<int>>(
-        find.byType(SegmentedButton<int>),
-      );
-      expect(selector.selected, {2});
+      expect(selectedSeason(tester), '2');
       expect(find.text('Seven Thirty-Seven'), findsOneWidget);
       expect(find.text('Pilot'), findsNothing);
     });
@@ -837,12 +844,54 @@ void main() {
       useWideViewport(tester);
       await mountSeries(tester);
 
-      // The segmented button scrolls sideways when the pane is narrow.
+      // The pills scroll sideways when the info column is narrow.
       await tester.ensureVisible(find.text('Specials'));
       await tester.tap(find.text('Specials'));
       await tester.pumpAndSettle();
       expect(find.text('Good Cop Bad Cop'), findsOneWidget);
       expect(find.text('Pilot'), findsNothing);
+    });
+
+    testWidgets('a long series opens with its season on screen, unscrolled', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final fixture = loadSeriesMetaDetailsFixture();
+      final videos =
+          fixture['metaItems'][0]['content']['content']['videos']
+              as List<dynamic>;
+      // Twenty seasons: far more than the row can hold at once.
+      for (var season = 6; season <= 20; season++) {
+        videos.add({
+          ...videos.first as Map<String, dynamic>,
+          'id': '$seriesId:$season:1',
+          'title': 'Season $season opener',
+          'season': season,
+          'episode': 1,
+        });
+      }
+      await mountSeries(tester, fixture: fixture, videoId: '$seriesId:18:1');
+
+      expect(seasonLabels(tester), hasLength(21), reason: '20 and specials');
+      expect(selectedSeason(tester), '18');
+
+      // The row scrolled itself to the current season: 18 is inside the
+      // viewport and 1, where an unscrolled row would start, is off it.
+      final viewport = tester.getRect(
+        find
+            .ancestor(
+              of: seasonPills().first,
+              matching: find.byType(SingleChildScrollView),
+            )
+            .first,
+      );
+      final current = tester.getRect(find.widgetWithText(ChoiceChip, '18'));
+      expect(current.left, greaterThanOrEqualTo(viewport.left));
+      expect(current.right, lessThanOrEqualTo(viewport.right));
+      expect(
+        tester.getRect(find.widgetWithText(ChoiceChip, '1')).right,
+        lessThan(viewport.left),
+      );
     });
 
     testWidgets('an unreleased episode is dimmed and marked upcoming', (
@@ -894,23 +943,23 @@ void main() {
       });
     });
 
-    testWidgets('phones stack everything and pick seasons from a dropdown', (
-      tester,
-    ) async {
+    testWidgets('phones stack everything and pick a season from the same '
+        'row of pills', (tester) async {
       usePhoneViewport(tester);
       await mountSeries(tester);
 
       expect(find.byType(VerticalDivider), findsNothing);
-      expect(find.byType(SegmentedButton<int>), findsNothing);
-      expect(find.byType(DropdownMenu<int>), findsOneWidget);
+      expect(seasonLabels(tester), ['1', '2', '3', '4', '5', 'Specials']);
+      expect(selectedSeason(tester), '1');
       expect(find.text('Pilot'), findsOneWidget);
       expect(find.text('Streams'), findsOneWidget);
 
-      await tester.tap(find.byType(DropdownMenu<int>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Season 3').last);
+      // One press, in place: no menu to open and nothing to dismiss.
+      await tester.ensureVisible(find.text('3'));
+      await tester.tap(find.text('3'));
       await tester.pumpAndSettle();
 
+      expect(selectedSeason(tester), '3');
       expect(find.text('No Mas'), findsOneWidget);
       expect(find.text('Pilot'), findsNothing);
     });
