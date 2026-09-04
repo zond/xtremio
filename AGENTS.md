@@ -161,6 +161,35 @@ it, and the platform registrations are listed in README, "Installing an
 addon from the web". A widget test drives links through `FakeDeepLinks`
 (`test/support/`); nothing in the tests touches `app_links`.
 
+## The addon health record keys on a hash, never the URL
+
+`rust/src/addon_health.rs` counts how each installed addon answers, and
+every record is addressed by `key_for`: `host[:port]#` plus the first 12 hex
+characters of `sha256(transport URL)`. **The transport URL itself is never
+stored, and neither is any query string** — the same reason a deep link
+never logs one above: a manifest URL can carry a debrid API key, which puts
+it in the class of things this file says are never written down. The
+readable half is the host, so a preferences file stays legible to the
+person whose file it is; the digest is what keeps two configurations of one
+addon apart.
+
+Nothing else about a request is kept either: not the resource id (that is a
+viewing history), not per-request timestamps, and not an error string (a
+`reqwest` error can carry the URL back in its own message).
+
+`lib/features/addons/addon_health.dart` mirrors `key_for` in Dart so the URL
+never crosses FFI to be hashed there. The two are pinned to each other by a
+test on each side (`the_key_is_the_digest_the_app_computes` and "is the
+digest the Rust side computes"); if they ever drift the record silently
+reads as "not used yet", so change one only with the other.
+
+Rust counts and Dart judges: `AddonHealth.verdict` is a pure function over
+an immutable record, so the rule can change without a migration. Empty is
+its own bucket, never folded into failed; a sweep in which every addon
+failed is recorded against nobody; and the embedded server and the local
+addon are never recorded against, on top of a protected addon never being
+labelled. See README, "Which addons are worth keeping".
+
 ## Use cheaper models for mechanical work
 
 When an agent delegates, mechanical subtasks (formatting, renames, moving
