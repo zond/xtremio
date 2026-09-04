@@ -416,9 +416,9 @@ class _HoldButtonState extends State<_HoldButton> {
       // panel and Back closes it.
       return KeyEventResult.ignored;
     }
-    if (!widget.enabled) return KeyEventResult.ignored;
     switch (event) {
       case KeyDownEvent():
+        if (!widget.enabled) return KeyEventResult.ignored;
         _keyDown = true;
         _start();
         return KeyEventResult.handled;
@@ -427,6 +427,13 @@ class _HoldButtonState extends State<_HoldButton> {
         // timer of its own, so the rate is ours and not the platform's.
         return _keyDown ? KeyEventResult.handled : KeyEventResult.ignored;
       case KeyUpEvent():
+        // A release is answered whatever [widget.enabled] now says. A
+        // hold is what drives the multiplier to the end of `sub-speed`'s
+        // range, and reaching it redraws this very button disabled while
+        // the key is still down: guarding the release too would drop the
+        // one event that stops [_repeat], leaving it firing for the life
+        // of the panel with the value pinned at the limit and every
+        // press the other way undone 120 ms later.
         if (!_keyDown) return KeyEventResult.ignored;
         _keyDown = false;
         _stop();

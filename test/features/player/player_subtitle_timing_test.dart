@@ -363,4 +363,37 @@ void main() {
     expect(panel, findsNothing);
     expect(find.byType(PlayerScreen), findsOneWidget);
   });
+
+  testWidgets('a stepper held to the end of its range still stops when the '
+      'key comes up', (tester) async {
+    useScreen(tester, tvSize);
+    final player = await playing(tester, device: tv);
+    final engine = player.engine;
+    await openPanel(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedTooltip(), 'Subtitles run slower');
+
+    // Held long past the ceiling of `sub-speed`'s `<0.1-10.0>`, which is
+    // what redraws this very button disabled while the key is still down.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(SubtitleTimingOverlay.holdDelay);
+    for (var i = 0; i < 80; i++) {
+      await tester.pump(SubtitleTimingOverlay.repeatInterval);
+    }
+    expect(engine.subtitleSpeed, greaterThan(9));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+
+    // The release is the only thing that stops the repeat. Dropped
+    // because the button had gone dead, the timer kept firing for the
+    // life of the panel: the multiplier stayed pinned at the limit and a
+    // press the other way was undone 120 ms later.
+    final atCeiling = engine.subtitleSpeed;
+    await step(tester, 'subtitle-speed-down');
+    final afterPress = engine.subtitleSpeed;
+    expect(afterPress, lessThan(atCeiling));
+    await tester.pump(SubtitleTimingOverlay.repeatInterval * 4);
+    expect(engine.subtitleSpeed, afterPress);
+  });
 }
