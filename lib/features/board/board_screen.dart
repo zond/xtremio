@@ -157,28 +157,10 @@ class _BoardScreenState extends State<BoardScreen> {
   }
 
   /// The addons behind the rows that were dropped, one card's worth each.
-  ///
-  /// One card per addon rather than per catalog: the card's actions are
-  /// about the addon, so a host that took two of its own catalogs down
-  /// would otherwise offer to uninstall itself twice. The count the
-  /// summary line reports is still catalogs — that is what went missing.
-  List<AddonFailure> _failures(CatalogsWithExtraState board) {
-    final profile = _profile;
-    final byUrl = <String, AddonFailure>{};
-    for (final row in board.failedRows) {
-      final url = row.firstRequest.base;
-      byUrl.putIfAbsent(
-        url,
-        () => AddonFailure(
-          transportUrl: url,
-          addon: profile?.installedAddon(url),
-          fallbackName: row.addonName,
-          message: row.error?.message ?? '',
-        ),
-      );
-    }
-    return byUrl.values.toList();
-  }
+  /// The count the summary line reports is still catalogs — that is what
+  /// went missing — even where two of them are one card.
+  List<AddonFailure> _failures(CatalogsWithExtraState board) =>
+      addonFailuresOf(board.failedRows, _profile);
 
   /// The rows as laid out: continue watching first when it has items, then
   /// every catalog row that has something to show — the ones the addon

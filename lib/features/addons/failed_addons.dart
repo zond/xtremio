@@ -49,6 +49,34 @@ final class AddonFailure {
   bool get isRemovable => addon != null && !addon!.isProtected;
 }
 
+/// The addons behind [rows] -- the catalog rows a screen dropped because
+/// their addon could not answer -- one entry each, in the order they were
+/// first met.
+///
+/// One entry per addon rather than per catalog: an entry's actions are
+/// about the addon, so a host that took two of its own catalogs down would
+/// otherwise offer to uninstall itself twice. What the summary line counts
+/// is the screen's own business and need not be this many.
+List<AddonFailure> addonFailuresOf(
+  Iterable<CatalogRow> rows,
+  ProfileState? profile,
+) {
+  final byUrl = <String, AddonFailure>{};
+  for (final row in rows) {
+    final url = row.firstRequest.base;
+    byUrl.putIfAbsent(
+      url,
+      () => AddonFailure(
+        transportUrl: url,
+        addon: profile?.installedAddon(url),
+        fallbackName: row.addonName,
+        message: row.error?.message ?? '',
+      ),
+    );
+  }
+  return byUrl.values.toList();
+}
+
 /// The addons that failed, below whatever did arrive.
 ///
 /// One failure is the row itself, unless [collapseSingle] says otherwise.
