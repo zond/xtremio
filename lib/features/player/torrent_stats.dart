@@ -162,6 +162,7 @@ final class InFlightPiece {
 final class TorrentStats {
   const TorrentStats({
     required this.phase,
+    this.streamName,
     this.checkedBytes,
     this.checkTotalBytes,
     this.initialWindowReadyBytes,
@@ -179,6 +180,18 @@ final class TorrentStats {
   });
 
   final TorrentPhase phase;
+
+  /// The name of the file the server is actually streaming (`streamName`):
+  /// the file the request named, or -- when the stream carried no
+  /// `fileIdx` -- the one the server guessed. Null until it knows, which is
+  /// what an empty `streamName` means: `EngineStats` initialises the field
+  /// to `""` and only fills it once the torrent's metadata lists files.
+  ///
+  /// It is the one answer about *this file* that does not come from an
+  /// addon, which is why the cast check reads it before
+  /// `behaviorHints.filename`: the addon says what it believes it linked
+  /// to, this is what was opened.
+  final String? streamName;
 
   /// Hash-check progress; non-null only while [TorrentPhase.checking].
   final int? checkedBytes;
@@ -256,6 +269,10 @@ final class TorrentStats {
     final discovery = json['peerDiscovery'];
     return TorrentStats(
       phase: TorrentPhase.parse(json['phase']),
+      streamName: switch (json['streamName']) {
+        final String name when name.isNotEmpty => name,
+        _ => null,
+      },
       checkedBytes: _intOrNull(json['checkedBytes']),
       checkTotalBytes: _intOrNull(json['checkTotalBytes']),
       initialWindowReadyBytes: _intOrNull(json['initialWindowReadyBytes']),
@@ -346,6 +363,7 @@ final class TorrentStats {
   bool operator ==(Object other) =>
       other is TorrentStats &&
       other.phase == phase &&
+      other.streamName == streamName &&
       other.checkedBytes == checkedBytes &&
       other.checkTotalBytes == checkTotalBytes &&
       other.initialWindowReadyBytes == initialWindowReadyBytes &&
@@ -364,6 +382,7 @@ final class TorrentStats {
   @override
   int get hashCode => Object.hash(
     phase,
+    streamName,
     checkedBytes,
     checkTotalBytes,
     initialWindowReadyBytes,

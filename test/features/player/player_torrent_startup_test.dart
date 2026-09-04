@@ -96,6 +96,42 @@ void main() {
       expect(failed, isNot(TorrentStats.fromJson(const {'phase': 'error'})));
     });
 
+    test('names the file the server opened, and empty is no name', () {
+      // `streamName` is the one thing in stats.json about *this file* that
+      // no addon supplied: for `/{infoHash}/{fileIdx}` it is the only name
+      // there is. `EngineStats` starts it as `""` and fills it once the
+      // torrent's metadata lists files, so empty is "not yet", not a name.
+      expect(
+        TorrentStats.fromJson(const {
+          'phase': 'buffering',
+          'streamName': 'Big Buck Bunny.mp4',
+        }).streamName,
+        'Big Buck Bunny.mp4',
+      );
+      expect(
+        TorrentStats.fromJson(const {
+          'phase': 'resolvingMetadata',
+          'streamName': '',
+        }).streamName,
+        isNull,
+      );
+      expect(
+        TorrentStats.fromJson(const {'phase': 'buffering'}).streamName,
+        isNull,
+      );
+      // A different file is different stats: the player keeps the last
+      // answer, so equality has to notice the name changing.
+      expect(
+        TorrentStats.fromJson(const {'phase': 'ready', 'streamName': 'a.mp4'}),
+        isNot(
+          TorrentStats.fromJson(const {
+            'phase': 'ready',
+            'streamName': 'b.mkv',
+          }),
+        ),
+      );
+    });
+
     test('keeps an unknown swarm null rather than calling it zero', () {
       final scraped = TorrentStats.fromJson(const {
         'phase': 'ready',
