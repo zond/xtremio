@@ -542,9 +542,34 @@ connection.
   like one, else none — never a stand-in like the stream's label) — that
   is what makes the core ask the subtitle addons. The menu lists the
   tracks embedded in the file (from libmpv's track list, minus the
-  synthetic `auto`/`no` entries) and every file from
-  `player.subtitles`, the stream's own `subtitles` and the converted
-  stream's, deduplicated by URL. Which track is active comes from mpv's
+  synthetic `auto`/`no` entries) first and in a section of their own --
+  they need no download and always match the release -- and below them
+  every file from `player.subtitles`, the stream's own `subtitles` and
+  the converted stream's, **one row per language**. That list is
+  deduplicated on what a file *is*, not on the URL string
+  (`SubtitleInfo.identityKeys`): the normalized URL -- scheme and host
+  lower-cased, a default port, a fragment and trailing slashes dropped,
+  the query's parameters in a fixed order but *nothing* removed from
+  them, because OpenSubtitles v3's only parameter is `senc`, which picks
+  the encoding of the bytes it returns -- and the addon's own `id`,
+  scoped by language, so two addons mirroring one upload collapse while
+  two that both number their answers from 1 do not. Then
+  `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)
+  makes one row per language, since OpenSubtitles answers a single movie
+  with 69 files, nineteen of them Spanish. Codes group on what they mean
+  (`en` and `eng` are one row); a code `languageName` does not know is
+  its own row, labelled with the code itself. Nothing is dropped: a
+  language with more than one file carries a row beneath it ("14 other
+  English files") that opens them all, each numbered and named by the
+  addon that offered it -- which is all there is to tell them apart,
+  since stremio-core's `Subtitles` keeps only `id`, `lang`, `url`,
+  `label` and `fonts` and OpenSubtitles sends no label. That row is a
+  *sibling* of the language row rather than a button inside it, so a
+  remote reaches it by moving down (directional traversal skips a node
+  inside the focused one's rect). Whichever file is playing is what its
+  language row shows as selected and what it re-applies, so a pick two
+  rows deep survives the list being rebuilt when a slow addon answers.
+  Which track is active comes from mpv's
   own `sid`/`aid` (observed through `NativePlayer.observeProperty`), so a
   default or forced track mpv picked by itself shows as selected too —
   media_kit's `stream.track` only follows its own setters. Picking one
