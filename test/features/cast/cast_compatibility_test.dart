@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_compatibility.dart';
 import 'package:xtremio/features/details/stream_facts.dart';
+import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/player/playback_stats.dart';
 
 /// The torrent URL the server serves a stream from: no extension anywhere
@@ -258,6 +259,17 @@ void main() {
 
     test('no server name falls back to what the addon claimed', () {
       expect(castFilename(playerState(claimed: 'claimed.mp4')), 'claimed.mp4');
+    });
+  });
+
+  group('the developer torrent', () {
+    test('is judged castable without waiting for the server', () {
+      // The file inside dd8255ec… really is `Big Buck Bunny.mp4`, and it is
+      // the largest, which is the one the server picks for a stream with no
+      // fileIdx.
+      final stream = StreamInfo(DevStreams.bigBuckBunnyTorrent);
+      expect(stream.filename, 'Big Buck Bunny.mp4');
+      expect(check(filename: stream.filename), isA<CastReady>());
     });
   });
 }

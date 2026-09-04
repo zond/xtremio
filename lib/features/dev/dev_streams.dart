@@ -19,6 +19,10 @@ abstract final class DevStreams {
     ],
     'name': 'Big Buck Bunny (torrent)',
     'description': 'Public torrent via the embedded stream-server',
+    // A real property of this torrent: the largest file the server picks is
+    // `Big Buck Bunny.mp4`. Saying so lets the cast check judge the stream
+    // from the first frame instead of waiting for the server's own answer.
+    'behaviorHints': {'filename': 'Big Buck Bunny.mp4'},
   };
 
   /// A plain progressive MP4 over HTTPS; the direct-play path.
