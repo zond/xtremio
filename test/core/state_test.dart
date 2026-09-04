@@ -708,11 +708,12 @@ void main() {
       for (final row in state.rows) {
         expect(row.isPlanned, row.index > 2, reason: 'row ${row.index}');
         expect(row.isEmpty, isFalse);
+        expect(row.hasFailed, isFalse, reason: 'row ${row.index}');
       }
       expect(state.visibleRows, hasLength(6));
     });
 
-    test('drops EmptyContent rows from visibleRows, keeps failures', () {
+    test('drops both EmptyContent and failed rows from visibleRows', () {
       final state = CatalogsWithExtraState.fromJson(loadSearchFixture());
       expect(state.selectedExtra, const [
         ExtraValue('search', 'night of the living dead'),
@@ -722,7 +723,10 @@ void main() {
       expect(failed, hasLength(2));
       expect(failed.first.error?.kind, 'Env');
       expect(failed.first.isEmpty, isFalse);
+      expect(failed.every((r) => r.hasFailed), isTrue);
       expect(state.rows.first.items.map((i) => i.id), contains('tt0063350'));
+      // The two YouTube rows answered HTTP 500: nothing to show, none shown.
+      expect(state.visibleRows.map((r) => r.index), [0, 1, 4]);
 
       final json = loadSearchFixture();
       final pages = json['catalogs'] as List<dynamic>;
@@ -732,7 +736,9 @@ void main() {
       };
       final withEmpty = CatalogsWithExtraState.fromJson(json);
       expect(withEmpty.rows[1].isEmpty, isTrue);
-      expect(withEmpty.visibleRows.map((r) => r.index), [0, 2, 3, 4]);
+      // An empty answer is not a failure, and neither is a loading row.
+      expect(withEmpty.rows[1].hasFailed, isFalse);
+      expect(withEmpty.visibleRows.map((r) => r.index), [0, 4]);
     });
 
     test('an unloaded model has no rows and is not loading', () {

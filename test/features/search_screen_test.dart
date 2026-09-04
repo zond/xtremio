@@ -169,10 +169,10 @@ void main() {
     expect(find.text('Night of the Living Dead'), findsWidgets);
     expect(find.text('Age of the Living Dead'), findsOneWidget);
 
-    // The failed YouTube rows keep a compact error each.
-    expect(find.text('Channels · YouTube'), findsNWidgets(2));
-    expect(find.text('Failed to fetch: HTTP 500'), findsNWidgets(2));
-    expect(find.byIcon(Icons.cloud_off_outlined), findsNWidgets(2));
+    // The two YouTube catalogs answered HTTP 500: no header, no error text.
+    expect(find.text('Channels · YouTube'), findsNothing);
+    expect(find.text('Failed to fetch: HTTP 500'), findsNothing);
+    expect(find.byIcon(Icons.cloud_off_outlined), findsNothing);
 
     // Everything settled: no progress bar.
     expect(find.byType(LinearProgressIndicator), findsNothing);

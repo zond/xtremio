@@ -194,10 +194,23 @@ void main() {
     expect(find.text('EmptyContent'), findsNothing);
   });
 
-  testWidgets('a failed catalog keeps its row with the error', (tester) async {
-    final core = fakeCore(
-      continueWatching: {'items': <Object>[]},
-      board: boardWithPage(0, {
+  testWidgets('a catalog that failed gets no row at all', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final core = fakeCore(continueWatching: {'items': <Object>[]});
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+    expect(find.text(firstPopularName()), findsOneWidget);
+    // Cinemeta's two movie catalogs, Popular and Featured.
+    expect(find.text('Cinemeta · movie'), findsNWidgets(2));
+
+    // The same row, now answering with an error rather than items: the row
+    // goes, message and all, rather than turning into a wall of text.
+    core.setState(
+      CoreField.board,
+      boardWithPage(0, {
         'type': 'Err',
         'content': {
           'type': 'Env',
@@ -205,12 +218,15 @@ void main() {
         },
       }),
     );
-    await tester.pumpWidget(harness(core));
     await tester.pumpAndSettle();
 
-    expect(find.text('HTTP 503'), findsOneWidget);
-    expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+    expect(find.text('HTTP 503'), findsNothing);
+    expect(find.byIcon(Icons.cloud_off_outlined), findsNothing);
     expect(find.text(firstPopularName()), findsNothing);
+    expect(find.text('Cinemeta · movie'), findsOneWidget);
+    // The catalogs that did answer are untouched.
+    expect(find.text('Popular'), findsOneWidget);
+    expect(find.text('Cinemeta · series'), findsNWidgets(2));
   });
 
   testWidgets('tapping a poster opens its details', (tester) async {

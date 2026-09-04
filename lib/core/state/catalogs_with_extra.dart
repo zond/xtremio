@@ -80,6 +80,19 @@ final class CatalogRow {
   /// dropped silently.
   bool get isEmpty => error?.isEmptyContent ?? false;
 
+  /// The addon could not answer at all — anything but `EmptyContent`.
+  ///
+  /// Kept apart from [isEmpty] on purpose: a catalog that legitimately has
+  /// nothing for this query and one whose host answered `HTTP 404` are
+  /// different facts, and only the second is a fault to report. A failed
+  /// row has nothing to put on screen, so it is dropped from
+  /// [CatalogsWithExtraState.visibleRows] too — but unlike an empty one it
+  /// is accounted for, once, where the list ends.
+  bool get hasFailed {
+    final error = this.error;
+    return error != null && !error.isEmptyContent;
+  }
+
   /// The shape the row's tiles should use: that of the first item, as
   /// stremio-web does, so one row is uniform.
   String get posterShape {
@@ -139,10 +152,14 @@ final class CatalogsWithExtraState {
   }
 
   /// Rows worth a place on screen: everything but the ones whose addon
-  /// answered with no items.
+  /// answered with no items and the ones whose addon could not answer.
+  ///
+  /// A row is dropped the moment it settles on a failure, never on any
+  /// history of failures: a 404 is a 404 the first time. A row that is
+  /// still loading stays, and keeps its placeholder.
   List<CatalogRow> get visibleRows => [
     for (final row in rows)
-      if (!row.isEmpty) row,
+      if (!row.isEmpty && !row.hasFailed) row,
   ];
 
   /// Any page still being fetched.

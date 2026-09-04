@@ -115,7 +115,9 @@ class _BoardScreenState extends State<BoardScreen> {
       ContinueWatchingState.fromJson(_continueWatching?.value ?? const {});
 
   /// The rows as laid out: continue watching first when it has items, then
-  /// every catalog row that is not known to be empty.
+  /// every catalog row that has something to show — the ones the addon
+  /// answered empty and the ones it could not answer at all are both left
+  /// out.
   List<_BoardRow> _rows(
     CatalogsWithExtraState board,
     ContinueWatchingState continueWatching,
@@ -441,8 +443,8 @@ class _CatalogRowView extends StatelessWidget {
   }
 
   Widget _content(_RowLayout layout) {
-    final error = row.error;
-    if (error != null) return _RowError(message: error.message);
+    // A row that failed never reaches here: `visibleRows` drops it, and the
+    // board accounts for it once at the end instead.
     final items = row.items;
     if (items.isEmpty) {
       // Planned but outside the requested range, or still loading.
@@ -563,22 +565,6 @@ class _PlaceholderStrip extends StatelessWidget {
       ),
     );
   }
-}
-
-class _RowError extends StatelessWidget {
-  const _RowError({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Align(
-    alignment: Alignment.topLeft,
-    child: ListTile(
-      dense: true,
-      leading: const Icon(Icons.cloud_off_outlined),
-      title: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
-    ),
-  );
 }
 
 /// A horizontal list of tiles with its own controller so desktop gets a

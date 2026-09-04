@@ -18,7 +18,7 @@ import '../details/meta_details_screen.dart';
 /// planned catalogs for the current query a `LoadRange` over all of them is
 /// dispatched, exactly once per query. Results are one poster grid per
 /// catalog that answered, labelled from `catalogLabels`; catalogs that
-/// answered with nothing are skipped, failed ones keep a compact error. An
+/// answered with nothing are skipped, and so are the ones that failed. An
 /// empty query unloads the field, as does leaving the screen.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -246,8 +246,10 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-/// One grid per catalog that returned items, plus a compact error for any
-/// that failed; catalogs with no hits are left out.
+/// One grid per catalog that returned items. Catalogs with no hits are left
+/// out, and so are the ones whose addon could not answer
+/// ([CatalogRow.hasFailed], via [CatalogsWithExtraState.visibleRows]) —
+/// a header over "failed to fetch: HTTP 404" is not a search result.
 class _Results extends StatelessWidget {
   const _Results({
     required this.query,
@@ -264,8 +266,8 @@ class _Results extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sections = [
-      for (final row in state.rows)
-        if (row.items.isNotEmpty || (row.error != null && !row.isEmpty)) row,
+      for (final row in state.visibleRows)
+        if (row.items.isNotEmpty) row,
     ];
     if (sections.isEmpty) {
       return isLoading ? const SizedBox.expand() : _NoResults(query: query);
@@ -275,25 +277,22 @@ class _Results extends StatelessWidget {
       slivers: [
         for (final row in sections) ...[
           SliverToBoxAdapter(child: _SectionHeader(row: row)),
-          if (row.error case final error?)
-            SliverToBoxAdapter(child: _SectionError(message: error.message))
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              sliver: SliverGrid.builder(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 160,
-                  childAspectRatio: 0.56,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                ),
-                itemCount: row.items.length,
-                itemBuilder: (context, index) {
-                  final item = row.items[index];
-                  return PosterTile(item: item, onTap: () => onOpen(item));
-                },
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            sliver: SliverGrid.builder(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 160,
+                childAspectRatio: 0.56,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
               ),
+              itemCount: row.items.length,
+              itemBuilder: (context, index) {
+                final item = row.items[index];
+                return PosterTile(item: item, onTap: () => onOpen(item));
+              },
             ),
+          ),
         ],
         const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
       ],
@@ -329,19 +328,6 @@ class _SectionHeader extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.titleMedium,
     ),
-  );
-}
-
-class _SectionError extends StatelessWidget {
-  const _SectionError({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => ListTile(
-    dense: true,
-    leading: const Icon(Icons.cloud_off_outlined),
-    title: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
   );
 }
 
