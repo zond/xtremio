@@ -752,7 +752,11 @@ connection.
   says the group's files are PAL-timed, and against a PAL video that
   needs nothing rather than needing the reciprocal -- though it stays in
   the file, since the next release of the show is likely to be the
-  family it was learned on. Reset *forgets* rather than storing a
+  family it was learned on. Because the rate is observed, on a torrent
+  the answer usually arrives *after* the file went on and the speed with
+  it, so the same rule runs again when it lands and takes back off what
+  it has just ruled out; a speed the viewer *pressed* is a judgement
+  about the drift in front of them and is never withdrawn. Reset *forgets* rather than storing a
   correction of none, since nothing remembered is what nothing applied
   looks like next time; the store is bounded by recency, so a viewer who
   fixes twenty shows does not pay for the twenty-first; and only a press
@@ -834,9 +838,10 @@ connection.
   out of the same ordered list the menu shows
   (`PlayerScreen._offeredSubtitles`, the one place either consumer gets
   it from), since it is the one path that applies a file without anybody
-  looking at it, and it applies it exactly as it stands. A backend that answers neither way is waited on for two seconds
-  (`PlayerScreen.frameRateTimeout`) and then treated as having said
-  nothing, which decides nothing. Text subtitles are rendered by Flutter
+  looking at it, and it applies it exactly as it stands. A backend with no
+  rate to report -- a cast device, an offline file, a container that
+  declares nothing -- simply stays silent, and an unknown rate decides
+  nothing. Text subtitles are rendered by Flutter
   (media_kit's default `libass: false` sets mpv `sub-visibility=no` and
   feeds the text lines to a `SubtitleView`), so size, colour and the
   background box are a `TextStyle` in `SubtitleViewConfiguration`, not

@@ -258,7 +258,16 @@ test; see README, *Subtitles*.
   dropped rather than reversed -- a remembered stretch says the group's
   files are PAL-timed, and a PAL-timed file on a PAL video needs
   nothing -- and it stays in the file, because the next release is
-  likely to be the family it was learned on.
+  likely to be the family it was learned on. **The rule runs again when
+  a late rate arrives**, because the rate is observed and on a torrent
+  that is normally after the file went on: enforcing it only where the
+  answer was already in makes it dead code for exactly the population it
+  was written for, and leaves 4.27 % on a subtitle that was in sync when
+  it arrived, with nothing that resets it. Only the machine's speed is
+  withdrawn -- `PlayerScreen._restoredSpeed` is what tells the two
+  apart -- because a press is a judgement about the drift on screen, and
+  a press keeps its own button, so the toggle back to exactly 1.0 stays
+  reachable.
 - **Only a press on the panel is a judgement, and a press does not
   write.** `_adjustTiming` is the one path that remembers; every other
   call on the timing is the machine putting a file back the way it found
@@ -346,9 +355,12 @@ test; see README, *Subtitles*.
   add a fallback: there is one property, not a list of them.
 - **An unknown rate decides nothing.** Cast, offline, a fake, a
   container that says nothing, a read that threw: all of it is null, and
-  null means the panel offers both directions. Never substitute a
-  default, a guess or a last-known rate. Nothing else reads it, so an
-  unknown rate costs a pointed button and no more.
+  null means the panel offers both directions and a remembered speed put
+  back unchallenged. Never substitute a default, a guess or a last-known
+  rate. Two things read the rate and both have to answer again when a
+  late observation changes it -- the panel's direction, and the
+  remembered speed above -- so unknown is a state to be left behind,
+  never a verdict to be recorded.
 - **Nothing is hidden; what orders a language is the release.**
   `subtitlesByRelease` puts a language's files that the addon says were
   cut for the release actually playing first, then the ones from a group
