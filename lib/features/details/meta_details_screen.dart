@@ -47,25 +47,34 @@ import 'stream_sources.dart';
 /// it, connection or not (`offline_play.dart`).
 ///
 /// The sources list has two layouts, and which one it is in is a global
-/// preference ([AppPrefs.streamsFlat]) rather than a per-title one: the
-/// section header carries the toggle, the choice follows the user to the
-/// next title, and it is read from the Rust side's preferences file at
-/// start-up so the first list is already the one they left. Grouped -- a
-/// section per addon, in profile order, each addon's own ranking intact --
-/// is the default and is what the engine hands over.
-///
-/// The other layout puts every addon's answers together and cuts them by
-/// **resolution**: one collapsible section per rung, highest first, the
-/// streams nothing could be read from in a section of their own at the
-/// bottom that says so rather than guessing. Only the best section is open
-/// to start with, so the stream most people want is one tap and not two,
-/// and a *closed* header still says how many streams it holds and the best
-/// swarm among them ([StreamSection.summary]) -- an empty-looking 2160p
-/// and a healthy one are different answers. Which sections are open is
-/// [_openSections], remembered for as long as the screen is up. Inside a
+/// preference ([AppPrefs.streamsSectioned]) rather than a per-title one:
+/// the section header carries the toggle, the choice follows the user to
+/// the next title, and it is read from the Rust side's preferences file at
+/// start-up so the first list is already the one they left. **Sectioned**
+/// -- every addon's answers together, cut by **resolution**: one
+/// collapsible section per rung, highest first, the streams nothing could
+/// be read from in a section of their own at the bottom that says so
+/// rather than guessing -- is the default, so the layout the sources list
+/// was built for is the one a fresh install actually sees. Inside a
 /// section the order is [StreamOrder], the same for every section, and
 /// each row names the addon it came from since it has no addon heading to
 /// sit under any more.
+///
+/// The other layout is **grouped**: a section per addon, in profile order,
+/// each addon's own ranking intact -- what the engine hands over, and what
+/// this list looked like before the sectioned layout existed.
+///
+/// Every resolution section starts *collapsed*, on every title, until the
+/// viewer opens one: a *closed* header still says how many streams it
+/// holds and the best swarm among them ([StreamSection.summary]) -- an
+/// empty-looking 2160p and a healthy one are different answers -- so a
+/// compact list of what is available is the first thing shown, and opening
+/// one is a choice rather than something already made for the viewer.
+/// Which sections are open is [AppPrefs.openStreamSections]: a *global*
+/// preference like the layout itself, not a per-screen one, so a section
+/// opened on one title is open on the next, and again after a restart. A
+/// resolution the current title does not offer is simply not shown open --
+/// it is never swapped for some other section the viewer did not ask for.
 ///
 /// Everything around the streams is the same in both layouts: the
 /// last-used shortcut, the addons that had nothing, the ones that failed,
@@ -179,18 +188,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// The season the episode list shows; null until the user (or the
   /// selected episode) chooses one.
   int? _season;
-
-  /// Which resolution sections of the sources list are open, or null while
-  /// the user has not said -- which is the best section available, so
-  /// playing the best stream is one tap and not two.
-  ///
-  /// A choice, once made, is what the screen shows from then on: another
-  /// episode's streams, a re-sort, a rebuilt list all keep it. Two things
-  /// are deliberately not "the user has not said": an empty set is
-  /// everything collapsed on purpose and stays that way, and a set naming
-  /// only resolutions this title does not have falls back to the best one
-  /// here rather than showing a list with nothing open in it.
-  Set<StreamResolution?>? _openSections;
 
   /// The episode a tap asked for while the engine has not answered with its
   /// streams yet. The field still describes the previous selection, so
@@ -839,7 +836,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// asked. Between a tap and that first state there is nothing at all to
   /// list, and the section says so where the tap can see it.
   List<Widget> _streamSlivers(MetaDetailsState state, MetaItem meta) {
-    final isFlat = _prefs?.streamsFlat ?? false;
+    final isSectioned = _prefs?.streamsSectioned ?? true;
     final order = _prefs?.streamsOrder ?? StreamOrder.peersPerSize;
     final lastUsed = state.lastUsedStream;
     final groups = state.allStreamGroups;
@@ -865,8 +862,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             state: state,
             video: meta.videoById(_awaitingVideoId!),
             isLoading: true,
-            flat: isFlat,
-            onFlatChanged: _setFlatStreams,
+            sectioned: isSectioned,
+            onSectionedChanged: _setStreamsSectioned,
             order: order,
             onOrderChanged: _setStreamsOrder,
           ),
@@ -937,7 +934,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // collapse is across the whole list so a source two addons described
     // differently cannot appear in two sections, and sectioning keeps the
     // order it is handed, so each section is already sorted.
-    final sections = isFlat
+    final sections = isSectioned
         ? sectionsByResolution(
             _collapse(
               sortedByStreamOrder(
@@ -968,7 +965,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // repeats collapsed. A source two addons both offered stays in both
     // groups -- the groups are the point of this layout -- and each row
     // says the other addon has it too.
-    final grouped = isFlat
+    final grouped = isSectioned
         ? const <(StreamGroup, List<_SourceRow>)>[]
         : [
             for (final group in listed)
@@ -994,8 +991,19 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         : null;
     // The first playable stream of an *open* section: a collapsed one has
     // nothing on screen to focus.
-    final sectionAutofocusAt = isTv && lastUsed == null && isFlat
+    final sectionAutofocusAt = isTv && lastUsed == null && isSectioned
         ? _firstPlayableSection(sections, openSections)
+        : null;
+    // Every section starts collapsed, so most of the time there is no
+    // stream row to land on: focus the first section's own header instead,
+    // which a remote can already open with select.
+    final headerAutofocusAt =
+        isTv &&
+            lastUsed == null &&
+            isSectioned &&
+            sectionAutofocusAt == null &&
+            sections.isNotEmpty
+        ? 0
         : null;
     // The shortcut is the same source as one of the rows below, so it is
     // handed the same merged trackers; nothing else about it changes.
@@ -1018,8 +1026,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         child: _StreamsHeader(
           key: _streamsKey,
           state: state,
-          flat: isFlat,
-          onFlatChanged: _setFlatStreams,
+          sectioned: isSectioned,
+          onSectionedChanged: _setStreamsSectioned,
           order: order,
           onOrderChanged: _setStreamsOrder,
         ),
@@ -1050,17 +1058,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             downloads: downloads?.forGroup(lastUsed!.$1),
           ),
         ),
-      if (isFlat)
+      if (isSectioned)
         for (final (index, section) in sections.indexed)
           _ResolutionSectionSliver(
             section: section,
             expanded: openSections.contains(section.resolution),
-            onExpand: () => _toggleSection(section.resolution, openSections),
+            onExpand: () => _toggleSection(section.resolution),
             lastUsed: lastUsed?.$2,
             onPlay: (row) => _play(state, row.group, row.stream),
             autofocusIndex: sectionAutofocusAt?.$1 == index
                 ? sectionAutofocusAt!.$2
                 : null,
+            headerAutofocus: headerAutofocusAt == index,
             downloads: downloads,
           )
       else ...[
@@ -1100,41 +1109,73 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
 
   /// Puts the sources list in one layout or the other, for everything the
   /// app shows from now on: the preference is global, not this title's.
-  void _setFlatStreams(bool value) => _prefs?.setStreamsFlat(value);
+  void _setStreamsSectioned(bool value) => _prefs?.setStreamsSectioned(value);
 
   /// Puts every resolution section in one order or another, again for
   /// everything the app shows from now on rather than for this title.
   void _setStreamsOrder(StreamOrder value) => _prefs?.setStreamsOrder(value);
 
-  /// Which of [sections] are drawn open, resolving [_openSections] against
-  /// what this title actually offers (see that field for the three cases).
+  /// The label [AppPrefs.openStreamSections] stores one section under: a
+  /// resolution's own [StreamResolution.label], or `'unknown'` for the
+  /// section nothing could be read a resolution from -- the same word
+  /// [streamSectionKey] uses for that section's widget key.
+  static String _sectionStorageLabel(StreamResolution? resolution) =>
+      resolution?.label ?? 'unknown';
+
+  /// Every resolution the viewer has ever opened, anywhere, parsed back
+  /// from [AppPrefs.openStreamSections]. A label this build does not
+  /// recognise -- a newer build's rung, a stray value -- is dropped rather
+  /// than guessed at, the same as an unparseable [StreamOrder]. Empty both
+  /// when nothing has ever been chosen and when the viewer collapsed
+  /// everything on purpose; [AppPrefs.openStreamSections] is what keeps
+  /// those two apart in storage; this screen draws them identically.
+  Set<StreamResolution?> _rememberedOpenSections() {
+    final result = <StreamResolution?>{};
+    for (final label in _prefs?.openStreamSections ?? const <String>{}) {
+      if (label == 'unknown') {
+        result.add(null);
+        continue;
+      }
+      for (final resolution in StreamResolution.values) {
+        if (resolution.label == label) {
+          result.add(resolution);
+          break;
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Which of [sections] are drawn open: the remembered resolutions this
+  /// title actually offers, and nothing else. A remembered resolution the
+  /// title does not have is simply not shown open -- never substituted
+  /// with some other section the viewer did not ask for.
   Set<StreamResolution?> _visibleOpenSections(
     List<StreamSection<_SourceRow>> sections,
   ) {
-    final best = {if (sections.isNotEmpty) sections.first.resolution};
-    final chosen = _openSections;
-    if (chosen == null) return best;
-    if (chosen.isEmpty) return const {};
-    final offered = {
+    final chosen = _rememberedOpenSections();
+    return {
       for (final section in sections)
         if (chosen.contains(section.resolution)) section.resolution,
     };
-    return offered.isEmpty ? best : offered;
   }
 
-  /// Opens or closes one section, building on [open] -- what is on screen
-  /// right now -- so the first press after a default acts on what the user
-  /// can see rather than on an empty memory.
-  void _toggleSection(
-    StreamResolution? resolution,
-    Set<StreamResolution?> open,
-  ) => setState(() {
-    _openSections = {
-      for (final section in open)
+  /// Opens or closes one section, on the *full* remembered set (every
+  /// resolution ever opened on any title), not just what this title shows
+  /// open: otherwise closing a section here could silently drop a resolution
+  /// another title still remembers, one this title never offered in the
+  /// first place.
+  void _toggleSection(StreamResolution? resolution) {
+    final full = _rememberedOpenSections();
+    final next = {
+      for (final section in full)
         if (section != resolution) section,
-      if (!open.contains(resolution)) resolution,
+      if (!full.contains(resolution)) resolution,
     };
-  });
+    _prefs?.setOpenStreamSections({
+      for (final section in next) _sectionStorageLabel(section),
+    });
+  }
 
   /// What an addon is called in a list that has lost its headings: the
   /// installed addon's own name, else the host its manifest URL names --
@@ -1729,9 +1770,19 @@ class _NoStreamsNotice extends StatelessWidget {
 /// engine's answer.
 const String kLookingForStreams = 'Looking for streams…';
 
-/// What the toggle in the section header offers next, as its tooltip.
-const String kFlatStreamsTooltip = 'Group streams by resolution';
-const String kGroupedStreamsTooltip = 'Group streams by addon';
+/// What the toggle in the section header says the layout on screen right
+/// now is, as its own short label (drawn beside it, when there is room)
+/// and as the state half of its tooltip, so it reads as "here is where you
+/// are" rather than as an action that only points one way.
+const String kStreamsSectionedLabel = 'Sectioned by resolution';
+const String kStreamsGroupedLabel = 'Grouped by addon';
+
+/// The toggle's tooltip: the layout on screen right now, and what tapping
+/// it switches to.
+const String kStreamsSectionedTooltip =
+    '$kStreamsSectionedLabel — tap to group by addon';
+const String kStreamsGroupedTooltip =
+    '$kStreamsGroupedLabel — tap to section by resolution';
 
 /// The key on one resolution section's header.
 ///
@@ -1748,19 +1799,20 @@ class _StreamsHeader extends StatelessWidget {
     required this.state,
     this.video,
     this.isLoading = false,
-    this.flat = false,
-    this.onFlatChanged,
+    this.sectioned = true,
+    this.onSectionedChanged,
     this.order = StreamOrder.peersPerSize,
     this.onOrderChanged,
   });
 
   final MetaDetailsState state;
 
-  /// Whether the list below is the one cut into resolution sections.
-  final bool flat;
+  /// Whether the list below is the one cut into resolution sections,
+  /// rather than one section per addon.
+  final bool sectioned;
 
   /// Flips the layout; null draws no toggle at all.
-  final ValueChanged<bool>? onFlatChanged;
+  final ValueChanged<bool>? onSectionedChanged;
 
   /// What order the streams inside each section are in. Only the sectioned
   /// layout has such an order to choose -- the grouped one is the addons'
@@ -1809,16 +1861,32 @@ class _StreamsHeader extends StatelessWidget {
                         color: theme.colorScheme.primary,
                       ),
                     ),
+                    // States which of the two layouts is on screen, right
+                    // next to the heading -- the toggle's tooltip says the
+                    // same thing, for when there is no room to read this.
+                    if (onSectionedChanged != null)
+                      Text(
+                        sectioned
+                            ? kStreamsSectionedLabel
+                            : kStreamsGroupedLabel,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     if (subtitle != null)
                       Text(subtitle, style: theme.textTheme.bodySmall),
                   ],
                 ),
               ),
-              if (onFlatChanged != null)
+              if (onSectionedChanged != null)
                 IconButton(
-                  tooltip: flat ? kGroupedStreamsTooltip : kFlatStreamsTooltip,
-                  icon: Icon(flat ? Icons.view_agenda_outlined : Icons.sort),
-                  onPressed: () => onFlatChanged!(!flat),
+                  tooltip: sectioned
+                      ? kStreamsSectionedTooltip
+                      : kStreamsGroupedTooltip,
+                  icon: Icon(
+                    sectioned ? Icons.view_agenda_outlined : Icons.sort,
+                  ),
+                  onPressed: () => onSectionedChanged!(!sectioned),
                 ),
               if (isLoading || state.isLoadingStreams)
                 const SizedBox.square(
@@ -1830,7 +1898,7 @@ class _StreamsHeader extends StatelessWidget {
           // A Wrap rather than a row of segments: three labels have to fit
           // a phone's width and a 480 dp pane on a television, and the
           // chips are each a focus stop a remote can reach.
-          if (flat && onOrderChanged != null)
+          if (sectioned && onOrderChanged != null)
             Padding(
               padding: const EdgeInsets.only(top: 4, bottom: 4),
               child: FilterChips<StreamOrder>(
@@ -1974,6 +2042,7 @@ class _ResolutionSectionSliver extends StatelessWidget {
     required this.lastUsed,
     required this.onPlay,
     this.autofocusIndex,
+    this.headerAutofocus = false,
     this.downloads,
   });
 
@@ -1988,6 +2057,11 @@ class _ResolutionSectionSliver extends StatelessWidget {
   /// The stream (by index) where TV focus starts; null for none here.
   final int? autofocusIndex;
 
+  /// Whether TV focus starts on this section's own header. Only true when
+  /// every section is collapsed and there is no stream to focus instead --
+  /// see `headerAutofocusAt` in `_streamSlivers`.
+  final bool headerAutofocus;
+
   /// The downloads, when there is a client above this screen. Bound to each
   /// row's own group, since a pin records the request its stream came from.
   final _StreamDownloads? downloads;
@@ -2000,6 +2074,7 @@ class _ResolutionSectionSliver extends StatelessWidget {
         SliverToBoxAdapter(
           child: ListTile(
             key: streamSectionKey(section.resolution),
+            autofocus: headerAutofocus,
             leading: Icon(
               expanded ? Icons.expand_more : Icons.chevron_right,
               color: theme.colorScheme.primary,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -43,6 +45,18 @@ Map<String, dynamic> torrentGroup(String videoId) => {
 };
 
 void main() {
+  /// Grouped, not the sources list's sectioned default: this file is
+  /// about the screen's own loading and routing, not resolution sections,
+  /// and most of it wants a stream on screen with no section to open
+  /// first. `AppPrefs.inMemory()` persists nothing, so the setter's write
+  /// below completes synchronously (nothing to await) and the value is
+  /// already in place by the time this returns.
+  AppPrefs groupedPrefs() {
+    final prefs = AppPrefs.inMemory();
+    unawaited(prefs.setStreamsSectioned(false));
+    return prefs;
+  }
+
   // Scopes sit above MaterialApp, as in the app, so pushed routes see them.
   Widget harness(
     FakeCoreClient core,
@@ -55,8 +69,11 @@ void main() {
     child: PlaybackScope(
       createEngine: () => engine,
       torrentStats: FakeTorrentStatsClient(),
-      child: MaterialApp(
-        home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
+      child: PrefsScope(
+        prefs: groupedPrefs(),
+        child: MaterialApp(
+          home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
+        ),
       ),
     ),
   );

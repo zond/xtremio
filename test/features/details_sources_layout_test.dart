@@ -206,15 +206,71 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// [AppPrefs.inMemory] plus a widget rebuild, so the streams pane keeps
+  /// its state -- section identity, expansion memory -- across it the way
+  /// a real title change does.
+  Future<void> rebuild(WidgetTester tester, Widget widget) async {
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(widget);
+    await tester.pumpAndSettle();
+  }
+
   group('the layout toggle', () {
-    testWidgets('starts grouped: the engine order, one section per addon', (
-      tester,
-    ) async {
+    testWidgets(
+      'starts sectioned: highest resolution first, every section collapsed',
+      (tester) async {
+        useWideViewport(tester);
+        await tester.pumpWidget(harness(coreWith(twoAddons())));
+        await tester.pumpAndSettle();
+
+        // A heading per resolution, highest first, and the one nothing
+        // could be read from last -- said to be unknown rather than
+        // guessed at.
+        expect(
+          topOfSection(tester, StreamResolution.uhd2160),
+          lessThan(topOfSection(tester, StreamResolution.fhd1080)),
+        );
+        expect(
+          topOfSection(tester, StreamResolution.fhd1080),
+          lessThan(topOfSection(tester, StreamResolution.hd720)),
+        );
+        expect(
+          topOfSection(tester, StreamResolution.hd720),
+          lessThan(topOfSection(tester, null)),
+        );
+        expect(find.text('Unknown resolution'), findsOneWidget);
+
+        // Nothing has been opened yet, so nothing but the headers is on
+        // screen -- not even the best one.
+        expect(find.text('Alpha 2160p'), findsNothing);
+        expect(find.text('Beta 1080p'), findsNothing);
+        expect(find.text('Alpha 720p'), findsNothing);
+        expect(find.text('Beta mystery release'), findsNothing);
+        expect(
+          find.text('alpha.example'),
+          findsNothing,
+          reason: 'no row is open to badge an addon name on',
+        );
+
+        // The toggle says where it is and what tapping it does, both in
+        // its tooltip and, with room in the header, right next to the
+        // heading.
+        expect(find.byTooltip(kStreamsSectionedTooltip), findsOneWidget);
+        expect(find.byTooltip(kStreamsGroupedTooltip), findsNothing);
+        expect(find.text(kStreamsSectionedLabel), findsOneWidget);
+      },
+    );
+
+    testWidgets('flips to grouped, each addon\'s own order intact, and back to '
+        'sectioned -- still with nothing open', (tester) async {
       useWideViewport(tester);
       await tester.pumpWidget(harness(coreWith(twoAddons())));
       await tester.pumpAndSettle();
 
-      // A heading per addon, once each, above its own streams.
+      await flip(tester, kStreamsSectionedTooltip);
+
+      // A heading per addon, once each, above its own streams: what this
+      // list looked like before the sectioned layout existed.
       expect(find.text('alpha.example'), findsOneWidget);
       expect(find.text('beta.example'), findsOneWidget);
       expect(topOf('alpha.example'), lessThan(topOf('Alpha 720p')));
@@ -222,60 +278,37 @@ void main() {
       expect(topOf('Alpha 720p'), lessThan(topOf('Alpha 2160p')));
       expect(topOf('Alpha 2160p'), lessThan(topOf('Beta 1080p')));
       expect(topOf('Beta 1080p'), lessThan(topOf('Beta mystery release')));
+      expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
+      expect(find.byTooltip(kStreamsSectionedTooltip), findsNothing);
+      expect(find.text(kStreamsGroupedLabel), findsOneWidget);
 
-      expect(find.byTooltip(kFlatStreamsTooltip), findsOneWidget);
-      expect(find.byTooltip(kGroupedStreamsTooltip), findsNothing);
-    });
+      await flip(tester, kStreamsGroupedTooltip);
 
-    testWidgets('flips to a section per resolution, highest first, with the '
-        'best one already open', (tester) async {
-      useWideViewport(tester);
-      await tester.pumpWidget(harness(coreWith(twoAddons())));
-      await tester.pumpAndSettle();
-
-      await flip(tester, kFlatStreamsTooltip);
-
-      // A heading per resolution, highest first, and the one nothing could
-      // be read from last -- said to be unknown rather than guessed at.
-      expect(
-        topOfSection(tester, StreamResolution.uhd2160),
-        lessThan(topOfSection(tester, StreamResolution.fhd1080)),
-      );
-      expect(
-        topOfSection(tester, StreamResolution.fhd1080),
-        lessThan(topOfSection(tester, StreamResolution.hd720)),
-      );
-      expect(
-        topOfSection(tester, StreamResolution.hd720),
-        lessThan(topOfSection(tester, null)),
-      );
-      expect(find.text('Unknown resolution'), findsOneWidget);
-
-      // Only the best section is open, so its stream is one tap away and
-      // the rest are folded up rather than scrolled past.
-      expect(find.text('Alpha 2160p'), findsOneWidget);
-      expect(find.text('Beta 1080p'), findsNothing);
-      expect(find.text('Alpha 720p'), findsNothing);
-      expect(find.text('Beta mystery release'), findsNothing);
-      // The open row names its own addon, as it has no addon heading now.
-      expect(find.text('alpha.example'), findsOneWidget);
-
-      // Opening another section leaves the first one open too.
-      await toggleSection(tester, StreamResolution.fhd1080);
-      expect(find.text('Alpha 2160p'), findsOneWidget);
-      expect(find.text('Beta 1080p'), findsOneWidget);
-      expect(topOf('Alpha 2160p'), lessThan(topOf('Beta 1080p')));
-      // And closing one closes only it.
-      await toggleSection(tester, StreamResolution.uhd2160);
+      // Sectioned again, and flipping the layout did not open anything
+      // on its own.
+      expect(find.text('alpha.example'), findsNothing);
       expect(find.text('Alpha 2160p'), findsNothing);
-      expect(find.text('Beta 1080p'), findsOneWidget);
-
-      // The toggle now offers the way back, and grouping is untouched.
-      expect(find.byTooltip(kGroupedStreamsTooltip), findsOneWidget);
-      await flip(tester, kGroupedStreamsTooltip);
-      expect(topOf('Alpha 720p'), lessThan(topOf('Alpha 2160p')));
-      expect(find.text('alpha.example'), findsOneWidget);
+      expect(find.byTooltip(kStreamsSectionedTooltip), findsOneWidget);
     });
+
+    testWidgets(
+      'an install that had already chosen grouped keeps it, not the new '
+      'sectioned default',
+      (tester) async {
+        useWideViewport(tester);
+        final prefs = AppPrefs(
+          client: FakePrefsClient({'streamsSectioned': false}),
+        );
+        addTearDown(prefs.dispose);
+        await prefs.load();
+        await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
+        await tester.pumpAndSettle();
+
+        expect(find.text('alpha.example'), findsOneWidget);
+        expect(topOf('Alpha 720p'), lessThan(topOf('Alpha 2160p')));
+        expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
+      },
+    );
 
     testWidgets('a collapsed header says how many streams and how healthy', (
       tester,
@@ -292,7 +325,6 @@ void main() {
       ];
       await tester.pumpWidget(harness(coreWith(streams)));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
 
       // Closed, a section still says what is in it: how many streams, and
       // the best swarm among them, which is what tells an empty-looking
@@ -319,7 +351,7 @@ void main() {
       useWideViewport(tester);
       await tester.pumpWidget(harness(coreWith(twoAddons())));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
+      await toggleSection(tester, StreamResolution.uhd2160);
       await toggleSection(tester, StreamResolution.fhd1080);
       await toggleSection(tester, null);
 
@@ -362,7 +394,7 @@ void main() {
       useWideViewport(tester);
       await tester.pumpWidget(harness(coreWith(oneResolution())));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
+      await toggleSection(tester, StreamResolution.fhd1080);
 
       // 8 GB for 200 peers is 41 MB a peer: the fattest file on the list
       // is the one likeliest to arrive faster than it is watched, which
@@ -383,7 +415,7 @@ void main() {
       useWideViewport(tester);
       await tester.pumpWidget(harness(coreWith(oneResolution())));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
+      await toggleSection(tester, StreamResolution.fhd1080);
 
       // Behind even the worst ratio on the list (350 MB a peer)...
       expect(topOf('Lonely 1080p'), lessThan(topOf('Sizeless 1080p')));
@@ -430,17 +462,20 @@ void main() {
       tester,
     ) async {
       useWideViewport(tester);
-      final stored = FakePrefsClient({'streamsFlat': true});
+      final stored = FakePrefsClient();
       final prefs = AppPrefs(client: stored);
       addTearDown(prefs.dispose);
       await prefs.load();
       await tester.pumpWidget(harness(coreWith(oneResolution()), prefs: prefs));
       await tester.pumpAndSettle();
 
-      // Peers per megabyte to begin with, and nothing written for it: a
-      // default is not a choice.
+      // Sectioned to begin with, and nothing written for it: a default is
+      // not a choice.
+      expect(stored.stored.containsKey('streamsSectioned'), isFalse);
+      await toggleSection(tester, StreamResolution.fhd1080);
+
+      // Peers per megabyte to begin with.
       expect(rows(tester).first, 'Fat 1080p');
-      expect(stored.stored, {'streamsFlat': true});
 
       await pick(tester, StreamOrder.largest);
       // Largest first, with the one whose size nobody gave last -- after
@@ -472,23 +507,21 @@ void main() {
       expect(stored.stored['streamsOrder'], 'peersPerSize');
     });
 
-    testWidgets('the choice survives a rebuild and a fresh start', (
-      tester,
-    ) async {
+    testWidgets('the order, and which section is open, survive a rebuild and a '
+        'fresh start', (tester) async {
       useWideViewport(tester);
-      final stored = FakePrefsClient({'streamsFlat': true});
+      final stored = FakePrefsClient();
       final first = AppPrefs(client: stored);
       addTearDown(first.dispose);
       await first.load();
       await tester.pumpWidget(harness(coreWith(oneResolution()), prefs: first));
       await tester.pumpAndSettle();
+      await toggleSection(tester, StreamResolution.fhd1080);
       await pick(tester, StreamOrder.largest);
       expect(rows(tester)[1], 'Peerless 1080p');
 
-      // Another title, the same preference above it.
-      await tester.pumpWidget(const SizedBox());
-      await tester.pumpWidget(harness(coreWith(oneResolution()), prefs: first));
-      await tester.pumpAndSettle();
+      // Another title, the same preferences above it.
+      await rebuild(tester, harness(coreWith(oneResolution()), prefs: first));
       expect(rows(tester)[1], 'Peerless 1080p');
 
       // And the app comes up again: a new AppPrefs over the same file,
@@ -498,6 +531,7 @@ void main() {
       addTearDown(restarted.dispose);
       await restarted.load();
       expect(restarted.streamsOrder, StreamOrder.largest);
+      expect(restarted.openStreamSections, {'1080p'});
       await tester.pumpWidget(
         harness(coreWith(oneResolution()), prefs: restarted),
       );
@@ -509,17 +543,33 @@ void main() {
       tester,
     ) async {
       useWideViewport(tester);
-      await tester.pumpWidget(harness(coreWith(oneResolution())));
+      final prefs = AppPrefs(
+        client: FakePrefsClient({'streamsSectioned': false}),
+      );
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      await tester.pumpWidget(harness(coreWith(oneResolution()), prefs: prefs));
       await tester.pumpAndSettle();
 
       // Grouped is each addon's own ranking, which is the point of it.
       expect(find.byType(ChoiceChip), findsNothing);
-      await flip(tester, kFlatStreamsTooltip);
+      await flip(tester, kStreamsGroupedTooltip);
       expect(find.byType(ChoiceChip), findsNWidgets(StreamOrder.values.length));
     });
   });
 
-  group('the section the user opened', () {
+  group('which resolution sections are open', () {
+    testWidgets('a fresh install has nothing open', (tester) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(harness(coreWith(twoAddons())));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Alpha 2160p'), findsNothing);
+      expect(find.text('Beta 1080p'), findsNothing);
+      expect(find.text('Alpha 720p'), findsNothing);
+      expect(find.text('Beta mystery release'), findsNothing);
+    });
+
     testWidgets('is the one still open when the streams are rebuilt', (
       tester,
     ) async {
@@ -527,11 +577,9 @@ void main() {
       final core = coreWith(twoAddons());
       await tester.pumpWidget(harness(core));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
 
-      // Open 720p and close the one that was open by default.
+      // Open 720p; nothing else was open to begin with.
       await toggleSection(tester, StreamResolution.hd720);
-      await toggleSection(tester, StreamResolution.uhd2160);
       expect(find.text('Alpha 720p'), findsOneWidget);
       expect(find.text('Alpha 2160p'), findsNothing);
 
@@ -547,70 +595,102 @@ void main() {
       expect(find.text('Alpha 2160p'), findsNothing);
     });
 
-    testWidgets('falls back to the best one when this title has nothing of '
-        'that resolution', (tester) async {
+    testWidgets('a remembered resolution this title does not have simply stays '
+        'unopened, never substituted for another section', (tester) async {
       useWideViewport(tester);
-      final core = coreWith(twoAddons());
-      await tester.pumpWidget(harness(core));
-      await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
-      await toggleSection(tester, StreamResolution.hd720);
-      await toggleSection(tester, StreamResolution.uhd2160);
-
-      // Streams with no 720p in them at all: rather than a list with
-      // everything folded up, the best section is open again.
-      core.setState(
-        CoreField.metaDetails,
-        loadMetaDetailsFixture()
-          ..['streams'] = [
-            ready(alphaUrl, [
-              {
-                'infoHash': 'f' * 40,
-                'name': 'Only 1080p',
-                'description': '👤 4',
-              },
-            ]),
-          ],
+      final prefs = AppPrefs(
+        client: FakePrefsClient({
+          'openStreamSections': ['2160p'],
+        }),
       );
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      // Streams with no 2160p in them at all.
+      final core = coreWith([
+        ready(alphaUrl, [
+          {'infoHash': 'f' * 40, 'name': 'Only 1080p', 'description': '👤 4'},
+        ]),
+      ]);
+      await tester.pumpWidget(harness(core, prefs: prefs));
       await tester.pumpAndSettle();
 
-      expect(find.text('Only 1080p'), findsOneWidget);
+      expect(
+        find.text('Only 1080p'),
+        findsNothing,
+        reason: 'not substituted for the section this title actually has',
+      );
+      expect(
+        find.text('1080p'),
+        findsOneWidget,
+        reason: 'the header is still there, just closed',
+      );
+    });
+
+    testWidgets('collapsing everything stays empty, and is not re-expanded '
+        'by the fallback that used to open the best section', (tester) async {
+      useWideViewport(tester);
+      final stored = FakePrefsClient();
+      final prefs = AppPrefs(client: stored);
+      addTearDown(prefs.dispose);
+      await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
+      await tester.pumpAndSettle();
+
+      await toggleSection(tester, StreamResolution.hd720);
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      await toggleSection(tester, StreamResolution.hd720);
+      expect(find.text('Alpha 720p'), findsNothing);
+      expect(prefs.openStreamSections, isEmpty);
+      expect(stored.stored['openStreamSections'], isEmpty);
+
+      // Rebuilding the streams -- another episode, a late addon -- must
+      // not reopen the best section on its own.
+      await rebuild(tester, harness(coreWith(twoAddons()), prefs: prefs));
+      expect(find.text('Alpha 2160p'), findsNothing);
+      expect(find.text('Alpha 720p'), findsNothing);
+
+      // And it survives a restart: an empty stored set is a choice, kept
+      // apart from "unset" -- see AppPrefs.openStreamSections.
+      final restarted = AppPrefs(client: stored);
+      addTearDown(restarted.dispose);
+      await restarted.load();
+      expect(restarted.openStreamSections, isEmpty);
+      expect(restarted.openStreamSections, isNotNull);
     });
   });
 
   group('the choice sticks', () {
-    testWidgets('across another title, on the app-wide value', (tester) async {
+    testWidgets('the layout, across another title, on the app-wide value', (
+      tester,
+    ) async {
       useWideViewport(tester);
       final prefs = AppPrefs(client: FakePrefsClient());
       addTearDown(prefs.dispose);
       await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
-      expect(prefs.streamsFlat, isTrue);
+      await flip(tester, kStreamsSectionedTooltip);
+      expect(prefs.streamsSectioned, isFalse);
 
       // A second title, a whole new screen, the same preference above it.
-      await tester.pumpWidget(const SizedBox());
-      await tester.pumpWidget(
+      await rebuild(
+        tester,
         harness(coreWith(twoAddons()), prefs: prefs, id: 'tt0063350'),
       );
-      await tester.pumpAndSettle();
 
-      expect(find.byTooltip(kGroupedStreamsTooltip), findsOneWidget);
-      expect(find.text('Alpha 2160p'), findsOneWidget);
-      expect(find.text('Alpha 720p'), findsNothing);
+      expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
+      expect(find.text('alpha.example'), findsOneWidget);
+      expect(topOf('Alpha 720p'), lessThan(topOf('Alpha 2160p')));
     });
 
-    testWidgets('across a fresh app start, through the stored file', (
-      tester,
-    ) async {
+    testWidgets('the layout, across a fresh app start, through the stored '
+        'file', (tester) async {
       useWideViewport(tester);
       final stored = FakePrefsClient();
       final first = AppPrefs(client: stored);
       addTearDown(first.dispose);
       await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: first));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
-      expect(stored.stored, {'streamsFlat': true});
+      await flip(tester, kStreamsSectionedTooltip);
+      expect(stored.stored['streamsSectioned'], isFalse);
 
       // The app comes up again: a new AppPrefs over the same file, loaded
       // before the first sources list is built.
@@ -621,29 +701,49 @@ void main() {
       await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: restarted));
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip(kGroupedStreamsTooltip), findsOneWidget);
-      expect(find.text('Alpha 2160p'), findsOneWidget);
-      expect(find.text('Alpha 720p'), findsNothing);
-      // The open row names its addon; the closed sections list nothing.
+      expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
       expect(find.text('alpha.example'), findsOneWidget);
+    });
+
+    testWidgets('which section is open, across another title, on the '
+        'app-wide value', (tester) async {
+      useWideViewport(tester);
+      final prefs = AppPrefs(client: FakePrefsClient());
+      addTearDown(prefs.dispose);
+      await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
+      await tester.pumpAndSettle();
+      await toggleSection(tester, StreamResolution.fhd1080);
+      expect(prefs.openStreamSections, {'1080p'});
+
+      // A second title, a whole new screen, the same preference above it.
+      await rebuild(
+        tester,
+        harness(coreWith(twoAddons()), prefs: prefs, id: 'tt0063350'),
+      );
+
+      expect(find.text('Beta 1080p'), findsOneWidget);
+      expect(find.text('Alpha 2160p'), findsNothing);
     });
 
     testWidgets('a load that lands after the screen is up still reaches it', (
       tester,
     ) async {
       useWideViewport(tester);
-      final prefs = AppPrefs(client: FakePrefsClient({'streamsFlat': true}));
+      final prefs = AppPrefs(
+        client: FakePrefsClient({'streamsSectioned': false}),
+      );
       addTearDown(prefs.dispose);
       await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
       await tester.pumpAndSettle();
-      expect(find.byTooltip(kFlatStreamsTooltip), findsOneWidget);
+      // Not loaded yet, so still the in-memory default: sectioned.
+      expect(find.byTooltip(kStreamsSectionedTooltip), findsOneWidget);
 
       await prefs.load();
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip(kGroupedStreamsTooltip), findsOneWidget);
-      expect(find.text('Alpha 2160p'), findsOneWidget);
-      expect(find.text('Alpha 720p'), findsNothing);
+      // The stored choice -- grouped -- has caught up.
+      expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
+      expect(find.text('alpha.example'), findsOneWidget);
     });
 
     testWidgets('with no scope above, the screen still toggles', (
@@ -664,9 +764,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await flip(tester, kFlatStreamsTooltip);
-      expect(find.text('Alpha 2160p'), findsOneWidget);
       await toggleSection(tester, StreamResolution.hd720);
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      await toggleSection(tester, StreamResolution.uhd2160);
+      expect(find.text('Alpha 2160p'), findsOneWidget);
       expect(
         topOf('Alpha 2160p'),
         lessThan(topOf('Alpha 720p')),
@@ -702,13 +803,13 @@ void main() {
       );
       await tester.pumpWidget(harness(core));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
 
-      // The shortcut is above the list, still the shortcut.
+      // The shortcut is above the list, still the shortcut -- shown
+      // whether or not any section is open.
       expect(find.text('Continue with last source'), findsOneWidget);
       expect(
         topOf('Continue with last source'),
-        lessThan(topOf('Alpha 2160p')),
+        lessThan(topOfSection(tester, StreamResolution.uhd2160)),
       );
       // The addon that had nothing, and the one that failed, both below --
       // below the last section, open or not.
@@ -727,7 +828,6 @@ void main() {
       final core = coreWith([emptyGroup(youTubeUrl), emptyGroup(strangerUrl)]);
       await tester.pumpWidget(harness(core));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
 
       expect(find.text('2 addons had nothing for this title'), findsOneWidget);
       expect(find.text('Add an addon'), findsOneWidget);
@@ -745,7 +845,6 @@ void main() {
       );
       await tester.pumpWidget(harness(core));
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
       await toggleSection(tester, StreamResolution.fhd1080);
 
       await tester.tap(find.text('Beta 1080p'));
@@ -776,9 +875,10 @@ void main() {
         harness(coreWith(twoAddons()), downloads: downloads),
       );
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
       await toggleSection(tester, StreamResolution.fhd1080);
 
+      expect(onRow(tester, 'Alpha 2160p', kDownloadTooltip), findsNothing);
+      await toggleSection(tester, StreamResolution.uhd2160);
       expect(onRow(tester, 'Alpha 2160p', kDownloadTooltip), findsOneWidget);
       await tester.tap(onRow(tester, 'Alpha 2160p', kDownloadTooltip));
       await tester.pumpAndSettle();
@@ -833,9 +933,9 @@ void main() {
         harness(coreWith(twoAddons()), downloads: downloads),
       );
       await tester.pumpAndSettle();
-      await flip(tester, kFlatStreamsTooltip);
       await toggleSection(tester, StreamResolution.fhd1080);
       await toggleSection(tester, null);
+      await toggleSection(tester, StreamResolution.uhd2160);
 
       expect(
         onRow(tester, 'Alpha 2160p', kDownloadDeleteTooltip),

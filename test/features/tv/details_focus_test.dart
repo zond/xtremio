@@ -184,6 +184,19 @@ Future<void> pressUpToTooltip(
   expect(focusedTooltip(), tooltip);
 }
 
+/// Sectioned is the sources list's default now, and every section starts
+/// collapsed, which most of these tests have nothing to do with -- they
+/// are about the info column, the bookmark, Tab order, downloads. Grouped
+/// keeps them landing focus on an actual stream, the way they were
+/// written to, rather than on a section header; the "sectioned sources"
+/// group below is what tests the collapsed default itself.
+Future<AppPrefs> groupedPrefs() async {
+  final prefs = AppPrefs(client: FakePrefsClient({'streamsSectioned': false}));
+  addTearDown(prefs.dispose);
+  await prefs.load();
+  return prefs;
+}
+
 /// Mounts Breaking Bad at the pilot on a TV, focus on its torrent.
 Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
   useScreen(tester, tvSize);
@@ -191,7 +204,13 @@ Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
     state: {CoreField.metaDetails: seriesWithTorrent()},
   );
   await tester.pumpWidget(
-    harness(core, type: 'series', id: seriesId, videoId: pilotId),
+    harness(
+      core,
+      type: 'series',
+      id: seriesId,
+      videoId: pilotId,
+      prefs: await groupedPrefs(),
+    ),
   );
   await tester.pumpAndSettle();
   expect(focusedLabel(tester), startsWith('Torrentio'));
@@ -206,7 +225,7 @@ void main() {
       final core = FakeCoreClient(
         state: {CoreField.metaDetails: loadMetaDetailsFixture()},
       );
-      await tester.pumpWidget(harness(core));
+      await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
       await tester.pumpAndSettle();
 
       // WatchHub's externals come first but cannot play; the public-domain
@@ -230,7 +249,7 @@ void main() {
           CoreField.player: loadPlayerFixture(),
         },
       );
-      await tester.pumpWidget(harness(core));
+      await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
       await tester.pumpAndSettle();
       expect(focusedLabel(tester), '1080p');
 
@@ -248,7 +267,7 @@ void main() {
       useScreen(tester, tvSize);
       final fixture = loadMetaDetailsFixture();
       final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
-      await tester.pumpWidget(harness(core));
+      await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
       await tester.pumpAndSettle();
       expect(MetaDetailsState.fromJson(fixture).isInLibrary, isFalse);
 
@@ -283,7 +302,7 @@ void main() {
         'infoHash': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       });
       final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
-      await tester.pumpWidget(harness(core));
+      await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
       await tester.pumpAndSettle();
       expect(focusedLabel(tester), '1080p');
 
@@ -330,10 +349,14 @@ void main() {
   });
 
   group('sectioned sources', () {
-    /// The movie on a TV with the two torrent addons, listed in sections.
-    Future<FakeCoreClient> mountFlat(
+    /// The movie on a TV with the two torrent addons, listed in sections
+    /// (the default). [open] names which resolution labels start expanded
+    /// -- empty, the default, is every section collapsed -- unless [prefs]
+    /// is given outright.
+    Future<FakeCoreClient> mountSectioned(
       WidgetTester tester, {
       AppPrefs? prefs,
+      Set<String> open = const {},
       DownloadsClient? downloads,
     }) async {
       useScreen(tester, tvSize);
@@ -344,9 +367,15 @@ void main() {
         },
       );
       final layout =
-          prefs ?? AppPrefs(client: FakePrefsClient({'streamsFlat': true}));
+          prefs ??
+          AppPrefs(
+            client: FakePrefsClient({
+              if (open.isNotEmpty) 'openStreamSections': open.toList(),
+            }),
+          );
       // Read before the first build, the way start-up does it, so the
-      // first sources list a remote sees is already the flat one.
+      // first sources list a remote sees already reflects the stored
+      // choice.
       await layout.load();
       await tester.pumpWidget(
         harness(core, prefs: layout, downloads: downloads),
@@ -355,25 +384,18 @@ void main() {
       return core;
     }
 
-    testWidgets('a stored choice is already in place, and focus starts on '
-        'the best stream the list now begins with', (tester) async {
-      final prefs = AppPrefs(client: FakePrefsClient({'streamsFlat': true}));
-      addTearDown(prefs.dispose);
-      await prefs.load();
-      await mountFlat(tester, prefs: prefs);
+    testWidgets('every section starts collapsed: focus is the first '
+        'header, and down walks the headers, and the ends hold', (
+      tester,
+    ) async {
+      await mountSectioned(tester);
 
-      expect(focusedLabel(tester), 'Alpha 2160p');
+      // Nothing is open, so the remote starts on the first section's own
+      // header rather than a stream inside it.
+      expect(focusedLabel(tester), '2160p');
       expect(focusInPane(), isTrue);
-    });
+      expect(find.text('Alpha 2160p'), findsNothing);
 
-    testWidgets('down walks the open section and on to the headers below '
-        'it, and the ends hold', (tester) async {
-      await mountFlat(tester);
-      // The best section is open, so the remote starts on its stream.
-      expect(focusedLabel(tester), 'Alpha 2160p');
-
-      // Below it: the sections that are folded up, each header a stop of
-      // its own -- which is what keeps them reachable at all.
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), '1080p');
       await press(tester, LogicalKeyboardKey.arrowDown);
@@ -382,17 +404,22 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusedLabel(tester), '1080p');
       await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(focusedLabel(tester), 'Alpha 2160p');
-      // And above the first stream, its own header.
-      await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusedLabel(tester), '2160p');
+      expect(focusInPane(), isTrue);
+    });
+
+    testWidgets('a stored choice remembers which sections are open, and '
+        'focus starts on the stream inside', (tester) async {
+      await mountSectioned(tester, open: {'2160p'});
+
+      expect(focusedLabel(tester), 'Alpha 2160p');
       expect(focusInPane(), isTrue);
     });
 
     testWidgets('select on a collapsed header opens it where the remote is', (
       tester,
     ) async {
-      await mountFlat(tester);
+      await mountSectioned(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), '1080p');
       expect(find.text('Beta 1080p'), findsNothing);
@@ -416,14 +443,13 @@ void main() {
     testWidgets('the order chips take the D-pad, and select picks one', (
       tester,
     ) async {
-      final stored = FakePrefsClient({'streamsFlat': true});
+      final stored = FakePrefsClient();
       final prefs = AppPrefs(client: stored);
       addTearDown(prefs.dispose);
-      await prefs.load();
-      await mountFlat(tester, prefs: prefs);
+      await mountSectioned(tester, prefs: prefs);
 
-      // Up from the first stream: its own section header, then the chips
-      // that say what order the sections are in.
+      // Up from the first header: the chips that say what order the
+      // sections are in -- shown whether or not any section is open.
       for (var i = 0; i < 4 && !focusIn<ChoiceChip>(); i++) {
         await press(tester, LogicalKeyboardKey.arrowUp);
       }
@@ -458,21 +484,24 @@ void main() {
       );
     });
 
-    testWidgets('the remote reaches the toggle and select groups them again', (
-      tester,
-    ) async {
-      final stored = FakePrefsClient({'streamsFlat': true});
+    testWidgets('the remote reaches the toggle, says which layout is on '
+        'screen, and select groups them', (tester) async {
+      final stored = FakePrefsClient();
       final prefs = AppPrefs(client: stored);
       addTearDown(prefs.dispose);
-      await prefs.load();
-      await mountFlat(tester, prefs: prefs);
+      await mountSectioned(tester, prefs: prefs);
 
-      await pressUpToTooltip(tester, kGroupedStreamsTooltip);
+      // Sectioned is what is on screen, so that is what the tooltip says.
+      await pressUpToTooltip(tester, kStreamsSectionedTooltip);
       expect(focusInPane(), isTrue);
 
       await press(tester, LogicalKeyboardKey.select);
-      expect(focusedTooltip(), kFlatStreamsTooltip, reason: 'focus stayed');
-      expect(stored.stored, {'streamsFlat': false});
+      expect(
+        focusedTooltip(),
+        kStreamsGroupedTooltip,
+        reason: 'focus stayed, and the tooltip now says the new layout',
+      );
+      expect(stored.stored, {'streamsSectioned': false});
       // Grouped again: each addon's own order, under its own heading.
       expect(find.text('alpha.example'), findsOneWidget);
       expect(
@@ -481,12 +510,11 @@ void main() {
       );
     });
 
-    testWidgets('a held select on a flat row still downloads it', (
-      tester,
-    ) async {
+    testWidgets('a held select on a row in an open section still '
+        'downloads it', (tester) async {
       final downloads = FakeDownloadsClient();
       addTearDown(downloads.dispose);
-      await mountFlat(tester, downloads: downloads);
+      await mountSectioned(tester, open: {'2160p'}, downloads: downloads);
       expect(focusedLabel(tester), 'Alpha 2160p');
 
       await hold(
@@ -647,7 +675,9 @@ void main() {
       );
       final downloads = FakeDownloadsClient(registry: downloaded());
       addTearDown(downloads.dispose);
-      await tester.pumpWidget(harness(core, downloads: downloads));
+      await tester.pumpWidget(
+        harness(core, downloads: downloads, prefs: await groupedPrefs()),
+      );
       await tester.pumpAndSettle();
 
       // The delete button is on the focused row and cannot be focused
@@ -678,7 +708,9 @@ void main() {
       );
       final downloads = FakeDownloadsClient();
       addTearDown(downloads.dispose);
-      await tester.pumpWidget(harness(core, downloads: downloads));
+      await tester.pumpWidget(
+        harness(core, downloads: downloads, prefs: await groupedPrefs()),
+      );
       await tester.pumpAndSettle();
 
       expect(focusedLabel(tester), '1080p');
@@ -700,7 +732,9 @@ void main() {
       );
       final downloads = FakeDownloadsClient(registry: downloaded());
       addTearDown(downloads.dispose);
-      await tester.pumpWidget(harness(core, downloads: downloads));
+      await tester.pumpWidget(
+        harness(core, downloads: downloads, prefs: await groupedPrefs()),
+      );
       await tester.pumpAndSettle();
 
       await press(tester, LogicalKeyboardKey.select);
@@ -718,7 +752,9 @@ void main() {
       );
       final downloads = FakeDownloadsClient(registry: downloaded());
       addTearDown(downloads.dispose);
-      await tester.pumpWidget(harness(core, downloads: downloads));
+      await tester.pumpWidget(
+        harness(core, downloads: downloads, prefs: await groupedPrefs()),
+      );
       await tester.pumpAndSettle();
 
       await press(tester, LogicalKeyboardKey.arrowLeft);

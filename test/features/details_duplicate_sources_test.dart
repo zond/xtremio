@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/details/stream_facts.dart';
 import 'package:xtremio/features/details/stream_sources.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
@@ -148,22 +149,44 @@ void main() {
     );
   }
 
-  /// Flat is not the default; every test that wants it says so.
-  AppPrefs flatPrefs() {
-    final prefs = AppPrefs(client: FakePrefsClient({'streamsFlat': true}));
+  /// Sectioned is the default, but every section starts collapsed; a
+  /// duplicate test cares about identity, not about which resolution
+  /// bucket a release happens to land in, so this opens every one that
+  /// could possibly appear.
+  AppPrefs openSectionsPrefs() {
+    final prefs = AppPrefs(
+      client: FakePrefsClient({
+        'openStreamSections': [
+          for (final resolution in StreamResolution.values) resolution.label,
+          'unknown',
+        ],
+      }),
+    );
     addTearDown(prefs.dispose);
     return prefs;
   }
 
-  Future<void> pumpFlat(
+  Future<void> pumpSectioned(
     WidgetTester tester,
     FakeCoreClient core, {
     DownloadsClient? downloads,
   }) async {
-    final prefs = flatPrefs();
+    final prefs = openSectionsPrefs();
     await prefs.load();
     await tester.pumpWidget(harness(core, prefs: prefs, downloads: downloads));
     await tester.pumpAndSettle();
+  }
+
+  /// Grouped is no longer the default; every test that wants it says so.
+  /// Loaded already, the way start-up reads it before the first sources
+  /// list is built.
+  Future<AppPrefs> groupedPrefs() async {
+    final prefs = AppPrefs(
+      client: FakePrefsClient({'streamsSectioned': false}),
+    );
+    addTearDown(prefs.dispose);
+    await prefs.load();
+    return prefs;
   }
 
   group('identity, not appearance', () {
@@ -171,7 +194,7 @@ void main() {
       tester,
     ) async {
       useWideViewport(tester);
-      await pumpFlat(tester, coreWith(theSameReleaseTwice()));
+      await pumpSectioned(tester, coreWith(theSameReleaseTwice()));
 
       expect(find.text('The Same Release 1080p'), findsOneWidget);
       // The best-ranked instance survives, and the sort is stable, so it
@@ -191,7 +214,7 @@ void main() {
           torrent(sharedHash, name: 'The Same Release 1080p', fileIdx: 0),
         ]),
       ];
-      await pumpFlat(tester, coreWith(streams));
+      await pumpSectioned(tester, coreWith(streams));
 
       expect(find.text('The Same Release 1080p'), findsOneWidget);
       expect(find.textContaining('Also from'), findsNothing);
@@ -210,7 +233,7 @@ void main() {
           torrent('c' * 40, name: 'Release B 1080p'),
         ]),
       ];
-      await pumpFlat(tester, coreWith(streams));
+      await pumpSectioned(tester, coreWith(streams));
 
       List<String> badgesOf(String title) => [
         for (final text in tester.widgetList<Text>(
@@ -248,7 +271,7 @@ void main() {
           torrent(sharedHash, name: 'Episode 2', fileIdx: 1),
         ]),
       ];
-      await pumpFlat(tester, coreWith(streams));
+      await pumpSectioned(tester, coreWith(streams));
 
       expect(find.text('Episode 1'), findsOneWidget);
       expect(find.text('Episode 2'), findsOneWidget);
@@ -265,7 +288,7 @@ void main() {
           {'url': 'https://cdn.example/other.mp4', 'name': 'Another 1080p'},
         ]),
       ];
-      await pumpFlat(tester, coreWith(streams));
+      await pumpSectioned(tester, coreWith(streams));
 
       expect(find.text('Direct 1080p'), findsOneWidget);
       expect(find.text(alsoFromLabel(const ['beta.example'])), findsOneWidget);
@@ -280,7 +303,7 @@ void main() {
         theSameReleaseTwice(),
         also: {CoreField.player: loadPlayerFixture()},
       );
-      await pumpFlat(tester, core);
+      await pumpSectioned(tester, core);
 
       await tester.tap(find.text('The Same Release 1080p'));
       await tester.pumpAndSettle();
@@ -304,7 +327,7 @@ void main() {
       useWideViewport(tester);
       final downloads = FakeDownloadsClient();
       addTearDown(downloads.dispose);
-      await pumpFlat(
+      await pumpSectioned(
         tester,
         coreWith(theSameReleaseTwice()),
         downloads: downloads,
@@ -324,7 +347,7 @@ void main() {
         theSameReleaseTwice(),
         also: {CoreField.player: loadPlayerFixture()},
       );
-      await tester.pumpWidget(harness(core));
+      await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
       await tester.pumpAndSettle();
 
       // Beta's copy of the row -- the second one on screen.
@@ -361,7 +384,7 @@ void main() {
         ],
         also: {CoreField.player: loadPlayerFixture()},
       );
-      await pumpFlat(tester, core);
+      await pumpSectioned(tester, core);
 
       await tester.tap(find.text('Only Release 1080p'));
       await tester.pumpAndSettle();
@@ -381,7 +404,9 @@ void main() {
       tester,
     ) async {
       useWideViewport(tester);
-      await tester.pumpWidget(harness(coreWith(theSameReleaseTwice())));
+      await tester.pumpWidget(
+        harness(coreWith(theSameReleaseTwice()), prefs: await groupedPrefs()),
+      );
       await tester.pumpAndSettle();
 
       // Both headings, and the release under each of them: the groups are
@@ -410,7 +435,9 @@ void main() {
           torrent('b' * 40, name: 'Another Release 720p'),
         ]),
       ];
-      await tester.pumpWidget(harness(coreWith(streams)));
+      await tester.pumpWidget(
+        harness(coreWith(streams), prefs: await groupedPrefs()),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('The Same Release 1080p'), findsOneWidget);
@@ -443,7 +470,7 @@ void main() {
             },
           },
         );
-        await pumpFlat(tester, core);
+        await pumpSectioned(tester, core);
 
         // The shortcut is above the one remaining row, still the shortcut.
         expect(find.text('Continue with last source'), findsOneWidget);

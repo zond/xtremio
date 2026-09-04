@@ -136,6 +136,18 @@ class GatedListingClient extends FakeDownloadsClient {
 }
 
 void main() {
+  /// Grouped, not the sources list's sectioned default: this file is about
+  /// the downloads affordances on a stream tile, not about resolution
+  /// sections, and the fixture's one torrent needs no section opened to be
+  /// on screen for it. `AppPrefs.inMemory()` persists nothing, so the
+  /// setter's write below completes synchronously (nothing to await) and
+  /// the value is already in place by the time this returns.
+  AppPrefs groupedPrefs() {
+    final prefs = AppPrefs.inMemory();
+    unawaited(prefs.setStreamsSectioned(false));
+    return prefs;
+  }
+
   Widget harness(
     FakeCoreClient core,
     DownloadsClient downloads, {
@@ -149,8 +161,11 @@ void main() {
       child: PlaybackScope(
         createEngine: FakePlaybackEngine.new,
         torrentStats: FakeTorrentStatsClient(),
-        child: MaterialApp(
-          home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
+        child: PrefsScope(
+          prefs: groupedPrefs(),
+          child: MaterialApp(
+            home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
+          ),
         ),
       ),
     ),

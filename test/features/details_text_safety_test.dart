@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -35,10 +37,22 @@ Map<String, dynamic> streams(List<Map<String, dynamic>> list) => [
 ].first;
 
 void main() {
+  /// Grouped, not the sources list's sectioned default: this file is
+  /// about text rendering safety on a stream row, not resolution
+  /// sections, and the fixture's one release needs no section opened to
+  /// be on screen. `AppPrefs.inMemory()` persists nothing, so the
+  /// setter's write below completes synchronously (nothing to await) and
+  /// the value is already in place by the time this returns.
+  AppPrefs groupedPrefs() {
+    final prefs = AppPrefs.inMemory();
+    unawaited(prefs.setStreamsSectioned(false));
+    return prefs;
+  }
+
   Widget harness(FakeCoreClient core) => CoreScope(
     client: core,
     child: PrefsScope(
-      prefs: AppPrefs.inMemory(),
+      prefs: groupedPrefs(),
       child: PlaybackScope(
         createEngine: FakePlaybackEngine.new,
         torrentStats: FakeTorrentStatsClient(),
