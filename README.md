@@ -577,10 +577,15 @@ connection.
   25 fps played against a 23.976 fps film drifts about four seconds a
   minute, and OpenSubtitles says which rate an upload was cut for
   (`fpsMilli`, on about nine entries in ten). The video's rate is one
-  read of libmpv's `container-fps` (`estimated-vf-fps` behind it) through
-  `PlaybackEngine.videoFrameRate`, taken once when the media loads --
-  the stats OSD polls the same property, but only while it is on screen,
-  and this has to be known whether or not anyone ever opens it. Rates
+  read of libmpv's `container-fps` through `PlaybackEngine.videoFrameRate`,
+  taken once when the media loads -- the stats OSD polls the same
+  property, but only while it is on screen, and this has to be known
+  whether or not anyone ever opens it. Only what the container *declares*
+  is trusted: `estimated-vf-fps` is an average of the last ten frame
+  durations, which mpv itself calls unstable for the imprecise timestamps
+  a torrent stream is full of, and a filter with a hundredth-of-a-frame
+  tolerance fed a jittery estimate hides the correct files rather than
+  the wrong ones. Rates
   within 0.01 fps are the same cut (`23980` is a rounded 23.976);
   anything further is the wrong file and is dropped, and a file that
   declares no rate is always kept. Two rules stop the filter taking the

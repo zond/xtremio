@@ -461,14 +461,21 @@ class MediaKitEngine implements PlaybackEngine {
     }
   }
 
-  /// The mpv properties [videoFrameRate] reads, in the order it tries
-  /// them: what the container declares, then -- for a container that
-  /// declares nothing, which is what a raw stream often is -- the rate
-  /// frames are actually leaving the filter chain at.
-  static const List<String> frameRateProperties = [
-    'container-fps',
-    'estimated-vf-fps',
-  ];
+  /// The mpv properties [videoFrameRate] reads: only what the container
+  /// *declares*, never a measurement of it.
+  ///
+  /// `estimated-vf-fps` is the obvious second choice and is the wrong
+  /// one: mpv averages the last ten frame durations, warns that the
+  /// number is unstable for imprecise timestamps (Matroska, which is what
+  /// a torrent stream mostly is) and wrong while frames are dropped, and
+  /// this reads it at the moment the media loads, when ten frames may not
+  /// have been drawn yet. That estimate then decides a comparison with a
+  /// tolerance of a hundredth of a frame (`subtitleFrameRateTolerance` in
+  /// `subtitle_groups.dart`), so a jittery 24.10 for a true 23.976 would
+  /// hide every correctly cut subtitle in the language. A container that
+  /// declares nothing is the case the filter already handles, and handles
+  /// safely: no rate, no filtering.
+  static const List<String> frameRateProperties = ['container-fps'];
 
   @override
   Future<double?> videoFrameRate() async {
@@ -480,8 +487,8 @@ class MediaKitEngine implements PlaybackEngine {
       try {
         values.add(await native.getProperty(property));
       } catch (_) {
-        // Unavailable property or a player torn down mid-read: the next
-        // one may still answer.
+        // Unavailable property or a player torn down mid-read: not a
+        // rate, which is the case the filter gives way to.
         values.add(null);
       }
     }
