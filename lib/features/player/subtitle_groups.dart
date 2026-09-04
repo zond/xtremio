@@ -314,14 +314,36 @@ bool _reducesTo(double rate, List<double> bases) {
 /// inside it, and promoting all of them promotes none of them.
 bool subtitleMatchesRelease(SubtitleInfo subtitle, {required String? release}) {
   if (release == null) return false;
-  final playing = _releaseTokens(release);
+  final playing = _withoutContainer(_releaseTokens(release));
   if (playing.isEmpty) return false;
-  for (final claim in [subtitle.releaseGroup, subtitle.movieReleaseName]) {
-    if (claim == null) continue;
-    final tokens = _releaseTokens(claim);
-    if (_namesAnUpload(tokens) && _containsRun(playing, tokens)) return true;
-  }
-  return false;
+  // A release group is never the film's title, so it counts wherever in
+  // the name it sits. A release name can be nothing *but* the title, so
+  // it is held to more.
+  return _claims(playing, subtitle.releaseGroup, wholeName: false) ||
+      _claims(playing, subtitle.movieReleaseName, wholeName: true);
+}
+
+/// Whether [claim] names the upload whose filename is [playing].
+///
+/// [wholeName] is set for a claim that is supposed to be a release name
+/// rather than a group, and holds it to one more rule: a run that starts
+/// at the front of the playing name and stops short of its end is the
+/// title and the episode, which every upload of that episode carries.
+/// `Gilmore Girls - S01E01 - Pilot` is what an addon sends when it has
+/// only the episode to go on, and eleven of the twelve OpenSubtitles
+/// answers whose claim appears in one real filename are of that shape --
+/// so taken as release matches they mark a file "same release" on no
+/// evidence and put it at the head of its language, which is the file
+/// the row applies and the file the auto-pick plays. A claim that runs
+/// to the end of the name is the whole name; one that starts inside it
+/// has already got past the title.
+bool _claims(List<String> playing, String? claim, {required bool wholeName}) {
+  if (claim == null) return false;
+  final tokens = _withoutContainer(_releaseTokens(claim));
+  if (!_namesAnUpload(tokens)) return false;
+  final at = _runStart(playing, tokens);
+  if (at < 0) return false;
+  return !wholeName || at > 0 || tokens.length == playing.length;
 }
 
 /// [name] as the tokens a release is compared on: lower-case runs of
@@ -349,9 +371,9 @@ bool _namesAnUpload(List<String> tokens) {
   return only.length >= 3 && !_bareDigits.hasMatch(only);
 }
 
-/// Whether [needle] appears in [haystack] as a contiguous run, token for
-/// token.
-bool _containsRun(List<String> haystack, List<String> needle) {
+/// Where [needle] appears in [haystack] as a contiguous run, token for
+/// token, and -1 when it does not.
+int _runStart(List<String> haystack, List<String> needle) {
   for (var start = 0; start + needle.length <= haystack.length; start++) {
     var same = true;
     for (var i = 0; i < needle.length; i++) {
@@ -360,10 +382,52 @@ bool _containsRun(List<String> haystack, List<String> needle) {
         break;
       }
     }
-    if (same) return true;
+    if (same) return start;
   }
-  return false;
+  return -1;
 }
+
+/// [tokens] without a trailing video container extension.
+///
+/// The extension is the one part of a filename that says nothing about
+/// which release it is, and the two sides disagree about it all the
+/// time: the addon spells its claim with the container it saw and the
+/// server opened a remux of the same release. Dropping it is also what
+/// lets "runs to the end of the name" mean the end of the name proper.
+///
+/// Spelled out rather than matched as "a short trailing dot-group", for
+/// the reason [SubtitleOption._extension] is: a release name ends in
+/// `.x264-DFN` or `.H.264`, and a rule that ate those would take a
+/// group tag off every name it saw. Never the only token, so a claim
+/// that is nothing but an extension stays the nothing it is.
+List<String> _withoutContainer(List<String> tokens) =>
+    tokens.length > 1 && _containers.contains(tokens.last)
+    ? tokens.sublist(0, tokens.length - 1)
+    : tokens;
+
+const Set<String> _containers = {
+  'mkv',
+  'mp4',
+  'm4v',
+  'avi',
+  'mov',
+  'ts',
+  'm2ts',
+  'mts',
+  'webm',
+  'wmv',
+  'asf',
+  'flv',
+  'mpg',
+  'mpeg',
+  'ogm',
+  'ogv',
+  'divx',
+  'vob',
+  'rm',
+  'rmvb',
+  '3gp',
+};
 
 /// Where a file sits in its language's order, best first.
 enum _ReleaseFit {

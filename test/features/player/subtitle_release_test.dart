@@ -118,6 +118,65 @@ void main() {
     );
   });
 
+  test('a title and an episode are not a claim about this upload', () {
+    // Measured against what OpenSubtitles really answers for Gilmore
+    // Girls S01E01: of the twelve files whose claim appears in this
+    // filename, eleven claim nothing but the show, the episode and its
+    // title -- which every upload of that episode carries. Taken as
+    // release matches they are marked "same release" on no evidence and
+    // sent to the head of their language, which is the file the row
+    // applies and the file the auto-pick plays with nobody looking.
+    const episode =
+        'gilmore.girls.s01e01.pilot.1080p.amzn.web-dl.ddp2.0.h.264-playweb.mkv';
+    for (final claim in [
+      'Gilmore Girls - S01E01 - Pilot',
+      'Gilmore Girls S01E01',
+      'gilmore_girls_s01e01_pilot',
+      'Gilmore Girls',
+    ]) {
+      expect(
+        matches(upload('https://subs/1.srt', movieReleaseName: claim), episode),
+        isFalse,
+        reason: '$claim names an episode, not an upload',
+      );
+    }
+    // The one that is genuine still is: a release group is never the
+    // show's title, so it counts wherever in the name it sits.
+    expect(
+      matches(upload('https://subs/2.srt', releaseGroup: 'playWEB'), episode),
+      isTrue,
+    );
+    // And so does a name that runs to the end of the file's own -- that
+    // is the whole release rather than the front of it.
+    expect(
+      matches(
+        upload(
+          'https://subs/3.srt',
+          movieReleaseName: 'Gilmore Girls S01E01 Pilot 1080p AMZN WEB-DL DDP2.0 H.264-playWEB',
+        ),
+        episode,
+      ),
+      isTrue,
+    );
+  });
+
+  test('the container the claim was written with is not the release', () {
+    // The addon spells its claim with the extension it saw and the
+    // server opened a remux of the same release; the name in between is
+    // what says which release it is.
+    const claim = 'Gilmore Girls S01E01 1080p WEB-DL DD+ 2.0 x264-TrollHD.mkv';
+    for (final playing in [
+      'gilmore girls s01e01 1080p web-dl dd+ 2.0 x264-trollhd.mkv',
+      'gilmore girls s01e01 1080p web-dl dd+ 2.0 x264-trollhd.mp4',
+    ]) {
+      expect(
+        matches(upload('https://subs/1.srt', movieReleaseName: claim), playing),
+        isTrue,
+        reason: playing,
+      );
+    }
+  });
+
   /// The URLs of [sources] in the order they are offered for a video
   /// named [release] of [series], with [memory] as what the viewer has
   /// already fixed.
