@@ -31,8 +31,8 @@
 //!
 //! So a sweep is a *load*, not an event: settled answers accumulate in
 //! [`FieldWatch::sweep`] while any of the field's loadables is still
-//! `Loading`, and the sweep is handed to [`crate::addon_health::commit_in`]
-//! once the field has gone quiet. That is the batch that went out together,
+//! `Loading`, and the sweep is handed to [`commit`] once the field has gone
+//! quiet. That is the batch that went out together,
 //! which is the only batch whose all-failing says something about the
 //! network rather than about an addon.
 //!
@@ -300,47 +300,60 @@ fn walk_field(walk: &mut Walk, model: &XtremioModel, field: Watched) {
     }
 }
 
-/// Counts what `fields` of `model` have answered into `app`, and answers
-/// how many loads that completed.
+/// The sweeps that `fields` of `model` have just completed, remembering in
+/// `app` what was seen so the same answer is not collected twice.
 ///
-/// Called from the runtime-event pump for every `NewState`, holding the
-/// model's read lock. That cannot deadlock against a dispatch:
+/// Reading and counting are two calls on purpose. The caller in the
+/// runtime-event pump is holding the model's read lock while this one runs,
+/// and [`commit`] is the half that can reach the disk: it writes the record
+/// out, `fsync` and all, up to once a minute. Holding the model across that
+/// would park any `Runtime::dispatch` waiting for the model's *write* lock
+/// for the length of a flush -- and with `std`'s `RwLock` a waiting writer
+/// also stalls the readers behind it, which includes the `core::get_state`
+/// Dart calls on every field render. So the pump lets the model go, and
+/// then counts.
+///
+/// Reading the model from the pump cannot deadlock against a dispatch:
 /// `Runtime::dispatch` and `Runtime::handle_effect_output` both drop the
-/// model's *write* guard before calling `handle_effects`, which is what
-/// emits into this pump's channel, so no writer is ever waiting on the pump
-/// while holding the lock the pump wants. The locks taken from here -- the
-/// observer's, then the health table's, then the preferences file's -- are
-/// only ever taken in that order, and nothing holding any of them reaches
-/// back for the model.
-pub fn observe(app: &AppState, model: &XtremioModel, fields: &[XtremioModelField]) -> usize {
-    let sweeps = {
-        let mut watched = app.addon_observer.watched();
-        let mut sweeps = Vec::new();
-        for field in fields.iter().filter_map(Watched::of) {
-            let watch = watched.entry(field).or_default();
-            let previous = std::mem::take(&mut watch.settled);
-            let mut sweep = std::mem::take(&mut watch.sweep);
-            let mut walk = Walk {
-                settled: BTreeMap::new(),
-                pending: false,
-                previous: &previous,
-                sweep: &mut sweep,
-            };
-            walk_field(&mut walk, model, field);
-            watch.settled = walk.settled;
-            if walk.pending {
-                // Still waiting on part of the load: the sweep is not whole
-                // yet, and half a load cannot say whether the connection is
-                // up.
-                watch.sweep = sweep;
-            } else if !sweep.is_empty() {
-                sweeps.push(sweep);
-            }
+/// model's write guard before calling `handle_effects`, which is what emits
+/// into this pump's channel, so no writer is ever waiting on the pump while
+/// holding the lock the pump wants.
+pub fn sweeps(app: &AppState, model: &XtremioModel, fields: &[XtremioModelField]) -> Vec<Sweep> {
+    let mut watched = app.addon_observer.watched();
+    let mut sweeps = Vec::new();
+    for field in fields.iter().filter_map(Watched::of) {
+        let watch = watched.entry(field).or_default();
+        let previous = std::mem::take(&mut watch.settled);
+        let mut sweep = std::mem::take(&mut watch.sweep);
+        let mut walk = Walk {
+            settled: BTreeMap::new(),
+            pending: false,
+            previous: &previous,
+            sweep: &mut sweep,
+        };
+        walk_field(&mut walk, model, field);
+        watch.settled = walk.settled;
+        if walk.pending {
+            // Still waiting on part of the load: the sweep is not whole
+            // yet, and half a load cannot say whether the connection is up.
+            watch.sweep = sweep;
+        } else if !sweep.is_empty() {
+            sweeps.push(sweep);
         }
-        sweeps
-    };
-    // The table's lock, and the preferences file behind it, are taken with
-    // the observer's already released.
+    }
+    sweeps
+}
+
+/// Counts collected sweeps into `app`, answering how many of them were
+/// evidence about the addons at all (see
+/// [`crate::addon_health::Sweep::commit_into`]).
+///
+/// Takes no model, and must be called with none held: this is where the
+/// health table's lock and the preferences file behind it are taken. The
+/// observer's own lock is released by then too -- [`sweeps`] gave it back
+/// with the sweeps -- so the order is only ever observer, then table, then
+/// file.
+pub fn commit(app: &AppState, sweeps: Vec<Sweep>) -> usize {
     sweeps.into_iter().fold(0, |recorded, sweep| {
         recorded + usize::from(crate::addon_health::commit_in(app, sweep))
     })

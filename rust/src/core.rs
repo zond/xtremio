@@ -406,19 +406,28 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
 /// writer can be waiting on the pump's channel while holding the model's
 /// write lock.
 ///
+/// The model is let go before the answers are counted, and that is the
+/// point of the two calls. Counting is what writes the record out -- an
+/// `fsync` and a rename, up to once a minute -- and the model's read lock
+/// held across that would park the next `Runtime::dispatch` (which wants
+/// the write lock) and, behind it, every reader including `get_state`.
+///
 /// Nothing is counted before the Runtime has been installed (the pump is
 /// started first, so the bootstrap effects' events arrive with no model to
 /// read) or after `shutdown` has taken it away -- by which point the record
 /// has already been written out.
 fn observe_addon_answers(app: &AppState, fields: &[XtremioModelField]) {
-    let guard = app.core.runtime();
-    let Some(runtime) = guard.as_ref() else {
-        return;
+    let sweeps = {
+        let guard = app.core.runtime();
+        let Some(runtime) = guard.as_ref() else {
+            return;
+        };
+        let Ok(model) = runtime.model() else {
+            return;
+        };
+        crate::addon_observer::sweeps(app, &model, fields)
     };
-    let Ok(model) = runtime.model() else {
-        return;
-    };
-    crate::addon_observer::observe(app, &model, fields);
+    crate::addon_observer::commit(app, sweeps);
 }
 
 /// `{"field": <model field | null>, "action": <stremio_core Action>}`.

@@ -97,8 +97,16 @@ fn loading() -> Option<Loadable<Vec<MetaItemPreview>, ResourceError>> {
     Some(Loadable::Loading)
 }
 
+/// What the runtime pump does with a `NewState`: read the model, let it go,
+/// then count what it said. Two calls, because the second one writes to
+/// disk and the model's read lock must not be held while it does.
+fn observe_fields(app: &AppState, model: &XtremioModel, fields: &[XtremioModelField]) -> usize {
+    let sweeps = xtremio_core::addon_observer::sweeps(app, model, fields);
+    xtremio_core::addon_observer::commit(app, sweeps)
+}
+
 fn observe(app: &AppState, model: &XtremioModel) -> usize {
-    xtremio_core::addon_observer::observe(app, model, &[XtremioModelField::Board])
+    observe_fields(app, model, &[XtremioModelField::Board])
 }
 
 fn catalog_record(table: &Table, base: &str) -> Record {
@@ -245,4 +253,31 @@ fn a_board_that_was_unloaded_and_loaded_again_counts_again() {
     let table = table_in(&app);
     assert_eq!(counts(&catalog_record(&table, CINEMETA)), (2.0, 0.0, 0.0));
     assert_eq!(counts(&catalog_record(&table, CHANNELS)), (0.0, 0.0, 2.0));
+}
+
+/// Reading the model and counting what it said are separate calls so that
+/// the pump can let the model's read lock go before the count -- which is
+/// what writes the record out, `fsync` included, up to once a minute. A
+/// `Runtime::dispatch` waiting for the model's write lock, and every
+/// `get_state` behind it, must not wait for that.
+#[test]
+fn the_answers_are_counted_after_the_model_has_been_let_go() {
+    let app = AppState::default();
+
+    let sweeps = {
+        let mut model = empty_model();
+        model.board = board(vec![row(CINEMETA, answered()), row(CHANNELS, failed())]);
+        xtremio_core::addon_observer::sweeps(&app, &model, &[XtremioModelField::Board])
+        // and the model is dropped here, before anything is counted
+    };
+    assert_eq!(sweeps.len(), 1, "the finished load was one sweep");
+    assert!(
+        table_in(&app).is_empty(),
+        "reading the model counted, rather than collecting"
+    );
+
+    assert_eq!(xtremio_core::addon_observer::commit(&app, sweeps), 1);
+    let table = table_in(&app);
+    assert_eq!(counts(&catalog_record(&table, CINEMETA)), (1.0, 0.0, 0.0));
+    assert_eq!(counts(&catalog_record(&table, CHANNELS)), (0.0, 0.0, 1.0));
 }
