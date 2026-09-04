@@ -4,12 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_episode_row.dart';
+import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/download_badge.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/remote_press.dart';
 
@@ -126,21 +128,7 @@ List<Map<String, dynamic>> twoTorrentAddons() => [
     },
 ];
 
-/// Where the streams pane starts at [tvSize]: 38 % of the width, at most
-/// 480 px, on the right.
-const double paneLeft = 1280 - 480;
-
 Rect focusedRect() => FocusManager.instance.primaryFocus!.rect;
-
-bool focusInPane() => focusedRect().left >= paneLeft;
-
-/// Which column the focused thing is *in*, by its centre rather than its
-/// edges: a focused tile wears a zoom, and a season pill at the right of
-/// the info column grows a few pixels past the divider without having
-/// moved to the other side of it.
-bool focusInInfoColumn() =>
-    FocusManager.instance.primaryFocus is! FocusScopeNode &&
-    focusedRect().center.dx < paneLeft;
 
 /// Every `Ctx` and `MetaDetails` action dispatched so far (never the
 /// screen's own `Load`s), by its inner `action` name.
@@ -153,6 +141,19 @@ List<String> innerActions(FakeCoreClient core) => [
 Object? innerArgs(CoreAction action) =>
     (action.action['args'] as Map<String, dynamic>)['args'];
 
+/// The style the group card named [label] draws its own label in: what
+/// says a card is the chosen one, beyond the colour of it.
+TextStyle groupLabelStyle(WidgetTester tester, String label) => tester
+    .widget<Text>(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is TvSourceGroupCard && w.group.label == label,
+        ),
+        matching: find.text(label),
+      ),
+    )
+    .style!;
+
 /// The name of the episode card holding primary focus.
 String? focusedEpisodeTitle() {
   final card = FocusManager.instance.primaryFocus?.context
@@ -160,19 +161,49 @@ String? focusedEpisodeTitle() {
   return card == null ? null : TvEpisodeCard.title(card.video);
 }
 
-/// From the streams pane, left lands on the header (the bookmark, nearest
-/// to the stream at the top); [down] presses from there reach [T], the
-/// season selector or an episode card.
-Future<void> stepLeftAndDownTo<T extends Widget>(
+/// The screen is one column of rows now, and the remote starts at the
+/// bottom of it, on the sources: [up] presses from there reach [T], an
+/// episode card or a season pill on the way to the header.
+Future<void> stepUpTo<T extends Widget>(
   WidgetTester tester, {
-  int limit = 8,
+  int limit = 10,
 }) async {
-  await press(tester, LogicalKeyboardKey.arrowLeft);
-  expect(focusInInfoColumn(), isTrue);
+  for (var i = 0; i < limit && !focusIn<T>(); i++) {
+    await press(tester, LogicalKeyboardKey.arrowUp);
+  }
+  expect(focusIn<T>(), isTrue);
+}
+
+/// The same walk the other way, for coming back down to the sources.
+Future<void> stepDownTo<T extends Widget>(
+  WidgetTester tester, {
+  int limit = 10,
+}) async {
   for (var i = 0; i < limit && !focusIn<T>(); i++) {
     await press(tester, LogicalKeyboardKey.arrowDown);
   }
   expect(focusIn<T>(), isTrue);
+}
+
+/// Walks the group row to [group], opens it, and steps down and along the
+/// row it opened until the card named [source] holds the remote.
+Future<void> openSource(
+  WidgetTester tester,
+  String group,
+  String source, {
+  int limit = 8,
+}) async {
+  for (var i = 0; i < limit && focusedLabel(tester) != group; i++) {
+    await press(tester, LogicalKeyboardKey.arrowRight);
+  }
+  expect(focusedLabel(tester), group, reason: 'the group row reached $group');
+  await press(tester, LogicalKeyboardKey.select);
+  await press(tester, LogicalKeyboardKey.arrowDown);
+  for (var i = 0; i < limit && focusedLabel(tester) != source; i++) {
+    await press(tester, LogicalKeyboardKey.arrowRight);
+  }
+  expect(focusedLabel(tester), source);
+  expect(focusIn<TvSourceCard>(), isTrue);
 }
 
 /// Presses up until the control tooltipped [tooltip] has focus: what is
@@ -202,7 +233,8 @@ Future<AppPrefs> groupedPrefs() async {
   return prefs;
 }
 
-/// Mounts Breaking Bad at the pilot on a TV, focus on its torrent.
+/// Mounts Breaking Bad at the pilot on a TV, focus on the group card of
+/// the addon that answered with its torrent.
 Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
   useScreen(tester, tvSize);
   final core = FakeCoreClient(
@@ -218,14 +250,14 @@ Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
     ),
   );
   await tester.pumpAndSettle();
-  expect(focusedLabel(tester), startsWith('Torrentio'));
+  expect(focusedLabel(tester), 'torrentio.example');
   return core;
 }
 
 void main() {
   group('movie', () {
-    testWidgets('focus starts on the first playable stream; left is the '
-        'info column, right the pane again', (tester) async {
+    testWidgets('the sources are a row under the rest, not a pane beside '
+        'them, and the remote starts on the first group', (tester) async {
       useScreen(tester, tvSize);
       final core = FakeCoreClient(
         state: {CoreField.metaDetails: loadMetaDetailsFixture()},
@@ -233,25 +265,24 @@ void main() {
       await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
       await tester.pumpAndSettle();
 
-      // WatchHub's externals come first but cannot play; the public-domain
-      // torrent is the first stream the player can open.
-      expect(focusedLabel(tester), '1080p');
-      expect(focusInPane(), isTrue);
+      // The whole screen is one column: the rows have the panel's width,
+      // rather than 480 px of it on the right.
+      final rows = tester.getRect(find.byType(TvSourceRows));
+      expect(rows.left, lessThan(tvSize.width * 0.1));
+      expect(rows.width, greaterThan(tvSize.width * 0.8));
 
-      await press(tester, LogicalKeyboardKey.arrowLeft);
-      expect(focusInInfoColumn(), isTrue);
-      // The television header's one stop is the bookmark, at the very top
-      // of the column, so coming back is the pane's own topmost stop and
-      // not the stream the walk started on. What this asserts is that the
-      // two sides are reachable from each other at all; which stop a
-      // sideways press lands on is geometry, and the geometry is what the
-      // rows replace.
-      expect(focusedTooltip(), 'Add to library');
+      // One card per addon that answered, in the profile's order, and the
+      // remote on the first of them -- not on a stream, which is a press
+      // further in now.
+      expect(focusIn<TvSourceGroupCard>(), isTrue);
+      expect(focusedLabel(tester), 'watchhub.strem.io');
+      expect(find.byType(TvSourceCard), findsNothing);
+
       await press(tester, LogicalKeyboardKey.arrowRight);
-      expect(focusInPane(), isTrue);
+      expect(focusedLabel(tester), 'caching.stremio.net');
     });
 
-    testWidgets('select on the stream opens the player; with no downloads '
+    testWidgets('select on a source opens the player; with no downloads '
         'client above, a held select is still a tap', (tester) async {
       useScreen(tester, tvSize);
       final core = FakeCoreClient(
@@ -262,7 +293,10 @@ void main() {
       );
       await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
       await tester.pumpAndSettle();
-      expect(focusedLabel(tester), '1080p');
+
+      // WatchHub's externals cannot play, so none of its cards takes the
+      // remote at all; the public-domain torrent is the next group along.
+      await openSource(tester, 'caching.stremio.net', '1080p');
 
       await hold(
         tester,
@@ -282,13 +316,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(MetaDetailsState.fromJson(fixture).isInLibrary, isFalse);
 
-      await press(tester, LogicalKeyboardKey.arrowLeft);
-      expect(focusInInfoColumn(), isTrue);
       final bookmark = find.byTooltip('Add to library');
-      for (var i = 0; i < 6 && !focusIn<IconButton>(); i++) {
-        await press(tester, LogicalKeyboardKey.arrowUp);
-      }
-      expect(focusIn<IconButton>(), isTrue);
+      await pressUpToTooltip(tester, 'Add to library', limit: 10);
       expect(
         tester.getRect(bookmark).contains(focusedRect().center),
         isTrue,
@@ -297,48 +326,6 @@ void main() {
 
       await press(tester, LogicalKeyboardKey.select);
       expect(innerActions(core), ['AddToLibrary']);
-    });
-
-    testWidgets('Tab visits the pane in one go: the two sides are groups', (
-      tester,
-    ) async {
-      useScreen(tester, tvSize);
-      final fixture = loadMetaDetailsFixture();
-      // A second playable stream, so the pane has more than one stop.
-      final torrents = (fixture['streams'] as List<dynamic>)[1];
-      final streams = torrents['content']['content'] as List<dynamic>;
-      streams.add({
-        ...streams.first as Map<String, dynamic>,
-        'name': '720p',
-        'infoHash': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      });
-      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
-      await tester.pumpWidget(harness(core, prefs: await groupedPrefs()));
-      await tester.pumpAndSettle();
-      expect(focusedLabel(tester), '1080p');
-
-      // Tab around the whole screen once. Reading order alone would visit
-      // the streams in between the header's controls, which sit at the same
-      // height on the left; as groups, the pane is left exactly once.
-      final inPane = <bool>[focusInPane()];
-      for (var i = 0; i < 40; i++) {
-        await press(tester, LogicalKeyboardKey.tab);
-        if (focusedLabel(tester) == '1080p') break;
-        inPane.add(focusInPane());
-      }
-      // Four stops: the header's flat/grouped toggle, the two streams, and
-      // the row summarising the addons that had nothing (which expands and
-      // so takes the remote too).
-      expect(inPane.length, lessThan(41), reason: 'came back around');
-      expect(inPane.where((b) => b).length, 4);
-      // And they are one contiguous run of the cycle: the walk starts on a
-      // stream, which is in the middle of the pane's own stops, so the run
-      // wraps around the end of the list rather than starting at index 0.
-      final leaves = [
-        for (var i = 0; i < inPane.length; i++)
-          if (inPane[i] != inPane[(i + 1) % inPane.length]) i,
-      ];
-      expect(leaves, hasLength(2), reason: 'the pane is entered and left once');
     });
 
     testWidgets(
@@ -395,43 +382,44 @@ void main() {
       return core;
     }
 
-    testWidgets('every section starts collapsed: focus is the first '
-        'header, and down walks the headers, and the ends hold', (
+    testWidgets('a rung is a card, and the row is walked sideways', (
       tester,
     ) async {
       await mountSectioned(tester);
 
-      // Nothing is open, so the remote starts on the first section's own
-      // header rather than a stream inside it.
+      // Nothing is chosen, so there is no second row at all yet: the
+      // resolutions themselves are what the remote starts on.
+      expect(focusIn<TvSourceGroupCard>(), isTrue);
       expect(focusedLabel(tester), '2160p');
-      expect(focusInPane(), isTrue);
-      expect(find.text('Alpha 2160p'), findsNothing);
+      expect(find.byType(TvSourceCard), findsNothing);
 
-      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), '1080p');
-      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), '720p');
 
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(focusedLabel(tester), '1080p');
-      await press(tester, LogicalKeyboardKey.arrowUp);
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      await press(tester, LogicalKeyboardKey.arrowLeft);
       expect(focusedLabel(tester), '2160p');
-      expect(focusInPane(), isTrue);
     });
 
-    testWidgets('a stored choice remembers which sections are open, and '
-        'focus starts on the stream inside', (tester) async {
-      await mountSectioned(tester, open: {'2160p'});
-
-      expect(focusedLabel(tester), 'Alpha 2160p');
-      expect(focusInPane(), isTrue);
-    });
-
-    testWidgets('select on a collapsed header opens it where the remote is', (
+    testWidgets('the sections a phone remembers open do not open a row here', (
       tester,
     ) async {
+      // Which sections are open is a global preference on a phone, kept
+      // across restarts; here exactly one row is open at a time and Back
+      // closes it. They share a word and nothing else, so a stored 2160p
+      // must not arrive with its sources already out.
+      await mountSectioned(tester, open: {'2160p'});
+
+      expect(find.byType(TvSourceCard), findsNothing);
+      expect(focusedLabel(tester), '2160p');
+    });
+
+    testWidgets('select opens that group beneath the row, which stays put '
+        'with the card marked by more than a colour', (tester) async {
       await mountSectioned(tester);
-      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), '1080p');
       expect(find.text('Beta 1080p'), findsNothing);
 
@@ -439,16 +427,53 @@ void main() {
 
       expect(find.text('Beta 1080p'), findsOneWidget);
       expect(focusedLabel(tester), '1080p', reason: 'focus stayed');
-      // And the stream it just revealed is the next thing down.
+      // Every rung is still on the screen, and the chosen one says so.
+      final cards = tester
+          .widgetList<TvSourceGroupCard>(find.byType(TvSourceGroupCard))
+          .toList();
+      expect(cards.map((card) => card.group.label), ['2160p', '1080p', '720p']);
+      expect(cards.map((card) => card.chosen), [false, true, false]);
+      expect(groupLabelStyle(tester, '1080p').fontWeight, FontWeight.w700);
+      expect(
+        groupLabelStyle(tester, '2160p').fontWeight,
+        isNot(FontWeight.w700),
+      );
+
+      // And the source it revealed is the next thing down.
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), 'Beta 1080p');
+    });
 
-      // Closing it again puts the next header back under the remote.
-      await press(tester, LogicalKeyboardKey.arrowUp);
+    testWidgets('another group is a sideways press away, and takes the '
+        'second row with it', (tester) async {
+      await mountSectioned(tester);
       await press(tester, LogicalKeyboardKey.select);
-      expect(find.text('Beta 1080p'), findsNothing);
+      expect(find.text('Alpha 2160p'), findsOneWidget);
+
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedLabel(tester), '1080p', reason: 'no press back first');
+      await press(tester, LogicalKeyboardKey.select);
+
+      expect(find.text('Beta 1080p'), findsOneWidget);
+      expect(find.text('Alpha 2160p'), findsNothing);
+    });
+
+    testWidgets('Back puts the open row away before it leaves the screen', (
+      tester,
+    ) async {
+      await mountSectioned(tester);
+      await press(tester, LogicalKeyboardKey.select);
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusedLabel(tester), '720p');
+      expect(focusedLabel(tester), 'Alpha 2160p');
+
+      await systemBack(tester);
+
+      expect(find.byType(TvSourceCard), findsNothing);
+      expect(find.byType(MetaDetailsScreen), findsOneWidget);
+      // The row the remote was in has gone, so it belongs on the card that
+      // opened it rather than nowhere, which is a dead D-pad.
+      expect(focusedLabel(tester), '2160p');
+      expect(focusIn<TvSourceGroupCard>(), isTrue);
     });
 
     testWidgets('the order chips take the D-pad, and select picks one', (
@@ -459,13 +484,9 @@ void main() {
       addTearDown(prefs.dispose);
       await mountSectioned(tester, prefs: prefs);
 
-      // Up from the first header: the chips that say what order the
-      // sections are in -- shown whether or not any section is open.
-      for (var i = 0; i < 4 && !focusIn<ChoiceChip>(); i++) {
-        await press(tester, LogicalKeyboardKey.arrowUp);
-      }
-      expect(focusIn<ChoiceChip>(), isTrue);
-      expect(focusInPane(), isTrue);
+      // Up from the first group card: the chips that say what order the
+      // sources inside a group are in -- shown whether or not one is open.
+      await stepUpTo<ChoiceChip>(tester, limit: 4);
 
       // And along them, which is what makes all three reachable.
       for (
@@ -473,7 +494,7 @@ void main() {
         i < 4 && focusedLabel(tester) != StreamOrder.largest.label;
         i++
       ) {
-        await press(tester, LogicalKeyboardKey.arrowLeft);
+        await press(tester, LogicalKeyboardKey.arrowRight);
       }
       expect(focusedLabel(tester), StreamOrder.largest.label);
 
@@ -504,7 +525,6 @@ void main() {
 
       // Sectioned is what is on screen, so that is what the tooltip says.
       await pressUpToTooltip(tester, kStreamsSectionedTooltip);
-      expect(focusInPane(), isTrue);
 
       await press(tester, LogicalKeyboardKey.select);
       expect(
@@ -513,20 +533,32 @@ void main() {
         reason: 'focus stayed, and the tooltip now says the new layout',
       );
       expect(stored.stored, {'streamsSectioned': false});
-      // Grouped again: each addon's own order, under its own heading.
-      expect(find.text('alpha.example'), findsOneWidget);
+      // Grouped again: the group row is one card per addon now, and what
+      // one of them opens is that addon's own ranking, left to right.
       expect(
-        tester.getTopLeft(find.text('Alpha 720p')).dy,
-        lessThan(tester.getTopLeft(find.text('Alpha 2160p')).dy),
+        tester
+            .widgetList<TvSourceGroupCard>(find.byType(TvSourceGroupCard))
+            .map((card) => card.group.label),
+        ['alpha.example', 'beta.example'],
+      );
+      await stepDownTo<TvSourceGroupCard>(tester);
+      for (var i = 0; i < 4 && focusedLabel(tester) != 'alpha.example'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowLeft);
+      }
+      expect(focusedLabel(tester), 'alpha.example');
+      await press(tester, LogicalKeyboardKey.select);
+      expect(
+        tester.getTopLeft(find.text('Alpha 720p')).dx,
+        lessThan(tester.getTopLeft(find.text('Alpha 2160p')).dx),
       );
     });
 
-    testWidgets('a held select on a row in an open section still '
+    testWidgets('a held select on a source in an open group still '
         'downloads it', (tester) async {
       final downloads = FakeDownloadsClient();
       addTearDown(downloads.dispose);
-      await mountSectioned(tester, open: {'2160p'}, downloads: downloads);
-      expect(focusedLabel(tester), 'Alpha 2160p');
+      await mountSectioned(tester, downloads: downloads);
+      await openSource(tester, '2160p', 'Alpha 2160p');
 
       await hold(
         tester,
@@ -541,13 +573,13 @@ void main() {
   });
 
   group('series', () {
-    testWidgets('down the info column reaches the episode row; the menu key '
+    testWidgets('up from the sources reaches the episode row; the menu key '
         'toggles one watched; right and select load the next', (tester) async {
       final core = await mountSeries(tester);
       final meta = MetaDetailsState.fromJson(seriesWithTorrent()).meta!;
       final season1 = meta.videosOfSeason(1);
 
-      await stepLeftAndDownTo<TvEpisodeCard>(tester);
+      await stepUpTo<TvEpisodeCard>(tester);
       final episode = focusedEpisodeTitle();
       final video = season1.singleWhere((v) => v.title == episode);
 
@@ -574,7 +606,7 @@ void main() {
       tester,
     ) async {
       final core = await mountSeries(tester);
-      await stepLeftAndDownTo<TvEpisodeCard>(tester);
+      await stepUpTo<TvEpisodeCard>(tester);
       final loads = core.dispatched.length;
 
       await hold(
@@ -593,12 +625,12 @@ void main() {
       final meta = MetaDetailsState.fromJson(seriesWithTorrent()).meta!;
       expect(find.text('Pilot'), findsOneWidget);
 
-      // Down the header reaches the row at all only because the pills fill
-      // its width; packed at the left they are stepped over.
-      await stepLeftAndDownTo<ChoiceChip>(tester);
+      // Up from the sources reaches the row at all only because the pills
+      // fill the panel's width; packed at the left they are stepped over.
+      await stepUpTo<ChoiceChip>(tester);
       // The row is one focus stop per season, walked with left and right.
       for (var i = 0; i < 8 && focusedLabel(tester) != '2'; i++) {
-        await press(tester, LogicalKeyboardKey.arrowLeft);
+        await press(tester, LogicalKeyboardKey.arrowRight);
       }
       expect(focusedLabel(tester), '2');
       expect(focusIn<ChoiceChip>(), isTrue);
@@ -614,7 +646,7 @@ void main() {
       // The row must not grow a highlight of its own: a chip's built-in
       // one is a tint, which is the cue a bright room takes away first.
       await mountSeries(tester);
-      await stepLeftAndDownTo<ChoiceChip>(tester);
+      await stepUpTo<ChoiceChip>(tester);
 
       final onPill = FocusManager.instance.primaryFocus!.context!
           .findAncestorWidgetOfExactType<FocusHighlight>();
@@ -646,12 +678,20 @@ void main() {
         });
       }
       final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
+      // Grouped, so the only chips between the remote and the pills are
+      // the pills: the sectioned layout's order chips are chips too.
       await tester.pumpWidget(
-        harness(core, type: 'series', id: seriesId, videoId: pilotId),
+        harness(
+          core,
+          type: 'series',
+          id: seriesId,
+          videoId: pilotId,
+          prefs: await groupedPrefs(),
+        ),
       );
       await tester.pumpAndSettle();
 
-      await stepLeftAndDownTo<ChoiceChip>(tester);
+      await stepUpTo<ChoiceChip>(tester);
       for (var i = 0; i < 30 && focusedLabel(tester) != '1'; i++) {
         await press(tester, LogicalKeyboardKey.arrowLeft);
       }
@@ -706,13 +746,17 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The delete button is on the focused row and cannot be focused
-      // itself: a node inside the focused one's rect is not in any
-      // direction from it.
-      expect(focusedLabel(tester), '1080p');
-      expect(find.byTooltip(kDownloadDeleteTooltip), findsOneWidget);
-      await press(tester, LogicalKeyboardKey.arrowRight);
-      expect(focusedLabel(tester), '1080p');
+      // The card says the file is on the device, and says it passively:
+      // a button drawn inside a focusable thing cannot be reached by a
+      // remote at all, which is why the hold below is the whole gesture.
+      await openSource(tester, 'caching.stremio.net', '1080p');
+      final badge = tester.widget<DownloadBadge>(
+        find.descendant(
+          of: find.byType(TvSourceCard),
+          matching: find.byType(DownloadBadge),
+        ),
+      );
+      expect(badge.onDelete, isNull);
 
       await hold(tester, LogicalKeyboardKey.select, RemotePress.holdDuration);
 
@@ -739,7 +783,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(focusedLabel(tester), '1080p');
+      await openSource(tester, 'caching.stremio.net', '1080p');
       await hold(tester, LogicalKeyboardKey.select, RemotePress.holdDuration);
 
       expect(find.byType(PlayerScreen), findsNothing, reason: 'not a tap');
@@ -763,6 +807,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await openSource(tester, 'caching.stremio.net', '1080p');
       await press(tester, LogicalKeyboardKey.select);
 
       expect(find.byType(PlayerScreen), findsOneWidget);
@@ -783,15 +828,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await press(tester, LogicalKeyboardKey.arrowLeft);
-      for (
-        var i = 0;
-        i < 6 && focusedTooltip() != kDownloadsScreenTooltip;
-        i++
-      ) {
-        await press(tester, LogicalKeyboardKey.arrowUp);
-      }
-      expect(focusedTooltip(), kDownloadsScreenTooltip);
+      await pressUpToTooltip(tester, kDownloadsScreenTooltip, limit: 10);
 
       await press(tester, LogicalKeyboardKey.select);
       expect(find.byType(DownloadsScreen), findsOneWidget);

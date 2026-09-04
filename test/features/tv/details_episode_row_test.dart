@@ -146,11 +146,11 @@ String? focusedEpisode() {
   return card == null ? null : TvEpisodeCard.title(card.video);
 }
 
-/// From the pane, left into the info column and then down onto the row.
+/// The remote starts on the sources at the foot of the column; up from
+/// there walks back through the streams header onto the episode row.
 Future<void> stepOntoTheRow(WidgetTester tester) async {
-  await press(tester, LogicalKeyboardKey.arrowLeft);
-  for (var i = 0; i < 8 && focusedEpisode() == null; i++) {
-    await press(tester, LogicalKeyboardKey.arrowDown);
+  for (var i = 0; i < 10 && focusedEpisode() == null; i++) {
+    await press(tester, LogicalKeyboardKey.arrowUp);
   }
   expect(focusedEpisode(), isNotNull, reason: 'the remote reached the row');
 }
@@ -380,14 +380,21 @@ void main() {
       also: {CoreField.player: loadPlayerFixture()},
     );
 
+    // Open the addon's sources before walking away from them: what is on
+    // screen is a card per addon until one of them is chosen.
+    await press(tester, LogicalKeyboardKey.select);
     await stepOntoTheRow(tester);
     await press(tester, LogicalKeyboardKey.arrowRight);
     await press(tester, LogicalKeyboardKey.arrowRight);
     final left = focusedEpisode();
     expect(left, isNot(seasonOne(series()).first.title));
 
-    // A pointer tap on the stream, so nothing but the player moves focus.
-    await tester.tap(find.textContaining('Torrentio').first);
+    // A pointer tap on the source, so nothing but the player moves focus
+    // (scrolling it back into view does not).
+    final source = find.textContaining('Torrentio').first;
+    await tester.ensureVisible(source);
+    await tester.pumpAndSettle();
+    await tester.tap(source);
     await tester.pumpAndSettle();
     expect(find.byType(PlayerScreen), findsOneWidget);
     expect(focusedEpisode(), isNull, reason: 'the player took the remote');

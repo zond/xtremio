@@ -25,6 +25,7 @@ import 'stream_sources.dart';
 import 'tv_backdrop.dart';
 import 'tv_episode_row.dart';
 import 'tv_meta_header.dart';
+import 'tv_source_row.dart';
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
 /// shows the meta item, its episodes (for a series) and every stream the
@@ -131,12 +132,19 @@ import 'tv_meta_header.dart';
 /// and no height at all once the backdrop and the sources are on it. The
 /// season pills above it were already a row.
 ///
-/// On a TV the info column and the streams pane are separate
-/// [FocusTraversalGroup]s, focus starts on the stream the user most likely
-/// wants (the last used source, else the first playable one) as nothing
-/// else on a freshly pushed screen holds any, the remote's menu key or a
-/// held select on an episode is its long press (toggle watched), and a long
-/// season list is picked from a [FilterMenu] rather than a dropdown.
+/// The sources are rows there too ([TvSourceRows]), and not a pane beside
+/// the episodes: a card per resolution rung or per addon -- whichever the
+/// layout preference already says -- and, under whichever card is chosen,
+/// a row of that group's sources. So the whole television screen is one
+/// column of rows the remote walks with four keys, and Back comes down a
+/// ladder like the player's: the open row of sources first, the screen
+/// second.
+///
+/// Focus starts on the source the user most likely wants (the last used
+/// one, else the first group card) as nothing else on a freshly pushed
+/// screen holds any, the remote's menu key or a held select on an episode
+/// is its long press (toggle watched), and a long season list is picked
+/// from a [FilterMenu] rather than a dropdown.
 class MetaDetailsScreen extends StatefulWidget {
   const MetaDetailsScreen({
     super.key,
@@ -231,6 +239,22 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// On a wide layout the streams are already beside the episodes, so
   /// nothing has to scroll.
   bool _isWide = false;
+
+  /// Whether the last build was the television one: one column of rows,
+  /// where nothing scrolls itself either (the remote's focus is what
+  /// moves, and a scroll of our own would fight it).
+  bool _isTv = false;
+
+  /// The [TvSourceGroup.label] whose sources are the second row, on a
+  /// television; null with only the group row on screen.
+  ///
+  /// Deliberately not [AppPrefs.openStreamSections]: that is a *set* of
+  /// resolutions, global and remembered across restarts, and this is one
+  /// row at a time that Back closes. They share a word and nothing else.
+  /// It is a label rather than an index so that streams arriving late,
+  /// which re-section the list under it, cannot silently move the mark to
+  /// another group.
+  String? _openSourceGroup;
 
   @override
   void didChangeDependencies() {
@@ -366,6 +390,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   void _load(String? videoId) {
     _requestedVideoId = videoId;
     _awaitingVideoId = null;
+    // Another video's sources are another set of groups; the row that was
+    // open was about the last one.
+    _openSourceGroup = null;
     claimField();
     _client?.dispatch(
       CoreActions.loadMetaDetails(
@@ -392,10 +419,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// on an episode, the player asking for the next one) rather than one the
   /// screen made for them, and on a narrow layout it is acknowledged where
   /// the user is looking. On a wide one there is nothing to acknowledge:
-  /// the streams pane is beside the episode and answers for itself.
+  /// the streams pane is beside the episode and answers for itself. On a
+  /// television there is nothing to scroll *with*: the sources are the row
+  /// below the episodes and the remote is what walks to them, so a scroll
+  /// of the screen's own would take the card the press was made on out
+  /// from under the focus that is still on it.
   void _selectVideo(VideoInfo video, {bool reveal = false}) {
     _load(video.id);
-    final acknowledge = reveal && !_isWide;
+    final acknowledge = reveal && !_isWide && !_isTv;
     if (acknowledge) _awaitingVideoId = video.id;
     if (mounted) setState(() => _season = video.season);
     if (acknowledge) _revealStreams(atEnd: true);
@@ -418,7 +449,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// Always after the frame the state change schedules, so it measures the
   /// section that is on its way in rather than the one going out.
   void _revealStreams({required bool atEnd}) {
-    if (_isWide) return;
+    if (_isWide || _isTv) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_narrowScroll.hasClients) return;
       const duration = Duration(milliseconds: 250);
@@ -709,9 +740,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       );
     }
     final isTv = DeviceScope.isTv(context);
+    _isTv = isTv;
     final body = LayoutBuilder(
       builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
+        final isWide =
+            !isTv && constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
         _isWide = isWide;
         final info = _infoSlivers(state, meta, isWide: isWide, isTv: isTv);
         final streams = _streamSlivers(state, meta);
@@ -725,22 +758,19 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: _tvGroup(isTv, CustomScrollView(slivers: info))),
+            Expanded(child: CustomScrollView(slivers: info)),
             const VerticalDivider(width: 1),
             SizedBox(
               width: paneWidth,
-              child: _tvGroup(
-                isTv,
-                CustomScrollView(
-                  slivers: [
-                    SliverPadding(
-                      padding: EdgeInsets.only(
-                        top: MediaQuery.paddingOf(context).top + 8,
-                      ),
+              child: CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.paddingOf(context).top + 8,
                     ),
-                    ...streams,
-                  ],
-                ),
+                  ),
+                  ...streams,
+                ],
               ),
             ),
           ],
@@ -753,18 +783,24 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // `SafeArea` rather than [TvSafeArea]: that one paints the band with
     // the scaffold's own colour, which would cover the backdrop with a
     // strip of ground at every edge.
-    return Scaffold(
-      body: TvBackdrop(
-        background: meta.background,
-        poster: meta.poster,
-        child: SafeArea(child: body),
+    //
+    // Back comes down a ladder here the way it does in the player: the
+    // open row of sources is put away first, and only a press with
+    // nothing left to put away leaves the screen.
+    return PopScope(
+      canPop: _openSourceGroup == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _openSourceGroup = null);
+      },
+      child: Scaffold(
+        body: TvBackdrop(
+          background: meta.background,
+          poster: meta.poster,
+          child: SafeArea(child: body),
+        ),
       ),
     );
   }
-
-  /// [child] as its own traversal group on a TV; [child] itself elsewhere.
-  static Widget _tvGroup(bool isTv, Widget child) =>
-      isTv ? FocusTraversalGroup(child: child) : child;
 
   /// Hero, facts and (for a series) the season selector and episode list.
   ///
@@ -1040,25 +1076,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                 ),
               ),
           ];
-    final autofocusAt = isTv && lastUsed == null
-        ? _firstPlayable(grouped)
-        : null;
-    // The first playable stream of an *open* section: a collapsed one has
-    // nothing on screen to focus.
-    final sectionAutofocusAt = isTv && lastUsed == null && isSectioned
-        ? _firstPlayableSection(sections, openSections)
-        : null;
-    // Every section starts collapsed, so most of the time there is no
-    // stream row to land on: focus the first section's own header instead,
-    // which a remote can already open with select.
-    final headerAutofocusAt =
-        isTv &&
-            lastUsed == null &&
-            isSectioned &&
-            sectionAutofocusAt == null &&
-            sections.isNotEmpty
-        ? 0
-        : null;
     // The shortcut is the same source as one of the rows below, so it is
     // handed the same merged trackers; nothing else about it changes.
     final lastUsedStream = lastUsed == null
@@ -1075,6 +1092,23 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                 _download(state, meta, group, stream),
             onDelete: _deleteDownload,
           );
+    if (isTv) {
+      return _tvSourceSlivers(
+        state,
+        isSectioned: isSectioned,
+        order: order,
+        sections: sections,
+        grouped: grouped,
+        profile: profile,
+        empties: empties,
+        failures: failures,
+        foundNothing: foundNothing,
+        noneYet: noneYet,
+        lastUsed: lastUsed,
+        lastUsedStream: lastUsedStream,
+        downloads: downloads,
+      );
+    }
     return [
       SliverToBoxAdapter(
         child: _StreamsHeader(
@@ -1106,34 +1140,28 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             stream: lastUsedStream,
             highlighted: true,
             leadingIcon: Icons.history,
-            titleOverride: 'Continue with last source',
+            titleOverride: kContinueWithLastSource,
             onTap: () => _play(state, lastUsed!.$1, lastUsedStream),
-            autofocus: isTv,
             downloads: downloads?.forGroup(lastUsed!.$1),
           ),
         ),
       if (isSectioned)
-        for (final (index, section) in sections.indexed)
+        for (final section in sections)
           _ResolutionSectionSliver(
             section: section,
             expanded: openSections.contains(section.resolution),
             onExpand: () => _toggleSection(section.resolution),
             lastUsed: lastUsed?.$2,
             onPlay: (row) => _play(state, row.group, row.stream),
-            autofocusIndex: sectionAutofocusAt?.$1 == index
-                ? sectionAutofocusAt!.$2
-                : null,
-            headerAutofocus: headerAutofocusAt == index,
             downloads: downloads,
           )
       else ...[
-        for (final (index, entry) in grouped.indexed)
+        for (final entry in grouped)
           _StreamGroupSliver(
             group: entry.$1,
             rows: entry.$2,
             lastUsed: lastUsed?.$2,
             onPlay: (stream) => _play(state, entry.$1, stream),
-            autofocusIndex: autofocusAt?.$1 == index ? autofocusAt!.$2 : null,
             downloads: downloads?.forGroup(entry.$1),
           ),
       ],
@@ -1164,9 +1192,210 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     ];
   }
 
+  /// The sources of the selected video as the two rows a television picks
+  /// from ([TvSourceRows]), in place of the column of collapsible sections
+  /// a phone and a desktop scroll.
+  ///
+  /// The groups are the same two the preference already chooses between --
+  /// a card per resolution rung, or a card per addon -- so nothing new is
+  /// stored and the order chips in the header still order inside one. What
+  /// is not shared is *which* group is open: the phone remembers a set of
+  /// resolutions across restarts, and this is one row at a time that Back
+  /// puts away (see [_openSourceGroup]).
+  ///
+  /// Everything around the sources stays where it was, below them: the
+  /// addons that had nothing, the ones that failed, and the notice when
+  /// nobody had anything.
+  List<Widget> _tvSourceSlivers(
+    MetaDetailsState state, {
+    required bool isSectioned,
+    required StreamOrder order,
+    required List<StreamSection<_SourceRow>> sections,
+    required List<(StreamGroup, List<_SourceRow>)> grouped,
+    required ProfileState? profile,
+    required List<StreamGroup> empties,
+    required List<AddonFailure> failures,
+    required bool foundNothing,
+    required bool noneYet,
+    required (StreamGroup, StreamInfo)? lastUsed,
+    required StreamInfo? lastUsedStream,
+    required _StreamDownloads? downloads,
+  }) {
+    TvSource source(_SourceRow row) =>
+        _tvSource(state, row, lastUsed: lastUsed?.$2, downloads: downloads);
+    final groups = <TvSourceGroup>[
+      if (isSectioned)
+        for (final section in sections)
+          (
+            label: section.label,
+            summary: section.summary,
+            icon: null,
+            sources: [for (final row in section.rows) source(row)],
+          )
+      else
+        for (final (group, rows) in grouped)
+          (
+            label: _addonNameOf(profile, group),
+            // A group with nothing in it is here only while its answer is
+            // still coming: one that settled on no streams was taken out
+            // of the list above.
+            summary: rows.isEmpty && group.isLoading
+                ? kLookingForStreams
+                : rows.length == 1
+                ? '1 source'
+                : '${rows.length} sources',
+            icon: null,
+            sources: [for (final row in rows) source(row)],
+          ),
+    ];
+    return [
+      SliverToBoxAdapter(
+        child: _StreamsHeader(
+          key: _streamsKey,
+          state: state,
+          sectioned: isSectioned,
+          onSectionedChanged: _setStreamsSectioned,
+          order: order,
+          onOrderChanged: _setStreamsOrder,
+        ),
+      ),
+      if (foundNothing)
+        SliverToBoxAdapter(
+          child: _NoStreamsNotice(
+            isEpisode: state.hasVideos,
+            onAddons: _openAddons,
+          ),
+        ),
+      if (noneYet)
+        const SliverToBoxAdapter(
+          child: ListTile(
+            leading: Icon(Icons.touch_app_outlined),
+            title: Text('Pick an episode to see its streams'),
+          ),
+        ),
+      // The shortcut is a card of its own above the groups, and the one
+      // the remote starts on: it is the source the viewer is most likely
+      // to want, which is why it is drawn at all.
+      if (lastUsedStream != null)
+        SliverToBoxAdapter(
+          child: TvSourceRow(
+            defaultFocus: true,
+            sources: [
+              _tvLastUsed(state, lastUsed!.$1, lastUsedStream, downloads),
+            ],
+          ),
+        ),
+      SliverToBoxAdapter(
+        child: TvSourceRows(
+          groups: groups,
+          openLabel: _openSourceGroup,
+          onOpen: (label) => setState(() => _openSourceGroup = label),
+          defaultFocus: lastUsedStream == null,
+        ),
+      ),
+      if (empties.isNotEmpty)
+        SliverToBoxAdapter(
+          child: _EmptyAddonsSummary(
+            names: [
+              for (final group in empties)
+                profile?.installedAddon(group.request.base)?.manifest.name ??
+                    group.addonLabel,
+            ],
+            isEpisode: state.hasVideos,
+          ),
+        ),
+      if (failures.isNotEmpty)
+        SliverToBoxAdapter(
+          child: FailedAddonsSection(
+            failures: failures,
+            summaryLabel: FailedAddonsSection.addonsLabel(failures.length),
+            locked: profile?.addonsLocked ?? false,
+            onCheck: (failure) =>
+                openAddonDetails(context, failure.transportUrl),
+            onUninstall: (failure) =>
+                confirmAndUninstallAddon(context, _client, failure.addon!),
+          ),
+        ),
+      const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+    ];
+  }
+
+  /// One row of the sources list as a television card draws it.
+  ///
+  /// The badges are exactly what the vertical list puts on the same row:
+  /// what [StreamFacts] read in the sectioned layout, and [StreamHints] in
+  /// the grouped one where nothing was parsed. A source the player cannot
+  /// open says which kind it is on a badge instead of taking a press, so
+  /// it is not a focus stop and the remote steps over it -- the disabled
+  /// row, in the shape a card has.
+  TvSource _tvSource(
+    MetaDetailsState state,
+    _SourceRow row, {
+    required StreamInfo? lastUsed,
+    required _StreamDownloads? downloads,
+  }) {
+    final stream = row.stream;
+    final facts = row.facts;
+    final hints = facts == null ? StreamHints.of(stream) : null;
+    final bound = downloads?.forGroup(row.group);
+    return (
+      icon: _StreamTile._iconFor(stream.kind),
+      title: stream.title,
+      // The group card names the addon in the grouped layout; in the
+      // sectioned one there is no heading and the card has to say it.
+      detail: facts?.addonName,
+      badges: [
+        if (facts != null)
+          ...facts.badges
+        else
+          for (final chip in hints!.chips)
+            if (chip.toLowerCase() != stream.title.toLowerCase()) chip,
+        if (!stream.isPlayable) stream.kind.label,
+      ],
+      alsoFrom: row.alsoFrom.isEmpty ? null : alsoFromLabel(row.alsoFrom),
+      highlighted: lastUsed != null && stream.isSameSource(lastUsed),
+      download: bound?.entryOf(stream),
+      downloading: bound?.isPending(stream) ?? false,
+      onSelect: stream.isPlayable
+          ? () => _play(state, row.group, stream)
+          : null,
+      onHold: bound?.remoteAction(stream),
+    );
+  }
+
+  /// The last-used source as its own card: the same shortcut the vertical
+  /// list draws above the sections, saying what it is on the first line
+  /// and which release it is on the second.
+  TvSource _tvLastUsed(
+    MetaDetailsState state,
+    StreamGroup group,
+    StreamInfo stream,
+    _StreamDownloads? downloads,
+  ) {
+    final bound = downloads?.forGroup(group);
+    return (
+      icon: Icons.history,
+      title: kContinueWithLastSource,
+      detail: stream.title,
+      badges: const [],
+      alsoFrom: null,
+      highlighted: true,
+      download: bound?.entryOf(stream),
+      downloading: bound?.isPending(stream) ?? false,
+      onSelect: () => _play(state, group, stream),
+      onHold: bound?.remoteAction(stream),
+    );
+  }
+
   /// Puts the sources list in one layout or the other, for everything the
   /// app shows from now on: the preference is global, not this title's.
-  void _setStreamsSectioned(bool value) => _prefs?.setStreamsSectioned(value);
+  ///
+  /// The groups on a television are the layout's own, so the row that was
+  /// open is about a grouping that no longer exists.
+  void _setStreamsSectioned(bool value) {
+    _openSourceGroup = null;
+    _prefs?.setStreamsSectioned(value);
+  }
 
   /// Puts every resolution section in one order or another, again for
   /// everything the app shows from now on rather than for this title.
@@ -1281,33 +1510,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             alsoFrom: sources.alsoFrom(addonOf(row), row.stream),
           ),
     ];
-  }
-
-  /// The (section, row) indices of the first playable stream in an open
-  /// section, if any: a collapsed section is not on screen to be focused.
-  static (int, int)? _firstPlayableSection(
-    List<StreamSection<_SourceRow>> sections,
-    Set<StreamResolution?> open,
-  ) {
-    for (final (s, section) in sections.indexed) {
-      if (!open.contains(section.resolution)) continue;
-      for (final (r, row) in section.rows.indexed) {
-        if (row.stream.isPlayable) return (s, r);
-      }
-    }
-    return null;
-  }
-
-  /// The (group, row) indices of the first playable stream, if any.
-  static (int, int)? _firstPlayable(
-    List<(StreamGroup, List<_SourceRow>)> groups,
-  ) {
-    for (final (g, entry) in groups.indexed) {
-      for (final (s, row) in entry.$2.indexed) {
-        if (row.stream.isPlayable) return (g, s);
-      }
-    }
-    return null;
   }
 }
 
@@ -1867,6 +2069,10 @@ class _NoStreamsNotice extends StatelessWidget {
 /// engine's answer.
 const String kLookingForStreams = 'Looking for streams…';
 
+/// The shortcut to the source this title was last played from, above the
+/// sections on a phone and its own card on a television.
+const String kContinueWithLastSource = 'Continue with last source';
+
 /// What the toggle in the section header says the layout on screen right
 /// now is, as its own short label (drawn beside it, when there is room)
 /// and as the state half of its tooltip, so it reads as "here is where you
@@ -2161,8 +2367,6 @@ class _ResolutionSectionSliver extends StatelessWidget {
     required this.onExpand,
     required this.lastUsed,
     required this.onPlay,
-    this.autofocusIndex,
-    this.headerAutofocus = false,
     this.downloads,
   });
 
@@ -2173,14 +2377,6 @@ class _ResolutionSectionSliver extends StatelessWidget {
   /// The stream pinned as "Continue with last source", highlighted here too.
   final StreamInfo? lastUsed;
   final ValueChanged<_SourceRow> onPlay;
-
-  /// The stream (by index) where TV focus starts; null for none here.
-  final int? autofocusIndex;
-
-  /// Whether TV focus starts on this section's own header. Only true when
-  /// every section is collapsed and there is no stream to focus instead --
-  /// see `headerAutofocusAt` in `_streamSlivers`.
-  final bool headerAutofocus;
 
   /// The downloads, when there is a client above this screen. Bound to each
   /// row's own group, since a pin records the request its stream came from.
@@ -2194,7 +2390,6 @@ class _ResolutionSectionSliver extends StatelessWidget {
         SliverToBoxAdapter(
           child: ListTile(
             key: streamSectionKey(section.resolution),
-            autofocus: headerAutofocus,
             leading: Icon(
               expanded ? Icons.expand_more : Icons.chevron_right,
               color: theme.colorScheme.primary,
@@ -2222,7 +2417,6 @@ class _ResolutionSectionSliver extends StatelessWidget {
                 highlighted:
                     lastUsed != null && row.stream.isSameSource(lastUsed),
                 onTap: row.stream.isPlayable ? () => onPlay(row) : null,
-                autofocus: index == autofocusIndex,
                 downloads: downloads?.forGroup(row.group),
               );
             },
@@ -2245,7 +2439,6 @@ class _StreamGroupSliver extends StatelessWidget {
     required this.rows,
     required this.lastUsed,
     required this.onPlay,
-    this.autofocusIndex,
     this.downloads,
   });
 
@@ -2259,9 +2452,6 @@ class _StreamGroupSliver extends StatelessWidget {
   /// The stream pinned as "Continue with last source", highlighted here too.
   final StreamInfo? lastUsed;
   final ValueChanged<StreamInfo> onPlay;
-
-  /// The stream (by index) where TV focus starts; null for none here.
-  final int? autofocusIndex;
 
   /// The downloads, when there is a client above this screen.
   final _StreamDownloads? downloads;
@@ -2310,7 +2500,6 @@ class _StreamGroupSliver extends StatelessWidget {
               alsoFrom: rows[index].alsoFrom,
               highlighted: lastUsed != null && stream.isSameSource(lastUsed),
               onTap: stream.isPlayable ? () => onPlay(stream) : null,
-              autofocus: index == autofocusIndex,
               downloads: downloads,
             );
           },
@@ -2405,7 +2594,6 @@ class _StreamTile extends StatelessWidget {
     this.highlighted = false,
     this.leadingIcon,
     this.titleOverride,
-    this.autofocus = false,
     this.downloads,
     this.facts,
     this.alsoFrom = const [],
@@ -2430,9 +2618,6 @@ class _StreamTile extends StatelessWidget {
   final bool highlighted;
   final IconData? leadingIcon;
   final String? titleOverride;
-
-  /// Where TV focus starts on the screen (see [MetaDetailsScreen]).
-  final bool autofocus;
 
   /// The offline downloads, when there is a client above this screen.
   final _StreamDownloads? downloads;
@@ -2465,7 +2650,6 @@ class _StreamTile extends StatelessWidget {
     final tile = ListTile(
       enabled: onTap != null,
       selected: highlighted,
-      autofocus: autofocus,
       leading: Icon(leadingIcon ?? _iconFor(stream.kind)),
       title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
       isThreeLine: lines > 1,
