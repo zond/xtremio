@@ -71,6 +71,15 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// When set, `setSubtitleTrack` and `setExternalSubtitle` record the call
   /// and then fail with it (mpv refusing the track).
   Object? subtitleError;
+
+  /// Holds the *next* subtitle call open until it is completed, then
+  /// clears itself: mpv's `sub-add` fetches the URL under its own
+  /// `network-timeout`, so an answer can be minutes late and the viewer
+  /// can have done several things by the time it lands. Whichever
+  /// [subtitleError] was set when the call was made is the one it fails
+  /// with, so a later call can succeed while this one is still out.
+  Completer<void>? subtitleGate;
+
   SubtitleStyle? subtitleStyle;
   double? lastSubtitleBottomPadding;
   bool disposed = false;
@@ -195,10 +204,20 @@ class FakePlaybackEngine implements PlaybackEngine {
     setAudioTrackIds.add(id);
   }
 
+  /// The gate the current call has to wait on, taken so that only the one
+  /// call it was set for is held.
+  Future<void>? _takeGate() {
+    final gate = subtitleGate;
+    subtitleGate = null;
+    return gate?.future;
+  }
+
   @override
   Future<void> setSubtitleTrack(String id) async {
     setSubtitleTrackIds.add(id);
-    if (subtitleError != null) throw subtitleError!;
+    final error = subtitleError;
+    await _takeGate();
+    if (error != null) throw error;
   }
 
   @override
@@ -208,7 +227,9 @@ class FakePlaybackEngine implements PlaybackEngine {
     String? language,
   }) async {
     externalSubtitles.add((url, title, language));
-    if (subtitleError != null) throw subtitleError!;
+    final error = subtitleError;
+    await _takeGate();
+    if (error != null) throw error;
   }
 
   @override

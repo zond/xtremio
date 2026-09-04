@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -278,6 +280,49 @@ void main() {
     expect(engine.opened, hasLength(2));
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
+  });
+
+  testWidgets('a refused auto-pick leaves alone a file picked while it was '
+      'in flight', (tester) async {
+    useWideViewport(tester);
+    final player = harness();
+    player.fixture['subtitlePreference'] = {
+      'enabled': true,
+      'source': 'external',
+      'language': 'eng',
+    };
+    await player.pump(tester);
+    final gate = Completer<void>();
+    final engine = player.engine
+      ..subtitleError = StateError('mpv: no')
+      ..subtitleGate = gate;
+    engine.emitDuration(const Duration(minutes: 96));
+    engine.emitPlaying(true);
+    await pumpEvents(tester);
+
+    // The session's pick is out on the network and unanswered: `sub-add`
+    // fetches the URL under mpv's own `network-timeout`, so a refusal
+    // can be minutes away.
+    expect(engine.externalSubtitles, hasLength(1));
+    expect(engine.externalSubtitles.single.$1.toString(), plainUrl);
+
+    // Meanwhile the viewer picks a file of their own and shifts it.
+    engine.subtitleError = null;
+    await selectFile(tester, 'PAL');
+    await openPanel(tester);
+    await step(tester, 'subtitle-shift-later');
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
+
+    // The refusal lands. What it has to undo is its own attempt, and
+    // that is no longer what is on screen: reverting here would take the
+    // multiplier and the offset off a file that is playing, and label
+    // the menu with a selection nobody made.
+    gate.complete();
+    await pumpEvents(tester);
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
+    expect(find.text('+0.1 s'), findsOneWidget);
   });
 
   testWidgets('a re-open puts the addon file back before re-timing it', (

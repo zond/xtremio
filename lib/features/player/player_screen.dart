@@ -1842,6 +1842,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     if (applied == null) return;
     final url = _opened;
+    // What this pick put on screen, so the revert below can tell whether
+    // it is still undoing its own work. `sub-add` fetches the URL under
+    // mpv's `network-timeout`, so a refusal can land minutes after the
+    // call, and by then the viewer may have chosen a file of their own.
+    final applying = _tracks.value.activeSubtitleId;
     _autoPickingSubtitles = true;
     applied
         .then(
@@ -1853,10 +1858,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
             // selected and try again on the next tracks/state change.
             // Reverting is a change of what is on screen like any other,
             // so the multiplier comes back with it.
-            if (_opened == url && mounted) {
-              _tracks.value = before;
-              _retimeSubtitles(beforeSubtitle);
+            if (_opened != url ||
+                !mounted ||
+                _tracks.value.activeSubtitleId != applying) {
+              return;
             }
+            _tracks.value = before;
+            // The one path that moves the timing outside a build: the
+            // panel is drawn from [_timing], so without the rebuild it
+            // would go on showing the shift and the multiplier mpv has
+            // already been taken off.
+            setState(() => _retimeSubtitles(beforeSubtitle));
           },
         )
         .whenComplete(() => _autoPickingSubtitles = false);
