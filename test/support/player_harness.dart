@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/tv_density.dart';
@@ -214,10 +215,15 @@ void usePhoneViewport(WidgetTester tester) {
 }
 
 /// The opacity of the controls layer: 1 while shown, 0 once faded.
+///
+/// Anchored on the top bar, which is built inside that layer and only
+/// there. The stack has other `SafeArea` children -- the stats panel, the
+/// up-next card, the subtitle timing panel -- and which of them is last
+/// depends on what the test has opened.
 double controlsOpacity(WidgetTester tester) => tester
     .widget<AnimatedOpacity>(
       find.ancestor(
-        of: find.byType(SafeArea).last,
+        of: find.byType(PlayerTopBar),
         matching: find.byType(AnimatedOpacity),
       ),
     )

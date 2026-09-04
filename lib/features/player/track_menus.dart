@@ -31,6 +31,7 @@ class SubtitleMenu extends StatefulWidget {
     required this.onOff,
     required this.onEmbedded,
     required this.onExternal,
+    required this.onAdjustTiming,
   });
 
   final List<TrackInfo> embedded;
@@ -48,6 +49,15 @@ class SubtitleMenu extends StatefulWidget {
   final VoidCallback onOff;
   final ValueChanged<TrackInfo> onEmbedded;
   final ValueChanged<SubtitleInfo> onExternal;
+
+  /// Opens the panel that shifts and stretches what is playing. Offered
+  /// only while something *is* playing: with subtitles off there is
+  /// nothing on screen to move, and a control that does nothing visible
+  /// is worse than one that is not there.
+  final VoidCallback onAdjustTiming;
+
+  /// The row that opens the hand adjustment.
+  static const String adjustTimingLabel = 'Adjust timing';
 
   /// `title`, else the language, else a numbered fallback.
   static String embeddedLabel(TrackInfo track, int index) =>
@@ -107,6 +117,17 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
           selected: activeId == null,
           onTap: widget.onOff,
         ),
+        // Above the list rather than below it: a language answers with
+        // sixty-nine files often enough that the bottom of this sheet is
+        // a scroll away, and what a viewer reaches for after picking a
+        // file that drifts is this.
+        if (activeId != null)
+          ListTile(
+            leading: const Icon(Icons.av_timer),
+            title: const Text(SubtitleMenu.adjustTimingLabel),
+            subtitle: const Text('Shift or stretch what is playing'),
+            onTap: widget.onAdjustTiming,
+          ),
         if (widget.embedded.isNotEmpty) ...[
           const _SectionLabel('In this file'),
           const _SectionNote(

@@ -22,6 +22,7 @@ import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
 import 'subtitle_groups.dart';
+import 'subtitle_timing.dart';
 import 'torrent_stall_overlay.dart';
 import 'torrent_startup_overlay.dart';
 import 'track_menus.dart';
@@ -210,6 +211,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     debugLabel: 'player up next',
   );
 
+  /// The timing panel's own scope, on every device rather than only on a
+  /// television: it is a small grid of buttons walked with the direction
+  /// keys wherever it is shown, and a left press in it must never reach
+  /// the seek below.
+  final FocusScopeNode _timingScope = FocusScopeNode(
+    debugLabel: 'player subtitle timing',
+  );
+
+  /// Where the remote lands when the timing panel opens: the shift's
+  /// earlier button, with the rest a press away.
+  final FocusNode _timingFocus = FocusNode(debugLabel: 'subtitle timing');
+
   /// Where focus lands when the remote moves down (the bottom bar's
   /// play/pause, or "Play now" while the countdown runs) and up (the top
   /// bar's back button) onto the controls.
@@ -301,6 +314,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// timed out): the difference between "no rate" and "no rate yet",
   /// which is what the subtitle auto-pick waits on.
   bool _frameRateSampled = false;
+
+  /// What the subtitles on screen are being played at: the multiplier the
+  /// automatic path decided, plus whatever the viewer has since asked of
+  /// it by hand.
+  ///
+  /// One value for both properties, because they are put back together:
+  /// [_retimeSubtitles] replaces the whole of it, so a shift belongs to
+  /// the file it was made for exactly as strictly as the multiplier does.
+  SubtitleTiming _timing = const SubtitleTiming();
+
+  /// Whether the timing panel is up. Not part of the OSD, so it is not
+  /// what [_controlsVisible] says (see [_showSubtitleTiming]).
+  bool _timingShown = false;
 
   /// The torrent overlays: while [_torrentStatsTimer] runs the server's
   /// stats are polled and the latest answer shown ([_torrentStats], null
@@ -688,6 +714,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ?.open(_mediaUrl(url), start: _openStart)
         .then((_) {
           if (state != null) _reportVideoParams(state, url);
+          // A re-open is a fresh `loadfile` on the same player, and what
+          // is in force belongs to the playback rather than to the file
+          // the demuxer just re-read: the stream is re-opened on a
+          // network error and on a buffer change, both keeping the
+          // position, and a correction the viewer made ten minutes ago
+          // has to survive that. Writing it again is what makes the
+          // guarantee ours instead of a property mpv happens to carry
+          // over; on a first open it re-states what [_onPlayerState] has
+          // already put back.
+          if (mounted && _opened == url) _applySubtitleTiming();
         })
         .catchError((Object error) {
           if (!mounted || _opened != url) return;
@@ -1602,18 +1638,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Puts libmpv's subtitle multiplier where [subtitle] needs it against
   /// the video that is playing ([subtitleSpeed]), or back to 1.0 when
   /// there is no file whose own timing is in question -- an embedded
-  /// track, subtitles off, another video.
+  /// track, subtitles off, another video -- and drops any hand
+  /// adjustment with it.
   ///
   /// Every path that changes what is on screen calls this, which is the
-  /// whole of the reset rule: the multiplier belongs to the player, not
-  /// to the file, so one left behind by the previous pick would silently
-  /// ruin a subtitle that was correct.
+  /// whole of the reset rule: the timing belongs to the player, not to
+  /// the file, so one left behind by the previous pick would silently
+  /// ruin a subtitle that was correct. That now covers the shift as
+  /// well, and for the same reason: an offset made for a file that
+  /// started late is nonsense on the next one, and mpv keeps `sub-delay`
+  /// across a track change exactly as it keeps `sub-speed`.
+  ///
+  /// This is also where the viewer hands the speed back. It is theirs
+  /// from the moment they touch the control until something changes what
+  /// is shown -- switching subtitles is what gives the automatic path
+  /// its file again.
   void _retimeSubtitles([SubtitleInfo? subtitle]) {
-    _engine?.setSubtitleSpeed(
-      subtitle == null
+    _timing = SubtitleTiming(
+      automaticSpeed: subtitle == null
           ? 1
           : subtitleSpeed(subtitle, videoFrameRate: _videoFrameRate),
     );
+    _applySubtitleTiming();
+  }
+
+  /// Writes [_timing] to the player: the multiplier and the offset
+  /// together, always both, so neither can be left holding a value the
+  /// other half of the pair has moved on from.
+  void _applySubtitleTiming() {
+    final engine = _engine;
+    if (engine == null) return;
+    engine.setSubtitleSpeed(_timing.speed);
+    engine.setSubtitleDelay(_timing.delay);
+  }
+
+  /// A press on the timing panel. The panel is rebuilt from [_timing], so
+  /// a step that was refused (see [SubtitleTiming.stretchedBy]) redraws
+  /// the same number rather than a number mpv is not really playing.
+  void _adjustTiming(SubtitleTiming timing) {
+    if (timing == _timing) return;
+    setState(() => _timing = timing);
+    _applySubtitleTiming();
   }
 
   void _selectEmbeddedSubtitle(TrackInfo track) {
@@ -1759,6 +1824,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
         .whenComplete(() => _autoPickingSubtitles = false);
   }
 
+  // --- Subtitle timing by hand ---------------------------------------------
+
+  /// Puts the timing panel up and the remote on it.
+  ///
+  /// Deliberately not part of the OSD: the bar fades on its three-second
+  /// timer while this stays, because adjusting means pressing and then
+  /// watching the picture for several seconds to see what the press did.
+  /// It is drawn outside the fade and it is not on [_canAutoHide]'s list
+  /// of things that stop it -- pinning the bar up over the very picture
+  /// being judged would be the wrong half of the problem to solve. What
+  /// makes that safe is that the panel is visible for as long as it holds
+  /// focus, which is the rule [_hideControls] keeps for the bar.
+  void _showSubtitleTiming() {
+    if (_timingShown) return;
+    setState(() => _timingShown = true);
+    // After the frame that builds it: there is no node to focus until
+    // the panel is in the tree.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _timingShown) _timingFocus.requestFocus();
+    });
+  }
+
+  /// Takes it away, and the remote back to the video with it -- a ring on
+  /// a panel that is gone is focus the viewer can no longer see.
+  void _hideSubtitleTiming() {
+    if (!_timingShown) return;
+    final focused = _timingScope.hasFocus;
+    setState(() => _timingShown = false);
+    if (focused) _focusNode.requestFocus();
+  }
+
+  void _toggleSubtitleTiming() {
+    if (_timingShown) {
+      _hideSubtitleTiming();
+    } else {
+      _showSubtitleTiming();
+    }
+  }
+
   // --- Menus ---------------------------------------------------------------
 
   /// Shows a bottom sheet over the player. The up-next countdown does not
@@ -1797,48 +1901,59 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _resumeUpNext();
   }
 
-  Future<void> _openSubtitleMenu() => _showSheet(
-    (context) => ValueListenableBuilder<Map<String, dynamic>?>(
-      valueListenable: _player!,
-      builder: (context, json, _) {
-        final state = json == null ? null : PlayerState.fromJson(json);
-        return ValueListenableBuilder<PlaybackTracks>(
-          valueListenable: _tracks,
-          builder: (context, tracks, _) => SubtitleMenu(
-            embedded: tracks.subtitle,
-            groups: groupSubtitlesByLanguage(
-              // Ordered before grouping, so the numbering and "the first
-              // option is what a tap applies" hold over the order the
-              // rows are actually in.
-              subtitlesByFrameRateFit(
-                state?.externalSubtitleSources ?? const [],
+  Future<void> _openSubtitleMenu() async {
+    var adjustTiming = false;
+    await _showSheet(
+      (context) => ValueListenableBuilder<Map<String, dynamic>?>(
+        valueListenable: _player!,
+        builder: (context, json, _) {
+          final state = json == null ? null : PlayerState.fromJson(json);
+          return ValueListenableBuilder<PlaybackTracks>(
+            valueListenable: _tracks,
+            builder: (context, tracks, _) => SubtitleMenu(
+              embedded: tracks.subtitle,
+              groups: groupSubtitlesByLanguage(
+                // Ordered before grouping, so the numbering and "the first
+                // option is what a tap applies" hold over the order the
+                // rows are actually in.
+                subtitlesByFrameRateFit(
+                  state?.externalSubtitleSources ?? const [],
+                  videoFrameRate: _videoFrameRate,
+                ),
+                addonName: _subtitleAddonName,
+                // Which rows say they will be re-timed; the same rate the
+                // ordering above was decided on, so a row that says so is
+                // one `subtitleSpeed` will really correct.
                 videoFrameRate: _videoFrameRate,
               ),
-              addonName: _subtitleAddonName,
-              // Which rows say they will be re-timed; the same rate the
-              // ordering above was decided on, so a row that says so is
-              // one `subtitleSpeed` will really correct.
-              videoFrameRate: _videoFrameRate,
+              activeId: tracks.activeSubtitleId,
+              loading: state?.subtitlesLoading ?? false,
+              onOff: () {
+                _disableSubtitles();
+                Navigator.of(context).pop();
+              },
+              onEmbedded: (track) {
+                _selectEmbeddedSubtitle(track);
+                Navigator.of(context).pop();
+              },
+              onExternal: (subtitle) {
+                _selectExternalSubtitle(subtitle);
+                Navigator.of(context).pop();
+              },
+              onAdjustTiming: () {
+                adjustTiming = true;
+                Navigator.of(context).pop();
+              },
             ),
-            activeId: tracks.activeSubtitleId,
-            loading: state?.subtitlesLoading ?? false,
-            onOff: () {
-              _disableSubtitles();
-              Navigator.of(context).pop();
-            },
-            onEmbedded: (track) {
-              _selectEmbeddedSubtitle(track);
-              Navigator.of(context).pop();
-            },
-            onExternal: (subtitle) {
-              _selectExternalSubtitle(subtitle);
-              Navigator.of(context).pop();
-            },
-          ),
-        );
-      },
-    ),
-  );
+          );
+        },
+      ),
+    );
+    // Once the sheet is really gone, not from inside it: [_showSheet]
+    // puts the remote back on the button that opened it as it closes,
+    // which would take it straight off the panel again.
+    if (adjustTiming && mounted) _showSubtitleTiming();
+  }
 
   Future<void> _openAudioMenu() => _showSheet(
     (context) => ValueListenableBuilder<PlaybackTracks>(
@@ -2311,7 +2426,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Up or down with a control focused: the next stop in that direction
-  /// inside the bar, and nothing at all at its edges.
+  /// inside the bar -- or inside the timing panel, which is confined to
+  /// its own scope for the same reason -- and nothing at all at its
+  /// edges.
   ///
   /// Neither wrapping round nor stepping out onto the video. The video
   /// draws no focus ring, so it cannot be a legitimate stop while
@@ -2323,24 +2440,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Whether Back has something to put away before it leaves the player:
-  /// the up-next card first, then a control bar that is up and free to go.
+  /// the timing panel first, then the up-next card, then a control bar
+  /// that is up and free to go.
   ///
-  /// Only on a television, where Back is the only way out of the OSD. Off
-  /// one the pointer hides the controls and Escape means what
-  /// `escExitFullscreen` says it means, so Back and Escape keep leaving
-  /// the player as they always have.
+  /// The panel is the one rung that exists off a television too. It is
+  /// opened deliberately and it does not fade, so on a phone Back is the
+  /// only way out of it and on a desktop Escape comes down the same
+  /// ladder; the other two are the OSD's, where the pointer hides the
+  /// controls and Escape means what `escExitFullscreen` says it means, so
+  /// Back and Escape keep leaving the player as they always have.
   ///
   /// A bar that cannot fade -- paused, buffering, a menu open -- is not on
   /// the ladder: there is nothing Back could do about it, so it leaves the
   /// player instead of appearing to do nothing.
   bool get _backDismisses =>
-      _isTv &&
-      (_upNextSecondsLeft != null || (_controlsVisible && _canAutoHide));
+      _timingShown ||
+      (_isTv &&
+          (_upNextSecondsLeft != null || (_controlsVisible && _canAutoHide)));
 
-  /// One rung down the ladder [_backDismisses] describes. Only ever called
-  /// for a Back that [PopScope] held back, so the pop itself is the last
-  /// rung and is not handled here.
+  /// One rung down the ladder [_backDismisses] describes, most transient
+  /// first. Only ever called for a Back that [PopScope] held back, so the
+  /// pop itself is the last rung and is not handled here.
   void _popBack() {
+    if (_timingShown) {
+      _hideSubtitleTiming();
+      return;
+    }
     if (_upNextSecondsLeft != null) {
       _dismissUpNext();
       return;
@@ -2373,6 +2498,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     final key = event.logicalKey;
     final shift = keyboard.isShiftPressed;
+
+    // The timing panel is a layer of its own with focus of its own: the
+    // direction keys walk its buttons, select presses one (its own
+    // handler has already had the key by the time this runs), Escape
+    // closes it and Back comes down the ladder below. None of them are
+    // the player's while it is up, and none of them bring the OSD back
+    // either -- adjusting means watching the picture between presses,
+    // and a bar flashing up on every one of them is the opposite of
+    // that. Everything else still means what it always did.
+    if (_timingScope.hasFocus) {
+      if (key == LogicalKeyboardKey.escape) {
+        if (event is KeyDownEvent) _hideSubtitleTiming();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.arrowDown) {
+        if (event is KeyDownEvent) {
+          _moveWithinControls(
+            key == LogicalKeyboardKey.arrowUp
+                ? TraversalDirection.up
+                : TraversalDirection.down,
+          );
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowLeft ||
+          key == LogicalKeyboardKey.arrowRight ||
+          key == LogicalKeyboardKey.tab ||
+          RemotePress.activateKeys.contains(key)) {
+        // The panel's own traversal, and its own buttons.
+        return KeyEventResult.ignored;
+      }
+    }
+
     final shownBefore = _controlsShown;
     _showControls();
 
@@ -2494,7 +2653,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           Navigator.of(context).maybePop();
         }
       case LogicalKeyboardKey.keyS:
-        if (event is KeyDownEvent) _openSubtitleMenu();
+        // S is the list of subtitles; Shift+S is what to do about the
+        // one that is playing.
+        if (event is! KeyDownEvent) break;
+        if (shift) {
+          _toggleSubtitleTiming();
+        } else {
+          _openSubtitleMenu();
+        }
       case LogicalKeyboardKey.keyA:
         if (event is KeyDownEvent && _tracks.value.audio.length > 1) {
           _openAudioMenu();
@@ -2582,6 +2748,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controlsScope.dispose();
     _upNextScope.removeListener(_onControlsFocusChange);
     _upNextScope.dispose();
+    _timingScope.dispose();
+    _timingFocus.dispose();
     _playPauseFocus.dispose();
     _seekBarFocus.dispose();
     _topBarFocus.dispose();
@@ -2817,6 +2985,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
+                // Outside the bar's [AnimatedOpacity] on purpose: this
+                // is the layer that must still be there when the OSD has
+                // faded, which is the whole of what it is for. Top right,
+                // opposite the stats panel and clear of the subtitles it
+                // is being used to judge.
+                if (_timingShown)
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 12, top: 64),
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: FocusScope(
+                          node: _timingScope,
+                          child: SubtitleTimingOverlay(
+                            timing: _timing,
+                            firstFocusNode: _timingFocus,
+                            onShift: (step) =>
+                                _adjustTiming(_timing.shiftedBy(step)),
+                            onStretch: (step) =>
+                                _adjustTiming(_timing.stretchedBy(step)),
+                            onReset: () => _adjustTiming(_timing.automatic),
+                            onClose: _hideSubtitleTiming,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (upNext != null && upNext > 0 && nextVideo != null)
                   Positioned(
                     right: 16,

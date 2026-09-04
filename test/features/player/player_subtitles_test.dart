@@ -978,6 +978,7 @@ void main() {
             onOff: () {},
             onEmbedded: (_) {},
             onExternal: (_) {},
+            onAdjustTiming: () {},
           ),
         ),
       ),
