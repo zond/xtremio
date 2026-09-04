@@ -22,9 +22,12 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// any addon -- such a sweep is recorded against nobody, so it leaves no
 /// trace in the counts and has to be reported separately.
 ///
-/// Sync: one lock, a clone of at most a couple of hundred small records and
-/// no I/O. Empty before `core_init` and after `shutdown`.
-String addonHealthReport() =>
+/// Async even though it only clones at most a couple of hundred small
+/// records: it takes the same lock the flush holds across a whole
+/// preferences rewrite, which ends in an fsync and a rename. Handed to
+/// Dart synchronously it would make the UI thread wait out that write.
+/// Empty before `core_init` and after `shutdown`.
+Future<String> addonHealthReport() =>
     RustLib.instance.api.crateApiAddonHealthAddonHealthReport();
 
 /// Drops everything recorded about one addon, answering whether there was

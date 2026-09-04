@@ -89,7 +89,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 abstract class RustLibApi extends BaseApi {
   Future<bool> crateApiAddonHealthAddonHealthForget({required String key});
 
-  String crateApiAddonHealthAddonHealthReport();
+  Future<String> crateApiAddonHealthAddonHealthReport();
 
   String crateApiHelloBridgeVersion();
 
@@ -210,12 +210,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "addon_health_forget", argNames: ["key"]);
 
   @override
-  String crateApiAddonHealthAddonHealthReport() {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+  Future<String> crateApiAddonHealthAddonHealthReport() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,

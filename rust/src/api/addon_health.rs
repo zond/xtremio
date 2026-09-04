@@ -19,8 +19,6 @@
 //! down. The app derives the same key by hashing the transport URL it
 //! already holds, so the URL never leaves the profile.
 
-use flutter_rust_bridge::frb;
-
 use crate::guard::guarded;
 
 /// How every addon has been answering, as one JSON object.
@@ -38,9 +36,11 @@ use crate::guard::guarded;
 /// any addon -- such a sweep is recorded against nobody, so it leaves no
 /// trace in the counts and has to be reported separately.
 ///
-/// Sync: one lock, a clone of at most a couple of hundred small records and
-/// no I/O. Empty before `core_init` and after `shutdown`.
-#[frb(sync)]
+/// Async even though it only clones at most a couple of hundred small
+/// records: it takes the same lock the flush holds across a whole
+/// preferences rewrite, which ends in an fsync and a rename. Handed to
+/// Dart synchronously it would make the UI thread wait out that write.
+/// Empty before `core_init` and after `shutdown`.
 pub fn addon_health_report() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::addon_health::report()).map_err(Into::into))
 }

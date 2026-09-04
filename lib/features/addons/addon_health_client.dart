@@ -28,7 +28,7 @@ class RustAddonHealthClient implements AddonHealthClient {
 
   @override
   Future<AddonHealthReport> read() async =>
-      AddonHealthReport.fromJson(jsonDecode(rust.addonHealthReport()));
+      AddonHealthReport.fromJson(jsonDecode(await rust.addonHealthReport()));
 
   @override
   Future<bool> forget(String key) => rust.addonHealthForget(key: key);

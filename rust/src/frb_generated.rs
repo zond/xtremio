@@ -83,15 +83,16 @@ fn wire__crate__api__addon_health__addon_health_forget_impl(
     )
 }
 fn wire__crate__api__addon_health__addon_health_report_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "addon_health_report",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -104,12 +105,14 @@ fn wire__crate__api__addon_health__addon_health_report_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
-            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
-                (move || {
-                    let output_ok = crate::api::addon_health::addon_health_report()?;
-                    std::result::Result::Ok(output_ok)
-                })(),
-            )
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::addon_health::addon_health_report()?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
         },
     )
 }
@@ -1452,6 +1455,12 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
+        2 => wire__crate__api__addon_health__addon_health_report_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         4 => wire__crate__api__core__core_dispatch_impl(port, ptr, rust_vec_len, data_len),
         5 => wire__crate__api__core__core_events_impl(port, ptr, rust_vec_len, data_len),
         6 => wire__crate__api__core__core_get_state_impl(port, ptr, rust_vec_len, data_len),
@@ -1511,7 +1520,6 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        2 => wire__crate__api__addon_health__addon_health_report_impl(ptr, rust_vec_len, data_len),
         3 => wire__crate__api__hello__bridge_version_impl(ptr, rust_vec_len, data_len),
         8 => wire__crate__api__core__core_is_initialized_impl(ptr, rust_vec_len, data_len),
         9 => wire__crate__api__hello__core_schema_version_impl(ptr, rust_vec_len, data_len),
