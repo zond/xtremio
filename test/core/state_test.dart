@@ -587,6 +587,73 @@ void main() {
       expect(n('data:text/plain,hi'), 'data:text/plain,hi');
     });
 
+    test("reads the addon's own properties off a subtitle entry", () {
+      // One entry as OpenSubtitles v3 really sends it: the modelled keys
+      // plus five the pinned fork keeps flattened beside them.
+      final full = SubtitleInfo(<String, dynamic>{
+        'id': '1',
+        'lang': 'eng',
+        'url': 'https://subs/1.srt',
+        'SubEncoding': 'CP1252',
+        'fpsMilli': 23980,
+        'subtitleFileName': 'The.Godfather.1972.720p.BluRay.x264-DFN.srt',
+        'movieReleaseName': 'The Godfather 1972 720p BluRay x264-DFN',
+        'releaseGroup': 'DFN',
+        'releaseFormat': 'BluRay',
+      });
+      expect(full.fpsMilli, 23980);
+      expect(full.subEncoding, 'CP1252');
+      expect(
+        full.subtitleFileName,
+        'The.Godfather.1972.720p.BluRay.x264-DFN.srt',
+      );
+      expect(full.movieReleaseName, 'The Godfather 1972 720p BluRay x264-DFN');
+      expect(full.releaseGroup, 'DFN');
+      expect(full.releaseFormat, 'BluRay');
+
+      // An addon that says nothing but the modelled keys reads as null
+      // everywhere, not as an empty string and not as a throw.
+      final bare = SubtitleInfo(<String, dynamic>{
+        'lang': 'eng',
+        'url': 'https://subs/2.srt',
+      });
+      expect(bare.fpsMilli, isNull);
+      expect(bare.subEncoding, isNull);
+      expect(bare.subtitleFileName, isNull);
+      expect(bare.movieReleaseName, isNull);
+      expect(bare.releaseGroup, isNull);
+      expect(bare.releaseFormat, isNull);
+      expect(bare.label, isNull);
+    });
+
+    test('tolerates a property spelled as anything at all', () {
+      SubtitleInfo with_(Map<String, dynamic> extra) => SubtitleInfo(
+        <String, dynamic>{'lang': 'eng', 'url': 'https://subs/1.srt', ...extra},
+      );
+      // A number the addon quoted is still a number; one it wrote as a
+      // decimal is read as whole.
+      expect(with_({'fpsMilli': '23980'}).fpsMilli, 23980);
+      expect(with_({'fpsMilli': ' 25000 '}).fpsMilli, 25000);
+      expect(with_({'fpsMilli': 23.976}).fpsMilli, 23);
+      // Nothing here is a number, and none of it throws.
+      expect(with_({'fpsMilli': 'unknown'}).fpsMilli, isNull);
+      expect(with_({'fpsMilli': true}).fpsMilli, isNull);
+      expect(with_({'fpsMilli': <String>[]}).fpsMilli, isNull);
+      expect(with_({'fpsMilli': double.nan}).fpsMilli, isNull);
+      expect(with_({'fpsMilli': double.infinity}).fpsMilli, isNull);
+      // Text that is not text, and text with nothing in it, are both
+      // "the addon did not say".
+      expect(with_({'releaseGroup': 42}).releaseGroup, isNull);
+      expect(with_({'releaseGroup': <String, dynamic>{}}).releaseGroup, isNull);
+      expect(with_({'releaseGroup': '   '}).releaseGroup, isNull);
+      expect(with_({'releaseGroup': ' DFN '}).releaseGroup, 'DFN');
+      // Addon text becomes menu text, so a lone surrogate -- the half
+      // character Flutter's layout refuses -- is dropped on the way out.
+      expect(with_({'label': 'Espa\u{00f1}ol \uD83D'}).label, 'Espa\u{00f1}ol');
+      expect(with_({'movieReleaseName': '\uDE00'}).movieReleaseName, isNull);
+      expect(with_({'label': 'Done \u{1F44D}'}).label, 'Done \u{1F44D}');
+    });
+
     test('collapses two addons offering the same file by URL or by id', () {
       // The same file, spelled three ways: as it is, with an upper-case
       // host and a redundant port, and with a trailing slash.

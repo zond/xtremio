@@ -1,4 +1,5 @@
 import '../resource.dart';
+import '../well_formed_text.dart';
 import 'loadable.dart';
 import 'meta_item.dart';
 import 'stream.dart';
@@ -41,7 +42,16 @@ final class LibraryProgress {
 }
 
 /// One subtitle file an addon offers (`Subtitles`): a URL to an SRT/VTT
-/// file plus its language.
+/// file plus its language, and whatever else the addon chose to say about
+/// it.
+///
+/// Everything past `id`/`lang`/`url`/`label` is addon-specific: the pinned
+/// stremio-core keeps it in a flattened catch-all rather than dropping it
+/// (see README, "Pinned upstreams"), so it arrives here as ordinary keys
+/// beside the modelled ones. That map is whatever the addon sent -- no
+/// schema, no promise about a type -- so every accessor below reads
+/// through it defensively: absent, empty or wrongly typed all read as
+/// null, and none of them throws.
 final class SubtitleInfo {
   const SubtitleInfo(this.json);
 
@@ -52,7 +62,57 @@ final class SubtitleInfo {
   /// Language code as the addon sent it (`eng`, `pob`, ...).
   String get lang => json['lang'] as String? ?? '';
   Uri get url => Uri.parse(json['url'] as String);
-  String? get label => json['label'] as String?;
+
+  /// The addon's own name for this upload. Rare -- OpenSubtitles v3 sends
+  /// none -- but it wins over anything derived when it is there.
+  String? get label => _text('label');
+
+  /// Frames per second times 1000 (`23980`, `25000`): the rate of the
+  /// video this file was timed against, when the addon knows it.
+  ///
+  /// Nothing here acts on it; it is the input to matching a subtitle
+  /// against the container's own rate.
+  int? get fpsMilli => _int('fpsMilli');
+
+  /// The name of the file inside the addon's archive
+  /// (`The.Godfather.1972.1080p.BluRay.x264-DFN.srt`).
+  String? get subtitleFileName => _text('subtitleFileName');
+
+  /// The release the addon says the file was synced to, as a whole name
+  /// (`The Godfather 1972 1080p BluRay x264-DFN`).
+  String? get movieReleaseName => _text('movieReleaseName');
+
+  /// The group that cut that release (`DFN`), when the addon split it out.
+  String? get releaseGroup => _text('releaseGroup');
+
+  /// The source that release came from (`BluRay`, `WEB-DL`).
+  String? get releaseFormat => _text('releaseFormat');
+
+  /// The character encoding of the bytes the URL hands back (`CP1252`).
+  /// Capitalized on the wire, unlike every other key here.
+  String? get subEncoding => _text('SubEncoding');
+
+  /// [key] as display text: null unless the addon sent a string with
+  /// something in it, and guarded by [wellFormedText] because every one of
+  /// these ends up in the subtitle menu.
+  String? _text(String key) {
+    final value = json[key];
+    if (value is! String) return null;
+    final text = wellFormedText(value)!.trim();
+    return text.isEmpty ? null : text;
+  }
+
+  /// [key] as a whole number, whether the addon sent one (`23980`) or the
+  /// same thing quoted (`"23980"`). Null for anything else, an infinity
+  /// and a NaN included.
+  int? _int(String key) {
+    final number = switch (json[key]) {
+      final num value => value,
+      final String value => num.tryParse(value.trim()),
+      _ => null,
+    };
+    return number == null || !number.isFinite ? null : number.toInt();
+  }
 
   /// [url] with everything folded away that cannot change *which file*
   /// comes back: the scheme and host lower-cased, a default port and any
