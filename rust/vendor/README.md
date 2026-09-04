@@ -14,8 +14,12 @@ flate2 = "1"        # upstream: flate2 = "1.0.*"
 (zip, async-compression via async_zip and librqbit) requires `flate2 >= 1.1`.
 Cargo cannot select two 1.x versions of one crate, so the combined dependency
 graph fails to resolve. The copy is wired in through
-`[patch."https://github.com/Stremio/stremio-core"]` in `../Cargo.toml`, which
-replaces the workspace member stremio-core itself depends on.
+`[patch."https://github.com/zond/stremio-core"]` in `../Cargo.toml`, which
+replaces the workspace member stremio-core itself depends on. A patch key
+names the *source URL being patched*, so it has to follow the `stremio-core`
+dependency whenever that moves: left behind on a URL nothing depends on any
+more it matches nothing, quietly unpatching the crate and bringing the
+flate2 conflict back.
 
 **How to drop it:** once upstream relaxes the pin (a one-line PR to
 Stremio/stremio-core), delete this directory and the `[patch]` section.

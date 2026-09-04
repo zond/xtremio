@@ -31,7 +31,14 @@ enginefs = { git = "https://github.com/zond/stream-server", rev = "6abb25d1bbb63
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
 # the Runtime can live on a multithreaded host.
-stremio-core = { git = "https://github.com/Stremio/stremio-core", rev = "00265b3bad7158535fccf1e119e10d6ad492183e", features = ["derive", "env-future-send"] }
+#
+# Pinned to our fork: upstream 0.62.1 plus one commit that keeps the
+# addon-specific properties of a subtitle (`fpsMilli`, `subtitleFileName`,
+# `releaseGroup`, ...) in a flattened `other` map instead of letting serde
+# drop them, which is what lets the app name and frame-rate-filter the
+# thirty-odd files OpenSubtitles answers with. Upstream PR:
+# Stremio/stremio-core#1045; drop the fork once it lands.
+stremio-core = { git = "https://github.com/zond/stremio-core", rev = "cfd27a7b3a8dbda2feea406a441ffd3dda798ce4", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
 chrono = "0.4"
@@ -98,7 +105,10 @@ librqbit = { git = "https://github.com/zond/rqbit", branch = "feat/configurable-
 # via async_zip/librqbit) needs flate2 >= 1.1. Cargo cannot pick two 1.x
 # versions, so the graph does not resolve without relaxing that pin. See
 # vendor/README.md for how to drop this once upstream relaxes it.
-[patch."https://github.com/Stremio/stremio-core"]
+# The key is the source URL being patched, so it follows the dependency to
+# the fork above -- left on the upstream URL it matches nothing, silently
+# unpatching stremio-watched-bitfield and bringing the flate2 conflict back.
+[patch."https://github.com/zond/stremio-core"]
 stremio-watched-bitfield = { path = "vendor/stremio-watched-bitfield" }
 
 [lints.rust]

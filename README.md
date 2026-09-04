@@ -581,8 +581,7 @@ connection.
   language with more than one file carries a row beneath it ("14 other
   English files") that opens them all, each numbered and named by the
   addon that offered it -- which is all there is to tell them apart,
-  since stremio-core's `Subtitles` keeps only `id`, `lang`, `url`,
-  `label` and `fonts` and OpenSubtitles sends no label. That row is a
+  since OpenSubtitles sends no label. That row is a
   *sibling* of the language row rather than a button inside it, so a
   remote reaches it by moving down (directional traversal skips a node
   inside the focused one's rect). Whichever file is playing is what its
@@ -703,7 +702,12 @@ connection.
   sourced from `AddonInstalled`/`AddonUninstalled`/`AddonUpgraded`) show
   as a SnackBar.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
-  (`00265b3`, release 0.62.0) with the `derive` + `env-future-send`
+  of the `zond/stremio-core` fork (`cfd27a7`: release 0.62.1 plus one
+  commit that keeps an addon's own subtitle properties -- `fpsMilli`,
+  `subtitleFileName`, `releaseGroup` and the rest -- in a flattened
+  `other` map instead of letting serde drop them; upstream PR
+  Stremio/stremio-core#1045, drop the fork once it lands) with the
+  `derive` + `env-future-send`
   features, `zond/stream-server` at a fixed rev (`f147a76`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
@@ -711,7 +715,9 @@ connection.
   on-demand cleaning, the piece-aligned start-up window that follows the
   reader plus the `pieceLength` it is measured in, and `inFlightPiece`,
   the byte progress of the one piece the reader is sitting on). To bump: change the rev, `cargo update -p <crate>`, run
-  `cargo test`, re-record any fixture whose shape moved, and re-copy
+  `cargo test`, re-record any fixture whose shape moved, move the
+  `[patch]` key along if the source URL changed (it names the URL being
+  patched, and a stale key silently patches nothing), and re-copy
   `rust/vendor/stremio-watched-bitfield` from the new stremio-core rev
   when that crate changed (it carries a one-line `flate2` relaxation the
   combined graph needs; see `rust/vendor/README.md`).

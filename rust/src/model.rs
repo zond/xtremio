@@ -251,7 +251,7 @@ mod tests {
     use super::*;
     use stremio_core::models::catalogs_with_extra::Selected;
     use stremio_core::models::common::ResourceLoadable;
-    use stremio_core::types::addon::{ResourcePath, ResourceRequest};
+    use stremio_core::types::addon::{ResourcePath, ResourceRequest, ResourceResponse};
 
     const FIELD_NAMES: [&str; 12] = [
         "ctx",
@@ -492,6 +492,82 @@ mod tests {
                 { "name": "YouTube", "addonName": "YouTube", "type": "channel" },
                 { "name": "weird", "addonName": "example.org", "type": "movie" },
             ])
+        );
+    }
+
+    /// One OpenSubtitles v3 entry, as the addon actually answers: the three
+    /// properties the protocol specifies plus the five it does not.
+    fn an_opensubtitles_answer() -> serde_json::Value {
+        serde_json::json!({
+            "subtitles": [
+                {
+                    "id": "1955625223",
+                    "url": "https://opensubtitles-v3.strem.io/subtitles/1955625223.srt",
+                    "lang": "eng",
+                    "SubEncoding": "CP1252",
+                    "fpsMilli": 23980,
+                    "subtitleFileName": "The.Godfather.1972.1080p.BluRay.x264.srt",
+                    "movieReleaseName": "The Godfather (1972) 1080p BluRay",
+                    "releaseGroup": "DFN"
+                },
+                { "id": "bare", "url": "https://example.org/bare.srt", "lang": "pol" }
+            ]
+        })
+    }
+
+    /// The properties an addon sends beyond `id`/`url`/`lang` are what tells
+    /// thirty-odd English uploads apart and what says a subtitle was cut for
+    /// 25 fps. They only survive because stremio-core is pinned to a rev that
+    /// keeps them in `Subtitles::other`; upstream drops them in serde. Nothing
+    /// in `get_state_json` has to know about them -- which is exactly why this
+    /// guard is here, so a future pin bump that loses them fails a test
+    /// instead of quietly emptying the subtitle menu's labels.
+    #[test]
+    fn addon_specific_subtitle_properties_reach_the_player_json() {
+        let ResourceResponse::Subtitles { subtitles } =
+            serde_json::from_value(an_opensubtitles_answer()).expect("a subtitles response")
+        else {
+            panic!("the response names the subtitles resource");
+        };
+        let mut model = default_model();
+        model.player.subtitles = vec![ResourceLoadable {
+            request: ResourceRequest::new(
+                url::Url::parse("https://opensubtitles-v3.strem.io/manifest.json").unwrap(),
+                ResourcePath::without_extra("subtitles", "movie", "tt0068646"),
+            ),
+            content: Some(Loadable::Ready(subtitles)),
+        }];
+
+        let json: serde_json::Value =
+            serde_json::from_str(&model.get_state_json(&XtremioModelField::Player).unwrap())
+                .unwrap();
+        let entries = &json["subtitles"][0]["content"]["content"];
+        assert_eq!(entries.as_array().map(Vec::len), Some(2), "{json}");
+
+        // Verbatim: the names are the addon's, the numbers are still numbers,
+        // and the casing of `SubEncoding` is not normalized on the way out.
+        assert_eq!(
+            entries[0],
+            serde_json::json!({
+                "id": "1955625223",
+                "url": "https://opensubtitles-v3.strem.io/subtitles/1955625223.srt",
+                "lang": "eng",
+                "SubEncoding": "CP1252",
+                "fpsMilli": 23980,
+                "subtitleFileName": "The.Godfather.1972.1080p.BluRay.x264.srt",
+                "movieReleaseName": "The Godfather (1972) 1080p BluRay",
+                "releaseGroup": "DFN",
+            })
+        );
+        // An entry that sent nothing extra gains nothing: the catch-all is
+        // flattened, so an empty one adds no key of its own.
+        assert_eq!(
+            entries[1],
+            serde_json::json!({
+                "id": "bare",
+                "url": "https://example.org/bare.srt",
+                "lang": "pol",
+            })
         );
     }
 }
