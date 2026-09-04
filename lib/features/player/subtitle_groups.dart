@@ -246,8 +246,9 @@ const List<double> _palFrameRates = [25];
 /// the two, so the video picks the direction: a film-family video can
 /// only be facing a PAL-sourced subtitle, which has to be stretched, and
 /// a PAL-family video the reverse. Under [subtitleFrameRateRatios] the
-/// two families are disjoint -- the closest members are 19.2 and 20 --
-/// so no rate is ever both.
+/// two families are disjoint -- the closest members are 9.6 and 10, four
+/// tenths of a frame apart against a tolerance of a hundredth -- so no
+/// rate is ever both.
 ///
 /// Only the container's own figure should reach this. A measurement of
 /// the frames actually delivered is a different number on a stalling
@@ -261,9 +262,15 @@ SubtitleSpeedDirection? subtitleSpeedDirection(double? videoFrameRate) {
   if (_reducesTo(videoFrameRate, _palFrameRates)) {
     return SubtitleSpeedDirection.compress;
   }
-  // Neither family: 12 fps animation, a broadcast oddity, a container
-  // that answered something we cannot read. We know nothing, and the
-  // panel offers both directions rather than guessing at one.
+  // Neither family: 15 fps, which no telecine or doubling relates to
+  // 23.976, 24 or 25; a broadcast oddity; a container that answered
+  // something we cannot read. We know nothing, and the panel offers
+  // both directions rather than guessing at one.
+  //
+  // 12 is *not* one of these -- it is 24 halved, so it reads as film and
+  // points the button confidently -- which is the whole reason a
+  // measurement of the frames a stalling stream actually delivered must
+  // never reach here.
   return null;
 }
 
