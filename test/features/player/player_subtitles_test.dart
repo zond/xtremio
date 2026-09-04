@@ -15,9 +15,12 @@ void main() {
   const spanishUrl = 'https://subs.example.org/tt0063350/spa.srt';
   const frenchUrl = 'https://subs.example.org/tt0063350/fre.vtt';
 
-  Map<String, dynamic> subtitlesResponse(List<Map<String, dynamic>> items) => {
+  Map<String, dynamic> subtitlesResponse(
+    List<Map<String, dynamic>> items, {
+    String base = 'https://subs.example.org/manifest.json',
+  }) => {
     'request': {
-      'base': 'https://subs.example.org/manifest.json',
+      'base': base,
       'path': {
         'resource': 'subtitles',
         'type': 'movie',
@@ -98,7 +101,9 @@ void main() {
     expect(find.text('Off'), findsOneWidget);
     expect(find.text('English'), findsNWidgets(2)); // track 3, and 4's language
     expect(find.text('Commentary'), findsOneWidget);
-    expect(find.text('Español (forced)'), findsOneWidget); // deduplicated
+    // One row per language -- the stream carried the Spanish file too,
+    // and it is the same file, so there is still one Spanish row.
+    expect(find.text('Spanish'), findsOneWidget);
     expect(find.text('French'), findsOneWidget);
     expect(find.text('subs.example.org'), findsNWidgets(2));
     expect(find.text('Looking for subtitles…'), findsNothing);
@@ -145,6 +150,151 @@ void main() {
       'preference': {'enabled': false},
     });
     expect(find.byIcon(Icons.subtitles_off), findsOneWidget);
+  });
+
+  /// What OpenSubtitles v3 really answers: many uploads per language, no
+  /// labels, one file in a language nothing knows the name of. Installed
+  /// in the anonymous profile, so the rows can name the addon.
+  const openSubtitles = 'https://opensubtitles-v3.strem.io/manifest.json';
+  String uploadUrl(String lang, int index) =>
+      'https://subs5.strem.io/$lang/file/$index';
+
+  PlayerHarness harnessWithManyUploads() {
+    final harness = PlayerHarness();
+    harness.fixture['subtitles'] = [
+      subtitlesResponse(base: openSubtitles, [
+        for (var i = 1; i <= 15; i++)
+          {'id': 'en-$i', 'lang': 'eng', 'url': uploadUrl('en', i)},
+        {'id': 'zz-1', 'lang': 'zzz', 'url': uploadUrl('zz', 1)},
+      ]),
+    ];
+    return harness;
+  }
+
+  /// Opens the subtitle sheet and brings [text] into view.
+  Future<void> openMenu(WidgetTester tester, [String? text]) async {
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    if (text != null) {
+      await tester.ensureVisible(find.text(text));
+      await tester.pumpAndSettle();
+    }
+  }
+
+  /// The second line of the [ListTile] whose first line is [title].
+  String subtitleOf(WidgetTester tester, String title) {
+    final tile = tester.widget<ListTile>(
+      find.ancestor(of: find.text(title), matching: find.byType(ListTile)),
+    );
+    return (tile.subtitle! as Text).data!;
+  }
+
+  testWidgets('fifteen English uploads are one row, the rest one press away', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final harness = harnessWithManyUploads();
+    await harness.pump(tester);
+    await openMenu(tester);
+
+    // One row per language, not one per upload -- and the row says which
+    // of the fifteen it would apply and who offered it.
+    expect(find.text('English'), findsOneWidget);
+    expect(subtitleOf(tester, 'English'), 'Option 1 · OpenSubtitles v3');
+
+    // A code the name table does not know shows as itself rather than
+    // being hidden, and it is the only file of its language.
+    expect(find.text('zzz'), findsOneWidget);
+    expect(subtitleOf(tester, 'zzz'), 'OpenSubtitles v3');
+    expect(find.text('Option 1'), findsNothing, reason: 'nothing expanded');
+
+    // The other fourteen are behind a row of their own.
+    const more = '14 other English files';
+    expect(find.text(more), findsOneWidget);
+    await tester.ensureVisible(find.text(more));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(more));
+    await tester.pumpAndSettle();
+    expect(find.text('Hide other English files'), findsOneWidget);
+    expect(find.text('Option 1'), findsOneWidget);
+
+    // Picking one applies that specific file, not the group's default.
+    await tester.scrollUntilVisible(find.text('Option 3'), 100);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Option 3'));
+    await tester.pumpAndSettle();
+    expect(harness.engine.externalSubtitles, [
+      (Uri.parse(uploadUrl('en', 3)), 'English', 'eng'),
+    ]);
+  });
+
+  testWidgets('the pick survives the list being regrouped', (tester) async {
+    useWideViewport(tester);
+    final harness = harnessWithManyUploads();
+    await harness.pump(tester);
+    await openMenu(tester);
+    await tester.tap(find.text('14 other English files'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Option 5'), 100);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Option 5'));
+    await tester.pumpAndSettle();
+    expect(
+      harness.engine.externalSubtitles.single.$1,
+      Uri.parse(uploadUrl('en', 5)),
+    );
+
+    // A late addon answer rebuilds every group. The English row is still
+    // the selected one, and it still names the upload that is playing.
+    pokeState(harness);
+    await pumpEvents(tester);
+    await openMenu(tester, 'English');
+    expect(subtitleOf(tester, 'English'), 'Option 5 · OpenSubtitles v3');
+    final row = tester.widget<ListTile>(
+      find.ancestor(of: find.text('English'), matching: find.byType(ListTile)),
+    );
+    expect(row.selected, isTrue);
+  });
+
+  testWidgets('embedded tracks come first and never merge with the addons\'', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final harness = harnessWithManyUploads();
+    await harness.pump(tester);
+    harness.engine.emitTracks(embedded);
+    await pumpEvents(tester);
+    await openMenu(tester);
+
+    // Two sections, the file's own first, said plainly enough that the
+    // difference between them is obvious.
+    final inFile = tester.getTopLeft(find.text('In this file')).dy;
+    final fromAddons = tester.getTopLeft(find.text('From subtitle addons')).dy;
+    expect(inFile, lessThan(fromAddons));
+    expect(
+      find.textContaining('nothing to download'),
+      findsOneWidget,
+      reason: 'why the embedded tracks are worth having first',
+    );
+
+    // Both sections have English in them and they stay two things: the
+    // embedded track above the addons' label, the addons' group below --
+    // never one merged English row.
+    final english = find.text('English');
+    expect(english, findsNWidgets(3), reason: 'track 3, 4\'s language, group');
+    expect(tester.getTopLeft(english.first).dy, lessThan(fromAddons));
+    expect(tester.getTopLeft(english.last).dy, greaterThan(fromAddons));
+    expect(
+      tester.getTopLeft(find.text('14 other English files')).dy,
+      greaterThan(fromAddons),
+    );
+    expect(harness.engine.setSubtitleTrackIds, isEmpty);
+    await tester.tap(english.first);
+    await tester.pumpAndSettle();
+    expect(harness.engine.setSubtitleTrackIds, [
+      '3',
+    ], reason: 'the embedded track, not a download');
+    expect(harness.engine.externalSubtitles, isEmpty);
   });
 
   testWidgets('shows a progress row while an addon is still answering', (

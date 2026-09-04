@@ -365,6 +365,75 @@ void main() {
       );
     });
 
+    testWidgets("a language's other files are reachable with the remote", (
+      tester,
+    ) async {
+      // The alternatives affordance is a row of its own rather than a
+      // button inside the language row: directional traversal skips a node
+      // inside the focused one's rect, so a nested button would be a
+      // control a television does not have.
+      final harness = await pumpOnTv(tester);
+      harness.fixture['subtitles'] = [
+        {
+          'request': {
+            'base': 'https://opensubtitles-v3.strem.io/manifest.json',
+            'path': {
+              'resource': 'subtitles',
+              'type': 'movie',
+              'id': 'tt0063350',
+              'extra': <Object>[],
+            },
+          },
+          'content': {
+            'type': 'Ready',
+            'content': [
+              for (var i = 1; i <= 3; i++)
+                {
+                  'id': 'en-$i',
+                  'lang': 'eng',
+                  'url': 'https://subs5.strem.io/en/file/$i',
+                },
+            ],
+          },
+        },
+      ];
+      harness.core.setState(
+        CoreField.player,
+        Map<String, dynamic>.from(harness.fixture),
+      );
+      await pumpEvents(tester);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      for (var i = 0; i < 8 && focusedTooltip() != 'Subtitles (S)'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusedTooltip(), 'Subtitles (S)');
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(SubtitleMenu), findsOneWidget);
+
+      // Down walks into the sheet: Off, the one language row, then the row
+      // that opens its other files.
+      const more = '2 other English files';
+      for (var i = 0; i < 8 && focusedLabel(tester) != more; i++) {
+        await press(tester, LogicalKeyboardKey.arrowDown);
+      }
+      expect(focusedLabel(tester), more);
+
+      // The centre key opens them, and the next one down is one of them.
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text('Hide other English files'), findsOneWidget);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), 'Option 1');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), 'Option 2');
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(SubtitleMenu), findsNothing);
+      expect(
+        harness.engine.externalSubtitles.single.$1,
+        Uri.parse('https://subs5.strem.io/en/file/2'),
+      );
+    });
+
     testWidgets('left and right seek while the seek bar has focus', (
       tester,
     ) async {

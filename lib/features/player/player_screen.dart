@@ -21,6 +21,7 @@ import 'language_names.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
+import 'subtitle_groups.dart';
 import 'torrent_stall_overlay.dart';
 import 'torrent_startup_overlay.dart';
 import 'track_menus.dart';
@@ -493,6 +494,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final json = _player?.value;
     return json == null ? null : PlayerState.fromJson(json);
   }
+
+  /// The profile, for the installed addons' names; null until the `ctx`
+  /// field has been pulled.
+  ProfileState? get _profile {
+    final json = _ctx?.value;
+    return json == null ? null : ProfileState.fromCtx(json);
+  }
+
+  /// What to call the addon a subtitle file came from: the installed
+  /// addon's own name, else the host its manifest URL names -- the same
+  /// fallback the sources list uses.
+  String _subtitleAddonName(String manifestUrl) =>
+      _profile?.installedAddon(manifestUrl)?.manifest.name ??
+      Uri.tryParse(manifestUrl)?.host ??
+      manifestUrl;
 
   /// The profile settings; empty (every accessor at its default) until the
   /// `ctx` field has been pulled, the last map sent while a write is in
@@ -1553,7 +1569,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           valueListenable: _tracks,
           builder: (context, tracks, _) => SubtitleMenu(
             embedded: tracks.subtitle,
-            external: state?.externalSubtitles ?? const [],
+            groups: groupSubtitlesByLanguage(
+              state?.externalSubtitleSources ?? const [],
+              addonName: _subtitleAddonName,
+            ),
             activeId: tracks.activeSubtitleId,
             loading: state?.subtitlesLoading ?? false,
             onOff: () {

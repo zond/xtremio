@@ -5,14 +5,27 @@ import '../downloads/download_labels.dart';
 import 'language_names.dart';
 import 'playback_engine.dart';
 import 'subtitle_color_chips.dart';
+import 'subtitle_groups.dart';
 
-/// The subtitle picker: off, the tracks embedded in the file, and the files
-/// the subtitle addons (or the stream itself) offer.
-class SubtitleMenu extends StatelessWidget {
+/// The subtitle picker.
+///
+/// Three things, in the order they are worth having: **Off**, the tracks
+/// already **in this file** (no download, always in sync with the release),
+/// and the files the subtitle addons (or the stream itself) offer -- those
+/// last **one row per language**, not one row per upload.
+///
+/// A language with more than one file names the one it would apply and
+/// offers the rest behind a row of its own ("18 other Spanish files"),
+/// because the reason to reach for a second upload is almost always that
+/// the first is out of sync with this release. That row is a sibling of
+/// the language row rather than a button inside it, so a remote's D-pad
+/// reaches it with one press down: a control nested in a focused tile's
+/// rect is skipped by directional traversal.
+class SubtitleMenu extends StatefulWidget {
   const SubtitleMenu({
     super.key,
     required this.embedded,
-    required this.external,
+    required this.groups,
     required this.activeId,
     required this.loading,
     required this.onOff,
@@ -21,7 +34,10 @@ class SubtitleMenu extends StatelessWidget {
   });
 
   final List<TrackInfo> embedded;
-  final List<SubtitleInfo> external;
+
+  /// The addons' files, one entry per language (see
+  /// [groupSubtitlesByLanguage]).
+  final List<SubtitleLanguageGroup> groups;
 
   /// [TrackInfo.id] of the active embedded track, or the URL of the active
   /// external one; null when subtitles are off.
@@ -43,32 +59,90 @@ class SubtitleMenu extends StatelessWidget {
   static String externalLabel(SubtitleInfo subtitle) =>
       subtitle.label ?? languageName(subtitle.lang);
 
+  /// What the row that shows or hides one language's other files says,
+  /// collapsed and expanded.
+  static String alternativesLabel(
+    SubtitleLanguageGroup group, {
+    required bool expanded,
+  }) {
+    final others = group.options.length - 1;
+    if (expanded) return 'Hide other ${group.language} files';
+    return '$others other ${group.language} '
+        '${others == 1 ? 'file' : 'files'}';
+  }
+
+  @override
+  State<SubtitleMenu> createState() => _SubtitleMenuState();
+}
+
+class _SubtitleMenuState extends State<SubtitleMenu> {
+  /// The languages whose other files are shown, by display name. Kept in
+  /// the state so a `player` update (an addon that answered late) does not
+  /// fold an open group back up.
+  final Set<String> _expanded = {};
+
   @override
   Widget build(BuildContext context) {
+    final activeId = widget.activeId;
     return ListView(
       shrinkWrap: true,
       children: [
         const _MenuHeader('Subtitles'),
-        _MenuTile(title: 'Off', selected: activeId == null, onTap: onOff),
-        if (embedded.isNotEmpty) const _SectionLabel('In this file'),
-        for (final (index, track) in embedded.indexed)
-          _MenuTile(
-            title: embeddedLabel(track, index),
-            subtitle: track.title != null && track.language != null
-                ? languageName(track.language!)
-                : null,
-            selected: activeId == track.id,
-            onTap: () => onEmbedded(track),
+        _MenuTile(
+          title: 'Off',
+          selected: activeId == null,
+          onTap: widget.onOff,
+        ),
+        if (widget.embedded.isNotEmpty) ...[
+          const _SectionLabel('In this file'),
+          const _SectionNote(
+            'Already in the video: nothing to download, and always in '
+            'sync with this release.',
           ),
-        if (external.isNotEmpty || loading) const _SectionLabel('From addons'),
-        for (final subtitle in external)
+          for (final (index, track) in widget.embedded.indexed)
+            _MenuTile(
+              title: SubtitleMenu.embeddedLabel(track, index),
+              subtitle: track.title != null && track.language != null
+                  ? languageName(track.language!)
+                  : null,
+              selected: activeId == track.id,
+              onTap: () => widget.onEmbedded(track),
+            ),
+        ],
+        if (widget.groups.isNotEmpty || widget.loading)
+          const _SectionLabel('From subtitle addons'),
+        for (final group in widget.groups) ...[
           _MenuTile(
-            title: externalLabel(subtitle),
-            subtitle: subtitle.url.host,
-            selected: activeId == subtitle.url.toString(),
-            onTap: () => onExternal(subtitle),
+            title: group.language,
+            subtitle: _groupDetail(group, activeId),
+            selected: group.contains(activeId),
+            onTap: () => widget.onExternal(group.chosen(activeId).subtitle),
           ),
-        if (loading)
+          if (group.hasAlternatives) ...[
+            _AlternativesTile(
+              label: SubtitleMenu.alternativesLabel(
+                group,
+                expanded: _expanded.contains(group.language),
+              ),
+              expanded: _expanded.contains(group.language),
+              onTap: () => setState(() {
+                if (!_expanded.remove(group.language)) {
+                  _expanded.add(group.language);
+                }
+              }),
+            ),
+            if (_expanded.contains(group.language))
+              for (final option in group.options)
+                _MenuTile(
+                  indented: true,
+                  title: option.name,
+                  subtitle: option.sourceName,
+                  selected: activeId == option.id,
+                  onTap: () => widget.onExternal(option.subtitle),
+                ),
+          ],
+        ],
+        if (widget.loading)
           const ListTile(
             leading: SizedBox(
               width: 24,
@@ -83,6 +157,43 @@ class SubtitleMenu extends StatelessWidget {
       ],
     );
   }
+
+  /// The second line of a language row: which of its files it would apply
+  /// and where that one came from. With only one file there is nothing to
+  /// pick between, so it is just the addon.
+  static String _groupDetail(SubtitleLanguageGroup group, String? activeId) {
+    final chosen = group.chosen(activeId);
+    return group.hasAlternatives
+        ? '${chosen.name} · ${chosen.sourceName}'
+        : chosen.sourceName;
+  }
+}
+
+/// The row under a language that shows or hides its other files. A row of
+/// its own, so the remote reaches it by moving down, indented to line up
+/// with the options it opens.
+class _AlternativesTile extends StatelessWidget {
+  const _AlternativesTile({
+    required this.label,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: const EdgeInsets.only(left: 40, right: 16),
+    leading: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+    title: Text(
+      label,
+      style: Theme.of(context).textTheme.bodyMedium
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    ),
+    onTap: onTap,
+  );
 }
 
 /// The audio track picker.
@@ -360,12 +471,30 @@ class _SectionLabel extends StatelessWidget {
   );
 }
 
+/// A line of explanation under a [_SectionLabel].
+class _SectionNote extends StatelessWidget {
+  const _SectionNote(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+    child: Text(
+      text,
+      style: Theme.of(context).textTheme.bodySmall
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    ),
+  );
+}
+
 class _MenuTile extends StatelessWidget {
   const _MenuTile({
     required this.title,
     this.subtitle,
     required this.selected,
     required this.onTap,
+    this.indented = false,
   });
 
   final String title;
@@ -373,8 +502,14 @@ class _MenuTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// One of a language's alternatives rather than a top-level row.
+  final bool indented;
+
   @override
   Widget build(BuildContext context) => ListTile(
+    contentPadding: indented
+        ? const EdgeInsets.only(left: 40, right: 16)
+        : null,
     leading: Icon(
       selected ? Icons.radio_button_checked : Icons.radio_button_off,
     ),
