@@ -191,7 +191,7 @@ class _BoardScreenState extends State<BoardScreen> {
     final rows = _rows(_boardState, _continueWatchingState);
     int start;
     int end;
-    if (rows.whereType<_CatalogRow>().isEmpty) {
+    if (_boardState.rows.isEmpty) {
       // Nothing planned yet (the Load has not come back): assume one catalog
       // per row so the first rows are requested as soon as they exist.
       start = firstVisual;
@@ -201,6 +201,9 @@ class _BoardScreenState extends State<BoardScreen> {
         for (var i = firstVisual; i <= lastVisual && i < rows.length; i++)
           if (rows[i] case _CatalogRow(:final row)) row.index,
       ];
+      // Planned, but no catalog is on screen -- every one of them failed,
+      // and what is scrolling is the account of that. Those offsets are
+      // card heights, so no catalog index can be read off them.
       if (visible.isEmpty) return;
       start = visible.first;
       end = visible.last;

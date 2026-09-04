@@ -347,6 +347,43 @@ void main() {
       expect(find.text('No catalogs'), findsNothing);
     });
 
+    testWidgets('a board whose catalogs all failed asks for no more pages', (
+      tester,
+    ) async {
+      // Small enough that the expanded cards have to scroll. What moves
+      // under the finger is the account of the failures, not catalogs, so
+      // nothing about how far it has moved says which catalog to fetch.
+      tester.view.physicalSize = const Size(400, 400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final core = fakeCore(
+        continueWatching: {'items': <Object>[]},
+        board: boardWithFailures({
+          for (var i = 0; i < 6; i++) i: 'Failed to fetch: HTTP 404',
+        }),
+        ctx: loadCtxLoggedOutFixture(),
+      );
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('6 catalogs could not be loaded'));
+      await tester.pumpAndSettle();
+
+      final summary = find.text('6 catalogs could not be loaded');
+      final before = tester.getTopLeft(summary).dy;
+      final ranges = rangeDispatches(core).length;
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -200));
+      await tester.pumpAndSettle();
+      await tester.pump(BoardScreen.scrollDebounce);
+      await tester.pump();
+
+      expect(
+        tester.getTopLeft(summary).dy,
+        lessThan(before),
+        reason: 'the cards have to scroll for the range to be recomputed',
+      );
+      expect(rangeDispatches(core), hasLength(ranges));
+    });
+
     testWidgets('uninstalling from it asks first, then sends the descriptor', (
       tester,
     ) async {
