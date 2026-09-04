@@ -1247,6 +1247,19 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             icon: null,
             sources: [for (final row in rows) source(row)],
           ),
+      // What the vertical list says in three quiet blocks below the
+      // streams has one card at the end of the group row here, and its
+      // own row underneath when it is chosen. The information is the
+      // point, not its shape -- and a viewer who never chooses it is
+      // still told, in a line, that four addons had nothing and one is
+      // dead.
+      ?_tvAccounting(
+        profile: profile,
+        empties: empties,
+        failures: failures,
+        foundNothing: foundNothing,
+        isEpisode: state.hasVideos,
+      ),
     ];
     return [
       SliverToBoxAdapter(
@@ -1259,13 +1272,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           onOrderChanged: _setStreamsOrder,
         ),
       ),
-      if (foundNothing)
-        SliverToBoxAdapter(
-          child: _NoStreamsNotice(
-            isEpisode: state.hasVideos,
-            onAddons: _openAddons,
-          ),
-        ),
       if (noneYet)
         const SliverToBoxAdapter(
           child: ListTile(
@@ -1293,31 +1299,103 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           defaultFocus: lastUsedStream == null,
         ),
       ),
-      if (empties.isNotEmpty)
-        SliverToBoxAdapter(
-          child: _EmptyAddonsSummary(
-            names: [
-              for (final group in empties)
-                profile?.installedAddon(group.request.base)?.manifest.name ??
-                    group.addonLabel,
-            ],
-            isEpisode: state.hasVideos,
-          ),
-        ),
-      if (failures.isNotEmpty)
-        SliverToBoxAdapter(
-          child: FailedAddonsSection(
-            failures: failures,
-            summaryLabel: FailedAddonsSection.addonsLabel(failures.length),
-            locked: profile?.addonsLocked ?? false,
-            onCheck: (failure) =>
-                openAddonDetails(context, failure.transportUrl),
-            onUninstall: (failure) =>
-                confirmAndUninstallAddon(context, _client, failure.addon!),
-          ),
-        ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
     ];
+  }
+
+  /// What the addons did other than answer with streams, as the last card
+  /// of the group row and the row it opens; null when there is nothing to
+  /// account for.
+  ///
+  /// The card's own line is the whole of what a viewer who does not choose
+  /// it sees, so it carries the counts -- how many failed, how many had
+  /// nothing -- and the row underneath carries the names, what each dead
+  /// addon said, and the two things worth doing about one: opening its
+  /// details, whose manifest fetch is the reachability test (select), and
+  /// uninstalling it (a hold, since a button drawn inside a card cannot be
+  /// reached by a remote).
+  ///
+  /// Nobody having anything at all is not one more line here but the
+  /// card's own name, because on a fresh profile it is the answer to the
+  /// screen rather than a footnote to it.
+  TvSourceGroup? _tvAccounting({
+    required ProfileState? profile,
+    required List<StreamGroup> empties,
+    required List<AddonFailure> failures,
+    required bool foundNothing,
+    required bool isEpisode,
+  }) {
+    if (empties.isEmpty && failures.isEmpty && !foundNothing) return null;
+    final locked = profile?.addonsLocked ?? false;
+    final names = [
+      for (final group in empties)
+        profile?.installedAddon(group.request.base)?.manifest.name ??
+            group.addonLabel,
+    ];
+    return (
+      label: foundNothing
+          ? _NoStreamsNotice.titleOf(isEpisode)
+          : kSourceAccountingLabel,
+      summary: [
+        if (failures.isNotEmpty)
+          FailedAddonsSection.addonsLabel(failures.length),
+        if (names.isNotEmpty)
+          _EmptyAddonsSummary.summaryLabel(names.length, isEpisode: isEpisode),
+        if (failures.isEmpty && names.isEmpty) kNothingCameBack,
+      ].join(' · '),
+      icon: foundNothing
+          ? Icons.search_off
+          : failures.isNotEmpty
+          ? Icons.cloud_off_outlined
+          : Icons.inbox_outlined,
+      sources: [
+        if (foundNothing)
+          (
+            icon: Icons.extension_outlined,
+            title: _NoStreamsNotice.addonsLabel,
+            detail: _NoStreamsNotice.explanation,
+            badges: const <String>[],
+            alsoFrom: null,
+            highlighted: false,
+            download: null,
+            downloading: false,
+            onSelect: _openAddons,
+            onHold: null,
+          ),
+        for (final failure in failures)
+          (
+            icon: Icons.cloud_off_outlined,
+            title: failure.name,
+            detail: failure.message,
+            badges: const <String>[],
+            alsoFrom: null,
+            highlighted: false,
+            download: null,
+            downloading: false,
+            onSelect: () => openAddonDetails(context, failure.transportUrl),
+            onHold: failure.isRemovable && !locked
+                ? () =>
+                      confirmAndUninstallAddon(context, _client, failure.addon!)
+                : null,
+          ),
+        if (names.isNotEmpty)
+          (
+            icon: Icons.inbox_outlined,
+            title: _EmptyAddonsSummary.summaryLabel(
+              names.length,
+              isEpisode: isEpisode,
+            ),
+            detail: names.join(', '),
+            badges: const <String>[],
+            alsoFrom: null,
+            highlighted: false,
+            download: null,
+            downloading: false,
+            onSelect: null,
+            onHold: null,
+          ),
+      ],
+    );
   }
 
   /// One row of the sources list as a television card draws it.
@@ -2017,8 +2095,17 @@ class _NoStreamsNotice extends StatelessWidget {
 
   static const String addonsLabel = 'Add an addon';
 
-  String get title =>
+  /// Why the list is empty, in the one sentence that is worth saying: a
+  /// fresh install has no torrent addon and this is what that looks like.
+  static const String explanation =
+      'None of your sources had anything to play. xtremio comes with no '
+      'torrent addon, so add one and its streams show up here.';
+
+  /// What came up empty: an episode of a series, or the title.
+  static String titleOf(bool isEpisode) =>
       isEpisode ? 'No streams for this episode' : 'No streams for this title';
+
+  String get title => titleOf(isEpisode);
 
   @override
   Widget build(BuildContext context) {
@@ -2039,12 +2126,7 @@ class _NoStreamsNotice extends StatelessWidget {
                   children: [
                     Text(title, style: theme.textTheme.titleSmall),
                     const SizedBox(height: 4),
-                    Text(
-                      'None of your sources had anything to play. xtremio '
-                      'comes with no torrent addon, so add one and its '
-                      'streams show up here.',
-                      style: theme.textTheme.bodySmall,
-                    ),
+                    Text(explanation, style: theme.textTheme.bodySmall),
                   ],
                 ),
               ),
@@ -2072,6 +2154,14 @@ const String kLookingForStreams = 'Looking for streams…';
 /// The shortcut to the source this title was last played from, above the
 /// sections on a phone and its own card on a television.
 const String kContinueWithLastSource = 'Continue with last source';
+
+/// The card at the end of a television's group row: what the addons did
+/// other than answer with streams.
+const String kSourceAccountingLabel = 'Addons';
+
+/// What that card says when every addon answered and none of them said
+/// anything worth counting.
+const String kNothingCameBack = 'Nothing came back';
 
 /// What the toggle in the section header says the layout on screen right
 /// now is, as its own short label (drawn beside it, when there is room)

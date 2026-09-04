@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/addons/addon_details_screen.dart';
+import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/stream_facts.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
@@ -30,6 +32,27 @@ Map<String, dynamic> group(String host, List<Map<String, dynamic>> streams) => {
     },
   },
   'content': {'type': 'Ready', 'content': streams},
+};
+
+/// An addon that answered with an error the engine calls "nothing here".
+Map<String, dynamic> emptyGroup(String host) => {
+  ...group(host, const []),
+  'content': {
+    'type': 'Err',
+    'content': {'type': 'EmptyContent'},
+  },
+};
+
+/// An addon that could not answer at all.
+Map<String, dynamic> failedGroup(String host) => {
+  ...group(host, const []),
+  'content': {
+    'type': 'Err',
+    'content': {
+      'type': 'Env',
+      'content': {'code': 1, 'message': 'Failed to fetch: 404 Not Found'},
+    },
+  },
 };
 
 /// A torrent stream, named and described the way an addon writes them.
@@ -316,6 +339,79 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowRight);
     }
     expect(focusedLabel(tester), 'Release 19');
+  });
+
+  testWidgets('the addons that failed and the ones that had nothing are '
+      'the card at the end of the row', (tester) async {
+    await mount(
+      tester,
+      movieWith([
+        group('alpha.example', [
+          torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
+        ]),
+        emptyGroup('quiet.example'),
+        failedGroup('mirror.example'),
+      ]),
+      also: {CoreField.ctx: loadCtxLoggedOutFixture()},
+    );
+
+    // Last, after the addons that did answer, and counting both without
+    // being opened at all.
+    expect(groupLabels(tester), ['alpha.example', kSourceAccountingLabel]);
+    expect(
+      find.text('1 addons did not answer · 1 addon had nothing for this title'),
+      findsOneWidget,
+    );
+
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(sourceTitles(tester), [
+      'mirror.example',
+      '1 addon had nothing for this title',
+    ]);
+    expect(
+      inSource('mirror.example', find.text('Failed to fetch: 404 Not Found')),
+      findsOneWidget,
+    );
+    expect(
+      inSource(
+        '1 addon had nothing for this title',
+        find.text('quiet.example'),
+      ),
+      findsOneWidget,
+    );
+
+    // Select on the dead one opens its details, whose manifest fetch is
+    // the reachability test.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), 'mirror.example');
+    // Not `press`: the screen it pushes fetches the manifest and spins
+    // while it waits, so nothing ever settles.
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AddonDetailsScreen), findsOneWidget);
+  });
+
+  testWidgets('nobody having anything at all names the card, and the card '
+      'opens the addons screen', (tester) async {
+    await mount(
+      tester,
+      movieWith([emptyGroup('quiet.example'), emptyGroup('silent.example')]),
+    );
+
+    expect(groupLabels(tester), ['No streams for this title']);
+    expect(find.text('2 addons had nothing for this title'), findsOneWidget);
+
+    await press(tester, LogicalKeyboardKey.select);
+    expect(sourceTitles(tester).first, 'Add an addon');
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), 'Add an addon');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AddonsScreen), findsOneWidget);
   });
 
   testWidgets('off a television the sources are the vertical list they '
