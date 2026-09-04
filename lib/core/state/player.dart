@@ -90,6 +90,26 @@ final class SubtitleInfo {
   /// The source that release came from (`BluRay`, `WEB-DL`).
   String? get releaseFormat => _text('releaseFormat');
 
+  /// The addon's own bucket for this upload (`g`): OpenSubtitles v3 sends
+  /// a small integer, the same one across every episode of a series.
+  ///
+  /// It says where the file came from -- one uploader's batch, one
+  /// source -- and that turns out to predict its *timing* better than the
+  /// declared rate does. Across two Gilmore Girls episodes `g=1` is all
+  /// 23.976 and `g=3` all 25, while `g=6` holds one file declaring 23.976
+  /// and one declaring 25 that end at exactly the same moment: synced to
+  /// each other, whatever they claim. So it is what an adjustment the
+  /// viewer made is remembered against (`SubtitleSyncMemory`), and an
+  /// addon that sends none is an adjustment not remembered at all.
+  ///
+  /// Read as text whether the addon sent a number or a string, since it
+  /// is only ever compared with itself; anything else -- a list, an
+  /// object, a bool -- is no bucket.
+  String? get group {
+    final value = json['g'];
+    return value is int ? '$value' : _text('g');
+  }
+
   /// The character encoding of the bytes the URL hands back (`CP1252`).
   /// Capitalized on the wire, unlike every other key here.
   String? get subEncoding => _text('SubEncoding');
