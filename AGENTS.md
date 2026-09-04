@@ -8,8 +8,10 @@ explains what the code does; this is about how changes are made.
 - `README.md` → "How the Rust core is wired in" (state crosses as JSON,
   what each model field is, what the app reads from the settings).
 - `docs/phase3-design.md` when touching account, library, addons or
-  settings: it is verified against the pinned stremio-core rev and lists the
-  exact action JSON, state shapes and the engine's surprises.
+  settings: it lists the exact action JSON, state shapes and the engine's
+  surprises. Its line offsets were read at the rev it names, which is
+  older than the current pin, so check a shape against the pinned source
+  rather than trusting an offset.
 - The pinned stremio-core source (`rust/Cargo.toml` names the rev) is the
   authority on wire shapes. Do not guess a field name; read the `serde`
   attributes.
@@ -160,6 +162,64 @@ rules hold it in place, and each has a test:
 it, and the platform registrations are listed in README, "Installing an
 addon from the web". A widget test drives links through `FakeDeepLinks`
 (`test/support/`); nothing in the tests touches `app_links`.
+
+## The subtitle menu hides files, so four rules hold it back
+
+`subtitlesMatchingFrameRate` (`lib/features/player/subtitle_groups.dart`)
+drops the uploads cut for a video of another speed -- a 25 fps subtitle
+against a 23.976 fps film drifts four seconds a minute, so it is the
+wrong file, not a worse one. Hiding is a strong move on numbers two
+strangers claimed (the addon about its upload, the container about
+itself), and each of these keeps it from taking the list away. Each has a
+test; see README, *Subtitles*.
+
+- **Only what the container declares is a rate.** `videoFrameRate` reads
+  `container-fps` and nothing else. `estimated-vf-fps` is the obvious
+  second choice and is a *measurement* -- ten frame durations averaged,
+  read the moment the media loads, which mpv's own manual calls unstable
+  for the imprecise timestamps a torrent stream is full of. Fed to a
+  comparison with a hundredth-of-a-frame tolerance it hides the correct
+  files and leaves the ones that declared nothing. Do not add a fallback.
+- **An unknown rate filters nothing.** Cast, offline, a fake, a container
+  that says nothing, a read that threw: all of it is null, and null means
+  every file stays. Never substitute a default, a guess or a last-known
+  rate.
+- **A language filtering would empty keeps every one of its files.** The
+  valve is per language keyed the way the menu groups them, and it is
+  decided *before* the exemption below, so a language whose files all
+  mismatch keeps all of them whether or not one is playing.
+- **The file that is playing is never dropped.** The menu is reachable
+  before the media loads, so a pick can predate the rate. Take the active
+  file out and every row is unselected -- Off included, since that row
+  keys on a null active id -- with subtitles still on screen.
+
+Two more things that are easy to undo by accident:
+
+- **Everything that consumes the subtitle list filters it.** There are two
+  consumers, the menu and the session preference's auto-pick, and the
+  auto-pick is the one that applies a file without the viewer looking. It
+  waits for the engine to have answered about the rate
+  (`_frameRateSampled`) before it runs, because the sample resolves a
+  microtask after it is started. A third consumer must do both.
+- **The tolerance is 0.01 fps at the content's own rate, and the ratios
+  that reach it are the ones that preserve *seconds*.** A subtitle is
+  timed in wall-clock seconds, so telecine and frame doubling (5/4, 2,
+  5/2) are the same cut -- 23.976 film in a 29.97 container is identical
+  seconds -- while 25 against 23.976 is a 4.3 % speed-up and is not.
+  Widening the tolerance instead of adding a ratio is the wrong repair:
+  0.01 is what separates a rounded `23980` from a real 24 fps cut.
+
+An upload's *name* in that menu is addon text as well, and it is subject
+to the same suspicion: it goes through `wellFormedText`, it is cut to
+sixty characters whichever property it came from (and the row caps at two
+lines besides, because a `ListTile` grows to fit), and it gets its
+position back on the end when another file of the same language derives
+the same name (`1 (2)`). Addons repeat themselves -- all three Czech files
+OpenSubtitles answers for The Godfather are called `1.srt` -- and the
+`Option N` these names replaced was at least unique.
+
+The rate is never shown anywhere in the UI. The request was a list that
+is right, not a number to reason about.
 
 ## The addon health record keys on a hash, never the URL
 

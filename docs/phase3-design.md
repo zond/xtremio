@@ -1,6 +1,6 @@
 # Phase 3 design — Account, Library, Addons, Settings
 
-Path shorthands: **SC** = `official/stremio-core/src` (checkout at the pinned rev `7ae100c`, so lines match `rust/Cargo.toml:27`), **WEB** = `…/stremio-core/stremio-core-web/src/model`, **SW** = `official/stremio-web/src`, **X** = `xtremio`.
+Path shorthands: **SC** = `official/stremio-core/src` (the line offsets below were read at rev `7ae100c`; the rev the crate actually builds against is the one `rust/Cargo.toml` names -- currently the `zond/stremio-core` fork -- so a line may have moved. The `serde` attributes are the authority, never the offset.), **WEB** = `…/stremio-core/stremio-core-web/src/model`, **SW** = `official/stremio-web/src`, **X** = `xtremio`.
 
 ## 0. Wire conventions that everything below relies on
 

@@ -759,13 +759,14 @@ connection.
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`f147a76`: generated
+  features, `zond/stream-server` at a fixed rev (`6abb25d`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
   counts, the buffer profiles behind `?buffer=`, cache usage and
   on-demand cleaning, the piece-aligned start-up window that follows the
-  reader plus the `pieceLength` it is measured in, and `inFlightPiece`,
-  the byte progress of the one piece the reader is sitting on). To bump: change the rev, `cargo update -p <crate>`, run
+  reader plus the `pieceLength` it is measured in, `inFlightPiece`, the
+  byte progress of the one piece the reader is sitting on, and
+  `ServerHandle::dht_status` for the diagnostics screen). To bump: change the rev, `cargo update -p <crate>`, run
   `cargo test`, re-record any fixture whose shape moved, move the
   `[patch]` key along if the source URL changed (it names the URL being
   patched, and a stale key silently patches nothing), and re-copy
