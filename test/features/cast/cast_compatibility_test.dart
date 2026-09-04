@@ -214,6 +214,68 @@ void main() {
     });
   });
 
+  group('what audio a receiver takes depends on the container', () {
+    test('an MP4 with MP3 audio is castable', () {
+      final result = check(
+        filename: 'clip.mp4',
+        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'mp3'),
+      );
+      expect(result, isA<CastReady>());
+    });
+
+    test('an MP4 with Opus audio is refused', () {
+      // Opus is a codec a Chromecast decodes, but not out of this box.
+      final result = check(
+        filename: 'clip.mp4',
+        stats: const PlaybackStats(videoCodec: 'h264', audioCodec: 'opus'),
+      );
+      expect(refusalOf(result), CastRefusal.audioCodec);
+      expect((result as CastRefused).explanation, contains('Opus'));
+    });
+
+    test('a WebM with Opus audio is castable', () {
+      final result = check(
+        filename: 'clip.webm',
+        stats: const PlaybackStats(audioCodec: 'opus'),
+      );
+      expect(result, isA<CastReady>());
+    });
+
+    test('a WebM with Vorbis audio is castable', () {
+      final result = check(
+        filename: 'clip.webm',
+        stats: const PlaybackStats(audioCodec: 'vorbis'),
+      );
+      expect(result, isA<CastReady>());
+    });
+
+    test('a WebM with MP3 audio is refused', () {
+      final result = check(
+        filename: 'clip.webm',
+        stats: const PlaybackStats(audioCodec: 'mp3'),
+      );
+      expect(refusalOf(result), CastRefusal.audioCodec);
+    });
+
+    test('the refusal names this container\'s set and no other', () {
+      // A sentence that names the wrong reason is worse than a vague one,
+      // so each container's refusal recites its own list.
+      final mp4 = check(
+        filename: 'clip.mp4',
+        stats: const PlaybackStats(audioCodec: 'vorbis'),
+      ) as CastRefused;
+      expect(mp4.explanation, contains('AAC or MP3 audio in an MP4 file'));
+      expect(mp4.explanation, isNot(contains('Opus')));
+
+      final webm = check(
+        filename: 'clip.webm',
+        stats: const PlaybackStats(audioCodec: 'aac'),
+      ) as CastRefused;
+      expect(webm.explanation, contains('Opus or Vorbis audio in a WebM file'));
+      expect(webm.explanation, isNot(contains('MP3')));
+    });
+  });
+
   group('the server outranks the addon about the file it opened', () {
     test('the server name is used when the addon claimed nothing', () {
       expect(
@@ -271,5 +333,22 @@ void main() {
       expect(stream.filename, 'Big Buck Bunny.mp4');
       expect(check(filename: stream.filename), isA<CastReady>());
     });
+
+    test(
+      'its MP3 track does not refuse it, which is the bug from the field',
+      () {
+        // The stream the owner tried to cast: an MP4 carrying H.264 video and
+        // an MP3 audio track, which is what mpv reports once it is playing.
+        final stream = StreamInfo(DevStreams.bigBuckBunnyTorrent);
+        final result = check(
+          filename: stream.filename,
+          stats: const PlaybackStats(
+            videoCodec: 'h264 (High)',
+            audioCodec: 'mp3',
+          ),
+        );
+        expect(result, isA<CastReady>());
+      },
+    );
   });
 }

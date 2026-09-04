@@ -11,8 +11,9 @@ import '../player/playback_stats.dart';
 /// cast fail on the television.
 ///
 /// What a Chromecast plays without help is an MP4 or WebM file whose video
-/// is H.264 or HEVC and whose audio is AAC. That is the rule as implemented
-/// here, judged from what the app already knows:
+/// is H.264 or HEVC and whose audio is one the container is allowed to
+/// carry -- AAC or MP3 in an MP4, Opus or Vorbis in a WebM. That is the
+/// rule as implemented here, judged from what the app already knows:
 ///
 /// - the **container** from the best filename known (see [castFilename]:
 ///   the file the *server* says it opened, then the converted stream's,
@@ -63,7 +64,8 @@ sealed class CastCompatibility {
           ? const CastRefused._containerPending()
           : const CastRefused._unknownContainer();
     }
-    if (!_castableContainers.containsKey(container)) {
+    final format = _castableContainers[container];
+    if (format == null) {
       return CastRefused._container(_describeContainer(container));
     }
 
@@ -72,10 +74,10 @@ sealed class CastCompatibility {
       return CastRefused._video(video);
     }
     final audio = _audioCodec(facts: facts, filename: filename, stats: stats);
-    if (audio != null && !_castableAudio.contains(audio)) {
-      return CastRefused._audio(audio);
+    if (audio != null && !format.audio.contains(audio)) {
+      return CastRefused._audio(audio, _describeAudioSupport(format));
     }
-    return CastReady(contentType: _castableContainers[container]!);
+    return CastReady(contentType: format.contentType);
   }
 
   /// Whether the stream can be cast as it is.
@@ -134,10 +136,10 @@ final class CastRefused extends CastCompatibility {
         'Casting it would need conversion, which this app cannot do yet.',
       );
 
-  const CastRefused._audio(String codec)
+  const CastRefused._audio(String codec, String supported)
     : this._(
         CastRefusal.audioCodec,
-        'A Chromecast decodes AAC audio; this stream is $codec. Casting it '
+        'A Chromecast decodes $supported; this stream is $codec. Casting it '
         'would need conversion, which this app cannot do yet.',
       );
 
@@ -169,11 +171,22 @@ enum CastRefusal {
   audioCodec,
 }
 
-/// The file extensions a receiver plays, and the MIME type to declare.
-const Map<String, String> _castableContainers = {
-  'mp4': 'video/mp4',
-  'm4v': 'video/mp4',
-  'webm': 'video/webm',
+/// The file extensions a receiver plays: the MIME type to declare, how a
+/// sentence names the file, and the audio it may carry.
+///
+/// The audio hangs off the container because that is where the receiver
+/// draws the line -- an MP3 track plays out of an MP4 and not out of a
+/// WebM, and Opus the other way round -- so one flat list of codecs was
+/// wrong whichever codecs it held.
+const Map<String, ({String contentType, String name, Set<String> audio})>
+_castableContainers = {
+  'mp4': (contentType: 'video/mp4', name: 'an MP4 file', audio: {'AAC', 'MP3'}),
+  'm4v': (contentType: 'video/mp4', name: 'an M4V file', audio: {'AAC', 'MP3'}),
+  'webm': (
+    contentType: 'video/webm',
+    name: 'a WebM file',
+    audio: {'Opus', 'Vorbis'},
+  ),
 };
 
 /// Extensions that are containers we recognise but a receiver will not take.
@@ -195,8 +208,16 @@ const Map<String, String> _knownContainers = {
   'divx': 'a DivX file',
 };
 
+/// The video codecs a receiver decodes -- and unlike the table above, this
+/// one is a guess that leans permissive. Only Chromecast Ultra, Chromecast
+/// with Google TV and the Google TV Streamer decode HEVC; a first- to
+/// third-generation Chromecast and a Nest Hub take H.264 and VP8 only, so
+/// an HEVC stream this gate calls ready fails on those receivers with
+/// nothing said. Fixing it honestly means asking the session what the
+/// receiver in the room supports -- the Cast SDK reports the device's
+/// capabilities -- rather than holding one table for every device, and
+/// that is a larger change than this one.
 const Set<String> _castableVideo = {'H.264', 'HEVC'};
-const Set<String> _castableAudio = {'AAC'};
 
 /// The `/proxy` or `/ftp` prefix [url] is served under, or null.
 ///
@@ -321,6 +342,12 @@ final Map<String, RegExp> _audioPatterns = {
   'Opus': RegExp(r'\bopus\b', caseSensitive: false),
   'MP3': RegExp(r'\bmp3\b', caseSensitive: false),
 };
+
+/// What a receiver takes out of [format], as the audio refusal says it:
+/// "AAC or MP3 audio in an MP4 file".
+String _describeAudioSupport(
+  ({String contentType, String name, Set<String> audio}) format,
+) => '${format.audio.join(' or ')} audio in ${format.name}';
 
 /// The name of the container [extension] belongs to, for a refusal that
 /// says what the file is rather than repeating the three letters.
