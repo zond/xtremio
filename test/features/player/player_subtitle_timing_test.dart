@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/subtitle_timing.dart';
 import 'package:xtremio/features/player/track_menus.dart';
@@ -105,6 +107,39 @@ void main() {
     player.engine.emitPlaying(true);
     await pumpEvents(tester);
     await selectFile(tester, pick);
+    return player;
+  }
+
+  /// A `player` state change that alters nothing -- what makes the screen
+  /// run everything it runs on a state event, the auto-pick included.
+  void pokeState(PlayerHarness player) => player.core.setState(
+    CoreField.player,
+    Map<String, dynamic>.from(player.fixture),
+  );
+
+  /// The player with an English track of mpv's own drawn, a session
+  /// preference asking for an English addon file, and an engine that
+  /// refuses it -- so the auto-pick keeps retrying for the rest of the
+  /// media, which is the state both of the tests below start from.
+  Future<PlayerHarness> refusedAutoPick(WidgetTester tester) async {
+    final player = harness();
+    player.fixture['subtitlePreference'] = {
+      'enabled': true,
+      'source': 'external',
+      'language': 'eng',
+    };
+    await player.pump(tester);
+    final engine = player.engine..subtitleError = StateError('mpv: no');
+    engine.emitTracks(
+      const PlaybackTracks(
+        subtitle: [TrackInfo(id: '3', language: 'eng')],
+        activeSubtitleId: '3',
+      ),
+    );
+    engine.emitDuration(const Duration(minutes: 96));
+    engine.emitPlaying(true);
+    await pumpEvents(tester);
+    expect(engine.externalSubtitles, hasLength(1));
     return player;
   }
 
@@ -323,6 +358,49 @@ void main() {
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
     expect(find.text('+0.1 s'), findsOneWidget);
+  });
+
+  testWidgets('a file picked by hand ends a refused auto-pick', (tester) async {
+    useWideViewport(tester);
+    final player = await refusedAutoPick(tester);
+    final engine = player.engine;
+
+    // The viewer picks for themselves. The engine takes this one.
+    engine.subtitleError = null;
+    await selectFile(tester, 'PAL');
+    expect(engine.externalSubtitles, hasLength(2));
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+
+    // Nothing counted the refused pick as done, so it went on retrying on
+    // every state and tracks event -- taking the viewer's file away again
+    // and handing the multiplier back to the automatic path with it.
+    // Their own choice is the answer the preference was guessing at.
+    pokeState(player);
+    await pumpEvents(tester);
+    expect(engine.externalSubtitles, hasLength(2));
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+  });
+
+  testWidgets('a hand adjustment ends a refused auto-pick', (tester) async {
+    useWideViewport(tester);
+    final player = await refusedAutoPick(tester);
+    final engine = player.engine;
+
+    // mpv's own English track is what is drawn, and the panel reaches it.
+    await openPanel(tester);
+    await step(tester, 'subtitle-shift-later');
+    await step(tester, 'subtitle-shift-later');
+    expect(engine.subtitleDelay, closeTo(0.2, 1e-9));
+
+    // One state tick used to retry the refused pick, and every retry
+    // replaced the whole timing: the shift vanished a moment after it was
+    // made, while the viewer was watching the picture for it to take
+    // effect, and it vanished again a second later.
+    pokeState(player);
+    await pumpEvents(tester);
+    expect(engine.subtitleDelay, closeTo(0.2, 1e-9));
+    expect(engine.externalSubtitles, hasLength(1));
+    expect(find.text('+0.2 s'), findsOneWidget);
   });
 
   testWidgets('a re-open puts the addon file back before re-timing it', (

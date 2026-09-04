@@ -297,6 +297,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _autoPickedSubtitles = false;
   bool _autoPickingSubtitles = false;
 
+  /// Whether the viewer has said what they want of the subtitles for this
+  /// media -- picked a file, an embedded track or none of them, or moved
+  /// the timing by hand -- which leaves the session preference nothing to
+  /// guess at.
+  ///
+  /// [_autoPickedSubtitles] only records that the engine *accepted* a
+  /// pick, so an engine that keeps refusing one leaves the auto-pick
+  /// retrying on every state and tracks event for the rest of the media.
+  /// Each retry replaces the whole [SubtitleTiming] and, on the way back
+  /// out, the selection too, so without this a shift was undone a moment
+  /// after it was made -- and again a second later, while the viewer
+  /// watched the picture for it to take effect.
+  bool _subtitlesChosenByHand = false;
+
   /// Whether the engine has reported the opened media loaded (a duration,
   /// or that it is playing). Until then mpv is between files and refuses
   /// `sub-add` ("Cannot add track at the moment"), so the subtitle
@@ -676,6 +690,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _opened = url;
     _autoPickedSubtitles = false;
+    _subtitlesChosenByHand = false;
     _mediaLoaded = false;
     // A different video: what the last one ran at says nothing about it,
     // and neither does the multiplier the last subtitle was re-timed by.
@@ -1713,13 +1728,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// A press on the timing panel. The panel is rebuilt from [_timing], so
   /// a step that was refused (see [SubtitleTiming.stretchedBy]) redraws
   /// the same number rather than a number mpv is not really playing.
+  ///
+  /// It also ends the auto-pick ([_subtitlesChosenByHand]): a viewer
+  /// judging the subtitle in front of them has answered the question the
+  /// session preference exists to guess at, and a guess that keeps
+  /// swapping the file under them is the wrong half of that answer.
   void _adjustTiming(SubtitleTiming timing) {
     if (timing == _timing) return;
+    _subtitlesChosenByHand = true;
     setState(() => _timing = timing);
     _applySubtitleTiming();
   }
 
   void _selectEmbeddedSubtitle(TrackInfo track) {
+    _subtitlesChosenByHand = true;
     _tracks.value = _tracks.value.copyWith(activeSubtitleId: track.id);
     _retimeSubtitles();
     _engine?.setSubtitleTrack(track.id);
@@ -1733,6 +1755,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _selectExternalSubtitle(SubtitleInfo subtitle) {
+    _subtitlesChosenByHand = true;
     _tracks.value = _tracks.value.copyWith(
       activeSubtitleId: subtitle.url.toString(),
     );
@@ -1752,6 +1775,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _disableSubtitles() {
+    _subtitlesChosenByHand = true;
     _tracks.value = _tracks.value.copyWith(clearSubtitle: true);
     _retimeSubtitles();
     _engine?.disableSubtitles();
@@ -1771,6 +1795,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _maybeAutoPickSubtitles() {
     if (_autoPickedSubtitles ||
         _autoPickingSubtitles ||
+        _subtitlesChosenByHand ||
         !_mediaLoaded ||
         // The rate decides which file of a language fits best and what
         // it has to be re-timed by, and this applies one without the
