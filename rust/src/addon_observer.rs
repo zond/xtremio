@@ -47,6 +47,15 @@
 //! with no content at all was never asked -- an unscrolled board row is not
 //! evidence about anything.
 //!
+//! Nor is a loadable the core made up rather than fetched. `MetaDetails`
+//! keeps a `meta_streams` beside the `streams` it requested, and that one
+//! is assembled locally from the meta item that was already counted: it is
+//! always `Ready` and always carries the meta addon's base. Counting it
+//! would give that addon a `stream` success it never earned, and -- since
+//! it can never fail -- would put a guaranteed non-failure into the sweep,
+//! so an outage in which every addon that was really asked failed would
+//! look like evidence and be charged to all of them.
+//!
 //! The map is rebuilt from the model on every walk rather than added to, so
 //! it is bounded by what the model holds and a request that goes away
 //! (unloading a screen) is forgotten with it. Asking the same addon again
@@ -245,9 +254,8 @@ impl Walk<'_> {
             Answer::Settled(outcome) => outcome,
         };
         let id = RequestId::of(&loadable.request, kind);
-        // The same request can appear twice in one field (a meta addon that
-        // also serves streams is in both `meta_streams` and `streams`); one
-        // identity is one answer per walk.
+        // One identity is one answer per walk, however many of a field's
+        // loadables happen to hold the same request.
         if self.settled.insert(id.clone(), outcome).is_some() {
             return;
         }
@@ -281,15 +289,18 @@ fn walk_field(walk: &mut Walk, model: &XtremioModel, field: Watched) {
             for item in &model.meta_details.meta_items {
                 walk.note(item);
             }
-            for streams in &model.meta_details.meta_streams {
-                walk.note(streams);
-            }
             for streams in &model.meta_details.streams {
                 walk.note(streams);
             }
-            // `last_used_stream` is left out: its request is one of the
-            // above, and its content is an `Option`, so an addon that
-            // answered with nothing would read as one that answered.
+            // Two of this field's loadables are left out because neither
+            // is a question anybody was asked. `meta_streams` is
+            // synthesised: stremio-core builds it out of the meta item
+            // already in hand -- the selected video's inline `streams`, or
+            // `Stream::youtube` -- always `Ready` and always under the
+            // *meta* addon's base, for a request that never leaves the
+            // device. `last_used_stream`'s request is one of the above,
+            // and its content is an `Option`, so an addon that answered
+            // with nothing would read as one that answered.
         }
         Watched::Player => {
             if let Some(item) = &model.player.meta_item {

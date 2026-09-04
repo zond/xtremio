@@ -320,42 +320,56 @@ fn subtitle() -> Subtitles {
         .expect("a subtitle")
 }
 
+/// One loadable for a particular video of a series: what the id is says
+/// which episode was selected, and picking another one makes every
+/// request on the screen a new request.
+fn for_video<T>(
+    base: &str,
+    resource: &str,
+    id: &str,
+    content: Option<Loadable<T, ResourceError>>,
+) -> ResourceLoadable<T> {
+    ResourceLoadable {
+        request: ResourceRequest::new(
+            url(base),
+            ResourcePath::without_extra(resource, "series", id),
+        ),
+        content,
+    }
+}
+
+/// A failure of the kind a broken connection produces, for any resource.
+fn unreachable<T>() -> Option<Loadable<T, ResourceError>> {
+    Some(Loadable::Err(ResourceError::Env(EnvError::Fetch(
+        "connection refused".to_owned(),
+    ))))
+}
+
 /// The details screen is where the record's most load-bearing evidence
-/// comes from -- stream addons -- and it is the field with the two
-/// judgement calls: a meta addon that also serves streams appears in both
-/// `meta_streams` and `streams` and must be counted once, and
-/// `last_used_stream` is not an answer at all (its request is one of the
-/// others, and its `Option` content would read a "nothing found" as an
-/// answer).
+/// comes from -- stream addons -- and it is the field with the judgement
+/// calls about what is not an answer: neither `meta_streams` nor
+/// `last_used_stream` is one. Only `meta_items` and `streams` were asked
+/// for.
 #[test]
-fn a_details_load_counts_meta_and_streams_once_each() {
+fn a_details_load_counts_the_meta_and_the_streams_that_were_asked_for() {
     let app = AppState::default();
     let mut model = empty_model();
     model.meta_details.meta_items =
         vec![asked(CINEMETA, "meta", Some(Loadable::Ready(meta_item())))];
-    // What the meta addon returned inline, plus an addon with nothing to
-    // offer for this title.
-    model.meta_details.meta_streams = vec![
-        asked(CINEMETA, "stream", Some(Loadable::Ready(vec![stream()]))),
-        asked(
-            BINGE,
-            "stream",
-            Some(Loadable::Err(ResourceError::EmptyContent)),
-        ),
-    ];
+    // Not an answer: stremio-core builds this out of the meta item that
+    // was just counted, under that same addon's base, without asking.
+    model.meta_details.meta_streams = vec![asked(
+        CINEMETA,
+        "stream",
+        Some(Loadable::Ready(vec![stream()])),
+    )];
     model.meta_details.streams = vec![
-        // The same request as in `meta_streams`: the meta addon is
-        // installed as a stream addon too, and answered once.
-        asked(CINEMETA, "stream", Some(Loadable::Ready(vec![stream()]))),
-        asked(
-            CHANNELS,
-            "stream",
-            Some(Loadable::Err(ResourceError::Env(EnvError::Fetch(
-                "connection refused".to_owned(),
-            )))),
-        ),
+        asked(BINGE, "stream", Some(Loadable::Ready(vec![stream()]))),
+        asked(CHANNELS, "stream", unreachable()),
     ];
-    // Not an answer: whatever it holds, its request was already counted.
+    // Not an answer either: whatever it holds, its request was already
+    // counted, and its `Option` content would read a "nothing found" as an
+    // answer.
     model.meta_details.last_used_stream =
         Some(asked(ORPHAN, "stream", Some(Loadable::Ready(None))));
 
@@ -371,29 +385,101 @@ fn a_details_load_counts_meta_and_streams_once_each() {
         (1.0, 0.0, 0.0)
     );
     assert_eq!(
-        counts(&record_for(&table, CINEMETA, ResourceKind::Stream)),
-        (1.0, 0.0, 0.0),
-        "one request answered twice was counted twice"
+        counts(&record_for(&table, BINGE, ResourceKind::Stream)),
+        (1.0, 0.0, 0.0)
     );
     assert_eq!(
         counts(&record_for(&table, CHANNELS, ResourceKind::Stream)),
         (0.0, 0.0, 1.0)
     );
-    assert_eq!(
-        counts(&record_for(&table, BINGE, ResourceKind::Stream)),
-        (0.0, 1.0, 0.0),
-        "the streams the meta addon returned inline were not walked"
-    );
     let mut expected = vec![
         key_for(&url(CINEMETA)),
-        key_for(&url(CHANNELS)),
         key_for(&url(BINGE)),
+        key_for(&url(CHANNELS)),
     ];
     expected.sort();
     assert_eq!(
         table.keys().collect::<Vec<_>>(),
         expected,
         "`last_used_stream` was counted as an answer"
+    );
+    assert_eq!(
+        table
+            .get(&key_for(&url(CINEMETA)))
+            .and_then(|kinds| kinds.get(&ResourceKind::Stream)),
+        None,
+        "the meta addon was handed a stream answer it never gave"
+    );
+}
+
+/// `meta_streams` is synthesised, not answered: stremio-core rebuilds it
+/// from the meta item already in hand -- the selected video's inline
+/// `streams`, or `Stream::youtube` -- always `Ready` and always under the
+/// *meta* addon's base, for a request that never leaves the device.
+///
+/// Counting it would hand that addon a free `stream` success (and a fresh
+/// `last_ok`, so its genuinely dead stream endpoint could never be judged
+/// broken) on every episode the user picks. Worse, a guaranteed
+/// non-failure in the sweep makes an outage look like evidence, and every
+/// stream addon that really was asked is charged for the broken
+/// connection.
+#[test]
+fn a_synthesised_meta_stream_does_not_rescue_a_load_where_everything_failed() {
+    let app = AppState::default();
+    let mut model = empty_model();
+    // A series page that has settled: the meta answered, and episode one's
+    // streams have been counted already.
+    model.meta_details.meta_items =
+        vec![asked(CINEMETA, "meta", Some(Loadable::Ready(meta_item())))];
+    model.meta_details.meta_streams = vec![for_video(
+        CINEMETA,
+        "stream",
+        "tt0063350:1:1",
+        Some(Loadable::Ready(vec![stream()])),
+    )];
+    model.meta_details.streams = vec![
+        for_video(
+            BINGE,
+            "stream",
+            "tt0063350:1:1",
+            Some(Loadable::Ready(vec![stream()])),
+        ),
+        for_video(
+            CHANNELS,
+            "stream",
+            "tt0063350:1:1",
+            Some(Loadable::Ready(vec![stream()])),
+        ),
+    ];
+    assert_eq!(
+        observe_fields(&app, &model, &[XtremioModelField::MetaDetails]),
+        1
+    );
+    let before = table_in(&app);
+
+    // Episode two, with the connection gone. The meta item is untouched,
+    // so it is not counted again; the synthesised entry is rebuilt for the
+    // new video id, and both addons that were really asked fail.
+    model.meta_details.meta_streams = vec![for_video(
+        CINEMETA,
+        "stream",
+        "tt0063350:1:2",
+        Some(Loadable::Ready(vec![stream()])),
+    )];
+    model.meta_details.streams = vec![
+        for_video(BINGE, "stream", "tt0063350:1:2", unreachable()),
+        for_video(CHANNELS, "stream", "tt0063350:1:2", unreachable()),
+    ];
+
+    assert_eq!(
+        observe_fields(&app, &model, &[XtremioModelField::MetaDetails]),
+        0,
+        "an outage was recorded as evidence"
+    );
+    assert_eq!(
+        table_in(&app),
+        before,
+        "a broken connection moved the record"
     );
 }
 
