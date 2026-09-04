@@ -240,6 +240,35 @@ void main() {
       expect(compressButton, findsOneWidget);
     });
 
+    testWidgets('a correction in force keeps its button, whatever the '
+        'video says', (tester) async {
+      // The container's rate is one bounded read taken when the media
+      // loads, so a press made while it has not answered can be in the
+      // direction the answer then rules out. The toggle is the only way
+      // back to exactly 1.0 and a gap cannot be pressed: with its own
+      // button gone, the one that is drawn would swap the correction for
+      // its reciprocal and never land on 1.0 at all.
+      final speeds = <SubtitleSpeedDirection>[];
+      await tester.pumpWidget(
+        panel(
+          const SubtitleTiming(speedDirection: SubtitleSpeedDirection.stretch),
+          videoDirection: SubtitleSpeedDirection.compress,
+          speeds: speeds,
+        ),
+      );
+      expect(stretchButton, findsOneWidget);
+      expect(compressButton, findsOneWidget);
+      await tester.tap(stretchButton);
+      await tester.pump();
+      expect(speeds, [SubtitleSpeedDirection.stretch]);
+
+      // And that press is the whole of the correction, not half of it.
+      const inForce = SubtitleTiming(
+        speedDirection: SubtitleSpeedDirection.stretch,
+      );
+      expect(inForce.toggledSpeed(speeds.single).speed, 1);
+    });
+
     testWidgets('a toggle that is on says so on the button', (tester) async {
       // The panel is the surface operated after the OSD bar has gone,
       // and a three-decimal number changing is not enough on its own to

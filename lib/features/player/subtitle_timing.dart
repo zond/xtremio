@@ -143,9 +143,11 @@ class SubtitleTimingOverlay extends StatelessWidget {
   ///
   /// The video decides the direction, so the speed control is one button
   /// and pressing it twice comes back to 1.0. Both buttons are offered
-  /// only for that null: a stream whose rate mpv never reports would
+  /// for that null: a stream whose rate mpv never reports would
   /// otherwise be unfixable, and offering the pair is the one honest
-  /// answer to knowing nothing.
+  /// answer to knowing nothing. The other case is [_speedButton]'s: a
+  /// correction already in force is never left without the button that
+  /// takes it off.
   final SubtitleSpeedDirection? videoDirection;
 
   /// One press of the shift control: `-1` earlier, `1` later.
@@ -203,14 +205,25 @@ class SubtitleTimingOverlay extends StatelessWidget {
   );
 
   /// The speed button for [direction], or the space it would have taken
-  /// when the video has already ruled it out.
+  /// when the video has already ruled it out and nothing is in force in
+  /// it.
   ///
   /// mpv multiplies the event timestamps by `sub-speed`, so the larger
   /// multiplier pushes every cue later and spreads them further apart:
   /// the subtitle runs *slower* through the film, which is what a file
   /// cut for 25 fps needs against 23.976 fps footage.
+  ///
+  /// A correction that is in force keeps its button whatever the video
+  /// says, because the toggle is the only way back to exactly 1.0 and a
+  /// gap cannot be pressed: the button that *is* drawn would replace the
+  /// direction with its reciprocal and never reach 1.0 at all. That is
+  /// reachable without anything remembering anything -- [videoDirection]
+  /// comes from one bounded read of `container-fps` when the media
+  /// loads, so a press made while it says nothing can land in the
+  /// direction the answer then rules out.
   Widget _speedButton(SubtitleSpeedDirection direction) {
-    if (videoDirection != null && videoDirection != direction) {
+    final inForce = timing.speedDirection == direction;
+    if (!inForce && videoDirection != null && videoDirection != direction) {
       return const _ButtonGap();
     }
     final stretch = direction == SubtitleSpeedDirection.stretch;
