@@ -93,6 +93,31 @@ void main() {
     expect(rings.where((r) => r.focused), isEmpty);
   });
 
+  testWidgets('the focus zoom fits inside the row it grows in', (tester) async {
+    // The owner's television: 1920x1080 at density 320, so 960x540 of
+    // logical pixels.
+    useScreen(tester, const Size(960, 540));
+    await tester.pumpWidget(harness(fakeCore()));
+    await tester.pumpAndSettle();
+    final name = focusedTileName(tester);
+    expect(name, 'Night of the Living Dead');
+
+    // A row with more tiles than fit scrolls, and a scrolling viewport
+    // paints behind a clip of exactly its own bounds. Laid out to the full
+    // height of that viewport, a focused tile's zoom is not a lift but a
+    // crop: a slice off the top of the poster and off the caption below
+    // it, and no shadow at all.
+    final tile = find.text(name!);
+    final grown = tester.getRect(
+      find.ancestor(of: tile, matching: find.byType(FocusRing)).first,
+    );
+    final strip = tester.getRect(
+      find.ancestor(of: tile, matching: find.byType(Viewport)).first,
+    );
+    expect(grown.top, greaterThan(strip.top));
+    expect(grown.bottom, lessThan(strip.bottom));
+  });
+
   testWidgets('up and down move between rows, left and right within one', (
     tester,
   ) async {

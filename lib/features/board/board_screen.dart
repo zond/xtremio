@@ -334,7 +334,7 @@ final class _CatalogRow extends _BoardRow {
 /// Shared geometry of one row: a header, then a horizontal strip whose tile
 /// width follows from the strip height and the poster shape.
 class _RowLayout {
-  const _RowLayout(this.baseExtent, {this.textFactor = 1});
+  const _RowLayout(this.baseExtent, {this.textFactor = 1, this.focusSlack = 0});
 
   /// The row's height at text scale 1: what [BoardScreen.rowExtentFor]
   /// picked for this window.
@@ -353,19 +353,42 @@ class _RowLayout {
   /// overflows the text out of it. A small font just leaves the row roomy.
   final double textFactor;
 
+  /// Room kept above and below the tiles in a strip, out of the strip's own
+  /// height, for a focused tile to grow into.
+  ///
+  /// A strip clips. Once a row holds more tiles than fit, its viewport
+  /// paints behind a clip of exactly its own bounds, and a tile is laid out
+  /// to exactly the viewport's height -- so the zoom a focused tile wears
+  /// ([FocusHighlight.focusedScale]) and the shadow it casts were being cut
+  /// off at both edges, which reads as a crop rather than the lift it is
+  /// meant to be. Only a television zooms anything, so only a television
+  /// spends poster height on the room.
+  final double focusSlack;
+
   /// The row geometry [context] is in.
-  static _RowLayout of(BuildContext context) => _RowLayout(
-    BoardScreen.rowExtentFor(
-      MediaQuery.sizeOf(context).width,
-      isTv: DeviceScope.isTv(context),
-    ),
-    textFactor: math.max(1, textFactorOf(context)),
-  );
+  static _RowLayout of(BuildContext context) {
+    final isTv = DeviceScope.isTv(context);
+    return _RowLayout(
+      BoardScreen.rowExtentFor(MediaQuery.sizeOf(context).width, isTv: isTv),
+      textFactor: math.max(1, textFactorOf(context)),
+      focusSlack: isTv ? focusRoom : 0,
+    );
+  }
 
   static const double baseHeaderHeight = 52;
   static const double bottomPadding = 8;
-  static const EdgeInsets stripPadding = EdgeInsets.symmetric(horizontal: 16);
+  static const double stripSidePadding = 16;
   static const double tileSpacing = 12;
+
+  /// [focusSlack] on a television: half of it covers the zoom (five percent
+  /// of a tile that tall, split between the two edges) and the rest is what
+  /// the shadow under a focused tile needs to be seen at all.
+  static const double focusRoom = 12;
+
+  /// What a strip insets its tiles by: the side margin, and [focusSlack]
+  /// above and below.
+  EdgeInsets get stripPadding =>
+      EdgeInsets.symmetric(horizontal: stripSidePadding, vertical: focusSlack);
 
   /// The size the scale is probed at: about what the header's title and a
   /// poster's caption are set in, and small enough to sit in the part of
@@ -397,7 +420,8 @@ class _RowLayout {
 
   double get stripHeight => extent - headerHeight - bottomPadding;
 
-  double get imageHeight => stripHeight - PosterTile.captionHeight * textFactor;
+  double get imageHeight =>
+      stripHeight - focusSlack * 2 - PosterTile.captionHeight * textFactor;
 
   double tileWidthFor(String posterShape) =>
       (imageHeight * PosterImage.aspectRatioFor(posterShape)).roundToDouble();
@@ -470,6 +494,7 @@ class _ContinueWatchingRowView extends StatelessWidget {
         _RowHeader(title: 'Continue watching', height: layout.headerHeight),
         Expanded(
           child: _HorizontalStrip(
+            padding: layout.stripPadding,
             itemCount: state.items.length,
             itemBuilder: (context, index) {
               final item = state.items[index];
@@ -534,11 +559,13 @@ class _CatalogRowView extends StatelessWidget {
       return _PlaceholderStrip(
         tileWidth: layout.tileWidthFor(row.posterShape),
         imageHeight: layout.imageHeight,
+        padding: layout.stripPadding,
       );
     }
     final shown = math.min(items.length, BoardScreen.maxTilesPerRow);
     final tileWidth = layout.tileWidthFor(row.posterShape);
     return _HorizontalStrip(
+      padding: layout.stripPadding,
       itemCount: shown + 1,
       itemBuilder: (context, index) {
         if (index == shown) {
@@ -615,10 +642,17 @@ class _SeeAllTile extends StatelessWidget {
 
 /// Neutral boxes standing in for tiles that have not arrived.
 class _PlaceholderStrip extends StatelessWidget {
-  const _PlaceholderStrip({required this.tileWidth, required this.imageHeight});
+  const _PlaceholderStrip({
+    required this.tileWidth,
+    required this.imageHeight,
+    required this.padding,
+  });
 
   final double tileWidth;
   final double imageHeight;
+
+  /// [_RowLayout.stripPadding], as the real strip beside it uses.
+  final EdgeInsets padding;
 
   static const int count = 6;
 
@@ -628,7 +662,7 @@ class _PlaceholderStrip extends StatelessWidget {
     return ListView.builder(
       scrollDirection: Axis.horizontal,
       physics: const NeverScrollableScrollPhysics(),
-      padding: _RowLayout.stripPadding,
+      padding: padding,
       itemCount: count,
       itemBuilder: (context, index) => Padding(
         padding: const EdgeInsets.only(right: _RowLayout.tileSpacing),
@@ -657,10 +691,18 @@ class _PlaceholderStrip extends StatelessWidget {
 /// remote has nothing to drag it with -- the row scrolls when focus moves
 /// off its end, which is the only way it ever scrolls there.
 class _HorizontalStrip extends StatefulWidget {
-  const _HorizontalStrip({required this.itemCount, required this.itemBuilder});
+  const _HorizontalStrip({
+    required this.itemCount,
+    required this.itemBuilder,
+    required this.padding,
+  });
 
   final int itemCount;
   final IndexedWidgetBuilder itemBuilder;
+
+  /// [_RowLayout.stripPadding]: the side margin, and the room a focused
+  /// tile grows into rather than being clipped by the viewport's edge.
+  final EdgeInsets padding;
 
   @override
   State<_HorizontalStrip> createState() => _HorizontalStripState();
@@ -686,7 +728,7 @@ class _HorizontalStripState extends State<_HorizontalStrip> {
     final list = ListView.builder(
       controller: _controller,
       scrollDirection: Axis.horizontal,
-      padding: _RowLayout.stripPadding,
+      padding: widget.padding,
       itemCount: widget.itemCount,
       itemBuilder: (context, index) => Padding(
         padding: const EdgeInsets.only(right: _RowLayout.tileSpacing),
