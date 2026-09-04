@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -77,6 +78,14 @@ class TextEntryActivity : Activity() {
         }
         setContentView(screen(intent.getStringExtra(EXTRA_LABEL).orEmpty()))
         field.requestFocus()
+        // The manifest's stateAlwaysVisible is what should put the keyboard
+        // up, and asking again once the view is attached costs nothing --
+        // this screen is worth nothing without one, and there is no press
+        // to spend on summoning it with a D-pad.
+        field.post {
+            val ime = getSystemService(Context.INPUT_METHOD_SERVICE)
+            (ime as? InputMethodManager)?.showSoftInput(field, 0)
+        }
     }
 
     /** The label over the field, then the field, down the middle. */
