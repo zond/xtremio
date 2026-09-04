@@ -1226,7 +1226,8 @@ Because nothing is converted, the honest part of this is the refusal.
 
 **The compatibility rule, as implemented**
 (`lib/features/cast/cast_compatibility.dart`): MP4 or WebM, H.264 or HEVC
-video, AAC audio.
+video, and audio the container is allowed to carry — AAC or MP3 in an MP4,
+Opus or Vorbis in a WebM.
 
 - The **container** comes from the name of the file the embedded server says
   it opened (`streamName` in the `stats.json` the player already polls), then
