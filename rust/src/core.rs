@@ -201,7 +201,11 @@ fn hydrate<T: for<'de> Deserialize<'de> + Send + 'static>(
     }
 }
 
-fn is_loopback(url: &Url) -> bool {
+/// Whether `url` names this machine: the two loopback addresses and the
+/// name that resolves to them. Shared with [`crate::addon_health`], which
+/// needs the same answer for the opposite reason -- what is on loopback is
+/// this app's own stub, never an addon whose reachability says anything.
+pub(crate) fn is_loopback(url: &Url) -> bool {
     match url.host() {
         Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
         Some(url::Host::Ipv6(ip)) => ip.is_loopback(),

@@ -42,7 +42,10 @@
 //! Observations are buffered per [`Sweep`] -- one field's load, all the
 //! addons asked at once -- and committed only if at least one of them did
 //! not fail. When DNS is down every addon fails together, and that is
-//! evidence about the connection, not about the addons.
+//! evidence about the connection, not about the addons. What is on
+//! loopback is left out of the sweep entirely ([`is_own_stub`]): this app's
+//! own stub answering says nothing about whether the network is up, and
+//! nothing about an addon it was never asked to stand for.
 //!
 //! ## Where it lives
 //!
@@ -114,6 +117,16 @@ const FLUSH_INTERVAL: Duration = Duration::from_secs(60);
 /// bytes: short enough to read in a preferences file, far more than enough
 /// to keep one profile's addons apart.
 const KEY_DIGEST_HEX: usize = 12;
+
+/// The port stremio-core's default profile puts the streaming server, and
+/// with it the local addon, on. Not read off the running server on purpose:
+/// what matters is the port the *profile* believes in, which is where the
+/// local addon's transport URL points however the server actually bound.
+const DEFAULT_SERVER_PORT: u16 = 11470;
+
+/// The path the streaming server serves the profile's built-in local addon
+/// under (`stremio-official-addons`, `protected: true`).
+const LOCAL_ADDON_PATH: &str = "/local-addon/";
 
 /// How an addon's answer settled.
 ///
@@ -405,6 +418,40 @@ fn newest(kinds: &BTreeMap<ResourceKind, Record>) -> Option<DateTime<Utc>> {
     kinds.values().map(|record| record.updated).max()
 }
 
+/// Whether `base` is this app's own stub rather than an addon on the
+/// network: the embedded server, or the profile's built-in local addon.
+///
+/// Two rules, because the bound-authority check alone is not enough. The
+/// local addon keeps the transport URL it was born with,
+/// `http://127.0.0.1:11470/local-addon/manifest.json`, and nothing
+/// retargets it -- `crate::core::retarget_loopback_server` rewrites the
+/// streaming server URL in the settings and not the addon -- so as soon as
+/// 11470 is taken by another Stremio and the embedded server falls back to
+/// an ephemeral port, or no server is running at all, the local addon stops
+/// looking embedded while still being ours.
+///
+/// Skipping it is not only about refusing to judge a protected addon. A
+/// loopback answer is not evidence that the network is up, and
+/// [`Sweep::is_evidence`] treats one non-failure as exactly that: with the
+/// local addon in the sweep, an outage in which every real addon failed
+/// would be charged to every one of them.
+///
+/// An addon genuinely self-hosted on loopback, on some port that is not the
+/// streaming server's, is still recorded: what is skipped is this app's own
+/// two endpoints, not everything on this machine.
+fn is_own_stub(base: &Url, is_embedded: impl FnOnce(&Url) -> bool) -> bool {
+    is_local_addon(base) || is_embedded(base)
+}
+
+/// Whether `base` is the streaming server's local addon: on this machine,
+/// and either under [`LOCAL_ADDON_PATH`] or on the port the profile expects
+/// the server at. Pure, and true whether or not a server is running.
+fn is_local_addon(base: &Url) -> bool {
+    crate::core::is_loopback(base)
+        && (base.path().starts_with(LOCAL_ADDON_PATH)
+            || base.port_or_known_default() == Some(DEFAULT_SERVER_PORT))
+}
+
 /// One field's worth of settled answers, held back until it is known
 /// whether they say anything about the addons at all.
 ///
@@ -423,10 +470,8 @@ impl Sweep {
         Self::default()
     }
 
-    /// Notes one settled answer, unless it came from the embedded server --
-    /// the local addon is this app's own stub, and a bad server release
-    /// must not be able to poison the record (the app also never labels a
-    /// protected addon, so both halves have to fail before a verdict shows).
+    /// Notes one settled answer, unless it came from this app's own stub
+    /// rather than from an addon out on the network -- see [`is_own_stub`].
     pub fn observe(&mut self, base: &Url, kind: ResourceKind, outcome: Outcome) {
         self.observe_with(base, kind, outcome, crate::server::is_embedded_url);
     }
@@ -441,7 +486,7 @@ impl Sweep {
         outcome: Outcome,
         is_embedded: impl FnOnce(&Url) -> bool,
     ) {
-        if is_embedded(base) {
+        if is_own_stub(base, is_embedded) {
             return;
         }
         self.observed.push((key_for(base), kind, outcome));
@@ -892,6 +937,83 @@ mod tests {
         assert!(sweep.is_empty());
         assert!(!sweep.commit_into(&mut table, now()));
         assert!(table.is_empty());
+    }
+
+    #[test]
+    fn the_local_addon_is_skipped_wherever_the_embedded_server_bound() {
+        // 11470 was taken by another Stremio, so the embedded server fell
+        // back to an ephemeral port -- but the profile's local addon still
+        // carries the transport URL it was born with.
+        let embedded = url("http://127.0.0.1:40503/");
+        let local_addon = url("http://127.0.0.1:11470/local-addon/manifest.json");
+        let remote = url("https://cinemeta.example.com/manifest.json");
+        let bound_where_it_says = |candidate: &Url| candidate.port() == embedded.port();
+
+        // Wi-Fi is gone: every addon out on the network fails, and the one
+        // on loopback answers because loopback never left.
+        let mut sweep = Sweep::new();
+        sweep.observe_with(
+            &local_addon,
+            ResourceKind::Catalog,
+            Outcome::Answered,
+            bound_where_it_says,
+        );
+        sweep.observe_with(
+            &remote,
+            ResourceKind::Catalog,
+            Outcome::Failed,
+            bound_where_it_says,
+        );
+
+        let mut table = Table::default();
+        assert!(
+            !sweep.commit_into(&mut table, now()),
+            "an answer from our own loopback stub was read as a working network"
+        );
+        assert!(
+            table.is_empty(),
+            "a connection outage was charged to the addons"
+        );
+    }
+
+    #[test]
+    fn the_local_addon_is_skipped_with_no_server_running_at_all() {
+        // No handle, so nothing is the embedded server as far as
+        // `server::is_embedded_url` is concerned.
+        let no_server = |_: &Url| false;
+        for base in [
+            "http://127.0.0.1:11470/local-addon/manifest.json",
+            "http://localhost:11470/local-addon/manifest.json",
+            "http://[::1]:11470/local-addon/manifest.json",
+            // The port alone is enough: whatever the server serves on the
+            // port the profile expects it at is ours, not an addon.
+            "http://127.0.0.1:11470/manifest.json",
+            // And the path alone is, for a server moved to another port.
+            "http://127.0.0.1:40503/local-addon/manifest.json",
+        ] {
+            let mut sweep = Sweep::new();
+            sweep.observe_with(
+                &url(base),
+                ResourceKind::Catalog,
+                Outcome::Failed,
+                no_server,
+            );
+            assert!(sweep.is_empty(), "{base} was recorded against");
+        }
+    }
+
+    #[test]
+    fn an_addon_hosted_on_this_machine_is_still_an_addon() {
+        // Not the streaming server's port and not its local addon: someone
+        // running their own addon next to the app is measured like any
+        // other, and only this app's own two endpoints are skipped.
+        let mine = url("http://127.0.0.1:7000/manifest.json");
+        let mut sweep = Sweep::new();
+        sweep.observe_with(&mine, ResourceKind::Stream, Outcome::Answered, |_| false);
+
+        let mut table = Table::default();
+        assert!(sweep.commit_into(&mut table, now()));
+        assert_eq!(table.keys().collect::<Vec<_>>(), vec![key_for(&mine)]);
     }
 
     #[test]
