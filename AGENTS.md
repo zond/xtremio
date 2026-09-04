@@ -190,6 +190,20 @@ failed is recorded against nobody; and the embedded server and the local
 addon are never recorded against, on top of a protected addon never being
 labelled. See README, "Which addons are worth keeping".
 
+## Brand assets are generated, never hand-edited
+
+Every icon, the Android TV banner, the splash mark and the README logo come out
+of `tool/generate_branding.sh`, which draws one two-tone X from a handful of
+coordinates and writes each platform's sizes. Change a colour or a coordinate
+there and re-run it; do not touch the PNGs, the `ic_launcher_*` XML or
+`values*/ic_launcher_background.xml` by hand, because the next run overwrites
+them. It needs ImageMagick 7 and Cantarell Extra Bold for the wordmark.
+
+The Android launcher icon is an adaptive icon: a flat background colour, a
+vector foreground, and a monochrome layer for Android 13 themed icons. The
+foreground keeps the mark inside the circle every launcher mask leaves visible,
+so widening the X in the script means checking that first.
+
 ## Use cheaper models for mechanical work
 
 When an agent delegates, mechanical subtasks (formatting, renames, moving

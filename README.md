@@ -1,5 +1,7 @@
 # Xtremio
 
+![xtremio](assets/branding/xtremio-logo.png)
+
 A native, cross-platform **Stremio client** built on a pure-Rust core with a Flutter UI.
 
 Xtremio is the client half of a two-part project. The other half is
