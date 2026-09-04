@@ -5,7 +5,8 @@ import '../../widgets/focusable_tile.dart';
 import 'addon_widgets.dart';
 
 /// One addon in a list: logo, name and version, description, the types it
-/// serves, plus whatever [trailing] the list wants (a menu, a button).
+/// serves, an optional [status] line under them, plus whatever [trailing]
+/// the list wants (a menu, a button).
 ///
 /// On a television it is a [FocusableTile] like every other list of things
 /// in the app, so the D-pad's focus is drawn as a ring and the tile it is
@@ -16,6 +17,7 @@ class AddonTile extends StatelessWidget {
     super.key,
     required this.addon,
     this.trailing,
+    this.status,
     this.onTap,
     this.memoryId,
     this.defaultFocus = false,
@@ -23,6 +25,11 @@ class AddonTile extends StatelessWidget {
 
   final AddonDescriptor addon;
   final Widget? trailing;
+
+  /// Drawn under the type labels: the Installed list puts the addon's
+  /// health verdict here. Nothing when there is nothing to say about it.
+  final Widget? status;
+
   final VoidCallback? onTap;
 
   /// See [FocusableTile.memoryId] and [FocusableTile.defaultFocus].
@@ -84,6 +91,10 @@ class AddonTile extends StatelessWidget {
                   if (manifest.types.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     AddonTypeLabels(types: manifest.types),
+                  ],
+                  if (status != null) ...[
+                    const SizedBox(height: 6),
+                    Align(alignment: Alignment.centerLeft, child: status!),
                   ],
                 ],
               ),

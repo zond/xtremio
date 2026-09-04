@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'core/core.dart';
 import 'features/addons/addon_details_screen.dart';
+import 'features/addons/addon_health_client.dart';
 import 'features/cast/cast_client.dart';
 import 'features/cast/google_cast_client.dart';
 import 'features/downloads/destination.dart';
@@ -90,6 +91,7 @@ class XtremioApp extends StatefulWidget {
     this.downloads,
     this.cast,
     this.prefs,
+    this.addonHealth = const RustAddonHealthClient(),
     this.deepLinks,
     this.defaultDestination = platformDefaultDestination,
     this.device = DeviceProfile.fallback,
@@ -109,6 +111,11 @@ class XtremioApp extends StatefulWidget {
   /// The app's own preferences, for tests that want a fake client behind
   /// them. Read once, when the app comes up, like [downloads].
   final AppPrefs? prefs;
+
+  /// How the installed addons have been answering, for the Addons screen.
+  /// Null shows no verdicts at all, which is what a test that does not care
+  /// about them wants.
+  final AddonHealthClient? addonHealth;
 
   /// Where `stremio://` links arrive from; tests hand in a fake instead of
   /// the platform's own ([AppLinksDeepLinkSource]).
@@ -396,25 +403,28 @@ class _XtremioAppState extends State<XtremioApp> {
       child: CoreScope(
         client: widget.core,
         initInfo: widget.initInfo,
-        child: DownloadsScope(
-          client: _downloads,
-          child: CastScope(
-            client: _cast,
-            child: PrefsScope(
-              prefs: _prefs,
-              child: PlaybackScope(
-                createEngine: _createEngine,
-                child: MaterialApp(
-                  title: 'Xtremio',
-                  debugShowCheckedModeBanner: false,
-                  navigatorKey: _navigator,
-                  theme: isTv ? TvDensity.theme(theme) : theme,
-                  builder: isTv ? TvMediaQuery.builder : null,
-                  navigatorObservers: [
-                    _routes,
-                    if (kDebugMode) RouteLogObserver(),
-                  ],
-                  home: const RootShell(),
+        child: _AddonHealth(
+          client: widget.addonHealth,
+          child: DownloadsScope(
+            client: _downloads,
+            child: CastScope(
+              client: _cast,
+              child: PrefsScope(
+                prefs: _prefs,
+                child: PlaybackScope(
+                  createEngine: _createEngine,
+                  child: MaterialApp(
+                    title: 'Xtremio',
+                    debugShowCheckedModeBanner: false,
+                    navigatorKey: _navigator,
+                    theme: isTv ? TvDensity.theme(theme) : theme,
+                    builder: isTv ? TvMediaQuery.builder : null,
+                    navigatorObservers: [
+                      _routes,
+                      if (kDebugMode) RouteLogObserver(),
+                    ],
+                    home: const RootShell(),
+                  ),
                 ),
               ),
             ),
@@ -422,6 +432,23 @@ class _XtremioAppState extends State<XtremioApp> {
         ),
       ),
     );
+  }
+}
+
+/// The [AddonHealthScope], when there is a client to put in one. No client
+/// is no scope at all rather than an empty one, so the Addons screen can
+/// tell "nothing has answered yet" from "nothing can be asked".
+class _AddonHealth extends StatelessWidget {
+  const _AddonHealth({required this.client, required this.child});
+
+  final AddonHealthClient? client;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final client = this.client;
+    if (client == null) return child;
+    return AddonHealthScope(client: client, child: child);
   }
 }
 

@@ -6,6 +6,9 @@ import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/shared_field_screen.dart';
 import 'addon_details_screen.dart';
+import 'addon_health.dart';
+import 'addon_health_client.dart';
+import 'addon_health_view.dart';
 import 'addon_tile.dart';
 import 'addon_widgets.dart';
 
@@ -23,6 +26,14 @@ import 'addon_widgets.dart';
 /// the community list is client-side (name and description), as in
 /// stremio-web. While `profile.addonsLocked` every mutation is disabled
 /// behind a banner.
+///
+/// Installed also carries each addon's health: what it has answered, read
+/// once on mount from the [AddonHealthScope] above (nothing is shown
+/// without one), turned into a verdict by `AddonHealth.verdict`. Health
+/// adds no way to remove an addon -- Uninstall is the same menu item it
+/// always was, still absent for a protected addon and still disabled while
+/// the profile is locked -- because a verdict is advice and the decision
+/// stays the viewer's.
 class AddonsScreen extends StatefulWidget {
   const AddonsScreen({super.key});
 
@@ -51,6 +62,8 @@ class _AddonsScreenState extends State<AddonsScreen> {
   CoreFieldNotifier? _ctx;
   final TextEditingController _search = TextEditingController();
   int _nextPageRequestedAt = -1;
+  AddonHealthNotifier? _health;
+  AddonHealthSort _sort = AddonHealthSort.profileOrder;
 
   @override
   void initState() {
@@ -78,6 +91,15 @@ class _AddonsScreenState extends State<AddonsScreen> {
       );
       client.dispatch(CoreActions.loadRemoteAddons(null));
     }
+    // Built even with no client above -- an empty report is what "nothing
+    // can tell us how these have been answering" looks like, and the tab
+    // then shows no verdicts rather than empty ones.
+    final health = AddonHealthScope.maybeOf(context);
+    final current = _health;
+    if (current == null || current.client != health) {
+      current?.dispose();
+      _health = AddonHealthNotifier(health)..load();
+    }
   }
 
   @override
@@ -90,6 +112,7 @@ class _AddonsScreenState extends State<AddonsScreen> {
     _installed?.dispose();
     _remote?.dispose();
     _ctx?.dispose();
+    _health?.dispose();
     _search.dispose();
     super.dispose();
   }
@@ -131,6 +154,20 @@ class _AddonsScreenState extends State<AddonsScreen> {
     if (url != null && mounted) _openDetails(url);
   }
 
+  /// Drops everything recorded about one addon, for when the verdict is
+  /// wrong -- most often right after a debrid key was replaced, where the
+  /// old key's failures are about a configuration that no longer exists.
+  /// It removes history and nothing else: the addon stays installed.
+  Future<void> _forgetHistory(AddonDescriptor addon) async {
+    await _health?.forget(addonHealthKey(addon.transportUrl));
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(_forgottenMessage(addon))));
+  }
+
+  static String _forgottenMessage(AddonDescriptor addon) =>
+      'Forgot how ${addon.manifest.name} has been answering';
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -155,7 +192,12 @@ class _AddonsScreenState extends State<AddonsScreen> {
           ),
           body: AddonErrorSnackBars(
             child: ListenableBuilder(
-              listenable: Listenable.merge([_installed!, _remote!, _ctx!]),
+              listenable: Listenable.merge([
+                _installed!,
+                _remote!,
+                _ctx!,
+                _health!,
+              ]),
               builder: (context, _) {
                 final ctx = _ctx!.value;
                 final profile = ctx == null
@@ -175,6 +217,10 @@ class _AddonsScreenState extends State<AddonsScreen> {
                                 ? null
                                 : InstalledAddonsState.fromJson(installedJson),
                             locked: profile.addonsLocked,
+                            health: _health!,
+                            sort: _sort,
+                            onSort: (sort) => setState(() => _sort = sort),
+                            onForget: _forgetHistory,
                             onSelect: (request) => _client?.dispatch(
                               CoreActions.loadInstalledAddons(request),
                             ),
@@ -298,13 +344,18 @@ class _TypeFilter<R> extends StatelessWidget {
   }
 }
 
-enum _InstalledAction { configure, uninstall, details }
+enum _InstalledAction { configure, uninstall, forget, details }
 
-/// The profile's addons filtered by type.
+/// The profile's addons filtered by type, each with what it has been
+/// answering.
 class _InstalledTab extends StatelessWidget {
   const _InstalledTab({
     required this.state,
     required this.locked,
+    required this.health,
+    required this.sort,
+    required this.onSort,
+    required this.onForget,
     required this.onSelect,
     required this.onUninstall,
     required this.onConfigure,
@@ -313,10 +364,17 @@ class _InstalledTab extends StatelessWidget {
 
   final InstalledAddonsState? state;
   final bool locked;
+  final AddonHealthNotifier health;
+  final AddonHealthSort sort;
+  final ValueChanged<AddonHealthSort> onSort;
+  final ValueChanged<AddonDescriptor> onForget;
   final ValueChanged<InstalledAddonsRequest> onSelect;
   final ValueChanged<AddonDescriptor> onUninstall;
   final ValueChanged<AddonDescriptor> onConfigure;
   final ValueChanged<AddonDescriptor> onOpen;
+
+  static const String sortLabel = 'Sort';
+  static const String forgetLabel = 'Forget this addon\'s history';
 
   @override
   Widget build(BuildContext context) {
@@ -332,34 +390,76 @@ class _InstalledTab extends StatelessWidget {
           request: type.request,
         ),
     ];
+    // Null until a report has actually been read: an addon nothing can be
+    // read about is shown with nothing said about it, never with "not used
+    // yet", which is a claim about the addon and not about the record.
+    final report = health.report;
+    final now = DateTime.now().toUtc();
+    final addons = report == null
+        ? state.addons
+        : sortedByHealth(state.addons, sort, report, now);
     return Column(
       children: [
-        if (types.isNotEmpty)
+        if (report != null && report.everyAnswerFailed)
+          const AddonConnectionBanner(),
+        if (types.isNotEmpty || report != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: _TypeFilter(options: types, onSelect: onSelect),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (types.isNotEmpty)
+                  _TypeFilter(options: types, onSelect: onSelect),
+                // Only offered when something can tell the addons apart:
+                // with no health record every order but the profile's is a
+                // guess.
+                if (report != null)
+                  FilterMenu<AddonHealthSort>(
+                    label: sortLabel,
+                    options: [
+                      for (final option in AddonHealthSort.values)
+                        FilterOption(
+                          label: option.label,
+                          selected: option == sort,
+                          request: option,
+                        ),
+                    ],
+                    onSelect: onSort,
+                  ),
+              ],
             ),
           ),
         Expanded(
-          child: state.addons.isEmpty
+          child: addons.isEmpty
               ? const _Empty('No installed addons for this type')
               : ListView.separated(
-                  itemCount: state.addons.length,
+                  itemCount: addons.length,
                   separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
-                    final addon = state.addons[index];
+                    final addon = addons[index];
+                    // Null for a protected addon, and for an addon nothing
+                    // can be read about: neither gets a label.
+                    final addonHealth = report?.healthOf(addon);
                     return AddonTile(
                       addon: addon,
                       onTap: () => onOpen(addon),
                       memoryId: 'installed/${addon.transportUrl}',
                       defaultFocus: index == 0,
+                      status: addonHealth == null
+                          ? null
+                          : AddonHealthChip(
+                              addon: addon,
+                              health: addonHealth,
+                              now: now,
+                            ),
                       trailing: PopupMenuButton<_InstalledAction>(
                         tooltip: 'More',
                         onSelected: (action) => switch (action) {
                           _InstalledAction.configure => onConfigure(addon),
                           _InstalledAction.uninstall => onUninstall(addon),
+                          _InstalledAction.forget => onForget(addon),
                           _InstalledAction.details => onOpen(addon),
                         },
                         itemBuilder: (_) => [
@@ -373,6 +473,11 @@ class _InstalledTab extends StatelessWidget {
                               value: _InstalledAction.uninstall,
                               enabled: !locked,
                               child: const Text('Uninstall'),
+                            ),
+                          if (addonHealth != null && !addonHealth.isEmpty)
+                            const PopupMenuItem(
+                              value: _InstalledAction.forget,
+                              child: Text(forgetLabel),
                             ),
                           const PopupMenuItem(
                             value: _InstalledAction.details,
