@@ -86,21 +86,30 @@ void main() {
     screen.height * TvDensity.overscan,
   );
 
-  /// The URL of the topmost image the backdrop is drawing, null when it is
-  /// drawing none and the ground is all there is.
-  String? backdropUrl(WidgetTester tester) {
-    final images = find.descendant(
-      of: find.byType(TvBackdrop),
-      matching: find.byType(Image),
-    );
-    if (images.evaluate().isEmpty) return null;
-    final provider = tester.widget<Image>(images.first).image;
-    return switch (provider) {
-      ResizeImage(:final NetworkImage imageProvider) => imageProvider.url,
-      NetworkImage(:final url) => url,
-      _ => null,
-    };
-  }
+  /// The backdrop's own layers: the children of its stack, and not the
+  /// header's logo, which is drawn inside it and is another `Image`
+  /// entirely.
+  List<Widget> layers(WidgetTester tester) => tester
+      .widget<Stack>(
+        find
+            .descendant(
+              of: find.byType(TvBackdrop),
+              matching: find.byType(Stack),
+            )
+            .first,
+      )
+      .children;
+
+  /// The image the backdrop is drawing, null when it is drawing none and
+  /// the ground is all there is.
+  Image? backdropImage(WidgetTester tester) =>
+      layers(tester).whereType<Image>().singleOrNull;
+
+  String? urlOf(Image? image) => switch (image?.image) {
+    ResizeImage(:final NetworkImage imageProvider) => imageProvider.url,
+    NetworkImage(:final url) => url,
+    _ => null,
+  };
 
   group('what the backdrop asks for', () {
     test('a metahub URL is asked for the size a full screen needs', () {
@@ -179,7 +188,7 @@ void main() {
       await pump(tester, movieWith());
 
       expect(
-        backdropUrl(tester),
+        urlOf(backdropImage(tester)),
         'https://images.metahub.space/background/medium/$movieId/img',
       );
     });
@@ -192,7 +201,7 @@ void main() {
       // Cinemeta sends the *small* poster, which is what would otherwise be
       // stretched across the whole panel.
       expect(
-        backdropUrl(tester),
+        urlOf(backdropImage(tester)),
         'https://images.metahub.space/poster/medium/$movieId/img',
       );
     });
@@ -200,48 +209,29 @@ void main() {
     testWidgets('falls back to the poster when the background will not load, '
         'and to the brand ground when neither does', (tester) async {
       await pump(tester, movieWith());
-      final images = find.descendant(
-        of: find.byType(TvBackdrop),
-        matching: find.byType(Image),
-      );
+      final context = tester.element(find.byType(TvBackdrop));
 
-      final background = tester.widget<Image>(images.first);
-      final afterBackground = background.errorBuilder!(
-        tester.element(images.first),
-        'gone',
-        null,
-      );
+      final afterBackground = backdropImage(tester)!
+          .errorBuilder!(context, 'gone', null);
       expect(afterBackground, isA<Image>());
       final poster = afterBackground as Image;
       expect(
-        (poster.image as ResizeImage).imageProvider,
-        isA<NetworkImage>().having(
-          (image) => image.url,
-          'url',
-          'https://images.metahub.space/poster/medium/$movieId/img',
-        ),
+        urlOf(poster),
+        'https://images.metahub.space/poster/medium/$movieId/img',
       );
 
-      final afterPoster = poster.errorBuilder!(
-        tester.element(images.first),
-        'gone',
-        null,
-      );
-      expect(afterPoster, isA<SizedBox>());
+      expect(poster.errorBuilder!(context, 'gone', null), isA<SizedBox>());
     });
 
     testWidgets('draws the brand ground and no image when there is no '
         'artwork at all', (tester) async {
       await pump(tester, movieWith(background: absent, poster: absent));
 
-      expect(backdropUrl(tester), isNull);
-      final ground = find.descendant(
-        of: find.byType(TvBackdrop),
-        matching: find.byType(ColoredBox),
-      );
+      expect(backdropImage(tester), isNull);
       expect(
-        tester.widget<ColoredBox>(ground.first).color,
-        Theme.of(tester.element(ground.first)).scaffoldBackgroundColor,
+        layers(tester).whereType<ColoredBox>().single.color,
+        Theme.of(tester.element(find.byType(TvBackdrop)))
+            .scaffoldBackgroundColor,
       );
       // A missing image may never disturb the layout: the content starts
       // in exactly the corner it starts in when the artwork loads.

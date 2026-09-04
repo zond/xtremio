@@ -22,6 +22,7 @@ import '../player/player_screen.dart';
 import 'stream_facts.dart';
 import 'stream_sources.dart';
 import 'tv_backdrop.dart';
+import 'tv_meta_header.dart';
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
 /// shows the meta item, its episodes (for a series) and every stream the
@@ -115,6 +116,12 @@ import 'tv_backdrop.dart';
 /// to name them. The three states stay apart: an addon still being waited
 /// on keeps its label and a spinner, one that answered with nothing is in
 /// that line, and one that failed has its own section.
+///
+/// On a TV the title's artwork is behind the whole screen ([TvBackdrop])
+/// and the header over it is the logo, one line of facts and two lines of
+/// description ([TvMetaHeader]) rather than the poster and the collapsing
+/// hero a phone shows: at three metres the poster was a third of the
+/// layout and the rows are what the remote came for.
 ///
 /// On a TV the info column and the streams pane are separate
 /// [FocusTraversalGroup]s, focus starts on the stream the user most likely
@@ -784,14 +791,21 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               ),
       ),
       SliverToBoxAdapter(
-        child: _MetaHeader(
-          meta: meta,
-          isWide: isWide,
-          isInLibrary: state.isInLibrary,
-          downloads: _downloads?.ofMeta(widget.id) ?? const [],
-          onGenre: _openGenre,
-          onToggleLibrary: () => _toggleLibrary(state, meta),
-        ),
+        child: isTv
+            ? TvMetaHeader(
+                meta: meta,
+                isInLibrary: state.isInLibrary,
+                downloads: _downloads?.ofMeta(widget.id) ?? const [],
+                onToggleLibrary: () => _toggleLibrary(state, meta),
+              )
+            : _MetaHeader(
+                meta: meta,
+                isWide: isWide,
+                isInLibrary: state.isInLibrary,
+                downloads: _downloads?.ofMeta(widget.id) ?? const [],
+                onGenre: _openGenre,
+                onToggleLibrary: () => _toggleLibrary(state, meta),
+              ),
       ),
       if (state.hasVideos) ...[
         if (seasons.length > 1 && season != null)
@@ -1332,8 +1346,8 @@ class _MetaHeader extends StatelessWidget {
   final ValueChanged<ResourceRequest> onGenre;
   final VoidCallback onToggleLibrary;
 
-  static const String addTooltip = 'Add to library';
-  static const String removeTooltip = 'Remove from library';
+  static const String addTooltip = TvMetaHeader.addTooltip;
+  static const String removeTooltip = TvMetaHeader.removeTooltip;
 
   @override
   Widget build(BuildContext context) {

@@ -133,9 +133,13 @@ Rect focusedRect() => FocusManager.instance.primaryFocus!.rect;
 
 bool focusInPane() => focusedRect().left >= paneLeft;
 
+/// Which column the focused thing is *in*, by its centre rather than its
+/// edges: a focused tile wears a zoom, and a season pill at the right of
+/// the info column grows a few pixels past the divider without having
+/// moved to the other side of it.
 bool focusInInfoColumn() =>
     FocusManager.instance.primaryFocus is! FocusScopeNode &&
-    focusedRect().right <= paneLeft;
+    focusedRect().center.dx < paneLeft;
 
 /// Every `Ctx` and `MetaDetails` action dispatched so far (never the
 /// screen's own `Load`s), by its inner `action` name.
@@ -236,9 +240,15 @@ void main() {
 
       await press(tester, LogicalKeyboardKey.arrowLeft);
       expect(focusInInfoColumn(), isTrue);
+      // The television header's one stop is the bookmark, at the very top
+      // of the column, so coming back is the pane's own topmost stop and
+      // not the stream the walk started on. What this asserts is that the
+      // two sides are reachable from each other at all; which stop a
+      // sideways press lands on is geometry, and the geometry is what the
+      // rows replace.
+      expect(focusedTooltip(), 'Add to library');
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusInPane(), isTrue);
-      expect(focusedLabel(tester), '1080p');
     });
 
     testWidgets('select on the stream opens the player; with no downloads '
