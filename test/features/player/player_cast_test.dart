@@ -215,6 +215,68 @@ void main() {
       expect(cast.loads.single.$1.contentType, 'video/mp4');
     });
 
+    testWidgets('a torrent that played before it was named is still named', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan, filename: null);
+      await harness.pump(tester);
+      harness.torrentStats.response = const TorrentStats(
+        phase: TorrentPhase.ready,
+        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
+      );
+
+      // Playback begins before a poll has come back with a name -- a
+      // torrent already on this disk starts in well under the start-up
+      // interval -- and the start-up polling stops there for good: nothing
+      // is stalled and no stats panel is up. The name is asked for once
+      // more anyway, because "try again in a moment" is a promise nothing
+      // else would keep.
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.loads.single.$1.contentType, 'video/mp4');
+    });
+
+    testWidgets('a name that arrives after the polling stopped still counts', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan, filename: null);
+      final stats = harness.torrentStats;
+      await harness.pump(tester);
+
+      // A poll goes out and the server takes its time over it.
+      stats.holdAnswers = true;
+      await tester.pump(PlayerScreen.torrentStatsInterval);
+      expect(stats.heldCount, 1);
+
+      // The media loads while that poll is still out, which stops the
+      // polling: the numbers it comes back with describe a moment that has
+      // passed, but the name of the file the server opened does not expire,
+      // and this is the only answer there will ever be.
+      stats.response = const TorrentStats(
+        phase: TorrentPhase.ready,
+        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
+      );
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      stats.answer();
+      await pumpEvents(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.loads.single.$1.contentType, 'video/mp4');
+    });
+
     testWidgets('a later answer with no name does not take the name back', (
       tester,
     ) async {

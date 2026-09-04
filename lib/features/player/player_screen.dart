@@ -1153,6 +1153,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         : null;
     if (cadence == null) {
       _pauseTorrentStats();
+      // Nobody wants numbers any more, but the cast check still wants the
+      // name of the file the server opened, and a torrent that started
+      // before the first poll came back has never been told one. This is
+      // the one ask that would otherwise never happen: with no timer left
+      // there is no later poll to carry it. Not while the app is in the
+      // background, which asks the server for nothing at all; coming back
+      // runs this again.
+      if (!_appHidden && _serverFilename == null) _pollTorrentStats();
       return;
     }
     if (_torrentStatsTimer != null && _torrentStatsCadence == cadence) return;
@@ -1203,20 +1211,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } finally {
       _torrentStatsFetching = false;
     }
-    // Still the same torrent, still polling for it (a stall that ended
-    // while the fetch was out wants no answer), and something changed.
     final opened = aboutTheFile ? stats?.streamName : null;
-    if (!mounted ||
-        _torrentStatsTimer == null ||
-        _torrentStatsRequest != request ||
-        (stats == _torrentStats && opened == _serverFilename)) {
-      return;
-    }
+    if (!mounted || _torrentStatsRequest != request) return;
+    // The numbers describe a moment, so an answer that came back after the
+    // polling stopped -- a stall that ended while the fetch was out -- is
+    // not one to show. The name is not a moment: which file this is does
+    // not go stale, and the poll that carries it is very often the last
+    // one there will be, since the polling stops for good once playback is
+    // under way. A poll that came back empty says nothing about the file
+    // the server opened; only an answer that names one replaces the name.
+    final names = opened != null && opened != _serverFilename;
+    final counts = _torrentStatsTimer != null && stats != _torrentStats;
+    if (!names && !counts) return;
     setState(() {
-      _torrentStats = stats;
-      // A poll that came back empty says nothing about the file the server
-      // opened; only an answer that names one replaces the name.
-      if (opened != null) _serverFilename = opened;
+      if (counts) _torrentStats = stats;
+      if (names) _serverFilename = opened;
     });
   }
 
