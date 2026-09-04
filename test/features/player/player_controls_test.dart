@@ -7,6 +7,7 @@ import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/seek_bar.dart';
 
 import '../../support/player_harness.dart';
+import '../../support/tv.dart';
 
 /// Our own controls over the video: visibility, transport, seek bar, time,
 /// volume, fullscreen and the keyboard.
@@ -86,6 +87,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(controlsOpacity(tester), 1);
     expect(find.byTooltip('Play (Space)'), findsOneWidget);
+  });
+
+  testWidgets('a focused control does not hold the controls open off a TV', (
+    tester,
+  ) async {
+    final harness = await pumpPlaying(tester);
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+
+    // Tab focus onto a button on the bar. Off a television the controls
+    // are not in a focus scope of their own, so focus never had a say in
+    // whether they fade -- what holds them up where there is a pointer is
+    // the pointer moving. This is the guard on that staying true while the
+    // television's own veto is taken away.
+    for (var i = 0; i < 10 && !focusIn<PlayerBottomBar>(); i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+    }
+    expect(focusIn<PlayerBottomBar>(), isTrue);
+    await tester.pump(PlayerScreen.controlsTimeout);
+    await tester.pumpAndSettle();
+    expect(controlsOpacity(tester), 0);
   });
 
   testWidgets('play/pause and skip buttons drive the engine and the core', (

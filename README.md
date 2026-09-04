@@ -544,7 +544,11 @@ connection.
   bottom bar (seek bar with buffered range and drag scrubbing, play/pause,
   ± the seek step, elapsed/remaining time, volume on wide layouts,
   fullscreen). The controls fade after 3 s while playing and return on
-  tap, mouse or key; they stay while paused or buffering. Keyboard:
+  tap, mouse or key; they stay while paused or buffering. On a television
+  they fade whether or not a control holds the remote, taking focus back to
+  the video with them so nothing is left focused on something invisible;
+  the D-pad stays inside them once it is there, and Back comes down a
+  ladder -- the up-next card, then the controls, then the player. Keyboard:
   Space/K play-pause, ←/→ or J/L ± the seek step (10 s by default),
   Shift+←/→ ± the short seek step (3 s), ↑/↓ volume, M mute, F
   fullscreen, Esc leaves fullscreen first when `escExitFullscreen` is on

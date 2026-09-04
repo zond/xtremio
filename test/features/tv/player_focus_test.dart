@@ -219,19 +219,22 @@ void main() {
       expect(harness.playerActions(), isNot(contains('NextVideo')));
     });
 
-    testWidgets('leaving the card hands the remote back to the video', (
-      tester,
-    ) async {
+    testWidgets('the D-pad stays on the card once it is there', (tester) async {
       await pumpCountdown(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), 'Play now');
+
+      // Neither direction walks off the card onto the video, which shows
+      // no focus at all. Back is what puts the card away.
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+      expect(focusedLabel(tester), 'Play now');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), 'Play now');
     });
   });
 
   group('the control bar', () {
-    testWidgets('down lands on play/pause, up walks the bar and off it', (
+    testWidgets('down lands on play/pause, up walks the bar and stops', (
       tester,
     ) async {
       final harness = await pumpOnTv(tester);
@@ -251,17 +254,16 @@ void main() {
       expect(harness.engine.playOrPauseCalls, 1);
 
       // Up from the transport row reaches the seek bar, then the top bar,
-      // then the video again.
+      // and stops there. The video is not a stop on the way out: it draws
+      // no focus ring, so landing on it is focus disappearing.
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<SeekBar>(), isTrue);
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<PlayerTopBar>(), isTrue);
       await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
-
-      // Up from the video is the top bar directly; down leaves it again.
-      await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<PlayerTopBar>(), isTrue);
+
+      // Down walks back down the same stops.
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusIn<SeekBar>(), isTrue);
     });
@@ -495,9 +497,9 @@ void main() {
         reason: 'walking the bar never touches the volume',
       );
 
-      // And the remote can still leave the bar from the end of the row.
+      // Down from the last row of the bar stays on it; Back is the way out.
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+      expect(focusedTooltip(), 'Mute (M)');
     });
 
     testWidgets('the volume slider stays a focus stop off a TV', (
@@ -523,7 +525,7 @@ void main() {
       );
     });
 
-    testWidgets('the controls do not fade while a control has focus', (
+    testWidgets('the controls fade with a control holding the remote', (
       tester,
     ) async {
       final harness = await pumpOnTv(tester);
@@ -532,16 +534,22 @@ void main() {
 
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusIn<PlayerBottomBar>(), isTrue);
-      await tester.pump(PlayerScreen.controlsTimeout * 3);
-      await tester.pumpAndSettle();
-      expect(controlsOpacity(tester), 1);
 
-      // Focus back on the video: the idle timer runs again.
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+      // A button holding focus is no reason to keep the bar up -- on a
+      // remote there is nowhere else for focus to be, so a veto on it kept
+      // the OSD up for the rest of the session. It fades, and the remote
+      // comes back to the video with it rather than being left on a
+      // button that is no longer drawn.
       await tester.pump(PlayerScreen.controlsTimeout);
       await tester.pumpAndSettle();
       expect(controlsOpacity(tester), 0);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+
+      // The next press brings the bar back, and the one after walks into it.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(controlsOpacity(tester), 1);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<PlayerTopBar>(), isTrue);
     });
 
     testWidgets('the subtitles clear the bar the television actually draws', (
@@ -562,10 +570,6 @@ void main() {
       // With the bar gone they drop back to their share of the height.
       harness.engine.emitPlaying(true);
       await pumpEvents(tester);
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      await press(tester, LogicalKeyboardKey.arrowUp);
-      await press(tester, LogicalKeyboardKey.arrowUp);
       await tester.pump(PlayerScreen.controlsTimeout);
       await tester.pumpAndSettle();
       expect(controlsOpacity(tester), 0);
@@ -653,6 +657,127 @@ void main() {
         isFalse,
         reason: 'the seek bar is a focus stop on a television only',
       );
+    });
+  });
+
+  group('Back', () {
+    /// The player pushed over a home screen, so Back has somewhere to go.
+    Future<PlayerHarness> pushOnTv(
+      WidgetTester tester, {
+      bool withNext = false,
+    }) async {
+      useScreen(tester, tvSize);
+      final harness = PlayerHarness(device: tv);
+      if (withNext) harness.fixture['nextVideo'] = nextVideo;
+      await harness.pump(
+        tester,
+        home: Builder(
+          builder: (context) => Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute<void>(builder: (_) => harness.screen())),
+              child: const Text('Play'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+      harness.engine.emitDuration(total);
+      harness.engine.emitPosition(const Duration(seconds: 65));
+      await pumpEvents(tester);
+      return harness;
+    }
+
+    testWidgets('hides the OSD and takes the remote back to the video', (
+      tester,
+    ) async {
+      final harness = await pushOnTv(tester);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<PlayerBottomBar>(), isTrue);
+
+      await systemBack(tester);
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(controlsOpacity(tester), 0);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
+
+      // With nothing left to put away it leaves the player.
+      await systemBack(tester);
+      expect(find.byType(PlayerScreen), findsNothing);
+      expect(find.text('Play'), findsOneWidget);
+    });
+
+    testWidgets('comes down the ladder: the card, then the OSD, then out', (
+      tester,
+    ) async {
+      final harness = await pushOnTv(tester, withNext: true);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      harness.engine.emitEnd();
+      await pumpEvents(tester);
+      expect(find.byType(UpNextCard), findsOneWidget);
+
+      // The most transient thing on screen goes first, and the hand-off it
+      // was counting down to does not happen.
+      await systemBack(tester);
+      expect(find.byType(UpNextCard), findsNothing);
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(harness.playerActions(), isNot(contains('NextVideo')));
+
+      await systemBack(tester);
+      expect(controlsOpacity(tester), 0);
+      expect(find.byType(PlayerScreen), findsOneWidget);
+
+      await systemBack(tester);
+      expect(find.byType(PlayerScreen), findsNothing);
+    });
+
+    testWidgets('leaves at once while the controls cannot fade anyway', (
+      tester,
+    ) async {
+      // Paused: the bar is up because nothing may hide it, so there is no
+      // rung there for Back to come down. Appearing to do nothing would be
+      // worse than leaving.
+      final harness = await pushOnTv(tester);
+      expect(controlsOpacity(tester), 1);
+      expect(harness.engine.playCalls, 0);
+
+      await systemBack(tester);
+      expect(find.byType(PlayerScreen), findsNothing);
+    });
+
+    testWidgets('off a television it leaves the player, OSD or no OSD', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final harness = PlayerHarness();
+      await harness.pump(
+        tester,
+        home: Builder(
+          builder: (context) => Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute<void>(builder: (_) => harness.screen())),
+              child: const Text('Play'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+      harness.engine.emitDuration(total);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      expect(controlsOpacity(tester), 1);
+
+      // Where there is a pointer the controls have their own way of going
+      // away, and Back means what it means everywhere else in the app.
+      await systemBack(tester);
+      expect(find.byType(PlayerScreen), findsNothing);
     });
   });
 }

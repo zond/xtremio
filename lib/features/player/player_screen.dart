@@ -50,13 +50,16 @@ import 'up_next_card.dart';
 ///
 /// On a TV ([DeviceScope.isTv]) the remote drives it: the D-pad's centre
 /// brings the controls up when they are hidden and toggles play/pause when
-/// they show, up and down move focus onto the shown control bar (and off
-/// it again at its edges), where select presses the focused control and the
-/// seek bar seeks with left/right, and the media keys (play, pause,
-/// play/pause, stop, fast forward, rewind, next and previous track) do what
-/// they say. The controls do not fade while a control holds focus. The
-/// media keys work off a TV too; nothing else about the keyboard changes
-/// there.
+/// they show, up and down move focus onto the shown control bar, where
+/// select presses the focused control and the seek bar seeks with
+/// left/right, and the media keys (play, pause, play/pause, stop, fast
+/// forward, rewind, next and previous track) do what they say. Once the
+/// remote is on the bar the D-pad stays inside it, and Back is the way out:
+/// it puts away the up-next card, then the controls, and only then leaves
+/// the player. The controls fade on their own timer whether or not a
+/// control holds focus, and take the remote back to the video with them.
+/// The media keys work off a TV too; nothing else about the keyboard
+/// changes there.
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -1345,11 +1348,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// The controls may fade only while something is playing with nothing
   /// else demanding attention.
+  ///
+  /// A control holding focus is deliberately not on that list. On a
+  /// television the remote has nowhere to put focus but the bar, so a veto
+  /// on it meant the first D-pad press disabled the fade for the rest of
+  /// the session -- the OSD up for good, and the subtitles lifted clear of
+  /// it for just as long. [_hideControls] takes the remote back to the
+  /// video as it hides the bar, so nothing is ever left focused on
+  /// something invisible. Off a television the controls are not in a focus
+  /// scope at all and never vetoed anything.
   bool get _canAutoHide =>
       _playing &&
       !_menuOpen &&
       !_scrubbing &&
-      !_controlFocused &&
       _opened != null &&
       _upNextSecondsLeft == null &&
       !_startupOverlayShown &&
@@ -1367,20 +1378,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _restartControlsTimer() {
     _controlsTimer?.cancel();
     _controlsTimer = null;
-    if (!_canAutoHide) return;
-    _controlsTimer = Timer(PlayerScreen.controlsTimeout, () {
-      if (mounted && _canAutoHide && _controlsVisible) {
-        setState(() => _controlsVisible = false);
-      }
-    });
+    if (!_canAutoHide || !_controlsVisible) return;
+    _controlsTimer = Timer(PlayerScreen.controlsTimeout, _hideControls);
   }
 
+  /// Puts the controls away, and on a television hands the remote back to
+  /// the video in the same breath.
+  ///
+  /// The two go together on purpose: a focus ring that fades out with the
+  /// bar is focus the viewer can no longer see, and the next press would
+  /// act on a control that is not on screen.
   void _hideControls() {
     _controlsTimer?.cancel();
     _controlsTimer = null;
-    if (_canAutoHide && _controlsVisible) {
-      setState(() => _controlsVisible = false);
-    }
+    if (!mounted || !_canAutoHide || !_controlsVisible) return;
+    setState(() => _controlsVisible = false);
+    if (_controlFocused) _focusNode.requestFocus();
   }
 
   void _onVideoTap() {
@@ -2212,15 +2225,60 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// Up or down with a control focused: the next stop in that direction
-  /// inside the bar, or back to the video when the bar ends there.
+  /// inside the bar, and nothing at all at its edges.
+  ///
+  /// Neither wrapping round nor stepping out onto the video. The video
+  /// draws no focus ring, so it cannot be a legitimate stop while
+  /// something visible is on screen, and a viewer who is not looking
+  /// closely would only see the ring vanish. Back is the way out of the
+  /// controls (see [_popBack]).
   void _moveWithinControls(TraversalDirection direction) {
-    final focused = FocusManager.instance.primaryFocus;
-    if (focused != null && focused.focusInDirection(direction)) return;
-    _focusNode.requestFocus();
+    FocusManager.instance.primaryFocus?.focusInDirection(direction);
+  }
+
+  /// Whether Back has something to put away before it leaves the player:
+  /// the up-next card first, then a control bar that is up and free to go.
+  ///
+  /// Only on a television, where Back is the only way out of the OSD. Off
+  /// one the pointer hides the controls and Escape means what
+  /// `escExitFullscreen` says it means, so Back and Escape keep leaving
+  /// the player as they always have.
+  ///
+  /// A bar that cannot fade -- paused, buffering, a menu open -- is not on
+  /// the ladder: there is nothing Back could do about it, so it leaves the
+  /// player instead of appearing to do nothing.
+  bool get _backDismisses =>
+      _isTv &&
+      (_upNextSecondsLeft != null || (_controlsVisible && _canAutoHide));
+
+  /// One rung down the ladder [_backDismisses] describes. Only ever called
+  /// for a Back that [PopScope] held back, so the pop itself is the last
+  /// rung and is not handled here.
+  void _popBack() {
+    if (_upNextSecondsLeft != null) {
+      _dismissUpNext();
+      return;
+    }
+    _hideControls();
+  }
+
+  /// Leaves the player past that ladder: Stop ends the session, and what
+  /// happens to be on screen at the time does not change that.
+  void _leavePlayer() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.pop();
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
+    // Back belongs to the route, not to this handler: Android delivers it
+    // as a key first and pops only if nothing took it, and [PopScope] is
+    // what answers. Above `_showControls` below, because the OSD flashing
+    // up on the way out of the player would be the opposite of what the
+    // press asked for.
+    if (event.logicalKey == LogicalKeyboardKey.goBack) {
+      return KeyEventResult.ignored;
+    }
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isControlPressed ||
         keyboard.isAltPressed ||
@@ -2321,8 +2379,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (event is KeyDownEvent) _engine?.pause();
       case LogicalKeyboardKey.mediaStop:
         // Stop ends the session: leave the player (unloading pauses and
-        // reports the position), as the Back key does.
-        if (event is KeyDownEvent) Navigator.of(context).maybePop();
+        // reports the position). Unlike Back it has no ladder to come down
+        // first -- there is nothing transient about a stop.
+        if (event is KeyDownEvent) _leavePlayer();
       case LogicalKeyboardKey.arrowLeft:
       case LogicalKeyboardKey.keyJ:
       case LogicalKeyboardKey.mediaRewind:
@@ -2491,195 +2550,206 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final seekStep = _seekStep;
     if (_isTv) _scheduleFocusCheck();
     if (hasVideo) _measureControlBarAfterFrame();
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Focus(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: _onKeyEvent,
-        child: MouseRegion(
-          cursor: shown ? MouseCursor.defer : SystemMouseCursors.none,
-          onEnter: (_) => _onPointerMoved(),
-          onHover: (_) => _onPointerMoved(),
-          onExit: (_) => _onPointerLeft(),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _onVideoTap,
-                onDoubleTapDown: (details) => _onVideoDoubleTap(details, width),
-                onDoubleTap: () {},
-                child: hasVideo
-                    ? engine.buildVideo(
-                        context,
-                        subtitleBottomPadding: _subtitleBottomPadding(
-                          controlsShown: shown,
-                        ),
-                      )
-                    : const SizedBox.expand(),
-              ),
-              // Above the tap-to-show-controls surface rather than inside
-              // it: its buttons are the only thing on screen while a
-              // receiver has the stream, and they must not have to win an
-              // arena against the video's double-tap-to-seek first.
-              if (casting)
-                SafeArea(
-                  child: CastRemotePanel(
-                    deviceName: _castingTo!.name,
-                    title: state?.title ?? '',
-                    status: _castStatus,
-                    onPlayPause: _togglePlay,
-                    onSeek: _seekTo,
-                    onStop: () => unawaited(_stopCast()),
-                    playPauseFocusNode: _isTv ? _playPauseFocus : null,
-                  ),
+    return PopScope(
+      canPop: !_backDismisses,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _popBack();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Focus(
+          focusNode: _focusNode,
+          autofocus: true,
+          onKeyEvent: _onKeyEvent,
+          child: MouseRegion(
+            cursor: shown ? MouseCursor.defer : SystemMouseCursors.none,
+            onEnter: (_) => _onPointerMoved(),
+            onHover: (_) => _onPointerMoved(),
+            onExit: (_) => _onPointerLeft(),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _onVideoTap,
+                  onDoubleTapDown: (details) =>
+                      _onVideoDoubleTap(details, width),
+                  onDoubleTap: () {},
+                  child: hasVideo
+                      ? engine.buildVideo(
+                          context,
+                          subtitleBottomPadding: _subtitleBottomPadding(
+                            controlsShown: shown,
+                          ),
+                        )
+                      : const SizedBox.expand(),
                 ),
-              if (hasVideo && _statsVisible)
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 12, top: 64),
-                    child: Align(
-                      alignment: Alignment.topLeft,
-                      child: PlaybackStatsOverlay(
-                        stats: engine.stats,
-                        source: _opened,
-                        isTorrent: _torrentStatsRequest != null,
-                        torrent: _torrentStats,
+                // Above the tap-to-show-controls surface rather than inside
+                // it: its buttons are the only thing on screen while a
+                // receiver has the stream, and they must not have to win an
+                // arena against the video's double-tap-to-seek first.
+                if (casting)
+                  SafeArea(
+                    child: CastRemotePanel(
+                      deviceName: _castingTo!.name,
+                      title: state?.title ?? '',
+                      status: _castStatus,
+                      onPlayPause: _togglePlay,
+                      onSeek: _seekTo,
+                      onStop: () => unawaited(_stopCast()),
+                      playPauseFocusNode: _isTv ? _playPauseFocus : null,
+                    ),
+                  ),
+                if (hasVideo && _statsVisible)
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12, top: 64),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: PlaybackStatsOverlay(
+                          stats: engine.stats,
+                          source: _opened,
+                          isTorrent: _torrentStatsRequest != null,
+                          torrent: _torrentStats,
+                          dht: _dhtStatus,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (startup)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: TorrentStartupOverlay(
+                        stats: _torrentStats,
+                        hasTrackers:
+                            _torrentStatsRequest?.trackers.isNotEmpty ?? true,
                         dht: _dhtStatus,
                       ),
                     ),
                   ),
-                ),
-              if (startup)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: TorrentStartupOverlay(
-                      stats: _torrentStats,
-                      hasTrackers:
-                          _torrentStatsRequest?.trackers.isNotEmpty ?? true,
-                      dht: _dhtStatus,
-                    ),
-                  ),
-                ),
-              if (status != null)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: stall
-                        ? TorrentStallOverlay(stats: _torrentStats)
-                        : Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (_engineError == null &&
-                                  state?.unplayableReason == null)
-                                const CircularProgressIndicator()
-                              else
-                                const Icon(Icons.error_outline, size: 48),
-                              const SizedBox(height: 12),
-                              Text(status, textAlign: TextAlign.center),
-                            ],
-                          ),
-                  ),
-                ),
-              AnimatedOpacity(
-                opacity: shown ? 1 : 0,
-                duration: const Duration(milliseconds: 200),
-                child: IgnorePointer(
-                  ignoring: !shown,
-                  child: SafeArea(
-                    child: _controlsFocus(
-                      Column(
-                        children: [
-                          PlayerTopBar(
-                            title: state?.title ?? '',
-                            subtitlesOn: _tracks.value.activeSubtitleId != null,
-                            onSubtitles: _openSubtitleMenu,
-                            onAudio: _tracks.value.audio.length > 1
-                                ? _openAudioMenu
-                                : null,
-                            statsOn: _statsPinned ?? false,
-                            onStats: _toggleStatsPinned,
-                            onSettings: _openSettings,
-                            onNext: nextVideo == null || casting
-                                ? null
-                                : _playNext,
-                            onCast: _castAvailable ? _openCastSheet : null,
-                            castOn: casting,
-                            firstFocusNode: _topBarFocus,
-                          ),
-                          Expanded(
-                            child:
-                                !wide && hasVideo && status == null && !startup
-                                ? Center(
-                                    child: PlayerCenterControls(
-                                      playing: _playing,
-                                      seekStep: seekStep,
-                                      onPlayPause: _togglePlay,
-                                      onSeekBack: () => _seekBy(-seekStep),
-                                      onSeekForward: () => _seekBy(seekStep),
-                                    ),
-                                  )
-                                : const SizedBox.expand(),
-                          ),
-                          if (hasVideo)
-                            PlayerBottomBar(
-                              key: _bottomBarKey,
-                              wide: wide,
-                              playing: _playing,
-                              seekStep: seekStep,
-                              position: _position,
-                              buffered: _buffer,
-                              duration: _duration,
-                              showRemaining: _showRemaining,
-                              volume: _volume,
-                              fullscreen: _fullscreenOn,
-                              onPlayPause: _togglePlay,
-                              onSeekBack: () => _seekBy(-seekStep),
-                              onSeekForward: () => _seekBy(seekStep),
-                              onSeek: _seekTo,
-                              onScrubStart: () {
-                                _scrubbing = true;
-                                _controlsTimer?.cancel();
-                              },
-                              onScrubEnd: () {
-                                _scrubbing = false;
-                                _restartControlsTimer();
-                              },
-                              onToggleTimeDisplay: () => setState(
-                                () => _showRemaining = !_showRemaining,
-                              ),
-                              onVolume: _setVolume,
-                              onMute: _toggleMute,
-                              onFullscreen: _toggleFullscreen,
-                              playPauseFocusNode: _playPauseFocus,
-                              seekBarFocusNode: _seekBarFocus,
+                if (status != null)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: stall
+                          ? TorrentStallOverlay(stats: _torrentStats)
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_engineError == null &&
+                                    state?.unplayableReason == null)
+                                  const CircularProgressIndicator()
+                                else
+                                  const Icon(Icons.error_outline, size: 48),
+                                const SizedBox(height: 12),
+                                Text(status, textAlign: TextAlign.center),
+                              ],
                             ),
-                        ],
+                    ),
+                  ),
+                AnimatedOpacity(
+                  opacity: shown ? 1 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: IgnorePointer(
+                    ignoring: !shown,
+                    child: SafeArea(
+                      child: _controlsFocus(
+                        Column(
+                          children: [
+                            PlayerTopBar(
+                              title: state?.title ?? '',
+                              subtitlesOn:
+                                  _tracks.value.activeSubtitleId != null,
+                              onSubtitles: _openSubtitleMenu,
+                              onAudio: _tracks.value.audio.length > 1
+                                  ? _openAudioMenu
+                                  : null,
+                              statsOn: _statsPinned ?? false,
+                              onStats: _toggleStatsPinned,
+                              onSettings: _openSettings,
+                              onNext: nextVideo == null || casting
+                                  ? null
+                                  : _playNext,
+                              onCast: _castAvailable ? _openCastSheet : null,
+                              castOn: casting,
+                              firstFocusNode: _topBarFocus,
+                            ),
+                            Expanded(
+                              child:
+                                  !wide &&
+                                      hasVideo &&
+                                      status == null &&
+                                      !startup
+                                  ? Center(
+                                      child: PlayerCenterControls(
+                                        playing: _playing,
+                                        seekStep: seekStep,
+                                        onPlayPause: _togglePlay,
+                                        onSeekBack: () => _seekBy(-seekStep),
+                                        onSeekForward: () => _seekBy(seekStep),
+                                      ),
+                                    )
+                                  : const SizedBox.expand(),
+                            ),
+                            if (hasVideo)
+                              PlayerBottomBar(
+                                key: _bottomBarKey,
+                                wide: wide,
+                                playing: _playing,
+                                seekStep: seekStep,
+                                position: _position,
+                                buffered: _buffer,
+                                duration: _duration,
+                                showRemaining: _showRemaining,
+                                volume: _volume,
+                                fullscreen: _fullscreenOn,
+                                onPlayPause: _togglePlay,
+                                onSeekBack: () => _seekBy(-seekStep),
+                                onSeekForward: () => _seekBy(seekStep),
+                                onSeek: _seekTo,
+                                onScrubStart: () {
+                                  _scrubbing = true;
+                                  _controlsTimer?.cancel();
+                                },
+                                onScrubEnd: () {
+                                  _scrubbing = false;
+                                  _restartControlsTimer();
+                                },
+                                onToggleTimeDisplay: () => setState(
+                                  () => _showRemaining = !_showRemaining,
+                                ),
+                                onVolume: _setVolume,
+                                onMute: _toggleMute,
+                                onFullscreen: _toggleFullscreen,
+                                playPauseFocusNode: _playPauseFocus,
+                                seekBarFocusNode: _seekBarFocus,
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              if (upNext != null && upNext > 0 && nextVideo != null)
-                Positioned(
-                  right: 16,
-                  bottom: hasVideo ? 112 : 16,
-                  child: SafeArea(
-                    child: _upNextFocus(
-                      UpNextCard(
-                        label: nextVideo.seasonEpisodeLabel,
-                        title: nextVideo.title,
-                        secondsLeft: upNext,
-                        onPlay: _playNext,
-                        onDismiss: _dismissUpNext,
-                        playFocusNode: _playNextFocus,
+                if (upNext != null && upNext > 0 && nextVideo != null)
+                  Positioned(
+                    right: 16,
+                    bottom: hasVideo ? 112 : 16,
+                    child: SafeArea(
+                      child: _upNextFocus(
+                        UpNextCard(
+                          label: nextVideo.seasonEpisodeLabel,
+                          title: nextVideo.title,
+                          secondsLeft: upNext,
+                          onPlay: _playNext,
+                          onDismiss: _dismissUpNext,
+                          playFocusNode: _playNextFocus,
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -25,6 +25,22 @@ Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
   await tester.pumpAndSettle();
 }
 
+/// The system Back button, as Android delivers it: the `popRoute`
+/// notification on the navigation channel, which is what `PopScope` answers.
+///
+/// Not a key event. A remote's Back reaches Flutter as a key first, and the
+/// platform turns it into this only when nothing took the key -- so a test
+/// that sent [LogicalKeyboardKey.goBack] would be testing the half of the
+/// mechanism that is meant to ignore it.
+Future<void> systemBack(WidgetTester tester) async {
+  await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    'flutter/navigation',
+    const JSONMethodCodec().encodeMethodCall(const MethodCall('popRoute')),
+    (_) {},
+  );
+  await tester.pumpAndSettle();
+}
+
 /// Holds [key] down for [duration] before releasing it.
 Future<void> hold(
   WidgetTester tester,
