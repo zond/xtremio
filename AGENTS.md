@@ -203,7 +203,46 @@ README, *Subtitles*.
   does so through the reset above, which is why there is no second
   mechanism for it. Both values are re-applied after a re-open (network
   error, false end of file, buffer change): they belong to the playback,
-  not to the file the demuxer just re-read.
+  not to the file the demuxer just re-read -- and the file has to go
+  back *first*. An `open` is a fresh `loadfile`: nothing `sub-add` put
+  in survives one (`MediaKitEngine.open` clears its own record of them
+  for the same reason) and nothing re-adds it, since the auto-pick has
+  counted itself done and a re-open does not re-arm it. Writing the
+  timing onto whatever mpv then selects by its own rules puts a gone
+  file's multiplier on a track that was in step, four seconds a minute
+  out with no path that resets it, so `_restoreExternalSubtitle` runs
+  before `_applySubtitleTiming` -- which is why the applied file is
+  remembered next to the timing at all.
+- **What the viewer does ends the guessing, not just the correcting.**
+  A pick from the menu and a press on the panel both stop the session
+  preference's auto-pick for that media (`_subtitlesChosenByHand`).
+  `_autoPickedSubtitles` records only that the engine *accepted* a pick,
+  so an engine that keeps refusing one leaves the auto-pick retrying on
+  every player-state and tracks event for the rest of the media -- which
+  is what that retry is for -- and every retry replaces the whole
+  `SubtitleTiming` and, on the way back out of the refusal, the
+  selection with it. Without the stop, a shift vanished a second after
+  it was made and again a second later, while the viewer was watching
+  the picture for it to take effect, and a file they had chosen
+  themselves was taken away. It is per media, cleared with the rest of
+  the per-`open` state.
+- **An undo that arrives late undoes only its own work.** `sub-add` is
+  mpv fetching a URL under `network-timeout`, so the auto-pick's
+  rejection can land minutes after the call and the viewer can have
+  picked a file and adjusted it meanwhile. The revert checks that what
+  is on screen is still the id it applied before putting anything back,
+  and it moves `_timing` inside a `setState`: it is the one path that
+  changes the timing outside a build, and the panel is drawn from it, so
+  without one the numbers on screen are not the numbers mpv is playing.
+- **A control that goes dead under a held key still owes the release.**
+  The panel's steppers are the only hold-to-repeat in the app, and
+  holding one is exactly what drives the multiplier to the end of
+  `sub-speed`'s range and redraws that very button disabled while the
+  key is still down. An `enabled` guard above the whole key switch
+  swallowed the `KeyUpEvent`, and the repeat timer then ran for the life
+  of the panel -- the value pinned at the limit and every press the
+  other way undone 120 ms later. Only the press and its repeats belong
+  behind that guard.
 - **The panel is not the OSD and must never join it.** Adjusting means
   pressing and then watching the picture for several seconds, so a panel
   on the bar's three-second timer would be gone before the first
@@ -260,7 +299,12 @@ Three more things that are easy to undo by accident:
   `<0.1-10.0>` is not a frame rate but a mis-scaled `fpsMilli`; it has to
   answer 1.0, because media_kit discards the property write's return code
   and mpv refuses such a value in silence, leaving the last file's
-  multiplier in force.
+  multiplier in force. Answering 1.0 is not the same as fitting, though:
+  the rank comes from `_readableRatio` and never from
+  `subtitleSpeed(...) == 1`, or an addon sending frames where
+  thousandths were wanted sorts ahead of every file that honestly
+  declared nothing -- head of its language, which is the file the row
+  and the auto-pick apply.
 - **A corrected row says one word, and never the number.** `re-timed`
   under the addon's name (`SubtitleMenu.retimedNote`), on the file's own
   row and on the language row that applies it, because a viewer whose

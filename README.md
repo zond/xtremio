@@ -643,8 +643,10 @@ connection.
   correction first, then the ones that declared no rate, then the ones a
   multiplier has to fix, because `fpsMilli` is a claim about the release
   an upload was made for and a claim can be wrong -- a file that needs
-  nothing is worth more than one we fix. Between languages nothing moves,
-  and inside a rank the addon that answered first still wins. Every path
+  nothing is worth more than one we fix. A rate that came out unreadable
+  ranks with the ones that declared none, since that is all it told us.
+  Between languages nothing moves, and inside a rank the addon that
+  answered first still wins. Every path
   that changes what is on screen -- another file, an embedded track,
   subtitles off, the next video, and the auto-pick putting the tracks back
   after the engine refused one -- goes through the one
@@ -656,12 +658,22 @@ connection.
   we touched this one before comparing it with another; the rate itself is
   never shown, because the point is a list that is right, not a number to
   reason about. What the multiplier cannot answer, a viewer answers by
-  hand: **Adjust timing** in that menu (or Shift+S) opens a small panel
-  with two steppers, a shift in 0.1 s steps on libmpv's `sub-delay`
-  (positive delays the lines, which is mpv's own sign) and a speed that
-  multiplies or divides `sub-speed` by the PAL ratio in one press, since
-  25/23.976 is the mismatch this ever has to fix by hand. Both are
-  counted in *presses* (`SubtitleTiming` in
+  hand. **Adjust timing** opens a small panel; it is the last entry of
+  the subtitle menu (the toolbar's subtitle button, or S), and it is
+  there only while a subtitle is actually showing, since there is nothing
+  to move otherwise. Shift+S opens and closes it directly, and on a
+  television the remote lands on its first stepper, walks the rows with
+  the direction keys and closes it with Back. It holds two steppers: a
+  shift in 0.1 s steps on libmpv's `sub-delay` (positive delays the
+  lines, which is mpv's own sign) and a speed that multiplies or divides
+  `sub-speed` by the PAL ratio in one press, since 25/23.976 is the
+  mismatch this ever has to fix by hand. Either stepper repeats while it
+  is held, by pointer or by the remote's centre key, because twenty
+  presses for a two-second offset is a chore rather than an adjustment;
+  the speed pair goes dead at the ends of the `<0.1-10.0>` `sub-speed`
+  accepts, since mpv refuses a value outside it in silence and what that
+  leaves running is the multiplier already in force. Both are counted in
+  *presses* (`SubtitleTiming` in
   `lib/features/player/subtitle_timing.dart`), so ten forward and ten
   back land exactly where they started, and the speed step is taken from
   whatever the automatic path already put in force rather than from 1.0
@@ -671,15 +683,24 @@ connection.
   file applied before the rate landed is never revisited automatically,
   and this is what revisits it. Reset goes back to the automatic state,
   not to 1.0 and 0.0, because "undo what I did" is what a viewer means.
-  From the first press the speed is *theirs* -- the automatic path stops
-  managing it until something changes what is shown -- and both values
-  are re-applied after the stream is re-opened, since they belong to the
-  playback rather than to the file the demuxer just re-read. The panel is
-  deliberately not part of the OSD: the bar fades on its three-second
-  timer while the panel stays, because adjusting means pressing and then
-  watching the picture for several seconds, and it takes a rung of its
-  own on the Back ladder -- above the bar, and on every device rather
-  than only on a television. Then
+  From the first press the speed is *theirs*: the automatic path stops
+  managing it until something changes what is shown, and the session
+  preference's auto-pick stops looking for a file of its own for this
+  media -- a viewer judging the subtitle in front of them has answered
+  the question that guess exists to ask, and a guess that keeps swapping
+  the file under them is the wrong answer to it. Picking a subtitle from
+  the menu ends it for the same reason. Both values are re-applied after
+  the stream is re-opened, since they belong to the playback rather than
+  to the file the demuxer just re-read -- and the addon file goes back
+  first, because a re-open is a fresh `loadfile` and nothing `sub-add`
+  put in survives one. The panel is deliberately not part of the OSD: the
+  bar fades on its three-second timer while the panel stays, because
+  adjusting means pressing and then watching the picture for several
+  seconds, and it takes a rung of its own on the Back ladder -- above the
+  bar, and on every device rather than only on a television. Every button
+  on it, Reset and the close cross included, wears the same two-pixel
+  focus ring, since this is the one surface meant to be operated after
+  the bar has gone. Then
   `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)
   makes one row per language, since OpenSubtitles answers a single movie
   with 69 files, nineteen of them Spanish. Codes group on what they mean
