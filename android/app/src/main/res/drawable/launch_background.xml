@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- The window background the OS draws while the process starts, before
+     Flutter's first frame. Flutter's template left this white, which flashed
+     against a dark app; it is the brand ground and the launcher mark instead.
+     Android 12 and up use the values-v31 splash attributes rather than this. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+    <item android:drawable="@color/ic_launcher_background" />
+    <item
+        android:drawable="@drawable/ic_launcher_foreground"
+        android:gravity="center" />
 </layer-list>
