@@ -278,6 +278,15 @@ class MediaKitEngine implements PlaybackEngine {
 
   SubtitleStyle _subtitleStyle = const SubtitleStyle();
 
+  /// The live [Video], so [SubtitleLift] can reach the subtitle view
+  /// inside it.
+  final GlobalKey<VideoState> _videoKey = GlobalKey<VideoState>();
+
+  /// Where the subtitles are, as far as that view is concerned. Starts as
+  /// nothing so the first build's padding is pushed as well as configured:
+  /// which of the two lands first is media_kit's business, and they agree.
+  final SubtitleLift _lift = SubtitleLift();
+
   @override
   Stream<Duration> get position => _player.stream.position;
 
@@ -574,7 +583,10 @@ class MediaKitEngine implements PlaybackEngine {
   @override
   Widget buildVideo(BuildContext context, {double subtitleBottomPadding = 24}) {
     final style = _subtitleStyle;
+    final padding = EdgeInsets.fromLTRB(16, 0, 16, subtitleBottomPadding);
+    if (_lift.changedTo(padding)) _pushSubtitlePadding(padding);
     return Video(
+      key: _videoKey,
       controller: _controller,
       controls: NoVideoControls,
       fill: const Color(0xFF000000),
@@ -596,9 +608,22 @@ class MediaKitEngine implements PlaybackEngine {
                   ),
                 ],
         ),
-        padding: EdgeInsets.fromLTRB(16, 0, 16, subtitleBottomPadding),
+        padding: padding,
       ),
     );
+  }
+
+  /// Tells the live subtitle view about a padding the configuration cannot
+  /// deliver, on the frame after the one that computed it.
+  ///
+  /// Not during the build that asked for it: `setPadding` is a `setState`
+  /// on a widget under the one being built. media_kit's own
+  /// `Video.didUpdateWidget` defers its configuration the same way, and it
+  /// runs after this one, so the two land in that order and agree.
+  void _pushSubtitlePadding(EdgeInsets padding) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _videoKey.currentState?.setSubtitleViewPadding(padding);
+    });
   }
 
   /// Stops playback before releasing the player. Once stopped, libmpv posts
@@ -620,5 +645,39 @@ class MediaKitEngine implements PlaybackEngine {
     } finally {
       await _player.dispose();
     }
+  }
+}
+
+/// Where the subtitles are drawn, as far as a live `SubtitleView` is
+/// concerned, and whether it still has to be told about a change.
+///
+/// media_kit's `SubtitleView` reads `SubtitleViewConfiguration.padding`
+/// exactly once. Its state initialises a `late` field from the
+/// configuration and has no `didUpdateWidget` (unlike the style, the
+/// alignment and the scaler, which it reads off the widget on every
+/// build), while a `GlobalKey` inside `VideoState` keeps that one state
+/// alive across every rebuild of the `Video`. So the configuration
+/// delivers the first padding and no other: lifting the subtitles clear of
+/// the controls later in the session means calling
+/// `VideoState.setSubtitleViewPadding`, which is what media_kit's own
+/// controls do.
+///
+/// This is the memo that makes that one call per change rather than per
+/// frame -- it is a `setState` on the subtitle view, and the player screen
+/// rebuilds on every position tick.
+class SubtitleLift {
+  /// Nothing shown yet: the first padding of a session is both configured
+  /// and pushed, since which of the two the view ends up taking is
+  /// media_kit's business and they carry the same value.
+  EdgeInsets? _showing;
+
+  /// What the view was last told to draw at, null before the first change.
+  EdgeInsets? get showing => _showing;
+
+  /// Records [padding] and answers whether the view has to be told.
+  bool changedTo(EdgeInsets padding) {
+    if (padding == _showing) return false;
+    _showing = padding;
+    return true;
   }
 }
