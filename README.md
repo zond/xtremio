@@ -17,9 +17,13 @@ Rust engine for addons, catalogs, library, and playback state) and
 > takes a per-launch bearer token that only the Rust side holds
 > (stremio-core's requests get it in `Env::fetch`; the app's own control
 > calls are FFI). **Board** shows a continue-watching
-> row and one row per catalog of every installed addon; **Discover** browses
-> any catalog through the engine's type/catalog/genre filters; **Search**
-> asks every addon that supports it and groups the hits per addon.
+> row and one row per catalog that answered, with one line at the end for
+> the catalogs that could not be loaded (expanding to the addon, what it
+> said, and Check addon / Uninstall); **Discover** browses any catalog
+> through the engine's type/catalog/genre filters; **Search** asks every
+> addon that supports it, groups the hits per addon, and accounts for the
+> addons that could not be searched the same way, so a dead addon is never
+> mistaken for a title nobody has.
 > **Details** shows facts and genres, a season picker and episode list with
 > watched state for series (picking an episode loads its streams), and the
 > streams every installed addon returns with quality hints parsed into
