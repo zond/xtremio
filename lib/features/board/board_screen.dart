@@ -9,6 +9,7 @@ import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
 import '../addons/addons_screen.dart';
+import '../addons/failed_addons.dart';
 import '../details/meta_details_screen.dart';
 import '../discover/discover_screen.dart';
 
@@ -44,6 +45,13 @@ class BoardScreen extends StatefulWidget {
   /// Tiles shown per catalog row before the "See all" tile.
   static const int maxTilesPerRow = 30;
 
+  /// The line under the rows for the catalogs that were dropped. It counts
+  /// catalogs, not addons: a catalog is what the viewer expected to see,
+  /// and one dead addon can take several of them down at once.
+  static String failedCatalogsLabel(int count) => count == 1
+      ? '1 catalog could not be loaded'
+      : '$count catalogs could not be loaded';
+
   @override
   State<BoardScreen> createState() => _BoardScreenState();
 }
@@ -52,6 +60,11 @@ class _BoardScreenState extends State<BoardScreen> {
   CoreClient? _client;
   CoreFieldNotifier? _board;
   CoreFieldNotifier? _continueWatching;
+
+  /// `ctx`, for the installed addons: a catalog that failed carries only
+  /// the manifest URL it was asked at, and the profile is what turns that
+  /// into an addon with a name that can be checked or uninstalled.
+  CoreFieldNotifier? _ctx;
   final ScrollController _scroll = ScrollController();
   Timer? _debounce;
 
@@ -74,6 +87,7 @@ class _BoardScreenState extends State<BoardScreen> {
       _board?.removeListener(_onBoardChanged);
       _board?.dispose();
       _continueWatching?.dispose();
+      _ctx?.dispose();
       _client = client;
       _board = CoreFieldNotifier(client, CoreField.board)
         ..addListener(_onBoardChanged);
@@ -81,6 +95,7 @@ class _BoardScreenState extends State<BoardScreen> {
         client,
         CoreField.continueWatchingPreview,
       );
+      _ctx = CoreFieldNotifier(client, CoreField.ctx);
       _requestedStart = null;
       _requestedEnd = null;
       client.dispatch(CoreActions.loadBoard());
@@ -96,6 +111,7 @@ class _BoardScreenState extends State<BoardScreen> {
     _board?.removeListener(_onBoardChanged);
     _board?.dispose();
     _continueWatching?.dispose();
+    _ctx?.dispose();
     super.dispose();
   }
 
@@ -113,6 +129,36 @@ class _BoardScreenState extends State<BoardScreen> {
 
   ContinueWatchingState get _continueWatchingState =>
       ContinueWatchingState.fromJson(_continueWatching?.value ?? const {});
+
+  /// The profile behind `ctx`; null until its first pull comes back.
+  ProfileState? get _profile {
+    final ctx = _ctx?.value;
+    return ctx == null ? null : ProfileState.fromCtx(ctx);
+  }
+
+  /// The addons behind the rows that were dropped, one card's worth each.
+  ///
+  /// One card per addon rather than per catalog: the card's actions are
+  /// about the addon, so a host that took two of its own catalogs down
+  /// would otherwise offer to uninstall itself twice. The count the
+  /// summary line reports is still catalogs — that is what went missing.
+  List<AddonFailure> _failures(CatalogsWithExtraState board) {
+    final profile = _profile;
+    final byUrl = <String, AddonFailure>{};
+    for (final row in board.failedRows) {
+      final url = row.firstRequest.base;
+      byUrl.putIfAbsent(
+        url,
+        () => AddonFailure(
+          transportUrl: url,
+          addon: profile?.installedAddon(url),
+          fallbackName: row.addonName,
+          message: row.error?.message ?? '',
+        ),
+      );
+    }
+    return byUrl.values.toList();
+  }
 
   /// The rows as laid out: continue watching first when it has items, then
   /// every catalog row that has something to show — the ones the addon
@@ -190,41 +236,73 @@ class _BoardScreenState extends State<BoardScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Board')),
       body: ListenableBuilder(
-        listenable: Listenable.merge([_board!, _continueWatching!]),
+        listenable: Listenable.merge([_board!, _continueWatching!, _ctx!]),
         builder: (context, _) {
           if (_board!.value == null) {
             return const Center(child: CircularProgressIndicator());
           }
           final board = _boardState;
           final rows = _rows(board, _continueWatchingState);
-          if (rows.isEmpty) {
+          final failures = _failures(board);
+          if (rows.isEmpty && failures.isEmpty) {
             if (!board.isLoaded || board.isLoading) {
               return const Center(child: CircularProgressIndicator());
             }
             return const _EmptyBoard();
           }
-          return ListView.builder(
+          return CustomScrollView(
             key: const Key('board-rows'),
             controller: _scroll,
-            itemExtent: layout.extent,
-            padding: const EdgeInsets.only(bottom: 16),
-            itemCount: rows.length,
-            itemBuilder: (context, index) => switch (rows[index]) {
-              _ContinueWatchingRow(:final state) => _ContinueWatchingRowView(
-                state: state,
-                layout: layout,
-                isFirstRow: index == 0,
-                onOpen: (item) =>
-                    _openDetails(item.type, item.id, videoId: item.videoId),
+            slivers: [
+              // Every row has the same extent, which is what lets the
+              // requested range be read off the scroll offset alone.
+              SliverFixedExtentList.builder(
+                itemExtent: layout.extent,
+                itemCount: rows.length,
+                itemBuilder: (context, index) => switch (rows[index]) {
+                  _ContinueWatchingRow(:final state) =>
+                    _ContinueWatchingRowView(
+                      state: state,
+                      layout: layout,
+                      isFirstRow: index == 0,
+                      onOpen: (item) => _openDetails(
+                        item.type,
+                        item.id,
+                        videoId: item.videoId,
+                      ),
+                    ),
+                  _CatalogRow(:final row) => _CatalogRowView(
+                    row: row,
+                    layout: layout,
+                    isFirstRow: index == 0,
+                    onOpen: (item) => _openDetails(item.type, item.id),
+                    onSeeAll: () => _openCatalog(row),
+                  ),
+                },
               ),
-              _CatalogRow(:final row) => _CatalogRowView(
-                row: row,
-                layout: layout,
-                isFirstRow: index == 0,
-                onOpen: (item) => _openDetails(item.type, item.id),
-                onSeeAll: () => _openCatalog(row),
-              ),
-            },
+              // What the rows above do not account for, once, at the end:
+              // a catalog that simply vanished is a bug report nobody can
+              // write, and the board is where the loss is noticed.
+              if (failures.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: FailedAddonsSection(
+                    failures: failures,
+                    summaryLabel: BoardScreen.failedCatalogsLabel(
+                      board.failedRows.length,
+                    ),
+                    collapseSingle: true,
+                    locked: _profile?.addonsLocked ?? false,
+                    onCheck: (failure) =>
+                        openAddonDetails(context, failure.transportUrl),
+                    onUninstall: (failure) => confirmAndUninstallAddon(
+                      context,
+                      _client,
+                      failure.addon!,
+                    ),
+                  ),
+                ),
+              const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
+            ],
           );
         },
       ),

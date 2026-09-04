@@ -1074,6 +1074,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         SliverToBoxAdapter(
           child: FailedAddonsSection(
             failures: failures,
+            summaryLabel: FailedAddonsSection.addonsLabel(failures.length),
             locked: profile?.addonsLocked ?? false,
             onCheck: (failure) =>
                 openAddonDetails(context, failure.transportUrl),

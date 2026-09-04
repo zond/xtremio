@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
@@ -35,11 +36,13 @@ void main() {
   FakeCoreClient fakeCore({
     Map<String, dynamic>? board,
     Map<String, dynamic>? continueWatching,
+    Map<String, dynamic>? ctx,
   }) => FakeCoreClient(
     state: {
       CoreField.board: board ?? loadBoardFixture(),
       CoreField.continueWatchingPreview:
           continueWatching ?? loadContinueWatchingFixture(),
+      CoreField.ctx: ?ctx,
     },
   );
 
@@ -51,6 +54,13 @@ void main() {
           .items
           .first
           .name;
+
+  /// The extent the rows are laid out at: the board is a `CustomScrollView`
+  /// now (a summary of what could not be loaded follows the rows), so the
+  /// fixed extent lives on the sliver rather than on a `ListView`.
+  double rowExtent(WidgetTester tester) => tester
+      .widget<SliverFixedExtentList>(find.byType(SliverFixedExtentList))
+      .itemExtent;
 
   List<CoreAction> rangeDispatches(FakeCoreClient core) => [
     for (final action in core.dispatched)
@@ -70,6 +80,28 @@ void main() {
     final catalogs = board['catalogs'] as List<dynamic>;
     ((catalogs[index] as List<dynamic>)[0] as Map<String, dynamic>)['content'] =
         content;
+    return board;
+  }
+
+  /// An `Err` page: what an addon that could not answer looks like.
+  Map<String, dynamic> failedPage(String message) => {
+    'type': 'Err',
+    'content': {
+      'type': 'Env',
+      'content': {'code': 1, 'message': message},
+    },
+  };
+
+  /// A board fixture with every catalog in [indexes] failed.
+  Map<String, dynamic> boardWithFailures(Map<int, String> messagesByIndex) {
+    final board = loadBoardFixture();
+    final catalogs = board['catalogs'] as List<dynamic>;
+    messagesByIndex.forEach((index, message) {
+      ((catalogs[index] as List<dynamic>)[0]
+          as Map<String, dynamic>)['content'] = failedPage(
+        message,
+      );
+    });
     return board;
   }
 
@@ -220,13 +252,143 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Collapsed: the message is only behind the summary line at the end.
     expect(find.text('HTTP 503'), findsNothing);
-    expect(find.byIcon(Icons.cloud_off_outlined), findsNothing);
     expect(find.text(firstPopularName()), findsNothing);
     expect(find.text('Cinemeta · movie'), findsOneWidget);
     // The catalogs that did answer are untouched.
     expect(find.text('Popular'), findsOneWidget);
     expect(find.text('Cinemeta · series'), findsNWidgets(2));
+  });
+
+  group('the catalogs that could not be loaded', () {
+    /// The board at 1000x2400: every row and the summary under them fit.
+    Future<FakeCoreClient> mount(
+      WidgetTester tester,
+      Map<int, String> failures,
+    ) async {
+      tester.view.physicalSize = const Size(1000, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final core = fakeCore(
+        continueWatching: {'items': <Object>[]},
+        board: boardWithFailures(failures),
+        ctx: loadCtxLoggedOutFixture(),
+      );
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+      return core;
+    }
+
+    testWidgets('nothing is said when every catalog answered', (tester) async {
+      await mount(tester, const {});
+      expect(find.textContaining('could not be loaded'), findsNothing);
+      expect(find.byIcon(Icons.cloud_off_outlined), findsNothing);
+    });
+
+    testWidgets('one line at the end, expanding to the addon and why', (
+      tester,
+    ) async {
+      // Catalog 4 is YouTube's; the rest of the board answered.
+      await mount(tester, const {4: 'Failed to fetch: HTTP 404'});
+
+      expect(find.text('1 catalog could not be loaded'), findsOneWidget);
+      // Collapsed: no name, no message, no actions until it is opened.
+      expect(find.text('Failed to fetch: HTTP 404'), findsNothing);
+      expect(find.text('Check addon'), findsNothing);
+
+      // Under the rows, not among them: the board stays a glance at what
+      // is there, and the account of what is missing follows it.
+      expect(
+        tester.getTopLeft(find.text('1 catalog could not be loaded')).dy,
+        greaterThan(tester.getTopLeft(find.text('Public Domain Movies')).dy),
+      );
+
+      await tester.tap(find.text('1 catalog could not be loaded'));
+      await tester.pumpAndSettle();
+
+      // Named from the profile, not by its host: v3-channels.strem.io is
+      // exactly the domain nobody recognises.
+      expect(find.text('YouTube'), findsWidgets);
+      expect(find.text('v3-channels.strem.io'), findsNothing);
+      expect(find.text('Failed to fetch: HTTP 404'), findsOneWidget);
+      expect(find.text('Check addon'), findsOneWidget);
+      expect(find.text('Uninstall'), findsOneWidget);
+    });
+
+    testWidgets('it counts catalogs and offers one card per addon', (
+      tester,
+    ) async {
+      // Cinemeta's Popular movies and Popular series, one dead host.
+      await mount(tester, const {
+        0: 'Failed to fetch: HTTP 503',
+        1: 'Failed to fetch: HTTP 503',
+      });
+
+      expect(find.text('2 catalogs could not be loaded'), findsOneWidget);
+      await tester.tap(find.text('2 catalogs could not be loaded'));
+      await tester.pumpAndSettle();
+
+      // Two catalogs lost, but one addon to do anything about.
+      expect(find.text('Check addon'), findsOneWidget);
+      expect(find.text('Failed to fetch: HTTP 503'), findsOneWidget);
+      // Cinemeta is protected: there is no uninstalling it.
+      expect(find.text('Uninstall'), findsNothing);
+    });
+
+    testWidgets('a board where everything failed says so, not "No catalogs"', (
+      tester,
+    ) async {
+      await mount(tester, {
+        for (var i = 0; i < 6; i++) i: 'Failed to fetch: HTTP 404',
+      });
+
+      expect(find.text('6 catalogs could not be loaded'), findsOneWidget);
+      expect(find.text('No catalogs'), findsNothing);
+    });
+
+    testWidgets('uninstalling from it asks first, then sends the descriptor', (
+      tester,
+    ) async {
+      final core = await mount(tester, const {4: 'Failed to fetch: HTTP 404'});
+      final descriptor = ProfileState.fromCtx(loadCtxLoggedOutFixture())
+          .installedAddon('https://v3-channels.strem.io/manifest.json')!;
+
+      await tester.tap(find.text('1 catalog could not be loaded'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Uninstall'));
+      await tester.pumpAndSettle();
+      expect(find.text('Uninstall YouTube?'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Uninstall'));
+      await tester.pumpAndSettle();
+
+      expect(
+        core.dispatched.last.action,
+        CoreActions.uninstallAddon(descriptor).action,
+      );
+      expect(find.text('Uninstalled YouTube'), findsOneWidget);
+    });
+
+    testWidgets('checking an addon opens its details on that manifest URL', (
+      tester,
+    ) async {
+      final core = await mount(tester, const {4: 'Failed to fetch: HTTP 404'});
+
+      await tester.tap(find.text('1 catalog could not be loaded'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Check addon'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(AddonDetailsScreen), findsOneWidget);
+      expect(
+        core.dispatched.last.action,
+        CoreActions.loadAddonDetails(
+          'https://v3-channels.strem.io/manifest.json',
+        ).action,
+      );
+    });
   });
 
   testWidgets('tapping a poster opens its details', (tester) async {
@@ -453,8 +615,7 @@ void main() {
     // never smaller, since the captions ask for less than was set aside.
     expect(scaled.width, unscaled.width);
     expect(scaled.height, greaterThanOrEqualTo(unscaled.height));
-    final list = tester.widget<ListView>(find.byKey(const Key('board-rows')));
-    expect(list.itemExtent, greaterThan(BoardScreen.rowExtentFor(400)));
+    expect(rowExtent(tester), greaterThan(BoardScreen.rowExtentFor(400)));
   });
 
   testWidgets('a small system font leaves the row header its size', (
@@ -475,8 +636,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    final list = tester.widget<ListView>(find.byKey(const Key('board-rows')));
-    expect(list.itemExtent, BoardScreen.rowExtentFor(400));
+    expect(rowExtent(tester), BoardScreen.rowExtentFor(400));
     final rows = tester.getTopLeft(find.byKey(const Key('board-rows'))).dy;
     final firstTile = tester.getTopLeft(find.byType(PosterTile).first).dy;
     expect(firstTile - rows, closeTo(52, 0.01));
@@ -490,8 +650,7 @@ void main() {
     await tester.pumpWidget(harness(core));
     await tester.pumpAndSettle();
 
-    final list = tester.widget<ListView>(find.byKey(const Key('board-rows')));
-    expect(list.itemExtent, BoardScreen.rowExtentFor(400));
+    expect(rowExtent(tester), BoardScreen.rowExtentFor(400));
     expect(
       BoardScreen.rowExtentFor(400),
       lessThan(BoardScreen.rowExtentFor(1000)),

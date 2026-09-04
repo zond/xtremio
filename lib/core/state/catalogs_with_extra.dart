@@ -50,14 +50,17 @@ final class CatalogRow {
   /// Row title: the catalog's name, falling back to its id.
   String get title => label?.name ?? firstRequest.path.id;
 
+  /// The addon that was asked, from `catalogLabels` — falling back to the
+  /// host of the manifest URL, which is all a request carries by itself.
+  String get addonName =>
+      label?.addonName ??
+      Uri.tryParse(firstRequest.base)?.host ??
+      firstRequest.base;
+
   /// `Addon · type`, for the row's subtitle.
   String get subtitle {
-    final label = this.label;
     final type = label?.type ?? firstRequest.path.type;
-    final addon =
-        label?.addonName ??
-        Uri.tryParse(firstRequest.base)?.host ??
-        firstRequest.base;
+    final addon = addonName;
     return [if (addon.isNotEmpty) addon, if (type.isNotEmpty) type].join(' · ');
   }
 
@@ -160,6 +163,14 @@ final class CatalogsWithExtraState {
   List<CatalogRow> get visibleRows => [
     for (final row in rows)
       if (!row.isEmpty && !row.hasFailed) row,
+  ];
+
+  /// The rows whose addon could not answer, in `catalogs` order: exactly
+  /// what [visibleRows] left out because it had only an error to show, and
+  /// what a screen owes the viewer an account of.
+  List<CatalogRow> get failedRows => [
+    for (final row in rows)
+      if (row.hasFailed) row,
   ];
 
   /// Any page still being fetched.

@@ -2,7 +2,8 @@
 ///
 /// Lives here rather than on the details screen because a failure looks the
 /// same wherever it is reported: a screen that asks several addons at once
-/// and shows only what came back owes the viewer an account of the rest.
+/// and shows only what came back — the sources list, the board — owes the
+/// viewer an account of the rest.
 library;
 
 import 'package:flutter/material.dart';
@@ -50,20 +51,28 @@ final class AddonFailure {
 
 /// The addons that failed, below whatever did arrive.
 ///
-/// One failure is the row itself. Several — a profile full of dead
-/// mirrors answers every request with the same wall of 404s — collapse
-/// into a single summary row naming them, which expands into the same
-/// rows, so what did work stays the first thing on screen.
+/// One failure is the row itself, unless [collapseSingle] says otherwise.
+/// Several — a profile full of dead mirrors answers every request with
+/// the same wall of 404s — collapse into a single summary row naming
+/// them, which expands into the same rows, so what did work stays the
+/// first thing on screen.
 class FailedAddonsSection extends StatefulWidget {
   const FailedAddonsSection({
     super.key,
     required this.failures,
+    required this.summaryLabel,
     required this.locked,
     required this.onCheck,
     required this.onUninstall,
+    this.collapseSingle = false,
   });
 
   final List<AddonFailure> failures;
+
+  /// The collapsed line's text. The caller counts what its viewer lost —
+  /// addons on the details screen, catalogs on the board — and that need
+  /// not be the number of cards underneath.
+  final String summaryLabel;
 
   /// `profile.addonsLocked`: every install and uninstall fails until the
   /// addon collection has been pulled, so the action is shown disabled
@@ -75,11 +84,17 @@ class FailedAddonsSection extends StatefulWidget {
   /// Only called for a failure whose [AddonFailure.isRemovable] holds.
   final ValueChanged<AddonFailure> onUninstall;
 
+  /// Collapse even a lone failure behind [summaryLabel]. What the section
+  /// sits under decides it: under the streams of the title the viewer is
+  /// looking at, the one thing that went wrong is worth stating outright;
+  /// at the foot of a board they scrolled past, one line is enough.
+  final bool collapseSingle;
+
   static const String checkLabel = 'Check addon';
   static const String uninstallLabel = 'Uninstall';
 
-  /// The summary row of [count] failures.
-  static String summaryLabel(int count) => '$count addons did not answer';
+  /// The summary row of [count] addons that did not answer.
+  static String addonsLabel(int count) => '$count addons did not answer';
 
   @override
   State<FailedAddonsSection> createState() => _FailedAddonsSectionState();
@@ -98,7 +113,9 @@ class _FailedAddonsSectionState extends State<FailedAddonsSection> {
       onCheck: () => widget.onCheck(failure),
       onUninstall: () => widget.onUninstall(failure),
     );
-    if (failures.length == 1) return card(failures.single);
+    if (failures.length == 1 && !widget.collapseSingle) {
+      return card(failures.single);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -108,7 +125,7 @@ class _FailedAddonsSectionState extends State<FailedAddonsSection> {
             Icons.cloud_off_outlined,
             color: theme.colorScheme.error,
           ),
-          title: Text(FailedAddonsSection.summaryLabel(failures.length)),
+          title: Text(widget.summaryLabel),
           subtitle: Text(
             [for (final failure in failures) failure.name].join(', '),
             maxLines: 1,

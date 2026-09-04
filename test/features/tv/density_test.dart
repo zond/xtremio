@@ -354,7 +354,9 @@ void main() {
         expect(tester.takeException(), isNull, reason: 'scale $systemScale');
         return (
           tester.getSize(find.byType(PosterImage).first).height,
-          tester.widget<ListView>(find.byType(ListView).first).itemExtent!,
+          tester
+              .widget<SliverFixedExtentList>(find.byType(SliverFixedExtentList))
+              .itemExtent,
         );
       }
 
