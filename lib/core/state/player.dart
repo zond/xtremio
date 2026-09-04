@@ -54,10 +54,74 @@ final class SubtitleInfo {
   Uri get url => Uri.parse(json['url'] as String);
   String? get label => json['label'] as String?;
 
+  /// [url] with everything folded away that cannot change *which file*
+  /// comes back: the scheme and host lower-cased, a default port and any
+  /// fragment dropped, trailing slashes off the path, and the query's
+  /// parameters put in a fixed order.
+  ///
+  /// Nothing is removed from the query. The one parameter OpenSubtitles v3
+  /// ever sends is `senc` (`?senc=cp1250`), which picks the encoding of the
+  /// bytes it hands back -- strip that and two genuinely different files
+  /// collapse into one. The path keeps its case: only the host is
+  /// case-insensitive.
+  String get normalizedUrl => normalizeUrl(url);
+
+  /// The keys two entries must share to be the same file. Both are
+  /// checked, so an addon that gives a stable id collapses with one that
+  /// only gives a URL, and two addons naming the same file with slightly
+  /// different URLs collapse too.
+  ///
+  /// The id is scoped by language: an id names a file and a file has one
+  /// language, so an id two unrelated addons happen to reuse (`1`, `2`,
+  /// ...) can only merge entries that at least claim the same language.
+  Iterable<String> get identityKeys sync* {
+    yield 'url:$normalizedUrl';
+    final id = json['id'] as String?;
+    if (id != null && id.isNotEmpty) {
+      yield 'id:${lang.trim().toLowerCase()}|$id';
+    }
+  }
+
+  /// See [normalizedUrl]. Anything without a scheme and host (a `data:`
+  /// URL, a relative one) is compared as it stands.
+  static String normalizeUrl(Uri url) {
+    if (url.scheme.isEmpty || url.host.isEmpty) return url.toString();
+    final scheme = url.scheme.toLowerCase();
+    final defaultPort = switch (scheme) {
+      'https' => 443,
+      'http' => 80,
+      _ => 0,
+    };
+    var path = url.path;
+    while (path.length > 1 && path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
+    return Uri(
+      scheme: scheme,
+      host: url.host.toLowerCase(),
+      port: url.port == defaultPort ? null : url.port,
+      path: path,
+      query: url.query.isEmpty
+          ? null
+          : (url.query.split('&')..sort()).join('&'),
+    ).toString();
+  }
+
   static List<SubtitleInfo> listFromJson(Object? json) => [
     for (final item in (json as List<dynamic>? ?? const []))
       SubtitleInfo(item as Map<String, dynamic>),
   ];
+}
+
+/// One subtitle file together with where it came from: the manifest URL of
+/// the addon whose `subtitles` answer carried it, or null when it rode on
+/// the stream itself. The menu needs that to tell two files of the same
+/// language apart.
+final class SubtitleSource {
+  const SubtitleSource(this.subtitle, {this.addonBase});
+
+  final SubtitleInfo subtitle;
+  final String? addonBase;
 }
 
 /// Where subtitles for this Player session should come from
@@ -210,25 +274,38 @@ final class PlayerState {
     return content?.convertedStream;
   }
 
-  /// Every subtitle file on offer: what the subtitle addons returned, the
-  /// stream's own `subtitles`, and the converted stream's, deduplicated by
-  /// URL in that order.
-  List<SubtitleInfo> get externalSubtitles {
+  /// Every subtitle file on offer with the addon that offered it: what the
+  /// subtitle addons returned, then the stream's own `subtitles`, then the
+  /// converted stream's.
+  ///
+  /// Deduplicated on [SubtitleInfo.identityKeys] -- the normalized URL and
+  /// the addon's own id -- rather than on the exact URL string, so the same
+  /// file reached two ways is one entry. The first answer wins, which keeps
+  /// the addons' own order.
+  List<SubtitleSource> get externalSubtitleSources {
     final seen = <String>{};
-    final result = <SubtitleInfo>[];
-    void add(Iterable<SubtitleInfo> items) {
+    final result = <SubtitleSource>[];
+    void add(Iterable<SubtitleInfo> items, String? base) {
       for (final item in items) {
-        if (seen.add(item.url.toString())) result.add(item);
+        final keys = item.identityKeys.toList();
+        if (keys.any(seen.contains)) continue;
+        seen.addAll(keys);
+        result.add(SubtitleSource(item, addonBase: base));
       }
     }
 
     for (final entry in subtitles) {
-      add(entry.contentOrNull ?? const []);
+      add(entry.contentOrNull ?? const [], entry.request.base);
     }
-    add(selectedStream?.subtitlesJson.map(SubtitleInfo.new) ?? const []);
-    add(convertedStream?.subtitlesJson.map(SubtitleInfo.new) ?? const []);
+    add(selectedStream?.subtitlesJson.map(SubtitleInfo.new) ?? const [], null);
+    add(convertedStream?.subtitlesJson.map(SubtitleInfo.new) ?? const [], null);
     return result;
   }
+
+  /// [externalSubtitleSources] without the provenance.
+  List<SubtitleInfo> get externalSubtitles => [
+    for (final source in externalSubtitleSources) source.subtitle,
+  ];
 
   /// Some subtitle addon has not answered yet.
   bool get subtitlesLoading => subtitles.any((entry) => entry.isLoading);

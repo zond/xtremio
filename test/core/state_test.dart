@@ -546,6 +546,127 @@ void main() {
       expect(state.subtitlesPath?.copyWith(id: 'tt1:1:2').id, 'tt1:1:2');
     });
 
+    /// A `player` state whose subtitle addons answered with [answers],
+    /// keyed by manifest URL, plus whatever the stream itself carried.
+    PlayerState stateWith(
+      Map<String, List<Map<String, dynamic>>> answers, {
+      List<Map<String, dynamic>> streamSubtitles = const [],
+    }) => PlayerState.fromJson({
+      'selected': {
+        'stream': {'url': 'https://x/e1.mkv', 'subtitles': streamSubtitles},
+      },
+      'subtitles': [
+        for (final MapEntry(key: base, value: items) in answers.entries)
+          response(base, {'type': 'Ready', 'content': items}),
+      ],
+    });
+
+    test('normalizes a URL without touching what identifies the file', () {
+      String n(String url) => SubtitleInfo.normalizeUrl(Uri.parse(url));
+      const canonical = 'https://subs.example.org/en/1.srt';
+      // Case of the scheme and host, the default port, a trailing slash, a
+      // fragment and the order of the query are all noise.
+      expect(n('HTTPS://Subs.Example.ORG/en/1.srt'), canonical);
+      expect(n('https://subs.example.org:443/en/1.srt'), canonical);
+      expect(n('https://subs.example.org/en/1.srt/'), canonical);
+      expect(n('https://subs.example.org/en/1.srt#x'), canonical);
+      expect(
+        n('https://subs.example.org/en/1.srt?b=2&a=1'),
+        n('https://subs.example.org/en/1.srt?a=1&b=2'),
+      );
+      // The path's case, a non-default port and the query itself are not.
+      // `senc` is the only parameter OpenSubtitles v3 sends and it picks
+      // the encoding of the bytes, so it names a different file.
+      expect(n('https://subs.example.org/EN/1.srt'), isNot(canonical));
+      expect(n('https://subs.example.org:8443/en/1.srt'), isNot(canonical));
+      expect(
+        n('https://subs.example.org/en/1.srt?senc=cp1250'),
+        isNot(canonical),
+      );
+      // Nothing to normalize: compared as it stands.
+      expect(n('data:text/plain,hi'), 'data:text/plain,hi');
+    });
+
+    test('collapses two addons offering the same file by URL or by id', () {
+      // The same file, spelled three ways: as it is, with an upper-case
+      // host and a redundant port, and with a trailing slash.
+      final byUrl = stateWith({
+        'https://a/manifest.json': [
+          {'id': '1', 'lang': 'eng', 'url': 'https://subs.example.org/1.srt'},
+        ],
+        'https://b/manifest.json': [
+          {
+            'id': '2',
+            'lang': 'eng',
+            'url': 'HTTPS://Subs.Example.ORG:443/1.srt',
+          },
+        ],
+        'https://c/manifest.json': [
+          {'id': '3', 'lang': 'eng', 'url': 'https://subs.example.org/1.srt/'},
+        ],
+      });
+      expect(byUrl.externalSubtitles, hasLength(1));
+      expect(
+        byUrl.externalSubtitleSources.single.addonBase,
+        'https://a/manifest.json',
+        reason: 'the first answer wins',
+      );
+
+      // Two mirrors of one OpenSubtitles upload: different hosts, the id
+      // the addons agree on.
+      final byId = stateWith({
+        'https://a/manifest.json': [
+          {'id': '3093321', 'lang': 'pob', 'url': 'https://subs5.strem.io/a'},
+        ],
+        'https://b/manifest.json': [
+          {'id': '3093321', 'lang': 'pob', 'url': 'https://mirror.example/b'},
+        ],
+      });
+      expect(byId.externalSubtitles, hasLength(1));
+
+      // An id is only an identity within one language: two addons that
+      // both number their answers from 1 do not merge unrelated files.
+      final collided = stateWith({
+        'https://a/manifest.json': [
+          {'id': '1', 'lang': 'eng', 'url': 'https://a.example/1.srt'},
+        ],
+        'https://b/manifest.json': [
+          {'id': '1', 'lang': 'fre', 'url': 'https://b.example/1.srt'},
+        ],
+      });
+      expect(collided.externalSubtitles, hasLength(2));
+
+      // The query is part of the file: `senc` picks its encoding.
+      final encodings = stateWith({
+        'https://a/manifest.json': [
+          {'id': '1', 'lang': 'cze', 'url': 'https://subs.example/1.srt'},
+          {
+            'id': '2',
+            'lang': 'cze',
+            'url': 'https://subs.example/1.srt?senc=cp1250',
+          },
+        ],
+      });
+      expect(encodings.externalSubtitles, hasLength(2));
+    });
+
+    test('says which addon each file came from', () {
+      final state = stateWith(
+        {
+          'https://os/manifest.json': [
+            {'id': '1', 'lang': 'eng', 'url': 'https://subs.example/1.srt'},
+          ],
+        },
+        streamSubtitles: [
+          {'id': 's', 'lang': 'spa', 'url': 'https://subs.example/2.srt'},
+        ],
+      );
+      expect(state.externalSubtitleSources.map((s) => s.addonBase), [
+        'https://os/manifest.json',
+        null,
+      ], reason: "a file the stream carried has no addon behind it");
+    });
+
     test('the recorded fixture has no subtitles, preference or next video', () {
       final state = PlayerState.fromJson(loadPlayerFixture());
       expect(state.subtitles, isEmpty);
