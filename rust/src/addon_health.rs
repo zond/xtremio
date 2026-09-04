@@ -53,8 +53,21 @@
 //! than the one that writes is a race. Observations touch memory only; the
 //! table reaches the disk through the app's generic preferences file
 //! ([`PREFS_KEY`]) when it is dirty and the last write is
-//! [`FLUSH_INTERVAL`] old, and unconditionally at shutdown. Nothing new
-//! crosses FFI: the app reads the same preferences key it already reads.
+//! [`FLUSH_INTERVAL`] old, and whatever the throttle says when
+//! [`flush_in`] is called. Nothing new crosses FFI: the app reads the same
+//! preferences key it already reads.
+//!
+//! Every entry point takes the [`crate::state::AppState`] it counts into --
+//! [`load_in`], [`commit_in`], [`flush_in`] -- the way
+//! `crate::server::stop_in` does, and for the same two reasons. The
+//! runtime-event pump outlives a shutdown by design, so an event still in
+//! flight has to be counted into the state that pump was started for and
+//! not into whatever a later `init` installed; and `crate::core::shutdown`
+//! takes the state out of the process on its first line, so the flush that
+//! makes the last minute of counts survive can only be a flush of the state
+//! it is holding. Nothing here reaches for the process global, and a table
+//! that [`load_in`] never filled is never written at all, so no late
+//! observation can put its one record where the whole record was.
 //!
 //! Lock order, where both are taken: this table, then the preferences
 //! file's lock (inside [`crate::prefs::set`]). Never the other way.
@@ -63,6 +76,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+use crate::state::AppState;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -477,8 +491,17 @@ struct Counted {
     table: Table,
     /// Whether the table has changes the file does not have.
     dirty: bool,
-    /// When the table was last written out. `None` until the first write,
-    /// so the first change after a start reaches the disk at once.
+    /// Whether the stored table has been read in yet. A table nobody has
+    /// loaded is not "this addon has no history", it is "the history has
+    /// not been read", and writing it out would replace the whole stored
+    /// record with whatever this process happened to see since it started.
+    /// So nothing reaches the disk before [`load_in`].
+    loaded: bool,
+    /// When the table was last written out -- or loaded, which counts as a
+    /// write because the file already holds exactly that, and so keeps the
+    /// first observation after a start from rewriting what was read a
+    /// moment ago. `None` only while `loaded` is false, and such a table is
+    /// never written.
     last_write: Option<Instant>,
 }
 
@@ -492,24 +515,23 @@ impl AddonHealthState {
     }
 }
 
-/// Reads the stored table into memory. Called once at init, beside the
-/// bucket hydration; a table that cannot be read is simply an empty one.
-pub fn load() {
+/// Reads the stored table into `app`. Called once at init, beside the
+/// bucket hydration, with the state init has just built; a table that
+/// cannot be read is simply an empty one.
+///
+/// Nothing is written out before this has run -- see [`Counted::loaded`].
+pub fn load_in(app: &AppState) {
     let table = stored();
-    let app = crate::state::state();
     let mut counted = app.addon_health.counted();
     counted.table = table;
     counted.dirty = false;
-    // Nothing has changed since the file was read, and pretending the file
-    // was just written keeps the first observation after a start from
-    // rewriting what was only loaded a moment ago.
+    counted.loaded = true;
     counted.last_write = Some(Instant::now());
 }
 
-/// Commits one sweep and writes the table out if a write is due. Answers
-/// whether the sweep was recorded (see [`Sweep::commit_into`]).
-pub fn commit(sweep: Sweep) -> bool {
-    let app = crate::state::state();
+/// Commits one sweep into `app` and writes the table out if a write is
+/// due. Answers whether the sweep was recorded (see [`Sweep::commit_into`]).
+pub fn commit_in(app: &AppState, sweep: Sweep) -> bool {
     let mut counted = app.addon_health.counted();
     let now = Utc::now();
     if !sweep.commit_into(&mut counted.table, now) {
@@ -522,8 +544,7 @@ pub fn commit(sweep: Sweep) -> bool {
 
 /// Forgets the addons that are no longer installed and have not been for a
 /// while. `installed` is [`key_for`] over every addon in the profile.
-pub fn prune_uninstalled(installed: &BTreeSet<String>) {
-    let app = crate::state::state();
+pub fn prune_uninstalled_in(app: &AppState, installed: &BTreeSet<String>) {
     let mut counted = app.addon_health.counted();
     if counted.table.prune_uninstalled(installed, Utc::now()) {
         counted.dirty = true;
@@ -533,19 +554,22 @@ pub fn prune_uninstalled(installed: &BTreeSet<String>) {
 
 /// Writes the table out now, whatever the throttle says: shutdown, and the
 /// app going to the background.
-pub fn flush() {
-    let Some(app) = crate::state::current() else {
-        return;
-    };
+///
+/// It takes the state rather than looking one up, because the caller that
+/// most needs it is `crate::core::shutdown`, which has already taken the
+/// state out of the process by the time it gets here.
+pub fn flush_in(app: &AppState) {
     let mut counted = app.addon_health.counted();
     flush_locked(&mut counted, true);
 }
 
-/// Stores the table under [`PREFS_KEY`] when it is dirty and either
-/// `force`d or [`FLUSH_INTERVAL`] has passed. Asked with the table's lock
-/// held, which is what makes reading `last_write` here honest.
+/// Stores the table under [`PREFS_KEY`] when it has been loaded, is dirty,
+/// and is either `force`d or [`FLUSH_INTERVAL`] old. Asked with the table's
+/// lock held, which is what makes reading `last_write` here honest.
 fn flush_locked(counted: &mut Counted, force: bool) {
-    if !counted.dirty {
+    // Not even `force` writes a table that was never read: it would be
+    // this process's few observations in place of the whole record.
+    if !counted.loaded || !counted.dirty {
         return;
     }
     if !force
@@ -580,6 +604,8 @@ fn stored() -> Table {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     /// A manifest URL carrying what a debrid addon's configuration looks
@@ -598,6 +624,33 @@ mod tests {
 
     fn days(days: i64) -> chrono::Duration {
         chrono::Duration::days(days)
+    }
+
+    /// Five addons' worth of history, as it sits in the preferences file
+    /// before this process starts: the record a late observation must not
+    /// be allowed to replace.
+    fn seeded_history() -> Value {
+        let mut table = Table::default();
+        for index in 0..5 {
+            table.record(
+                &format!("seeded{index}.example.com#{index:012x}"),
+                ResourceKind::Catalog,
+                Outcome::Answered,
+                now() - days(1),
+            );
+        }
+        table.to_value()
+    }
+
+    /// One addon answering, which is a sweep worth committing.
+    fn one_answer(base: &Url) -> Sweep {
+        let mut sweep = Sweep::new();
+        sweep.observe_with(base, ResourceKind::Catalog, Outcome::Answered, |_| false);
+        sweep
+    }
+
+    fn stored_keys() -> Vec<String> {
+        stored().keys().map(str::to_owned).collect()
     }
 
     fn record_of(table: &Table, key: &str, kind: ResourceKind) -> Record {
@@ -995,6 +1048,84 @@ mod tests {
     fn anything_that_is_not_a_table_reads_as_no_history() {
         assert!(Table::from_value(&Value::Null).is_empty());
         assert!(Table::from_value(&serde_json::json!("nope")).is_empty());
+    }
+
+    #[test]
+    fn a_table_that_was_never_loaded_is_never_written() {
+        crate::env::with_storage_dir(|_| {
+            crate::prefs::set(PREFS_KEY, Some(seeded_history())).expect("seed");
+            let before = stored_keys();
+            assert_eq!(before.len(), 5);
+
+            // A state nothing has loaded into: what a commit that runs
+            // before `load_in` holds, and what a state built after a
+            // shutdown looks like. Its table is empty, and empty here means
+            // "not read", not "no history".
+            let app = AppState::default();
+            assert!(commit_in(
+                &app,
+                one_answer(&url("https://late.example.com/manifest.json"))
+            ));
+
+            assert_eq!(
+                stored_keys(),
+                before,
+                "one observation replaced the whole stored record"
+            );
+        });
+    }
+
+    #[test]
+    fn a_sweep_that_arrives_after_a_shutdown_still_counts_into_its_own_state() {
+        crate::env::with_storage_dir(|_| {
+            crate::prefs::set(PREFS_KEY, Some(seeded_history())).expect("seed");
+
+            // A state the process does not hold -- which is what the
+            // runtime-event pump is left with the moment `core::shutdown`
+            // takes the state out on its first line. It goes on delivering
+            // into the state it was started for, and that state's counts
+            // are the ones that have to reach the file.
+            let app = Arc::new(AppState::default());
+            assert!(!crate::state::is_current(&app), "not a retired state");
+            load_in(&app);
+
+            let late = url("https://late.example.com/manifest.json");
+            assert!(commit_in(&app, one_answer(&late)));
+            flush_in(&app);
+
+            let keys = stored_keys();
+            assert_eq!(
+                keys.len(),
+                6,
+                "the seeded history did not survive: {keys:?}"
+            );
+            assert!(keys.contains(&key_for(&late)), "the late sweep was lost");
+            assert!(keys.contains(&"seeded0.example.com#000000000000".to_owned()));
+        });
+    }
+
+    #[test]
+    fn an_answer_waits_for_the_flush_the_shutdown_asks_for() {
+        crate::env::with_storage_dir(|_| {
+            let app = Arc::new(AppState::default());
+            assert!(!crate::state::is_current(&app), "not a retired state");
+            load_in(&app);
+
+            let addon = url("https://good.example.com/manifest.json");
+            assert!(commit_in(&app, one_answer(&addon)));
+            assert!(
+                stored_keys().is_empty(),
+                "a write per answer: the throttle did not hold"
+            );
+
+            flush_in(&app);
+            assert_eq!(stored_keys(), vec![key_for(&addon)]);
+
+            // Written is not dirty: a second flush has nothing to say.
+            crate::prefs::set(PREFS_KEY, None).expect("clear");
+            flush_in(&app);
+            assert!(stored_keys().is_empty(), "a clean table was written again");
+        });
     }
 
     #[test]
