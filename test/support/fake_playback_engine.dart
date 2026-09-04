@@ -71,14 +71,22 @@ class FakePlaybackEngine implements PlaybackEngine {
   void emitCompleted() => _completed.add(true);
 
   /// The media reaching its end the way a real one does: the duration, the
-  /// position at it, then `completed`.
+  /// position at it, then playback stopping, then `completed`.
   ///
   /// The screen believes an ending only when the position agrees with one
   /// (`PlayerScreen._endLooksReal`): libmpv reports a read that stopped
   /// making progress as an end of file too, and that one is a stall.
+  ///
+  /// Playback stops first, and it stops on its own. mpv runs with
+  /// `keep-open=yes`, so the end of a file is `eof-reached`, and media_kit
+  /// answers that one property with `playing: false` and `completed: true`
+  /// in that order, out of the same branch (`player/native/player/real.dart`).
+  /// An end with the player still reporting itself as playing is a state no
+  /// device produces, and a screen must not be reasoned about from it.
   void emitEnd({Duration duration = const Duration(minutes: 96)}) {
     emitDuration(duration);
     emitPosition(duration);
+    emitPlaying(false);
     emitCompleted();
   }
 

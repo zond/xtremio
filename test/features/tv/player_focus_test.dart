@@ -710,7 +710,7 @@ void main() {
       expect(find.text('Play'), findsOneWidget);
     });
 
-    testWidgets('comes down the ladder: the card, then the OSD, then out', (
+    testWidgets('takes the up-next card away first, and only then leaves', (
       tester,
     ) async {
       final harness = await pushOnTv(tester, withNext: true);
@@ -727,10 +727,10 @@ void main() {
       expect(find.byType(PlayerScreen), findsOneWidget);
       expect(harness.playerActions(), isNot(contains('NextVideo')));
 
-      await systemBack(tester);
-      expect(controlsOpacity(tester), 0);
-      expect(find.byType(PlayerScreen), findsOneWidget);
-
+      // The film has ended, so the engine has stopped playing and the bar
+      // is up because nothing may hide it -- the same state as paused,
+      // where there is no OSD rung to come down either. Back leaves.
+      expect(controlsOpacity(tester), 1);
       await systemBack(tester);
       expect(find.byType(PlayerScreen), findsNothing);
     });
