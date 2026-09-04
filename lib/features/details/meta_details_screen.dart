@@ -1589,10 +1589,18 @@ class _SeasonSelectorState extends State<_SeasonSelector> {
               // directional focus coming down from the header prefers
               // whatever overlaps it horizontally -- a short row packed at
               // the left is stepped straight over into the episode list.
-              final share =
+              //
+              // Never below zero: past about thirty pills the gaps alone
+              // are wider than the row, and a negative minimum is not a
+              // cramped layout but a `NOT NORMALIZED` constraints failure
+              // that takes the episode list down with it. A series that
+              // long scrolls at its pills' own width, which is the same
+              // thing an even share of nothing would be.
+              final even =
                   (constraints.maxWidth -
                       _SeasonSelector._gap * (widget.seasons.length - 1)) /
                   widget.seasons.length;
+              final share = even > 0 ? even : 0.0;
               return SingleChildScrollView(
                 controller: _controller,
                 scrollDirection: Axis.horizontal,

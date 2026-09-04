@@ -894,6 +894,35 @@ void main() {
       );
     });
 
+    testWidgets('a series longer than the row still lists its episodes', (
+      tester,
+    ) async {
+      // A phone, and a series with more seasons than there are gaps' worth
+      // of room: The Simpsons is 36 and Specials. An even share of the row
+      // each is negative here, and asking for a negative minimum width is
+      // not a cramped layout -- it fails the row's own constraints check
+      // and takes the whole scroll view, episode list included, with it.
+      usePhoneViewport(tester);
+      final fixture = loadSeriesMetaDetailsFixture();
+      final videos =
+          fixture['metaItems'][0]['content']['content']['videos']
+              as List<dynamic>;
+      for (var season = 6; season <= 36; season++) {
+        videos.add({
+          ...videos.first as Map<String, dynamic>,
+          'id': '$seriesId:$season:1',
+          'title': 'Season $season opener',
+          'season': season,
+          'episode': 1,
+        });
+      }
+      await mountSeries(tester, fixture: fixture);
+
+      expect(tester.takeException(), isNull);
+      expect(seasonLabels(tester), hasLength(37), reason: '36 and specials');
+      expect(find.text('Pilot'), findsOneWidget);
+    });
+
     testWidgets('an unreleased episode is dimmed and marked upcoming', (
       tester,
     ) async {
