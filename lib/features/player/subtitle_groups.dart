@@ -10,6 +10,7 @@ final class SubtitleOption {
     required this.sourceName,
     required this.index,
     this.ambiguousName = false,
+    this.matchesRelease = false,
   });
 
   final SubtitleInfo subtitle;
@@ -25,6 +26,13 @@ final class SubtitleOption {
   /// the name on its own does not tell them apart. Set by
   /// [groupSubtitlesByLanguage]; see [name].
   final bool ambiguousName;
+
+  /// Whether the addon says this file was cut for the very release that
+  /// is playing ([subtitleMatchesRelease]). Set by
+  /// [groupSubtitlesByLanguage] from the name the player knows the video
+  /// by, and worth a word on the row: it is why the file is at the head
+  /// of its language.
+  final bool matchesRelease;
 
   /// What `PlaybackTracks.activeSubtitleId` holds while this file is on.
   String get id => subtitle.url.toString();
@@ -370,6 +378,93 @@ bool _reducesTo(double rate, List<double> bases) {
   return false;
 }
 
+/// Whether the addon says [subtitle] was cut for [release] -- the video
+/// file that is playing, by the best name the player knows it by.
+///
+/// Two of the addon's claims are compared, and both are claims about
+/// *which upload this is*: the release group (`DFN`) and the whole
+/// release name (`The Godfather 1972 1080p BluRay x264-DFN`). A match
+/// says more about timing than any declared rate does, because two
+/// subtitle files cut for one release are in step with it by
+/// construction, where a rate is only a claim about where the upload
+/// came from.
+///
+/// Release names are written every way there is -- dots, underscores,
+/// spaces, dashes, brackets, any case -- so both sides are cut into
+/// lower-case runs of letters and digits, and the claim has to appear in
+/// the playing file's name as a whole run of whole tokens.
+///
+/// A false match is worse than no match: it puts a file at the head of
+/// its language, which is the file the row applies and the file the
+/// auto-pick plays with nobody looking. So these are deliberately *not*
+/// matches:
+///
+/// - Part of a word. `DFN` does not match `dfnx264`, because tokens are
+///   compared whole and never as a substring of one.
+/// - Tokens that appear scattered through the name rather than together.
+///   `1080p` and `bluray` picked out of opposite ends of a filename
+///   describe a kind of encode, not this encode.
+/// - A lone token that is bare digits, or shorter than three characters:
+///   a year, a resolution, a season number, an initialism. None of those
+///   name an upload, and an addon fills these fields with whatever it
+///   managed to parse.
+///
+/// A claim that matches *every* file of a language -- the film's title
+/// on its own -- costs nothing, since a rank keeps the addons' own order
+/// inside it, and promoting all of them promotes none of them.
+bool subtitleMatchesRelease(SubtitleInfo subtitle, {required String? release}) {
+  if (release == null) return false;
+  final playing = _releaseTokens(release);
+  if (playing.isEmpty) return false;
+  for (final claim in [subtitle.releaseGroup, subtitle.movieReleaseName]) {
+    if (claim == null) continue;
+    final tokens = _releaseTokens(claim);
+    if (_namesAnUpload(tokens) && _containsRun(playing, tokens)) return true;
+  }
+  return false;
+}
+
+/// [name] as the tokens a release is compared on: lower-case runs of
+/// letters and digits, with every separator a release name is written
+/// with dropped.
+///
+/// Letters and digits by their Unicode classes rather than `a-z0-9`, so
+/// an accented title is one token on both sides instead of being split
+/// at every accent.
+List<String> _releaseTokens(String name) => [
+  for (final token in name.toLowerCase().split(_separators))
+    if (token.isNotEmpty) token,
+];
+
+final RegExp _separators = RegExp(r'[^\p{L}\p{N}]+', unicode: true);
+final RegExp _bareDigits = RegExp(r'^\p{N}+$', unicode: true);
+
+/// Whether [tokens] name a particular upload rather than something every
+/// upload of the film shares. See [subtitleMatchesRelease] for why one
+/// token is held to more than the rest are.
+bool _namesAnUpload(List<String> tokens) {
+  if (tokens.isEmpty) return false;
+  if (tokens.length > 1) return true;
+  final only = tokens.single;
+  return only.length >= 3 && !_bareDigits.hasMatch(only);
+}
+
+/// Whether [needle] appears in [haystack] as a contiguous run, token for
+/// token.
+bool _containsRun(List<String> haystack, List<String> needle) {
+  for (var start = 0; start + needle.length <= haystack.length; start++) {
+    var same = true;
+    for (var i = 0; i < needle.length; i++) {
+      if (haystack[start + i] != needle[i]) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return true;
+  }
+  return false;
+}
+
 /// Where a file sits in its language's order, best first.
 enum _FrameRateFit {
   /// A declared rate the video is already in step with: nothing to
@@ -467,9 +562,16 @@ String _languageLabel(String lang) {
 /// The order the groups and their options come out in is the order
 /// [sources] arrived in, so the ranking is [subtitlesByFrameRateFit]'s to
 /// do first.
+///
+/// [release] is the name the player knows the video by, and every option
+/// is asked whether the addon says it was cut for it
+/// ([subtitleMatchesRelease]); null -- an offline play, a torrent nothing
+/// has named the file of -- means nobody is marked, which is what knowing
+/// nothing has to look like.
 List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
   Iterable<SubtitleSource> sources, {
   String Function(String manifestUrl)? addonName,
+  String? release,
 }) {
   final order = <String>[];
   final labels = <String, String>{};
@@ -490,6 +592,10 @@ List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
             ? source.subtitle.url.host
             : addonName?.call(base) ?? Uri.tryParse(base)?.host ?? base,
         index: options.length + 1,
+        matchesRelease: subtitleMatchesRelease(
+          source.subtitle,
+          release: release,
+        ),
       ),
     );
   }
@@ -523,6 +629,7 @@ List<SubtitleOption> _disambiguated(List<SubtitleOption> options) {
           sourceName: option.sourceName,
           index: option.index,
           ambiguousName: true,
+          matchesRelease: option.matchesRelease,
         )
       else
         option,

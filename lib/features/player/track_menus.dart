@@ -69,6 +69,23 @@ class SubtitleMenu extends StatefulWidget {
   static String externalLabel(SubtitleInfo subtitle) =>
       subtitle.label ?? languageName(subtitle.lang);
 
+  /// The two words a file cut for the video that is playing earns on its
+  /// row.
+  ///
+  /// Such a file is at the head of its language, and a row that is first
+  /// for a reason should say the reason: a viewer scrolling past sixty
+  /// uploads has no other way to tell the one the addon says was made
+  /// for this exact release. It is a fact about the *upload*, not a
+  /// verdict about its timing and not a number to reason about -- the
+  /// declared rate is still shown nowhere.
+  static const String releaseNote = 'same release';
+
+  /// The second line under one of a language's files: the addon that
+  /// offered it, and whether it was cut for what is playing.
+  static String optionDetail(SubtitleOption option) => option.matchesRelease
+      ? '${option.sourceName} · $releaseNote'
+      : option.sourceName;
+
   /// What the row that shows or hides one language's other files says,
   /// collapsed and expanded.
   static String alternativesLabel(
@@ -157,7 +174,7 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
                 _MenuTile(
                   indented: true,
                   title: option.name,
-                  subtitle: option.sourceName,
+                  subtitle: SubtitleMenu.optionDetail(option),
                   selected: activeId == option.id,
                   onTap: () => widget.onExternal(option.subtitle),
                 ),
@@ -182,11 +199,14 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
   /// The second line of a language row: which of its files it would apply
   /// and where that one came from. With only one file there is nothing to
   /// pick between, so it is just the addon.
+  ///
+  /// The row names one particular file, so the mark that file earns
+  /// belongs here as much as on its own row: picking the language row is
+  /// how a file is applied without ever opening the list under it.
   static String _groupDetail(SubtitleLanguageGroup group, String? activeId) {
     final chosen = group.chosen(activeId);
-    return group.hasAlternatives
-        ? '${chosen.name} · ${chosen.sourceName}'
-        : chosen.sourceName;
+    final detail = SubtitleMenu.optionDetail(chosen);
+    return group.hasAlternatives ? '${chosen.name} · $detail' : detail;
   }
 }
 

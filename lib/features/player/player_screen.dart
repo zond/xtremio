@@ -2122,6 +2122,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   videoFrameRate: _videoFrameRate,
                 ),
                 addonName: _subtitleAddonName,
+                // The same name a shift is remembered against, so a row
+                // marked for this release and a correction put back for
+                // it are talking about the same file.
+                release: _syncRelease,
               ),
               activeId: tracks.activeSubtitleId,
               loading: state?.subtitlesLoading ?? false,

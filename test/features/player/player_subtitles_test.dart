@@ -935,6 +935,42 @@ void main() {
     expect(engine.subtitleSpeed, 1);
   });
 
+  testWidgets('a row says which file was cut for the release being played', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // The name comes from the server -- the file it actually opened --
+    // which is the same name a shift is remembered against, so the row
+    // and the memory are talking about one video.
+    final harness = harnessRated(23.976, [
+      upload('en-1', 'eng', 'https://subs.example.org/en-yts.srt', 'YTS'),
+      upload('en-2', 'eng', 'https://subs.example.org/en-dfn.srt', 'DFN'),
+    ]);
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.buffering,
+      streamName: 'The.Godfather.1972.1080p.BluRay.x264-DFN.mkv',
+      initialWindowReadyBytes: 0,
+      initialWindowBytes: 4194304,
+    );
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1 other English file'));
+    await tester.pumpAndSettle();
+    // Two words beside the addon, and only on the file the addon says
+    // was cut for this release. The other file carries the addon alone,
+    // and neither carries a rate.
+    expect(
+      find.text('subs.example.org · ${SubtitleMenu.releaseNote}'),
+      findsOneWidget,
+    );
+    expect(find.text('subs.example.org'), findsOneWidget);
+    expect(find.textContaining('23.9'), findsNothing);
+  });
+
   testWidgets('a menu row stays a row, however long the addon name is', (
     tester,
   ) async {
