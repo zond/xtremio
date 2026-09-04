@@ -10,10 +10,21 @@ void main() {
     String url, {
     String? base = 'https://opensubtitles-v3.strem.io/manifest.json',
     String? label,
+    Map<String, dynamic> properties = const {},
   }) => SubtitleSource(
-    SubtitleInfo(<String, dynamic>{'lang': lang, 'url': url, 'label': ?label}),
+    SubtitleInfo(<String, dynamic>{
+      'lang': lang,
+      'url': url,
+      'label': ?label,
+      ...properties,
+    }),
     addonBase: base,
   );
+
+  /// The name of the only option of the only group offered [properties].
+  String nameOf(Map<String, dynamic> properties) => groupSubtitlesByLanguage([
+    source('eng', 'https://subs/1.srt', properties: properties),
+  ]).single.options.single.name;
 
   test('one row per language, the rest kept as alternatives', () {
     // What OpenSubtitles really answers: many uploads per language.
@@ -109,6 +120,80 @@ void main() {
       'Español (forced)',
       'Option 2',
     ]);
+  });
+
+  test('names an upload by what the addon said about it', () {
+    // First hit wins, and every hit is tried in turn: the label beats the
+    // release, which beats the filename, which beats the release name.
+    const everything = <String, dynamic>{
+      'label': 'Espanol (forced)',
+      'releaseGroup': 'DFN',
+      'releaseFormat': 'BluRay',
+      'subtitleFileName': 'The.Godfather.1972.BluRay.srt',
+      'movieReleaseName': 'The Godfather 1972 BluRay',
+    };
+    expect(nameOf(everything), 'Espanol (forced)');
+    expect(nameOf({...everything}..remove('label')), 'DFN BluRay');
+    // A group with no format is the group alone; a format with no group
+    // names no upload, so it is skipped for the filename.
+    expect(
+      nameOf(
+        {...everything}
+          ..remove('label')
+          ..remove('releaseFormat'),
+      ),
+      'DFN',
+    );
+    expect(
+      nameOf(
+        {...everything}
+          ..remove('label')
+          ..remove('releaseGroup'),
+      ),
+      'The Godfather 1972 BluRay',
+    );
+    expect(
+      nameOf(<String, dynamic>{
+        'movieReleaseName': everything['movieReleaseName'],
+      }),
+      'The Godfather 1972 BluRay',
+    );
+    // Nothing said at all is still the numbered fallback.
+    expect(nameOf(const {}), 'Option 1');
+  });
+
+  test('cleans a filename into something a menu row can show', () {
+    // The directory, the extension and the dots and underscores a release
+    // name is written with all go.
+    expect(
+      nameOf({'subtitleFileName': 'subs/eng/The.Godfather_1972.720p.srt'}),
+      'The Godfather 1972 720p',
+    );
+    // Windows separators too, and runs of separators collapse.
+    expect(
+      nameOf({'subtitleFileName': r'C:\subs\The...Godfather__1972.SRT'}),
+      'The Godfather 1972',
+    );
+    // Only a subtitle extension is dropped: `x264-DFN` ends a release
+    // name and is not one.
+    expect(
+      nameOf({'subtitleFileName': 'The.Godfather.1972.BluRay.x264-DFN'}),
+      'The Godfather 1972 BluRay x264-DFN',
+    );
+    // A filename that cleans away to nothing is not a name.
+    expect(nameOf({'subtitleFileName': 'subs/eng/'}), 'Option 1');
+    expect(nameOf({'subtitleFileName': '.srt'}), 'Option 1');
+    // A name too long for a row is cut, and the cut never leaves half of
+    // a surrogate pair behind -- that is what the text engine refuses.
+    final long = nameOf({
+      'subtitleFileName': '${'A' * 59}\u{1F44D}${'B' * 20}.srt',
+    });
+    expect(long, '${'A' * 59}\u2026');
+    // The split emoji went whole rather than leaving its head behind.
+    expect(
+      long.codeUnits.where((unit) => unit >= 0xD800 && unit <= 0xDFFF),
+      isEmpty,
+    );
   });
 
   test('nothing to group is no groups', () {

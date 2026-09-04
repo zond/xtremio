@@ -579,11 +579,19 @@ connection.
   (`en` and `eng` are one row); a code `languageName` does not know is
   its own row, labelled with the code itself. Nothing is dropped: a
   language with more than one file carries a row beneath it ("14 other
-  English files") that opens them all, each numbered and named by the
-  addon that offered it -- which is all there is to tell them apart,
-  since OpenSubtitles sends no label. That row is a
-  *sibling* of the language row rather than a button inside it, so a
-  remote reaches it by moving down (directional traversal skips a node
+  English files") that opens them all, each named by the addon that
+  offered it plus whatever the file itself is worth calling: the addon's
+  `label` if it sent one, else its release group (`DFN`, or `DFN BluRay`
+  with the format), else its `subtitleFileName` cleaned up into words,
+  else its `movieReleaseName`, and only then `Option N`. Those come from
+  the addon's own properties the pinned stremio-core keeps
+  (`SubtitleInfo` in `lib/core/state/player.dart`); OpenSubtitles v3
+  sends no label, so before that pin fifteen English uploads were fifteen
+  numbers. Every one of them is addon text on its way to the screen and
+  goes through `wellFormedText` (`lib/core/well_formed_text.dart`), which
+  drops the half characters Flutter's text layout refuses to draw. That
+  row is a *sibling* of the language row rather than a button inside it,
+  so a remote reaches it by moving down (directional traversal skips a node
   inside the focused one's rect). Whichever file is playing is what its
   language row shows as selected and what it re-applies, so a pick two
   rows deep survives the list being rebuilt when a slow addon answers.

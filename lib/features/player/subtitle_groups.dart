@@ -1,4 +1,5 @@
 import '../../core/core.dart';
+import '../../core/well_formed_text.dart';
 import 'language_names.dart';
 
 /// One subtitle file on offer, with what tells it apart from the other
@@ -22,12 +23,63 @@ final class SubtitleOption {
   /// What `PlaybackTracks.activeSubtitleId` holds while this file is on.
   String get id => subtitle.url.toString();
 
-  /// What to call this particular upload: the label the addon gave, else
-  /// its position. OpenSubtitles v3 sends no label, and the engine's
-  /// `Subtitles` type carries no filename to fall back on (it keeps only
-  /// `id`, `lang`, `url`, `label` and `fonts`), so an index plus the addon
-  /// name is all there is to tell fifteen English uploads apart.
-  String get name => subtitle.label ?? 'Option $index';
+  /// What to call this particular upload, first hit wins: the label the
+  /// addon gave, else the release it was cut for, else its filename, else
+  /// the release name, else its position.
+  ///
+  /// OpenSubtitles v3 sends no label, so before the pinned fork kept the
+  /// addon's own properties (see README, "Pinned upstreams") every one of
+  /// fifteen English uploads was `Option N` and the addon's name. The
+  /// derived names are what tell them apart now; `Option $index` is still
+  /// the floor, for an addon that says nothing but a URL.
+  String get name =>
+      subtitle.label ??
+      _release ??
+      _fromFileName(subtitle.subtitleFileName) ??
+      subtitle.movieReleaseName ??
+      'Option $index';
+
+  /// The release group, with the format when the addon named both
+  /// (`DFN BluRay`). Keyed on the group: a format on its own (`BluRay`)
+  /// names no particular upload, so it is not a name.
+  String? get _release {
+    final group = subtitle.releaseGroup;
+    if (group == null) return null;
+    final format = subtitle.releaseFormat;
+    return format == null ? group : '$group $format';
+  }
+
+  /// Past this many characters a name has stopped telling two uploads
+  /// apart and the row would only ellipsize it anyway.
+  static const _limit = 60;
+
+  /// The extensions worth dropping off a subtitle filename, spelled out
+  /// rather than matched as "a short trailing dot-group": a release name
+  /// ends in `.x264-DFN` or `.H.264`, and a rule that eats those makes
+  /// every name worse.
+  static final _extension = RegExp(
+    r'\.(srt|sub|ssa|ass|vtt|smi|idx|sup|txt)$',
+    caseSensitive: false,
+  );
+
+  /// [raw] as a menu row: no directory, no extension, the separators a
+  /// release name is written with (`.`, `_`) as spaces, and short enough
+  /// to read. Null when nothing is left.
+  static String? _fromFileName(String? raw) {
+    if (raw == null) return null;
+    final name = raw
+        .split(RegExp(r'[/\\]'))
+        .last
+        .replaceFirst(_extension, '')
+        .replaceAll(RegExp(r'[._\s]+'), ' ')
+        .trim();
+    if (name.isEmpty) return null;
+    if (name.length <= _limit) return name;
+    // Cutting a string is the one thing that can break a surrogate pair
+    // in half, and half a character is what Flutter's text layout refuses
+    // to draw -- so the cut goes back through the guard.
+    return '${wellFormedText(name.substring(0, _limit))!.trimRight()}\u2026';
+  }
 }
 
 /// Every file one language was offered in: one row in the subtitle menu,
