@@ -184,4 +184,219 @@ void main() {
     );
     expect(find.text('Downloading the test torrent.'), findsOneWidget);
   });
+
+  group('the Peer discovery row', () {
+    /// Pumps a [SettingsScreen] over [core], with [dhtStatus] wired in as
+    /// the injected reader, and scrolls the Streaming server section into
+    /// view (it sits below the Account form, off the test viewport).
+    Future<void> pumpSettings(
+      WidgetTester tester, {
+      required FakeCoreClient core,
+      DhtStatus Function()? dhtStatus,
+    }) async {
+      await tester.pumpWidget(
+        CoreScope(
+          client: core,
+          child: MaterialApp(home: SettingsScreen(dhtStatus: dhtStatus)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Peer discovery'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+    }
+
+    /// The row's own [ListTile], found by its fixed title so a coincidental
+    /// duplicate of its subtitle text elsewhere (the server-status row can
+    /// show `Unknown` too) never makes a test ambiguous.
+    ListTile peerDiscoveryTile(WidgetTester tester) => tester.widget<ListTile>(
+      find.widgetWithText(ListTile, 'Peer discovery'),
+    );
+
+    String subtitleOf(WidgetTester tester) =>
+        (peerDiscoveryTile(tester).subtitle! as Text).data!;
+
+    FakeCoreClient loggedOutCore() =>
+        FakeCoreClient(state: {CoreField.ctx: loadCtxLoggedOutFixture()});
+
+    testWidgets('shows the node count once the DHT has bootstrapped', (
+      tester,
+    ) async {
+      await pumpSettings(
+        tester,
+        core: loggedOutCore(),
+        dhtStatus: () => const DhtStatus(
+          enabled: true,
+          nodes: 312,
+          nodesV6: 9,
+          everBootstrapped: true,
+        ),
+      );
+
+      expect(subtitleOf(tester), 'Connected, 312 nodes');
+    });
+
+    testWidgets(
+      'shows the tracker-only wording, in the ordinary text style, once '
+      'enabled but never bootstrapped',
+      (tester) async {
+        await pumpSettings(
+          tester,
+          core: loggedOutCore(),
+          dhtStatus: () => const DhtStatus(
+            enabled: true,
+            nodes: 0,
+            nodesV6: 0,
+            everBootstrapped: false,
+          ),
+        );
+
+        expect(subtitleOf(tester), DhtStatus.unavailableMessage);
+        // Information, not a warning: same icon as every other state, no
+        // warning/error glyph, and the default (non-error) text color.
+        final tile = peerDiscoveryTile(tester);
+        expect((tile.leading! as Icon).icon, Icons.hub_outlined);
+        expect(find.byIcon(Icons.warning_amber_outlined), findsNothing);
+        expect(find.byIcon(Icons.error_outline), findsNothing);
+        final subtitleFinder = find.text(DhtStatus.unavailableMessage);
+        final errorColor = Theme.of(tester.element(subtitleFinder))
+            .colorScheme
+            .error;
+        expect(
+          tester.widget<Text>(subtitleFinder).style?.color,
+          isNot(errorColor),
+        );
+      },
+    );
+
+    testWidgets('says so plainly when the DHT is disabled', (tester) async {
+      await pumpSettings(
+        tester,
+        core: loggedOutCore(),
+        dhtStatus: () => const DhtStatus(
+          enabled: false,
+          nodes: 0,
+          nodesV6: 0,
+          everBootstrapped: false,
+        ),
+      );
+
+      expect(subtitleOf(tester), 'Disabled');
+    });
+
+    testWidgets(
+      'says so plainly when the server is not running (indistinguishable '
+      'from disabled, over this API)',
+      (tester) async {
+        await pumpSettings(
+          tester,
+          core: loggedOutCore(),
+          // What `ServerClient().dhtStatus` answers when nothing is
+          // running: "no DHT to ask" reads the same as "disabled".
+          dhtStatus: () => const DhtStatus(
+            enabled: false,
+            nodes: 0,
+            nodesV6: 0,
+            everBootstrapped: false,
+          ),
+        );
+
+        expect(subtitleOf(tester), 'Disabled');
+      },
+    );
+
+    testWidgets('degrades to a quiet Unknown when the read fails', (
+      tester,
+    ) async {
+      await pumpSettings(
+        tester,
+        core: loggedOutCore(),
+        dhtStatus: () => throw StateError('no server'),
+      );
+
+      expect(subtitleOf(tester), 'Unknown');
+      expect(find.byIcon(Icons.warning_amber_outlined), findsNothing);
+      expect(find.byIcon(Icons.error_outline), findsNothing);
+    });
+
+    testWidgets('reads again when the streaming-server section refreshes, '
+        'never on a timer of its own', (tester) async {
+      var calls = 0;
+      final core = loggedOutCore();
+      await pumpSettings(
+        tester,
+        core: core,
+        dhtStatus: () {
+          calls++;
+          return calls == 1
+              ? const DhtStatus(
+                  enabled: true,
+                  nodes: 1,
+                  nodesV6: 0,
+                  everBootstrapped: true,
+                )
+              : const DhtStatus(
+                  enabled: true,
+                  nodes: 2,
+                  nodesV6: 0,
+                  everBootstrapped: true,
+                );
+        },
+      );
+      expect(calls, 1);
+      expect(subtitleOf(tester), 'Connected, 1 nodes');
+
+      // Time passing alone must never trigger another read.
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pump(const Duration(minutes: 5));
+      expect(calls, 1);
+      expect(subtitleOf(tester), 'Connected, 1 nodes');
+
+      // The section's own refresh affordance -- a `NewState` for the
+      // streaming-server field -- is what piggybacks the next read.
+      core.setState(CoreField.streamingServer, {
+        'baseUrl': null,
+        'settings': {'type': 'Ready', 'content': {}},
+      });
+      await tester.pumpAndSettle();
+
+      expect(calls, 2);
+      expect(subtitleOf(tester), 'Connected, 2 nodes');
+    });
+
+    testWidgets('leaves the server-status row above it unchanged', (
+      tester,
+    ) async {
+      final core = FakeCoreClient(
+        state: {
+          CoreField.ctx: loadCtxLoggedOutFixture(),
+          CoreField.streamingServer: {
+            'baseUrl': 'http://127.0.0.1:11470/',
+            'settings': {'type': 'Ready', 'content': {}},
+          },
+        },
+      );
+      await pumpSettings(
+        tester,
+        core: core,
+        dhtStatus: () => const DhtStatus(
+          enabled: true,
+          nodes: 5,
+          nodesV6: 0,
+          everBootstrapped: true,
+        ),
+      );
+
+      expect(
+        find.text('Ready · http://127.0.0.1:11470/'),
+        findsOneWidget,
+        reason:
+            'the Status row keeps its own wording, untouched by the '
+            'new Peer discovery row next to it',
+      );
+      expect(subtitleOf(tester), 'Connected, 5 nodes');
+    });
+  });
 }

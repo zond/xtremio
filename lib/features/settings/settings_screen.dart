@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../core/core.dart';
 import '../addons/addons_screen.dart';
@@ -19,15 +20,31 @@ import 'core_settings.dart';
 /// the streaming server (from the `streaming_server` model field) and the
 /// core.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.dhtStatus});
+
+  /// Where the Peer discovery row's [DhtStatus] comes from (absent,
+  /// `ServerClient().dhtStatus`) -- a plain function, the way
+  /// `PlaybackScope.dhtStatus` is, so a widget test can hand over one that
+  /// returns a chosen state or throws instead of reaching FFI.
+  final DhtStatus Function()? dhtStatus;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
+/// `SettingsScreen.dhtStatus`'s default: the embedded server over FFI.
+DhtStatus _defaultDhtStatus() => const ServerClient().dhtStatus;
+
 class _SettingsScreenState extends State<SettingsScreen> {
   CoreFieldNotifier? _server;
   CoreFieldNotifier? _ctx;
+
+  /// The DHT's status, read alongside the streaming-server row above it --
+  /// the same `NewState`-triggered pull [_server] already does, never a
+  /// timer of its own. Null both before the first pull lands and whenever
+  /// the read itself throws; either way the row shows a quiet "Unknown"
+  /// rather than an error.
+  DhtStatus? _dht;
 
   /// The settings map of the last `UpdateSettings` sent, until the next
   /// `ctx` pull: what the controls show and what the next write builds on,
@@ -51,7 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _server?.dispose();
       _ctx?.removeListener(_onCtx);
       _ctx?.dispose();
-      _server = CoreFieldNotifier(client, CoreField.streamingServer);
+      _server = CoreFieldNotifier(client, CoreField.streamingServer)
+        ..addListener(_onServer);
       _ctx = CoreFieldNotifier(client, CoreField.ctx)..addListener(_onCtx);
     }
     // Reading the scope here is what subscribes to it, so a choice changed
@@ -73,8 +91,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted && _pending != null) setState(() => _pending = null);
   }
 
+  /// The streaming-server field pulled (or failed to): piggyback the DHT
+  /// read on that same trigger rather than giving it a poll of its own.
+  void _onServer() {
+    DhtStatus? dht;
+    try {
+      dht = (widget.dhtStatus ?? _defaultDhtStatus)();
+    } catch (_) {
+      dht = null;
+    }
+    if (mounted) setState(() => _dht = dht);
+  }
+
   @override
   void dispose() {
+    _server?.removeListener(_onServer);
     _server?.dispose();
     _ctx?.removeListener(_onCtx);
     _ctx?.dispose();
@@ -124,6 +155,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
+        // The default cache extent (250px) only pre-builds a couple of
+        // screens' worth around the viewport; a D-pad's directional focus
+        // move only ever considers *built* widgets, so a jump from one
+        // focusable tile, over several informational rows with no `onTap`
+        // (Status, Peer discovery, the core-schema line), to the next
+        // focusable one below (Diagnostics) can land on nothing at all if
+        // that next tile has not been built yet. This screen's whole
+        // content is short and fixed, so building generously ahead costs
+        // nothing.
+        scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
         children: [
           const _SectionHeader('Account'),
           AccountSection(ctx: _ctx!),
@@ -194,6 +235,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: Text(url == null ? status : '$status · $url'),
               );
             },
+          ),
+          // Directly under the server's own status: the DHT is a peer
+          // *source* for that server, not a requirement (a torrent with
+          // working trackers downloads fine without one), so this shows
+          // health in both directions -- a bootstrapped DHT's node count
+          // and a never-bootstrapped one's plain explanation -- rather
+          // than only ever flagging a fault. `DhtStatus.healthLine` is the
+          // one place the wording lives; Diagnostics reads the same
+          // `unavailableMessage` constant it composes with.
+          ListTile(
+            leading: const Icon(Icons.hub_outlined),
+            title: const Text('Peer discovery'),
+            subtitle: Text(_dht?.healthLine ?? 'Unknown'),
           ),
           const _SectionHeader('Core'),
           ListTile(

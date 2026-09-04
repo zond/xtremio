@@ -53,6 +53,20 @@ class DhtStatus {
   static const String unavailableMessage =
       'DHT unavailable — using trackers only';
 
+  /// The line Settings shows beside the embedded server's own status:
+  /// health, not just failure, since the node count *is* the health
+  /// measure a bootstrapped DHT reports. `Disabled` covers both a DHT the
+  /// user turned off and a server that is not running -- [enabled] cannot
+  /// tell those apart, and neither is worth explaining differently.
+  /// Diagnostics and the player only ever care about [unavailable], so
+  /// they read [unavailableMessage] directly rather than this -- but that
+  /// is the same constant this composes with, so the wording never
+  /// drifts between the two screens.
+  String get healthLine {
+    if (!enabled) return 'Disabled';
+    return everBootstrapped ? 'Connected, $nodes nodes' : unavailableMessage;
+  }
+
   /// `0 nodes (0 v6)`: the raw counts, for a details view a curious person
   /// opens on purpose -- never shown alongside [unavailableMessage] by
   /// default.
