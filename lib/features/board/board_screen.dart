@@ -64,6 +64,12 @@ class _BoardScreenState extends State<BoardScreen> {
   /// `ctx`, for the installed addons: a catalog that failed carries only
   /// the manifest URL it was asked at, and the profile is what turns that
   /// into an addon with a name that can be checked or uninstalled.
+  ///
+  /// Subscribed to only once a catalog has actually failed, by
+  /// [_watchProfileForFailures]: `ctx` is the whole context -- the library
+  /// included -- so every event that touches it costs a serialize across
+  /// FFI and a decode here, and the board stays mounted under the player
+  /// while a film reports its progress.
   CoreFieldNotifier? _ctx;
   final ScrollController _scroll = ScrollController();
   Timer? _debounce;
@@ -95,7 +101,7 @@ class _BoardScreenState extends State<BoardScreen> {
         client,
         CoreField.continueWatchingPreview,
       );
-      _ctx = CoreFieldNotifier(client, CoreField.ctx);
+      _ctx = null;
       _requestedStart = null;
       _requestedEnd = null;
       client.dispatch(CoreActions.loadBoard());
@@ -115,9 +121,23 @@ class _BoardScreenState extends State<BoardScreen> {
     super.dispose();
   }
 
-  /// New board state may add or drop rows under the same scroll offset.
-  void _onBoardChanged() =>
-      WidgetsBinding.instance.addPostFrameCallback((_) => _updateRange());
+  /// New board state may add or drop rows under the same scroll offset,
+  /// and may be the first state with an addon to name.
+  void _onBoardChanged() {
+    _watchProfileForFailures();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateRange());
+  }
+
+  /// Starts pulling `ctx` the first time a catalog fails, and keeps it from
+  /// then on: a profile that has one dead addon usually keeps it, and the
+  /// names would otherwise arrive a frame after each new failure.
+  void _watchProfileForFailures() {
+    final client = _client;
+    if (_ctx != null || client == null || _boardState.failedRows.isEmpty) {
+      return;
+    }
+    setState(() => _ctx = CoreFieldNotifier(client, CoreField.ctx));
+  }
 
   void _scheduleRangeUpdate() {
     _debounce?.cancel();
@@ -239,7 +259,7 @@ class _BoardScreenState extends State<BoardScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Board')),
       body: ListenableBuilder(
-        listenable: Listenable.merge([_board!, _continueWatching!, _ctx!]),
+        listenable: Listenable.merge([_board!, _continueWatching!, _ctx]),
         builder: (context, _) {
           if (_board!.value == null) {
             return const Center(child: CircularProgressIndicator());

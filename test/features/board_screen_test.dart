@@ -347,6 +347,34 @@ void main() {
       expect(find.text('No catalogs'), findsNothing);
     });
 
+    testWidgets('ctx is pulled only once something has failed', (tester) async {
+      tester.view.physicalSize = const Size(1000, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final core = fakeCore(
+        continueWatching: {'items': <Object>[]},
+        ctx: loadCtxLoggedOutFixture(),
+      );
+      await tester.pumpWidget(harness(core));
+      await tester.pumpAndSettle();
+
+      // A board where every catalog answered needs no addon names, and ctx
+      // carries the whole context: the library writes of a film playing
+      // above this screen would each be serialized and decoded for nothing.
+      expect(core.pulled, isNot(contains(CoreField.ctx)));
+
+      core.setState(
+        CoreField.board,
+        boardWithFailures(const {4: 'Failed to fetch: HTTP 404'}),
+      );
+      await tester.pumpAndSettle();
+
+      expect(core.pulled, contains(CoreField.ctx));
+      await tester.tap(find.text('1 catalog could not be loaded'));
+      await tester.pumpAndSettle();
+      expect(find.text('YouTube'), findsWidgets);
+    });
+
     testWidgets('a board whose catalogs all failed asks for no more pages', (
       tester,
     ) async {

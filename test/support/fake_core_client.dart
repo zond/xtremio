@@ -19,6 +19,11 @@ class FakeCoreClient implements CoreClient {
   /// Every action passed to [dispatch], in order.
   final List<CoreAction> dispatched = [];
 
+  /// Every field [state] was asked for, in order: a screen that subscribes
+  /// to a field pays for a serialize and a decode on every event that
+  /// touches it, which is a cost worth pinning for the wide ones.
+  final List<CoreField> pulled = [];
+
   bool _initialized = false;
 
   @override
@@ -56,8 +61,10 @@ class FakeCoreClient implements CoreClient {
   }
 
   @override
-  Future<Map<String, dynamic>> state(CoreField field) async =>
-      _state[field] ?? const {};
+  Future<Map<String, dynamic>> state(CoreField field) async {
+    pulled.add(field);
+    return _state[field] ?? const {};
+  }
 
   @override
   Future<void> shutdown() async {
