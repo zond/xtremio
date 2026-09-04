@@ -221,21 +221,38 @@ const double maxSubtitleSpeed = 10;
 /// as. [subtitleFrameRateTolerance] keeps its meaning there too, counted
 /// in frames of the video that is playing.
 double subtitleSpeed(SubtitleInfo subtitle, {required double? videoFrameRate}) {
-  final declared = _declaredFrameRate(subtitle);
-  if (declared == null || videoFrameRate == null) return 1;
-  final speed = _sameSecondsRatio(declared, videoFrameRate);
-  // A rate that divides out to nothing or to infinity is not a rate; the
-  // guards above have caught every real one, and this is the arithmetic's
-  // own floor.
-  if (!speed.isFinite || speed <= 0) return 1;
-  // A multiplier mpv would refuse is worse than none: the refusal is
-  // silent, and what it leaves running is the last file's correction.
-  if (speed < minSubtitleSpeed || speed > maxSubtitleSpeed) return 1;
+  if (videoFrameRate == null) return 1;
+  final speed = _readableRatio(subtitle, videoFrameRate);
+  if (speed == null) return 1;
   // The tolerance is frames, so the ratio is read back as the rate it
   // puts the subtitle at against the video's own.
   return (speed - 1).abs() * videoFrameRate <= subtitleFrameRateTolerance
       ? 1
       : speed;
+}
+
+/// The ratio [subtitle]'s declared rate implies against [videoFrameRate],
+/// or null when there is no rate here we can read anything from.
+///
+/// Null covers a rate the addon did not give, an arithmetic result that
+/// is no number at all, and -- the one that is not obvious -- a ratio
+/// outside the `<0.1-10.0>` libmpv's `sub-speed` accepts. That last is
+/// not a frame-rate relationship at all but an addon sending frames
+/// where `fpsMilli` wants thousandths, and a multiplier mpv would refuse
+/// is worse than none: the refusal is silent, and what it leaves running
+/// is the *previous* file's correction. Such a file is played as it
+/// stands, which is also why [_fitOf] must rank it with the files that
+/// declared nothing rather than with the ones that fit.
+double? _readableRatio(SubtitleInfo subtitle, double videoFrameRate) {
+  final declared = _declaredFrameRate(subtitle);
+  if (declared == null) return null;
+  final speed = _sameSecondsRatio(declared, videoFrameRate);
+  // A rate that divides out to nothing or to infinity is not a rate; the
+  // guards above have caught every real one, and this is the arithmetic's
+  // own floor.
+  if (!speed.isFinite || speed <= 0) return null;
+  if (speed < minSubtitleSpeed || speed > maxSubtitleSpeed) return null;
+  return speed;
 }
 
 /// The rate [subtitle] says it was cut for, or null when the addon said
@@ -346,7 +363,15 @@ List<SubtitleSource> subtitlesByFrameRateFit(
 
 /// Which of the three ranks [subtitle] is in against [videoFrameRate].
 _FrameRateFit _fitOf(SubtitleInfo subtitle, double videoFrameRate) {
-  if (_declaredFrameRate(subtitle) == null) return _FrameRateFit.undeclared;
+  // Not `_declaredFrameRate`: a declared rate we cannot read anything
+  // from says no more about the file than declaring nothing did, and
+  // [subtitleSpeed] answers 1.0 for both. Ranked off that alone, an
+  // addon's mis-scaled `fpsMilli` came out ahead of every file that was
+  // honest about knowing nothing -- head of its language, so the row and
+  // the auto-pick both applied it.
+  if (_readableRatio(subtitle, videoFrameRate) == null) {
+    return _FrameRateFit.undeclared;
+  }
   return subtitleSpeed(subtitle, videoFrameRate: videoFrameRate) == 1
       ? _FrameRateFit.matched
       : _FrameRateFit.corrected;

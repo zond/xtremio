@@ -185,6 +185,34 @@ void main() {
     ]);
   });
 
+  test('a rate we cannot read ranks where the rates we cannot read do', () {
+    // `fpsMilli` is thousandths, so 25 is 0.025 fps: a mis-scaled number,
+    // not a frame rate, and the multiplier it reduces to is one mpv would
+    // refuse. The correction answers 1.0 for it -- there is nothing to do
+    // -- and answers 1.0 for a file in step as well, so a rank read off
+    // that alone put the garbage rate at the *head* of its language,
+    // ahead of a file that really does fit. The language row and the
+    // auto-pick both apply the head of the list.
+    final sources = [
+      source('eng', 'https://subs/en-scaled-wrong.srt', fpsMilli: 25),
+      source('eng', 'https://subs/en-23976.srt', fpsMilli: 23976),
+      source('eng', 'https://subs/en-silent.srt'),
+      source('eng', 'https://subs/en-25000.srt', fpsMilli: 25000),
+    ];
+    // Ranked on what is actually known about it -- nothing -- it sits
+    // with the files that declared nothing, behind the one that fits and
+    // ahead of the one a multiplier has to fix.
+    expect(offered(sources, 23.976), [
+      'https://subs/en-23976.srt',
+      'https://subs/en-scaled-wrong.srt',
+      'https://subs/en-silent.srt',
+      'https://subs/en-25000.srt',
+    ]);
+    // Nothing is hidden by it either, and it is still played as it
+    // stands.
+    expect(speed(25, 23.976), 1);
+  });
+
   test('the rows keep the addons order, and so does each rank', () {
     expect(subtitlesByFrameRateFit(const [], videoFrameRate: 23.976), isEmpty);
     // Languages stay in the order the addons answered in -- the ranking
