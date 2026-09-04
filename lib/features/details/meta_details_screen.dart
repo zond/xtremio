@@ -19,6 +19,7 @@ import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import '../downloads/remove_download_dialog.dart';
 import '../player/player_screen.dart';
+import 'episode_thumbnail.dart';
 import 'stream_facts.dart';
 import 'stream_sources.dart';
 import 'tv_backdrop.dart';
@@ -1753,7 +1754,7 @@ class _EpisodeTile extends StatelessWidget {
       enabled: isReleased,
       onTap: onTap,
       onLongPress: onLongPress,
-      leading: _EpisodeThumbnail(video: video),
+      leading: EpisodeThumbnail(video: video),
       title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: date == null && isReleased
           ? null
@@ -1765,61 +1766,6 @@ class _EpisodeTile extends StatelessWidget {
     );
     if (!DeviceScope.isTv(context)) return tile;
     return RemotePress(onTap: onTap, onLongPress: onLongPress, child: tile);
-  }
-}
-
-class _EpisodeThumbnail extends StatelessWidget {
-  const _EpisodeThumbnail({required this.video});
-
-  final VideoInfo video;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final thumbnail = video.thumbnail;
-    final episode = video.episode;
-    return SizedBox(
-      width: 96,
-      height: 54,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: theme.colorScheme.surfaceContainerHighest),
-            if (thumbnail != null)
-              Image.network(
-                thumbnail,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-            if (episode != null)
-              Positioned(
-                left: 4,
-                bottom: 4,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 1,
-                    ),
-                    child: Text(
-                      'E$episode',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
