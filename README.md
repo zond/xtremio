@@ -634,9 +634,24 @@ connection.
   tokens scattered through the name are not (`BluRay` and `x264` from
   opposite ends describe a kind of encode, not this one), and a lone bare
   number or two-letter tag is not, because a year and a resolution are
-  what a bad parse leaves in those fields. A claim matching every file of
-  a language costs nothing, since a rank keeps the addons' order inside
-  it. A row carries the addon that offered the file and, where it earned
+  what a bad parse leaves in those fields. A release *name* has to reach
+  past the front of the filename as well: a run that starts at the first
+  token and stops short of the last is the show, the episode and its
+  title, which every upload of that episode carries. Of the twelve files
+  in the real OpenSubtitles answer for one Gilmore Girls episode whose
+  claim appeared in the playing filename, eleven claimed only that (one
+  claimed `Gilmore Girls` and matched every filename tried), and each was
+  marked "same release" and sent to the head of its language ahead of the
+  one file that named the rip -- which on that episode meant a 25 fps
+  file first on a 23.976 fps picture. A release *group* is never the
+  show's title and still counts wherever in the name it sits. Both sides
+  lose a trailing container extension before any of this, since agreeing
+  where a name ends is what "to the end" needs and an addon writing
+  `.mkv` where the server opened the `.mp4` is naming the same release. A
+  claim matching every file of a language costs nothing, since a rank
+  keeps the addons' order inside it; the shape that hurts is a generic
+  claim on *one* file of a language, which is what the rule above is
+  for. A row carries the addon that offered the file and, where it earned
   one, two words saying it was cut for this release -- a fact about the
   upload, never a rate and never a verdict about its timing. What the
   video's own rate still decides is the direction of the panel's speed
@@ -695,9 +710,15 @@ connection.
   flip eight times a second. Two buttons appear in exactly one case: a
   container that declares no rate at all, or one in neither family,
   where no direction can be chosen and a stream would otherwise be
-  unfixable. Reset goes back to untouched, 1.0 and 0.0, because with
-  nothing else writing either property that is what "undo what I did"
-  means. What the viewer fixes is **remembered, keyed on what caused
+  unfixable. The other time both appear is not a case at all but the
+  toggle kept reachable: a correction already in force keeps its own
+  button whatever the video says, because a gap cannot be pressed and
+  the button that *is* drawn would swap the direction for its reciprocal
+  rather than reach 1.0. The rate is one bounded read taken when the
+  media loads, so a press made before it lands can be in the direction
+  the answer then rules out. Reset goes back to untouched, 1.0 and 0.0,
+  because with nothing else writing either property that is what "undo
+  what I did" means. What the viewer fixes is **remembered, keyed on what caused
   it** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`, under the
   one `subtitleSync` preference), so the same correction is not made
   again on the next episode, and `_resetSubtitleTiming` puts it back
@@ -719,7 +740,12 @@ connection.
   a key nobody can name -- an addon that sends no `g`, a torrent nothing
   has named the file of -- means that adjustment is simply not
   remembered: a narrower key is forgotten more often, and that is the
-  price of never being wrong. Reset *forgets* rather than storing a
+  price of never being wrong. A remembered speed whose direction this
+  video's own family contradicts is not put back either -- a stretch
+  says the group's files are PAL-timed, and against a PAL video that
+  needs nothing rather than needing the reciprocal -- though it stays in
+  the file, since the next release of the show is likely to be the
+  family it was learned on. Reset *forgets* rather than storing a
   correction of none, since nothing remembered is what nothing applied
   looks like next time; the store is bounded by recency, so a viewer who
   fixes twenty shows does not pay for the twenty-first; and only a press
@@ -728,7 +754,11 @@ connection.
   made when the adjusting is over -- the panel closing, something
   changing what is on screen, the player going away -- rather than on
   each press, since the shift repeats eight times a second under a held
-  key and a preferences file is not a keystroke log. From the first
+  key and a preferences file is not a keystroke log. The last of those
+  waits until after the screen has dropped its preferences listener,
+  because a write notifies synchronously and a notification answered
+  from inside `dispose` is a `setState` on an element Flutter has
+  already marked defunct. From the first
   press the session preference's auto-pick stops
   looking for a file of its own for this media -- a viewer judging the
   subtitle in front of them has answered the question that guess exists
@@ -746,9 +776,10 @@ connection.
   on it, Reset and the close cross included, wears the same two-pixel
   focus ring, since this is the one surface meant to be operated after
   the bar has gone, and a toggle that is on is filled as well as
-  counted. Where the video has ruled a direction out, the button's place
-  is left empty rather than filled with a second control, so the value
-  and the button stay in the columns the shift row put them in. Then
+  counted. Where the video has ruled a direction out and nothing is in
+  force in it, the button's place is left empty rather than filled with a
+  second control, so the value and the button stay in the columns the
+  shift row put them in. Then
   `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)
   makes one row per language, since OpenSubtitles answers a single movie
   with 69 files, nineteen of them Spanish. Codes group on what they mean

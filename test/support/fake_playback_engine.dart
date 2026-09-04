@@ -49,8 +49,8 @@ class FakePlaybackEngine implements PlaybackEngine {
   int disableSubtitlesCalls = 0;
 
   /// Every `setSubtitleSpeed` call, in order -- what a test reads to see
-  /// that a re-timed file was corrected and that the next pick put the
-  /// multiplier back.
+  /// which way the viewer's press stretched the file and that the next
+  /// pick put the multiplier back.
   final List<double> subtitleSpeeds = [];
 
   /// The multiplier in force, which is the last one set.

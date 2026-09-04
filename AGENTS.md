@@ -199,6 +199,14 @@ test; see README, *Subtitles*.
   would otherwise be unfixable. A measurement must never reach this: a
   stall rendering 12 frames a second reads as film (12 is 24 halved) and
   points the button confidently the wrong way.
+- **A correction in force always has its own button.** That is not a
+  second case for the pair above but the rule below kept reachable: the
+  gap where a ruled-out direction would be cannot be pressed, so a
+  correction in force in it could only be swapped for its reciprocal by
+  the button that *is* drawn, and never taken back to 1.0 at all. It is
+  reachable without anything remembering anything, because the rate is
+  one bounded read taken when the media loads and a press made while it
+  says nothing can land in the direction the answer then rules out.
 - **The speed is a toggle, so a second press is exactly 1.0.**
   `SubtitleTiming.speedDirection` is a direction and not a count of
   presses, which is what makes that structural rather than arithmetic --
@@ -241,7 +249,14 @@ test; see README, *Subtitles*.
   back to untouched is *forgotten* rather than stored as a zero, since
   nothing remembered is what nothing applied looks like next time. A
   narrower key is forgotten more often, which is the price of never
-  being wrong.
+  being wrong. **A remembered speed the video's own family contradicts
+  is not applied.** A speed carries across releases because releases of
+  one show almost always share a rate; where one does not, putting it
+  back is the reciprocal mistake the first rule above is about. It is
+  dropped rather than reversed -- a remembered stretch says the group's
+  files are PAL-timed, and a PAL-timed file on a PAL video needs
+  nothing -- and it stays in the file, because the next release is
+  likely to be the family it was learned on.
 - **Only a press on the panel is a judgement, and a press does not
   write.** `_adjustTiming` is the one path that remembers; every other
   call on the timing is the machine putting a file back the way it found
@@ -254,7 +269,16 @@ test; see README, *Subtitles*.
   leave the file holding a number the panel is not showing. What waits
   is a closure over the file the press was made on, and
   `_resetSubtitleTiming` flushes it *before* it moves, or the next press
-  on the file that replaced it drops the one before.
+  on the file that replaced it drops the one before. The flush in
+  `dispose` runs *after* the preferences listener is removed, and that
+  order is load-bearing: writing a preference notifies synchronously,
+  and a notification answered from inside `dispose` is a `setState` on
+  an element the framework has already marked defunct. `mounted` does
+  not catch it -- `StatefulElement.unmount` marks the element defunct
+  before it calls `dispose` and clears `state._element` only after -- so
+  a debug build throws on `markNeedsBuild`'s assert. Both paths that
+  reach it, the up-next hand-over and the stop key, leave the panel
+  open, so this is the ordinary way out and not an edge.
 - **Both values are re-applied after a re-open, and the file goes back
   first.** A network error, a false end of file and a buffer change all
   re-open the stream keeping the position; the values belong to the
@@ -342,9 +366,23 @@ test; see README, *Subtitles*.
   never claims a DFNX rip), scattered tokens are not (`BluRay` and
   `x264` from opposite ends of a name describe a kind of encode), and a
   lone bare number or two-letter tag is not, since a year and a
-  resolution are what a bad parse leaves in those fields. A claim
-  matching *every* file of a language costs nothing, because a rank
-  keeps the addons' order inside it.
+  resolution are what a bad parse leaves in those fields. **A release
+  *name* also has to reach past the front of the filename**: a run
+  starting at the first token and stopping short of the last is the
+  show, the episode and its title, which every upload of that episode
+  carries. Against the real OpenSubtitles answer for one Gilmore Girls
+  episode, twelve files matched the playing name and eleven of them
+  claimed only that -- one claiming `Gilmore Girls` matched every
+  filename tried -- each marked "same release" and sent to the head of
+  its language ahead of the file that did name the rip. A release
+  *group* is never the show's title and still counts wherever it sits,
+  which is what keeps the one genuine match in that answer. Both sides
+  lose a trailing container extension first, since agreeing where a name
+  ends is what "to the end" needs, and an addon writing `.mkv` where the
+  server opened the `.mp4` is naming the same release. A claim matching
+  *every* file of a language costs nothing, because a rank keeps the
+  addons' order inside it; a generic claim on *one* file of a language
+  is the harmful shape, and is what the rule above is for.
 
 Three more things that are easy to undo by accident:
 
