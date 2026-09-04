@@ -187,6 +187,25 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// is a couple of seconds of holding, slow enough to let go on a value.
   static const Duration repeatInterval = Duration(milliseconds: 120);
 
+  /// The ring the steppers wear, given to Reset and Close as a border of
+  /// their own.
+  ///
+  /// Material's own focus for a [TextButton] or an [IconButton] is a
+  /// 10 %-opacity overlay, and over this panel's near-black ground that
+  /// is about 1.2:1 -- roughly an eighth of what the steppers' two
+  /// pixels of [ColorScheme.primary] manage, and gone entirely at three
+  /// metres on a lit screen. Two stops of the same panel cannot differ
+  /// by that much: this is the surface meant to be operated *after* the
+  /// OSD bar has faded, so the ring is the only thing saying what the
+  /// centre key will press.
+  static ButtonStyle focusRing(ColorScheme scheme) => ButtonStyle(
+    side: WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.focused)
+          ? BorderSide(color: scheme.primary, width: 2)
+          : BorderSide.none,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -223,6 +242,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
                       tooltip: 'Close',
                       color: Colors.white,
                       iconSize: 20,
+                      style: focusRing(theme.colorScheme),
                       onPressed: onClose,
                       icon: const Icon(Icons.close),
                     ),
@@ -258,6 +278,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     key: const ValueKey('subtitle-timing-reset'),
+                    style: focusRing(theme.colorScheme),
                     onPressed: timing.adjusted ? onReset : null,
                     child: const Text(resetLabel),
                   ),

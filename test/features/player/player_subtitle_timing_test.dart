@@ -143,6 +143,20 @@ void main() {
     return player;
   }
 
+  /// The border the panel button keyed [key] is drawn with: its focus
+  /// ring while the remote is on it, and [BorderSide.none] otherwise.
+  BorderSide? ring(WidgetTester tester, String key) {
+    final material = tester
+        .widgetList<Material>(
+          find.descendant(
+            of: find.byKey(ValueKey(key)),
+            matching: find.byType(Material),
+          ),
+        )
+        .first;
+    return (material.shape as OutlinedBorder?)?.side;
+  }
+
   final panel = find.byType(SubtitleTimingOverlay);
 
   testWidgets('the menu offers the panel only once something is playing', (
@@ -522,6 +536,43 @@ void main() {
     await systemBack(tester);
     expect(panel, findsNothing);
     expect(find.byType(PlayerScreen), findsOneWidget);
+  });
+
+  testWidgets('Reset and Close wear the same ring as the steppers', (
+    tester,
+  ) async {
+    useScreen(tester, tvSize);
+    final player = await playing(tester, device: tv);
+    await openPanel(tester);
+    // Also what makes Reset reachable at all, which is exactly when a
+    // viewer wants it.
+    await step(tester, 'subtitle-shift-later');
+    final primary = Theme.of(tester.element(panel)).colorScheme.primary;
+    expect(player.engine.subtitleDelay, closeTo(0.1, 1e-9));
+
+    // Material's own focus for a TextButton and an IconButton is a
+    // 10 %-opacity overlay: over this panel's near-black ground it is
+    // about 1.2:1, against the 9.7:1 the steppers' ring manages a
+    // hundred pixels away. At three metres those two stops of the same
+    // panel simply have no ring, and this is the surface meant to be
+    // operated after the OSD bar has faded.
+    expect(ring(tester, 'subtitle-timing-reset'), BorderSide.none);
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusedTooltip(), 'Close');
+    expect(
+      ring(tester, 'subtitle-timing-close'),
+      BorderSide(color: primary, width: 2),
+    );
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), SubtitleTimingOverlay.resetLabel);
+    expect(
+      ring(tester, 'subtitle-timing-reset'),
+      BorderSide(color: primary, width: 2),
+    );
+    expect(ring(tester, 'subtitle-timing-close'), BorderSide.none);
   });
 
   testWidgets('a stepper held to the end of its range still stops when the '
