@@ -9,6 +9,14 @@
 # Needs ImageMagick 7 (`magick`) and Cantarell Extra Bold for the wordmark.
 set -euo pipefail
 
+# ImageMagick stamps the wall-clock time into every PNG it writes -- a `tIME`
+# chunk and the `date:create`/`date:modify` text -- so a re-run that changed no
+# pixel still rewrote all 36 assets with fresh bytes. That noise both invites
+# committing a diff that means nothing and hides a real one inside it, so the
+# chunks are dropped. Done here rather than at each call site so a `magick`
+# added later is reproducible without anyone remembering this.
+magick() { command magick -define png:exclude-chunk=date,time "$@"; }
+
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 OUT=$(mktemp -d)
