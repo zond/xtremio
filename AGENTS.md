@@ -179,15 +179,41 @@ README, *Subtitles*.
   `N / fps_video` in the picture, so 25 against 23.976 is 1.0427.
   Reversed it does not half-fix the drift, it doubles it -- the cue lands
   further from where it belongs than leaving the file alone.
-- **Every path that changes what is shown puts it back to 1.0.** Another
-  file, an embedded track, subtitles off, the next video, and the
-  auto-pick restoring the tracks after the engine refused a file: all of
-  them go through `PlayerScreen._retimeSubtitles`, which is why they are
-  one call. The multiplier belongs to the player, not to the file, so one
-  left over from the last pick silently ruins a subtitle that was
-  correct, which is worse than the problem being solved. A path that
-  *undoes* a change is one of these -- the refused pick was the hole --
-  so add a path, add its reset and its test.
+- **Every path that changes what is shown puts it back to 1.0, and the
+  offset back to 0.0.** Another file, an embedded track, subtitles off,
+  the next video, and the auto-pick restoring the tracks after the engine
+  refused a file: all of them go through
+  `PlayerScreen._retimeSubtitles`, which is why they are one call, and
+  which is why it replaces the whole `SubtitleTiming` rather than one
+  number of it. Both belong to the player, not to the file, so one left
+  over from the last pick silently ruins a subtitle that was correct,
+  which is worse than the problem being solved. A path that *undoes* a
+  change is one of these -- the refused pick was the hole -- so add a
+  path, add its reset and its test.
+- **The hand adjustment owns the speed from the first press.**
+  `SubtitleTiming` (`lib/features/player/subtitle_timing.dart`) is what
+  the panel behind "Adjust timing" drives: a shift in tenths of a second
+  on `sub-delay`, and a speed step of the whole PAL ratio taken *from*
+  whatever `subtitleSpeed` already decided rather than from 1.0, so one
+  press down off a correction the addon was wrong about lands on the
+  file's own timing. Both are counted in presses, because a double
+  accumulated a tenth at a time does not come back to zero. Reset goes
+  to the automatic state, never to 1.0/0.0. Switching subtitles is the
+  only thing that hands the speed back to the automatic path -- and it
+  does so through the reset above, which is why there is no second
+  mechanism for it. Both values are re-applied after a re-open (network
+  error, false end of file, buffer change): they belong to the playback,
+  not to the file the demuxer just re-read.
+- **The panel is not the OSD and must never join it.** Adjusting means
+  pressing and then watching the picture for several seconds, so a panel
+  on the bar's three-second timer would be gone before the first
+  judgement. It is drawn outside the fade rather than added to
+  `_canAutoHide` -- pinning the bar up over the picture being judged is
+  the wrong half of the problem -- and letting the bar go while it stays
+  is safe only because the ring is still on something drawn. It has its
+  own focus scope so a left press walks its row instead of seeking, and
+  its own rung on the Back ladder above the bar, on every device rather
+  than only on a television, since on a phone Back is the only way out.
 - **Only what the container declares is a rate.** `videoFrameRate` reads
   `container-fps` and nothing else. `estimated-vf-fps` is the obvious
   second choice and is a *measurement* -- ten frame durations averaged,

@@ -573,8 +573,8 @@ connection.
   Space/K play-pause, ←/→ or J/L ± the seek step (10 s by default),
   Shift+←/→ ± the short seek step (3 s), ↑/↓ volume, M mute, F
   fullscreen, Esc leaves fullscreen first when `escExitFullscreen` is on
-  and the player otherwise, S subtitles, A audio, N next episode, Shift+I
-  stats. Everything is a stream or method on
+  and the player otherwise, S subtitles, Shift+S subtitle timing, A
+  audio, N next episode, Shift+I stats. Everything is a stream or method on
   `PlaybackEngine` (`tracks`, `buffer`, `volume`, `setAudioTrack`,
   `setSubtitleTrack`, `setExternalSubtitle`, ...) or a core action, so the
   screen is tested against `FakePlaybackEngine` and `FakeCoreClient`
@@ -655,7 +655,31 @@ connection.
   that applies it), since a viewer whose subtitles still drift has to know
   we touched this one before comparing it with another; the rate itself is
   never shown, because the point is a list that is right, not a number to
-  reason about. Then
+  reason about. What the multiplier cannot answer, a viewer answers by
+  hand: **Adjust timing** in that menu (or Shift+S) opens a small panel
+  with two steppers, a shift in 0.1 s steps on libmpv's `sub-delay`
+  (positive delays the lines, which is mpv's own sign) and a speed that
+  multiplies or divides `sub-speed` by the PAL ratio in one press, since
+  25/23.976 is the mismatch this ever has to fix by hand. Both are
+  counted in *presses* (`SubtitleTiming` in
+  `lib/features/player/subtitle_timing.dart`), so ten forward and ten
+  back land exactly where they started, and the speed step is taken from
+  whatever the automatic path already put in force rather than from 1.0
+  -- one press down off a correction the addon was wrong about lands on
+  the file's own timing, and one press up on an uncorrected file picks
+  the whole PAL correction up. That is how the gap above is closed: a
+  file applied before the rate landed is never revisited automatically,
+  and this is what revisits it. Reset goes back to the automatic state,
+  not to 1.0 and 0.0, because "undo what I did" is what a viewer means.
+  From the first press the speed is *theirs* -- the automatic path stops
+  managing it until something changes what is shown -- and both values
+  are re-applied after the stream is re-opened, since they belong to the
+  playback rather than to the file the demuxer just re-read. The panel is
+  deliberately not part of the OSD: the bar fades on its three-second
+  timer while the panel stays, because adjusting means pressing and then
+  watching the picture for several seconds, and it takes a rung of its
+  own on the Back ladder -- above the bar, and on every device rather
+  than only on a television. Then
   `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)
   makes one row per language, since OpenSubtitles answers a single movie
   with 69 files, nineteen of them Spanish. Codes group on what they mean
