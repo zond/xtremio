@@ -35,15 +35,24 @@ void main() {
     await tester.pump(PlayerScreen.controlsTimeout * 2);
     await tester.pumpAndSettle();
     expect(controlsOpacity(tester), 1);
-    expect(engine.lastSubtitleBottomPadding, 96);
+    // Lifted clear of the bar the window actually drew, not of a guess at
+    // one: 96 logical px of bar in this 1280x720 window, plus the gap.
+    expect(
+      engine.lastSubtitleBottomPadding,
+      96 + PlayerScreen.subtitleControlGap,
+    );
 
-    // Playing: gone after the idle timeout, subtitles drop to the edge.
+    // Playing: gone after the idle timeout, subtitles drop back to their
+    // resting fraction of the height.
     engine.emitPlaying(true);
     await pumpEvents(tester);
     await tester.pump(PlayerScreen.controlsTimeout);
     await tester.pumpAndSettle();
     expect(controlsOpacity(tester), 0);
-    expect(engine.lastSubtitleBottomPadding, 24);
+    expect(
+      engine.lastSubtitleBottomPadding,
+      720 * PlayerScreen.subtitleBottomFraction,
+    );
 
     // A tap on the video brings them back, another hides them.
     await tapVideo(tester);
@@ -284,6 +293,9 @@ void main() {
     final harness = await pumpPlaying(tester);
     expect(find.byType(PlayerCenterControls), findsNothing);
     expect(find.byType(PlayerBottomBar), findsOneWidget);
-    expect(harness.engine.lastSubtitleBottomPadding, 96);
+    expect(
+      harness.engine.lastSubtitleBottomPadding,
+      96 + PlayerScreen.subtitleControlGap,
+    );
   });
 }

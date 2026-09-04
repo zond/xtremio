@@ -544,6 +544,37 @@ void main() {
       expect(controlsOpacity(tester), 0);
     });
 
+    testWidgets('the subtitles clear the bar the television actually draws', (
+      tester,
+    ) async {
+      final harness = await pumpOnTv(tester);
+      // The measured bar, overscan band and all -- not a constant chosen
+      // on a phone. On this 720-high panel the television's bar is half
+      // again the 96 logical px the constant used to assume.
+      final covered =
+          tvSize.height - tester.getRect(find.byType(PlayerBottomBar)).top;
+      expect(covered, greaterThan(96));
+      expect(
+        harness.engine.lastSubtitleBottomPadding,
+        covered + PlayerScreen.subtitleControlGap,
+      );
+
+      // With the bar gone they drop back to their share of the height.
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      await tester.pump(PlayerScreen.controlsTimeout);
+      await tester.pumpAndSettle();
+      expect(controlsOpacity(tester), 0);
+      expect(
+        harness.engine.lastSubtitleBottomPadding,
+        tvSize.height * PlayerScreen.subtitleBottomFraction,
+      );
+    });
+
     testWidgets('a control that disappears hands the remote back', (
       tester,
     ) async {

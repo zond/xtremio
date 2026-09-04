@@ -137,9 +137,23 @@ class PlayerScreen extends StatefulWidget {
   /// the volume slider is dropped (hardware keys on phones).
   static const double wideBreakpoint = 720;
 
-  /// Subtitle padding above the bottom edge with the controls up / hidden.
-  static const double subtitlePaddingWithControls = 96;
-  static const double subtitlePaddingBare = 24;
+  /// Where subtitles sit above the bottom of the picture at rest, as a
+  /// fraction of the player's height.
+  ///
+  /// A fraction rather than a pixel count because the same count means
+  /// different things on different screens: 24 logical px is a tenth of a
+  /// phone's landscape height and a twenty-second of a desktop window's,
+  /// and on a 1920x1080 television at density 320 (960x540 logical) it is
+  /// the 4.5% this is. Every screen now puts them in the same place
+  /// relative to the picture.
+  static const double subtitleBottomFraction = 0.045;
+
+  /// The gap left between lifted subtitles and the top of the control bar
+  /// they are clearing. The lift itself is the bar's *measured* height (see
+  /// [_PlayerScreenState._controlBarHeight]): the bar is built from the
+  /// platform's own text and icon sizes and sits inside a safe area, so one
+  /// constant cannot be right for a phone and a television at once.
+  static const double subtitleControlGap = 12;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -378,6 +392,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _controlsTimer;
   bool _menuOpen = false;
   bool _scrubbing = false;
+
+  /// The bottom control bar, so its height can be read off the frame that
+  /// laid it out.
+  final GlobalKey _bottomBarKey = GlobalKey(debugLabel: 'player bottom bar');
+
+  /// How much of the picture's bottom edge the control bar covers, in
+  /// logical pixels, as last laid out -- the bar's own height plus the
+  /// safe area it sits inside. Null until a frame has drawn one.
+  double? _controlBarHeight;
+  bool _barMeasureScheduled = false;
 
   /// Seconds left on the up-next card; null while it is not showing.
   int? _upNextSecondsLeft;
@@ -1381,6 +1405,49 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else if (x > width * 2 / 3) {
       _seekBy(_seekStep);
     }
+  }
+
+  // --- Subtitle position ---------------------------------------------------
+
+  /// Reads the control bar's real height off the frame that laid it out.
+  ///
+  /// The bar is built once per frame whether or not it is visible (it fades
+  /// with an opacity, it is not taken out of the tree), so this measures the
+  /// same thing at rest as it does with the OSD up, and the lift is ready
+  /// before the OSD is. Only a change is written back, so the post-frame
+  /// callback this schedules on every build does not rebuild anything by
+  /// itself.
+  void _measureControlBarAfterFrame() {
+    if (_barMeasureScheduled) return;
+    _barMeasureScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _barMeasureScheduled = false;
+      if (!mounted) return;
+      final box = _bottomBarKey.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return;
+      // From the bottom of the picture rather than the bar's own height:
+      // the safe area the bar sits inside is part of what it covers, and
+      // the video runs underneath all of it.
+      final covered =
+          MediaQuery.sizeOf(context).height - box.localToGlobal(Offset.zero).dy;
+      if (covered <= 0 || covered == _controlBarHeight) return;
+      setState(() => _controlBarHeight = covered);
+    });
+  }
+
+  /// How far above the bottom of the picture the subtitles are drawn.
+  ///
+  /// At rest a fraction of the height ([PlayerScreen.subtitleBottomFraction]);
+  /// with the controls up, clear of what they actually cover. Never lower
+  /// than the resting position: a bar shorter than the fraction would
+  /// otherwise push the subtitles down when it appeared.
+  double _subtitleBottomPadding({required bool controlsShown}) {
+    final rest =
+        MediaQuery.sizeOf(context).height * PlayerScreen.subtitleBottomFraction;
+    final bar = _controlBarHeight;
+    if (!controlsShown || bar == null) return rest;
+    final lifted = bar + PlayerScreen.subtitleControlGap;
+    return lifted > rest ? lifted : rest;
   }
 
   // --- Transport -----------------------------------------------------------
@@ -2423,6 +2490,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final hasVideo = engine != null && _opened != null && !casting;
     final seekStep = _seekStep;
     if (_isTv) _scheduleFocusCheck();
+    if (hasVideo) _measureControlBarAfterFrame();
     return Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
@@ -2445,9 +2513,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 child: hasVideo
                     ? engine.buildVideo(
                         context,
-                        subtitleBottomPadding: shown
-                            ? PlayerScreen.subtitlePaddingWithControls
-                            : PlayerScreen.subtitlePaddingBare,
+                        subtitleBottomPadding: _subtitleBottomPadding(
+                          controlsShown: shown,
+                        ),
                       )
                     : const SizedBox.expand(),
               ),
@@ -2557,6 +2625,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           ),
                           if (hasVideo)
                             PlayerBottomBar(
+                              key: _bottomBarKey,
                               wide: wide,
                               playing: _playing,
                               seekStep: seekStep,
