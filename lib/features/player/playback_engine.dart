@@ -495,9 +495,9 @@ class MediaKitEngine implements PlaybackEngine {
   /// have been drawn yet. That estimate then decides a comparison with a
   /// tolerance of a hundredth of a frame (`subtitleFrameRateTolerance` in
   /// `subtitle_groups.dart`), so a jittery 24.10 for a true 23.976 would
-  /// hide every correctly cut subtitle in the language. A container that
-  /// declares nothing is the case the filter already handles, and handles
-  /// safely: no rate, no filtering.
+  /// re-time every correctly cut subtitle in the language -- putting out
+  /// of step the files that were in it. A container that declares nothing
+  /// is the safe answer, and the one this gives: no rate, no correction.
   static const List<String> frameRateProperties = ['container-fps'];
 
   @override
@@ -511,7 +511,7 @@ class MediaKitEngine implements PlaybackEngine {
         values.add(await native.getProperty(property));
       } catch (_) {
         // Unavailable property or a player torn down mid-read: not a
-        // rate, which is the case the filter gives way to.
+        // rate, and an unknown rate corrects nothing.
         values.add(null);
       }
     }

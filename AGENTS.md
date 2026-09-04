@@ -180,12 +180,14 @@ README, *Subtitles*.
   Reversed it does not half-fix the drift, it doubles it -- the cue lands
   further from where it belongs than leaving the file alone.
 - **Every path that changes what is shown puts it back to 1.0.** Another
-  file, an embedded track, subtitles off, the next video: all of them go
-  through `PlayerScreen._retimeSubtitles`, which is why they are one
-  call. The multiplier belongs to the player, not to the file, so one
+  file, an embedded track, subtitles off, the next video, and the
+  auto-pick restoring the tracks after the engine refused a file: all of
+  them go through `PlayerScreen._retimeSubtitles`, which is why they are
+  one call. The multiplier belongs to the player, not to the file, so one
   left over from the last pick silently ruins a subtitle that was
-  correct, which is worse than the problem being solved. Add a path, add
-  its reset and its test.
+  correct, which is worse than the problem being solved. A path that
+  *undoes* a change is one of these -- the refused pick was the hole --
+  so add a path, add its reset and its test.
 - **Only what the container declares is a rate.** `videoFrameRate` reads
   `container-fps` and nothing else. `estimated-vf-fps` is the obvious
   second choice and is a *measurement* -- ten frame durations averaged,
@@ -222,10 +224,17 @@ Three more things that are easy to undo by accident:
   5/2) are the same cut and need no correction -- 23.976 film in a 29.97
   container is identical seconds -- while 25 against 23.976 is a 4.3 %
   speed-up and does. The same reduction is what keeps the multiplier
-  honest: a file cut for a 50 fps PAL encode wants 25/23.976 against
-  film, not twice that. Widening the tolerance instead of adding a ratio
-  is the wrong repair: 0.01 is what separates a rounded `23980` from a
-  real 24 fps cut.
+  honest, and it runs on *both* numbers: a 50 fps PAL encode is 25 fps
+  material and a 29.97 fps container is 23.976 fps film, so the ratio is
+  the one nearest 1 over both families and not a single step off the
+  video's declared rate -- reducing the file alone answers 0.834 there,
+  which is worse than doing nothing. Widening the tolerance instead of
+  adding a ratio is the wrong repair: 0.01 is what separates a rounded
+  `23980` from a real 24 fps cut. And a ratio outside `sub-speed`'s own
+  `<0.1-10.0>` is not a frame rate but a mis-scaled `fpsMilli`; it has to
+  answer 1.0, because media_kit discards the property write's return code
+  and mpv refuses such a value in silence, leaving the last file's
+  multiplier in force.
 - **A corrected row says one word, and never the number.** `re-timed`
   under the addon's name (`SubtitleMenu.retimedNote`), on the file's own
   row and on the language row that applies it, because a viewer whose

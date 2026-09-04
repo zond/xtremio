@@ -952,9 +952,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     engine
         .videoFrameRate()
-        // An engine that has not answered by now has not said, which is
-        // the case the filter gives way to. Without the bound the
-        // auto-pick below would wait on it for the whole film.
+        // An engine that has not answered by now has not said, and an
+        // unknown rate corrects nothing. Without the bound the auto-pick
+        // below would wait on it for the whole film.
         .timeout(PlayerScreen.frameRateTimeout, onTimeout: () => null)
         .then(
           (rate) => _onFrameRateSampled(url, rate),

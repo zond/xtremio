@@ -623,11 +623,20 @@ connection.
   not frames, so 23.976 film in a 29.97 container is the same seconds
   (five frames drawn for every four) and a `23976` file plays in sync
   against it: neither is corrected. The same reduction is what keeps the
-  multiplier honest, since it is taken at the content's own rate -- a file
-  cut for a 50 fps PAL encode wants 25/23.976 against film, not twice
-  that. What is left is the PAL/NTSC pair, where the running time really
-  does differ, and that is what gets the multiplier. Nothing is dropped
-  and nothing is corrected on a guess: a file that declares no rate is
+  multiplier honest, since it is taken between the two *content* rates
+  and not between the two declared numbers: a file cut for a 50 fps PAL
+  encode is 25 fps material and a 29.97 fps container is 23.976 fps film,
+  so the pair is one PAL/NTSC step apart and wants 25/23.976 -- reducing
+  the file alone would read it as 25/29.97 and leave the subtitle five
+  times further out than never touching it. Both families are walked, and
+  the ratio nearest 1 wins. What is left is the PAL/NTSC pair, where the
+  running time really does differ, and that is what gets the multiplier;
+  a ratio outside the `<0.1-10.0>` libmpv's `sub-speed` accepts is not a
+  frame-rate relationship at all but an addon sending frames where
+  `fpsMilli` wants thousandths, and it is left alone, because media_kit
+  discards the property write's return code and mpv would refuse it in
+  silence -- leaving the *previous* file's multiplier running. Nothing is
+  dropped and nothing is corrected on a guess: a file that declares no rate is
   played as it stands, and an engine that cannot say what the video runs
   at re-times nothing at all. What the rate decides instead is the
   *order*: `subtitlesByFrameRateFit` puts a language's files that need no
@@ -637,10 +646,11 @@ connection.
   nothing is worth more than one we fix. Between languages nothing moves,
   and inside a rank the addon that answered first still wins. Every path
   that changes what is on screen -- another file, an embedded track,
-  subtitles off, the next video -- puts `sub-speed` back to 1.0 through
-  the one `PlayerScreen._retimeSubtitles`, because a multiplier belongs to
-  the player rather than to the file and one left behind ruins a subtitle
-  that was correct. A corrected file says so in one word on its row
+  subtitles off, the next video, and the auto-pick putting the tracks back
+  after the engine refused one -- goes through the one
+  `PlayerScreen._retimeSubtitles`, because a multiplier belongs to the
+  player rather than to the file and one left behind ruins a subtitle that
+  was correct. A corrected file says so in one word on its row
   (`re-timed`, under the addon that offered it, and on the language row
   that applies it), since a viewer whose subtitles still drift has to know
   we touched this one before comparing it with another; the rate itself is
