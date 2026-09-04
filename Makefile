@@ -7,7 +7,8 @@
 # says `app: unknown` -- which is the one line that says which build the rest
 # of the report is about. So the build a person actually types is this one.
 #
-#   make apk            release APK for a phone or TV box (arm64)
+#   make apk            release APK for a phone or a 64-bit TV box (arm64)
+#   make apk-tv         release APK for a Chromecast with Google TV (armeabi-v7a)
 #   make apk-split      release APKs per ABI (arm, arm64, x64)
 #   make apk-debug      debug APK for the x86_64 emulator
 #   make linux          release Linux desktop bundle
@@ -27,10 +28,18 @@ DEFINES := --dart-define=XTREMIO_VERSION=$(VERSION) \
 FLAGS ?=
 DEVICE ?=
 
-.PHONY: apk apk-split apk-debug linux run version
+.PHONY: apk apk-tv apk-split apk-debug linux run version
 
 apk:
 	flutter build apk --release --target-platform android-arm64 $(DEFINES) $(FLAGS)
+
+# A Chromecast with Google TV has a 64-bit chip and a 32-bit userspace
+# (`ro.product.cpu.abilist` is `armeabi-v7a,armeabi` on Android 14), so it
+# refuses the arm64 APK above with INSTALL_FAILED_NO_MATCHING_ABIS. Needs
+# libclang, which armv7 uses to generate the aws-lc-sys bindings -- ANDROID.md,
+# "Prerequisites".
+apk-tv:
+	flutter build apk --release --target-platform android-arm $(DEFINES) $(FLAGS)
 
 apk-split:
 	flutter build apk --release --split-per-abi $(DEFINES) $(FLAGS)

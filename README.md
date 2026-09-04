@@ -875,7 +875,8 @@ the one line that says which build the rest of the report is about. A plain
 `flutter build` passes neither, so the build to type is the `Makefile`'s:
 
 ```bash
-make apk          # release APK for a phone or TV box (arm64)
+make apk          # release APK for a phone or a 64-bit TV box (arm64)
+make apk-tv       # release APK for a Chromecast with Google TV (armeabi-v7a)
 make apk-split    # release APKs per ABI
 make linux        # release Linux desktop bundle
 make run          # flutter run, stamped the same way
@@ -1001,9 +1002,11 @@ app fell back to an ephemeral port, read it from logcat); Discover showing
 Cinemeta posters proves HTTPS end to end. For D-pad work create a second
 AVD from `system-images;android-36;android-tv;x86_64` with `-d tv_1080p`
 and drive it with `adb shell input keyevent` — the same x86_64 debug APK
-installs on it; ANDROID.md lists the keycodes. A physical phone/TV box
-(USB debugging, `adb devices` shows `device`) takes the arm64 APK the same
-way.
+installs on it; ANDROID.md lists the keycodes. On a physical phone or TV box
+(USB debugging, `adb devices` shows `device`) build for the ABI that box
+reports from `adb shell getprop ro.product.cpu.abilist` -- `make apk` for a
+phone, `make apk-tv` for a Chromecast with Google TV, which is 32-bit and
+refuses the arm64 APK outright (ANDROID.md, "Running on a physical device").
 
 ## Casting to a Chromecast
 
@@ -1261,7 +1264,7 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 | **Windows (desktop)** | ✅ First-class | Same as Linux, except that `stremio://` links are not registered: that needs an installer writing a URL-protocol registry key, and this repo has none. |
 | **macOS (desktop)** | ✅ First-class | Native Rust + media_kit; needs a Mac to build. |
 | **Android** | ✅ Supported | Rust cross-compiles to the NDK; embedded as a native lib. Proven by existing Stremio clients. Primary mobile target. |
-| **Android TV / Google TV** | ✅ Supported | Chromecast with Google TV, the Google TV Streamer, and other Android TV boxes all run Android — the same APK installs (leanback manifest is in place). The **D-pad/remote-focused UI** is in: focus traversal, remote keys in the player, ten-foot density and overscan, all keyed on the `xtremio/device` channel's answer (see Status). Verified on a headless `android-36;android-tv;x86_64` AVD; a physical box is still untried. Low-RAM devices (the 2 GB Chromecast) make the lightweight pure-Rust server and a bounded piece cache matter. |
+| **Android TV / Google TV** | ✅ Supported | Chromecast with Google TV, the Google TV Streamer, and other Android TV boxes all run Android — one build covers them (leanback manifest is in place), as long as it is built for the ABI the box reports: a Chromecast with Google TV runs a 32-bit userspace and wants `make apk-tv`. The **D-pad/remote-focused UI** is in: focus traversal, remote keys in the player, ten-foot density and overscan, all keyed on the `xtremio/device` channel's answer (see Status). Verified on a headless `android-36;android-tv;x86_64` AVD and run on a physical Chromecast with Google TV (`sabrina`, Android 14), which is where the ABI above and the remote-input fixes came from. Low-RAM devices (the 2 GB Chromecast) make the lightweight pure-Rust server and a bounded piece cache matter. |
 | **iOS** | ⚠️ With effort | Rust + media_kit build for iOS, but: background execution is throttled (a torrent server suspends when backgrounded), and **the App Store is out** (App Store terms are incompatible with GPL-3, which the shipped binary is — see License). Sideload / TestFlight / AltStore only. |
 | **Web** | ❌ Not possible | A browser **cannot do BitTorrent** — no raw sockets (only HTTP/WebSocket/WebRTC), so the torrent swarm is unreachable, and there's no way to run a local server or libmpv. WebTorrent only reaches the tiny WebRTC-capable subset of peers. The only "web" that works is a *thin client talking to a separate streaming server* (the stremio-web model) — a different architecture, not this app. |
 

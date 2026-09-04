@@ -39,9 +39,14 @@ cross-compile per target takes several minutes.
 ```bash
 make apk-debug                                                           # emulator only (x86_64)
 make apk                                                                 # release, arm64 only, no bindgen needed
+make apk-tv                                                              # release, armeabi-v7a: Chromecast with Google TV
 make apk-split                                                           # release, arm + arm64 + x64 APKs
-make apk-debug FLAGS="--target-platform android-arm64,android-x64"       # phone/TV + emulator
+make apk-debug FLAGS="--target-platform android-arm64,android-x64"       # phone/64-bit TV + emulator
 ```
+
+`make apk-tv` is not `make apk` with a different flag by accident: see
+"Running on a physical device" for which box wants which ABI. It is an armv7
+build, so it is one of the two that need libclang.
 
 Those are the `flutter build apk` lines below plus the two `--dart-define`s
 that put a version and a commit in the Diagnostics header (see the Makefile,
@@ -51,8 +56,9 @@ The plain commands, for anything the Makefile does not cover:
 
 ```bash
 flutter build apk --debug --target-platform android-x64                  # emulator only
-flutter build apk --debug --target-platform android-arm64,android-x64    # phone/TV + emulator
+flutter build apk --debug --target-platform android-arm64,android-x64    # phone/64-bit TV + emulator
 flutter build apk --release --target-platform android-arm64              # arm64 only, no bindgen needed
+flutter build apk --release --target-platform android-arm                # armeabi-v7a only
 flutter build apk --release --split-per-abi                              # arm, arm64, x64 APKs
 ```
 
@@ -126,8 +132,10 @@ existing Flutter escape hatch out of ABI filtering entirely.
   (a `HOME` fallback in the settings defaults, `dirs::cache_dir` in the
   update manager), and a missing one is not an error.
 - **Leanback entries** for Android TV / Google TV are already in
-  `AndroidManifest.xml` (same APK runs on Android TV boxes, Chromecast with
-  Google TV, and the Google TV Streamer — they're all just Android).
+  `AndroidManifest.xml` (one build runs on Android TV boxes, Chromecast with
+  Google TV and the Google TV Streamer alike — they're all just Android —
+  as long as its ABI is one the box has; they do not agree on that, see
+  "Running on a physical device").
   `android:banner` is the tile the TV home screen shows, a 320x180 xhdpi
   PNG at `res/drawable-xhdpi/banner.png` (the launcher icon is the wrong
   shape for it).
@@ -378,7 +386,7 @@ but nothing downstream would put the resulting `.so` in an APK — which is
 why the vendored copy is patched to stop adding that ABI (see
 `rust_builder/README.md`). So on a 32-bit-only TV image the app cannot be
 installed at all; use the x86_64 image on an x86_64 host, `arm64-v8a` on an
-arm64 host, or a physical box with the arm64 APK.
+arm64 host, or a physical box with the APK for the ABI that box reports.
 
 The ordinary emulator debug APK is what installs here — no separate build:
 
@@ -445,13 +453,38 @@ curl -si http://127.0.0.1:11470/heartbeat
 
 ## Running on a physical device
 
-A phone, TV box or Chromecast with Google TV with USB debugging enabled
-(`adb devices` shows `device`, not `unauthorized`) takes the arm64 APK the
-same way: `adb install -r build/app/outputs/flutter-apk/app-debug.apk` (built
-with `android-arm64` in `--target-platform`), then
-`adb shell am start -n com.zond.xtremio/.MainActivity`. No physical device or
-Android TV box was available to this session, so this path is documented but
-not yet exercised — the emulator run below stands in for it.
+**Ask the device which ABI it wants; do not infer it from the chip.** With USB
+debugging enabled (`adb devices` shows `device`, not `unauthorized`):
+
+```bash
+adb shell getprop ro.product.cpu.abilist
+```
+
+The first entry is the one to build for. Measured on the box this project
+targets, a **Chromecast with Google TV** (`sabrina`, Android 14 / API 34):
+
+```
+armeabi-v7a,armeabi
+```
+
+That is a 64-bit chip running a 32-bit userspace, and there is no `arm64-v8a`
+in the list, so an arm64 APK is not merely slower there — it is refused, with
+`INSTALL_FAILED_NO_MATCHING_ABIS`. It wants **`make apk-tv`** (armeabi-v7a),
+which needs no source change at all: rustls and aws-lc-rs cross-compile for
+`armv7-linux-androideabi` unchanged, and the release APK came out at 44.6 MB
+against arm64's 55.2 MB. A phone or a 64-bit TV box (whose list starts
+`arm64-v8a`) takes `make apk` instead.
+
+Then, for either:
+
+```bash
+adb install -r build/app/outputs/flutter-apk/app-release.apk
+adb shell am start -n com.zond.xtremio/.MainActivity
+```
+
+On a TV device the way in is usually ADB over the network — turn on ADB
+debugging in its developer options, then `adb connect <ip>:5555` — rather than
+a cable.
 
 ## What was verified
 
