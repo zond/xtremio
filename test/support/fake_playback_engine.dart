@@ -25,6 +25,14 @@ class FakePlaybackEngine implements PlaybackEngine {
   int statsListeners = 0;
   bool get sampling => statsListeners > 0;
 
+  /// What [videoFrameRate] answers: null (a backend that cannot say)
+  /// unless a test gives the video a rate.
+  double? frameRate;
+
+  /// How often the screen has asked for it -- a test's proof that the rate
+  /// is sampled once per playback and not per menu.
+  int videoFrameRateCalls = 0;
+
   /// Every `open` call: the URL and the requested start position.
   final List<(Uri, Duration)> opened = [];
   final List<Duration> seeks = [];
@@ -114,6 +122,12 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   @override
   Stream<PlaybackStats> get stats => _stats.stream;
+
+  @override
+  Future<double?> videoFrameRate() async {
+    videoFrameRateCalls++;
+    return frameRate;
+  }
 
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {

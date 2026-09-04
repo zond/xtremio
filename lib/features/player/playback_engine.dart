@@ -51,6 +51,16 @@ abstract interface class PlaybackEngine {
   /// simply never emits.
   Stream<PlaybackStats> get stats;
 
+  /// The frame rate of the video playing, read once, or null when this
+  /// backend cannot say -- no video open yet, no such property, or an
+  /// engine that is not libmpv.
+  ///
+  /// [stats] carries the same number, but only while the stats OSD is on
+  /// screen and at the cost of a poll. What reads this needs it whether or
+  /// not anyone ever opens the OSD, and needs it once, so it is a plain
+  /// read rather than a subscription.
+  Future<double?> videoFrameRate();
+
   /// Opens [url] and starts playing from [start].
   Future<void> open(Uri url, {Duration start = Duration.zero});
 
@@ -449,6 +459,46 @@ class MediaKitEngine implements PlaybackEngine {
     } finally {
       _sampling = false;
     }
+  }
+
+  /// The mpv properties [videoFrameRate] reads, in the order it tries
+  /// them: what the container declares, then -- for a container that
+  /// declares nothing, which is what a raw stream often is -- the rate
+  /// frames are actually leaving the filter chain at.
+  static const List<String> frameRateProperties = [
+    'container-fps',
+    'estimated-vf-fps',
+  ];
+
+  @override
+  Future<double?> videoFrameRate() async {
+    final native = _player.platform;
+    // Only the native (libmpv) backend exposes raw properties.
+    if (native is! NativePlayer || _disposed) return null;
+    final values = <String?>[];
+    for (final property in frameRateProperties) {
+      try {
+        values.add(await native.getProperty(property));
+      } catch (_) {
+        // Unavailable property or a player torn down mid-read: the next
+        // one may still answer.
+        values.add(null);
+      }
+    }
+    return frameRateFrom(values);
+  }
+
+  /// The first of [values] that is a frame rate at all: a number that
+  /// parses, is finite and is above zero. mpv answers an empty string for
+  /// a property it has no value for, and `0` for a container that
+  /// declares no rate -- neither says anything about the video, so both
+  /// read as null rather than as a rate of nothing.
+  static double? frameRateFrom(Iterable<String?> values) {
+    for (final value in values) {
+      final rate = double.tryParse(value?.trim() ?? '');
+      if (rate != null && rate.isFinite && rate > 0) return rate;
+    }
+    return null;
   }
 
   @override
