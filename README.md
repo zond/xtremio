@@ -600,63 +600,69 @@ connection.
   the encoding of the bytes it returns -- and the addon's own `id`,
   scoped by language, so two addons mirroring one upload collapse while
   two that both number their answers from 1 do not. What is left is
-  weighed against the video's own frame rate. A subtitle timed for
-  25 fps played against a 23.976 fps film *can* drift about four seconds
-  a minute, and OpenSubtitles says which rate an upload was cut for
-  (`fpsMilli`, on about nine entries in ten) -- but the claim is about
-  the release the upload was made for, not about its timing. Ten English
-  files for one film declaring six different rates all end within 1 % of
-  the same runtime, while five Gilmore Girls files at 25 fps really do
-  run 4.27 % short against the five at 23.976, and nothing in the
-  metadata separates those two populations. So **nothing is corrected
-  automatically**: a multiplier applied unasked would fix one population
-  and silently break the other. What the rate decides is the order of
-  the list and the direction of the panel's speed button; the drift
-  itself is linear, so when a viewer judges it there, one press removes
-  the whole of it -- a film of N frames sits at `N / fps_sub` in the
-  subtitle and at `N / fps_video` in the picture, so 25 against 23.976 is
-  1.0427 (`subtitleSpeed`, written through
-  `PlaybackEngine.setSubtitleSpeed`), and the reciprocal is the mistake
-  to make here, since it doubles the drift rather than removing it. The
-  video's rate is one read of libmpv's `container-fps` through
-  `PlaybackEngine.videoFrameRate`,
-  taken once when the media loads -- the stats OSD polls the same
-  property, but only while it is on screen, and this has to be known
-  whether or not anyone ever opens it. Only what the container *declares*
-  is trusted: `estimated-vf-fps` is an average of the last ten frame
-  durations, which mpv itself calls unstable for the imprecise timestamps
-  a torrent stream is full of, and a stall rendering 12 frames a second
-  would rank the files that fit behind the ones that fit nothing and
-  point the speed button off a number it invented. Rates within 0.01 fps
-  are the same cut (`23980` is a rounded 23.976), and so
-  are rates a telecine or a doubling apart -- an SRT is timed in seconds,
-  not frames, so 23.976 film in a 29.97 container is the same seconds
-  (five frames drawn for every four) and a `23976` file plays in sync
-  against it: both rank as fitting. The same reduction is what keeps the
-  ratio honest, and what places a video in its family for the speed
-  button's direction, since it is taken between the two *content* rates
-  and not between the two declared numbers: a file cut for a 50 fps PAL
-  encode is 25 fps material and a 29.97 fps container is 23.976 fps film,
-  so the pair is one PAL/NTSC step apart and wants 25/23.976 -- reducing
-  the file alone would read it as 25/29.97 and leave the subtitle five
-  times further out than never touching it. Both families are walked, and
-  the ratio nearest 1 wins. What is left is the PAL/NTSC pair, where the
-  running time really does differ; a ratio outside the `<0.1-10.0>`
-  libmpv's `sub-speed` accepts is not a frame-rate relationship at all
-  but an addon sending frames where `fpsMilli` wants thousandths, and it
-  tells us nothing. Nothing is dropped and nothing is decided on a guess:
-  a file that declares no rate is one we know nothing about, and an
-  engine that cannot say what the video runs at leaves the addons' own
-  order standing. What the rate decides is the *order*:
-  `subtitlesByFrameRateFit` puts a language's files whose declared rate
-  fits first, then the ones that declared no rate, then the ones whose
-  rate differs, because `fpsMilli` is a claim about the release an upload
-  was made for and a claim can be wrong -- a file that needs nothing is
-  worth more than one that might. A rate that came out unreadable ranks
-  with the ones that declared none, since that is all it told us.
+  ordered by **the release it was cut for**. A subtitle timed for 25 fps
+  played against a 23.976 fps film *can* drift about four seconds a
+  minute, and
+  OpenSubtitles says which rate an upload was cut for (`fpsMilli`, on
+  about nine entries in ten) -- but the claim is about the release the
+  upload was made for, not about its timing. Ten English files for one
+  film declaring six different rates all end within 1 % of the same
+  runtime, while five Gilmore Girls files at 25 fps really do run 4.27 %
+  short against the five at 23.976, and nothing in the metadata
+  separates those two populations. So **nothing is corrected
+  automatically** -- a multiplier applied unasked would fix one
+  population and silently break the other -- and nothing is *ordered* by
+  the rate either. What the addon says about which release an upload was
+  cut for says more, because two files made for one release keep its
+  time. `subtitlesByRelease` puts a language's files whose `releaseGroup`
+  or `movieReleaseName` names the video actually playing first, then the
+  ones from a subtitle group the viewer has already adjusted for this
+  series (the correction goes back on when the file is applied, so it
+  arrives fixed, and the rank asks the memory exactly what applying it
+  will ask), then everything else in the order the addons answered.
   Between languages nothing moves, and inside a rank the addon that
-  answered first still wins. A row carries the addon that offered the
-  file and nothing else: no rate, and no verdict about its timing. Every
+  answered first still wins -- which matters, because the head of a
+  language is the file its row applies and the file the auto-pick plays.
+  Nothing is dropped or hidden. The video is named by the same
+  `castFilename` a remembered shift is keyed on (the file the server says
+  it opened, else the addon's claim); both sides are cut into lower-case
+  runs of letters and digits, since release names are written with dots,
+  underscores, spaces and any case, and the claim has to appear as a
+  contiguous run of *whole tokens*. A false match is worse than no match
+  -- it would put a file at the head of its language with nobody looking
+  -- so part of a word is not a match (`DFN` never claims a DFNX rip),
+  tokens scattered through the name are not (`BluRay` and `x264` from
+  opposite ends describe a kind of encode, not this one), and a lone bare
+  number or two-letter tag is not, because a year and a resolution are
+  what a bad parse leaves in those fields. A claim matching every file of
+  a language costs nothing, since a rank keeps the addons' order inside
+  it. A row carries the addon that offered the file and, where it earned
+  one, two words saying it was cut for this release -- a fact about the
+  upload, never a rate and never a verdict about its timing. What the
+  video's own rate still decides is the direction of the panel's speed
+  button, and nothing else. The drift is linear, so when a viewer judges
+  it one press removes the whole of it: a film of N frames sits at
+  `N / fps_sub` in the subtitle and at `N / fps_video` in the picture, so
+  25 against 23.976 is 1.0427 (`SubtitleTiming.speedStep`, written
+  through `PlaybackEngine.setSubtitleSpeed`), and the reciprocal is the
+  mistake to make here, since it doubles the drift rather than removing
+  it. The video's rate is one read of libmpv's `container-fps` through
+  `PlaybackEngine.videoFrameRate`, taken once when the media loads -- the
+  stats OSD polls the same property, but only while it is on screen, and
+  this has to be known whether or not anyone ever opens it. Only what the
+  container *declares* is trusted: `estimated-vf-fps` is an average of
+  the last ten frame durations, which mpv itself calls unstable for the
+  imprecise timestamps a torrent stream is full of, and a stall rendering
+  12 frames a second would point the speed button off a number it
+  invented. Rates within 0.01 fps are the same rate (a container rounding
+  23.976 to 23.98), and so are rates a telecine or a doubling apart -- an
+  SRT is timed in seconds, not frames, so 23.976 film in a 29.97
+  container is the same seconds, five frames drawn for every four. That
+  reduction is what places a video in its family: a 50 fps PAL encode is
+  25 fps material and a 29.97 fps container is 23.976 fps film, so both
+  families are walked and the rate is read as whichever base it reduces
+  to. An engine that cannot say what the video runs at simply leaves the
+  panel offering both directions. Every
   path that changes what is on screen -- another file, an embedded
   track, subtitles off, the next video, and the auto-pick putting the
   tracks back after the engine refused one -- goes through the one
@@ -775,7 +781,10 @@ connection.
   rows deep survives the list being rebuilt when a slow addon answers.
   The menu is reachable before the media loads, so a pick can predate the
   rate; nothing is taken away when it lands, and the panel picks up the
-  direction as soon as the engine has answered.
+  direction as soon as the engine has answered. The list itself waits for
+  nothing: a torrent whose server has not yet named the file it opened is
+  a video nothing can be said to have been cut for, and the addons' order
+  stands until it is.
   Which track is active comes from mpv's
   own `sid`/`aid` (observed through `NativePlayer.observeProperty`), so a
   default or forced track mpv picked by itself shows as selected too —
@@ -783,11 +792,11 @@ connection.
   dispatches `SubtitlePreferenceChanged`, which the core keeps for the
   Player session; the next episode's player applies it automatically to
   the first matching track once the media is loaded (mpv refuses
-  `sub-add` while it is still between files) and the engine has answered
-  about the frame rate -- the automatic pick comes out of the same
-  ordered list the menu shows, since it is the one path that applies a
-  file without anybody looking at it, and it applies it exactly as it
-  stands. A backend that answers neither way is waited on for two seconds
+  `sub-add` while it is still between files) -- the automatic pick comes
+  out of the same ordered list the menu shows
+  (`PlayerScreen._offeredSubtitles`, the one place either consumer gets
+  it from), since it is the one path that applies a file without anybody
+  looking at it, and it applies it exactly as it stands. A backend that answers neither way is waited on for two seconds
   (`PlayerScreen.frameRateTimeout`) and then treated as having said
   nothing, which decides nothing. Text subtitles are rendered by Flutter
   (media_kit's default `libass: false` sets mpv `sub-visibility=no` and

@@ -511,13 +511,12 @@ class MediaKitEngine implements PlaybackEngine {
   /// number is unstable for imprecise timestamps (Matroska, which is what
   /// a torrent stream mostly is) and wrong while frames are dropped, and
   /// this reads it at the moment the media loads, when ten frames may not
-  /// have been drawn yet. That estimate then decides a comparison with a
-  /// tolerance of a hundredth of a frame (`subtitleFrameRateTolerance` in
-  /// `subtitle_groups.dart`), so a jittery 24.10 for a true 23.976 would
-  /// rank every correctly cut subtitle in the language behind the ones
-  /// that fit nothing, and would put the timing panel's speed control
-  /// the wrong way round or take its direction away. A container that
-  /// declares nothing is the safe answer, and the one this gives.
+  /// have been drawn yet. That estimate then decides which frame-rate
+  /// family the video is in, within a hundredth of a frame
+  /// (`subtitleFrameRateTolerance` in `subtitle_groups.dart`), so a
+  /// jittery 24.10 for a true 23.976 would put the timing panel's speed
+  /// control the wrong way round or take its direction away. A container
+  /// that declares nothing is the safe answer, and the one this gives.
   static const List<String> frameRateProperties = ['container-fps'];
 
   @override

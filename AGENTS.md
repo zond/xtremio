@@ -174,18 +174,19 @@ automatically fixes one and breaks the other in equal measure -- and
 breaks it silently, on a file that was in sync when it arrived. So
 `sub-speed` and `sub-delay` are the viewer's alone, through the panel
 behind "Adjust timing" (`SubtitleTiming` in
-`lib/features/player/subtitle_timing.dart`). What the rates still decide
-is the *order* of the list and the *direction* of one button. Each rule
-below has a test; see README, *Subtitles*.
+`lib/features/player/subtitle_timing.dart`). What a rate still decides
+is the *direction* of one button, and nothing else -- the list is
+ordered by the release an upload was cut for. Each rule below has a
+test; see README, *Subtitles*.
 
 - **The ratio is `fps_sub / fps_video`, and the reciprocal is the bug.**
   A film of N frames sits at `N / fps_sub` in the subtitle and at
-  `N / fps_video` in the picture, so 25 against 23.976 is 1.0427.
-  Reversed it does not half-fix the drift, it doubles it -- the cue lands
-  further from where it belongs than leaving the file alone. That is why
-  the speed control is pointed by the video rather than offered both
-  ways: `subtitleSpeed` computes the ratio, and
-  `subtitleSpeedDirection` says which way a press has to go.
+  `N / fps_video` in the picture, so 25 against 23.976 is 1.0427
+  (`SubtitleTiming.speedStep`). Reversed it does not half-fix the drift,
+  it doubles it -- the cue lands further from where it belongs than
+  leaving the file alone. That is why the speed control is pointed by
+  the video rather than offered both ways, and
+  `subtitleSpeedDirection` is what points it.
 - **The video picks the direction, and only the container may say so.**
   Frame rates are two lineages -- film (23.976, 24, and the 29.97, 30,
   47.952, 48, 59.94, 60 telecined or doubled off them, all the same
@@ -305,57 +306,75 @@ below has a test; see README, *Subtitles*.
   `container-fps` and nothing else. `estimated-vf-fps` is the obvious
   second choice and is a *measurement* -- ten frame durations averaged,
   read the moment the media loads, which mpv's own manual calls unstable
-  for the imprecise timestamps a torrent stream is full of. Fed to a
-  comparison with a hundredth-of-a-frame tolerance it ranks the files
-  that fit behind the ones that fit nothing, and it points the speed
-  button off a number the stall invented. Do not add a fallback.
+  for the imprecise timestamps a torrent stream is full of. It would
+  point the speed button off a number the stall invented, confidently
+  and the wrong way. Do not add a fallback.
 - **An unknown rate decides nothing.** Cast, offline, a fake, a
   container that says nothing, a read that threw: all of it is null, and
-  null means the addons' own order stands and the panel offers both
-  directions. Never substitute a default, a guess or a last-known rate.
-- **Nothing is hidden; what the rate decides is the order.**
-  `subtitlesByFrameRateFit` puts a language's files that need no
-  correction first, then the ones that declared no rate, then the ones
-  whose declared rate differs -- an addon's `fpsMilli` is a claim about
-  the release the upload was made for, and a claim can be wrong, so a
-  file that needs nothing is worth more than one that might. Between
-  languages nothing moves and inside a rank the addon that answered
-  first still wins, because that is the file a language row applies.
+  null means the panel offers both directions. Never substitute a
+  default, a guess or a last-known rate. Nothing else reads it, so an
+  unknown rate costs a pointed button and no more.
+- **Nothing is hidden; what orders a language is the release.**
+  `subtitlesByRelease` puts a language's files that the addon says were
+  cut for the release actually playing first, then the ones from a group
+  the viewer has already adjusted for this series, then the addons' own
+  order. The first rank is evidence about *this video*: two files cut
+  for one release keep its time, where a declared rate says only where
+  an upload came from. The second is worth having because the
+  correction goes back on when the file is applied, so it arrives fixed
+  -- which is why it asks `SubtitleSyncMemory` exactly what
+  `_resetSubtitleTiming` will ask it, and why a shift measured against
+  another release does not rank: a rank must not promise a fix that
+  never comes. Between languages nothing moves and inside a rank the
+  addon that answered first still wins, because that is the file a
+  language row applies. Ordering by the rate is the thing not to put
+  back: it had to be taught that a claim beats no claim, and then that a
+  mis-scaled `fpsMilli` beats neither, and the premise under all of it
+  was still wrong.
+- **A release match is whole tokens, and a false one is worse than
+  none.** `subtitleMatchesRelease` compares the addon's `releaseGroup`
+  and `movieReleaseName` against the name the player knows the video by
+  (`castFilename`, the same one a shift is keyed on), both cut into
+  lower-case runs of letters and digits, and the claim has to appear as
+  a contiguous run of whole tokens. A match puts a file at the head of
+  its language, which is what the row applies and what the auto-pick
+  plays with nobody looking -- so part of a word is not a match (`DFN`
+  never claims a DFNX rip), scattered tokens are not (`BluRay` and
+  `x264` from opposite ends of a name describe a kind of encode), and a
+  lone bare number or two-letter tag is not, since a year and a
+  resolution are what a bad parse leaves in those fields. A claim
+  matching *every* file of a language costs nothing, because a rank
+  keeps the addons' order inside it.
 
 Three more things that are easy to undo by accident:
 
 - **Everything that consumes the subtitle list orders it.** There are two
   consumers, the menu and the session preference's auto-pick, and the
-  auto-pick is the one that applies a file without the viewer looking. It
-  waits for the engine to have answered about the rate
-  (`_frameRateSampled`) before it runs, because the sample resolves a
-  microtask after it is started, and a pick made before it would play the
-  addons' first answer rather than the language's best-fitting file. A
-  third consumer must do both.
-- **The tolerance is 0.01 fps at the content's own rate, and the ratios
-  that reach it are the ones that preserve *seconds*.** A subtitle is
-  timed in wall-clock seconds, so telecine and frame doubling (5/4, 2,
-  5/2) are the same cut and rank as fitting -- 23.976 film in a 29.97
-  container is identical seconds -- while 25 against 23.976 is a 4.3 %
-  speed-up and does not. The same reduction is what places a video in
-  its family for the speed button's direction, and it runs on *both*
-  numbers: a 50 fps PAL encode is 25 fps material and a 29.97 fps
-  container is 23.976 fps film, so the ratio is the one nearest 1 over
-  both families and not a single step off the video's declared rate --
-  reducing the file alone answers 0.834 there. Widening the tolerance
-  instead of adding a ratio is the wrong repair: 0.01 is what separates
-  a rounded `23980` from a real 24 fps cut. And a ratio outside
-  `sub-speed`'s own `<0.1-10.0>` is not a frame rate but a mis-scaled
-  `fpsMilli`; the rank comes from `_readableRatio` and never from
-  `subtitleSpeed(...) == 1`, or an addon sending frames where
-  thousandths were wanted sorts ahead of every file that honestly
-  declared nothing -- head of its language, which is the file the row
-  and the auto-pick apply.
-- **A row says the addon, and never a rate or a verdict.** The menu once
-  marked the files it was about to re-time; with nothing re-timed there
-  is nothing to mark, and the number was never shown in the first place.
-  The request was a list that is right and a button that presses the
-  right way, not a number to reason about.
+  auto-pick is the one that applies a file without the viewer looking, so
+  a consumer that skipped the ordering would play whichever addon
+  answered first. Both go through `PlayerScreen._offeredSubtitles`, which
+  is one call rather than four arguments repeated twice; a third consumer
+  calls it too. Nothing waits on anything to run it -- the ordering asked
+  the engine for the rate until the release replaced it, and what it asks
+  now (the server's filename, the series, the memory) is either there or
+  is not.
+- **The tolerance is 0.01 fps, and the ratios that reach it are the ones
+  that preserve *seconds*.** A subtitle is timed in wall-clock seconds,
+  so telecine and frame doubling (5/4, 2, 5/2) leave a rate in the same
+  family -- 23.976 film in a 29.97 container is identical seconds --
+  while 25 against 23.976 is a 4.3 % speed-up and is the other family.
+  That reduction is the whole of what a declared rate is used for now:
+  it places the *video* in its family so the speed button can be pointed.
+  Widening the tolerance instead of adding a ratio is the wrong repair:
+  0.01 is what separates a rounded 23.98 from a real 24 fps cut.
+- **A row says the addon and why it is first, never a rate or a
+  verdict.** A file matching the release earns two words for it
+  (`SubtitleMenu.releaseNote`), on the row and on the language row that
+  would apply it, because a row that is first for a reason should say
+  the reason. That is a fact about the upload; the declared rate is
+  still shown nowhere, and neither is any judgement about a file's
+  timing. The request was a list that is right and a button that presses
+  the right way, not a number to reason about.
 
 ## The addon health record keys on a hash, never the URL
 

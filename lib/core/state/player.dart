@@ -68,12 +68,19 @@ final class SubtitleInfo {
   String? get label => _text('label');
 
   /// Frames per second times 1000 (`23980`, `25000`): the rate of the
-  /// video this file was timed against, when the addon knows it.
+  /// video the addon says this file was cut for, on about nine
+  /// OpenSubtitles entries in ten.
   ///
-  /// What `subtitleSpeed` divides by the container's own rate to put a
-  /// file cut for another video back in step, and what
-  /// `subtitlesByFrameRateFit` reads to offer the files needing no
-  /// correction first.
+  /// **Nothing reads it, and a new reader is almost certainly a
+  /// mistake.** It ordered the subtitle list until the measurements came
+  /// in: ten English files for one film declaring six different rates
+  /// all end within 1 % of the same runtime, so the number says where an
+  /// upload came from and not how it is timed. What orders the list now
+  /// is the release an upload was cut for, and what re-times one is the
+  /// viewer -- see AGENTS, *Nothing re-times a subtitle but the viewer*.
+  /// It is kept because the addon keeps sending it and because measuring
+  /// a file's real drift is the honest way to use it, which nothing here
+  /// does yet.
   int? get fpsMilli => _int('fpsMilli');
 
   /// The name of the file inside the addon's archive
