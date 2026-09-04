@@ -5,6 +5,7 @@
 //! and committed. The other modules are internal:
 //!
 //! - `addon_health`: how each installed addon has been answering, counted
+//! - `addon_observer`: what the runtime pump saw each addon answer
 //! - `env`: the `stremio_core::runtime::Env` (HTTP, storage, executors)
 //! - `model`: the `#[derive(Model)]` app model and its JSON projection
 //! - `state`: the one process-global value the modules below keep their
@@ -19,6 +20,7 @@
 //! - `android`: JNI hooks the Kotlin side calls before Dart starts (Android only)
 
 pub mod addon_health;
+pub mod addon_observer;
 #[cfg(target_os = "android")]
 pub mod android;
 pub mod api;

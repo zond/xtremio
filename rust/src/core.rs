@@ -7,6 +7,13 @@
 //! embedded server -> build the model -> `Runtime::new` -> pump events ->
 //! re-pin the unfinished offline downloads in the background.
 //!
+//! Every `NewState` is also read for how the addons answered, into
+//! [`crate::addon_health`] by way of [`crate::addon_observer`]. Reading the
+//! model from the pump is safe: `Runtime::dispatch` and
+//! `Runtime::handle_effect_output` both release the model's *write* guard
+//! before `handle_effects` emits, so nothing is ever waiting on this
+//! channel while holding the lock this pump wants.
+//!
 //! Login and logout replace the profile settings with stremio-core's
 //! defaults, which point the streaming server back at loopback:11470, so the
 //! pump re-applies the retarget when `UserAuthenticated` / `UserLoggedOut`
@@ -303,6 +310,11 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
             )
         });
 
+    // Beside the buckets, and for the same reason: nothing is written out
+    // before the stored record has been read, or this process's first
+    // minute of answers would replace all of it.
+    crate::addon_health::load_in(&app);
+
     let mut profile = profile.unwrap_or_default();
     if let Some(embedded) = &server_base_url {
         retarget_loopback_server(&mut profile, embedded);
@@ -355,6 +367,9 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
             {
                 reapply_loopback_retarget(app);
             }
+            if let RuntimeEvent::NewState(fields, ..) = &event {
+                observe_addon_answers(app, fields);
+            }
         }));
         futures::future::ready(())
     }));
@@ -381,6 +396,29 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
         server_base_url,
         schema_version: SCHEMA_VERSION,
     })
+}
+
+/// Counts how the addons answered in the fields a `NewState` names.
+///
+/// Reads the model as it is now rather than as it was when the event was
+/// emitted, which is what the edge detection in [`crate::addon_observer`]
+/// is for. Safe to do from the pump: see this module's docs on why no
+/// writer can be waiting on the pump's channel while holding the model's
+/// write lock.
+///
+/// Nothing is counted before the Runtime has been installed (the pump is
+/// started first, so the bootstrap effects' events arrive with no model to
+/// read) or after `shutdown` has taken it away -- by which point the record
+/// has already been written out.
+fn observe_addon_answers(app: &AppState, fields: &[XtremioModelField]) {
+    let guard = app.core.runtime();
+    let Some(runtime) = guard.as_ref() else {
+        return;
+    };
+    let Ok(model) = runtime.model() else {
+        return;
+    };
+    crate::addon_observer::observe(app, &model, fields);
 }
 
 /// `{"field": <model field | null>, "action": <stremio_core Action>}`.
@@ -424,8 +462,9 @@ pub fn get_state(field: &str) -> anyhow::Result<String> {
     })
 }
 
-/// Drops the Runtime (no more dispatches) and stops the embedded server.
-/// The tokio runtimes stay alive for the process lifetime.
+/// Drops the Runtime (no more dispatches), writes out how the addons have
+/// been answering and stops the embedded server. The tokio runtimes stay
+/// alive for the process lifetime.
 ///
 /// The whole [`AppState`] goes with it, and it goes *first*: from here on a
 /// sink, a dispatch or a subscribe addresses a fresh state, never the one
@@ -437,6 +476,10 @@ pub fn shutdown() -> anyhow::Result<()> {
     if app.core.runtime_mut().take().is_some() {
         tracing::info!("stremio-core runtime stopped");
     }
+    // Whatever the throttle says: the last minute of answers is the part
+    // that would otherwise never reach the file. Of *this* state, which is
+    // the only one anything still counting can be counting into.
+    crate::addon_health::flush_in(&app);
     server::stop_in(&app)
 }
 

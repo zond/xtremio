@@ -587,6 +587,17 @@ pub fn commit_in(app: &AppState, sweep: Sweep) -> bool {
     true
 }
 
+/// What has been counted into `app` so far.
+///
+/// A copy: the table is small, and handing out the lock's contents would
+/// make every reader a writer's problem. This is how the record is read
+/// back without going through the preferences file -- which is what a test
+/// wants, and what an FFI read would want if the app ever needs one that
+/// does not wait for a flush.
+pub fn table_in(app: &AppState) -> Table {
+    app.addon_health.counted().table.clone()
+}
+
 /// Forgets the addons that are no longer installed and have not been for a
 /// while. `installed` is [`key_for`] over every addon in the profile.
 pub fn prune_uninstalled_in(app: &AppState, installed: &BTreeSet<String>) {
