@@ -118,6 +118,155 @@ void main() {
     );
   });
 
+  /// The URLs of [sources] in the order they are offered for a video
+  /// named [release] of [series], with [memory] as what the viewer has
+  /// already fixed.
+  List<String> offered(
+    List<SubtitleSource> sources, {
+    String? release,
+    String? series,
+    SubtitleSyncMemory memory = SubtitleSyncMemory.empty,
+  }) => [
+    for (final source in subtitlesByRelease(
+      sources,
+      release: release,
+      series: series,
+      memory: memory,
+    ))
+      source.subtitle.url.toString(),
+  ];
+
+  test('a language offers what was cut for this release first', () {
+    final sources = [
+      upload('https://subs/yts.srt', releaseGroup: 'YTS'),
+      upload('https://subs/silent.srt'),
+      upload('https://subs/dfn.srt', releaseGroup: 'DFN'),
+    ];
+    expect(offered(sources, release: playing), [
+      'https://subs/dfn.srt',
+      // Nothing is dropped: the rest are still offered, in the order the
+      // addons answered, because that is the order a row applies.
+      'https://subs/yts.srt',
+      'https://subs/silent.srt',
+    ]);
+    // With nothing to compare against, the addons' order is the whole of
+    // what is known.
+    expect(offered(sources), [
+      'https://subs/yts.srt',
+      'https://subs/silent.srt',
+      'https://subs/dfn.srt',
+    ]);
+    expect(
+      subtitlesByRelease(
+        const [],
+        release: playing,
+        series: 'tt0068646',
+        memory: SubtitleSyncMemory.empty,
+      ),
+      isEmpty,
+    );
+  });
+
+  test('then a group the viewer has already fixed for this show', () {
+    // The second rank is worth having for one reason: the correction is
+    // put back when the file is applied, so it arrives fixed.
+    const series = 'tt0068646';
+    final memory = SubtitleSyncMemory.empty.remembering(
+      series: series,
+      group: '6',
+      release: null,
+      speed: 'stretch',
+      shiftSteps: 0,
+    );
+    final sources = [
+      upload('https://subs/plain.srt', releaseGroup: 'PLAIN'),
+      upload('https://subs/six.srt', releaseGroup: 'SIX', g: 6),
+      upload('https://subs/dfn.srt', releaseGroup: 'DFN'),
+    ];
+    expect(offered(sources, release: playing, series: series, memory: memory), [
+      // The release match still outranks it: it is evidence about this
+      // video, where the memory is evidence about a group.
+      'https://subs/dfn.srt',
+      'https://subs/six.srt',
+      'https://subs/plain.srt',
+    ]);
+    // Another show's correction says nothing about this one, and neither
+    // does one made for a group nobody here belongs to.
+    expect(
+      offered(sources, release: playing, series: 'tt0063350', memory: memory),
+      [
+        'https://subs/dfn.srt',
+        'https://subs/plain.srt',
+        'https://subs/six.srt',
+      ],
+    );
+  });
+
+  test('a correction that would not be applied does not rank either', () {
+    // A shift belongs to one video release, so one measured against
+    // another is not put back here -- and a rank that promised it would
+    // be would be promising a fix that never arrives. The rank asks the
+    // memory exactly what the player asks it.
+    const series = 'tt0068646';
+    final elsewhere = SubtitleSyncMemory.empty.remembering(
+      series: series,
+      group: '6',
+      release: 'the.godfather.1972.720p.web.h264-yts.mkv',
+      speed: null,
+      shiftSteps: 3,
+    );
+    final sources = [
+      upload('https://subs/plain.srt', releaseGroup: 'PLAIN'),
+      upload('https://subs/six.srt', releaseGroup: 'SIX', g: 6),
+    ];
+    expect(
+      offered(sources, release: playing, series: series, memory: elsewhere),
+      ['https://subs/plain.srt', 'https://subs/six.srt'],
+    );
+    // Made against this release, it is put back, so it ranks.
+    final here = SubtitleSyncMemory.empty.remembering(
+      series: series,
+      group: '6',
+      release: playing,
+      speed: null,
+      shiftSteps: 3,
+    );
+    expect(offered(sources, release: playing, series: series, memory: here), [
+      'https://subs/six.srt',
+      'https://subs/plain.srt',
+    ]);
+  });
+
+  test('the rows keep the addons order, and so does each rank', () {
+    // Languages stay in the order the addons answered in -- the ranking
+    // is inside a language, never across them -- so a Polish file cut
+    // for this release does not push the Polish row above the English
+    // one.
+    final sources = [
+      upload('https://subs/en-yts.srt', releaseGroup: 'YTS'),
+      upload('https://subs/pl-dfn.srt', lang: 'pol', releaseGroup: 'DFN'),
+      upload('https://subs/en-dfn-1.srt', releaseGroup: 'DFN'),
+      upload('https://subs/en-dfn-2.srt', releaseGroup: 'DFN'),
+    ];
+    expect(offered(sources, release: playing), [
+      // Both English matches are first, and the addon that answered
+      // first still wins the tie: ranking never reorders inside a rank.
+      'https://subs/en-dfn-1.srt',
+      'https://subs/en-dfn-2.srt',
+      'https://subs/en-yts.srt',
+      'https://subs/pl-dfn.srt',
+    ]);
+    // `pl` and `pol` are one row in the menu, so they are one language
+    // here as well.
+    expect(
+      offered([
+        upload('https://subs/pl-yts.srt', lang: 'pl', releaseGroup: 'YTS'),
+        upload('https://subs/pol-dfn.srt', lang: 'pol', releaseGroup: 'DFN'),
+      ], release: playing),
+      ['https://subs/pol-dfn.srt', 'https://subs/pl-yts.srt'],
+    );
+  });
+
   test('the row says which file was cut for what is playing', () {
     final groups = groupSubtitlesByLanguage(
       [

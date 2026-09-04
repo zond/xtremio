@@ -319,16 +319,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// What the video playing runs at, once the engine has said
   /// ([_sampleFrameRate]); null until then, and for a backend that cannot
-  /// say at all. Read to order the subtitle files and to point the
-  /// timing panel's speed control -- it is never shown: the point is a
-  /// list that is right and a button that presses the right way, not a
-  /// number to reason about.
+  /// say at all. Read to point the timing panel's speed control and for
+  /// nothing else -- it is never shown, and it no longer orders the
+  /// subtitle list: the point is a button that presses the right way,
+  /// not a number to reason about.
   double? _videoFrameRate;
-
-  /// Whether the engine has been asked and has answered (or declined, or
-  /// timed out): the difference between "no rate" and "no rate yet",
-  /// which is what the subtitle auto-pick waits on.
-  bool _frameRateSampled = false;
 
   /// What the viewer has asked of the subtitles on screen, and the whole
   /// of what mpv is playing them at: nothing else writes either property.
@@ -711,7 +706,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // A different video: what the last one ran at says nothing about it,
     // and neither does the adjustment the last subtitle was played with.
     _videoFrameRate = null;
-    _frameRateSampled = false;
     _resetSubtitleTiming();
     _dismissUpNext();
     final progress = state.progress;
@@ -1006,8 +1000,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _pauseTorrentStats();
     });
     _syncTorrentStats();
-    // Before the auto-pick, which waits on its answer: the pick has to be
-    // made out of the same list the menu will show.
     _sampleFrameRate();
     _maybeAutoPickSubtitles();
   }
@@ -1015,11 +1007,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Asks the engine what the video runs at, once per opened media and as
   /// soon as there is a video to ask about.
   ///
-  /// Not before the menu can be opened, though -- the Subtitles button
-  /// works from the moment the controls do -- so a manual pick can still
-  /// predate the answer, and a file picked in that window plays at its
-  /// own timing. Nothing is hidden by the rate, so the cost is a menu
-  /// ordered as the addons answered rather than a file taken away.
+  /// Nothing waits on the answer: the rate points the timing panel's
+  /// speed control and orders nothing, so a panel opened before it lands
+  /// offers both directions and picks up the one it is told as soon as
+  /// the engine says.
   ///
   /// The stats OSD samples the same property, but only while it is up.
   /// This must not depend on that, and must not turn the poll on to get
@@ -1045,15 +1036,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
   }
 
-  /// The engine's answer for [url], or the absence of one -- and the
-  /// go-ahead for the auto-pick that was waiting on it.
+  /// The engine's answer for [url], or the absence of one. A `setState`
+  /// because the timing panel is drawn from it: a direction that arrived
+  /// after the panel opened has to reach the buttons.
   void _onFrameRateSampled(Uri? url, double? rate) {
     if (!mounted || _opened != url) return;
-    setState(() {
-      _videoFrameRate = rate;
-      _frameRateSampled = true;
-    });
-    _maybeAutoPickSubtitles();
+    setState(() => _videoFrameRate = rate);
   }
 
   /// mpv's own error log. Not shown, only recorded: this is where the
@@ -1763,6 +1751,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return file.isEmpty ? null : file;
   }
 
+  /// [sources] in the order both of the list's consumers offer them: the
+  /// menu, and the auto-pick that applies a file with nobody looking.
+  ///
+  /// One place, because a consumer that skipped the ordering would apply
+  /// whichever addon answered first -- and the ranking is read from the
+  /// same three things a correction is: the release the server named,
+  /// the series, and what the viewer has already fixed. A third consumer
+  /// calls this too.
+  List<SubtitleSource> _offeredSubtitles(Iterable<SubtitleSource> sources) =>
+      subtitlesByRelease(
+        sources,
+        release: _syncRelease,
+        series: _syncSeries,
+        memory: _prefs?.subtitleSync ?? SubtitleSyncMemory.empty,
+      );
+
   /// Holds what is on screen now for [_flushRememberedTiming] to write,
   /// replacing whatever was waiting.
   ///
@@ -1910,8 +1914,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// this Player session, e.g. the previous episode) to freshly opened
   /// media: off stays off; otherwise the first track in the preferred
   /// language, from the preferred source first. Waits for the engine to
-  /// report the media loaded (see [_mediaLoaded]) and to have answered
-  /// about the frame rate (see [_frameRateSampled]), then retries as
+  /// report the media loaded (see [_mediaLoaded]), then retries as
   /// tracks and addon results arrive until something matches, and counts
   /// as done only once the engine accepted the pick.
   void _maybeAutoPickSubtitles() {
@@ -1919,11 +1922,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _autoPickingSubtitles ||
         _subtitlesChosenByHand ||
         !_mediaLoaded ||
-        // The rate decides which file of a language fits best and what
-        // it has to be re-timed by, and this applies one without the
-        // viewer looking: picking before the engine has answered would
-        // take the addons' first answer and play it uncorrected.
-        !_frameRateSampled ||
         _opened == null ||
         _handedOver) {
       return;
@@ -1954,12 +1952,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   languageName(language).toLowerCase());
       // The same list the menu is built from, in the same order. This is
       // the one path that applies a subtitle without the viewer looking,
-      // so it is the one that has to take the language's best-fitting
-      // file rather than whichever addon answered first.
-      final offered = subtitlesByFrameRateFit(
-        state.externalSubtitleSources,
-        videoFrameRate: _videoFrameRate,
-      );
+      // so it is the one that has to take the language's best-known file
+      // rather than whichever addon answered first.
+      final offered = _offeredSubtitles(state.externalSubtitleSources);
       final external = offered
           .map((source) => source.subtitle)
           .where((s) => matches(s.lang))
@@ -2117,10 +2112,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 // Ordered before grouping, so the numbering and "the first
                 // option is what a tap applies" hold over the order the
                 // rows are actually in.
-                subtitlesByFrameRateFit(
-                  state?.externalSubtitleSources ?? const [],
-                  videoFrameRate: _videoFrameRate,
-                ),
+                _offeredSubtitles(state?.externalSubtitleSources ?? const []),
                 addonName: _subtitleAddonName,
                 // The same name a shift is remembered against, so a row
                 // marked for this release and a correction put back for

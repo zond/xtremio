@@ -6,6 +6,7 @@ import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/subtitle_groups.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
+import '../../support/fake_prefs_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
@@ -578,9 +579,11 @@ void main() {
     double? videoFrameRate,
     List<Map<String, dynamic>> items, {
     Map<String, dynamic>? preference,
+    AppPrefs? prefs,
   }) {
     final harness = PlayerHarness(
       configureEngine: (engine) => engine.frameRate = videoFrameRate,
+      prefs: prefs,
     );
     harness.fixture['subtitlePreference'] = preference;
     harness.fixture['subtitles'] = [subtitlesResponse(items)];
@@ -603,15 +606,26 @@ void main() {
     'releaseGroup': releaseGroup,
   };
 
-  testWidgets('the menu offers every file, the ones that fit first', (
-    tester,
-  ) async {
+  /// The name the server gives the file it opened, which is what the
+  /// menu ranks and marks against.
+  const opened = 'The.Godfather.1972.1080p.BluRay.x264-DFN.mkv';
+
+  const openedStats = TorrentStats(
+    phase: TorrentPhase.buffering,
+    streamName: opened,
+    initialWindowReadyBytes: 0,
+    initialWindowBytes: 4194304,
+  );
+
+  testWidgets('the menu offers every file, the ones cut for this release '
+      'first', (tester) async {
     useWideViewport(tester);
-    // A 23.976 fps container, which is what a film release is. The PAL
-    // upload *may* drift four seconds a minute against it, and it may
-    // keep perfect time: a declared rate is a claim about the release an
-    // upload was made for, and files that keep time declare it too. So
-    // the rate orders the list and nothing else.
+    // A 23.976 fps container and three uploads, two of which declare a
+    // rate. The rate orders nothing: it is a claim about the release an
+    // upload was made for, and ten English files for one film declaring
+    // six different rates all end within 1 % of the same runtime. What
+    // the addon says about *which release* does order them, because two
+    // files cut for one release keep its time.
     final harness = harnessRated(23.976, [
       upload(
         'en-1',
@@ -624,11 +638,12 @@ void main() {
       upload(
         'en-3',
         'eng',
-        'https://subs.example.org/en-23980.srt',
-        'ROUNDED',
+        'https://subs.example.org/en-dfn.srt',
+        'DFN',
         fpsMilli: 23980,
       ),
     ]);
+    harness.torrentStats.response = openedStats;
     await harness.pump(tester);
     final engine = harness.engine;
     // Nothing is asked before there is a video to ask about, and the rate
@@ -642,39 +657,28 @@ void main() {
 
     await tester.tap(find.byTooltip('Subtitles (S)'));
     await tester.pumpAndSettle();
-    // All three are on offer, and the row names the one that needs
-    // nothing done to it -- an addon's `fpsMilli` is a claim about the
-    // release it was cut for, and a claim can be wrong.
-    expect(find.text('ROUNDED · subs.example.org'), findsOneWidget);
+    // The language row names the file it would apply -- the one the
+    // addon says was cut for the file the server opened -- and says why
+    // it is first. The addon's own answer order put it last.
+    expect(
+      find.text('DFN · subs.example.org · ${SubtitleMenu.releaseNote}'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('2 other English files'));
     await tester.pumpAndSettle();
-    expect(find.text('ROUNDED'), findsOneWidget);
+    expect(find.text('DFN'), findsOneWidget);
     expect(find.text('SILENT'), findsOneWidget);
     expect(find.text('PAL'), findsOneWidget);
 
-    // A row carries the addon that offered it and nothing else: no rate,
-    // and no word claiming we touched the file, because we do not.
-    expect(find.text('ROUNDED · subs.example.org'), findsOneWidget);
-    expect(find.text('subs.example.org'), findsNWidgets(3));
+    // A row carries the addon that offered it and, where it earned one,
+    // the mark: no rate anywhere, and no word claiming we touched the
+    // file, because we do not.
+    expect(find.text('subs.example.org'), findsNWidgets(2));
     expect(find.textContaining('25'), findsNothing);
     expect(find.textContaining('23.9'), findsNothing);
 
-    // A file that fits is played at its own timing.
-    await tester.tap(find.text('ROUNDED'));
-    await tester.pumpAndSettle();
-    expect(engine.externalSubtitles.last.$1.path, endsWith('/en-23980.srt'));
-    expect(engine.subtitleSpeed, 1);
-
-    // And so is the PAL file, whose declared rate is four seconds a
-    // minute from the container's. Ten English uploads for one film
-    // declaring six different rates all run to within 1 % of the same
-    // length: the rate says where a file came from, not how it is timed,
-    // so applying it on the viewer's behalf breaks as many files as it
-    // fixes. Nothing writes `sub-speed` but the viewer.
-    await tester.tap(find.byTooltip('Subtitles (S)'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('2 other English files'));
-    await tester.pumpAndSettle();
+    // Every file is played exactly as it stands, the one cut for another
+    // release included: nothing writes `sub-speed` but the viewer.
     await tester.tap(find.text('PAL'));
     await tester.pumpAndSettle();
     expect(engine.externalSubtitles.last.$1.path, endsWith('/en-25.srt'));
@@ -807,34 +811,24 @@ void main() {
     expect(engine.subtitleDelay, 0);
   });
 
-  testWidgets('the session preference takes the file that fits', (
+  testWidgets('the session preference takes the file cut for this release', (
     tester,
   ) async {
     useWideViewport(tester);
     // The auto-pick is the one path that applies a subtitle without the
-    // viewer looking. English was picked on the previous episode; the
-    // addon answers a 25 fps upload first and a 23.980 one second, and
-    // the container is 23.976 film, so the second is the better file.
+    // viewer looking, so it comes out of the same ordered list the menu
+    // shows. English was picked on the previous episode; the addon
+    // answers an upload for another release first and one for this
+    // release second.
     final harness = harnessRated(
       23.976,
       [
-        upload(
-          'en-1',
-          'eng',
-          'https://subs.example.org/en-25.srt',
-          'PAL',
-          fpsMilli: 25000,
-        ),
-        upload(
-          'en-2',
-          'eng',
-          'https://subs.example.org/en-23980.srt',
-          'ROUNDED',
-          fpsMilli: 23980,
-        ),
+        upload('en-1', 'eng', 'https://subs.example.org/en-yts.srt', 'YTS'),
+        upload('en-2', 'eng', 'https://subs.example.org/en-dfn.srt', 'DFN'),
       ],
       preference: {'enabled': true, 'source': 'external', 'language': 'eng'},
     );
+    harness.torrentStats.response = openedStats;
     await harness.pump(tester);
     final engine = harness.engine;
     expect(engine.externalSubtitles, isEmpty);
@@ -842,9 +836,11 @@ void main() {
     await pumpEvents(tester);
 
     expect(engine.externalSubtitles, [
-      (Uri.parse('https://subs.example.org/en-23980.srt'), 'English', 'eng'),
+      (Uri.parse('https://subs.example.org/en-dfn.srt'), 'English', 'eng'),
     ]);
+    // And applied exactly as it stands, like every other file.
     expect(engine.subtitleSpeed, 1);
+    expect(engine.subtitleDelay, 0);
 
     // And the menu agrees with what is playing: the row is selected.
     await tester.tap(find.byTooltip('Subtitles (S)'));
@@ -1023,45 +1019,78 @@ void main() {
     );
   });
 
-  testWidgets('an engine that cannot say the rate leaves the order alone', (
+  testWidgets('a video nothing has named leaves the order alone', (
     tester,
   ) async {
     useWideViewport(tester);
-    // Every engine but libmpv, and libmpv before the first frame: with no
-    // rate to compare against there is no fit to sort on, so the addons'
-    // order stands.
-    final harness = harnessRated(null, [
-      upload(
-        'en-1',
-        'eng',
-        'https://subs.example.org/en-25.srt',
-        'PAL',
-        fpsMilli: 25000,
-      ),
-      upload(
-        'en-2',
-        'eng',
-        'https://subs.example.org/en-23980.srt',
-        'ROUNDED',
-        fpsMilli: 23980,
-      ),
+    // An offline play, a cast, a torrent whose server has not opened the
+    // file yet: nothing names the video, so nothing can be said to have
+    // been cut for it. The addons' own order stands and no row is
+    // marked -- knowing nothing has to look like knowing nothing.
+    final harness = harnessRated(23.976, [
+      upload('en-1', 'eng', 'https://subs.example.org/en-yts.srt', 'YTS'),
+      upload('en-2', 'eng', 'https://subs.example.org/en-dfn.srt', 'DFN'),
     ]);
     await harness.pump(tester);
     harness.engine.emitDuration(const Duration(minutes: 96));
     await pumpEvents(tester);
-    expect(harness.engine.frameRate, isNull);
+    // The server is answering, and what it answers names no file.
+    expect(harness.torrentStats.response?.streamName, isNull);
 
     await tester.tap(find.byTooltip('Subtitles (S)'));
     await tester.pumpAndSettle();
     // The row still names the addon's first answer, and both are there.
-    expect(find.text('PAL · subs.example.org'), findsOneWidget);
+    expect(find.text('YTS · subs.example.org'), findsOneWidget);
     await tester.tap(find.text('1 other English file'));
     await tester.pumpAndSettle();
-    expect(find.text('PAL'), findsOneWidget);
-    expect(find.text('ROUNDED'), findsOneWidget);
+    expect(find.text('YTS'), findsOneWidget);
+    expect(find.text('DFN'), findsOneWidget);
+    expect(find.textContaining(SubtitleMenu.releaseNote), findsNothing);
 
-    await tester.tap(find.text('PAL'));
+    await tester.tap(find.text('YTS'));
     await tester.pumpAndSettle();
     expect(harness.engine.subtitleSpeed, 1);
+  });
+
+  testWidgets('a group the viewer has already fixed comes before the rest', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // The second rank. Nothing here was cut for this release, but one
+    // upload is from a group this show was corrected for on an earlier
+    // episode -- so applying it puts the correction back with it, which
+    // is the whole reason it is worth offering first.
+    final prefs = AppPrefs(
+      client: FakePrefsClient({
+        'subtitleSync': [
+          {'series': 'tt0063350', 'group': '6', 'speed': 'stretch'},
+        ],
+      }),
+    );
+    await prefs.load();
+    final harness = harnessRated(23.976, [
+      upload('en-1', 'eng', 'https://subs.example.org/en-plain.srt', 'PLAIN'),
+      {
+        ...upload('en-2', 'eng', 'https://subs.example.org/en-six.srt', 'SIX'),
+        'g': 6,
+      },
+    ], prefs: prefs);
+    harness.torrentStats.response = openedStats;
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    expect(find.text('SIX · subs.example.org'), findsOneWidget);
+    // And it really is put back: the file arrives corrected, which is
+    // what makes the rank worth having.
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    expect(
+      harness.engine.externalSubtitles.last.$1.path,
+      endsWith('/en-six.srt'),
+    );
+    expect(harness.engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 }

@@ -142,150 +142,33 @@ final class SubtitleLanguageGroup {
       activeId != null && options.any((option) => option.id == activeId);
 }
 
-/// How far a subtitle's declared rate may sit from the video's own and
-/// still need no correction, in frames per second.
+/// How far a rate may sit from one of the two families' bases and still
+/// be read as that family, in frames per second.
 ///
-/// Wide enough for rounding, narrow enough to catch a different cut.
-/// OpenSubtitles' `23980` against a 23.976 container is 0.004 away and is
-/// the same file; a genuine 24 fps cut is 0.024 away, which is a tenth of
-/// a percent -- seven seconds of drift over a feature, and growing. There
-/// is nothing legitimate in between: no addon knows a rate to a
-/// thousandth of a frame it did not round from one of the handful of
-/// rates film and video are shot at.
+/// Wide enough for rounding, narrow enough to keep the families apart. A
+/// container rounding 23.976 to `23.98` is four thousandths away and is
+/// film; 25 is a whole frame away and is PAL. There is nothing
+/// legitimate in between: nobody knows a rate to a thousandth of a frame
+/// they did not round from one of the handful of rates film and video
+/// are shot at.
 const double subtitleFrameRateTolerance = 0.01;
 
 /// The ratios between two frame rates that mean the *same content at the
-/// same speed*, so a file declaring one is in step with a video running
-/// at the other however far apart the numbers look.
+/// same speed*, so a video running at one keeps the seconds a video
+/// running at the other keeps, however far apart the numbers look.
 ///
-/// A subtitle file is timed in wall-clock seconds, so a declared rate
-/// only implies drift when the two rates imply a different running time
-/// for the same material. That is exactly the PAL/NTSC pair the
-/// correction exists for -- 25 against 23.976 is a 4.3 % speed-up, four
-/// seconds a minute -- and it is exactly *not* the telecine and
-/// frame-doubling relations inside one family: 23.976 film in a 29.97
-/// container is 5/4 as many frames of the same seconds, and a 50 fps
-/// encode of 25 fps material is twice as many. OpenSubtitles' English
-/// answer for one Breaking Bad episode is six `23976` files and one
-/// `29970`; against the NTSC rip all seven are already in step, and a
-/// bare `fps_sub / fps_video` would push six of them out of it.
+/// A subtitle file is timed in wall-clock seconds, so two rates only
+/// imply drift when they imply a different running time for the same
+/// material. That is exactly the PAL/NTSC pair -- 25 against 23.976 is a
+/// 4.3 % speed-up, four seconds a minute -- and it is exactly *not* the
+/// telecine and frame-doubling relations inside one family: 23.976 film
+/// in a 29.97 container is 5/4 as many frames of the same seconds, and a
+/// 50 fps encode of 25 fps material is twice as many. Which is why
+/// [subtitleSpeedDirection] reduces a container's rate by these before
+/// asking which family it is in: a 29.97 fps video is film and a 50 fps
+/// video is PAL, whatever the two numbers look like beside 23.976 and
+/// 25.
 const List<double> subtitleFrameRateRatios = [1, 1.25, 2, 2.5];
-
-/// The smallest multiplier libmpv's `sub-speed` accepts (the property is
-/// `<0.1-10.0>`), and with [maxSubtitleSpeed] the range a correction has
-/// to fall in to be *set at all*.
-///
-/// media_kit writes the property with `mpv_set_property_string` and
-/// discards its return code, so a value outside the range is refused in
-/// silence -- nothing throws, and the multiplier the *previous* file left
-/// behind stays in force. Only a declared rate that is no frame rate
-/// reaches out here: an addon sending frames per second where `fpsMilli`
-/// wants thousandths declares 0.025 fps, which reduces to 0.0065. Such a
-/// file is played as it stands, like every other rate we cannot read.
-const double minSubtitleSpeed = 0.1;
-
-/// The largest multiplier libmpv's `sub-speed` accepts; see
-/// [minSubtitleSpeed] for what falling outside the range costs.
-const double maxSubtitleSpeed = 10;
-
-/// What libmpv's `sub-speed` has to be for [subtitle] to keep time with a
-/// video running at [videoFrameRate]: `fps_sub / fps_video`, and `1.0`
-/// wherever there is nothing to correct.
-///
-/// A film of N frames sits at `N / fps_sub` in a subtitle cut for
-/// `fps_sub` and at `N / fps_video` in the picture, so every timestamp
-/// wants multiplying by `fps_sub / fps_video`: a 25 fps subtitle on a
-/// 23.976 fps video runs 1.0427 times as long. The reciprocal is the
-/// mistake to make here, and it doubles the drift rather than removing
-/// it.
-///
-/// Three things are not a correction, and each answers `1.0`:
-///
-/// - A rate the addon did not give -- absent, unparsable, or a zero or
-///   negative that is no rate at all. Most addons declare none, and
-///   OpenSubtitles sends `fpsMilli` on about nine entries in ten.
-/// - A [videoFrameRate] of null. Cast, offline, a fake, a container that
-///   says nothing, a read that threw: an engine that cannot say is no
-///   evidence about any file, and a guess here re-times a file that was
-///   right.
-/// - Two rates a telecine or a doubling apart, which are the same
-///   seconds already (see [subtitleFrameRateRatios]).
-///
-/// The ratio is taken between the two *content* rates, not between the
-/// two declared numbers: a subtitle cut for a 50 fps PAL encode is
-/// 25 fps material and a 29.97 fps container is 23.976 fps film, so the
-/// pair needs 25/23.976 and not the 25/29.97 the declared numbers read
-/// as. [subtitleFrameRateTolerance] keeps its meaning there too, counted
-/// in frames of the video that is playing.
-double subtitleSpeed(SubtitleInfo subtitle, {required double? videoFrameRate}) {
-  if (videoFrameRate == null) return 1;
-  final speed = _readableRatio(subtitle, videoFrameRate);
-  if (speed == null) return 1;
-  // The tolerance is frames, so the ratio is read back as the rate it
-  // puts the subtitle at against the video's own.
-  return (speed - 1).abs() * videoFrameRate <= subtitleFrameRateTolerance
-      ? 1
-      : speed;
-}
-
-/// The ratio [subtitle]'s declared rate implies against [videoFrameRate],
-/// or null when there is no rate here we can read anything from.
-///
-/// Null covers a rate the addon did not give, an arithmetic result that
-/// is no number at all, and -- the one that is not obvious -- a ratio
-/// outside the `<0.1-10.0>` libmpv's `sub-speed` accepts. That last is
-/// not a frame-rate relationship at all but an addon sending frames
-/// where `fpsMilli` wants thousandths, and a multiplier mpv would refuse
-/// is worse than none: the refusal is silent, and what it leaves running
-/// is the *previous* file's correction. Such a file is played as it
-/// stands, which is also why [_fitOf] must rank it with the files that
-/// declared nothing rather than with the ones that fit.
-double? _readableRatio(SubtitleInfo subtitle, double videoFrameRate) {
-  final declared = _declaredFrameRate(subtitle);
-  if (declared == null) return null;
-  final speed = _sameSecondsRatio(declared, videoFrameRate);
-  // A rate that divides out to nothing or to infinity is not a rate; the
-  // guards above have caught every real one, and this is the arithmetic's
-  // own floor.
-  if (!speed.isFinite || speed <= 0) return null;
-  if (speed < minSubtitleSpeed || speed > maxSubtitleSpeed) return null;
-  return speed;
-}
-
-/// The rate [subtitle] says it was cut for, or null when the addon said
-/// nothing usable: absent, unparsable, or a zero or negative that is no
-/// rate at all.
-double? _declaredFrameRate(SubtitleInfo subtitle) {
-  final milli = subtitle.fpsMilli;
-  return milli == null || milli <= 0 ? null : milli / 1000;
-}
-
-/// The ratio between [rate] and [videoFrameRate] nearest 1: every member
-/// of the subtitle's frame-rate family over every member of the video's,
-/// since a telecine or a doubling leaves the seconds alone on either
-/// side.
-///
-/// Both sides have to be reduced, not the subtitle's alone. A 50 fps PAL
-/// encode is 25 fps material and a 29.97 fps container is 23.976 fps
-/// film, but no single step of [subtitleFrameRateRatios] carries 50 into
-/// 29.97's neighbourhood: reducing one side lands on 25 against a
-/// declared 29.97 and answers 0.834, which leaves the file five times
-/// further out than playing it untouched would have.
-///
-/// Nearest *to 1* rather than nearest in frames, because the answer has
-/// to be the same whichever end of a family the two numbers are written
-/// at, and a difference in frames is not -- it puts 100 against 25 on
-/// 40/25 rather than on the 50/50 that is the same cut.
-double _sameSecondsRatio(double rate, double videoFrameRate) {
-  var nearest = rate / videoFrameRate;
-  for (final subtitleRate in _frameRateFamily(rate)) {
-    for (final videoRate in _frameRateFamily(videoFrameRate)) {
-      final ratio = subtitleRate / videoRate;
-      if ((ratio - 1).abs() < (nearest - 1).abs()) nearest = ratio;
-    }
-  }
-  return nearest;
-}
 
 /// [rate] and the rates that are the same seconds as it: [rate] scaled by
 /// each of [subtitleFrameRateRatios] either way, since telecine and frame
@@ -296,6 +179,23 @@ Iterable<double> _frameRateFamily(double rate) sync* {
     yield rate / ratio;
   }
 }
+
+/// The smallest multiplier libmpv's `sub-speed` accepts (the property is
+/// `<0.1-10.0>`), and with [maxSubtitleSpeed] the range a value has to
+/// fall in to be set at all.
+///
+/// media_kit writes the property with `mpv_set_property_string` and
+/// discards its return code, so a value outside the range is refused in
+/// silence -- nothing throws, and the multiplier the *previous* file
+/// left behind stays in force while the panel claims a new one. What
+/// keeps the panel clear of it is that a toggle has three values and the
+/// furthest is 4 % from 1.0; the pair is here so that a test can say so
+/// rather than so that anything clamps.
+const double minSubtitleSpeed = 0.1;
+
+/// The largest multiplier libmpv's `sub-speed` accepts; see
+/// [minSubtitleSpeed] for what falling outside the range costs.
+const double maxSubtitleSpeed = 10;
 
 /// Which way a subtitle has to be pressed to keep time with the video,
 /// for the timing panel's speed control.
@@ -466,45 +366,56 @@ bool _containsRun(List<String> haystack, List<String> needle) {
 }
 
 /// Where a file sits in its language's order, best first.
-enum _FrameRateFit {
-  /// A declared rate the video is already in step with: nothing to
-  /// correct, nothing to get wrong.
-  matched,
+enum _ReleaseFit {
+  /// The addon says it was cut for the release that is playing
+  /// ([subtitleMatchesRelease]), so it is near-certainly in sync: two
+  /// files made for one release are in step with it by construction.
+  release,
 
-  /// No declared rate. Nothing says it drifts and nothing says it does
-  /// not; it is played as it stands.
-  undeclared,
+  /// From a subtitle group the viewer has already corrected for this
+  /// show, so the correction goes back on the moment it is applied and
+  /// the file arrives fixed.
+  adjusted,
 
-  /// A declared rate that differs, so [subtitleSpeed] re-times it.
-  corrected,
+  /// Everything else, in the order the addons answered.
+  offered,
 }
 
-/// [sources] with each language's files ordered by how little has to be
-/// done to them: an exact match first, then the ones that declared no
-/// rate, then the ones a multiplier has to fix.
+/// [sources] with each language's files ordered by what is actually
+/// known about them: the ones the addon says were cut for the release
+/// that is playing first, then the ones from a group the viewer has
+/// already adjusted for [series], then the rest as the addons gave them.
 ///
-/// An addon's `fpsMilli` is a claim about the release the upload was made
-/// for, and a claim can be wrong -- so a file that needs nothing is worth
-/// more than a file we have to fix, and a file that says nothing is worth
-/// more than a file whose own claim says it is the wrong cut. Nothing is
-/// dropped: every file the addons offered is still on the list, because
-/// the drift they were once hidden for is correctable.
+/// The declared frame rate used to order this and no longer does. It is
+/// a claim about the release an upload was made for, and the evidence
+/// says that is a claim about *provenance* and not about timing: ten
+/// English files for one film declaring six different rates all end
+/// within 1 % of the same runtime. What names a release says more,
+/// because two files cut for one release keep its time.
+///
+/// [release] and [series] name what is playing (null for either -- an
+/// offline play, a torrent nothing has named the file of, a stream with
+/// no meta behind it -- simply answers nothing for that rank), and
+/// [memory] is what the viewer has already fixed. The second rank asks
+/// [memory] exactly what `PlayerScreen._resetSubtitleTiming` will ask it
+/// when the file goes on screen, so "already adjusted" means the
+/// correction really is put back and not merely stored: a shift belongs
+/// to one release, and one measured against another is not this video's.
 ///
 /// The order *between* languages is untouched -- the menu's rows stay in
-/// the addons' answer order -- and so is the order inside each of the
-/// three ranks, so the addon that answered first still wins a tie.
-///
-/// A null [videoFrameRate] ranks nothing: with no rate to compare against
-/// there is no fit to sort on, and the addons' order stands.
-List<SubtitleSource> subtitlesByFrameRateFit(
+/// the addons' answer order -- and so is the order inside each rank, so
+/// the addon that answered first still wins a tie. That matters more
+/// than it looks: the head of a language is the file its row applies and
+/// the file the auto-pick plays. Nothing is dropped or hidden.
+List<SubtitleSource> subtitlesByRelease(
   Iterable<SubtitleSource> sources, {
-  required double? videoFrameRate,
+  required String? release,
+  required String? series,
+  required SubtitleSyncMemory memory,
 }) {
-  final all = sources.toList();
-  if (videoFrameRate == null) return all;
   final order = <String>[];
   final byLanguage = <String, List<SubtitleSource>>{};
-  for (final source in all) {
+  for (final source in sources) {
     // Keyed the way the menu groups them, so "within a language" is the
     // same language as the row the files are listed under.
     final key = _languageLabel(source.subtitle.lang).toLowerCase();
@@ -520,26 +431,41 @@ List<SubtitleSource> subtitlesByFrameRateFit(
       // Bucketed rather than sorted: `List.sort` is not stable, and the
       // order inside a rank is the addons' answer order, which is what
       // decides the file a language row applies.
-      for (final fit in _FrameRateFit.values)
+      for (final fit in _ReleaseFit.values)
         for (final source in byLanguage[key]!)
-          if (_fitOf(source.subtitle, videoFrameRate) == fit) source,
+          if (_fitOf(
+                source.subtitle,
+                release: release,
+                series: series,
+                memory: memory,
+              ) ==
+              fit)
+            source,
   ];
 }
 
-/// Which of the three ranks [subtitle] is in against [videoFrameRate].
-_FrameRateFit _fitOf(SubtitleInfo subtitle, double videoFrameRate) {
-  // Not `_declaredFrameRate`: a declared rate we cannot read anything
-  // from says no more about the file than declaring nothing did, and
-  // [subtitleSpeed] answers 1.0 for both. Ranked off that alone, an
-  // addon's mis-scaled `fpsMilli` came out ahead of every file that was
-  // honest about knowing nothing -- head of its language, so the row and
-  // the auto-pick both applied it.
-  if (_readableRatio(subtitle, videoFrameRate) == null) {
-    return _FrameRateFit.undeclared;
+/// Which of the three ranks [subtitle] is in.
+_ReleaseFit _fitOf(
+  SubtitleInfo subtitle, {
+  required String? release,
+  required String? series,
+  required SubtitleSyncMemory memory,
+}) {
+  if (subtitleMatchesRelease(subtitle, release: release)) {
+    return _ReleaseFit.release;
   }
-  return subtitleSpeed(subtitle, videoFrameRate: videoFrameRate) == 1
-      ? _FrameRateFit.matched
-      : _FrameRateFit.corrected;
+  final group = subtitle.group;
+  if (group != null &&
+      (memory.speedFor(series: series, group: group) != null ||
+          memory.shiftStepsFor(
+                series: series,
+                group: group,
+                release: release,
+              ) !=
+              0)) {
+    return _ReleaseFit.adjusted;
+  }
+  return _ReleaseFit.offered;
 }
 
 /// The display name a language code is grouped under: what the code
@@ -560,8 +486,8 @@ String _languageLabel(String lang) {
 /// the addon's installed name; without it the manifest's host is used.
 ///
 /// The order the groups and their options come out in is the order
-/// [sources] arrived in, so the ranking is [subtitlesByFrameRateFit]'s to
-/// do first.
+/// [sources] arrived in, so the ranking is [subtitlesByRelease]'s to do
+/// first.
 ///
 /// [release] is the name the player knows the video by, and every option
 /// is asked whether the addon says it was cut for it
