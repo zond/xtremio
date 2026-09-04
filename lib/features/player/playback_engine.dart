@@ -609,6 +609,12 @@ class MediaKitEngine implements PlaybackEngine {
       // A player torn down mid-write, or a build of libmpv without the
       // property. The latter never re-times anything either, so there is
       // no stale multiplier for a failed reset to leave behind.
+      //
+      // A value mpv *refuses* does not come through here at all:
+      // media_kit discards `mpv_set_property_string`'s return code, so an
+      // out-of-range write is silent and leaves the property as it was.
+      // That is why the range is enforced where the number is computed
+      // (`minSubtitleSpeed` in `subtitle_groups.dart`) rather than here.
     }
   }
 

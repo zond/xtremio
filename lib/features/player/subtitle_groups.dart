@@ -174,6 +174,23 @@ const double subtitleFrameRateTolerance = 0.01;
 /// bare `fps_sub / fps_video` would push six of them out of it.
 const List<double> subtitleFrameRateRatios = [1, 1.25, 2, 2.5];
 
+/// The smallest multiplier libmpv's `sub-speed` accepts (the property is
+/// `<0.1-10.0>`), and with [maxSubtitleSpeed] the range a correction has
+/// to fall in to be *set at all*.
+///
+/// media_kit writes the property with `mpv_set_property_string` and
+/// discards its return code, so a value outside the range is refused in
+/// silence -- nothing throws, and the multiplier the *previous* file left
+/// behind stays in force. Only a declared rate that is no frame rate
+/// reaches out here: an addon sending frames per second where `fpsMilli`
+/// wants thousandths declares 0.025 fps, which reduces to 0.0065. Such a
+/// file is played as it stands, like every other rate we cannot read.
+const double minSubtitleSpeed = 0.1;
+
+/// The largest multiplier libmpv's `sub-speed` accepts; see
+/// [minSubtitleSpeed] for what falling outside the range costs.
+const double maxSubtitleSpeed = 10;
+
 /// What libmpv's `sub-speed` has to be for [subtitle] to keep time with a
 /// video running at [videoFrameRate]: `fps_sub / fps_video`, and `1.0`
 /// wherever there is nothing to correct.
@@ -211,6 +228,9 @@ double subtitleSpeed(SubtitleInfo subtitle, {required double? videoFrameRate}) {
   // guards above have caught every real one, and this is the arithmetic's
   // own floor.
   if (!speed.isFinite || speed <= 0) return 1;
+  // A multiplier mpv would refuse is worse than none: the refusal is
+  // silent, and what it leaves running is the last file's correction.
+  if (speed < minSubtitleSpeed || speed > maxSubtitleSpeed) return 1;
   // The tolerance is frames, so the ratio is read back as the rate it
   // puts the subtitle at against the video's own.
   return (speed - 1).abs() * videoFrameRate <= subtitleFrameRateTolerance

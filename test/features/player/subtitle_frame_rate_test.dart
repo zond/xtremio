@@ -120,6 +120,26 @@ void main() {
     expect(speed(100000, 50), 1);
   });
 
+  test('a rate that is no frame rate at all is left alone, not acted on', () {
+    // `fpsMilli` is thousandths, so an addon that sends 25 is declaring
+    // 0.025 fps. That reduces to a multiplier of 0.0065, which is outside
+    // the `<0.1-10.0>` libmpv's `sub-speed` accepts -- and media_kit
+    // discards the property write's return code, so mpv refuses it in
+    // silence and whatever the *last* file was corrected by stays in
+    // force. The guard is what keeps one garbage rate from ruining the
+    // next file rather than only its own.
+    expect(speed(25, 23.976), 1);
+    expect(speed(23976000, 23.976), 1);
+    // A real correction is nowhere near either end of that range: the
+    // only rates that reach it are ones no release was ever cut at.
+    expect(minSubtitleSpeed, lessThan(1));
+    expect(maxSubtitleSpeed, greaterThan(1));
+    expect(
+      speed(25000, 23.976),
+      inInclusiveRange(minSubtitleSpeed, maxSubtitleSpeed),
+    );
+  });
+
   test('a rate nobody declared is never corrected', () {
     // Most addons declare nothing at all, and OpenSubtitles sends
     // `fpsMilli` on about nine entries in ten; silence is not a mismatch.
