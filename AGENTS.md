@@ -250,6 +250,65 @@ failed is recorded against nobody; and the embedded server and the local
 addon are never recorded against, on top of a protected addon never being
 labelled. See README, "Which addons are worth keeping".
 
+## Six rules a real device taught us
+
+Five of these were bugs on a real Chromecast with Google TV and the sixth
+was a red box on a 400 dp phone; every one of them is easy to write again.
+Each has a test behind it, except where the rule itself says a test cannot
+reach it.
+
+- **Nothing vetoes the OSD's fade on a focus.**
+  `PlayerScreen._canAutoHide` lists what keeps the controls up -- a menu, a
+  scrub, a stall, the start-up overlay, playback not running -- and a
+  control *holding focus* is deliberately not on that list. On a television
+  the remote has nowhere to put focus but the bar, so a veto there latches:
+  the first D-pad press pinned the OSD for the rest of the session, and the
+  subtitles stayed lifted clear of it for just as long. What makes that safe
+  is that hiding the bar and handing the remote back to the video are one
+  act (`_hideControls`), so nothing is ever left focused on something that
+  is not drawn -- and that every state which flips `_canAutoHide` back to
+  true re-arms the timer as it goes.
+- **A direction key never leaves a layer.** Once the remote is in the
+  control bar, up from the top row and down from the transport row
+  dead-end, because directional traversal is confined to the enclosing
+  `FocusScope` (`_controlsScope`, `_upNextScope`). The video is not a
+  legitimate focus target while something visible is on screen: stepping
+  out onto it puts the ring nowhere. Back is the way out, and it comes down
+  a ladder, most transient first. A rung only exists while it would visibly
+  do something -- a bar that cannot fade (paused, buffering, a menu, the
+  end of a film) is not one, and Back leaves instead of appearing to do
+  nothing.
+- **A button drawn inside a focusable thing is not a button.** On a
+  television a tile, a row or a text field takes focus as a whole, so
+  directional traversal has nothing inside it to move to, and the
+  `RemotePress` above it takes select before any descendant's own
+  activation runs. Anything that must be pressed on its own goes *beside*
+  the thing, outside that `RemotePress` -- see `TvTextField.onClear`. Drawn
+  and dead is worse than absent.
+- **A subtitle's position is pushed, not configured.** media_kit's
+  `SubtitleView` reads `SubtitleViewConfiguration.padding` once, when its
+  state is created, and a `GlobalKey` inside `VideoState` keeps that state
+  alive for the session; the style and the scaler it does re-read, which is
+  what makes the omission look like it works. Moving the subtitles means
+  `VideoState.setSubtitleViewPadding`, on the frame after the build that
+  computed the value (it is a `setState` below the widget being built), and
+  only when it changed. Widget tests cannot catch a regression here: the
+  fake engine records the argument, it does not lay out a `SubtitleView`.
+- **A scrolling strip clips, so a focused tile needs room to grow.** Once a
+  row holds more than fits, its viewport paints behind a clip of exactly
+  its own bounds, and a tile in a horizontal list is laid out to exactly
+  that height -- so the zoom and the shadow a focused tile wears are cut
+  off at both edges and the cue reads as a crop. The room comes out of the
+  strip's own padding (`_RowLayout.focusSlack`), and only on a television,
+  which is the only place anything zooms.
+- **A width shared between N things is clamped at zero.** Anything of the
+  form `(width - gaps) / n` goes negative on a narrow screen with a large
+  `n` -- thirty-odd season pills on a phone -- and a negative `minWidth` is
+  not a cramped layout but a `NOT NORMALIZED` constraints failure that
+  takes the whole sliver, and everything below it, down with it. Release
+  builds clamp and debug builds throw, so this is a red box the owner sees
+  and CI does not.
+
 ## Brand assets are generated, never hand-edited
 
 Every icon, the Android TV banner, the splash mark and the README logo come out

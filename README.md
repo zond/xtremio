@@ -294,14 +294,19 @@ connection.
   and additive like the downloads registry: a write is a read-modify-write
   of one key, a key from a newer build survives it, and a file that cannot
   be parsed reads as "nothing set" rather than as a failure. Today it holds
-  four keys: `streamsSectioned` (the Details screen's sources list,
+  five keys: `streamsSectioned` (the Details screen's sources list,
   sectioned by resolution -- the default -- rather than grouped by addon;
   an install from before the rename is read from the older `streamsFlat`
   name it was stored under, never written back), `openStreamSections`
   (which resolution sections are expanded, empty meaning every one
   collapsed on purpose rather than "unset"), `streamsOrder` (what order the
-  streams inside one of those sections are in) and `bufferAhead` (how far
-  ahead playback buffers, below). Nothing secret goes in it.
+  streams inside one of those sections are in), `bufferAhead` (how far
+  ahead playback buffers, below) and `focusEmphasis` (Settings ->
+  Interface -> "Focus highlight", offered on a television only: `standard`
+  is the two-stroke ring with its zoom and shadow, `bold` thickens the ring
+  and dims everything the remote is not on, for a bright room a display
+  cannot fight; an unreadable or absent value is `standard`). Nothing
+  secret goes in it.
 - **How far ahead playback buffers is the viewer's choice.** The streaming
   server reads ahead of the play head by a window sized for a healthy
   connection and a patient player; a spotty link, or a receiver with a
@@ -553,7 +558,18 @@ connection.
   they fade whether or not a control holds the remote, taking focus back to
   the video with them so nothing is left focused on something invisible;
   the D-pad stays inside them once it is there, and Back comes down a
-  ladder -- the up-next card, then the controls, then the player. Keyboard:
+  ladder, most transient first -- the up-next card, then an OSD that is up
+  and free to go, then the player. A bar that cannot fade is not a rung:
+  paused, buffering, with a menu open or at the end of a film (where
+  playback has stopped and the up-next card was the rung), Back leaves,
+  because appearing to do nothing would be worse. Subtitles ride above the
+  bar: at rest they sit 4.5 % of the picture's height off the bottom, and
+  while the controls are up they are lifted clear of what the bar actually
+  covers, measured off the laid-out bar rather than assumed. media_kit's
+  `SubtitleView` reads its padding out of the configuration once and never
+  again, so the lift is *pushed* into it
+  (`VideoState.setSubtitleViewPadding`, one call per change) rather than
+  configured -- configuring it moves nothing after the first frame. Keyboard:
   Space/K play-pause, ←/→ or J/L ± the seek step (10 s by default),
   Shift+←/→ ± the short seek step (3 s), ↑/↓ volume, M mute, F
   fullscreen, Esc leaves fullscreen first when `escExitFullscreen` is on
@@ -977,6 +993,14 @@ remote's way of pressing Done. A password is masked, asks the keyboard to
 learn nothing from it (`IME_FLAG_NO_PERSONALIZED_LEARNING`), is kept out of
 autofill and runs behind `FLAG_SECURE`. Off a television `TvTextField` is
 the ordinary Flutter `TextField` every one of those places always had.
+
+A field that can be emptied takes an `onClear`, and the button that does it
+is the field's own, never part of the decoration: off a television it is the
+`suffixIcon` inside the box, as it has always been, and on one it sits
+*beside* the box. Inside, a remote could neither reach it (the field takes
+focus as a whole, so there is nothing to the right of the text to step to)
+nor press it (`RemotePress` is above every descendant and takes select for
+the typing screen), which is a button drawn where the remote cannot go.
 
 **Emulator (headless, KVM).** The x86_64 `google_apis` image is the one that
 runs on an x86_64 Linux host (which is why the bindgen path above matters);

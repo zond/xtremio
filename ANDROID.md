@@ -420,6 +420,27 @@ Every keycode the app listens for, as `adb shell input keyevent <name>`:
 | Rewind / fast-forward | `KEYCODE_MEDIA_REWIND` (89), `KEYCODE_MEDIA_FAST_FORWARD` (90) | Seek by the profile's seek step |
 | Next / previous | `KEYCODE_MEDIA_NEXT` (87), `KEYCODE_MEDIA_PREVIOUS` (88) | Next episode; previous restarts the current one |
 
+**Text fields on a television are not text fields.** Flutter hosts none of
+them there: select on a field opens `TextEntryActivity`, a screen of its own
+with one plain `EditText` the system keyboard can actually own (see README,
+*Typing with a remote*, for why -- `IME_FLAG_NO_FULLSCREEN` makes an in-app
+field undrivable by a remote). So a field is driven in two steps, and
+`input text` only reaches the second one:
+
+```bash
+adb shell input keyevent KEYCODE_DPAD_CENTER  # opens the typing screen
+adb shell input text "the%squery"             # %s is a space; it has the caret
+adb shell input keyevent KEYCODE_ENTER        # Done: the string goes back to
+# the field, which submits with it (a search runs, an addon URL is saved).
+# A hardware Enter reaches the screen as IME_NULL and confirms; BACK instead
+# cancels, and neither the value nor the focus in the app moves.
+```
+
+The Clear button of a search field sits *beside* the box on a television,
+not inside it, so it is `KEYCODE_DPAD_RIGHT` from the field and then
+`KEYCODE_DPAD_CENTER` -- a press of its own, not another trip to the typing
+screen.
+
 A walk from the Board to playback, headless:
 
 ```bash
