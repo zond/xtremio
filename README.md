@@ -1225,9 +1225,14 @@ the other three quarters of the streams out there be cast, is not built.
 Because nothing is converted, the honest part of this is the refusal.
 
 **The compatibility rule, as implemented**
-(`lib/features/cast/cast_compatibility.dart`): MP4 or WebM, H.264 or HEVC
-video, and audio the container is allowed to carry — AAC or MP3 in an MP4,
-Opus or Vorbis in a WebM.
+(`lib/features/cast/cast_compatibility.dart`): MP4 or WebM, H.264, HEVC, VP8
+or VP9 video, and audio the container is allowed to carry — AAC or MP3 in an
+MP4, Opus or Vorbis in a WebM. The audio half is keyed on the container
+because that is where a receiver draws the line; the video half is one list
+for every device, which is a known approximation in both directions — HEVC
+and VP9 want a Chromecast Ultra or newer, and a WebM claiming H.264 would be
+called ready — and the comment on the table says why fixing it means asking
+the session what the receiver in the room supports.
 
 - The **container** comes from the name of the file the embedded server says
   it opened (`streamName` in the `stats.json` the player already polls), then
