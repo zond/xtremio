@@ -14,7 +14,7 @@ use stremio_core::types::events::DismissedEventsBucket;
 use stremio_core::types::library::LibraryBucket;
 use stremio_core::types::notifications::NotificationsBucket;
 use stremio_core::types::profile::Profile;
-use stremio_core::types::resource::MetaItemPreview;
+use stremio_core::types::resource::{MetaItem, MetaItemPreview, Stream, Subtitles};
 use stremio_core::types::search_history::SearchHistoryBucket;
 use stremio_core::types::server_urls::ServerUrlsBucket;
 use stremio_core::types::streams::StreamsBucket;
@@ -26,6 +26,9 @@ use xtremio_core::state::AppState;
 
 const CINEMETA: &str = "https://v3-cinemeta.strem.io/manifest.json";
 const CHANNELS: &str = "https://v3-channels.strem.io/manifest.json";
+const SUBS: &str = "https://opensubtitles.example.com/manifest.json";
+const BINGE: &str = "https://binge.example.com/manifest.json";
+const ORPHAN: &str = "https://orphan.example.com/manifest.json";
 
 fn url(url: &str) -> Url {
     Url::parse(url).expect("parse")
@@ -109,17 +112,21 @@ fn observe(app: &AppState, model: &XtremioModel) -> usize {
     observe_fields(app, model, &[XtremioModelField::Board])
 }
 
-fn catalog_record(table: &Table, base: &str) -> Record {
+fn record_for(table: &Table, base: &str, kind: ResourceKind) -> Record {
     table
         .get(&key_for(&url(base)))
-        .and_then(|kinds| kinds.get(&ResourceKind::Catalog))
+        .and_then(|kinds| kinds.get(&kind))
         .cloned()
         .unwrap_or_else(|| {
             panic!(
-                "no catalog record for {base}: {:?}",
+                "no {kind:?} record for {base}: {:?}",
                 table.keys().collect::<Vec<_>>()
             )
         })
+}
+
+fn catalog_record(table: &Table, base: &str) -> Record {
+    record_for(table, base, ResourceKind::Catalog)
 }
 
 fn counts(record: &Record) -> (f64, f64, f64) {
@@ -280,4 +287,177 @@ fn the_answers_are_counted_after_the_model_has_been_let_go() {
     let table = table_in(&app);
     assert_eq!(counts(&catalog_record(&table, CINEMETA)), (1.0, 0.0, 0.0));
     assert_eq!(counts(&catalog_record(&table, CHANNELS)), (0.0, 0.0, 1.0));
+}
+
+/// One loadable of a details or player screen: the same addon, resource and
+/// path make the same request, which is what the walk dedups on.
+fn asked<T>(
+    base: &str,
+    resource: &str,
+    content: Option<Loadable<T, ResourceError>>,
+) -> ResourceLoadable<T> {
+    ResourceLoadable {
+        request: ResourceRequest::new(
+            url(base),
+            ResourcePath::without_extra(resource, "movie", "tt0063350"),
+        ),
+        content,
+    }
+}
+
+fn meta_item() -> MetaItem {
+    serde_json::from_value(json!({ "id": "tt0063350", "type": "movie", "name": "A film" }))
+        .expect("a meta item")
+}
+
+fn stream() -> Stream {
+    serde_json::from_value(json!({ "url": "https://example.com/a.mp4", "name": "1080p" }))
+        .expect("a stream")
+}
+
+fn subtitle() -> Subtitles {
+    serde_json::from_value(json!({ "id": "s1", "lang": "eng", "url": "https://example.com/a.srt" }))
+        .expect("a subtitle")
+}
+
+/// The details screen is where the record's most load-bearing evidence
+/// comes from -- stream addons -- and it is the field with the two
+/// judgement calls: a meta addon that also serves streams appears in both
+/// `meta_streams` and `streams` and must be counted once, and
+/// `last_used_stream` is not an answer at all (its request is one of the
+/// others, and its `Option` content would read a "nothing found" as an
+/// answer).
+#[test]
+fn a_details_load_counts_meta_and_streams_once_each() {
+    let app = AppState::default();
+    let mut model = empty_model();
+    model.meta_details.meta_items =
+        vec![asked(CINEMETA, "meta", Some(Loadable::Ready(meta_item())))];
+    // What the meta addon returned inline, plus an addon with nothing to
+    // offer for this title.
+    model.meta_details.meta_streams = vec![
+        asked(CINEMETA, "stream", Some(Loadable::Ready(vec![stream()]))),
+        asked(
+            BINGE,
+            "stream",
+            Some(Loadable::Err(ResourceError::EmptyContent)),
+        ),
+    ];
+    model.meta_details.streams = vec![
+        // The same request as in `meta_streams`: the meta addon is
+        // installed as a stream addon too, and answered once.
+        asked(CINEMETA, "stream", Some(Loadable::Ready(vec![stream()]))),
+        asked(
+            CHANNELS,
+            "stream",
+            Some(Loadable::Err(ResourceError::Env(EnvError::Fetch(
+                "connection refused".to_owned(),
+            )))),
+        ),
+    ];
+    // Not an answer: whatever it holds, its request was already counted.
+    model.meta_details.last_used_stream =
+        Some(asked(ORPHAN, "stream", Some(Loadable::Ready(None))));
+
+    assert_eq!(
+        observe_fields(&app, &model, &[XtremioModelField::MetaDetails]),
+        1,
+        "the details load was one sweep"
+    );
+
+    let table = table_in(&app);
+    assert_eq!(
+        counts(&record_for(&table, CINEMETA, ResourceKind::Meta)),
+        (1.0, 0.0, 0.0)
+    );
+    assert_eq!(
+        counts(&record_for(&table, CINEMETA, ResourceKind::Stream)),
+        (1.0, 0.0, 0.0),
+        "one request answered twice was counted twice"
+    );
+    assert_eq!(
+        counts(&record_for(&table, CHANNELS, ResourceKind::Stream)),
+        (0.0, 0.0, 1.0)
+    );
+    assert_eq!(
+        counts(&record_for(&table, BINGE, ResourceKind::Stream)),
+        (0.0, 1.0, 0.0),
+        "the streams the meta addon returned inline were not walked"
+    );
+    let mut expected = vec![
+        key_for(&url(CINEMETA)),
+        key_for(&url(CHANNELS)),
+        key_for(&url(BINGE)),
+    ];
+    expected.sort();
+    assert_eq!(
+        table.keys().collect::<Vec<_>>(),
+        expected,
+        "`last_used_stream` was counted as an answer"
+    );
+}
+
+/// The player asks for subtitles, and a subtitle addon that never answers
+/// is the other half of what a verdict is read off.
+#[test]
+fn a_player_load_counts_the_subtitles_that_answered_and_the_ones_that_did_not() {
+    let app = AppState::default();
+    let mut model = empty_model();
+    model.player.meta_item = Some(asked(CINEMETA, "meta", Some(Loadable::Ready(meta_item()))));
+    model.player.subtitles = vec![
+        asked(SUBS, "subtitles", Some(Loadable::Ready(vec![subtitle()]))),
+        asked(
+            CHANNELS,
+            "subtitles",
+            Some(Loadable::Err(ResourceError::Env(EnvError::Fetch(
+                "connection refused".to_owned(),
+            )))),
+        ),
+    ];
+    model.player.next_streams = Some(asked(
+        BINGE,
+        "stream",
+        Some(Loadable::Err(ResourceError::EmptyContent)),
+    ));
+
+    assert_eq!(
+        observe_fields(&app, &model, &[XtremioModelField::Player]),
+        1,
+        "the player load was one sweep"
+    );
+
+    let table = table_in(&app);
+    assert_eq!(
+        counts(&record_for(&table, CINEMETA, ResourceKind::Meta)),
+        (1.0, 0.0, 0.0)
+    );
+    assert_eq!(
+        counts(&record_for(&table, SUBS, ResourceKind::Subtitles)),
+        (1.0, 0.0, 0.0)
+    );
+    assert_eq!(
+        counts(&record_for(&table, CHANNELS, ResourceKind::Subtitles)),
+        (0.0, 0.0, 1.0)
+    );
+    assert_eq!(
+        counts(&record_for(&table, BINGE, ResourceKind::Stream)),
+        (0.0, 1.0, 0.0),
+        "an addon with no next stream to offer was counted as failing"
+    );
+}
+
+/// A `NewState` for a field the record keeps nothing for changes nothing,
+/// and does not disturb what another field has already counted.
+#[test]
+fn a_field_that_holds_no_addon_answers_is_not_a_sweep() {
+    let app = AppState::default();
+    let mut model = empty_model();
+    model.board = board(vec![row(CINEMETA, answered())]);
+
+    assert_eq!(
+        observe_fields(&app, &model, &[XtremioModelField::Ctx]),
+        0,
+        "a context change was read as an addon answering"
+    );
+    assert!(table_in(&app).is_empty());
 }
