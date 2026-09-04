@@ -299,7 +299,22 @@ enum SubtitleSpeedDirection {
 
   /// Compress it: the reciprocal, for a film-sourced file against a
   /// PAL-family video.
-  compress,
+  compress;
+
+  /// What the direction is stored as when a viewer's press is remembered
+  /// (`SubtitleSyncMemory`).
+  String get stored => name;
+
+  /// The direction [stored] was written from, or null for anything else:
+  /// a name a newer build wrote, a value of the wrong type, a key that
+  /// was never there. An adjustment that cannot be read is one that is
+  /// not applied, which is what every other unknown here means too.
+  static SubtitleSpeedDirection? parse(Object? stored) {
+    for (final direction in values) {
+      if (direction.stored == stored) return direction;
+    }
+    return null;
+  }
 }
 
 /// The rates that are film, and the rates that are PAL, before either is

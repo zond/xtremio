@@ -349,6 +349,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// worse than doing nothing, so the file goes back first.
   SubtitleInfo? _externalSubtitle;
 
+  /// The write of what the viewer has adjusted that has not been made
+  /// yet, and null when there is nothing to write.
+  ///
+  /// A press does not write. The shift repeats eight times a second
+  /// under a held key, a preferences file is not a keystroke log, and
+  /// two overlapping `prefsSet` calls land on FRB's worker pool in no
+  /// particular order -- twenty of them could leave the file holding a
+  /// number the panel is not showing. So a press leaves this behind and
+  /// the write is made when the adjusting is over: the panel closing,
+  /// something changing what is on screen, or the player going away.
+  ///
+  /// It is a closure because it has to remember the *file* the press was
+  /// made on rather than whatever is playing when it is finally made.
+  VoidCallback? _pendingSync;
+
   /// Whether the timing panel is up. Not part of the OSD, so it is not
   /// what [_controlsVisible] says (see [_showSubtitleTiming]).
   bool _timingShown = false;
@@ -1682,9 +1697,116 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// adjustment is theirs from the first press until something changes
   /// what is shown.
   void _resetSubtitleTiming([SubtitleInfo? subtitle]) {
+    // Before anything moves: a press a moment ago belongs to the file
+    // that is on its way out, not to the one replacing it.
+    _flushRememberedTiming();
     _externalSubtitle = subtitle;
-    _timing = const SubtitleTiming();
+    _timing = _rememberedTiming(subtitle);
     _applySubtitleTiming();
+  }
+
+  /// What the viewer is remembered to have fixed about [subtitle] here,
+  /// and untouched when nothing is -- which is every embedded track,
+  /// every subtitle turned off, and every file from an addon that sends
+  /// no group.
+  ///
+  /// The two halves are looked up under different keys because they have
+  /// different causes: the speed under the series and the subtitle group,
+  /// since what a file was timed against is a property of where it came
+  /// from; the offset under the video release as well, since it is the
+  /// video's pre-roll less whatever the subtitle's source assumed. See
+  /// [SubtitleSyncMemory].
+  SubtitleTiming _rememberedTiming(SubtitleInfo? subtitle) {
+    final memory = _prefs?.subtitleSync;
+    final group = subtitle?.group;
+    if (memory == null || group == null) return const SubtitleTiming();
+    final series = _syncSeries;
+    return SubtitleTiming(
+      shiftSteps: memory.shiftStepsFor(
+        series: series,
+        group: group,
+        release: _syncRelease,
+      ),
+      speedDirection: SubtitleSpeedDirection.parse(
+        memory.speedFor(series: series, group: group),
+      ),
+    );
+  }
+
+  /// The show or film an adjustment made here belongs to: the meta item's
+  /// id and not the episode's, because a subtitle group is timed against
+  /// a series and not against one of its episodes.
+  ///
+  /// Read off the request rather than the loaded meta item, which is a
+  /// resource that may still be in flight while the subtitle it would key
+  /// is already on screen. Null -- an offline play, a stream with no meta
+  /// behind it -- means nothing is remembered.
+  String? get _syncSeries {
+    final id = _state?.metaRequest?.path.id.trim();
+    return id == null || id.isEmpty ? null : id;
+  }
+
+  /// The video release an offset was measured against: the best filename
+  /// known ([castFilename] -- the file the server says it opened, else
+  /// the addon's claim about what it linked to), as a bare lower-case
+  /// name.
+  ///
+  /// The whole filename rather than a release group parsed out of it. A
+  /// parse is a guess, and the same evening's worth of pre-roll is a
+  /// property of the exact file: two encodes by one group can still start
+  /// in different places. A narrower key is forgotten more often, which is
+  /// the price of never being wrong.
+  String? get _syncRelease {
+    final name = castFilename(_state, serverFilename: _serverFilename);
+    if (name == null) return null;
+    final file = name.split(RegExp(r'[/\\]')).last.trim().toLowerCase();
+    return file.isEmpty ? null : file;
+  }
+
+  /// Holds what is on screen now for [_flushRememberedTiming] to write,
+  /// replacing whatever was waiting.
+  ///
+  /// Everything the write needs is read here rather than when it is
+  /// made, so that what is written down is the file the press was made
+  /// on however long the panel then stays up.
+  void _rememberTiming() {
+    final group = _externalSubtitle?.group;
+    final series = _syncSeries;
+    final release = _syncRelease;
+    final speed = _timing.speedDirection?.stored;
+    final shiftSteps = _timing.shiftSteps;
+    _pendingSync = null;
+    // No group from the addon, or no series: there is nothing to key the
+    // adjustment on, and applying it to the files it might belong to is
+    // worse than forgetting it.
+    if (group == null || series == null) return;
+    _pendingSync = () {
+      final prefs = _prefs;
+      if (prefs == null) return;
+      prefs
+          .setSubtitleSync(
+            prefs.subtitleSync.remembering(
+              series: series,
+              group: group,
+              release: release,
+              speed: speed,
+              shiftSteps: shiftSteps,
+            ),
+          )
+          .ignore();
+    };
+  }
+
+  /// Makes the waiting write, if there is one: the adjusting is over.
+  ///
+  /// Called when the panel closes, before anything changes what is on
+  /// screen, and on the way out. The first of those is the ordinary one;
+  /// the second is what keeps a press made a moment ago from being
+  /// dropped by the next press on the file that replaced it.
+  void _flushRememberedTiming() {
+    final pending = _pendingSync;
+    _pendingSync = null;
+    pending?.call();
   }
 
   /// Puts the addon file back that a re-open took away, before the timing
@@ -1720,18 +1842,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   /// A press on the timing panel. The panel is rebuilt from [_timing], so
-  /// a step that was refused (see [SubtitleTiming.stretchedBy]) redraws
-  /// the same number rather than a number mpv is not really playing.
+  /// what it draws is what mpv is really playing.
   ///
-  /// It also ends the auto-pick ([_subtitlesChosenByHand]): a viewer
-  /// judging the subtitle in front of them has answered the question the
-  /// session preference exists to guess at, and a guess that keeps
-  /// swapping the file under them is the wrong half of that answer.
+  /// It ends the auto-pick ([_subtitlesChosenByHand]): a viewer judging
+  /// the subtitle in front of them has answered the question the session
+  /// preference exists to guess at, and a guess that keeps swapping the
+  /// file under them is the wrong half of that answer.
+  ///
+  /// And it is the only path that remembers anything. Every *other* call
+  /// on the timing is the machine putting a file back the way it was
+  /// found ([_resetSubtitleTiming]), which is not a judgement about
+  /// anything and must not be written down as one -- Reset on the panel
+  /// is a judgement, and comes through here.
   void _adjustTiming(SubtitleTiming timing) {
     if (timing == _timing) return;
     _subtitlesChosenByHand = true;
     setState(() => _timing = timing);
     _applySubtitleTiming();
+    _rememberTiming();
   }
 
   void _selectEmbeddedSubtitle(TrackInfo track) {
@@ -1917,8 +2045,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Takes it away, and the remote back to the video with it -- a ring on
   /// a panel that is gone is focus the viewer can no longer see.
+  ///
+  /// The panel closing is what says the adjusting is over, so it is
+  /// where what was pressed gets written down.
   void _hideSubtitleTiming() {
     if (!_timingShown) return;
+    _flushRememberedTiming();
     final focused = _timingScope.hasFocus;
     setState(() => _timingShown = false);
     if (focused) _focusNode.requestFocus();
@@ -2797,6 +2929,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final engine = _engine;
     _engine = null;
     if (engine != null) _disposeAfterFrame(engine);
+    // Whatever the last press asked for, before the preferences this
+    // screen writes through go out of reach.
+    _flushRememberedTiming();
     _prefs?.removeListener(_onPrefsChanged);
     _ownPrefs?.dispose();
     _bufferStatus.dispose();
