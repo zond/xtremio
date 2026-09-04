@@ -572,57 +572,61 @@ void main() {
     expect(harness.engine.rates, [1.5]);
   });
 
-  testWidgets('the menu offers only the files cut for this video', (
+  /// A harness whose container is [videoFrameRate] and whose addon answers
+  /// [items], with no session preference to auto-apply.
+  PlayerHarness harnessRated(
+    double? videoFrameRate,
+    List<Map<String, dynamic>> items, {
+    Map<String, dynamic>? preference,
+  }) {
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.frameRate = videoFrameRate,
+    );
+    harness.fixture['subtitlePreference'] = preference;
+    harness.fixture['subtitles'] = [subtitlesResponse(items)];
+    return harness;
+  }
+
+  /// One addon answer: a file of [lang] at [url], named [releaseGroup] in
+  /// the menu, declaring [fpsMilli] as the rate it was cut for.
+  Map<String, dynamic> upload(
+    String id,
+    String lang,
+    String url,
+    String releaseGroup, {
+    int? fpsMilli,
+  }) => {
+    'id': id,
+    'lang': lang,
+    'url': url,
+    'fpsMilli': ?fpsMilli,
+    'releaseGroup': releaseGroup,
+  };
+
+  testWidgets('the menu offers every file, the ones that fit first', (
     tester,
   ) async {
     useWideViewport(tester);
-    // A 23.976 fps container, which is what a film release is: the 25 fps
-    // English upload is not a worse option, it is the wrong file.
-    final harness = PlayerHarness(
-      configureEngine: (engine) => engine.frameRate = 23.976,
-    );
-    harness.fixture['subtitlePreference'] = null;
-    harness.fixture['subtitles'] = [
-      subtitlesResponse([
-        {
-          'id': 'en-1',
-          'lang': 'eng',
-          'url': 'https://subs.example.org/en-24.srt',
-          'fpsMilli': 24000,
-          'releaseGroup': 'TWENTYFOUR',
-        },
-        {
-          'id': 'en-2',
-          'lang': 'eng',
-          'url': 'https://subs.example.org/en-23980.srt',
-          'fpsMilli': 23980,
-          'releaseGroup': 'ROUNDED',
-        },
-        {
-          'id': 'en-3',
-          'lang': 'eng',
-          'url': 'https://subs.example.org/en-25.srt',
-          'fpsMilli': 25000,
-          'releaseGroup': 'PAL',
-        },
-        // Polish was only ever offered at 25 fps: dropping both would
-        // leave the language off the menu, so it keeps them.
-        {
-          'id': 'pl-1',
-          'lang': 'pol',
-          'url': 'https://subs.example.org/pl-25.srt',
-          'fpsMilli': 25000,
-          'releaseGroup': 'POLA',
-        },
-        {
-          'id': 'pl-2',
-          'lang': 'pol',
-          'url': 'https://subs.example.org/pl-25b.srt',
-          'fpsMilli': 25000,
-          'releaseGroup': 'POLB',
-        },
-      ]),
-    ];
+    // A 23.976 fps container, which is what a film release is. The PAL
+    // upload drifts four seconds a minute against it -- and that drift is
+    // linear, so it is corrected rather than hidden.
+    final harness = harnessRated(23.976, [
+      upload(
+        'en-1',
+        'eng',
+        'https://subs.example.org/en-25.srt',
+        'PAL',
+        fpsMilli: 25000,
+      ),
+      upload('en-2', 'eng', 'https://subs.example.org/en-silent.srt', 'SILENT'),
+      upload(
+        'en-3',
+        'eng',
+        'https://subs.example.org/en-23980.srt',
+        'ROUNDED',
+        fpsMilli: 23980,
+      ),
+    ]);
     await harness.pump(tester);
     final engine = harness.engine;
     // Nothing is asked before there is a video to ask about, and the rate
@@ -636,75 +640,175 @@ void main() {
 
     await tester.tap(find.byTooltip('Subtitles (S)'));
     await tester.pumpAndSettle();
-    // One English file survived, so there is nothing left behind that row
-    // -- the 24 and 25 fps uploads are not hidden one press away, they
-    // are not on offer at all.
-    expect(find.text('English'), findsOneWidget);
-    expect(find.textContaining('other English'), findsNothing);
-
-    // Polish kept both of its mismatched files rather than going missing.
-    expect(find.text('Polish'), findsOneWidget);
-    await tester.tap(find.text('1 other Polish file'));
+    // All three are on offer, and the row names the one that needs
+    // nothing done to it -- an addon's `fpsMilli` is a claim about the
+    // release it was cut for, and a claim can be wrong.
+    expect(find.text('ROUNDED · subs.example.org'), findsOneWidget);
+    await tester.tap(find.text('2 other English files'));
     await tester.pumpAndSettle();
-    expect(find.text('POLA'), findsOneWidget);
-    expect(find.text('POLB'), findsOneWidget);
+    expect(find.text('ROUNDED'), findsOneWidget);
+    expect(find.text('SILENT'), findsOneWidget);
+    expect(find.text('PAL'), findsOneWidget);
 
-    // And a tap applies the file the row named, not the one that was
-    // dropped from under it.
-    await tester.tap(find.text('English'));
+    // A file that fits is played at its own timing.
+    await tester.tap(find.text('ROUNDED'));
     await tester.pumpAndSettle();
-    expect(engine.externalSubtitles, [
-      (Uri.parse('https://subs.example.org/en-23980.srt'), 'English', 'eng'),
-    ]);
+    expect(engine.externalSubtitles.last.$1.path, endsWith('/en-23980.srt'));
+    expect(engine.subtitleSpeed, 1);
+
+    // The PAL file is offered too, and applying it re-times it: 25 fps
+    // events against a 23.976 fps picture, so 1.0427.
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2 other English files'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PAL'));
+    await tester.pumpAndSettle();
+    expect(engine.externalSubtitles.last.$1.path, endsWith('/en-25.srt'));
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 
-  testWidgets('the session preference picks from the filtered list too', (
+  testWidgets('a re-timed file is put back to 1.0 by every way out of it', (
     tester,
   ) async {
     useWideViewport(tester);
-    // The auto-pick is the one path that applies a subtitle without the
-    // viewer looking, so it is the one that must not reach past the
-    // filter. English was picked on the previous episode; the addon
-    // answers a 25 fps upload first and a 23.980 one second, and the
-    // container is 23.976 film.
-    final harness = PlayerHarness(
-      configureEngine: (engine) => engine.frameRate = 23.976,
+    // The failure this whole design is most likely to produce: a
+    // multiplier belongs to the player, not to the file, so one left over
+    // from the previous pick silently ruins a subtitle that was correct.
+    final harness = harnessRated(23.976, [
+      upload(
+        'en-1',
+        'eng',
+        'https://subs.example.org/en-25.srt',
+        'PAL',
+        fpsMilli: 25000,
+      ),
+      upload(
+        'pl-1',
+        'pol',
+        'https://subs.example.org/pl-23980.srt',
+        'ROUNDED',
+        fpsMilli: 23980,
+      ),
+    ]);
+    await harness.pump(tester);
+    final engine = harness.engine;
+    // An embedded track of its own language, so its row is not one of the
+    // two the addon files are listed under.
+    engine.emitTracks(
+      const PlaybackTracks(
+        subtitle: [TrackInfo(id: '4', title: 'Commentary', language: 'ger')],
+      ),
     );
-    harness.fixture['subtitlePreference'] = {
-      'enabled': true,
-      'source': 'external',
-      'language': 'eng',
+    engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+
+    Future<void> pick(String row) async {
+      await tester.tap(find.byTooltip('Subtitles (S)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(row));
+      await tester.pumpAndSettle();
+    }
+
+    await pick('English');
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+
+    // Another file, which happens to need no correction at all.
+    await pick('Polish');
+    expect(engine.subtitleSpeed, 1);
+
+    // An embedded track is part of the video and declares no rate of its
+    // own, so it is played as it is.
+    await pick('English');
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    await pick('Commentary');
+    expect(engine.setSubtitleTrackIds, ['4']);
+    expect(engine.subtitleSpeed, 1);
+
+    // And so is nothing at all: turning subtitles off leaves no
+    // multiplier behind for whatever is picked next.
+    await pick('English');
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    await pick('Off');
+    expect(engine.disableSubtitlesCalls, 1);
+    expect(engine.subtitleSpeed, 1);
+  });
+
+  testWidgets('another video starts at its own timing', (tester) async {
+    useWideViewport(tester);
+    // The next episode opens on the same engine, and its container is not
+    // the one the last file was corrected against.
+    final harness = harnessRated(23.976, [
+      upload(
+        'en-1',
+        'eng',
+        'https://subs.example.org/en-25.srt',
+        'PAL',
+        fpsMilli: 25000,
+      ),
+    ]);
+    await harness.pump(tester);
+    final engine = harness.engine;
+    engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+
+    // The core resolves a different stream: same screen, same engine.
+    final next = Map<String, dynamic>.from(harness.fixture);
+    final stream = Map<String, dynamic>.from(next['stream'] as Map);
+    final content = List<Object?>.from(stream['content'] as List);
+    content[0] = {
+      ...content[0]! as Map<String, dynamic>,
+      'streaming_url': 'http://127.0.0.1:39661/next/0?',
     };
-    harness.fixture['subtitles'] = [
-      subtitlesResponse([
-        {
-          'id': 'en-1',
-          'lang': 'eng',
-          'url': 'https://subs.example.org/en-25.srt',
-          'fpsMilli': 25000,
-          'releaseGroup': 'PAL',
-        },
-        {
-          'id': 'en-2',
-          'lang': 'eng',
-          'url': 'https://subs.example.org/en-23980.srt',
-          'fpsMilli': 23980,
-          'releaseGroup': 'ROUNDED',
-        },
-      ]),
-    ];
+    next['stream'] = {...stream, 'content': content};
+    harness.core.setState(CoreField.player, next);
+    await pumpEvents(tester);
+    expect(engine.opened.last.$1.path, '/next/0');
+    expect(engine.subtitleSpeed, 1);
+  });
+
+  testWidgets('the session preference takes the file that fits, and re-times '
+      'the one that does not', (tester) async {
+    useWideViewport(tester);
+    // The auto-pick is the one path that applies a subtitle without the
+    // viewer looking. English was picked on the previous episode; the
+    // addon answers a 25 fps upload first and a 23.980 one second, and
+    // the container is 23.976 film, so the second is the better file.
+    final harness = harnessRated(
+      23.976,
+      [
+        upload(
+          'en-1',
+          'eng',
+          'https://subs.example.org/en-25.srt',
+          'PAL',
+          fpsMilli: 25000,
+        ),
+        upload(
+          'en-2',
+          'eng',
+          'https://subs.example.org/en-23980.srt',
+          'ROUNDED',
+          fpsMilli: 23980,
+        ),
+      ],
+      preference: {'enabled': true, 'source': 'external', 'language': 'eng'},
+    );
     await harness.pump(tester);
     final engine = harness.engine;
     expect(engine.externalSubtitles, isEmpty);
     engine.emitDuration(const Duration(minutes: 96));
     await pumpEvents(tester);
 
-    // The 25 fps file is what came first, and it is the file this whole
-    // filter exists to keep away: four seconds a minute of drift, applied
-    // to a viewer who never opened the menu.
     expect(engine.externalSubtitles, [
       (Uri.parse('https://subs.example.org/en-23980.srt'), 'English', 'eng'),
     ]);
+    expect(engine.subtitleSpeed, 1);
 
     // And the menu agrees with what is playing: the row is selected.
     await tester.tap(find.byTooltip('Subtitles (S)'));
@@ -723,65 +827,33 @@ void main() {
     );
   });
 
-  testWidgets('a pick made before the rate landed survives it', (tester) async {
+  testWidgets('the session preference re-times the only file there is', (
+    tester,
+  ) async {
     useWideViewport(tester);
-    // The Subtitles button works from the moment the controls do, which
-    // is before the media loads and the rate is read. Picking the 23.980
-    // file against what turns out to be a 25 fps container must not take
-    // that file off the menu: the alternative is subtitles on screen with
-    // every row unselected, Off included, and no row to turn them off.
-    final harness = PlayerHarness(
-      configureEngine: (engine) => engine.frameRate = 25,
+    // Nothing in the language fits, so the pick nobody watched applies a
+    // file that would drift four seconds a minute -- and corrects it.
+    final harness = harnessRated(
+      23.976,
+      [
+        upload(
+          'en-1',
+          'eng',
+          'https://subs.example.org/en-25.srt',
+          'PAL',
+          fpsMilli: 25000,
+        ),
+      ],
+      preference: {'enabled': true, 'source': 'external', 'language': 'eng'},
     );
-    harness.fixture['subtitlePreference'] = null;
-    harness.fixture['subtitles'] = [
-      subtitlesResponse([
-        {
-          'id': 'en-1',
-          'lang': 'eng',
-          'url': 'https://subs.example.org/en-25.srt',
-          'fpsMilli': 25000,
-          'releaseGroup': 'PAL',
-        },
-        {
-          'id': 'en-2',
-          'lang': 'eng',
-          'url': 'https://subs.example.org/en-23980.srt',
-          'fpsMilli': 23980,
-          'releaseGroup': 'ROUNDED',
-        },
-      ]),
-    ];
     await harness.pump(tester);
     final engine = harness.engine;
-    expect(engine.videoFrameRateCalls, 0);
-
-    await tester.tap(find.byTooltip('Subtitles (S)'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('1 other English file'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('ROUNDED'));
-    await tester.pumpAndSettle();
-    expect(engine.externalSubtitles, [
-      (Uri.parse('https://subs.example.org/en-23980.srt'), 'English', 'eng'),
-    ]);
-
-    // Now the container answers 25, which says that file is the wrong
-    // cut -- but it is the one playing.
-    engine.emitDuration(const Duration(minutes: 47));
+    engine.emitDuration(const Duration(minutes: 96));
     await pumpEvents(tester);
-    expect(engine.videoFrameRateCalls, 1);
-
-    await tester.tap(find.byTooltip('Subtitles (S)'));
-    await tester.pumpAndSettle();
-    // The English row is selected, and it names the file that is on.
-    expect(find.text('ROUNDED · subs.example.org'), findsOneWidget);
-    expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
-    await tester.tap(find.text('1 other English file'));
-    await tester.pumpAndSettle();
-    expect(find.text('ROUNDED'), findsOneWidget);
-    // The 25 fps file is still on offer; only the exemption is special.
-    expect(find.text('PAL'), findsOneWidget);
+    expect(engine.externalSubtitles, [
+      (Uri.parse('https://subs.example.org/en-25.srt'), 'English', 'eng'),
+    ]);
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 
   testWidgets('a menu row stays a row, however long the addon name is', (
@@ -835,32 +907,29 @@ void main() {
     );
   });
 
-  testWidgets('an engine that cannot say the rate filters nothing', (
+  testWidgets('an engine that cannot say the rate re-times nothing', (
     tester,
   ) async {
     useWideViewport(tester);
-    // Every engine but libmpv, and libmpv before the first frame: the
-    // 25 fps upload stays on offer rather than disappearing on a guess.
-    final harness = PlayerHarness();
-    harness.fixture['subtitlePreference'] = null;
-    harness.fixture['subtitles'] = [
-      subtitlesResponse([
-        {
-          'id': 'en-1',
-          'lang': 'eng',
-          'url': 'https://subs.example.org/en-25.srt',
-          'fpsMilli': 25000,
-          'releaseGroup': 'PAL',
-        },
-        {
-          'id': 'en-2',
-          'lang': 'eng',
-          'url': 'https://subs.example.org/en-23980.srt',
-          'fpsMilli': 23980,
-          'releaseGroup': 'ROUNDED',
-        },
-      ]),
-    ];
+    // Every engine but libmpv, and libmpv before the first frame: with no
+    // rate to compare against, the addons' order stands and no file is
+    // touched. A guess here re-times a subtitle that was right.
+    final harness = harnessRated(null, [
+      upload(
+        'en-1',
+        'eng',
+        'https://subs.example.org/en-25.srt',
+        'PAL',
+        fpsMilli: 25000,
+      ),
+      upload(
+        'en-2',
+        'eng',
+        'https://subs.example.org/en-23980.srt',
+        'ROUNDED',
+        fpsMilli: 23980,
+      ),
+    ]);
     await harness.pump(tester);
     harness.engine.emitDuration(const Duration(minutes: 96));
     await pumpEvents(tester);
@@ -868,9 +937,15 @@ void main() {
 
     await tester.tap(find.byTooltip('Subtitles (S)'));
     await tester.pumpAndSettle();
+    // The row still names the addon's first answer, and both are there.
+    expect(find.text('PAL · subs.example.org'), findsOneWidget);
     await tester.tap(find.text('1 other English file'));
     await tester.pumpAndSettle();
     expect(find.text('PAL'), findsOneWidget);
     expect(find.text('ROUNDED'), findsOneWidget);
+
+    await tester.tap(find.text('PAL'));
+    await tester.pumpAndSettle();
+    expect(harness.engine.subtitleSpeed, 1);
   });
 }

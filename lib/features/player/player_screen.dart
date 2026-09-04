@@ -292,8 +292,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// What the video playing runs at, once the engine has said
   /// ([_sampleFrameRate]); null until then, and for a backend that cannot
-  /// say at all. Read only by the subtitle filter -- it is never shown:
-  /// the point is a list that is right, not a number to reason about.
+  /// say at all. Read only to order the subtitle files and to re-time the
+  /// one applied -- it is never shown: the point is a subtitle that keeps
+  /// time, not a number to reason about.
   double? _videoFrameRate;
 
   /// Whether the engine has been asked and has answered (or declined, or
@@ -640,9 +641,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _opened = url;
     _autoPickedSubtitles = false;
     _mediaLoaded = false;
-    // A different video: what the last one ran at says nothing about it.
+    // A different video: what the last one ran at says nothing about it,
+    // and neither does the multiplier the last subtitle was re-timed by.
     _videoFrameRate = null;
     _frameRateSampled = false;
+    _retimeSubtitles();
     _dismissUpNext();
     final progress = state.progress;
     final start = progress != null && progress.isResumable
@@ -932,8 +935,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ///
   /// Not before the menu can be opened, though -- the Subtitles button
   /// works from the moment the controls do -- so a manual pick can still
-  /// predate the answer. That is what the filter's exemption for the
-  /// playing file is for (`subtitlesMatchingFrameRate`).
+  /// predate the answer, and a file picked in that window plays at its
+  /// own timing. Nothing is hidden by the rate, so the cost is a menu
+  /// ordered as the addons answered rather than a file taken away.
   ///
   /// The stats OSD samples the same property, but only while it is up.
   /// This must not depend on that, and must not turn the poll on to get
@@ -1595,8 +1599,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _engine?.setAudioTrack(track.id);
   }
 
+  /// Puts libmpv's subtitle multiplier where [subtitle] needs it against
+  /// the video that is playing ([subtitleSpeed]), or back to 1.0 when
+  /// there is no file whose own timing is in question -- an embedded
+  /// track, subtitles off, another video.
+  ///
+  /// Every path that changes what is on screen calls this, which is the
+  /// whole of the reset rule: the multiplier belongs to the player, not
+  /// to the file, so one left behind by the previous pick would silently
+  /// ruin a subtitle that was correct.
+  void _retimeSubtitles([SubtitleInfo? subtitle]) {
+    _engine?.setSubtitleSpeed(
+      subtitle == null
+          ? 1
+          : subtitleSpeed(subtitle, videoFrameRate: _videoFrameRate),
+    );
+  }
+
   void _selectEmbeddedSubtitle(TrackInfo track) {
     _tracks.value = _tracks.value.copyWith(activeSubtitleId: track.id);
+    _retimeSubtitles();
     _engine?.setSubtitleTrack(track.id);
     _client?.dispatch(
       CoreActions.playerSubtitlePreferenceChanged(
@@ -1611,6 +1633,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _tracks.value = _tracks.value.copyWith(
       activeSubtitleId: subtitle.url.toString(),
     );
+    _retimeSubtitles(subtitle);
     _engine?.setExternalSubtitle(
       subtitle.url,
       title: SubtitleMenu.externalLabel(subtitle),
@@ -1627,6 +1650,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _disableSubtitles() {
     _tracks.value = _tracks.value.copyWith(clearSubtitle: true);
+    _retimeSubtitles();
     _engine?.disableSubtitles();
     _client?.dispatch(
       CoreActions.playerSubtitlePreferenceChanged(enabled: false),
@@ -1645,9 +1669,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_autoPickedSubtitles ||
         _autoPickingSubtitles ||
         !_mediaLoaded ||
-        // The rate decides which files are on offer at all, and this
-        // applies one without the viewer looking: picking before the
-        // engine has answered would apply a file the menu then hides.
+        // The rate decides which file of a language fits best and what
+        // it has to be re-timed by, and this applies one without the
+        // viewer looking: picking before the engine has answered would
+        // take the addons' first answer and play it uncorrected.
         !_frameRateSampled ||
         _opened == null ||
         _handedOver) {
@@ -1660,6 +1685,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final Future<void>? applied;
     if (!preference.enabled) {
       _tracks.value = before.copyWith(clearSubtitle: true);
+      _retimeSubtitles();
       applied = _engine?.disableSubtitles();
     } else {
       final language = preference.language;
@@ -1668,10 +1694,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
           (candidate != null &&
               languageName(candidate).toLowerCase() ==
                   languageName(language).toLowerCase());
-      // The same list the menu is built from. This is the one path that
-      // applies a subtitle without the viewer looking, so it is the one
-      // that must not reach past the filter for a file the menu hides.
-      final offered = subtitlesMatchingFrameRate(
+      // The same list the menu is built from, in the same order. This is
+      // the one path that applies a subtitle without the viewer looking,
+      // so it is the one that has to take the language's best-fitting
+      // file rather than whichever addon answered first.
+      final offered = subtitlesByFrameRateFit(
         state.externalSubtitleSources,
         videoFrameRate: _videoFrameRate,
       );
@@ -1688,6 +1715,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _tracks.value = before.copyWith(
           activeSubtitleId: external.url.toString(),
         );
+        _retimeSubtitles(external);
         applied = _engine?.setExternalSubtitle(
           external.url,
           title: SubtitleMenu.externalLabel(external),
@@ -1695,6 +1723,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
       } else if (embedded != null) {
         _tracks.value = before.copyWith(activeSubtitleId: embedded.id);
+        _retimeSubtitles();
         applied = _engine?.setSubtitleTrack(embedded.id);
       } else {
         return;
@@ -1765,14 +1794,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           builder: (context, tracks, _) => SubtitleMenu(
             embedded: tracks.subtitle,
             groups: groupSubtitlesByLanguage(
-              // Filtered before grouping, so the numbering and "the first
-              // option is what a tap applies" hold over what survived.
-              subtitlesMatchingFrameRate(
+              // Ordered before grouping, so the numbering and "the first
+              // option is what a tap applies" hold over the order the
+              // rows are actually in.
+              subtitlesByFrameRateFit(
                 state?.externalSubtitleSources ?? const [],
                 videoFrameRate: _videoFrameRate,
-                // Never the file that is playing: the menu is on offer
-                // before the rate lands, so a pick can predate it.
-                activeId: tracks.activeSubtitleId,
               ),
               addonName: _subtitleAddonName,
             ),
