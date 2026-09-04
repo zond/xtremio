@@ -2953,10 +2953,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final engine = _engine;
     _engine = null;
     if (engine != null) _disposeAfterFrame(engine);
+    // The listener goes first, and the order is the whole of it: the
+    // flush below writes a preference, which notifies synchronously, and
+    // a notification answered from here is a `setState` on an element
+    // the framework has already marked defunct -- `mounted` is still
+    // true inside `dispose`, so the guard on [_onPrefsChanged] does not
+    // stop it. This screen has no use for a preference change it is on
+    // its way out of anyway.
+    _prefs?.removeListener(_onPrefsChanged);
     // Whatever the last press asked for, before the preferences this
     // screen writes through go out of reach.
     _flushRememberedTiming();
-    _prefs?.removeListener(_onPrefsChanged);
     _ownPrefs?.dispose();
     _bufferStatus.dispose();
     _player?.removeListener(_onPlayerState);

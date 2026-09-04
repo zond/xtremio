@@ -430,6 +430,32 @@ void main() {
     );
   });
 
+  testWidgets('a press the player is taken away under is still written', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final prefs = prefsWith();
+    await playing(tester, prefs: prefs);
+    await openPanel(tester);
+    await press(tester, 'subtitle-shift-later');
+
+    // The panel is still up and the write is still waiting when the
+    // screen goes. Nothing closes the panel first on either path that
+    // does this: the up-next countdown replaces the player, and the
+    // stop key pops it straight past the Back ladder.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpEvents(tester);
+
+    expect(
+      prefs.subtitleSync.shiftStepsFor(
+        series: series,
+        group: '6',
+        release: opened.toLowerCase(),
+      ),
+      1,
+    );
+  });
+
   testWidgets('nothing is written by a file the viewer never touched', (
     tester,
   ) async {
