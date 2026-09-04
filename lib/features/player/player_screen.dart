@@ -1715,10 +1715,38 @@ class _PlayerScreenState extends State<PlayerScreen> {
         group: group,
         release: _syncRelease,
       ),
-      speedDirection: SubtitleSpeedDirection.parse(
-        memory.speedFor(series: series, group: group),
-      ),
+      speedDirection: _rememberedSpeed(memory, series, group),
     );
+  }
+
+  /// The speed [memory] holds for [group]'s files of [series], unless
+  /// this video's own rate says that direction cannot be the one.
+  ///
+  /// A speed carries across releases because releases of one show
+  /// almost always share a frame rate -- but when this one does not,
+  /// carrying it is the reciprocal mistake the whole design is built to
+  /// avoid. A remembered `stretch` says the group's files are PAL-timed,
+  /// which against a PAL-family video needs nothing rather than needing
+  /// compressing, so the remembered direction is dropped and not
+  /// reversed. It stays in the file: the next release of this show is
+  /// likely to be the family it was learned on.
+  ///
+  /// This is also what keeps the panel honest. The direction the video
+  /// ruled out has no button, so a correction in force in it could be
+  /// toggled off only by pressing the *other* one -- which lands on the
+  /// reciprocal rather than on 1.0, and never on 1.0 at all.
+  SubtitleSpeedDirection? _rememberedSpeed(
+    SubtitleSyncMemory memory,
+    String? series,
+    String group,
+  ) {
+    final stored = SubtitleSpeedDirection.parse(
+      memory.speedFor(series: series, group: group),
+    );
+    final video = subtitleSpeedDirection(_videoFrameRate);
+    // An unknown rate rules nothing out, which is what unknown means
+    // everywhere else here too.
+    return video == null || video == stored ? stored : null;
   }
 
   /// The show or film an adjustment made here belongs to: the meta item's

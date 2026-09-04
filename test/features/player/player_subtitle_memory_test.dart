@@ -39,8 +39,11 @@ void main() {
 
   /// Two English uploads: `SIX` from the addon's group 6, and `NONE` from
   /// an addon that says nothing about where its files came from.
-  PlayerHarness harness({AppPrefs? prefs}) {
-    final harness = PlayerHarness(prefs: prefs);
+  PlayerHarness harness({AppPrefs? prefs, double? frameRate}) {
+    final harness = PlayerHarness(
+      prefs: prefs,
+      configureEngine: (engine) => engine.frameRate = frameRate,
+    );
     harness.fixture['subtitlePreference'] = null;
     harness.fixture['subtitles'] = [
       {
@@ -75,8 +78,9 @@ void main() {
     String pick = 'SIX',
     AppPrefs? prefs,
     String? streamName = opened,
+    double? frameRate,
   }) async {
-    final player = harness(prefs: prefs);
+    final player = harness(prefs: prefs, frameRate: frameRate);
     player.torrentStats.response = TorrentStats(
       phase: TorrentPhase.buffering,
       streamName: streamName,
@@ -260,6 +264,43 @@ void main() {
     // else.
     expect(player.engine.subtitleSpeed, closeTo(25 / 23.976, 1e-9));
     expect(player.engine.subtitleDelay, 0);
+  });
+
+  testWidgets('a speed the video rules out is dropped, not reversed', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final prefs = prefsWith({
+      'subtitleSync': [
+        {'series': series, 'group': '6', 'speed': 'stretch'},
+        {
+          'series': series,
+          'group': '6',
+          'release': opened.toLowerCase(),
+          'shift': 3,
+        },
+      ],
+    });
+    await prefs.load();
+
+    // The stretch was learned where the video was film; this release is
+    // PAL, and a PAL-sourced file against a PAL video needs nothing.
+    // Carrying it over would spread the cues 4 % further apart -- the
+    // reciprocal mistake -- and the panel draws only the direction the
+    // video calls for, so there would be no button to take it off with:
+    // the one that is drawn lands on 0.959, never on 1.0.
+    final player = await playing(tester, prefs: prefs, frameRate: 25);
+    expect(player.engine.subtitleSpeed, 1);
+    // The offset is this release's own and still comes back.
+    expect(player.engine.subtitleDelay, closeTo(0.3, 1e-9));
+
+    await openPanel(tester);
+    expect(find.byKey(const ValueKey('subtitle-speed-stretch')), findsNothing);
+    expect(find.text('1.000×'), findsOneWidget);
+
+    // Dropped from this playback, not forgotten: the next release of
+    // this show is likely to be the family the speed was learned on.
+    expect(prefs.subtitleSync.speedFor(series: series, group: '6'), 'stretch');
   });
 
   testWidgets('another series remembers nothing of this one', (tester) async {
