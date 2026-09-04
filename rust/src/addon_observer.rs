@@ -225,6 +225,17 @@ impl Walk<'_> {
     /// Notes one loadable: whether it keeps the field busy, and whether it
     /// has just settled into something not seen before.
     fn note<T>(&mut self, loadable: &ResourceLoadable<T>) {
+        // A resource no record is kept for (`addon_catalog`, or whatever an
+        // addon invents) is not an answer this counts, and does not make
+        // the field busy either -- which is why it is skipped before its
+        // content is looked at at all. Nothing reaches this today, because
+        // none of the watched fields holds such a loadable; the order
+        // matters for the day one does, when a permanently-`Loading`
+        // addon catalog would otherwise hold the field's whole sweep open
+        // and drop every real answer in it.
+        let Some(kind) = ResourceKind::from_resource_name(&loadable.request.path.resource) else {
+            return;
+        };
         let outcome = match answer(&loadable.content) {
             Answer::Pending => {
                 self.pending = true;
@@ -232,12 +243,6 @@ impl Walk<'_> {
             }
             Answer::NotAsked => return,
             Answer::Settled(outcome) => outcome,
-        };
-        // A resource no record is kept for (`addon_catalog`, or whatever an
-        // addon invents) is not an answer this counts, and does not make
-        // the field busy either.
-        let Some(kind) = ResourceKind::from_resource_name(&loadable.request.path.resource) else {
-            return;
         };
         let id = RequestId::of(&loadable.request, kind);
         // The same request can appear twice in one field (a meta addon that

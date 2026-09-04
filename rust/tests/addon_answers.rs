@@ -461,3 +461,33 @@ fn a_field_that_holds_no_addon_answers_is_not_a_sweep() {
     );
     assert!(table_in(&app).is_empty());
 }
+
+/// A resource the record keeps nothing for is not an answer, and does not
+/// keep the field busy either. None of the watched fields holds one today;
+/// the day one does, a catalog of addons that never finishes loading must
+/// not hold the whole sweep open and drop every real answer beside it.
+#[test]
+fn a_resource_no_record_is_kept_for_does_not_hold_the_load_open() {
+    let app = AppState::default();
+    let mut model = empty_model();
+    model.board = board(vec![
+        row(CINEMETA, answered()),
+        vec![ResourceLoadable {
+            request: ResourceRequest::new(
+                url(CHANNELS),
+                ResourcePath::without_extra("addon_catalog", "movie", "official"),
+            ),
+            content: loading(),
+        }],
+    ]);
+
+    assert_eq!(
+        observe(&app, &model),
+        1,
+        "a loading addon catalog held the load open"
+    );
+    assert_eq!(
+        table_in(&app).keys().collect::<Vec<_>>(),
+        vec![key_for(&url(CINEMETA))]
+    );
+}
