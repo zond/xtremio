@@ -57,8 +57,17 @@
 //! table reaches the disk through the app's generic preferences file
 //! ([`PREFS_KEY`]) when it is dirty and the last write is
 //! [`FLUSH_INTERVAL`] old, and whatever the throttle says when
-//! [`flush_in`] is called. Nothing new crosses FFI: the app reads the same
-//! preferences key it already reads.
+//! [`flush_in`] is called. The file is the only place the counts are
+//! *stored*: `crate::api::addon_health` is a window onto the live table,
+//! not a second store.
+//!
+//! The app does not read that key itself, for two reasons. The file is up
+//! to a flush behind, and a screen that says "not used yet" about an addon
+//! used a minute ago is worse than one that says nothing; and a
+//! preferences write from the app could not forget an addon at all, since
+//! the table in this process would write it straight back. So the app
+//! reads [`report`] and forgets through [`forget`], and the counts still
+//! live in exactly one place.
 //!
 //! Every entry point takes the [`crate::state::AppState`] it counts into --
 //! [`load_in`], [`commit_in`], [`flush_in`] -- the way
@@ -76,6 +85,7 @@
 //! file's lock (inside [`crate::prefs::set_in`]). Never the other way.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -529,6 +539,14 @@ impl Sweep {
 #[derive(Default)]
 pub struct AddonHealthState {
     counted: Mutex<Counted>,
+    /// Whole sweeps offered since this run started, and how many of them
+    /// were evidence about the addons at all. Counters rather than part of
+    /// `Counted`, because they say nothing about the record and everything
+    /// about *this run*: they are what [`every_answer_failed_in`] reads,
+    /// and they are deliberately not stored -- a connection that was down
+    /// yesterday is not news today.
+    sweeps: AtomicU64,
+    evidence: AtomicU64,
 }
 
 #[derive(Default)]
@@ -579,9 +597,11 @@ pub fn load_in(app: &AppState) {
 pub fn commit_in(app: &AppState, sweep: Sweep) -> bool {
     let mut counted = app.addon_health.counted();
     let now = Utc::now();
+    app.addon_health.sweeps.fetch_add(1, Ordering::Relaxed);
     if !sweep.commit_into(&mut counted.table, now) {
         return false;
     }
+    app.addon_health.evidence.fetch_add(1, Ordering::Relaxed);
     counted.dirty = true;
     flush_locked(app, &mut counted, false);
     true
@@ -606,6 +626,77 @@ pub fn prune_uninstalled_in(app: &AppState, installed: &BTreeSet<String>) {
         counted.dirty = true;
         flush_locked(app, &mut counted, false);
     }
+}
+
+/// Whether every answer this run has produced was a failure: sweeps were
+/// offered and not one of them was evidence about the addons (see
+/// [`Sweep::commit_into`]).
+///
+/// This is the app's "it is not them, it is your connection" signal, and it
+/// is the same observation the all-failed rule already makes, read the
+/// other way round: a sweep is refused precisely when every addon in it
+/// failed, so a run in which *no* sweep was ever accepted is a run in which
+/// nothing answered at all. No reachability probe, no DHT check, nothing
+/// asked of the network that the app was not already asking.
+///
+/// Per run and never stored: a connection that was down an hour ago says
+/// nothing about now, and the counters start again with the next
+/// [`AppState`].
+pub fn every_answer_failed_in(app: &AppState) -> bool {
+    let health = &app.addon_health;
+    health.sweeps.load(Ordering::Relaxed) > 0 && health.evidence.load(Ordering::Relaxed) == 0
+}
+
+/// Drops one addon's whole record and writes the table out at once,
+/// answering whether there was anything to drop.
+///
+/// This has to happen *here* rather than in the app, even though the app
+/// can already write the preferences file: the table it would edit is a
+/// copy, and the live one in this process would write the forgotten addon
+/// straight back on its next flush. Forgetting is therefore a call into the
+/// state that owns the counts, and it forces the write rather than waiting
+/// out [`FLUSH_INTERVAL`], so a restart cannot resurrect the record either.
+///
+/// A table [`load_in`] has never filled forgets nothing: an empty table is
+/// "the history has not been read", and writing it out would be exactly the
+/// erasure [`Counted::loaded`] exists to prevent.
+pub fn forget_in(app: &AppState, key: &str) -> bool {
+    let mut counted = app.addon_health.counted();
+    if !counted.loaded || !counted.table.forget(key) {
+        return false;
+    }
+    counted.dirty = true;
+    flush_locked(app, &mut counted, true);
+    true
+}
+
+/// What the app reads: `{"addons": {key: {resource: record}},
+/// "everyAnswerFailed": bool}`.
+///
+/// The counts come out of memory rather than out of the preferences file so
+/// that the screen shows what has actually been observed, including the
+/// answers since the last flush -- a list that says "not used yet" about an
+/// addon used a minute ago is worse than no list.
+pub fn report_in(app: &AppState) -> Value {
+    serde_json::json!({
+        "addons": table_in(app).to_value(),
+        "everyAnswerFailed": every_answer_failed_in(app),
+    })
+}
+
+/// [`report_in`] for the running process. Before `core_init` and after
+/// `shutdown` there is no state, and no state is an empty record rather
+/// than an error: nothing has been observed yet.
+pub fn report() -> Value {
+    match crate::state::current() {
+        Some(app) => report_in(&app),
+        None => serde_json::json!({ "addons": {}, "everyAnswerFailed": false }),
+    }
+}
+
+/// [`forget_in`] for the running process.
+pub fn forget(key: &str) -> bool {
+    crate::state::current().is_some_and(|app| forget_in(&app, key))
 }
 
 /// Writes the table out now, whatever the throttle says: shutdown, and the
@@ -1264,6 +1355,118 @@ mod tests {
             flush_in(&app);
             assert!(stored_keys().is_empty(), "a clean table was written again");
         });
+    }
+
+    #[test]
+    fn forgetting_one_addon_writes_the_table_out_without_it() {
+        crate::env::with_storage_dir(|_| {
+            let app = Arc::new(AppState::default());
+            load_in(&app);
+
+            let kept = url("https://kept.example.com/manifest.json");
+            let dropped = url("https://dropped.example.com/manifest.json");
+            assert!(commit_in(&app, one_answer(&kept)));
+            assert!(commit_in(&app, one_answer(&dropped)));
+
+            assert!(forget_in(&app, &key_for(&dropped)));
+
+            // At once, not at the next flush: the throttle would otherwise
+            // leave the forgotten addon in the file for another minute, and
+            // a restart in that minute would read it straight back.
+            assert_eq!(stored_keys(), vec![key_for(&kept)]);
+            assert!(
+                table_in(&app).get(&key_for(&dropped)).is_none(),
+                "the live table kept what the file no longer has"
+            );
+
+            // Forgetting again has nothing to say, and forgetting an addon
+            // that was never recorded is not an error.
+            assert!(!forget_in(&app, &key_for(&dropped)));
+            assert!(!forget_in(&app, "never.example.com#000000000000"));
+        });
+    }
+
+    #[test]
+    fn a_later_answer_does_not_bring_a_forgotten_addon_back() {
+        crate::env::with_storage_dir(|_| {
+            let app = Arc::new(AppState::default());
+            load_in(&app);
+
+            let addon = url("https://forgiven.example.com/manifest.json");
+            assert!(commit_in(&app, one_answer(&addon)));
+            assert!(forget_in(&app, &key_for(&addon)));
+
+            // The record starts again from nothing rather than from what it
+            // was: this is the whole point of forgetting after, say, a
+            // debrid key was replaced.
+            assert!(commit_in(&app, one_answer(&addon)));
+            flush_in(&app);
+            let record = record_of(&table_in(&app), &key_for(&addon), ResourceKind::Catalog);
+            assert_eq!(record.ok, 1.0, "the forgotten count came back");
+        });
+    }
+
+    #[test]
+    fn a_table_that_was_never_loaded_forgets_nothing() {
+        crate::env::with_storage_dir(|_| {
+            crate::prefs::set(PREFS_KEY, Some(seeded_history())).expect("seed");
+            let before = stored_keys();
+
+            // No `load_in`: the table is empty because it has not been
+            // read, and writing it out minus one key would erase the other
+            // four.
+            let app = AppState::default();
+            assert!(!forget_in(&app, "seeded0.example.com#000000000000"));
+            assert_eq!(stored_keys(), before, "an unread table was written out");
+        });
+    }
+
+    #[test]
+    fn nothing_answering_at_all_is_reported_as_the_connection() {
+        let app = AppState::default();
+        assert!(
+            !every_answer_failed_in(&app),
+            "nothing has been asked yet, which is not a broken connection"
+        );
+
+        let mut everything_failed = Sweep::new();
+        for host in ["one", "two"] {
+            everything_failed.observe_with(
+                &url(&format!("https://{host}.example.com/manifest.json")),
+                ResourceKind::Catalog,
+                Outcome::Failed,
+                |_| false,
+            );
+        }
+        assert!(!commit_in(&app, everything_failed));
+        assert!(every_answer_failed_in(&app));
+
+        // One addon answering anywhere is enough to say the connection is
+        // not the problem -- and it stays said, because the counter is
+        // "was there ever evidence this run", not "was the last sweep".
+        assert!(commit_in(
+            &app,
+            one_answer(&url("https://good.example.com/manifest.json"))
+        ));
+        assert!(!every_answer_failed_in(&app));
+    }
+
+    #[test]
+    fn the_report_carries_the_counts_and_the_connection() {
+        let app = AppState::default();
+        load_in(&app);
+        let addon = url("https://reported.example.com/manifest.json");
+        assert!(commit_in(&app, one_answer(&addon)));
+
+        let report = report_in(&app);
+        assert_eq!(report["everyAnswerFailed"], Value::Bool(false));
+        assert_eq!(report["addons"][key_for(&addon)]["catalog"]["ok"], 1.0);
+        assert!(
+            !serde_json::to_string(&report)
+                .expect("json")
+                .contains("reported.example.com/manifest.json"),
+            "the report carried a transport URL"
+        );
     }
 
     #[test]

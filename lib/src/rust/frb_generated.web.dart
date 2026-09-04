@@ -6,6 +6,7 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/addon_health.dart';
 import 'api/core.dart';
 import 'api/diagnostics.dart';
 import 'api/downloads.dart';
