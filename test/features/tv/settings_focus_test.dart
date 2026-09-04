@@ -7,6 +7,7 @@ import 'package:xtremio/features/settings/account_section.dart';
 import 'package:xtremio/features/settings/core_settings.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fake_prefs_client.dart';
@@ -65,10 +66,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(focusedLabel(tester), isNull);
 
-    // The account form comes first: two text fields, which must not keep
-    // the D-pad (a field claims every arrow key while focused).
+    // The account form comes first: two fields, which on a television are
+    // controls that open the platform's text-entry screen rather than
+    // EditableTexts, so nothing there claims an arrow key.
     await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusIn<TextField>(), isTrue);
+    expect(focusIn<TvTextField>(), isTrue);
     final email = FocusManager.instance.primaryFocus!;
     expect(
       tester
@@ -77,17 +79,17 @@ void main() {
       isTrue,
     );
     await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusIn<TextField>(), isTrue);
+    expect(focusIn<TvTextField>(), isTrue);
     expect(FocusManager.instance.primaryFocus, isNot(email));
     await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusIn<TextField>(), isFalse);
+    expect(focusIn<TvTextField>(), isFalse);
     expect(focusedLabel(tester), 'Sign in');
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedLabel(tester), 'Create an account');
 
-    // Up goes back into the field, left and right walk out of an empty one.
+    // Up goes back into the fields, one at a time.
     await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusIn<TextField>(), isTrue);
+    expect(focusIn<TvTextField>(), isTrue);
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(FocusManager.instance.primaryFocus, email);
 

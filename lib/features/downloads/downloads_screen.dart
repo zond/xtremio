@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../widgets/poster_tile.dart';
+import '../../widgets/tv_text_field.dart';
 import '../player/player_screen.dart';
 import 'destination.dart';
 import 'download_labels.dart';
@@ -468,7 +469,7 @@ class _DestinationControl extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 8),
-            TextField(
+            TvTextField(
               controller: typed,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),

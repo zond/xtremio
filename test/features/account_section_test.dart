@@ -3,20 +3,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/account_section.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
+import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fixtures.dart';
+import '../support/text_entry.dart';
 
 /// The Settings screen (the Account section sits at its top) on a tall
 /// viewport, so the whole registration form stays tappable.
-Future<void> pumpSettings(WidgetTester tester, FakeCoreClient core) async {
+Future<void> pumpSettings(
+  WidgetTester tester,
+  FakeCoreClient core, {
+  DeviceProfile device = DeviceProfile.fallback,
+}) async {
   tester.view.physicalSize = const Size(800, 1400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
-    CoreScope(
-      client: core,
-      child: const MaterialApp(home: SettingsScreen()),
+    DeviceScope(
+      profile: device,
+      child: CoreScope(
+        client: core,
+        child: const MaterialApp(home: SettingsScreen()),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -144,7 +154,7 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(
         tester
-            .widget<TextField>(find.byKey(AccountSection.emailFieldKey))
+            .widget<TvTextField>(find.byKey(AccountSection.emailFieldKey))
             .enabled,
         isFalse,
       );
@@ -171,8 +181,8 @@ void main() {
       // The typed password is kept for a retry.
       expect(
         tester
-            .widget<TextField>(find.byKey(AccountSection.passwordFieldKey))
-            .controller!
+            .widget<TvTextField>(find.byKey(AccountSection.passwordFieldKey))
+            .controller
             .text,
         'secret',
       );
@@ -551,6 +561,66 @@ void main() {
         ),
         isTrue,
       );
+    });
+  });
+
+  // The device the form exists for. On Android TV the app window keeps
+  // input focus while the on-screen keyboard is up, so the keyboard cannot
+  // move its own selection and neither field can be typed into; the fields
+  // here host no IME at all and hand the string to the platform's screen.
+  group('on a television', () {
+    const tv = DeviceProfile(isTv: true, hasTouch: false);
+
+    testWidgets('the remote types both credentials and signs in', (
+      tester,
+    ) async {
+      final core = loggedOutCore();
+      await pumpSettings(tester, core, device: tv);
+      expect(find.byType(EditableText), findsNothing);
+
+      var calls = answerTextEntry('user@example.com');
+      await tester.tap(find.byKey(AccountSection.emailFieldKey));
+      await tester.pumpAndSettle();
+      expect(calls.single.arguments, {
+        'label': 'Email',
+        'value': '',
+        'kind': 'email',
+      });
+      expect(find.text('user@example.com'), findsOneWidget);
+      expect(core.dispatched, isEmpty, reason: 'the email is not a submit');
+
+      // The password screen is asked for masking, and confirming there is
+      // the remote's Done: it signs in without a trip to the button.
+      calls = answerTextEntry('secret');
+      await tester.tap(find.byKey(AccountSection.passwordFieldKey));
+      await settleTextEntry(tester);
+      expect((calls.single.arguments as Map)['kind'], 'password');
+      expect(find.text('secret'), findsNothing);
+      expect(
+        ctxActions(core).single.toJson(),
+        CoreActions.login(
+          email: 'user@example.com',
+          password: 'secret',
+        ).toJson(),
+      );
+    });
+
+    testWidgets('a cancelled screen leaves the field as it was', (
+      tester,
+    ) async {
+      final core = loggedOutCore();
+      await pumpSettings(tester, core, device: tv);
+
+      answerTextEntry('user@example.com');
+      await tester.tap(find.byKey(AccountSection.emailFieldKey));
+      await tester.pumpAndSettle();
+
+      answerTextEntry(null);
+      await tester.tap(find.byKey(AccountSection.emailFieldKey));
+      await tester.pumpAndSettle();
+
+      expect(find.text('user@example.com'), findsOneWidget);
+      expect(core.dispatched, isEmpty);
     });
   });
 }

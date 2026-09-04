@@ -4,6 +4,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/core_settings.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fake_prefs_client.dart';
@@ -435,11 +436,11 @@ void main() {
       expect(radios(tester).groupValue, isTrue);
       expect(
         tester
-            .widget<TextField>(
+            .widget<TvTextField>(
               find.byKey(StreamingServerSection.remoteUrlFieldKey),
             )
             .controller
-            ?.text,
+            .text,
         'https://server.example.com/',
       );
 

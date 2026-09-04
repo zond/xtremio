@@ -4,6 +4,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/search/search_screen.dart';
+import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fixtures.dart';
@@ -109,7 +110,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Search movies, series and channels'), findsOneWidget);
-    expect(tester.widget<TextField>(field()).autofocus, isTrue);
+    expect(tester.widget<TvTextField>(field()).autofocus, isTrue);
     expect(core.dispatched, isEmpty);
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
@@ -416,7 +417,7 @@ void main() {
     expect(core.dispatched.last.field, CoreField.search);
     expect(find.text('Search movies, series and channels'), findsOneWidget);
     expect(find.text('Night of the Living Dead'), findsNothing);
-    expect(tester.widget<TextField>(field()).controller!.text, isEmpty);
+    expect(tester.widget<TvTextField>(field()).controller.text, isEmpty);
 
     // Typing the same query again is a fresh search.
     await type(tester, fixtureQuery);

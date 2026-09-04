@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/tv_density.dart';
+import '../../shell/tv_text_entry.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/shared_field_screen.dart';
+import '../../widgets/tv_text_field.dart';
 import 'addon_details_screen.dart';
 import 'addon_health.dart';
 import 'addon_health_client.dart';
@@ -590,7 +592,7 @@ class _CommunityTab extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-          child: TextField(
+          child: TvTextField(
             controller: search,
             decoration: InputDecoration(
               hintText: 'Search addons',
@@ -800,11 +802,10 @@ class _AddAddonDialogState extends State<AddAddonDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Add addon'),
-    content: TextField(
+    content: TvTextField(
       controller: _url,
       autofocus: true,
-      keyboardType: TextInputType.url,
-      autocorrect: false,
+      kind: TvTextKind.url,
       decoration: InputDecoration(
         labelText: 'Manifest URL',
         hintText: 'https://…/manifest.json',

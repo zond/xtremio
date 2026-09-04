@@ -7,10 +7,13 @@ import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/search/search_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
+import 'package:xtremio/shell/tv_text_entry.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
+import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fixtures.dart';
+import '../../support/text_entry.dart';
 
 const tv = DeviceProfile(isTv: true, hasTouch: false);
 
@@ -305,18 +308,18 @@ void main() {
 
     // The field autofocuses on a desktop or phone, where the keyboard is
     // right there; on a TV it would take focus off the rail the moment the
-    // tab is selected, as no other tab does, and start the IME.
+    // tab is selected, as no other tab does.
     await focusSearchDestination(tester);
     await press(tester, LogicalKeyboardKey.select);
     expect(find.byType(SearchScreen), findsOneWidget);
     expect(focusedRailLabel(tester), 'Search');
-    expect(focusIn<TextField>(), isFalse);
+    expect(focusIn<TvTextField>(), isFalse);
 
     await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIn<TextField>(), isTrue);
+    expect(focusIn<TvTextField>(), isTrue);
   });
 
-  testWidgets('the D-pad leaves the search field at the edges of its text', (
+  testWidgets('the D-pad leaves the search field, full or empty', (
     tester,
   ) async {
     useScreen(tester, const Size(1280, 720));
@@ -326,44 +329,30 @@ void main() {
     await focusSearchDestination(tester);
     await press(tester, LogicalKeyboardKey.select);
     await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIn<TextField>(), isTrue);
+    expect(focusIn<TvTextField>(), isTrue);
 
-    // Empty field: left is the way back to the rail (to whichever
-    // destination is nearest, as directional traversal goes).
+    // Left is the way back to the rail (to whichever destination is
+    // nearest, as directional traversal goes).
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusIn<NavigationRail>(), isTrue);
 
-    // With text, left walks the caret to the start first, then leaves.
-    final field = find.byKey(const Key('search-field'));
-    const query = 'night of the living dead';
-    await tester.enterText(field, query);
-    await tester.pump(SearchScreen.debounce);
+    // Select is what types on a television: it opens the platform's own
+    // text-entry screen, which comes back with the whole query.
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<TvTextField>(), isTrue);
+    final calls = answerTextEntry('night of the living dead');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settleTextEntry(tester);
     core.setState(CoreField.search, loadSearchFixture());
     await tester.pumpAndSettle();
-    expect(focusIn<TextField>(), isTrue);
-    final controller = tester.widget<TextField>(field).controller!;
-    controller.selection = const TextSelection.collapsed(offset: 1);
-    await press(tester, LogicalKeyboardKey.arrowLeft);
-    expect(focusIn<TextField>(), isTrue);
-    expect(controller.selection.extentOffset, 0);
+    expect(calls.single.method, TvTextEntry.method);
+    expect(find.byType(FocusableTile), findsWidgets);
+
+    // And a field with text in it is no different: there is no caret for an
+    // arrow key to walk, so nothing here can hold the D-pad.
+    expect(focusIn<TvTextField>(), isTrue);
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusIn<NavigationRail>(), isTrue);
-
-    // Right past the end of the text reaches the Clear button. (Right from
-    // the rail now finds a result tile alongside; up from there is the field.)
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    for (var i = 0; i < 3 && !focusIn<TextField>(); i++) {
-      await press(tester, LogicalKeyboardKey.arrowUp);
-    }
-    expect(focusIn<TextField>(), isTrue);
-    controller.selection = TextSelection.collapsed(offset: query.length - 1);
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIn<TextField>(), isTrue);
-    expect(controller.selection.extentOffset, query.length);
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    // (The Clear button is the field's suffix, so still within the TextField.)
-    expect(focusIn<EditableText>(), isFalse);
-    expect(focusIn<IconButton>(), isTrue);
   });
 
   testWidgets('down from the search field goes to the results', (tester) async {
@@ -374,25 +363,22 @@ void main() {
     await focusSearchDestination(tester);
     await press(tester, LogicalKeyboardKey.select);
     await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIn<TextField>(), isTrue);
+    expect(focusIn<TvTextField>(), isTrue);
 
-    await tester.enterText(
-      find.byKey(const Key('search-field')),
-      'night of the living dead',
-    );
-    await tester.pump(SearchScreen.debounce);
+    answerTextEntry('night of the living dead');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settleTextEntry(tester);
     core.setState(CoreField.search, loadSearchFixture());
     await tester.pumpAndSettle();
     expect(find.byType(FocusableTile), findsWidgets);
-    expect(focusIn<TextField>(), isTrue);
+    expect(focusIn<TvTextField>(), isTrue);
 
-    // A single-line field has no line below the caret to move to.
     await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusIn<TextField>(), isFalse);
+    expect(focusIn<TvTextField>(), isFalse);
     expect(focusIn<FocusableTile>(), isTrue);
 
     await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusIn<TextField>(), isTrue);
+    expect(focusIn<TvTextField>(), isTrue);
   });
 
   testWidgets('up from the first and down from the last destination stay on '

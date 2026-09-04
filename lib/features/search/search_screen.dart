@@ -6,7 +6,7 @@ import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/poster_tile.dart';
-import '../../widgets/remote_field_exit.dart';
+import '../../widgets/tv_text_field.dart';
 import '../addons/failed_addons.dart';
 import '../details/meta_details_screen.dart';
 
@@ -282,7 +282,7 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isTv = DeviceScope.isTv(context);
-    final field = TextField(
+    return TvTextField(
       key: const Key('search-field'),
       controller: controller,
       // A keyboard is right there on a desktop or phone. On a TV taking
@@ -306,7 +306,6 @@ class _SearchField extends StatelessWidget {
               ),
       ),
     );
-    return RemoteFieldExit(controller: controller, child: field);
   }
 }
 

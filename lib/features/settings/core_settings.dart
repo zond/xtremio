@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
-import '../../widgets/remote_field_exit.dart';
+import '../../shell/tv_text_entry.dart';
+import '../../widgets/tv_text_field.dart';
 import '../player/language_names.dart';
 import '../player/playback_engine.dart';
 import '../player/subtitle_color_chips.dart';
@@ -560,21 +561,15 @@ class _StreamingServerSectionState extends State<StreamingServerSection> {
                 Row(
                   children: [
                     Expanded(
-                      // On a TV the D-pad has to be able to leave the
-                      // field again.
-                      child: RemoteFieldExit(
+                      child: TvTextField(
+                        key: StreamingServerSection.remoteUrlFieldKey,
                         controller: _url,
-                        child: TextField(
-                          key: StreamingServerSection.remoteUrlFieldKey,
-                          controller: _url,
-                          keyboardType: TextInputType.url,
-                          autocorrect: false,
-                          decoration: const InputDecoration(
-                            labelText: 'Server URL',
-                            hintText: 'http://192.168.1.10:11470',
-                          ),
-                          onSubmitted: (_) => _save(),
+                        kind: TvTextKind.url,
+                        decoration: const InputDecoration(
+                          labelText: 'Server URL',
+                          hintText: 'http://192.168.1.10:11470',
                         ),
+                        onSubmitted: (_) => _save(),
                       ),
                     ),
                     const SizedBox(width: 12),
