@@ -84,6 +84,20 @@ abstract interface class PlaybackEngine {
   Future<void> setExternalSubtitle(Uri url, {String? title, String? language});
   Future<void> disableSubtitles();
 
+  /// Multiplies the timestamps of the subtitle events being drawn by
+  /// [speed], `1.0` being the file's own timing.
+  ///
+  /// This is how a file cut for a release of another frame rate is put
+  /// back in step: the whole drift is linear, so one multiplier removes
+  /// it (`subtitleSpeed` in `subtitle_groups.dart`). Only libmpv has the
+  /// property; any other backend does nothing here, exactly as
+  /// [videoFrameRate] says nothing there.
+  ///
+  /// Every path that changes what is on screen sets it, 1.0 included: a
+  /// multiplier is a property of the player, not of the file, so one left
+  /// behind by the previous pick would ruin a subtitle that was correct.
+  Future<void> setSubtitleSpeed(double speed);
+
   /// Applies to the subtitles drawn over the video from the next build.
   Future<void> setSubtitleStyle(SubtitleStyle style);
 
@@ -568,6 +582,35 @@ class MediaKitEngine implements PlaybackEngine {
   @override
   Future<void> disableSubtitles() =>
       _player.setSubtitleTrack(SubtitleTrack.no());
+
+  /// The mpv property that multiplies subtitle event timestamps. It is in
+  /// the libmpv we ship, alongside `sub-fps` and `sub-delay`; `sub-fps`
+  /// is the wrong one of the three, since it only re-times a file mpv
+  /// itself has to convert from frames.
+  static const String subtitleSpeedProperty = 'sub-speed';
+
+  /// [speed] as mpv reads it: a decimal string, at a precision that
+  /// carries a frame-rate ratio (25 / 23.976 is 1.042709) without
+  /// spelling out the whole of a double.
+  static String subtitleSpeedValue(double speed) => speed.toStringAsFixed(6);
+
+  @override
+  Future<void> setSubtitleSpeed(double speed) async {
+    final native = _player.platform;
+    // Only the native (libmpv) backend has properties; a cast or an
+    // offline backend re-times nothing and needs nothing reset.
+    if (native is! NativePlayer || _disposed) return;
+    try {
+      await native.setProperty(
+        subtitleSpeedProperty,
+        subtitleSpeedValue(speed),
+      );
+    } catch (_) {
+      // A player torn down mid-write, or a build of libmpv without the
+      // property. The latter never re-times anything either, so there is
+      // no stale multiplier for a failed reset to leave behind.
+    }
+  }
 
   @override
   Future<void> setSubtitleStyle(SubtitleStyle style) async {

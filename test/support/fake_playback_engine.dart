@@ -48,6 +48,14 @@ class FakePlaybackEngine implements PlaybackEngine {
   final List<(Uri, String?, String?)> externalSubtitles = [];
   int disableSubtitlesCalls = 0;
 
+  /// Every `setSubtitleSpeed` call, in order -- what a test reads to see
+  /// that a re-timed file was corrected and that the next pick put the
+  /// multiplier back.
+  final List<double> subtitleSpeeds = [];
+
+  /// The multiplier in force, which is the last one set.
+  double get subtitleSpeed => subtitleSpeeds.isEmpty ? 1 : subtitleSpeeds.last;
+
   /// When set, `open` records the call and then fails with it (mpv refusing
   /// the URL).
   Object? openError;
@@ -198,6 +206,11 @@ class FakePlaybackEngine implements PlaybackEngine {
   @override
   Future<void> disableSubtitles() async {
     disableSubtitlesCalls++;
+  }
+
+  @override
+  Future<void> setSubtitleSpeed(double speed) async {
+    subtitleSpeeds.add(speed);
   }
 
   @override
