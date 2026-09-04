@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,89 +24,99 @@ import 'subtitle_groups.dart';
 /// the other in equal measure. The viewer watching the drift is the only
 /// one who can tell those apart.
 ///
-/// Steps are integers so that ten presses back and forth land exactly
-/// where they started; a double accumulated a tenth at a time does not.
+/// The shift is counted in integer presses so that ten forward and ten
+/// back land exactly where they started; a double accumulated a tenth at
+/// a time does not. The speed is not counted at all -- it is one
+/// direction or none.
 @immutable
 final class SubtitleTiming {
-  const SubtitleTiming({this.shiftSteps = 0, this.speedSteps = 0});
+  const SubtitleTiming({this.shiftSteps = 0, this.speedDirection});
 
   /// Presses of the shift control, positive being later.
   final int shiftSteps;
 
-  /// Presses of the speed control, positive multiplying by [speedStep].
-  final int speedSteps;
+  /// Which way the speed control has been pressed, and null for the
+  /// file's own timing.
+  ///
+  /// A direction rather than a count, because there is nothing to count:
+  /// the only mismatch a subtitle can have with a video is PAL against
+  /// film, so the correction is either in force or it is not. Holding it
+  /// this way is what makes a second press land on exactly 1.0 rather
+  /// than on the ratio squared, which is a place no viewer means to
+  /// arrive.
+  final SubtitleSpeedDirection? speedDirection;
 
   /// One press of the shift control. A tenth of a second is about the
   /// smallest offset that is visible against speech and small enough that
   /// holding the key is how a two-second correction gets made.
   static const double shiftStep = 0.1;
 
-  /// One press of the speed control: the PAL ratio, 25/23.976 = 1.042709.
+  /// What the speed control is worth: the PAL ratio, 25/23.976 =
+  /// 1.042709.
   ///
   /// The whole correction in one press, not a nudge towards it, because
   /// PAL against film is the only mismatch there is to fix -- every other
-  /// pair of rates is the same seconds. The press the other way divides
-  /// by it, and getting those two round the wrong way does not half-fix
-  /// the drift, it doubles it.
+  /// pair of rates is the same seconds. [SubtitleSpeedDirection.compress]
+  /// divides by it, and getting those two round the wrong way does not
+  /// half-fix the drift, it doubles it.
   static const double speedStep = 25 / 23.976;
 
   /// The offset for libmpv's `sub-delay`, in seconds. Positive delays the
   /// lines, which is mpv's own sign.
   double get delay => shiftSteps * shiftStep;
 
-  /// The multiplier for libmpv's `sub-speed`.
-  double get speed => _speedAfter(speedSteps);
+  /// The multiplier for libmpv's `sub-speed`: three values and no
+  /// others, all of them well inside the `<0.1-10.0>` mpv accepts.
+  double get speed => switch (speedDirection) {
+    null => 1,
+    SubtitleSpeedDirection.stretch => speedStep,
+    SubtitleSpeedDirection.compress => 1 / speedStep,
+  };
 
   /// The viewer has touched something, so there is a correction of theirs
   /// to undo. Reset is offered for exactly this.
-  bool get adjusted => shiftSteps != 0 || speedSteps != 0;
+  bool get adjusted => shiftSteps != 0 || speedDirection != null;
 
   /// The offset as the overlay shows it: signed, because which way it has
   /// gone is the whole of what a viewer is tracking between presses.
   String get shiftText =>
       '${shiftSteps > 0 ? '+' : ''}${delay.toStringAsFixed(1)} s';
 
-  /// The multiplier as the overlay shows it. Three decimals separates one
-  /// PAL step from none and from two.
+  /// The multiplier as the overlay shows it. Three decimals is what
+  /// separates the correction from the file's own timing.
   String get speedText => '${speed.toStringAsFixed(3)}×';
 
   /// [steps] more presses of the shift control.
-  SubtitleTiming shiftedBy(int steps) =>
-      SubtitleTiming(shiftSteps: shiftSteps + steps, speedSteps: speedSteps);
+  SubtitleTiming shiftedBy(int steps) => SubtitleTiming(
+    shiftSteps: shiftSteps + steps,
+    speedDirection: speedDirection,
+  );
 
-  /// [steps] more presses of the speed control, or this timing unchanged
-  /// when that would leave the `<0.1-10.0>` libmpv's `sub-speed` accepts.
-  ///
-  /// A refused write is silent (media_kit discards the return code), so
-  /// what a press outside the range would really do is leave the previous
-  /// multiplier running while the overlay claims a new one. Nothing is
-  /// better than that, and the button that would do it is drawn disabled.
-  SubtitleTiming stretchedBy(int steps) => canStretchBy(steps)
-      ? SubtitleTiming(shiftSteps: shiftSteps, speedSteps: speedSteps + steps)
-      : this;
-
-  /// Whether [stretchedBy] would move at all.
-  bool canStretchBy(int steps) {
-    final next = _speedAfter(speedSteps + steps);
-    return next >= minSubtitleSpeed && next <= maxSubtitleSpeed;
-  }
-
-  double _speedAfter(int steps) => math.pow(speedStep, steps).toDouble();
+  /// [direction] applied, or taken off again when it is already what is
+  /// in force: the control is a toggle, so a second press is how a
+  /// viewer who judged wrong gets back to exactly 1.0.
+  SubtitleTiming toggledSpeed(SubtitleSpeedDirection direction) =>
+      SubtitleTiming(
+        shiftSteps: shiftSteps,
+        speedDirection: speedDirection == direction ? null : direction,
+      );
 
   @override
   bool operator ==(Object other) =>
       other is SubtitleTiming &&
       other.shiftSteps == shiftSteps &&
-      other.speedSteps == speedSteps;
+      other.speedDirection == speedDirection;
 
   @override
-  int get hashCode => Object.hash(shiftSteps, speedSteps);
+  int get hashCode => Object.hash(shiftSteps, speedDirection);
 
   @override
-  String toString() => 'SubtitleTiming(shift: $shiftSteps, speed: $speedSteps)';
+  String toString() =>
+      'SubtitleTiming(shift: $shiftSteps, speed: ${speedDirection?.name})';
 }
 
-/// The panel that drives a [SubtitleTiming]: two steppers and a reset.
+/// The panel that drives a [SubtitleTiming]: a stepper, a toggle and a
+/// reset.
 ///
 /// It is deliberately not part of the player's OSD. Adjusting means
 /// pressing, then watching the picture for several seconds to see what
@@ -118,8 +127,9 @@ class SubtitleTimingOverlay extends StatelessWidget {
   const SubtitleTimingOverlay({
     super.key,
     required this.timing,
+    required this.videoDirection,
     required this.onShift,
-    required this.onStretch,
+    required this.onSpeed,
     required this.onReset,
     required this.onClose,
     this.firstFocusNode,
@@ -127,12 +137,23 @@ class SubtitleTimingOverlay extends StatelessWidget {
 
   final SubtitleTiming timing;
 
+  /// Which way this video's subtitles have to be pressed
+  /// ([subtitleSpeedDirection]), and null when the container declared no
+  /// rate we can place in either family.
+  ///
+  /// The video decides the direction, so the speed control is one button
+  /// and pressing it twice comes back to 1.0. Both buttons are offered
+  /// only for that null: a stream whose rate mpv never reports would
+  /// otherwise be unfixable, and offering the pair is the one honest
+  /// answer to knowing nothing.
+  final SubtitleSpeedDirection? videoDirection;
+
   /// One press of the shift control: `-1` earlier, `1` later.
   final ValueChanged<int> onShift;
 
-  /// One press of the speed control: `-1` divides by the PAL ratio, `1`
-  /// multiplies by it.
-  final ValueChanged<int> onStretch;
+  /// A press on the speed control, which is a toggle: pressing the
+  /// direction already in force takes it off again.
+  final ValueChanged<SubtitleSpeedDirection> onSpeed;
 
   /// Back to untouched: speed 1.0, shift 0.0. With nothing else writing
   /// either property, "undo what I did" and "back to untouched" are the
@@ -154,7 +175,8 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// remote is sitting on.
   static const double width = 300;
 
-  /// How long a stepper has to be held before it starts repeating.
+  /// How long the shift stepper has to be held before it starts
+  /// repeating.
   static const Duration holdDelay = Duration(milliseconds: 400);
 
   /// How often it steps after that: fast enough that a two-second shift
@@ -179,6 +201,29 @@ class SubtitleTimingOverlay extends StatelessWidget {
           : BorderSide.none,
     ),
   );
+
+  /// The speed button for [direction], or the space it would have taken
+  /// when the video has already ruled it out.
+  ///
+  /// mpv multiplies the event timestamps by `sub-speed`, so the larger
+  /// multiplier pushes every cue later and spreads them further apart:
+  /// the subtitle runs *slower* through the film, which is what a file
+  /// cut for 25 fps needs against 23.976 fps footage.
+  Widget _speedButton(SubtitleSpeedDirection direction) {
+    if (videoDirection != null && videoDirection != direction) {
+      return const _ButtonGap();
+    }
+    final stretch = direction == SubtitleSpeedDirection.stretch;
+    return _PanelButton(
+      key: ValueKey(
+        stretch ? 'subtitle-speed-stretch' : 'subtitle-speed-compress',
+      ),
+      icon: stretch ? Icons.unfold_more : Icons.unfold_less,
+      tooltip: stretch ? 'Subtitles run slower' : 'Subtitles run faster',
+      toggled: timing.speedDirection == direction,
+      onPress: () => onSpeed(direction),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -222,31 +267,35 @@ class SubtitleTimingOverlay extends StatelessWidget {
                     ),
                   ],
                 ),
-                _Stepper(
+                _TimingRow(
                   label: shiftLabel,
                   value: timing.shiftText,
-                  downKey: 'subtitle-shift-earlier',
-                  upKey: 'subtitle-shift-later',
-                  downTooltip: 'Subtitles earlier',
-                  upTooltip: 'Subtitles later',
-                  onStep: onShift,
-                  firstFocusNode: firstFocusNode,
+                  before: _PanelButton(
+                    key: const ValueKey('subtitle-shift-earlier'),
+                    icon: Icons.remove,
+                    tooltip: 'Subtitles earlier',
+                    repeats: true,
+                    focusNode: firstFocusNode,
+                    onPress: () => onShift(-1),
+                  ),
+                  after: _PanelButton(
+                    key: const ValueKey('subtitle-shift-later'),
+                    icon: Icons.add,
+                    tooltip: 'Subtitles later',
+                    repeats: true,
+                    onPress: () => onShift(1),
+                  ),
                 ),
-                _Stepper(
+                _TimingRow(
                   label: speedLabel,
                   value: timing.speedText,
-                  downKey: 'subtitle-speed-down',
-                  upKey: 'subtitle-speed-up',
-                  // mpv multiplies the event timestamps by `sub-speed`,
-                  // so a larger multiplier pushes every cue later and
-                  // spreads them further apart: the subtitle runs
-                  // *slower* through the film, which is what a file cut
-                  // for 25 fps needs against 23.976 fps footage.
-                  downTooltip: 'Subtitles run faster',
-                  upTooltip: 'Subtitles run slower',
-                  onStep: onStretch,
-                  canStepDown: timing.canStretchBy(-1),
-                  canStepUp: timing.canStretchBy(1),
+                  // The direction the video does *not* call for leaves a
+                  // gap the width of a button, so the value and the
+                  // button that is there stay in the same columns as the
+                  // shift row's -- and a press lands where the eye is
+                  // already looking.
+                  before: _speedButton(SubtitleSpeedDirection.compress),
+                  after: _speedButton(SubtitleSpeedDirection.stretch),
                 ),
                 Align(
                   alignment: Alignment.centerRight,
@@ -266,36 +315,26 @@ class SubtitleTimingOverlay extends StatelessWidget {
   }
 }
 
-/// One labelled row: a minus, the value it is showing, and a plus.
+/// One labelled row: a control, the value it is showing, and a control.
 ///
-/// Left and right along the row is the shape a remote expects of a pair
-/// of steppers, and it is what directional traversal gives for free from
-/// the geometry -- which is why the buttons are siblings in a `Row` and
-/// not something drawn inside a focusable tile.
-class _Stepper extends StatelessWidget {
-  const _Stepper({
+/// Left and right along the row is the shape a remote expects, and it is
+/// what directional traversal gives for free from the geometry -- which
+/// is why the buttons are siblings in a `Row` and not something drawn
+/// inside a focusable tile. Both rows share the layout so that the value
+/// sits in one column and the buttons in two, whichever of them a row
+/// has.
+class _TimingRow extends StatelessWidget {
+  const _TimingRow({
     required this.label,
     required this.value,
-    required this.downKey,
-    required this.upKey,
-    required this.downTooltip,
-    required this.upTooltip,
-    required this.onStep,
-    this.canStepDown = true,
-    this.canStepUp = true,
-    this.firstFocusNode,
+    required this.before,
+    required this.after,
   });
 
   final String label;
   final String value;
-  final String downKey;
-  final String upKey;
-  final String downTooltip;
-  final String upTooltip;
-  final ValueChanged<int> onStep;
-  final bool canStepDown;
-  final bool canStepUp;
-  final FocusNode? firstFocusNode;
+  final Widget before;
+  final Widget after;
 
   @override
   Widget build(BuildContext context) {
@@ -308,14 +347,7 @@ class _Stepper extends StatelessWidget {
             style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
           ),
         ),
-        _HoldButton(
-          key: ValueKey(downKey),
-          icon: Icons.remove,
-          tooltip: downTooltip,
-          enabled: canStepDown,
-          focusNode: firstFocusNode,
-          onPress: () => onStep(-1),
-        ),
+        before,
         SizedBox(
           width: 76,
           child: Text(
@@ -328,48 +360,67 @@ class _Stepper extends StatelessWidget {
             ),
           ),
         ),
-        _HoldButton(
-          key: ValueKey(upKey),
-          icon: Icons.add,
-          tooltip: upTooltip,
-          enabled: canStepUp,
-          onPress: () => onStep(1),
-        ),
+        after,
       ],
     );
   }
 }
 
-/// A button that fires once on press and then keeps firing while it is
-/// held down, by pointer or by the remote's select key.
+/// How wide and tall a button on this panel is: the television's minimum
+/// target where a remote has to hit it, and a pointer-sized circle
+/// otherwise.
+double _buttonSize(BuildContext context) =>
+    DeviceScope.isTv(context) ? TvDensity.minTarget : 40.0;
+
+/// The space a button would have taken. Nothing is drawn in it and
+/// nothing takes focus, so the remote walks straight past.
+class _ButtonGap extends StatelessWidget {
+  const _ButtonGap();
+
+  @override
+  Widget build(BuildContext context) =>
+      SizedBox.square(dimension: _buttonSize(context));
+}
+
+/// A round icon button on the panel, which when [repeats] is set fires
+/// once on press and then keeps firing while it is held down, by pointer
+/// or by the remote's select key.
 ///
 /// Twenty presses for a two-second offset is not an adjustment, it is a
-/// chore, so holding is the way a large correction gets made. The repeat
-/// is this widget's own timer rather than the key's auto-repeat, so it
-/// runs at the same rate on a mouse, a touch screen and a D-pad, and it
-/// stops on a release, a cancel and a lost focus alike -- a timer left
-/// running after the finger has gone would walk the value off on its own.
-class _HoldButton extends StatefulWidget {
-  const _HoldButton({
+/// chore, so holding is the way a large shift gets made. The repeat is
+/// this widget's own timer rather than the key's auto-repeat, so it runs
+/// at the same rate on a mouse, a touch screen and a D-pad, and it stops
+/// on a release, a cancel and a lost focus alike -- a timer left running
+/// after the finger has gone would walk the value off on its own. The
+/// speed control does not repeat: it is a toggle, and a toggle held down
+/// would flip eight times a second.
+class _PanelButton extends StatefulWidget {
+  const _PanelButton({
     super.key,
     required this.icon,
     required this.tooltip,
     required this.onPress,
-    this.enabled = true,
+    this.repeats = false,
+    this.toggled,
     this.focusNode,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onPress;
-  final bool enabled;
+  final bool repeats;
+
+  /// Whether this button's own correction is in force, for a button that
+  /// is a toggle; null for one that is not.
+  final bool? toggled;
+
   final FocusNode? focusNode;
 
   @override
-  State<_HoldButton> createState() => _HoldButtonState();
+  State<_PanelButton> createState() => _PanelButtonState();
 }
 
-class _HoldButtonState extends State<_HoldButton> {
+class _PanelButtonState extends State<_PanelButton> {
   Timer? _hold;
   Timer? _repeat;
 
@@ -386,9 +437,9 @@ class _HoldButtonState extends State<_HoldButton> {
   }
 
   void _start() {
-    if (!widget.enabled) return;
     _stop();
     widget.onPress();
+    if (!widget.repeats) return;
     _hold = Timer(SubtitleTimingOverlay.holdDelay, () {
       _hold = null;
       _repeat = Timer.periodic(
@@ -413,7 +464,6 @@ class _HoldButtonState extends State<_HoldButton> {
     }
     switch (event) {
       case KeyDownEvent():
-        if (!widget.enabled) return KeyEventResult.ignored;
         _keyDown = true;
         _start();
         return KeyEventResult.handled;
@@ -422,13 +472,10 @@ class _HoldButtonState extends State<_HoldButton> {
         // timer of its own, so the rate is ours and not the platform's.
         return _keyDown ? KeyEventResult.handled : KeyEventResult.ignored;
       case KeyUpEvent():
-        // A release is answered whatever [widget.enabled] now says. A
-        // hold is what drives the multiplier to the end of `sub-speed`'s
-        // range, and reaching it redraws this very button disabled while
-        // the key is still down: guarding the release too would drop the
-        // one event that stops [_repeat], leaving it firing for the life
-        // of the panel with the value pinned at the limit and every
-        // press the other way undone 120 ms later.
+        // Answered whatever the button has become in the meantime: a
+        // release dropped because the button stopped accepting presses
+        // is the one event that stops [_repeat], and without it the
+        // timer fires for the life of the panel.
         if (!_keyDown) return KeyEventResult.ignored;
         _keyDown = false;
         _stop();
@@ -448,7 +495,7 @@ class _HoldButtonState extends State<_HoldButton> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final size = DeviceScope.isTv(context) ? TvDensity.minTarget : 40.0;
+    final size = _buttonSize(context);
     // The [Tooltip] is outside the [Focus] rather than inside it so that
     // what the remote is sitting on can be read off the focused node: it
     // names the button, and there is no other text on one.
@@ -463,7 +510,7 @@ class _HoldButtonState extends State<_HoldButton> {
         onFocusChange: _onFocusChange,
         child: Semantics(
           button: true,
-          enabled: widget.enabled,
+          toggled: widget.toggled,
           label: widget.tooltip,
           // A [Listener] rather than a [GestureDetector]: a repeat has to
           // begin the moment the button is touched, and a tap recognizer
@@ -485,7 +532,12 @@ class _HoldButtonState extends State<_HoldButton> {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.12),
+                  // A toggle that is on is filled, because the panel has
+                  // to say what is in force after the OSD bar has gone
+                  // and the number alone is a three-decimal difference.
+                  color: widget.toggled ?? false
+                      ? theme.colorScheme.primary.withValues(alpha: 0.45)
+                      : Colors.white.withValues(alpha: 0.12),
                   border: Border.all(
                     color: _focused
                         ? theme.colorScheme.primary
@@ -493,11 +545,7 @@ class _HoldButtonState extends State<_HoldButton> {
                     width: 2,
                   ),
                 ),
-                child: Icon(
-                  widget.icon,
-                  size: 20,
-                  color: widget.enabled ? Colors.white : Colors.white30,
-                ),
+                child: Icon(widget.icon, size: 20, color: Colors.white),
               ),
             ),
           ),

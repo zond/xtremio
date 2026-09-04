@@ -289,6 +289,72 @@ Iterable<double> _frameRateFamily(double rate) sync* {
   }
 }
 
+/// Which way a subtitle has to be pressed to keep time with the video,
+/// for the timing panel's speed control.
+enum SubtitleSpeedDirection {
+  /// Stretch it: every timestamp multiplied by 25/23.976, so the lines
+  /// are spread further apart and run slower through the picture. What a
+  /// PAL-sourced file needs against a film-family video.
+  stretch,
+
+  /// Compress it: the reciprocal, for a film-sourced file against a
+  /// PAL-family video.
+  compress,
+}
+
+/// The rates that are film, and the rates that are PAL, before either is
+/// scaled by [subtitleFrameRateRatios].
+///
+/// Film is two bases rather than one because 24 and 23.976 are a
+/// thousandth of a percent apart in seconds -- the NTSC pulldown -- and
+/// both are film. 30 reduces to 24 and 29.97 to 23.976, which is why
+/// both are on the film side despite the numbers.
+const List<double> _filmFrameRates = [24000 / 1001, 24];
+const List<double> _palFrameRates = [25];
+
+/// Which way [videoFrameRate] says its subtitles have to be pressed, or
+/// null when nothing here says: no rate at all, or a rate in neither
+/// family.
+///
+/// Frame rates come in two lineages. The film family is 23.976 and 24
+/// and everything telecined or doubled from them -- 29.97, 30, 47.952,
+/// 48, 59.94, 60 -- all of which are the same seconds. The PAL family is
+/// 25 and 50, which run 4.27 % faster. Drift only ever appears *between*
+/// the two, so the video picks the direction: a film-family video can
+/// only be facing a PAL-sourced subtitle, which has to be stretched, and
+/// a PAL-family video the reverse. Under [subtitleFrameRateRatios] the
+/// two families are disjoint -- the closest members are 19.2 and 20 --
+/// so no rate is ever both.
+///
+/// Only the container's own figure should reach this. A measurement of
+/// the frames actually delivered is a different number on a stalling
+/// torrent, and one that lands in neither family, which is the answer
+/// that takes the direction away.
+SubtitleSpeedDirection? subtitleSpeedDirection(double? videoFrameRate) {
+  if (videoFrameRate == null) return null;
+  if (_reducesTo(videoFrameRate, _filmFrameRates)) {
+    return SubtitleSpeedDirection.stretch;
+  }
+  if (_reducesTo(videoFrameRate, _palFrameRates)) {
+    return SubtitleSpeedDirection.compress;
+  }
+  // Neither family: 12 fps animation, a broadcast oddity, a container
+  // that answered something we cannot read. We know nothing, and the
+  // panel offers both directions rather than guessing at one.
+  return null;
+}
+
+/// Whether any rate that is the same seconds as [rate] is one of [bases],
+/// within [subtitleFrameRateTolerance].
+bool _reducesTo(double rate, List<double> bases) {
+  for (final member in _frameRateFamily(rate)) {
+    for (final base in bases) {
+      if ((member - base).abs() <= subtitleFrameRateTolerance) return true;
+    }
+  }
+  return false;
+}
+
 /// Where a file sits in its language's order, best first.
 enum _FrameRateFit {
   /// A declared rate the video is already in step with: nothing to

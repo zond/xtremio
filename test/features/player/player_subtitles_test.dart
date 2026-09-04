@@ -730,7 +730,7 @@ void main() {
       await pick(row);
       await pick(SubtitleMenu.adjustTimingLabel);
       await tester.tap(find.byKey(const ValueKey('subtitle-shift-later')));
-      await tester.tap(find.byKey(const ValueKey('subtitle-speed-up')));
+      await tester.tap(find.byKey(const ValueKey('subtitle-speed-stretch')));
       await tester.pump();
       expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
       expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
@@ -785,7 +785,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text(SubtitleMenu.adjustTimingLabel));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('subtitle-speed-up')));
+    await tester.tap(find.byKey(const ValueKey('subtitle-speed-stretch')));
     await tester.tap(find.byKey(const ValueKey('subtitle-shift-later')));
     await tester.pump();
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));

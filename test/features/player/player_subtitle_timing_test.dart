@@ -40,10 +40,10 @@ void main() {
   /// A 23.976 fps film with two English uploads on offer: one the addon
   /// says nothing about (`PLAIN`) and one it says was cut for 25 fps
   /// (`PAL`). Both are played exactly as they were written.
-  PlayerHarness harness({DeviceProfile? device}) {
+  PlayerHarness harness({DeviceProfile? device, double? frameRate = 23.976}) {
     final harness = PlayerHarness(
       device: device,
-      configureEngine: (engine) => engine.frameRate = 23.976,
+      configureEngine: (engine) => engine.frameRate = frameRate,
     );
     harness.fixture['subtitlePreference'] = null;
     harness.fixture['subtitles'] = [
@@ -100,8 +100,9 @@ void main() {
     WidgetTester tester, {
     String pick = 'PLAIN',
     DeviceProfile? device,
+    double? frameRate = 23.976,
   }) async {
-    final player = harness(device: device);
+    final player = harness(device: device, frameRate: frameRate);
     await player.pump(tester);
     player.engine.emitDuration(const Duration(minutes: 96));
     player.engine.emitPlaying(true);
@@ -205,27 +206,63 @@ void main() {
     expect(find.text('-0.1 s'), findsOneWidget);
   });
 
-  testWidgets('a speed press is the whole PAL correction, and the other '
-      'way its reciprocal', (tester) async {
+  testWidgets('a film video offers one press, and it stretches', (
+    tester,
+  ) async {
     useWideViewport(tester);
-    // PAL against film is the only mismatch there is: every other pair of
-    // rates is the same seconds, so one press is the whole correction
-    // rather than a nudge towards it.
+    // 23.976 is the film family, which can only be facing a PAL-sourced
+    // file: 25 fps events over a 23.976 fps picture, so 1.0427 and never
+    // its reciprocal. Reversed it does not half-fix the drift, it
+    // doubles it, so the direction is not a thing to leave to a guess in
+    // front of the picture.
     final player = await playing(tester);
     final engine = player.engine;
     expect(engine.subtitleSpeed, 1);
     await openPanel(tester);
+    expect(find.byKey(const ValueKey('subtitle-speed-compress')), findsNothing);
 
-    await step(tester, 'subtitle-speed-up');
+    await step(tester, 'subtitle-speed-stretch');
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(find.text('1.043×'), findsOneWidget);
-    // Back through 1.0 and out the other side: 23.976/25, not 1.0427
-    // again, which is the mistake that doubles a drift instead of
-    // removing it.
-    await step(tester, 'subtitle-speed-down');
-    await step(tester, 'subtitle-speed-down');
+
+    // And a second press is exactly 1.0, not the ratio squared.
+    await step(tester, 'subtitle-speed-stretch');
+    expect(engine.subtitleSpeed, 1);
+    expect(find.text('1.000×'), findsOneWidget);
+  });
+
+  testWidgets('a PAL video offers the press the other way', (tester) async {
+    useWideViewport(tester);
+    // 25 fps is the PAL family, and the file it can be out of step with
+    // is a film-sourced one that has to be compressed: 23.976/25.
+    final player = await playing(tester, frameRate: 25);
+    final engine = player.engine;
+    await openPanel(tester);
+    expect(find.byKey(const ValueKey('subtitle-speed-stretch')), findsNothing);
+
+    await step(tester, 'subtitle-speed-compress');
     expect(engine.subtitleSpeed, closeTo(0.9590, 0.0001));
     expect(find.text('0.959×'), findsOneWidget);
+    await step(tester, 'subtitle-speed-compress');
+    expect(engine.subtitleSpeed, 1);
+  });
+
+  testWidgets('a container that declares no rate offers both', (tester) async {
+    useWideViewport(tester);
+    // A video needs no declared rate to play -- frames carry timestamps
+    // -- so `container-fps` is legitimately absent for variable-rate
+    // content and for transport streams. With no direction to choose,
+    // both buttons are the only honest answer: without them a stream
+    // whose rate mpv never reports would be unfixable.
+    final player = await playing(tester, frameRate: null);
+    final engine = player.engine;
+    await openPanel(tester);
+    await step(tester, 'subtitle-speed-compress');
+    expect(engine.subtitleSpeed, closeTo(0.9590, 0.0001));
+    // The other button replaces the direction rather than compounding
+    // it, so the pair still cannot reach the ratio squared.
+    await step(tester, 'subtitle-speed-stretch');
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 
   testWidgets('a file whose declared rate differs is still played as it '
@@ -243,7 +280,7 @@ void main() {
     expect(find.text('1.000×'), findsNothing);
     await openPanel(tester);
     expect(find.text('1.000×'), findsOneWidget);
-    await step(tester, 'subtitle-speed-up');
+    await step(tester, 'subtitle-speed-stretch');
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 
@@ -253,7 +290,7 @@ void main() {
     final engine = player.engine;
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-up');
+    await step(tester, 'subtitle-speed-stretch');
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
 
@@ -272,7 +309,7 @@ void main() {
     final player = await playing(tester);
     final engine = player.engine;
     await openPanel(tester);
-    await step(tester, 'subtitle-speed-up');
+    await step(tester, 'subtitle-speed-stretch');
     await step(tester, 'subtitle-shift-later');
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
@@ -294,7 +331,7 @@ void main() {
     final engine = player.engine;
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-up');
+    await step(tester, 'subtitle-speed-stretch');
     await openMenu(tester);
     await tester.tap(find.text('Off'));
     await tester.pumpAndSettle();
@@ -310,7 +347,7 @@ void main() {
     final engine = player.engine;
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-up');
+    await step(tester, 'subtitle-speed-stretch');
     engine.subtitleSpeeds.clear();
     engine.subtitleDelays.clear();
 
@@ -355,7 +392,7 @@ void main() {
     await selectFile(tester, 'PAL');
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-up');
+    await step(tester, 'subtitle-speed-stretch');
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
 
@@ -379,7 +416,7 @@ void main() {
     engine.subtitleError = null;
     await selectFile(tester, 'PAL');
     await openPanel(tester);
-    await step(tester, 'subtitle-speed-up');
+    await step(tester, 'subtitle-speed-stretch');
     expect(engine.externalSubtitles, hasLength(2));
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
 
@@ -424,7 +461,7 @@ void main() {
     expect(engine.externalSubtitles, hasLength(1));
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-up');
+    await step(tester, 'subtitle-speed-stretch');
 
     // `open` is `loadfile`, and nothing `sub-add` put in survives one:
     // mpv comes back drawing whatever it selects by its own rules,
@@ -513,8 +550,11 @@ void main() {
     expect(focusedTooltip(), 'Subtitles later');
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedTooltip(), 'Subtitles run slower');
+    // This video's rate is known, so the speed row is one button and a
+    // left press along it has nowhere to go. It stays in the panel
+    // rather than escaping onto the seek bar behind.
     await press(tester, LogicalKeyboardKey.arrowLeft);
-    expect(focusedTooltip(), 'Subtitles run faster');
+    expect(focusIn<SubtitleTimingOverlay>(), isTrue);
 
     // Nothing steps out of it. The video draws no focus ring, so it is
     // not a legitimate stop while something visible is on screen, and a
@@ -574,36 +614,26 @@ void main() {
     expect(ring(tester, 'subtitle-timing-close'), BorderSide.none);
   });
 
-  testWidgets('a stepper held to the end of its range still stops when the '
-      'key comes up', (tester) async {
+  testWidgets('the speed toggle held on a remote presses once', (tester) async {
     useScreen(tester, tvSize);
     final player = await playing(tester, device: tv);
     final engine = player.engine;
     await openPanel(tester);
     await press(tester, LogicalKeyboardKey.arrowDown);
-    await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTooltip(), 'Subtitles run slower');
 
-    // Held long past the ceiling of `sub-speed`'s `<0.1-10.0>`, which is
-    // what redraws this very button disabled while the key is still down.
+    // The shift stepper repeats while it is held, because twenty presses
+    // for a two-second offset is a chore. A toggle must not: held down
+    // at the stepper's rate it would flip eight times a second and land
+    // on whichever side the release happened to fall.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
     await tester.pump(SubtitleTimingOverlay.holdDelay);
-    for (var i = 0; i < 80; i++) {
+    for (var i = 0; i < 20; i++) {
       await tester.pump(SubtitleTimingOverlay.repeatInterval);
     }
-    expect(engine.subtitleSpeed, greaterThan(9));
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
-    await tester.pump();
-
-    // The release is the only thing that stops the repeat. Dropped
-    // because the button had gone dead, the timer kept firing for the
-    // life of the panel: the multiplier stayed pinned at the limit and a
-    // press the other way was undone 120 ms later.
-    final atCeiling = engine.subtitleSpeed;
-    await step(tester, 'subtitle-speed-down');
-    final afterPress = engine.subtitleSpeed;
-    expect(afterPress, lessThan(atCeiling));
     await tester.pump(SubtitleTimingOverlay.repeatInterval * 4);
-    expect(engine.subtitleSpeed, afterPress);
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 }

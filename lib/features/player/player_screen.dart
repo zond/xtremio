@@ -319,9 +319,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// What the video playing runs at, once the engine has said
   /// ([_sampleFrameRate]); null until then, and for a backend that cannot
-  /// say at all. Read only to order the subtitle files -- it is never
-  /// shown: the point is a list that is right, not a number to reason
-  /// about.
+  /// say at all. Read to order the subtitle files and to point the
+  /// timing panel's speed control -- it is never shown: the point is a
+  /// list that is right and a button that presses the right way, not a
+  /// number to reason about.
   double? _videoFrameRate;
 
   /// Whether the engine has been asked and has answered (or declined, or
@@ -3064,11 +3065,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           node: _timingScope,
                           child: SubtitleTimingOverlay(
                             timing: _timing,
+                            // The container's own figure and nothing
+                            // else: what a stalling stream is measured
+                            // at would put this control the wrong way
+                            // round on a video whose rate we know.
+                            videoDirection: subtitleSpeedDirection(
+                              _videoFrameRate,
+                            ),
                             firstFocusNode: _timingFocus,
                             onShift: (step) =>
                                 _adjustTiming(_timing.shiftedBy(step)),
-                            onStretch: (step) =>
-                                _adjustTiming(_timing.stretchedBy(step)),
+                            onSpeed: (direction) =>
+                                _adjustTiming(_timing.toggledSpeed(direction)),
                             onReset: () =>
                                 _adjustTiming(const SubtitleTiming()),
                             onClose: _hideSubtitleTiming,

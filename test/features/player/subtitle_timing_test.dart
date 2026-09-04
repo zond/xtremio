@@ -43,14 +43,77 @@ void main() {
       expect(timing.adjusted, isFalse);
     });
 
-    test('a speed press is the PAL ratio, and down is its reciprocal', () {
+    test('stretching is the PAL ratio and compressing its reciprocal', () {
       // 25/23.976 = 1.042709 and not 0.959040. Reversed it does not
       // half-fix a drift, it doubles it, which is the bug this pins.
       const none = SubtitleTiming();
       expect(none.speed, 1);
-      expect(none.stretchedBy(1).speed, closeTo(pal, 1e-12));
-      expect(none.stretchedBy(-1).speed, closeTo(1 / pal, 1e-12));
-      expect(none.stretchedBy(2).speed, closeTo(pal * pal, 1e-12));
+      expect(
+        none.toggledSpeed(SubtitleSpeedDirection.stretch).speed,
+        closeTo(pal, 1e-12),
+      );
+      expect(
+        none.toggledSpeed(SubtitleSpeedDirection.compress).speed,
+        closeTo(1 / pal, 1e-12),
+      );
+    });
+
+    test('the speed control is a toggle, so twice is exactly 1.0', () {
+      // Not the ratio squared, which is a state no viewer means to
+      // reach: the second press is how somebody who judged the drift
+      // backwards gets the file's own timing back, and "exactly" is the
+      // point -- 1.0427 squared is nearly 9 % out.
+      for (final direction in SubtitleSpeedDirection.values) {
+        const none = SubtitleTiming();
+        final once = none.toggledSpeed(direction);
+        expect(once.speedDirection, direction);
+        expect(once.toggledSpeed(direction).speedDirection, isNull);
+        expect(once.toggledSpeed(direction).speed, 1);
+        expect(once.toggledSpeed(direction).adjusted, isFalse);
+      }
+      // And pressing the other way replaces the direction rather than
+      // compounding it, for the video whose rate said nothing and got
+      // both buttons.
+      final stretched = const SubtitleTiming().toggledSpeed(
+        SubtitleSpeedDirection.stretch,
+      );
+      expect(
+        stretched.toggledSpeed(SubtitleSpeedDirection.compress).speed,
+        closeTo(1 / pal, 1e-12),
+      );
+    });
+
+    test('the video picks the direction, and says so or says nothing', () {
+      // The film family runs at one speed and the PAL family 4.27 %
+      // faster; drift only appears between the two, so a film-family
+      // video can only be facing a PAL-sourced file and needs it
+      // stretched. Every rate telecined or doubled off 23.976 or 24 is
+      // film, however unlike the numbers look.
+      const film = <double>[23.976, 23.98, 24, 29.97, 30, 47.952, 59.94, 60];
+      for (final rate in film) {
+        expect(
+          subtitleSpeedDirection(rate),
+          SubtitleSpeedDirection.stretch,
+          reason: '$rate is film',
+        );
+      }
+      for (final rate in <double>[25, 50, 12.5]) {
+        expect(
+          subtitleSpeedDirection(rate),
+          SubtitleSpeedDirection.compress,
+          reason: '$rate is PAL',
+        );
+      }
+      // A container that said nothing, and a reading in neither family:
+      // both mean we know nothing, and the panel offers both buttons.
+      expect(subtitleSpeedDirection(null), isNull);
+      expect(subtitleSpeedDirection(15), isNull);
+      // And why only the container's own figure may reach here: a
+      // stalling torrent rendering 12 frames a second reads as film,
+      // since 12 is 24 halved, while 12.5 reads as PAL. A measurement
+      // of the frames actually delivered would answer confidently and
+      // point the button whichever way the stall happened to fall.
+      expect(subtitleSpeedDirection(12), SubtitleSpeedDirection.stretch);
     });
 
     test('an untouched timing is what a file was written at', () {
@@ -62,28 +125,23 @@ void main() {
       expect(none.speed, 1);
       expect(none.delay, 0);
       expect(none.adjusted, isFalse);
-      expect(none.shiftedBy(3).stretchedBy(1).adjusted, isTrue);
+      expect(
+        none.shiftedBy(3).toggledSpeed(SubtitleSpeedDirection.stretch).adjusted,
+        isTrue,
+      );
     });
 
-    test('a press mpv would refuse never happens', () {
+    test('no press can reach a multiplier mpv would refuse', () {
       // `sub-speed` is `<0.1-10.0>` and media_kit discards the write's
       // return code, so a value outside it is refused in silence and
       // leaves the *previous* multiplier running while the panel claims
-      // a new one. The press is dropped instead, and the button that
-      // would have made it is drawn dead.
-      var timing = const SubtitleTiming();
-      for (var i = 0; i < 200; i++) {
-        timing = timing.stretchedBy(1);
+      // a new one. A toggle cannot get near it: three values, and the
+      // furthest is 4 % from 1.0.
+      for (final direction in [null, ...SubtitleSpeedDirection.values]) {
+        final speed = SubtitleTiming(speedDirection: direction).speed;
+        expect(speed, greaterThanOrEqualTo(minSubtitleSpeed));
+        expect(speed, lessThanOrEqualTo(maxSubtitleSpeed));
       }
-      expect(timing.speed, lessThanOrEqualTo(maxSubtitleSpeed));
-      expect(timing.canStretchBy(1), isFalse);
-      expect(timing.stretchedBy(1), same(timing));
-      var down = const SubtitleTiming();
-      for (var i = 0; i < 200; i++) {
-        down = down.stretchedBy(-1);
-      }
-      expect(down.speed, greaterThanOrEqualTo(minSubtitleSpeed));
-      expect(down.canStretchBy(-1), isFalse);
     });
 
     test('what the panel shows is signed, and never a bare number', () {
@@ -91,17 +149,28 @@ void main() {
       expect(const SubtitleTiming().shiftedBy(1).shiftText, '+0.1 s');
       expect(const SubtitleTiming().shiftedBy(-12).shiftText, '-1.2 s');
       expect(const SubtitleTiming().speedText, '1.000×');
-      expect(const SubtitleTiming().stretchedBy(1).speedText, '1.043×');
-      expect(const SubtitleTiming().stretchedBy(-1).speedText, '0.959×');
+      expect(
+        const SubtitleTiming(speedDirection: SubtitleSpeedDirection.stretch)
+            .speedText,
+        '1.043×',
+      );
+      expect(
+        const SubtitleTiming(speedDirection: SubtitleSpeedDirection.compress)
+            .speedText,
+        '0.959×',
+      );
     });
   });
 
   group('the panel', () {
     /// The overlay over a timing a test drives, recording every press.
+    /// [videoDirection] is what the container said the video is, and
+    /// null is a container that said nothing.
     Widget panel(
       SubtitleTiming timing, {
+      SubtitleSpeedDirection? videoDirection,
       List<int>? shifts,
-      List<int>? stretches,
+      List<SubtitleSpeedDirection>? speeds,
       VoidCallback? onReset,
       VoidCallback? onClose,
       FocusNode? firstFocusNode,
@@ -109,29 +178,124 @@ void main() {
       home: Scaffold(
         body: SubtitleTimingOverlay(
           timing: timing,
+          videoDirection: videoDirection,
           firstFocusNode: firstFocusNode,
           onShift: (step) => shifts?.add(step),
-          onStretch: (step) => stretches?.add(step),
+          onSpeed: (direction) => speeds?.add(direction),
           onReset: onReset ?? () {},
           onClose: onClose ?? () {},
         ),
       ),
     );
 
-    testWidgets('each button steps its own control, once, in its own '
+    final stretchButton = find.byKey(const ValueKey('subtitle-speed-stretch'));
+    final compressButton = find.byKey(
+      const ValueKey('subtitle-speed-compress'),
+    );
+
+    testWidgets('each button presses its own control, once, in its own '
         'direction', (tester) async {
       final shifts = <int>[];
-      final stretches = <int>[];
+      final speeds = <SubtitleSpeedDirection>[];
       await tester.pumpWidget(
-        panel(const SubtitleTiming(), shifts: shifts, stretches: stretches),
+        panel(const SubtitleTiming(), shifts: shifts, speeds: speeds),
       );
       await tester.tap(find.byKey(const ValueKey('subtitle-shift-later')));
       await tester.tap(find.byKey(const ValueKey('subtitle-shift-earlier')));
-      await tester.tap(find.byKey(const ValueKey('subtitle-speed-up')));
-      await tester.tap(find.byKey(const ValueKey('subtitle-speed-down')));
+      await tester.tap(stretchButton);
+      await tester.tap(compressButton);
       await tester.pump();
       expect(shifts, [1, -1]);
-      expect(stretches, [1, -1]);
+      expect(speeds, SubtitleSpeedDirection.values);
+    });
+
+    testWidgets('the video that has a rate gets one speed button', (
+      tester,
+    ) async {
+      // The direction is the video's to decide, so there is nothing for
+      // a second button to mean: a film-family video can only be facing
+      // a PAL-sourced file. Two buttons survive exactly where no
+      // direction can be chosen -- otherwise a stream whose rate mpv
+      // never reports would be unfixable.
+      await tester.pumpWidget(
+        panel(
+          const SubtitleTiming(),
+          videoDirection: SubtitleSpeedDirection.stretch,
+        ),
+      );
+      expect(stretchButton, findsOneWidget);
+      expect(compressButton, findsNothing);
+
+      await tester.pumpWidget(
+        panel(
+          const SubtitleTiming(),
+          videoDirection: SubtitleSpeedDirection.compress,
+        ),
+      );
+      expect(compressButton, findsOneWidget);
+      expect(stretchButton, findsNothing);
+
+      await tester.pumpWidget(panel(const SubtitleTiming()));
+      expect(stretchButton, findsOneWidget);
+      expect(compressButton, findsOneWidget);
+    });
+
+    testWidgets('a toggle that is on says so on the button', (tester) async {
+      // The panel is the surface operated after the OSD bar has gone,
+      // and a three-decimal number changing is not enough on its own to
+      // say whether the correction is in force.
+      Color? fill() =>
+          (tester
+                      .widget<DecoratedBox>(
+                        find
+                            .descendant(
+                              of: stretchButton,
+                              matching: find.byType(DecoratedBox),
+                            )
+                            .first,
+                      )
+                      .decoration
+                  as BoxDecoration)
+              .color;
+      await tester.pumpWidget(
+        panel(
+          const SubtitleTiming(),
+          videoDirection: SubtitleSpeedDirection.stretch,
+        ),
+      );
+      final off = fill();
+      await tester.pumpWidget(
+        panel(
+          const SubtitleTiming(speedDirection: SubtitleSpeedDirection.stretch),
+          videoDirection: SubtitleSpeedDirection.stretch,
+        ),
+      );
+      expect(fill(), isNot(off));
+    });
+
+    testWidgets('the speed toggle does not repeat while it is held', (
+      tester,
+    ) async {
+      // A toggle held down would flip eight times a second, and let go
+      // on whichever side the timer happened to leave it.
+      final speeds = <SubtitleSpeedDirection>[];
+      await tester.pumpWidget(
+        panel(
+          const SubtitleTiming(),
+          videoDirection: SubtitleSpeedDirection.stretch,
+          speeds: speeds,
+        ),
+      );
+      final gesture = await tester.startGesture(
+        tester.getCenter(stretchButton),
+      );
+      expect(speeds, [SubtitleSpeedDirection.stretch]);
+      await tester.pump(SubtitleTimingOverlay.holdDelay);
+      await tester.pump(SubtitleTimingOverlay.repeatInterval * 5);
+      expect(speeds, [SubtitleSpeedDirection.stretch]);
+      await gesture.up();
+      await tester.pump(const Duration(seconds: 2));
+      expect(speeds, [SubtitleSpeedDirection.stretch]);
     });
 
     testWidgets('a held button keeps stepping, and stops on the release', (
@@ -177,29 +341,6 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('subtitle-timing-reset')));
       await tester.pump();
       expect(resets, 1);
-    });
-
-    testWidgets('a press mpv would refuse is not offered either', (
-      tester,
-    ) async {
-      final stretches = <int>[];
-      // Past ten times the file's own timing there is nothing left to
-      // ask for: the write would be refused in silence.
-      var timing = const SubtitleTiming();
-      // Bounded rather than `while`, so a guard that stopped guarding
-      // fails the test instead of spinning here for ever.
-      for (var i = 0; i < 200 && timing.canStretchBy(1); i++) {
-        timing = timing.stretchedBy(1);
-      }
-      expect(timing.canStretchBy(1), isFalse);
-      await tester.pumpWidget(panel(timing, stretches: stretches));
-      await tester.tap(find.byKey(const ValueKey('subtitle-speed-up')));
-      await tester.pump();
-      expect(stretches, isEmpty);
-      // The other direction is still there to come back with.
-      await tester.tap(find.byKey(const ValueKey('subtitle-speed-down')));
-      await tester.pump();
-      expect(stretches, [-1]);
     });
 
     testWidgets('a remote steps it with select, and holds it too', (
