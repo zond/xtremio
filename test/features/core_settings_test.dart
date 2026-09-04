@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/core_settings.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
+import 'package:xtremio/shell/device_profile.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fake_prefs_client.dart';
@@ -31,6 +32,7 @@ void main() {
     Uri? embeddedUrl,
     bool embeddedServer = true,
     AppPrefs? prefs,
+    DeviceProfile device = DeviceProfile.fallback,
   }) async {
     tester.view.physicalSize = const Size(900, 3600);
     tester.view.devicePixelRatio = 1;
@@ -50,10 +52,15 @@ void main() {
     );
     const screen = MaterialApp(home: SettingsScreen());
     await tester.pumpWidget(
-      CoreScope(
-        client: core,
-        initInfo: core.initInfo,
-        child: prefs == null ? screen : PrefsScope(prefs: prefs, child: screen),
+      DeviceScope(
+        profile: device,
+        child: CoreScope(
+          client: core,
+          initInfo: core.initInfo,
+          child: prefs == null
+              ? screen
+              : PrefsScope(prefs: prefs, child: screen),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -283,6 +290,40 @@ void main() {
       await pumpSettings(tester, ctx: const {}, prefs: prefs);
 
       expect(find.byKey(settingKey(AppPrefs.bufferAheadKey)), findsOneWidget);
+    });
+  });
+
+  group('focus highlight', () {
+    const tv = DeviceProfile(isTv: true, hasTouch: false);
+
+    testWidgets('a television is offered Bold, and it goes to the '
+        'preferences', (tester) async {
+      final stored = FakePrefsClient();
+      final prefs = AppPrefs(client: stored);
+      final core = await pumpSettings(tester, prefs: prefs, device: tv);
+
+      expect(prefs.focusEmphasis, FocusEmphasis.standard);
+      // What each choice does is on the tile, not in a help page.
+      expect(find.text(FocusEmphasis.standard.description), findsOneWidget);
+
+      await pick(tester, AppPrefs.focusEmphasisKey, FocusEmphasis.bold.label);
+
+      expect(prefs.focusEmphasis, FocusEmphasis.bold);
+      expect(core.dispatched, isEmpty, reason: '${core.dispatched}');
+      // The room does not change on a restart: a fresh AppPrefs over the
+      // same file.
+      final restarted = AppPrefs(client: stored);
+      await restarted.load();
+      expect(restarted.focusEmphasis, FocusEmphasis.bold);
+    });
+
+    testWidgets('a phone is not offered it at all', (tester) async {
+      // The indicator is only drawn on a television; off one, focus
+      // follows a pointer or Tab.
+      await pumpSettings(tester, prefs: AppPrefs.inMemory());
+
+      expect(find.byKey(settingKey(AppPrefs.focusEmphasisKey)), findsNothing);
+      expect(find.text('Focus highlight'), findsNothing);
     });
   });
 

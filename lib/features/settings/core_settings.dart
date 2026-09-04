@@ -175,6 +175,50 @@ class BufferAheadSection extends StatelessWidget {
   }
 }
 
+/// Settings → Interface → "Focus highlight": how strongly the thing the
+/// remote is on is marked (see [FocusEmphasis]).
+///
+/// The app's own preference rather than a `profile.settings` field, for the
+/// same reason "Buffer ahead" is: it is about this device's room and
+/// display, not about the account. It is offered on a television only —
+/// that is where the indicator is drawn at all, and where the viewer is
+/// three metres away from a projector screen; off one, focus follows a
+/// pointer or Tab and Material's own highlight does the job.
+class FocusEmphasisSection extends StatelessWidget {
+  const FocusEmphasisSection({super.key, required this.prefs});
+
+  final AppPrefs prefs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!DeviceScope.isTv(context)) return const SizedBox.shrink();
+    return ListTile(
+      leading: const Icon(Icons.highlight_alt_outlined),
+      title: const Text('Focus highlight'),
+      subtitle: Text(prefs.focusEmphasis.description),
+      trailing: DropdownButton<FocusEmphasis>(
+        // The same key shape a `profile.settings` control gets, so a test
+        // finds this one the same way.
+        key: settingKey(AppPrefs.focusEmphasisKey),
+        value: prefs.focusEmphasis,
+        underline: const SizedBox.shrink(),
+        items: [
+          for (final choice in FocusEmphasis.values)
+            DropdownMenuItem<FocusEmphasis>(
+              value: choice,
+              child: Text(choice.label),
+            ),
+        ],
+        onChanged: (selected) {
+          if (selected != null && selected != prefs.focusEmphasis) {
+            prefs.setFocusEmphasis(selected);
+          }
+        },
+      ),
+    );
+  }
+}
+
 /// Subtitles: size and colours, the same values the player's own settings
 /// sheet edits.
 class SubtitlesSettingsSection extends StatelessWidget {

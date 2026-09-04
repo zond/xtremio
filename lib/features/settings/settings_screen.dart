@@ -200,6 +200,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 SubtitlesSettingsSection(settings: settings, onSetting: write),
           ),
           const _SectionHeader('Interface'),
+          // The app's own preference, and a television's only, so it is
+          // outside `_withSettings` like "Buffer ahead" above.
+          FocusEmphasisSection(prefs: _prefs),
           _withSettings(
             (settings, write) =>
                 InterfaceSettingsSection(settings: settings, onSetting: write),
