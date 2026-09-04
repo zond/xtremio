@@ -82,7 +82,21 @@ Rust engine for addons, catalogs, library, and playback state) and
 > with an error is named from the profile
 > rather than by its host and offers to be checked or uninstalled on the
 > spot; details routes are video-aware, so coming back from the player
-> lands on the right episode. The **player** plays torrents through the
+> lands on the right episode. **On a television** the top of that screen is
+> a different shape: the title's own artwork fills the panel -- *under* the
+> overscan band, since the artwork is the one thing here meant to be
+> cropped -- and over it sit the logo, one line of year, runtime, genres and
+> rating, and two lines of description, with no poster, because at three
+> metres the poster was a third of the layout of a picture already on
+> screen. What darkens the artwork is a gradient scrim over it: never
+> opacity on the text (dimmed text over a busy frame is unreadable in a way
+> a dimmed picture behind solid text is not) and never a blur, which the
+> Chromecast's Mali GPU cannot afford full-screen. No backdrop falls back to
+> the poster, one that will not load falls back the same way, and neither
+> leaves the brand ground. metahub names an image's size in its URL, so what
+> is asked for is the `medium` one rather than Cinemeta's small poster
+> stretched across the panel, and the decode is bounded to the panel's own
+> pixels. The **player** plays torrents through the
 > embedded server and HTTP streams directly, with its own controls (seek
 > bar with the buffered range, play/pause, seek buttons, volume,
 > fullscreen, keyboard shortcuts, playback speed), embedded and addon
@@ -167,8 +181,9 @@ Rust engine for addons, catalogs, library, and playback state) and
 > the remote's centre and media keys and is immersive-fullscreen the whole
 > time it is up, posters and text grow (1.15x text, a roomier density,
 > 48 dp targets), every screen holds 5% of every edge clear of overscan
-> except the video itself, and the controls a remote cannot work (the
-> volume slider, the fullscreen toggle, scrollbar thumbs) are not drawn.
+> except the video itself and the Details backdrop, and the controls a
+> remote cannot work (the volume slider, the fullscreen toggle, scrollbar
+> thumbs) are not drawn.
 
 ## Goals (beyond current Stremio clients)
 
