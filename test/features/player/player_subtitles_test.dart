@@ -570,4 +570,129 @@ void main() {
     await tester.pump();
     expect(harness.engine.rates, [1.5]);
   });
+
+  testWidgets('the menu offers only the files cut for this video', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // A 23.976 fps container, which is what a film release is: the 25 fps
+    // English upload is not a worse option, it is the wrong file.
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.frameRate = 23.976,
+    );
+    harness.fixture['subtitlePreference'] = null;
+    harness.fixture['subtitles'] = [
+      subtitlesResponse([
+        {
+          'id': 'en-1',
+          'lang': 'eng',
+          'url': 'https://subs.example.org/en-24.srt',
+          'fpsMilli': 24000,
+          'releaseGroup': 'TWENTYFOUR',
+        },
+        {
+          'id': 'en-2',
+          'lang': 'eng',
+          'url': 'https://subs.example.org/en-23980.srt',
+          'fpsMilli': 23980,
+          'releaseGroup': 'ROUNDED',
+        },
+        {
+          'id': 'en-3',
+          'lang': 'eng',
+          'url': 'https://subs.example.org/en-25.srt',
+          'fpsMilli': 25000,
+          'releaseGroup': 'PAL',
+        },
+        // Polish was only ever offered at 25 fps: dropping both would
+        // leave the language off the menu, so it keeps them.
+        {
+          'id': 'pl-1',
+          'lang': 'pol',
+          'url': 'https://subs.example.org/pl-25.srt',
+          'fpsMilli': 25000,
+          'releaseGroup': 'POLA',
+        },
+        {
+          'id': 'pl-2',
+          'lang': 'pol',
+          'url': 'https://subs.example.org/pl-25b.srt',
+          'fpsMilli': 25000,
+          'releaseGroup': 'POLB',
+        },
+      ]),
+    ];
+    await harness.pump(tester);
+    final engine = harness.engine;
+    // Nothing is asked before there is a video to ask about, and the rate
+    // arrives with the media -- long before the menu can be opened.
+    expect(engine.videoFrameRateCalls, 0);
+    engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+    expect(engine.videoFrameRateCalls, 1);
+    // Read, not polled: the stats OSD is off and stays off.
+    expect(engine.sampling, isFalse);
+
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    // One English file survived, so there is nothing left behind that row
+    // -- the 24 and 25 fps uploads are not hidden one press away, they
+    // are not on offer at all.
+    expect(find.text('English'), findsOneWidget);
+    expect(find.textContaining('other English'), findsNothing);
+
+    // Polish kept both of its mismatched files rather than going missing.
+    expect(find.text('Polish'), findsOneWidget);
+    await tester.tap(find.text('1 other Polish file'));
+    await tester.pumpAndSettle();
+    expect(find.text('POLA'), findsOneWidget);
+    expect(find.text('POLB'), findsOneWidget);
+
+    // And a tap applies the file the row named, not the one that was
+    // dropped from under it.
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    expect(engine.externalSubtitles, [
+      (Uri.parse('https://subs.example.org/en-23980.srt'), 'English', 'eng'),
+    ]);
+  });
+
+  testWidgets('an engine that cannot say the rate filters nothing', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // Every engine but libmpv, and libmpv before the first frame: the
+    // 25 fps upload stays on offer rather than disappearing on a guess.
+    final harness = PlayerHarness();
+    harness.fixture['subtitlePreference'] = null;
+    harness.fixture['subtitles'] = [
+      subtitlesResponse([
+        {
+          'id': 'en-1',
+          'lang': 'eng',
+          'url': 'https://subs.example.org/en-25.srt',
+          'fpsMilli': 25000,
+          'releaseGroup': 'PAL',
+        },
+        {
+          'id': 'en-2',
+          'lang': 'eng',
+          'url': 'https://subs.example.org/en-23980.srt',
+          'fpsMilli': 23980,
+          'releaseGroup': 'ROUNDED',
+        },
+      ]),
+    ];
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+    expect(harness.engine.frameRate, isNull);
+
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1 other English file'));
+    await tester.pumpAndSettle();
+    expect(find.text('PAL'), findsOneWidget);
+    expect(find.text('ROUNDED'), findsOneWidget);
+  });
 }

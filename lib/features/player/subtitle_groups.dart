@@ -110,6 +110,81 @@ final class SubtitleLanguageGroup {
       activeId != null && options.any((option) => option.id == activeId);
 }
 
+/// How far a subtitle's declared rate may sit from the video's own and
+/// still be the same cut, in frames per second.
+///
+/// Wide enough for rounding, narrow enough to catch a different cut.
+/// OpenSubtitles' `23980` against a 23.976 container is 0.004 away and is
+/// the same file; a genuine 24 fps cut is 0.024 away, and that one drifts
+/// a second every fifty. There is nothing legitimate in between: no addon
+/// knows a rate to a thousandth of a frame it did not round from one of
+/// the handful of rates film and video are shot at.
+const double subtitleFrameRateTolerance = 0.01;
+
+/// [sources] without the files cut for a video of a different frame rate,
+/// which is what the subtitle menu is built from.
+///
+/// A subtitle timed for 25 fps played against a 23.976 fps video drifts
+/// about four seconds a minute: it is not a worse option, it is the wrong
+/// file. But both rates are only what somebody *claims* -- the addon about
+/// its upload, the container about itself -- so the filter gives way
+/// wherever believing them could leave a viewer with nothing:
+///
+/// - A file that declares no rate is always kept. Most addons declare
+///   none, and silence is not a mismatch.
+/// - Nothing at all is dropped when [videoFrameRate] is null. An engine
+///   that cannot say (or has not said yet) is no evidence against any
+///   file.
+/// - A language that filtering would empty keeps every one of its files.
+///   Losing every Polish subtitle because the container lied about its
+///   rate is worse than offering one that drifts.
+///
+/// Embedded tracks never come through here: they are part of the file and
+/// declare no rate of their own.
+List<SubtitleSource> subtitlesMatchingFrameRate(
+  Iterable<SubtitleSource> sources, {
+  required double? videoFrameRate,
+}) {
+  final all = sources.toList();
+  if (videoFrameRate == null) return all;
+  final matches = [
+    for (final source in all)
+      _matchesFrameRate(source.subtitle, videoFrameRate),
+  ];
+  // The languages that would still have something to offer. Keyed the way
+  // the menu groups them, so "a language filtering would empty" is the
+  // same language as the row that would go missing.
+  final answered = <String>{
+    for (var i = 0; i < all.length; i++)
+      if (matches[i]) _languageLabel(all[i].subtitle.lang).toLowerCase(),
+  };
+  return [
+    for (var i = 0; i < all.length; i++)
+      if (matches[i] ||
+          !answered.contains(
+            _languageLabel(all[i].subtitle.lang).toLowerCase(),
+          ))
+        all[i],
+  ];
+}
+
+/// Whether [subtitle] was cut for a video running at [videoFrameRate].
+/// A rate the addon did not give -- absent, unparsable, or a zero or
+/// negative that is no rate at all -- is not a mismatch.
+bool _matchesFrameRate(SubtitleInfo subtitle, double videoFrameRate) {
+  final milli = subtitle.fpsMilli;
+  if (milli == null || milli <= 0) return true;
+  return (milli / 1000 - videoFrameRate).abs() <= subtitleFrameRateTolerance;
+}
+
+/// The display name a language code is grouped under: what the code
+/// *means*, so `en` and `eng` are one language; the code itself when
+/// [languageName] does not know it; `Unknown` when there is no code.
+String _languageLabel(String lang) {
+  final code = lang.trim();
+  return code.isEmpty ? 'Unknown' : languageName(code);
+}
+
 /// Groups deduplicated subtitle files by language, one group per language
 /// in first-seen (merge) order.
 ///
@@ -126,8 +201,7 @@ List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
   final labels = <String, String>{};
   final byLanguage = <String, List<SubtitleOption>>{};
   for (final source in sources) {
-    final code = source.subtitle.lang.trim();
-    final label = code.isEmpty ? 'Unknown' : languageName(code);
+    final label = _languageLabel(source.subtitle.lang);
     final key = label.toLowerCase();
     final options = byLanguage.putIfAbsent(key, () {
       order.add(key);

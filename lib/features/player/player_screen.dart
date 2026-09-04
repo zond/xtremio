@@ -266,6 +266,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// auto-pick waits for this.
   bool _mediaLoaded = false;
 
+  /// What the video playing runs at, once the engine has said
+  /// ([_sampleFrameRate]); null until then, and for a backend that cannot
+  /// say at all. Read only by the subtitle filter -- it is never shown:
+  /// the point is a list that is right, not a number to reason about.
+  double? _videoFrameRate;
+
   /// The torrent overlays: while [_torrentStatsTimer] runs the server's
   /// stats are polled and the latest answer shown ([_torrentStats], null
   /// until the server answers for this torrent).
@@ -584,6 +590,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _opened = url;
     _autoPickedSubtitles = false;
     _mediaLoaded = false;
+    // A different video: what the last one ran at says nothing about it.
+    _videoFrameRate = null;
     _dismissUpNext();
     final progress = state.progress;
     final start = progress != null && progress.isResumable
@@ -862,7 +870,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _pauseTorrentStats();
     });
     _syncTorrentStats();
+    _sampleFrameRate();
     _maybeAutoPickSubtitles();
+  }
+
+  /// Asks the engine what the video runs at, once per opened media and as
+  /// soon as there is a video to ask about -- which is well before the
+  /// controls can put the subtitle menu on screen, so the menu is filtered
+  /// from the first time it is opened.
+  ///
+  /// The stats OSD samples the same property, but only while it is up.
+  /// This must not depend on that, and must not turn the poll on to get
+  /// one number, so it is a single read (see
+  /// [PlaybackEngine.videoFrameRate]).
+  void _sampleFrameRate() {
+    final url = _opened;
+    _engine?.videoFrameRate().then(
+      (rate) {
+        if (!mounted || _opened != url || rate == _videoFrameRate) return;
+        setState(() => _videoFrameRate = rate);
+      },
+      // A backend that refused the read simply has not said, which is the
+      // case the filter already gives way to.
+      onError: (Object _) {},
+    );
   }
 
   /// mpv's own error log. Not shown, only recorded: this is where the
@@ -1570,7 +1601,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           builder: (context, tracks, _) => SubtitleMenu(
             embedded: tracks.subtitle,
             groups: groupSubtitlesByLanguage(
-              state?.externalSubtitleSources ?? const [],
+              // Filtered before grouping, so the numbering and "the first
+              // option is what a tap applies" hold over what survived.
+              subtitlesMatchingFrameRate(
+                state?.externalSubtitleSources ?? const [],
+                videoFrameRate: _videoFrameRate,
+              ),
               addonName: _subtitleAddonName,
             ),
             activeId: tracks.activeSubtitleId,

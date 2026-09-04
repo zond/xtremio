@@ -572,13 +572,30 @@ connection.
   them, because OpenSubtitles v3's only parameter is `senc`, which picks
   the encoding of the bytes it returns -- and the addon's own `id`,
   scoped by language, so two addons mirroring one upload collapse while
-  two that both number their answers from 1 do not. Then
+  two that both number their answers from 1 do not. What is left is
+  filtered against the video's own frame rate: a subtitle timed for
+  25 fps played against a 23.976 fps film drifts about four seconds a
+  minute, and OpenSubtitles says which rate an upload was cut for
+  (`fpsMilli`, on about nine entries in ten). The video's rate is one
+  read of libmpv's `container-fps` (`estimated-vf-fps` behind it) through
+  `PlaybackEngine.videoFrameRate`, taken once when the media loads --
+  the stats OSD polls the same property, but only while it is on screen,
+  and this has to be known whether or not anyone ever opens it. Rates
+  within 0.01 fps are the same cut (`23980` is a rounded 23.976);
+  anything further is the wrong file and is dropped, and a file that
+  declares no rate is always kept. Two rules stop the filter taking the
+  list away: nothing at all is filtered when the engine cannot say what
+  the video runs at, and a language filtering would empty keeps every one
+  of its files -- losing every Polish subtitle because the container lied
+  about its rate is worse than offering one that drifts. The rate itself
+  is never shown; the point is a list that is right, not a number to
+  reason about. Then
   `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)
   makes one row per language, since OpenSubtitles answers a single movie
   with 69 files, nineteen of them Spanish. Codes group on what they mean
   (`en` and `eng` are one row); a code `languageName` does not know is
-  its own row, labelled with the code itself. Nothing is dropped: a
-  language with more than one file carries a row beneath it ("14 other
+  its own row, labelled with the code itself. Nothing that reaches it is
+  hidden: a language with more than one file carries a row beneath it ("14 other
   English files") that opens them all, each named by the addon that
   offered it plus whatever the file itself is worth calling: the addon's
   `label` if it sent one, else its release group (`DFN`, or `DFN BluRay`
