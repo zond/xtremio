@@ -36,6 +36,16 @@
 //! which is the only batch whose all-failing says something about the
 //! network rather than about an addon.
 //!
+//! What that costs, and it is worth being plain about: a sweep of one is
+//! always either evidence or discarded, never weighed. The board asks for
+//! the rows in its current `LoadRange` and widens that by about a row per
+//! scroll step, so after the first screenful most board sweeps are a
+//! single row -- and a single row that fails is an all-failed sweep and is
+//! thrown away. Board failures below the fold are therefore thin in the
+//! record, while the successes beside them are counted normally. The
+//! details screen, where the stream addons are asked together, is where a
+//! failure is most reliably seen.
+//!
 //! ## Only a transition into a settled state counts
 //!
 //! A `NewState` is re-emitted for a field whenever anything in it changes,
