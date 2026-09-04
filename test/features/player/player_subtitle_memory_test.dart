@@ -303,6 +303,78 @@ void main() {
     expect(prefs.subtitleSync.speedFor(series: series, group: '6'), 'stretch');
   });
 
+  testWidgets('a speed the video rules out is dropped when the rate arrives '
+      'late', (tester) async {
+    useWideViewport(tester);
+    final prefs = prefsWith({
+      'subtitleSync': [
+        {'series': series, 'group': '6', 'speed': 'stretch'},
+        {
+          'series': series,
+          'group': '6',
+          'release': opened.toLowerCase(),
+          'shift': 3,
+        },
+      ],
+    });
+    await prefs.load();
+
+    // The same PAL video as above, over a torrent: mpv has not probed
+    // the container when the file is applied, so the rule that drops a
+    // contradicted speed has nothing to test it against and the stretch
+    // goes on.
+    final player = await playing(tester, prefs: prefs);
+    expect(player.engine.subtitleSpeed, closeTo(25 / 23.976, 1e-9));
+
+    player.engine.emitFrameRate(25);
+    await pumpEvents(tester);
+
+    // The answer arriving is the answer, whenever it arrives. Left in
+    // force this is 4.27 % applied by the machine to a subtitle that was
+    // in sync when it arrived, and nothing else resets it.
+    expect(player.engine.subtitleSpeed, 1);
+    // The offset is the release's own and no rate says anything about
+    // it.
+    expect(player.engine.subtitleDelay, closeTo(0.3, 1e-9));
+
+    await openPanel(tester);
+    expect(find.byKey(const ValueKey('subtitle-speed-stretch')), findsNothing);
+    expect(find.text('1.000\u00d7'), findsOneWidget);
+
+    // Still not forgotten, for the same reason as when the rate was
+    // known at the open.
+    expect(prefs.subtitleSync.speedFor(series: series, group: '6'), 'stretch');
+  });
+
+  testWidgets('a speed the viewer pressed survives the rate that rules it '
+      'out', (tester) async {
+    useWideViewport(tester);
+    final prefs = prefsWith();
+    await prefs.load();
+    final player = await playing(tester, prefs: prefs);
+    await openPanel(tester);
+
+    // A press made while the rate said nothing, which on a torrent is
+    // the ordinary way one gets made.
+    await press(tester, 'subtitle-speed-stretch');
+    expect(player.engine.subtitleSpeed, closeTo(25 / 23.976, 1e-9));
+
+    player.engine.emitFrameRate(25);
+    await pumpEvents(tester);
+    await tester.pumpAndSettle();
+
+    // Only the machine's guess is withdrawn. This is a judgement about
+    // the drift on screen, and it keeps its own button so the toggle
+    // back to exactly 1.0 is still there.
+    expect(player.engine.subtitleSpeed, closeTo(25 / 23.976, 1e-9));
+    expect(
+      find.byKey(const ValueKey('subtitle-speed-stretch')),
+      findsOneWidget,
+    );
+    await press(tester, 'subtitle-speed-stretch');
+    expect(player.engine.subtitleSpeed, 1);
+  });
+
   testWidgets('another series remembers nothing of this one', (tester) async {
     useWideViewport(tester);
     final prefs = prefsWith({
