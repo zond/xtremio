@@ -57,6 +57,26 @@ abstract final class TvDensity {
   /// for larger text still gets it.
   static TextScaler textScaler(TextScaler base) => _TvTextScaler(base);
 
+  /// The size the text scale is probed at: about what a row header and a
+  /// poster's caption are set in, and small enough to sit in the part of
+  /// the curve that actually moves.
+  static const double probeFontSize = 16;
+
+  /// The text scale in force below [context], as a plain factor: how much
+  /// bigger text is here than at the size a layout's fixed boxes were
+  /// picked for. A television scales it up ([textScale]), and so does a
+  /// system-wide accessibility setting anywhere.
+  ///
+  /// Probed at [probeFontSize] rather than at some large round number,
+  /// because a [TextScaler] need not be linear: Android 14 and later scale
+  /// fonts through a lookup table that lifts body sizes hard and then
+  /// flattens out, and AOSP's tables are anchored so that 100sp maps to
+  /// 100dp at *every* font setting. A probe at 100 therefore comes back
+  /// 1.0 however large the viewer asked for their text, while a 16sp
+  /// header is being drawn nearly twice the size.
+  static double textFactorOf(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(probeFontSize) / probeFontSize;
+
   /// [overscan] of the given screen, as padding.
   static EdgeInsets overscanPadding(Size screen) => EdgeInsets.symmetric(
     horizontal: screen.width * overscan,

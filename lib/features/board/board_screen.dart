@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/tv_density.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
@@ -340,11 +341,9 @@ class _RowLayout {
   /// picked for this window.
   final double baseExtent;
 
-  /// How much bigger text is here than at the size these constants were
-  /// picked for: a television scales it up, and so does a system-wide
-  /// accessibility setting anywhere. The header and the caption are text in
-  /// boxes of a fixed height, so both boxes grow with it -- and so does the
-  /// row, rather than the strip between them shrinking.
+  /// [TvDensity.textFactorOf], never below 1. The header and the caption
+  /// are text in boxes of a fixed height, so both boxes grow with it -- and
+  /// so does the row, rather than the strip between them shrinking.
   ///
   /// Never below 1: the boxes are an exact fit at scale 1 (52 dp of header
   /// is 12 of padding around 40 of title and subtitle), and the padding is
@@ -370,7 +369,7 @@ class _RowLayout {
     final isTv = DeviceScope.isTv(context);
     return _RowLayout(
       BoardScreen.rowExtentFor(MediaQuery.sizeOf(context).width, isTv: isTv),
-      textFactor: math.max(1, textFactorOf(context)),
+      textFactor: math.max(1, TvDensity.textFactorOf(context)),
       focusSlack: isTv ? focusRoom : 0,
     );
   }
@@ -389,23 +388,6 @@ class _RowLayout {
   /// above and below.
   EdgeInsets get stripPadding =>
       EdgeInsets.symmetric(horizontal: stripSidePadding, vertical: focusSlack);
-
-  /// The size the scale is probed at: about what the header's title and a
-  /// poster's caption are set in, and small enough to sit in the part of
-  /// the curve that actually moves.
-  static const double probeFontSize = 16;
-
-  /// The text scale in play here, as a plain factor.
-  ///
-  /// Probed at [probeFontSize] rather than at some large round number,
-  /// because a [TextScaler] need not be linear: Android 14 and later scale
-  /// fonts through a lookup table that lifts body sizes hard and then
-  /// flattens out, and AOSP's tables are anchored so that 100sp maps to
-  /// 100dp at *every* font setting. A probe at 100 therefore comes back
-  /// 1.0 however large the viewer asked for their text, while the 16sp
-  /// header is being drawn nearly twice the size.
-  static double textFactorOf(BuildContext context) =>
-      MediaQuery.textScalerOf(context).scale(probeFontSize) / probeFontSize;
 
   /// What the list scrolls by: [baseExtent] plus exactly the room the two
   /// text boxes gained. The poster between them therefore keeps the same
