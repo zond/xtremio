@@ -274,6 +274,31 @@ void main() {
     );
   });
 
+  test('the files that will be re-timed are the ones marked', () {
+    // The mark is what puts one word on the row; a viewer whose
+    // subtitles drift anyway has to know the file was touched before
+    // they go looking for another one.
+    List<bool> retimed(double? videoFrameRate) => groupSubtitlesByLanguage(
+      [
+        source('eng', 'https://subs/25.srt', properties: {'fpsMilli': 25000}),
+        source(
+          'eng',
+          'https://subs/23980.srt',
+          properties: {'fpsMilli': 23980},
+        ),
+        source('eng', 'https://subs/silent.srt'),
+      ],
+      videoFrameRate: videoFrameRate,
+    ).single.options.map((o) => o.retimed).toList();
+
+    expect(retimed(23.976), [true, false, false]);
+    // Against the PAL encode it is the other file that gets corrected.
+    expect(retimed(25), [false, true, false]);
+    // No rate, nothing corrected, nothing said: an engine that cannot
+    // answer must not put a word on a row it knows nothing about.
+    expect(retimed(null), [false, false, false]);
+  });
+
   test('nothing to group is no groups', () {
     expect(groupSubtitlesByLanguage(const []), isEmpty);
   });

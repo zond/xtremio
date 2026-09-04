@@ -10,6 +10,7 @@ final class SubtitleOption {
     required this.sourceName,
     required this.index,
     this.ambiguousName = false,
+    this.retimed = false,
   });
 
   final SubtitleInfo subtitle;
@@ -25,6 +26,16 @@ final class SubtitleOption {
   /// the name on its own does not tell them apart. Set by
   /// [groupSubtitlesByLanguage]; see [name].
   final bool ambiguousName;
+
+  /// Whether playing this file means correcting its timing
+  /// ([subtitleSpeed]). Set by [groupSubtitlesByLanguage], which is the
+  /// only place that knows what the video runs at.
+  ///
+  /// It is worth a word on the row: a viewer whose subtitles drift anyway
+  /// needs to know we touched the file before they go hunting for a
+  /// different one. Only that -- not the rate, which is a number to
+  /// reason about rather than an answer.
+  final bool retimed;
 
   /// What `PlaybackTracks.activeSubtitleId` holds while this file is on.
   String get id => subtitle.url.toString();
@@ -315,9 +326,16 @@ String _languageLabel(String lang) {
 /// English group; a code [languageName] does not know is its own group,
 /// labelled with the code itself. [addonName] resolves a manifest URL to
 /// the addon's installed name; without it the manifest's host is used.
+///
+/// [videoFrameRate] is what the video is running at, and is only read to
+/// mark the files that will be re-timed against it
+/// ([SubtitleOption.retimed]). The order the groups and their options
+/// come out in is the order [sources] arrived in, so the ranking is
+/// [subtitlesByFrameRateFit]'s to do first.
 List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
   Iterable<SubtitleSource> sources, {
   String Function(String manifestUrl)? addonName,
+  double? videoFrameRate,
 }) {
   final order = <String>[];
   final labels = <String, String>{};
@@ -338,6 +356,8 @@ List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
             ? source.subtitle.url.host
             : addonName?.call(base) ?? Uri.tryParse(base)?.host ?? base,
         index: options.length + 1,
+        retimed:
+            subtitleSpeed(source.subtitle, videoFrameRate: videoFrameRate) != 1,
       ),
     );
   }
@@ -371,6 +391,7 @@ List<SubtitleOption> _disambiguated(List<SubtitleOption> options) {
           sourceName: option.sourceName,
           index: option.index,
           ambiguousName: true,
+          retimed: option.retimed,
         )
       else
         option,

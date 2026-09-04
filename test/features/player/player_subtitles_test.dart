@@ -668,6 +668,53 @@ void main() {
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 
+  testWidgets('a corrected row says so, in one word', (tester) async {
+    useWideViewport(tester);
+    // Not the rate: the number is noise to a viewer, and what a row has
+    // to answer is whether this is the plain file or one we touched --
+    // because a subtitle that still drifts sends them hunting for a
+    // different upload, and they need to know what they are comparing.
+    final harness = harnessRated(23.976, [
+      upload(
+        'en-1',
+        'eng',
+        'https://subs.example.org/en-25.srt',
+        'PAL',
+        fpsMilli: 25000,
+      ),
+      upload(
+        'en-2',
+        'eng',
+        'https://subs.example.org/en-23980.srt',
+        'ROUNDED',
+        fpsMilli: 23980,
+      ),
+    ]);
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    // The row names the file that needs nothing, and says nothing extra.
+    expect(find.text('ROUNDED · subs.example.org'), findsOneWidget);
+    await tester.tap(find.text('1 other English file'));
+    await tester.pumpAndSettle();
+    expect(find.text('subs.example.org'), findsOneWidget);
+    expect(find.text('subs.example.org · re-timed'), findsOneWidget);
+    // The rate is not shown anywhere, on either row.
+    expect(find.textContaining('25'), findsNothing);
+    expect(find.textContaining('23.9'), findsNothing);
+
+    // Applying it carries the word up onto the language row, which is
+    // the row that is on screen once the sheet is closed and reopened.
+    await tester.tap(find.text('PAL'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    expect(find.text('PAL · subs.example.org · re-timed'), findsOneWidget);
+  });
+
   testWidgets('a re-timed file is put back to 1.0 by every way out of it', (
     tester,
   ) async {

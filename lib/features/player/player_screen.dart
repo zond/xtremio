@@ -1802,6 +1802,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 videoFrameRate: _videoFrameRate,
               ),
               addonName: _subtitleAddonName,
+              // Which rows say they will be re-timed; the same rate the
+              // ordering above was decided on, so a row that says so is
+              // one `subtitleSpeed` will really correct.
+              videoFrameRate: _videoFrameRate,
             ),
             activeId: tracks.activeSubtitleId,
             loading: state?.subtitlesLoading ?? false,
