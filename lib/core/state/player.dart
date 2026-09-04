@@ -70,8 +70,10 @@ final class SubtitleInfo {
   /// Frames per second times 1000 (`23980`, `25000`): the rate of the
   /// video this file was timed against, when the addon knows it.
   ///
-  /// What `subtitlesMatchingFrameRate` compares against the container's
-  /// own rate to keep a file cut for another video out of the menu.
+  /// What `subtitleSpeed` divides by the container's own rate to put a
+  /// file cut for another video back in step, and what
+  /// `subtitlesByFrameRateFit` reads to offer the files needing no
+  /// correction first.
   int? get fpsMilli => _int('fpsMilli');
 
   /// The name of the file inside the addon's archive

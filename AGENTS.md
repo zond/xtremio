@@ -163,51 +163,75 @@ it, and the platform registrations are listed in README, "Installing an
 addon from the web". A widget test drives links through `FakeDeepLinks`
 (`test/support/`); nothing in the tests touches `app_links`.
 
-## The subtitle menu hides files, so four rules hold it back
+## The subtitle menu re-times files, and the multiplier is the risk
 
-`subtitlesMatchingFrameRate` (`lib/features/player/subtitle_groups.dart`)
-drops the uploads cut for a video of another speed -- a 25 fps subtitle
-against a 23.976 fps film drifts four seconds a minute, so it is the
-wrong file, not a worse one. Hiding is a strong move on numbers two
-strangers claimed (the addon about its upload, the container about
-itself), and each of these keeps it from taking the list away. Each has a
-test; see README, *Subtitles*.
+`subtitleSpeed` (`lib/features/player/subtitle_groups.dart`) says what
+libmpv's `sub-speed` has to be for an upload cut at one frame rate to
+keep time with a video running at another, and
+`PlaybackEngine.setSubtitleSpeed` is what writes it. It replaces a filter
+that dropped those files: a 25 fps subtitle against a 23.976 fps film
+drifts four seconds a minute, but the drift is linear, so one multiplier
+removes it and nothing has to be hidden. Each rule below has a test; see
+README, *Subtitles*.
 
+- **The ratio is `fps_sub / fps_video`, and the reciprocal is the bug.**
+  A film of N frames sits at `N / fps_sub` in the subtitle and at
+  `N / fps_video` in the picture, so 25 against 23.976 is 1.0427.
+  Reversed it does not half-fix the drift, it doubles it -- the cue lands
+  further from where it belongs than leaving the file alone.
+- **Every path that changes what is shown puts it back to 1.0.** Another
+  file, an embedded track, subtitles off, the next video: all of them go
+  through `PlayerScreen._retimeSubtitles`, which is why they are one
+  call. The multiplier belongs to the player, not to the file, so one
+  left over from the last pick silently ruins a subtitle that was
+  correct, which is worse than the problem being solved. Add a path, add
+  its reset and its test.
 - **Only what the container declares is a rate.** `videoFrameRate` reads
   `container-fps` and nothing else. `estimated-vf-fps` is the obvious
   second choice and is a *measurement* -- ten frame durations averaged,
   read the moment the media loads, which mpv's own manual calls unstable
   for the imprecise timestamps a torrent stream is full of. Fed to a
-  comparison with a hundredth-of-a-frame tolerance it hides the correct
-  files and leaves the ones that declared nothing. Do not add a fallback.
-- **An unknown rate filters nothing.** Cast, offline, a fake, a container
-  that says nothing, a read that threw: all of it is null, and null means
-  every file stays. Never substitute a default, a guess or a last-known
-  rate.
-- **A language filtering would empty keeps every one of its files.** The
-  valve is per language keyed the way the menu groups them, and it is
-  decided *before* the exemption below, so a language whose files all
-  mismatch keeps all of them whether or not one is playing.
-- **The file that is playing is never dropped.** The menu is reachable
-  before the media loads, so a pick can predate the rate. Take the active
-  file out and every row is unselected -- Off included, since that row
-  keys on a null active id -- with subtitles still on screen.
+  comparison with a hundredth-of-a-frame tolerance it re-times the files
+  that were right. Do not add a fallback.
+- **An unknown rate corrects nothing.** Cast, offline, a fake, a
+  container that says nothing, a read that threw: all of it is null, and
+  null means every file is played exactly as it was written. Never
+  substitute a default, a guess or a last-known rate -- a guess here
+  breaks a subtitle that was in sync.
+- **Nothing is hidden; what the rate decides is the order.**
+  `subtitlesByFrameRateFit` puts a language's files that need no
+  correction first, then the ones that declared no rate, then the ones a
+  multiplier has to fix -- an addon's `fpsMilli` is a claim about the
+  release the upload was made for, and a claim can be wrong, so a file
+  that needs nothing is worth more than one we fix. Between languages
+  nothing moves and inside a rank the addon that answered first still
+  wins, because that is the file a language row applies.
 
-Two more things that are easy to undo by accident:
+Three more things that are easy to undo by accident:
 
-- **Everything that consumes the subtitle list filters it.** There are two
+- **Everything that consumes the subtitle list orders it.** There are two
   consumers, the menu and the session preference's auto-pick, and the
   auto-pick is the one that applies a file without the viewer looking. It
   waits for the engine to have answered about the rate
   (`_frameRateSampled`) before it runs, because the sample resolves a
-  microtask after it is started. A third consumer must do both.
+  microtask after it is started, and a pick made before it would play the
+  addons' first answer uncorrected. A third consumer must do both.
 - **The tolerance is 0.01 fps at the content's own rate, and the ratios
   that reach it are the ones that preserve *seconds*.** A subtitle is
   timed in wall-clock seconds, so telecine and frame doubling (5/4, 2,
-  5/2) are the same cut -- 23.976 film in a 29.97 container is identical
-  seconds -- while 25 against 23.976 is a 4.3 % speed-up and is not.
-  Widening the tolerance instead of adding a ratio is the wrong repair:
-  0.01 is what separates a rounded `23980` from a real 24 fps cut.
+  5/2) are the same cut and need no correction -- 23.976 film in a 29.97
+  container is identical seconds -- while 25 against 23.976 is a 4.3 %
+  speed-up and does. The same reduction is what keeps the multiplier
+  honest: a file cut for a 50 fps PAL encode wants 25/23.976 against
+  film, not twice that. Widening the tolerance instead of adding a ratio
+  is the wrong repair: 0.01 is what separates a rounded `23980` from a
+  real 24 fps cut.
+- **A corrected row says one word, and never the number.** `re-timed`
+  under the addon's name (`SubtitleMenu.retimedNote`), on the file's own
+  row and on the language row that applies it, because a viewer whose
+  subtitles still drift has to know we touched this one before comparing
+  it with another. The rate is never shown anywhere: the request was a
+  list that is right, not a number to reason about.
 
 An upload's *name* in that menu is addon text as well, and it is subject
 to the same suspicion: it goes through `wellFormedText`, it is cut to
@@ -217,9 +241,6 @@ position back on the end when another file of the same language derives
 the same name (`1 (2)`). Addons repeat themselves -- all three Czech files
 OpenSubtitles answers for The Godfather are called `1.srt` -- and the
 `Option N` these names replaced was at least unique.
-
-The rate is never shown anywhere in the UI. The request was a list that
-is right, not a number to reason about.
 
 ## The addon health record keys on a hash, never the URL
 
