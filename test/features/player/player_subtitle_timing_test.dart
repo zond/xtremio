@@ -280,6 +280,43 @@ void main() {
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
   });
 
+  testWidgets('a re-open puts the addon file back before re-timing it', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final player = await playing(tester, pick: 'PAL');
+    final engine = player.engine;
+    expect(engine.externalSubtitles, hasLength(1));
+    await openPanel(tester);
+    await step(tester, 'subtitle-shift-later');
+
+    // `open` is `loadfile`, and nothing `sub-add` put in survives one:
+    // mpv comes back drawing whatever it selects by its own rules,
+    // typically a default-flagged embedded track. Writing this file's
+    // 1.0427 and the viewer's offset onto *that* takes a subtitle that
+    // was in step four seconds a minute out, and no path resets it.
+    engine.emitPosition(const Duration(seconds: 10));
+    engine.emitCompleted();
+    await pumpEvents(tester);
+    expect(engine.opened, hasLength(2));
+    expect(engine.externalSubtitles, hasLength(2));
+    expect(engine.externalSubtitles.last.$1.toString(), palUrl);
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
+
+    // And only while there is a file to put back. An embedded track and
+    // subtitles off are not something `sub-add` can restore, and
+    // re-adding the last file would overrule the choice just made.
+    await openMenu(tester);
+    await tester.tap(find.text('Off'));
+    await tester.pumpAndSettle();
+    engine.emitPosition(const Duration(seconds: 20));
+    engine.emitCompleted();
+    await pumpEvents(tester);
+    expect(engine.opened, hasLength(3));
+    expect(engine.externalSubtitles, hasLength(2));
+  });
+
   testWidgets('the panel does not fade on the OSD timer', (tester) async {
     useWideViewport(tester);
     final player = await playing(tester);

@@ -324,6 +324,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// the file it was made for exactly as strictly as the multiplier does.
   SubtitleTiming _timing = const SubtitleTiming();
 
+  /// The addon file [_timing] was computed for, and null whenever what is
+  /// shown is not one -- an embedded track, subtitles off, another video.
+  ///
+  /// Kept because an `open` is a fresh `loadfile` and a file added with
+  /// `sub-add` does not survive one: the engine drops its record of it
+  /// too, so after a re-open mpv is drawing whatever it selects by its
+  /// own rules. Re-applying the multiplier and the offset onto *that* is
+  /// worse than doing nothing, so the file goes back first.
+  SubtitleInfo? _externalSubtitle;
+
   /// Whether the timing panel is up. Not part of the OSD, so it is not
   /// what [_controlsVisible] says (see [_showSubtitleTiming]).
   bool _timingShown = false;
@@ -722,8 +732,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
           // has to survive that. Writing it again is what makes the
           // guarantee ours instead of a property mpv happens to carry
           // over; on a first open it re-states what [_onPlayerState] has
-          // already put back.
-          if (mounted && _opened == url) _applySubtitleTiming();
+          // already put back. The file it was computed for goes back
+          // first, because `loadfile` took that with it
+          // ([_restoreExternalSubtitle]).
+          if (mounted && _opened == url) {
+            _restoreExternalSubtitle();
+            _applySubtitleTiming();
+          }
         })
         .catchError((Object error) {
           if (!mounted || _opened != url) return;
@@ -1654,12 +1669,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// is shown -- switching subtitles is what gives the automatic path
   /// its file again.
   void _retimeSubtitles([SubtitleInfo? subtitle]) {
+    _externalSubtitle = subtitle;
     _timing = SubtitleTiming(
       automaticSpeed: subtitle == null
           ? 1
           : subtitleSpeed(subtitle, videoFrameRate: _videoFrameRate),
     );
     _applySubtitleTiming();
+  }
+
+  /// Puts the addon file back that a re-open took away, before the timing
+  /// computed for it is written again.
+  ///
+  /// `open` is `loadfile`, which drops every subtitle `sub-add` put in --
+  /// [MediaKitEngine.open] clears its own record of them for the same
+  /// reason -- and mpv then selects by its own rules, typically a
+  /// default-flagged embedded track. Nothing else re-adds it: the
+  /// auto-pick has counted itself done and a re-open does not re-arm it,
+  /// so without this the viewer loses the file they chose and inherits
+  /// its multiplier on a track that was in step.
+  void _restoreExternalSubtitle() {
+    final subtitle = _externalSubtitle;
+    if (subtitle == null) return;
+    _engine
+        ?.setExternalSubtitle(
+          subtitle.url,
+          title: SubtitleMenu.externalLabel(subtitle),
+          language: subtitle.lang.isEmpty ? null : subtitle.lang,
+        )
+        .ignore();
   }
 
   /// Writes [_timing] to the player: the multiplier and the offset
