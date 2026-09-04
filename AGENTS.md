@@ -163,56 +163,77 @@ it, and the platform registrations are listed in README, "Installing an
 addon from the web". A widget test drives links through `FakeDeepLinks`
 (`test/support/`); nothing in the tests touches `app_links`.
 
-## The subtitle menu re-times files, and the multiplier is the risk
+## Nothing re-times a subtitle but the viewer
 
-`subtitleSpeed` (`lib/features/player/subtitle_groups.dart`) says what
-libmpv's `sub-speed` has to be for an upload cut at one frame rate to
-keep time with a video running at another, and
-`PlaybackEngine.setSubtitleSpeed` is what writes it. It replaces a filter
-that dropped those files: a 25 fps subtitle against a 23.976 fps film
-drifts four seconds a minute, but the drift is linear, so one multiplier
-removes it and nothing has to be hidden. Each rule below has a test; see
-README, *Subtitles*.
+A declared frame rate says where an upload came from, not how it is
+timed. Ten English subtitles for one film declaring six different rates
+all end within 1 % of the same runtime; five Gilmore Girls files at
+25 fps really do run 4.27 % short against the five at 23.976. Nothing in
+the metadata separates those two populations, so anything applied
+automatically fixes one and breaks the other in equal measure -- and
+breaks it silently, on a file that was in sync when it arrived. So
+`sub-speed` and `sub-delay` are the viewer's alone, through the panel
+behind "Adjust timing" (`SubtitleTiming` in
+`lib/features/player/subtitle_timing.dart`). What the rates still decide
+is the *order* of the list and the *direction* of one button. Each rule
+below has a test; see README, *Subtitles*.
 
 - **The ratio is `fps_sub / fps_video`, and the reciprocal is the bug.**
   A film of N frames sits at `N / fps_sub` in the subtitle and at
   `N / fps_video` in the picture, so 25 against 23.976 is 1.0427.
   Reversed it does not half-fix the drift, it doubles it -- the cue lands
-  further from where it belongs than leaving the file alone.
-- **Every path that changes what is shown puts it back to 1.0, and the
-  offset back to 0.0.** Another file, an embedded track, subtitles off,
-  the next video, and the auto-pick restoring the tracks after the engine
-  refused a file: all of them go through
-  `PlayerScreen._retimeSubtitles`, which is why they are one call, and
-  which is why it replaces the whole `SubtitleTiming` rather than one
-  number of it. Both belong to the player, not to the file, so one left
-  over from the last pick silently ruins a subtitle that was correct,
-  which is worse than the problem being solved. A path that *undoes* a
-  change is one of these -- the refused pick was the hole -- so add a
-  path, add its reset and its test.
-- **The hand adjustment owns the speed from the first press.**
-  `SubtitleTiming` (`lib/features/player/subtitle_timing.dart`) is what
-  the panel behind "Adjust timing" drives: a shift in tenths of a second
-  on `sub-delay`, and a speed step of the whole PAL ratio taken *from*
-  whatever `subtitleSpeed` already decided rather than from 1.0, so one
-  press down off a correction the addon was wrong about lands on the
-  file's own timing. Both are counted in presses, because a double
-  accumulated a tenth at a time does not come back to zero. Reset goes
-  to the automatic state, never to 1.0/0.0. Switching subtitles is the
-  only thing that hands the speed back to the automatic path -- and it
-  does so through the reset above, which is why there is no second
-  mechanism for it. Both values are re-applied after a re-open (network
-  error, false end of file, buffer change): they belong to the playback,
-  not to the file the demuxer just re-read -- and the file has to go
-  back *first*. An `open` is a fresh `loadfile`: nothing `sub-add` put
-  in survives one (`MediaKitEngine.open` clears its own record of them
-  for the same reason) and nothing re-adds it, since the auto-pick has
-  counted itself done and a re-open does not re-arm it. Writing the
-  timing onto whatever mpv then selects by its own rules puts a gone
-  file's multiplier on a track that was in step, four seconds a minute
-  out with no path that resets it, so `_restoreExternalSubtitle` runs
-  before `_applySubtitleTiming` -- which is why the applied file is
-  remembered next to the timing at all.
+  further from where it belongs than leaving the file alone. That is why
+  the speed control is pointed by the video rather than offered both
+  ways: `subtitleSpeed` computes the ratio, and
+  `subtitleSpeedDirection` says which way a press has to go.
+- **The video picks the direction, and only the container may say so.**
+  Frame rates are two lineages -- film (23.976, 24, and the 29.97, 30,
+  47.952, 48, 59.94, 60 telecined or doubled off them, all the same
+  seconds) and PAL (25, 50, 4.27 % faster) -- and drift appears only
+  between them. So a film-family video is facing a PAL-sourced file and
+  needs it stretched, a PAL-family video the reverse, and the two
+  families are disjoint under `subtitleFrameRateRatios`. **Two buttons
+  exist for exactly one case**: a container that declares no rate, or a
+  rate in neither family, where no direction can be chosen and a stream
+  would otherwise be unfixable. A measurement must never reach this: a
+  stall rendering 12 frames a second reads as film (12 is 24 halved) and
+  points the button confidently the wrong way.
+- **The speed is a toggle, so a second press is exactly 1.0.**
+  `SubtitleTiming.speedDirection` is a direction and not a count of
+  presses, which is what makes that structural rather than arithmetic --
+  a stepper's two presses were the ratio squared, nine per cent out and
+  a state nobody means to reach. It follows that the multiplier is three
+  values, all far inside `sub-speed`'s `<0.1-10.0>`, so no press can
+  reach a write mpv would refuse in silence. The shift is still counted
+  in integer presses (ten forward and ten back must land on zero) and is
+  still the only hold-to-repeat in the app; a *toggle* must never repeat,
+  since held at the stepper's rate it flips eight times a second and
+  lands wherever the release falls.
+- **Every path that changes what is shown puts both back to untouched.**
+  Another file, an embedded track, subtitles off, the next video, and
+  the auto-pick restoring the tracks after the engine refused a file:
+  all of them go through `PlayerScreen._resetSubtitleTiming`, which is
+  why they are one call, and which is why it replaces the whole
+  `SubtitleTiming` rather than one number of it. Both belong to the
+  player, not to the file, so one left over from the last pick silently
+  ruins a subtitle that was correct, which is worse than the problem
+  being solved. A path that *undoes* a change is one of these -- the
+  refused pick was the hole -- so add a path, add its reset and its test.
+  With nothing else writing either property, reset means back to what
+  the file was written with, and "undo what I did" is the same thing.
+- **Both values are re-applied after a re-open, and the file goes back
+  first.** A network error, a false end of file and a buffer change all
+  re-open the stream keeping the position; the values belong to the
+  playback, not to the file the demuxer just re-read. An `open` is a
+  fresh `loadfile`: nothing `sub-add` put in survives one
+  (`MediaKitEngine.open` clears its own record of them for the same
+  reason) and nothing re-adds it, since the auto-pick has counted itself
+  done and a re-open does not re-arm it. Writing the timing onto
+  whatever mpv then selects by its own rules puts a gone file's
+  multiplier on a track that was in step, four seconds a minute out with
+  no path that resets it, so `_restoreExternalSubtitle` runs before
+  `_applySubtitleTiming` -- which is why the applied file is remembered
+  next to the timing at all.
 - **What the viewer does ends the guessing, not just the correcting.**
   A pick from the menu and a press on the panel both stop the session
   preference's auto-pick for that media (`_subtitlesChosenByHand`).
@@ -234,15 +255,6 @@ README, *Subtitles*.
   and it moves `_timing` inside a `setState`: it is the one path that
   changes the timing outside a build, and the panel is drawn from it, so
   without one the numbers on screen are not the numbers mpv is playing.
-- **A control that goes dead under a held key still owes the release.**
-  The panel's steppers are the only hold-to-repeat in the app, and
-  holding one is exactly what drives the multiplier to the end of
-  `sub-speed`'s range and redraws that very button disabled while the
-  key is still down. An `enabled` guard above the whole key switch
-  swallowed the `KeyUpEvent`, and the repeat timer then ran for the life
-  of the panel -- the value pinned at the limit and every press the
-  other way undone 120 ms later. Only the press and its repeats belong
-  behind that guard.
 - **The panel is not the OSD and must never join it.** Adjusting means
   pressing and then watching the picture for several seconds, so a panel
   on the bar's three-second timer would be gone before the first
@@ -253,26 +265,29 @@ README, *Subtitles*.
   own focus scope so a left press walks its row instead of seeking, and
   its own rung on the Back ladder above the bar, on every device rather
   than only on a television, since on a phone Back is the only way out.
+  The row a direction key walks may hold one button rather than two, so
+  a press with nowhere to go has to stay in the panel rather than fall
+  through to the seek bar.
 - **Only what the container declares is a rate.** `videoFrameRate` reads
   `container-fps` and nothing else. `estimated-vf-fps` is the obvious
   second choice and is a *measurement* -- ten frame durations averaged,
   read the moment the media loads, which mpv's own manual calls unstable
   for the imprecise timestamps a torrent stream is full of. Fed to a
-  comparison with a hundredth-of-a-frame tolerance it re-times the files
-  that were right. Do not add a fallback.
-- **An unknown rate corrects nothing.** Cast, offline, a fake, a
+  comparison with a hundredth-of-a-frame tolerance it ranks the files
+  that fit behind the ones that fit nothing, and it points the speed
+  button off a number the stall invented. Do not add a fallback.
+- **An unknown rate decides nothing.** Cast, offline, a fake, a
   container that says nothing, a read that threw: all of it is null, and
-  null means every file is played exactly as it was written. Never
-  substitute a default, a guess or a last-known rate -- a guess here
-  breaks a subtitle that was in sync.
+  null means the addons' own order stands and the panel offers both
+  directions. Never substitute a default, a guess or a last-known rate.
 - **Nothing is hidden; what the rate decides is the order.**
   `subtitlesByFrameRateFit` puts a language's files that need no
-  correction first, then the ones that declared no rate, then the ones a
-  multiplier has to fix -- an addon's `fpsMilli` is a claim about the
-  release the upload was made for, and a claim can be wrong, so a file
-  that needs nothing is worth more than one we fix. Between languages
-  nothing moves and inside a rank the addon that answered first still
-  wins, because that is the file a language row applies.
+  correction first, then the ones that declared no rate, then the ones
+  whose declared rate differs -- an addon's `fpsMilli` is a claim about
+  the release the upload was made for, and a claim can be wrong, so a
+  file that needs nothing is worth more than one that might. Between
+  languages nothing moves and inside a rank the addon that answered
+  first still wins, because that is the file a language row applies.
 
 Three more things that are easy to undo by accident:
 
@@ -282,44 +297,32 @@ Three more things that are easy to undo by accident:
   waits for the engine to have answered about the rate
   (`_frameRateSampled`) before it runs, because the sample resolves a
   microtask after it is started, and a pick made before it would play the
-  addons' first answer uncorrected. A third consumer must do both.
+  addons' first answer rather than the language's best-fitting file. A
+  third consumer must do both.
 - **The tolerance is 0.01 fps at the content's own rate, and the ratios
   that reach it are the ones that preserve *seconds*.** A subtitle is
   timed in wall-clock seconds, so telecine and frame doubling (5/4, 2,
-  5/2) are the same cut and need no correction -- 23.976 film in a 29.97
+  5/2) are the same cut and rank as fitting -- 23.976 film in a 29.97
   container is identical seconds -- while 25 against 23.976 is a 4.3 %
-  speed-up and does. The same reduction is what keeps the multiplier
-  honest, and it runs on *both* numbers: a 50 fps PAL encode is 25 fps
-  material and a 29.97 fps container is 23.976 fps film, so the ratio is
-  the one nearest 1 over both families and not a single step off the
-  video's declared rate -- reducing the file alone answers 0.834 there,
-  which is worse than doing nothing. Widening the tolerance instead of
-  adding a ratio is the wrong repair: 0.01 is what separates a rounded
-  `23980` from a real 24 fps cut. And a ratio outside `sub-speed`'s own
-  `<0.1-10.0>` is not a frame rate but a mis-scaled `fpsMilli`; it has to
-  answer 1.0, because media_kit discards the property write's return code
-  and mpv refuses such a value in silence, leaving the last file's
-  multiplier in force. Answering 1.0 is not the same as fitting, though:
-  the rank comes from `_readableRatio` and never from
+  speed-up and does not. The same reduction is what places a video in
+  its family for the speed button's direction, and it runs on *both*
+  numbers: a 50 fps PAL encode is 25 fps material and a 29.97 fps
+  container is 23.976 fps film, so the ratio is the one nearest 1 over
+  both families and not a single step off the video's declared rate --
+  reducing the file alone answers 0.834 there. Widening the tolerance
+  instead of adding a ratio is the wrong repair: 0.01 is what separates
+  a rounded `23980` from a real 24 fps cut. And a ratio outside
+  `sub-speed`'s own `<0.1-10.0>` is not a frame rate but a mis-scaled
+  `fpsMilli`; the rank comes from `_readableRatio` and never from
   `subtitleSpeed(...) == 1`, or an addon sending frames where
   thousandths were wanted sorts ahead of every file that honestly
   declared nothing -- head of its language, which is the file the row
   and the auto-pick apply.
-- **A corrected row says one word, and never the number.** `re-timed`
-  under the addon's name (`SubtitleMenu.retimedNote`), on the file's own
-  row and on the language row that applies it, because a viewer whose
-  subtitles still drift has to know we touched this one before comparing
-  it with another. The rate is never shown anywhere: the request was a
-  list that is right, not a number to reason about.
-
-An upload's *name* in that menu is addon text as well, and it is subject
-to the same suspicion: it goes through `wellFormedText`, it is cut to
-sixty characters whichever property it came from (and the row caps at two
-lines besides, because a `ListTile` grows to fit), and it gets its
-position back on the end when another file of the same language derives
-the same name (`1 (2)`). Addons repeat themselves -- all three Czech files
-OpenSubtitles answers for The Godfather are called `1.srt` -- and the
-`Option N` these names replaced was at least unique.
+- **A row says the addon, and never a rate or a verdict.** The menu once
+  marked the files it was about to re-time; with nothing re-timed there
+  is nothing to mark, and the number was never shown in the first place.
+  The request was a list that is right and a button that presses the
+  right way, not a number to reason about.
 
 ## The addon health record keys on a hash, never the URL
 
