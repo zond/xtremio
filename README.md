@@ -96,7 +96,21 @@ Rust engine for addons, catalogs, library, and playback state) and
 > leaves the brand ground. metahub names an image's size in its URL, so what
 > is asked for is the `medium` one rather than Cinemeta's small poster
 > stretched across the panel, and the decode is bounded to the panel's own
-> pixels. The **player** plays torrents through the
+> pixels. A series' episodes are a **row of cards** there rather than the
+> vertical list, under the season pills that were already a row: a remote
+> walks a row with two keys and a list with a hundred. A card carries what
+> its list row carried -- the still with the episode number on it, the
+> title, the air date, a check when it has been watched, a badge when it is
+> kept on the device -- plus a bar saying how far into that episode the
+> viewer got, which is the library item's own resume point and so appears
+> on at most one card of a series. Every card is built at once, because
+> directional focus only considers widgets that have been built and a lazy
+> row hands the D-pad back halfway through the season; each still is
+> decoded no larger than the card it is drawn in, which is what that costs
+> instead. The row scrolls to the selected card, so resuming at episode
+> nineteen does not start the remote at episode one, and an episode that
+> has not aired is drawn saying so and takes no press and no focus. The
+> **player** plays torrents through the
 > embedded server and HTTP streams directly, with its own controls (seek
 > bar with the buffered range, play/pause, seek buttons, volume,
 > fullscreen, keyboard shortcuts, playback speed), embedded and addon

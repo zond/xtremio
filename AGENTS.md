@@ -466,12 +466,12 @@ failed is recorded against nobody; and the embedded server and the local
 addon are never recorded against, on top of a protected addon never being
 labelled. See README, "Which addons are worth keeping".
 
-## Six rules a real device taught us
+## Seven rules a real device taught us
 
-Five of these were bugs on a real Chromecast with Google TV and the sixth
-was a red box on a 400 dp phone; every one of them is easy to write again.
-Each has a test behind it, except where the rule itself says a test cannot
-reach it.
+Five of these were bugs on a real Chromecast with Google TV, the sixth was
+a red box on a 400 dp phone and the seventh has been written twice
+already; every one of them is easy to write again. Each has a test behind
+it, except where the rule itself says a test cannot reach it.
 
 - **Nothing vetoes the OSD's fade on a focus.**
   `PlayerScreen._canAutoHide` lists what keeps the controls up -- a menu, a
@@ -517,6 +517,15 @@ reach it.
   off at both edges and the cue reads as a crop. The room comes out of the
   strip's own padding (`_RowLayout.focusSlack`), and only on a television,
   which is the only place anything zooms.
+- **A row a remote walks is built all at once.** Directional traversal
+  only considers widgets that have been built, so a `ListView.builder`
+  strip hands the D-pad back at the last realised tile and the rest of the
+  row cannot be reached at all -- silently, and only on a row longer than
+  the screen. A row the remote walks end to end is a
+  `SingleChildScrollView` over a `Row` (the season pills, the episode
+  cards), and its test walks to the *last* item of a row with more items
+  than fit. What that costs is paid down by bounding each image's decode
+  to the box it is drawn in, not by building fewer widgets.
 - **A width shared between N things is clamped at zero.** Anything of the
   form `(width - gaps) / n` goes negative on a narrow screen with a large
   `n` -- thirty-odd season pills on a phone -- and a negative `minWidth` is
