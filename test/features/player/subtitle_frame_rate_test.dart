@@ -95,6 +95,31 @@ void main() {
     expect(speed(30000, 25), closeTo(0.96, 0.001));
   });
 
+  test('the container is reduced as well as the file, so a doubled rate '
+      'against a telecined one is still one step apart', () {
+    // 50 and 29.97 are one PAL/NTSC step apart once both are read as the
+    // material they carry: a 50 fps PAL encode is 25 fps, a 29.97 fps
+    // container is 23.976 fps film. Reducing only the file leaves 25
+    // against a declared 29.97 and answers 0.834.
+    expect(speed(50000, 29.97), closeTo(1.0427, 0.0001));
+    expect(speed(50000, 30), closeTo(1.0417, 0.0001));
+    expect(speed(100000, 23.976), closeTo(1.0427, 0.0001));
+
+    // And 0.834 is not a half-fix but a wreck: the cue 40 s into the PAL
+    // file belongs at 41.71 s, where the one-sided answer puts it at
+    // 33.4 s -- nearly five times further out than never touching it.
+    final wanted = 1000 / 23.976;
+    expect(
+      (0.834168 * 40 - wanted).abs(),
+      greaterThan(4 * (40 - wanted).abs()),
+    );
+
+    // Two steps on the same side are the same cut too: 100 fps is 25 fps
+    // material doubled twice, so against a 25 fps video nothing is done.
+    expect(speed(100000, 25), 1);
+    expect(speed(100000, 50), 1);
+  });
+
   test('a rate nobody declared is never corrected', () {
     // Most addons declare nothing at all, and OpenSubtitles sends
     // `fpsMilli` on about nine entries in ten; silence is not a mismatch.

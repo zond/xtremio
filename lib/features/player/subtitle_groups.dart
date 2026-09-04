@@ -197,20 +197,25 @@ const List<double> subtitleFrameRateRatios = [1, 1.25, 2, 2.5];
 /// - Two rates a telecine or a doubling apart, which are the same
 ///   seconds already (see [subtitleFrameRateRatios]).
 ///
-/// The ratio is taken at the content's own rate, not between the two
-/// declared numbers: a subtitle cut for a 50 fps PAL encode is 25 fps
-/// material, so against 23.976 film it needs 25/23.976 and not twice
-/// that. [subtitleFrameRateTolerance] keeps its meaning there too.
+/// The ratio is taken between the two *content* rates, not between the
+/// two declared numbers: a subtitle cut for a 50 fps PAL encode is
+/// 25 fps material and a 29.97 fps container is 23.976 fps film, so the
+/// pair needs 25/23.976 and not the 25/29.97 the declared numbers read
+/// as. [subtitleFrameRateTolerance] keeps its meaning there too, counted
+/// in frames of the video that is playing.
 double subtitleSpeed(SubtitleInfo subtitle, {required double? videoFrameRate}) {
   final declared = _declaredFrameRate(subtitle);
   if (declared == null || videoFrameRate == null) return 1;
-  final rate = _sameSecondsAs(declared, videoFrameRate);
-  if ((rate - videoFrameRate).abs() <= subtitleFrameRateTolerance) return 1;
-  final speed = rate / videoFrameRate;
+  final speed = _sameSecondsRatio(declared, videoFrameRate);
   // A rate that divides out to nothing or to infinity is not a rate; the
   // guards above have caught every real one, and this is the arithmetic's
   // own floor.
-  return speed.isFinite && speed > 0 ? speed : 1;
+  if (!speed.isFinite || speed <= 0) return 1;
+  // The tolerance is frames, so the ratio is read back as the rate it
+  // puts the subtitle at against the video's own.
+  return (speed - 1).abs() * videoFrameRate <= subtitleFrameRateTolerance
+      ? 1
+      : speed;
 }
 
 /// The rate [subtitle] says it was cut for, or null when the addon said
@@ -221,24 +226,41 @@ double? _declaredFrameRate(SubtitleInfo subtitle) {
   return milli == null || milli <= 0 ? null : milli / 1000;
 }
 
-/// The member of [rate]'s own frame-rate family nearest [videoFrameRate]:
-/// [rate] scaled by each of [subtitleFrameRateRatios] either way, since a
-/// telecine or a doubling leaves the seconds alone in both directions.
+/// The ratio between [rate] and [videoFrameRate] nearest 1: every member
+/// of the subtitle's frame-rate family over every member of the video's,
+/// since a telecine or a doubling leaves the seconds alone on either
+/// side.
 ///
-/// This is what makes the comparison and the ratio that follows it happen
-/// at the content's rate rather than at whichever rate the release was
-/// encoded to.
-double _sameSecondsAs(double rate, double videoFrameRate) {
-  var nearest = rate;
-  for (final ratio in subtitleFrameRateRatios) {
-    for (final candidate in [rate * ratio, rate / ratio]) {
-      if ((candidate - videoFrameRate).abs() <
-          (nearest - videoFrameRate).abs()) {
-        nearest = candidate;
-      }
+/// Both sides have to be reduced, not the subtitle's alone. A 50 fps PAL
+/// encode is 25 fps material and a 29.97 fps container is 23.976 fps
+/// film, but no single step of [subtitleFrameRateRatios] carries 50 into
+/// 29.97's neighbourhood: reducing one side lands on 25 against a
+/// declared 29.97 and answers 0.834, which leaves the file five times
+/// further out than playing it untouched would have.
+///
+/// Nearest *to 1* rather than nearest in frames, because the answer has
+/// to be the same whichever end of a family the two numbers are written
+/// at, and a difference in frames is not -- it puts 100 against 25 on
+/// 40/25 rather than on the 50/50 that is the same cut.
+double _sameSecondsRatio(double rate, double videoFrameRate) {
+  var nearest = rate / videoFrameRate;
+  for (final subtitleRate in _frameRateFamily(rate)) {
+    for (final videoRate in _frameRateFamily(videoFrameRate)) {
+      final ratio = subtitleRate / videoRate;
+      if ((ratio - 1).abs() < (nearest - 1).abs()) nearest = ratio;
     }
   }
   return nearest;
+}
+
+/// [rate] and the rates that are the same seconds as it: [rate] scaled by
+/// each of [subtitleFrameRateRatios] either way, since telecine and frame
+/// doubling go in both directions.
+Iterable<double> _frameRateFamily(double rate) sync* {
+  for (final ratio in subtitleFrameRateRatios) {
+    yield rate * ratio;
+    yield rate / ratio;
+  }
 }
 
 /// Where a file sits in its language's order, best first.
