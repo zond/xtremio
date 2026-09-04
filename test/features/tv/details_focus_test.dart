@@ -9,6 +9,7 @@ import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/remote_press.dart';
 
 import '../../support/fake_core_client.dart';
@@ -594,6 +595,26 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       expect(find.text('Pilot'), findsNothing);
       expect(find.text(meta.videosOfSeason(2).first.title), findsOneWidget);
+    });
+
+    testWidgets('a focused pill wears the same indicator the posters do', (
+      tester,
+    ) async {
+      // The row must not grow a highlight of its own: a chip's built-in
+      // one is a tint, which is the cue a bright room takes away first.
+      await mountSeries(tester);
+      await stepLeftAndDownTo<ChoiceChip>(tester);
+
+      final onPill = FocusManager.instance.primaryFocus!.context!
+          .findAncestorWidgetOfExactType<FocusHighlight>();
+      expect(onPill?.focused, isTrue);
+      expect(
+        tester
+            .widgetList<FocusHighlight>(find.byType(FocusHighlight))
+            .where((highlight) => highlight.focused),
+        hasLength(1),
+        reason: 'only the pill the remote is on is marked',
+      );
     });
 
     testWidgets('every pill of a long series is built, so the D-pad walks '

@@ -11,6 +11,7 @@ export 'diagnostics_client.dart';
 export 'diagnostics_log.dart';
 export 'downloads_client.dart';
 export 'fields.dart';
+export 'focus_emphasis.dart';
 export 'prefs_client.dart';
 export 'resource.dart';
 export 'server_client.dart';

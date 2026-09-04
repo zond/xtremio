@@ -6,6 +6,7 @@ import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/download_badge.dart';
 import '../../widgets/filter_controls.dart';
+import '../../widgets/focusable_tile.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/remote_press.dart';
 import '../../widgets/shared_field_screen.dart';
@@ -1515,6 +1516,11 @@ class _SeasonSelector extends StatefulWidget {
   /// The space between two pills.
   static const double _gap = 8;
 
+  /// Rounds the focus ring around a pill. A chip is stadium-shaped, and a
+  /// radius this side of half its height is drawn as one (the radii are
+  /// scaled down to fit the box, never up).
+  static const BorderRadius _pillRadius = BorderRadius.all(Radius.circular(40));
+
   @override
   State<_SeasonSelector> createState() => _SeasonSelectorState();
 }
@@ -1597,15 +1603,24 @@ class _SeasonSelectorState extends State<_SeasonSelector> {
                       ConstrainedBox(
                         key: _pills.putIfAbsent(season, GlobalKey.new),
                         constraints: BoxConstraints(minWidth: share),
-                        child: ChoiceChip(
-                          label: Text(_SeasonSelector.label(season)),
-                          showCheckmark: false,
-                          selected: season == widget.selected,
-                          // Selected or not, every pill takes a press and is
-                          // a focus stop: a chip with no callback is
-                          // neither, which would leave a remote unable to
-                          // rest on the season already on screen.
-                          onSelected: (_) => widget.onChanged(season),
+                        // The same indicator every focusable thing on a
+                        // television wears, rather than a ring of the
+                        // pill's own: a chip's built-in focus highlight is
+                        // a tint, which is exactly the cue a bright room
+                        // takes away.
+                        child: FocusHighlighted(
+                          borderRadius: _SeasonSelector._pillRadius,
+                          builder: (context, node) => ChoiceChip(
+                            focusNode: node,
+                            label: Text(_SeasonSelector.label(season)),
+                            showCheckmark: false,
+                            selected: season == widget.selected,
+                            // Selected or not, every pill takes a press and
+                            // is a focus stop: a chip with no callback is
+                            // neither, which would leave a remote unable to
+                            // rest on the season already on screen.
+                            onSelected: (_) => widget.onChanged(season),
+                          ),
                         ),
                       ),
                   ],

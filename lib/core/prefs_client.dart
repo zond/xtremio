@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../src/rust/api/prefs.dart' as rust;
 import 'buffer_ahead.dart';
+import 'focus_emphasis.dart';
 import 'stream_order.dart';
 
 /// The app's own preferences, over the Rust side's small JSON file
@@ -117,6 +118,12 @@ class AppPrefs extends ChangeNotifier {
   /// for the playback on screen.
   static const String bufferAheadKey = 'bufferAhead';
 
+  /// The `focusEmphasis` key: how strongly focus is marked on a television
+  /// (see [FocusEmphasis]). This device's room and display, not the
+  /// account's, which is why it lives here rather than in
+  /// `profile.settings`.
+  static const String focusEmphasisKey = 'focusEmphasis';
+
   bool _streamsSectioned = true;
 
   bool get streamsSectioned => _streamsSectioned;
@@ -138,6 +145,10 @@ class AppPrefs extends ChangeNotifier {
   BufferAhead _bufferAhead = BufferAhead.normal;
 
   BufferAhead get bufferAhead => _bufferAhead;
+
+  FocusEmphasis _focusEmphasis = FocusEmphasis.standard;
+
+  FocusEmphasis get focusEmphasis => _focusEmphasis;
 
   /// Reads every stored preference. Called once at start-up, before any
   /// screen that reads one can be on the stack, so the first list is
@@ -195,6 +206,11 @@ class AppPrefs extends ChangeNotifier {
       _bufferAhead = buffer;
       changed = true;
     }
+    final emphasis = FocusEmphasis.parse(stored[focusEmphasisKey]);
+    if (emphasis != null && emphasis != _focusEmphasis) {
+      _focusEmphasis = emphasis;
+      changed = true;
+    }
     if (changed) notifyListeners();
   }
 
@@ -224,6 +240,13 @@ class AppPrefs extends ChangeNotifier {
     _bufferAhead = value;
     notifyListeners();
     await _write(bufferAheadKey, value.stored);
+  }
+
+  Future<void> setFocusEmphasis(FocusEmphasis value) async {
+    if (_focusEmphasis == value) return;
+    _focusEmphasis = value;
+    notifyListeners();
+    await _write(focusEmphasisKey, value.stored);
   }
 
   Future<void> _write(String key, Object? value) async {

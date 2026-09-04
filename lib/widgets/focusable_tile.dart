@@ -1,5 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../core/focus_emphasis.dart';
+import '../core/prefs_client.dart';
 import '../shell/device_profile.dart';
 import 'remote_press.dart';
 
@@ -9,7 +13,7 @@ import 'remote_press.dart';
 /// Off a television it is the plain [InkWell] those tiles always had. On a
 /// TV ([DeviceScope.isTv]) the D-pad moves focus from tile to tile, so the
 /// tile has to show that it holds focus and has to be on screen when it
-/// does: a [FocusRing] is drawn over the child while focused, and gaining
+/// does: a [FocusHighlight] marks the child while focused, and gaining
 /// focus scrolls every enclosing scrollable (the row, then the rows) so the
 /// tile sits in the middle of the viewport, which keeps the next tile in
 /// each direction built and reachable. The remote's keys go through a
@@ -119,10 +123,10 @@ class _FocusableTileState extends State<FocusableTile> {
         autofocus: _autofocus,
         onFocusChange: _onFocusChange,
         borderRadius: widget.borderRadius,
-        child: FocusRing(
+        child: FocusHighlight(
           focused: _focused,
           borderRadius: widget.borderRadius,
-          child: widget.child,
+          child: TileFocus(focused: _focused, child: widget.child),
         ),
       ),
     );
@@ -150,10 +154,40 @@ class FocusMemory extends InheritedWidget {
   bool updateShouldNotify(FocusMemory oldWidget) => store != oldWidget.store;
 }
 
-/// The border a [FocusableTile] draws over its child while it has focus:
-/// nothing when [focused] is false, so the tile keeps its size either way.
-class FocusRing extends StatelessWidget {
-  const FocusRing({
+/// Whether the [FocusableTile] around this context holds focus, for the
+/// parts of a tile that want to say so themselves -- a caption that is
+/// muted until the remote is on it.
+///
+/// Null where there is no tile above (off a television, where nothing
+/// draws a focus indicator at all), which is not the same as false: a
+/// phone's caption is not "the unfocused one", it is the only one.
+class TileFocus extends InheritedWidget {
+  const TileFocus({super.key, required this.focused, required super.child});
+
+  final bool focused;
+
+  static bool? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TileFocus>()?.focused;
+
+  @override
+  bool updateShouldNotify(TileFocus oldWidget) => focused != oldWidget.focused;
+}
+
+/// The whole focus indicator on a television: the two-stroke [FocusRing],
+/// a slight zoom and a shadow under what is focused, and -- in
+/// [FocusEmphasis.bold] -- everything that is *not* focused dimmed.
+///
+/// One colour cannot carry this on its own. The indicator is drawn over
+/// poster art, on a display the app knows nothing about; the owner's is a
+/// projector in a room that is not always dark, where a mid-luminance line
+/// over a busy poster is the first thing to disappear. So there are three
+/// separate cues, and each survives what the others do not: two strokes of
+/// opposite luminance mean any background contrasts with one of them, the
+/// zoom is a size difference that no amount of ambient light can wash out,
+/// and the shadow lifts the tile off the row the way the Google TV home
+/// screen does.
+class FocusHighlight extends StatelessWidget {
+  const FocusHighlight({
     super.key,
     required this.focused,
     required this.borderRadius,
@@ -164,20 +198,211 @@ class FocusRing extends StatelessWidget {
   final BorderRadius borderRadius;
   final Widget child;
 
-  static const double width = 3;
+  /// How much bigger the focused thing is drawn. Enough to be read as a
+  /// size difference from three metres away, small enough that a row of
+  /// posters does not jump about as focus walks it.
+  static const double focusedScale = 1.05;
+
+  /// How long the zoom (and the dimming) takes. Short: the remote is
+  /// already on the next tile.
+  static const Duration duration = Duration(milliseconds: 120);
+
+  /// What everything that is not focused is drawn at, in
+  /// [FocusEmphasis.bold] only. Dimming the surroundings is the strongest
+  /// cue there is when the display itself cannot deliver contrast, and far
+  /// too heavy for a dark room -- hence a choice rather than the default.
+  static const double dimmedOpacity = 0.45;
+
+  /// The shadow under the focused tile.
+  static const List<BoxShadow> shadow = [
+    BoxShadow(color: Color(0x99000000), blurRadius: 16, offset: Offset(0, 4)),
+  ];
+
+  /// The emphasis in force below [context]: the viewer's choice, or
+  /// [FocusEmphasis.standard] where there is no [PrefsScope] (a widget
+  /// test) or the preferences have not loaded yet.
+  static FocusEmphasis emphasisOf(BuildContext context) =>
+      PrefsScope.maybeOf(context)?.focusEmphasis ?? FocusEmphasis.standard;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    position: DecorationPosition.foreground,
-    decoration: BoxDecoration(
+  Widget build(BuildContext context) {
+    final emphasis = emphasisOf(context);
+    Widget content = FocusRing(
+      focused: focused,
       borderRadius: borderRadius,
-      border: focused
-          ? Border.all(
-              color: Theme.of(context).colorScheme.primary,
-              width: width,
-            )
-          : null,
-    ),
-    child: child,
-  );
+      emphasis: emphasis,
+      child: child,
+    );
+    if (emphasis == FocusEmphasis.bold) {
+      content = AnimatedOpacity(
+        opacity: focused ? 1 : dimmedOpacity,
+        duration: duration,
+        child: content,
+      );
+    }
+    return AnimatedScale(
+      scale: focused ? focusedScale : 1,
+      duration: duration,
+      curve: Curves.easeOut,
+      // Behind the child, so the blur falls outside the tile: an
+      // elevation, not a veil over the poster.
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          boxShadow: focused ? shadow : null,
+        ),
+        child: content,
+      ),
+    );
+  }
+}
+
+/// A control that takes focus itself -- a [ChoiceChip], say -- wearing the
+/// same indicator a [FocusableTile] does, rather than growing a ring of its
+/// own. [builder] is handed the [FocusNode] to give the control, and the
+/// highlight follows it.
+///
+/// The node is the control's own, so nothing is added to the focus tree and
+/// traversal is exactly what it was. Off a television this is its child and
+/// nothing else: focus there follows a pointer or Tab, and Material's own
+/// highlight is enough.
+class FocusHighlighted extends StatefulWidget {
+  const FocusHighlighted({
+    super.key,
+    required this.borderRadius,
+    required this.builder,
+  });
+
+  /// Rounds the ring; a stadium-shaped control wants a radius of at least
+  /// half its height (the radii are scaled down to fit, never up).
+  final BorderRadius borderRadius;
+
+  final Widget Function(BuildContext context, FocusNode node) builder;
+
+  @override
+  State<FocusHighlighted> createState() => _FocusHighlightedState();
+}
+
+class _FocusHighlightedState extends State<FocusHighlighted> {
+  late final FocusNode _node = FocusNode()..addListener(_onFocusChange);
+  bool _focused = false;
+
+  void _onFocusChange() {
+    if (mounted && _node.hasFocus != _focused) {
+      setState(() => _focused = _node.hasFocus);
+    }
+  }
+
+  @override
+  void dispose() {
+    _node.removeListener(_onFocusChange);
+    _node.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final child = widget.builder(context, _node);
+    if (!DeviceScope.isTv(context)) return child;
+    return FocusHighlight(
+      focused: _focused,
+      borderRadius: widget.borderRadius,
+      child: child,
+    );
+  }
+}
+
+/// The ring drawn over a focused child: a dark outer stroke and a light
+/// inner one, each half of the ring's width.
+///
+/// Two strokes rather than one because the background is unknown -- poster
+/// art, on a washed-out projector image. Whatever is underneath, it
+/// contrasts with one of them, which is what WCAG's focus-appearance
+/// guidance asks of an indicator drawn over arbitrary content. Neither
+/// stroke is the theme's violet: its luminance is the whole problem.
+///
+/// Nothing is painted when [focused] is false, and the tree is the same
+/// shape either way, so a tile keeps its size and its child keeps its
+/// state as focus comes and goes.
+class FocusRing extends StatelessWidget {
+  const FocusRing({
+    super.key,
+    required this.focused,
+    required this.borderRadius,
+    required this.child,
+    this.emphasis = FocusEmphasis.standard,
+  });
+
+  final bool focused;
+  final BorderRadius borderRadius;
+  final FocusEmphasis emphasis;
+  final Widget child;
+
+  /// Both strokes together, in logical pixels. Four, not the three this
+  /// started at: a television is watched from two or three metres, not
+  /// from forty centimetres, and on a 320 dpi box each of these is two
+  /// physical pixels.
+  static const double width = 4;
+
+  /// Both strokes together in [FocusEmphasis.bold].
+  static const double boldWidth = 8;
+
+  /// The outer stroke: near-black, so it reads against a bright poster and
+  /// against a bright room's washed-out whites.
+  static const Color outerColor = Color(0xE6000000);
+
+  /// The inner stroke: near-white, so it reads against a dark poster.
+  static const Color innerColor = Color(0xFFF2F2F2);
+
+  static double widthFor(FocusEmphasis emphasis) =>
+      emphasis == FocusEmphasis.bold ? boldWidth : width;
+
+  /// [radius] pulled in by [by] on every corner, so the inner stroke sits
+  /// concentric inside the outer one rather than cutting its corners.
+  static BorderRadius insetRadius(BorderRadius radius, double by) =>
+      BorderRadius.only(
+        topLeft: _insetCorner(radius.topLeft, by),
+        topRight: _insetCorner(radius.topRight, by),
+        bottomLeft: _insetCorner(radius.bottomLeft, by),
+        bottomRight: _insetCorner(radius.bottomRight, by),
+      );
+
+  static Radius _insetCorner(Radius radius, double by) =>
+      Radius.elliptical(math.max(0, radius.x - by), math.max(0, radius.y - by));
+
+  @override
+  Widget build(BuildContext context) {
+    final stroke = widthFor(emphasis) / 2;
+    return Stack(
+      // The ring is an overlay: the child is laid out against the
+      // constraints the tile was given, exactly as if it were not here.
+      fit: StackFit.passthrough,
+      children: [
+        child,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: borderRadius,
+                border: focused
+                    ? Border.all(color: outerColor, width: stroke)
+                    : null,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(stroke),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: insetRadius(borderRadius, stroke),
+                    border: focused
+                        ? Border.all(color: innerColor, width: stroke)
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

@@ -223,6 +223,42 @@ void main() {
     expect(seen, [true, false]);
   });
 
+  group('how strongly focus is marked', () {
+    test('defaults to Standard, and an unknown name stays there', () async {
+      final fresh = AppPrefs(client: FakePrefsClient());
+      await fresh.load();
+      expect(fresh.focusEmphasis, FocusEmphasis.standard);
+
+      // A name a newer build wrote reads as "not set", not as a failure.
+      final newer = AppPrefs(
+        client: FakePrefsClient({'focusEmphasis': 'blinding'}),
+      );
+      await newer.load();
+      expect(newer.focusEmphasis, FocusEmphasis.standard);
+    });
+
+    test('a choice round-trips through a fresh AppPrefs', () async {
+      final client = FakePrefsClient();
+      final prefs = AppPrefs(client: client);
+
+      await prefs.setFocusEmphasis(FocusEmphasis.bold);
+      expect(client.stored['focusEmphasis'], 'bold');
+      expect(client.writes, ['focusEmphasis']);
+
+      // The bad room is still a bad room after a restart.
+      final restarted = AppPrefs(client: client);
+      await restarted.load();
+      expect(restarted.focusEmphasis, FocusEmphasis.bold);
+    });
+
+    test('choosing what is already chosen writes nothing', () async {
+      final client = FakePrefsClient();
+      final prefs = AppPrefs(client: client);
+      await prefs.setFocusEmphasis(FocusEmphasis.standard);
+      expect(client.writes, isEmpty);
+    });
+  });
+
   testWidgets('maybeOf is null with no scope above', (tester) async {
     AppPrefs? found = AppPrefs.inMemory();
     await tester.pumpWidget(

@@ -88,11 +88,20 @@ class LibraryItemTile extends StatelessWidget {
             style: theme.textTheme.bodySmall,
           ),
           if (episode.isNotEmpty)
-            Text(
-              episode,
-              maxLines: 1,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            Builder(
+              // On a television the episode line under the focused tile
+              // goes to full strength: a muted caption under a poster is
+              // the second thing a projector in a lit room loses, after
+              // the ring itself. Off one there is no [TileFocus] above and
+              // it is the muted colour it has always been.
+              builder: (context) => Text(
+                episode,
+                maxLines: 1,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: TileFocus.maybeOf(context) ?? false
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
         ],
