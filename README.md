@@ -958,6 +958,25 @@ config and cache directories the app hands it (`<files>/server` and
 `<cache>/server`, from `path_provider`), which override the environment-based
 defaults it may still look at.
 
+**Typing with a remote.** On Android TV the app window keeps input focus
+while the on-screen keyboard is up, so every D-pad press is delivered to
+Flutter and moves Flutter's focus: the keyboard can never move its own
+selection, which makes it decorative and sign-in impossible. The cause is
+`IME_FLAG_NO_FULLSCREEN`, which Flutter sets on every field it creates and
+which Dart cannot unset -- fullscreen ("extract") mode is precisely the mode
+in which the keyboard takes window focus and owns the remote. So on a
+television the app hosts no text field at all. `TvTextField`
+(`lib/widgets/tv_text_field.dart`) draws the field's decoration around its
+current value and, on select, asks `MainActivity` over the `xtremio/device`
+channel for `TextEntryActivity` -- one plain `EditText` on a screen of its
+own, carrying none of those flags -- then takes back the string. Back
+cancels and nothing moves; Done returns the text, which is delivered to the
+field's `onChanged` and `onSubmitted` because confirming there is the
+remote's way of pressing Done. A password is masked, asks the keyboard to
+learn nothing from it (`IME_FLAG_NO_PERSONALIZED_LEARNING`), is kept out of
+autofill and runs behind `FLAG_SECURE`. Off a television `TvTextField` is
+the ordinary Flutter `TextField` every one of those places always had.
+
 **Emulator (headless, KVM).** The x86_64 `google_apis` image is the one that
 runs on an x86_64 Linux host (which is why the bindgen path above matters);
 the user must be in the `kvm` group.

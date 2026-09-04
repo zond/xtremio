@@ -95,6 +95,20 @@
                 <data android:scheme="stremio"/>
             </intent-filter>
         </activity>
+        <!-- The screen a remote types on (TextEntryActivity.kt), opened for
+             the `editText` call on the xtremio/device channel and by nothing
+             else, which is why it is not exported. Its EditText carries none
+             of the IME flags Flutter's fields do, so the Android TV keyboard
+             goes fullscreen and owns the D-pad; stateAlwaysVisible is what
+             puts it up as the screen appears, with no press to spend on it.
+             DeviceDefault so it looks like the rest of the system keyboard
+             it shares the screen with. -->
+        <activity
+            android:name=".TextEntryActivity"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
