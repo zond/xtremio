@@ -53,28 +53,16 @@ void main() {
       expect(none.stretchedBy(2).speed, closeTo(pal * pal, 1e-12));
     });
 
-    test('a press is taken from the automatic correction, not from 1.0', () {
-      // The file the addons said was 25 fps against a 23.976 fps video is
-      // already playing at 1.0427. One press down is the whole of "that
-      // correction was wrong", and it lands on the file's own timing --
-      // not on 1/1.0427, which would be the drift back again and doubled.
-      const corrected = SubtitleTiming(automaticSpeed: pal);
-      expect(corrected.speed, pal);
-      expect(corrected.stretchedBy(-1).speed, closeTo(1, 1e-12));
-      // And a file nothing corrected picks the PAL correction up whole.
-      expect(const SubtitleTiming().stretchedBy(1).speed, closeTo(pal, 1e-12));
-    });
-
-    test('reset goes back to the automatic state, not to 1.0 and 0.0', () {
-      // "Undo what I did" is what a viewer means, and what they did is
-      // the presses -- not the correction the frame rates asked for,
-      // which they never saw and which is still right about the file.
-      const corrected = SubtitleTiming(automaticSpeed: pal);
-      final adjusted = corrected.shiftedBy(3).stretchedBy(1);
-      expect(adjusted.adjusted, isTrue);
-      expect(adjusted.automatic.speed, pal);
-      expect(adjusted.automatic.delay, 0);
-      expect(adjusted.automatic.adjusted, isFalse);
+    test('an untouched timing is what a file was written at', () {
+      // Nothing else writes either property, so this is the whole of
+      // what mpv is playing: a file is played exactly as it stands until
+      // the viewer says otherwise, and "undo what I did" and "back to
+      // untouched" are the same thing.
+      const none = SubtitleTiming();
+      expect(none.speed, 1);
+      expect(none.delay, 0);
+      expect(none.adjusted, isFalse);
+      expect(none.shiftedBy(3).stretchedBy(1).adjusted, isTrue);
     });
 
     test('a press mpv would refuse never happens', () {

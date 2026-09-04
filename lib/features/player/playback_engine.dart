@@ -89,9 +89,11 @@ abstract interface class PlaybackEngine {
   ///
   /// This is how a file cut for a release of another frame rate is put
   /// back in step: the whole drift is linear, so one multiplier removes
-  /// it (`subtitleSpeed` in `subtitle_groups.dart`). Only libmpv has the
-  /// property; any other backend does nothing here, exactly as
-  /// [videoFrameRate] says nothing there.
+  /// it. Only a viewer watching the picture ever asks for one -- a
+  /// declared rate says where an upload came from, not how it is timed --
+  /// so nothing sets this by itself. Only libmpv has the property; any
+  /// other backend does nothing here, exactly as [videoFrameRate] says
+  /// nothing there.
   ///
   /// Every path that changes what is on screen sets it, 1.0 included: a
   /// multiplier is a property of the player, not of the file, so one left
@@ -101,11 +103,11 @@ abstract interface class PlaybackEngine {
   /// Shifts the subtitle events being drawn by [seconds]: positive makes
   /// a line appear later than the file asks for, negative earlier.
   ///
-  /// The other half of putting a file back in step, and the half no rate
-  /// can be computed: a multiplier fixes a subtitle that drifts, an
-  /// offset fixes one cut for a release that starts somewhere else -- a
-  /// distributor logo this video does not have. Only a viewer watching
-  /// the picture can judge it, so nothing sets this by itself.
+  /// The other half of putting a file back in step: a multiplier fixes a
+  /// subtitle that drifts, an offset fixes one cut for a release that
+  /// starts somewhere else -- a distributor logo this video does not
+  /// have. Like the multiplier, only a viewer watching the picture can
+  /// judge it, so nothing sets this by itself.
   ///
   /// libmpv's `sub-delay`; any other backend does nothing here, exactly
   /// as [videoFrameRate] says nothing there.
@@ -512,9 +514,10 @@ class MediaKitEngine implements PlaybackEngine {
   /// have been drawn yet. That estimate then decides a comparison with a
   /// tolerance of a hundredth of a frame (`subtitleFrameRateTolerance` in
   /// `subtitle_groups.dart`), so a jittery 24.10 for a true 23.976 would
-  /// re-time every correctly cut subtitle in the language -- putting out
-  /// of step the files that were in it. A container that declares nothing
-  /// is the safe answer, and the one this gives: no rate, no correction.
+  /// rank every correctly cut subtitle in the language behind the ones
+  /// that fit nothing, and would put the timing panel's speed control
+  /// the wrong way round or take its direction away. A container that
+  /// declares nothing is the safe answer, and the one this gives.
   static const List<String> frameRateProperties = ['container-fps'];
 
   @override

@@ -69,20 +69,6 @@ class SubtitleMenu extends StatefulWidget {
   static String externalLabel(SubtitleInfo subtitle) =>
       subtitle.label ?? languageName(subtitle.lang);
 
-  /// The one word a corrected file earns on its row.
-  ///
-  /// A viewer whose subtitles drift anyway has to know the file was
-  /// touched before they go hunting for another one. The rate itself is
-  /// not said anywhere: it is a number to reason about, and what a row
-  /// has to answer is whether this is the plain file or not.
-  static const String retimedNote = 're-timed';
-
-  /// The second line under one of a language's files: the addon that
-  /// offered it, and whether it is played through a correction.
-  static String optionDetail(SubtitleOption option) => option.retimed
-      ? '${option.sourceName} · $retimedNote'
-      : option.sourceName;
-
   /// What the row that shows or hides one language's other files says,
   /// collapsed and expanded.
   static String alternativesLabel(
@@ -171,7 +157,7 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
                 _MenuTile(
                   indented: true,
                   title: option.name,
-                  subtitle: SubtitleMenu.optionDetail(option),
+                  subtitle: option.sourceName,
                   selected: activeId == option.id,
                   onTap: () => widget.onExternal(option.subtitle),
                 ),
@@ -196,14 +182,11 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
   /// The second line of a language row: which of its files it would apply
   /// and where that one came from. With only one file there is nothing to
   /// pick between, so it is just the addon.
-  ///
-  /// The row names one particular file, so a note about that file being
-  /// re-timed belongs here as much as on the file's own row: picking the
-  /// language row is the commonest way a corrected file gets applied.
   static String _groupDetail(SubtitleLanguageGroup group, String? activeId) {
     final chosen = group.chosen(activeId);
-    final detail = SubtitleMenu.optionDetail(chosen);
-    return group.hasAlternatives ? '${chosen.name} · $detail' : detail;
+    return group.hasAlternatives
+        ? '${chosen.name} · ${chosen.sourceName}'
+        : chosen.sourceName;
   }
 }
 

@@ -16,10 +16,10 @@ import '../../support/tv.dart';
 /// Fixing a subtitle's timing by hand: the panel the subtitle menu opens,
 /// what each press writes to the player, and who owns the result.
 ///
-/// The automatic correction only answers a rate mismatch the addon
-/// declared. These are the two things it cannot answer -- a cut that
-/// starts somewhere else, and a declared rate that was wrong -- and the
-/// viewer watching the drift is the only one who can judge either.
+/// Nothing else writes either property. A declared frame rate says where
+/// an upload came from and not how it is timed -- files that keep perfect
+/// time declare a mismatched rate just as often as files that drift -- so
+/// the viewer watching the picture is the only one who can judge it.
 void main() {
   const palUrl = 'https://subs.example.org/en-25.srt';
   const plainUrl = 'https://subs.example.org/en-plain.srt';
@@ -38,8 +38,8 @@ void main() {
   };
 
   /// A 23.976 fps film with two English uploads on offer: one the addon
-  /// says nothing about (`PLAIN`, played as it stands) and one it says was
-  /// cut for 25 fps (`PAL`, re-timed to 1.0427 the moment it is picked).
+  /// says nothing about (`PLAIN`) and one it says was cut for 25 fps
+  /// (`PAL`). Both are played exactly as they were written.
   PlayerHarness harness({DeviceProfile? device}) {
     final harness = PlayerHarness(
       device: device,
@@ -208,9 +208,9 @@ void main() {
   testWidgets('a speed press is the whole PAL correction, and the other '
       'way its reciprocal', (tester) async {
     useWideViewport(tester);
-    // The file the addon said nothing about is played as it stands, so
-    // this is the case where the declared rate was missing and the drift
-    // is there anyway.
+    // PAL against film is the only mismatch there is: every other pair of
+    // rates is the same seconds, so one press is the whole correction
+    // rather than a nudge towards it.
     final player = await playing(tester);
     final engine = player.engine;
     expect(engine.subtitleSpeed, 1);
@@ -228,25 +228,26 @@ void main() {
     expect(find.text('0.959×'), findsOneWidget);
   });
 
-  testWidgets('one press undoes a correction the addon was wrong about', (
-    tester,
-  ) async {
+  testWidgets('a file whose declared rate differs is still played as it '
+      'stands', (tester) async {
     useWideViewport(tester);
     // `fpsMilli` is a claim about the release an upload was made for, and
-    // a claim can be wrong. This file is already playing at 1.0427; one
-    // press down has to land on the file's own timing, which is what
-    // taking the step from the correction rather than from 1.0 buys.
+    // the same claim covers files that keep time and files that drift:
+    // ten English uploads for one film declaring six different rates all
+    // run to within 1 % of the same length. Acting on it would break as
+    // many as it fixed, so this file arrives untouched and one press is
+    // the whole of what the viewer can decide it needs.
     final player = await playing(tester, pick: 'PAL');
     final engine = player.engine;
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleSpeed, 1);
+    expect(find.text('1.000×'), findsNothing);
     await openPanel(tester);
-    await step(tester, 'subtitle-speed-down');
-    expect(engine.subtitleSpeed, closeTo(1, 1e-9));
     expect(find.text('1.000×'), findsOneWidget);
+    await step(tester, 'subtitle-speed-up');
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 
-  testWidgets('reset goes back to the automatic correction, not to 1.0 '
-      'and 0.0', (tester) async {
+  testWidgets('reset goes back to untouched', (tester) async {
     useWideViewport(tester);
     final player = await playing(tester, pick: 'PAL');
     final engine = player.engine;
@@ -254,40 +255,33 @@ void main() {
     await step(tester, 'subtitle-shift-later');
     await step(tester, 'subtitle-speed-up');
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
-    expect(engine.subtitleSpeed, closeTo(1.0872, 0.0001));
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
 
-    // "Undo what I did" is what a viewer means. The correction the frame
-    // rates asked for is not something they did, and handing it back
-    // would return the drift they never asked about.
+    // With nothing else writing either property, "undo what I did" and
+    // "back to what the file says" are the same thing.
     await tester.tap(find.byKey(const ValueKey('subtitle-timing-reset')));
     await tester.pump();
     expect(engine.subtitleDelay, 0);
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleSpeed, 1);
   });
 
-  testWidgets('switching subtitles hands the timing back to the automatic '
-      'path', (tester) async {
+  testWidgets('switching subtitles puts both back to untouched', (
+    tester,
+  ) async {
     useWideViewport(tester);
     final player = await playing(tester);
     final engine = player.engine;
     await openPanel(tester);
     await step(tester, 'subtitle-speed-up');
-    await step(tester, 'subtitle-speed-up');
     await step(tester, 'subtitle-shift-later');
-    expect(engine.subtitleSpeed, closeTo(1.0872, 0.0001));
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
 
-    // Another file is another judgement: it gets its own correction and
-    // nothing of the last one's, offset included. An offset made for a
-    // file that started late is nonsense on the next one, and mpv keeps
+    // Another file is another judgement, and it starts from the timing
+    // it was written with -- offset included. An offset made for a file
+    // that started late is nonsense on the next one, and mpv keeps
     // `sub-delay` across a track change exactly as it keeps `sub-speed`.
     await selectFile(tester, 'PAL');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
-    expect(engine.subtitleDelay, 0);
-
-    // And coming back to the first file finds it plain again: the
-    // adjustment belonged to the viewing, not to the upload.
-    await selectFile(tester, 'PLAIN');
     expect(engine.subtitleSpeed, 1);
     expect(engine.subtitleDelay, 0);
     expect(find.text('0.0 s'), findsOneWidget);
@@ -300,6 +294,7 @@ void main() {
     final engine = player.engine;
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
+    await step(tester, 'subtitle-speed-up');
     await openMenu(tester);
     await tester.tap(find.text('Off'));
     await tester.pumpAndSettle();
@@ -360,13 +355,14 @@ void main() {
     await selectFile(tester, 'PAL');
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
+    await step(tester, 'subtitle-speed-up');
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
 
     // The refusal lands. What it has to undo is its own attempt, and
     // that is no longer what is on screen: reverting here would take the
-    // multiplier and the offset off a file that is playing, and label
-    // the menu with a selection nobody made.
+    // viewer's own multiplier and offset off a file that is playing, and
+    // label the menu with a selection nobody made.
     gate.complete();
     await pumpEvents(tester);
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
@@ -379,16 +375,18 @@ void main() {
     final player = await refusedAutoPick(tester);
     final engine = player.engine;
 
-    // The viewer picks for themselves. The engine takes this one.
+    // The viewer picks for themselves, and stretches what they picked.
     engine.subtitleError = null;
     await selectFile(tester, 'PAL');
+    await openPanel(tester);
+    await step(tester, 'subtitle-speed-up');
     expect(engine.externalSubtitles, hasLength(2));
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
 
     // Nothing counted the refused pick as done, so it went on retrying on
     // every state and tracks event -- taking the viewer's file away again
-    // and handing the multiplier back to the automatic path with it.
-    // Their own choice is the answer the preference was guessing at.
+    // and their adjustment with it. Their own choice is the answer the
+    // preference was guessing at.
     pokeState(player);
     await pumpEvents(tester);
     expect(engine.externalSubtitles, hasLength(2));
@@ -417,7 +415,7 @@ void main() {
     expect(find.text('+0.2 s'), findsOneWidget);
   });
 
-  testWidgets('a re-open puts the addon file back before re-timing it', (
+  testWidgets('a re-open puts the addon file back before the timing', (
     tester,
   ) async {
     useWideViewport(tester);
@@ -426,12 +424,13 @@ void main() {
     expect(engine.externalSubtitles, hasLength(1));
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
+    await step(tester, 'subtitle-speed-up');
 
     // `open` is `loadfile`, and nothing `sub-add` put in survives one:
     // mpv comes back drawing whatever it selects by its own rules,
-    // typically a default-flagged embedded track. Writing this file's
-    // 1.0427 and the viewer's offset onto *that* takes a subtitle that
-    // was in step four seconds a minute out, and no path resets it.
+    // typically a default-flagged embedded track. Writing the viewer's
+    // multiplier and offset onto *that* takes a subtitle that was in
+    // step four seconds a minute out, and no path resets it.
     engine.emitPosition(const Duration(seconds: 10));
     engine.emitCompleted();
     await pumpEvents(tester);

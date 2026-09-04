@@ -16,30 +16,20 @@ import 'subtitle_groups.dart';
 /// one of them is computable. A **shift** answers a subtitle cut for a
 /// release that starts somewhere else -- a distributor logo this video
 /// does not have -- which no declared frame rate says anything about. A
-/// **stretch** answers a rate that drifts, and exists on top of
-/// [subtitleSpeed]'s automatic correction because an addon's `fpsMilli`
-/// is a claim and a claim can be wrong: it may have declared nothing, or
-/// declared the wrong thing.
+/// **stretch** answers a rate that drifts.
+///
+/// Nothing else writes either property, so what is in this is the whole
+/// of what mpv is playing: a declared frame rate is a claim about the
+/// release an upload was made for, and the same claim covers files that
+/// keep time and files that do not, so acting on it fixes one and breaks
+/// the other in equal measure. The viewer watching the drift is the only
+/// one who can tell those apart.
 ///
 /// Steps are integers so that ten presses back and forth land exactly
 /// where they started; a double accumulated a tenth at a time does not.
 @immutable
 final class SubtitleTiming {
-  const SubtitleTiming({
-    this.automaticSpeed = 1,
-    this.shiftSteps = 0,
-    this.speedSteps = 0,
-  });
-
-  /// The multiplier [subtitleSpeed] computed for what is on screen, and
-  /// `1.0` wherever it found nothing to correct.
-  ///
-  /// The stretch is taken *from* here rather than from 1.0, which is what
-  /// makes one press the whole of "that correction was wrong": a file
-  /// re-timed to 1.0427 goes back to its own timing in a single press
-  /// down, and a file nothing corrected picks the PAL correction up in a
-  /// single press up.
-  final double automaticSpeed;
+  const SubtitleTiming({this.shiftSteps = 0, this.speedSteps = 0});
 
   /// Presses of the shift control, positive being later.
   final int shiftSteps;
@@ -55,9 +45,10 @@ final class SubtitleTiming {
   /// One press of the speed control: the PAL ratio, 25/23.976 = 1.042709.
   ///
   /// The whole correction in one press, not a nudge towards it, because
-  /// PAL against NTSC film is the mismatch this ever has to fix by hand.
-  /// The press the other way divides by it, and getting those two round
-  /// the wrong way does not half-fix the drift -- it doubles it.
+  /// PAL against film is the only mismatch there is to fix -- every other
+  /// pair of rates is the same seconds. The press the other way divides
+  /// by it, and getting those two round the wrong way does not half-fix
+  /// the drift, it doubles it.
   static const double speedStep = 25 / 23.976;
 
   /// The offset for libmpv's `sub-delay`, in seconds. Positive delays the
@@ -81,11 +72,8 @@ final class SubtitleTiming {
   String get speedText => '${speed.toStringAsFixed(3)}×';
 
   /// [steps] more presses of the shift control.
-  SubtitleTiming shiftedBy(int steps) => SubtitleTiming(
-    automaticSpeed: automaticSpeed,
-    shiftSteps: shiftSteps + steps,
-    speedSteps: speedSteps,
-  );
+  SubtitleTiming shiftedBy(int steps) =>
+      SubtitleTiming(shiftSteps: shiftSteps + steps, speedSteps: speedSteps);
 
   /// [steps] more presses of the speed control, or this timing unchanged
   /// when that would leave the `<0.1-10.0>` libmpv's `sub-speed` accepts.
@@ -95,11 +83,7 @@ final class SubtitleTiming {
   /// multiplier running while the overlay claims a new one. Nothing is
   /// better than that, and the button that would do it is drawn disabled.
   SubtitleTiming stretchedBy(int steps) => canStretchBy(steps)
-      ? SubtitleTiming(
-          automaticSpeed: automaticSpeed,
-          shiftSteps: shiftSteps,
-          speedSteps: speedSteps + steps,
-        )
+      ? SubtitleTiming(shiftSteps: shiftSteps, speedSteps: speedSteps + steps)
       : this;
 
   /// Whether [stretchedBy] would move at all.
@@ -108,31 +92,19 @@ final class SubtitleTiming {
     return next >= minSubtitleSpeed && next <= maxSubtitleSpeed;
   }
 
-  /// Back to what the automatic path decided, which is what "undo what I
-  /// did" means here -- not back to 1.0 and 0.0. A file the addons said
-  /// was 25 fps against a 23.976 fps video is still that file after a
-  /// reset, and resetting it to 1.0 would hand the viewer back the drift
-  /// they never asked about.
-  SubtitleTiming get automatic =>
-      SubtitleTiming(automaticSpeed: automaticSpeed);
-
-  double _speedAfter(int steps) =>
-      automaticSpeed * math.pow(speedStep, steps).toDouble();
+  double _speedAfter(int steps) => math.pow(speedStep, steps).toDouble();
 
   @override
   bool operator ==(Object other) =>
       other is SubtitleTiming &&
-      other.automaticSpeed == automaticSpeed &&
       other.shiftSteps == shiftSteps &&
       other.speedSteps == speedSteps;
 
   @override
-  int get hashCode => Object.hash(automaticSpeed, shiftSteps, speedSteps);
+  int get hashCode => Object.hash(shiftSteps, speedSteps);
 
   @override
-  String toString() =>
-      'SubtitleTiming(auto: $automaticSpeed, shift: $shiftSteps, '
-      'speed: $speedSteps)';
+  String toString() => 'SubtitleTiming(shift: $shiftSteps, speed: $speedSteps)';
 }
 
 /// The panel that drives a [SubtitleTiming]: two steppers and a reset.
@@ -162,7 +134,9 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// multiplies by it.
   final ValueChanged<int> onStretch;
 
-  /// Back to [SubtitleTiming.automatic].
+  /// Back to untouched: speed 1.0, shift 0.0. With nothing else writing
+  /// either property, "undo what I did" and "back to untouched" are the
+  /// same thing.
   final VoidCallback onReset;
   final VoidCallback onClose;
 

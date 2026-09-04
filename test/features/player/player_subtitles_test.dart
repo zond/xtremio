@@ -608,8 +608,10 @@ void main() {
   ) async {
     useWideViewport(tester);
     // A 23.976 fps container, which is what a film release is. The PAL
-    // upload drifts four seconds a minute against it -- and that drift is
-    // linear, so it is corrected rather than hidden.
+    // upload *may* drift four seconds a minute against it, and it may
+    // keep perfect time: a declared rate is a claim about the release an
+    // upload was made for, and files that keep time declare it too. So
+    // the rate orders the list and nothing else.
     final harness = harnessRated(23.976, [
       upload(
         'en-1',
@@ -650,14 +652,25 @@ void main() {
     expect(find.text('SILENT'), findsOneWidget);
     expect(find.text('PAL'), findsOneWidget);
 
+    // A row carries the addon that offered it and nothing else: no rate,
+    // and no word claiming we touched the file, because we do not.
+    expect(find.text('ROUNDED · subs.example.org'), findsOneWidget);
+    expect(find.text('subs.example.org'), findsNWidgets(3));
+    expect(find.textContaining('25'), findsNothing);
+    expect(find.textContaining('23.9'), findsNothing);
+
     // A file that fits is played at its own timing.
     await tester.tap(find.text('ROUNDED'));
     await tester.pumpAndSettle();
     expect(engine.externalSubtitles.last.$1.path, endsWith('/en-23980.srt'));
     expect(engine.subtitleSpeed, 1);
 
-    // The PAL file is offered too, and applying it re-times it: 25 fps
-    // events against a 23.976 fps picture, so 1.0427.
+    // And so is the PAL file, whose declared rate is four seconds a
+    // minute from the container's. Ten English uploads for one film
+    // declaring six different rates all run to within 1 % of the same
+    // length: the rate says where a file came from, not how it is timed,
+    // so applying it on the viewer's behalf breaks as many files as it
+    // fixes. Nothing writes `sub-speed` but the viewer.
     await tester.tap(find.byTooltip('Subtitles (S)'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('2 other English files'));
@@ -665,62 +678,16 @@ void main() {
     await tester.tap(find.text('PAL'));
     await tester.pumpAndSettle();
     expect(engine.externalSubtitles.last.$1.path, endsWith('/en-25.srt'));
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleSpeeds, everyElement(1));
+    expect(engine.subtitleDelays, everyElement(0));
   });
 
-  testWidgets('a corrected row says so, in one word', (tester) async {
-    useWideViewport(tester);
-    // Not the rate: the number is noise to a viewer, and what a row has
-    // to answer is whether this is the plain file or one we touched --
-    // because a subtitle that still drifts sends them hunting for a
-    // different upload, and they need to know what they are comparing.
-    final harness = harnessRated(23.976, [
-      upload(
-        'en-1',
-        'eng',
-        'https://subs.example.org/en-25.srt',
-        'PAL',
-        fpsMilli: 25000,
-      ),
-      upload(
-        'en-2',
-        'eng',
-        'https://subs.example.org/en-23980.srt',
-        'ROUNDED',
-        fpsMilli: 23980,
-      ),
-    ]);
-    await harness.pump(tester);
-    harness.engine.emitDuration(const Duration(minutes: 96));
-    await pumpEvents(tester);
-
-    await tester.tap(find.byTooltip('Subtitles (S)'));
-    await tester.pumpAndSettle();
-    // The row names the file that needs nothing, and says nothing extra.
-    expect(find.text('ROUNDED · subs.example.org'), findsOneWidget);
-    await tester.tap(find.text('1 other English file'));
-    await tester.pumpAndSettle();
-    expect(find.text('subs.example.org'), findsOneWidget);
-    expect(find.text('subs.example.org · re-timed'), findsOneWidget);
-    // The rate is not shown anywhere, on either row.
-    expect(find.textContaining('25'), findsNothing);
-    expect(find.textContaining('23.9'), findsNothing);
-
-    // Applying it carries the word up onto the language row, which is
-    // the row that is on screen once the sheet is closed and reopened.
-    await tester.tap(find.text('PAL'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Subtitles (S)'));
-    await tester.pumpAndSettle();
-    expect(find.text('PAL · subs.example.org · re-timed'), findsOneWidget);
-  });
-
-  testWidgets('a re-timed file is put back to 1.0 by every way out of it', (
+  testWidgets('a hand adjustment is put back by every way out of it', (
     tester,
   ) async {
     useWideViewport(tester);
-    // The failure this whole design is most likely to produce: a
-    // multiplier belongs to the player, not to the file, so one left over
+    // The failure this whole design is most likely to produce: the
+    // timing belongs to the player, not to the file, so one left over
     // from the previous pick silently ruins a subtitle that was correct.
     final harness = harnessRated(23.976, [
       upload(
@@ -757,34 +724,46 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await pick('English');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    /// Picks [row] and moves both values off untouched by hand, which is
+    /// now the only way either of them moves at all.
+    Future<void> pickAndAdjust(String row) async {
+      await pick(row);
+      await pick(SubtitleMenu.adjustTimingLabel);
+      await tester.tap(find.byKey(const ValueKey('subtitle-shift-later')));
+      await tester.tap(find.byKey(const ValueKey('subtitle-speed-up')));
+      await tester.pump();
+      expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
+      expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    }
 
-    // Another file, which happens to need no correction at all.
+    await pickAndAdjust('English');
+
+    // Another file is another judgement, and it starts from untouched.
     await pick('Polish');
     expect(engine.subtitleSpeed, 1);
+    expect(engine.subtitleDelay, 0);
 
-    // An embedded track is part of the video and declares no rate of its
-    // own, so it is played as it is.
-    await pick('English');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    // An embedded track is part of the video: whatever was done to an
+    // addon file says nothing about it.
+    await pickAndAdjust('English');
     await pick('Commentary');
     expect(engine.setSubtitleTrackIds, ['4']);
     expect(engine.subtitleSpeed, 1);
+    expect(engine.subtitleDelay, 0);
 
-    // And so is nothing at all: turning subtitles off leaves no
-    // multiplier behind for whatever is picked next.
-    await pick('English');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    // And so is nothing at all: turning subtitles off leaves neither
+    // value behind for whatever is picked next.
+    await pickAndAdjust('English');
     await pick('Off');
     expect(engine.disableSubtitlesCalls, 1);
     expect(engine.subtitleSpeed, 1);
+    expect(engine.subtitleDelay, 0);
   });
 
   testWidgets('another video starts at its own timing', (tester) async {
     useWideViewport(tester);
-    // The next episode opens on the same engine, and its container is not
-    // the one the last file was corrected against.
+    // The next episode opens on the same engine, and an adjustment made
+    // for the last video's subtitle is nonsense on this one's.
     final harness = harnessRated(23.976, [
       upload(
         'en-1',
@@ -802,7 +781,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(SubtitleMenu.adjustTimingLabel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('subtitle-speed-up')));
+    await tester.tap(find.byKey(const ValueKey('subtitle-shift-later')));
+    await tester.pump();
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
 
     // The core resolves a different stream: same screen, same engine.
     final next = Map<String, dynamic>.from(harness.fixture);
@@ -817,10 +804,12 @@ void main() {
     await pumpEvents(tester);
     expect(engine.opened.last.$1.path, '/next/0');
     expect(engine.subtitleSpeed, 1);
+    expect(engine.subtitleDelay, 0);
   });
 
-  testWidgets('the session preference takes the file that fits, and re-times '
-      'the one that does not', (tester) async {
+  testWidgets('the session preference takes the file that fits', (
+    tester,
+  ) async {
     useWideViewport(tester);
     // The auto-pick is the one path that applies a subtitle without the
     // viewer looking. English was picked on the previous episode; the
@@ -874,12 +863,13 @@ void main() {
     );
   });
 
-  testWidgets('the session preference re-times the only file there is', (
-    tester,
-  ) async {
+  testWidgets('the session preference applies the only file there is, as it '
+      'stands', (tester) async {
     useWideViewport(tester);
-    // Nothing in the language fits, so the pick nobody watched applies a
-    // file that would drift four seconds a minute -- and corrects it.
+    // Nothing in the language fits, so the pick nobody watched applies
+    // the file whose declared rate differs -- and plays it exactly as it
+    // was written. This is the pick with nobody watching it, which is
+    // the last place to act on a guess.
     final harness = harnessRated(
       23.976,
       [
@@ -900,20 +890,18 @@ void main() {
     expect(engine.externalSubtitles, [
       (Uri.parse('https://subs.example.org/en-25.srt'), 'English', 'eng'),
     ]);
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleSpeeds, everyElement(1));
   });
 
-  testWidgets('an auto-pick the engine refuses puts the multiplier back', (
+  testWidgets('an auto-pick the engine refuses draws its track as written', (
     tester,
   ) async {
     useWideViewport(tester);
     // The one path that changes what is on screen and then changes it
     // back. mpv is already drawing a default-flagged embedded track that
     // is in step with the video; the preference asks for a 25 fps addon
-    // file and mpv refuses it. Restoring the tracks without restoring the
-    // multiplier leaves the refused file's 1.0427 on the subtitle that
-    // stayed on screen -- four seconds a minute out, on a file nobody
-    // asked us to touch.
+    // file and mpv refuses it. Both values go back with the tracks, and
+    // neither was ever anything but untouched.
     final harness = harnessRated(
       23.976,
       [
@@ -938,9 +926,11 @@ void main() {
     engine.emitDuration(const Duration(minutes: 96));
     await pumpEvents(tester);
 
-    // It tried, and it re-timed for the file it was about to add.
+    // It tried, and what it wrote for the file it was about to add was
+    // the same untouched timing every path writes.
     expect(engine.externalSubtitles, hasLength(1));
-    expect(engine.subtitleSpeeds, contains(closeTo(1.0427, 0.0001)));
+    expect(engine.subtitleSpeeds, everyElement(1));
+    expect(engine.subtitleDelays, everyElement(0));
     // The embedded track is what is drawn, and it is drawn as written.
     expect(engine.subtitleSpeed, 1);
   });
@@ -997,13 +987,13 @@ void main() {
     );
   });
 
-  testWidgets('an engine that cannot say the rate re-times nothing', (
+  testWidgets('an engine that cannot say the rate leaves the order alone', (
     tester,
   ) async {
     useWideViewport(tester);
     // Every engine but libmpv, and libmpv before the first frame: with no
-    // rate to compare against, the addons' order stands and no file is
-    // touched. A guess here re-times a subtitle that was right.
+    // rate to compare against there is no fit to sort on, so the addons'
+    // order stands.
     final harness = harnessRated(null, [
       upload(
         'en-1',

@@ -319,9 +319,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// What the video playing runs at, once the engine has said
   /// ([_sampleFrameRate]); null until then, and for a backend that cannot
-  /// say at all. Read only to order the subtitle files and to re-time the
-  /// one applied -- it is never shown: the point is a subtitle that keeps
-  /// time, not a number to reason about.
+  /// say at all. Read only to order the subtitle files -- it is never
+  /// shown: the point is a list that is right, not a number to reason
+  /// about.
   double? _videoFrameRate;
 
   /// Whether the engine has been asked and has answered (or declined, or
@@ -329,16 +329,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// which is what the subtitle auto-pick waits on.
   bool _frameRateSampled = false;
 
-  /// What the subtitles on screen are being played at: the multiplier the
-  /// automatic path decided, plus whatever the viewer has since asked of
-  /// it by hand.
+  /// What the viewer has asked of the subtitles on screen, and the whole
+  /// of what mpv is playing them at: nothing else writes either property.
   ///
-  /// One value for both properties, because they are put back together:
-  /// [_retimeSubtitles] replaces the whole of it, so a shift belongs to
-  /// the file it was made for exactly as strictly as the multiplier does.
+  /// One value for both, because they are put back together:
+  /// [_resetSubtitleTiming] replaces the whole of it, so a shift belongs
+  /// to the file it was made for exactly as strictly as the multiplier
+  /// does.
   SubtitleTiming _timing = const SubtitleTiming();
 
-  /// The addon file [_timing] was computed for, and null whenever what is
+  /// The addon file [_timing] belongs to, and null whenever what is
   /// shown is not one -- an embedded track, subtitles off, another video.
   ///
   /// Kept because an `open` is a fresh `loadfile` and a file added with
@@ -693,10 +693,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subtitlesChosenByHand = false;
     _mediaLoaded = false;
     // A different video: what the last one ran at says nothing about it,
-    // and neither does the multiplier the last subtitle was re-timed by.
+    // and neither does the adjustment the last subtitle was played with.
     _videoFrameRate = null;
     _frameRateSampled = false;
-    _retimeSubtitles();
+    _resetSubtitleTiming();
     _dismissUpNext();
     final progress = state.progress;
     final start = progress != null && progress.isResumable
@@ -1665,36 +1665,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _engine?.setAudioTrack(track.id);
   }
 
-  /// Puts libmpv's subtitle multiplier where [subtitle] needs it against
-  /// the video that is playing ([subtitleSpeed]), or back to 1.0 when
-  /// there is no file whose own timing is in question -- an embedded
-  /// track, subtitles off, another video -- and drops any hand
-  /// adjustment with it.
+  /// Puts libmpv's subtitle multiplier and offset back to untouched --
+  /// 1.0 and 0.0 -- and records [subtitle] as the addon file they now
+  /// belong to, or null when what is shown is not one.
   ///
   /// Every path that changes what is on screen calls this, which is the
   /// whole of the reset rule: the timing belongs to the player, not to
   /// the file, so one left behind by the previous pick would silently
-  /// ruin a subtitle that was correct. That now covers the shift as
-  /// well, and for the same reason: an offset made for a file that
+  /// ruin a subtitle that was correct. An offset made for a file that
   /// started late is nonsense on the next one, and mpv keeps `sub-delay`
   /// across a track change exactly as it keeps `sub-speed`.
   ///
-  /// This is also where the viewer hands the speed back. It is theirs
-  /// from the moment they touch the control until something changes what
-  /// is shown -- switching subtitles is what gives the automatic path
-  /// its file again.
-  void _retimeSubtitles([SubtitleInfo? subtitle]) {
+  /// Nothing but the viewer ever moves either value away from untouched,
+  /// so this is also the only thing that undoes their work: an
+  /// adjustment is theirs from the first press until something changes
+  /// what is shown.
+  void _resetSubtitleTiming([SubtitleInfo? subtitle]) {
     _externalSubtitle = subtitle;
-    _timing = SubtitleTiming(
-      automaticSpeed: subtitle == null
-          ? 1
-          : subtitleSpeed(subtitle, videoFrameRate: _videoFrameRate),
-    );
+    _timing = const SubtitleTiming();
     _applySubtitleTiming();
   }
 
   /// Puts the addon file back that a re-open took away, before the timing
-  /// computed for it is written again.
+  /// made for it is written again.
   ///
   /// `open` is `loadfile`, which drops every subtitle `sub-add` put in --
   /// [MediaKitEngine.open] clears its own record of them for the same
@@ -1743,7 +1736,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _selectEmbeddedSubtitle(TrackInfo track) {
     _subtitlesChosenByHand = true;
     _tracks.value = _tracks.value.copyWith(activeSubtitleId: track.id);
-    _retimeSubtitles();
+    _resetSubtitleTiming();
     _engine?.setSubtitleTrack(track.id);
     _client?.dispatch(
       CoreActions.playerSubtitlePreferenceChanged(
@@ -1759,7 +1752,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _tracks.value = _tracks.value.copyWith(
       activeSubtitleId: subtitle.url.toString(),
     );
-    _retimeSubtitles(subtitle);
+    _resetSubtitleTiming(subtitle);
     _engine?.setExternalSubtitle(
       subtitle.url,
       title: SubtitleMenu.externalLabel(subtitle),
@@ -1777,7 +1770,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _disableSubtitles() {
     _subtitlesChosenByHand = true;
     _tracks.value = _tracks.value.copyWith(clearSubtitle: true);
-    _retimeSubtitles();
+    _resetSubtitleTiming();
     _engine?.disableSubtitles();
     _client?.dispatch(
       CoreActions.playerSubtitlePreferenceChanged(enabled: false),
@@ -1821,7 +1814,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final Future<void>? applied;
     if (!preference.enabled) {
       _tracks.value = before.copyWith(clearSubtitle: true);
-      _retimeSubtitles();
+      _resetSubtitleTiming();
       applied = _engine?.disableSubtitles();
     } else {
       final language = preference.language;
@@ -1851,7 +1844,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _tracks.value = before.copyWith(
           activeSubtitleId: external.url.toString(),
         );
-        _retimeSubtitles(external);
+        _resetSubtitleTiming(external);
         applied = _engine?.setExternalSubtitle(
           external.url,
           title: SubtitleMenu.externalLabel(external),
@@ -1859,7 +1852,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         );
       } else if (embedded != null) {
         _tracks.value = before.copyWith(activeSubtitleId: embedded.id);
-        _retimeSubtitles();
+        _resetSubtitleTiming();
         applied = _engine?.setSubtitleTrack(embedded.id);
       } else {
         return;
@@ -1893,7 +1886,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             // panel is drawn from [_timing], so without the rebuild it
             // would go on showing the shift and the multiplier mpv has
             // already been taken off.
-            setState(() => _retimeSubtitles(beforeSubtitle));
+            setState(() => _resetSubtitleTiming(beforeSubtitle));
           },
         )
         .whenComplete(() => _autoPickingSubtitles = false);
@@ -1996,10 +1989,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   videoFrameRate: _videoFrameRate,
                 ),
                 addonName: _subtitleAddonName,
-                // Which rows say they will be re-timed; the same rate the
-                // ordering above was decided on, so a row that says so is
-                // one `subtitleSpeed` will really correct.
-                videoFrameRate: _videoFrameRate,
               ),
               activeId: tracks.activeSubtitleId,
               loading: state?.subtitlesLoading ?? false,
@@ -3080,7 +3069,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 _adjustTiming(_timing.shiftedBy(step)),
                             onStretch: (step) =>
                                 _adjustTiming(_timing.stretchedBy(step)),
-                            onReset: () => _adjustTiming(_timing.automatic),
+                            onReset: () =>
+                                _adjustTiming(const SubtitleTiming()),
                             onClose: _hideSubtitleTiming,
                           ),
                         ),
