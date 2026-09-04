@@ -23,17 +23,24 @@ Rust engine for addons, catalogs, library, and playback state) and
 > **Details** shows facts and genres, a season picker and episode list with
 > watched state for series (picking an episode loads its streams), and the
 > streams every installed addon returns with quality hints parsed into
-> chips. The sources list has two layouts and a toggle in its header to
-> pick one: grouped (a section per addon, in profile order, each addon's
-> own ranking intact) is the default, and the other cuts every addon's
-> answers into **one collapsible section per resolution**, highest first,
-> with the streams nothing could be read from last in a section that says
-> it does not know rather than guessing a rung. Only the best section is
-> open to start with, so playback stays one tap away, and a *closed*
-> header still says how many streams it holds and the best swarm among
-> them -- an empty-looking 2160p and a healthy one are different answers.
-> The section a viewer opens stays open (falling back to the best one when
-> the next title has nothing of that resolution). Inside a section the
+> chips. The sources list has two layouts and a toggle in its header, worded
+> to say which layout is on screen and what tapping switches to, to pick
+> one: **sectioned** -- every addon's answers put together and cut into
+> **one collapsible section per resolution**, highest first, with the
+> streams nothing could be read from last in a section that says it does
+> not know rather than guessing a rung -- is the default. The other is
+> grouped: a section per addon, in profile order, each addon's own ranking
+> intact, which is what the engine hands over and what the sources list
+> looked like before the sectioned layout existed. Every resolution section
+> starts *collapsed*, on every title, until the viewer opens one, so the
+> first thing shown is a compact list of what is available rather than a
+> guess at what they want; a *closed* header still says how many streams it
+> holds and the best swarm among them -- an empty-looking 2160p and a
+> healthy one are different answers. Which sections are open is a global
+> preference too, not a per-title one: a section opened on one title stays
+> open on the next and survives a restart, and a resolution the current
+> title does not offer is simply not shown open, never swapped for some
+> other section the viewer did not ask for. Inside a section the
 > order is **peers per megabyte** -- ascending size over peers -- because
 > every stream in the list is the same film: duration is constant, so size
 > is bitrate, bitrate is the demand and peers are the supply, which makes
@@ -45,9 +52,12 @@ Rust engine for addons, catalogs, library, and playback state) and
 > empty is ranked, and ranked last of the ranked. Each row names the addon
 > it came from and is badged with what could actually be read off the
 > stream, size and peers included -- nothing is badged that is not known.
-> Both choices are global and persisted (`streamsFlat` and `streamsOrder`
-> in the preferences file), so they follow the user to the next title and
-> survive a restart. **One release is one
+> The layout, the order and which sections are open are all global and
+> persisted (`streamsSectioned`, `streamsOrder` and `openStreamSections` in
+> the preferences file), so they follow the user to the next title and
+> survive a restart -- an install from before the layout was renamed keeps
+> its choice too, read from the older `streamsFlat` key it was stored
+> under. **One release is one
 > row**: two addons offering the same torrent (or one addon offering it
 > twice) collapse on what they *are* -- info hash plus file index, or the
 > direct URL, the identity a download pin already uses -- never on what
@@ -273,11 +283,14 @@ connection.
   and additive like the downloads registry: a write is a read-modify-write
   of one key, a key from a newer build survives it, and a file that cannot
   be parsed reads as "nothing set" rather than as a failure. Today it holds
-  three keys: `streamsFlat` (the Details screen's sources list, sectioned
-  by resolution rather than grouped by addon), `streamsOrder` (what order
-  the streams inside one of those sections are in) and `bufferAhead` (how
-  far ahead playback buffers, below). Nothing
-  secret goes in it.
+  four keys: `streamsSectioned` (the Details screen's sources list,
+  sectioned by resolution -- the default -- rather than grouped by addon;
+  an install from before the rename is read from the older `streamsFlat`
+  name it was stored under, never written back), `openStreamSections`
+  (which resolution sections are expanded, empty meaning every one
+  collapsed on purpose rather than "unset"), `streamsOrder` (what order the
+  streams inside one of those sections are in) and `bufferAhead` (how far
+  ahead playback buffers, below). Nothing secret goes in it.
 - **How far ahead playback buffers is the viewer's choice.** The streaming
   server reads ahead of the play head by a window sized for a healthy
   connection and a patient player; a spotty link, or a receiver with a
