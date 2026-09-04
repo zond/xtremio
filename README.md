@@ -294,18 +294,20 @@ connection.
   and additive like the downloads registry: a write is a read-modify-write
   of one key, a key from a newer build survives it, and a file that cannot
   be parsed reads as "nothing set" rather than as a failure. Today it holds
-  five keys: `streamsSectioned` (the Details screen's sources list,
+  six keys: `streamsSectioned` (the Details screen's sources list,
   sectioned by resolution -- the default -- rather than grouped by addon;
   an install from before the rename is read from the older `streamsFlat`
   name it was stored under, never written back), `openStreamSections`
   (which resolution sections are expanded, empty meaning every one
   collapsed on purpose rather than "unset"), `streamsOrder` (what order the
   streams inside one of those sections are in), `bufferAhead` (how far
-  ahead playback buffers, below) and `focusEmphasis` (Settings ->
+  ahead playback buffers, below), `focusEmphasis` (Settings ->
   Interface -> "Focus highlight", offered on a television only: `standard`
   is the two-stroke ring with its zoom and shadow, `bold` thickens the ring
   and dims everything the remote is not on, for a bright room a display
-  cannot fight; an unreadable or absent value is `standard`). Nothing
+  cannot fight; an unreadable or absent value is `standard`) and
+  `subtitleSync` (the subtitle timings the viewer has fixed by hand, most
+  recent first, bounded by recency -- see Subtitles). Nothing
   secret goes in it.
 - **How far ahead playback buffers is the viewer's choice.** The streaming
   server reads ahead of the play head by a window sized for a healthy
@@ -689,7 +691,39 @@ connection.
   where no direction can be chosen and a stream would otherwise be
   unfixable. Reset goes back to untouched, 1.0 and 0.0, because with
   nothing else writing either property that is what "undo what I did"
-  means. From the first press the session preference's auto-pick stops
+  means. What the viewer fixes is **remembered, keyed on what caused
+  it** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`, under the
+  one `subtitleSync` preference), so the same correction is not made
+  again on the next episode, and `_resetSubtitleTiming` puts it back
+  whenever that file goes on screen. The two keys are deliberately
+  different because the causes are. A *speed* is remembered against the
+  series and the addon's own grouping of its files (`g`), since what a
+  file was timed against is a property of where it came from -- across
+  two Gilmore Girls episodes `g=1` is all 23.976 and `g=3` all 25, while
+  `g=6` holds one file claiming 23.976 and one claiming 25 that end at
+  exactly the same moment, synced to each other whatever they claim --
+  and since video releases of one show share a frame rate, so a speed
+  carries from one to the next. A *shift* is remembered against the
+  video release as well, because an offset is the video's pre-roll less
+  whatever the subtitle's source assumed and changing either side
+  changes the answer; the release is the whole filename the player knows
+  (the file the server says it opened, else the addon's claim), not a
+  release group parsed out of it, because a parse is a guess and two
+  encodes by one group can still start in different places. Any part of
+  a key nobody can name -- an addon that sends no `g`, a torrent nothing
+  has named the file of -- means that adjustment is simply not
+  remembered: a narrower key is forgotten more often, and that is the
+  price of never being wrong. Reset *forgets* rather than storing a
+  correction of none, since nothing remembered is what nothing applied
+  looks like next time; the store is bounded by recency, so a viewer who
+  fixes twenty shows does not pay for the twenty-first; and only a press
+  on the panel is written down, because every other call on the timing
+  is the machine putting a file back the way it found it. The write is
+  made when the adjusting is over -- the panel closing, something
+  changing what is on screen, the player going away -- rather than on
+  each press, since the shift repeats eight times a second under a held
+  key and a preferences file is not a keystroke log. From the first
+  press the session preference's auto-pick stops
   looking for a file of its own for this media -- a viewer judging the
   subtitle in front of them has answered the question that guess exists
   to ask, and a guess that keeps swapping the file under them is the

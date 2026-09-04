@@ -209,18 +209,51 @@ below has a test; see README, *Subtitles*.
   still the only hold-to-repeat in the app; a *toggle* must never repeat,
   since held at the stepper's rate it flips eight times a second and
   lands wherever the release falls.
-- **Every path that changes what is shown puts both back to untouched.**
-  Another file, an embedded track, subtitles off, the next video, and
-  the auto-pick restoring the tracks after the engine refused a file:
-  all of them go through `PlayerScreen._resetSubtitleTiming`, which is
-  why they are one call, and which is why it replaces the whole
+- **Every path that changes what is shown recomputes both from
+  scratch.** Another file, an embedded track, subtitles off, the next
+  video, and the auto-pick restoring the tracks after the engine refused
+  a file: all of them go through `PlayerScreen._resetSubtitleTiming`,
+  which is why they are one call, and which is why it replaces the whole
   `SubtitleTiming` rather than one number of it. Both belong to the
   player, not to the file, so one left over from the last pick silently
   ruins a subtitle that was correct, which is worse than the problem
   being solved. A path that *undoes* a change is one of these -- the
-  refused pick was the hole -- so add a path, add its reset and its test.
-  With nothing else writing either property, reset means back to what
-  the file was written with, and "undo what I did" is the same thing.
+  refused pick was the hole -- so add a path, add its reset and its
+  test. What it resets *to* is what the viewer is remembered to have
+  fixed about the file going on screen (below), and untouched whenever
+  nothing is: an embedded track, subtitles off, an addon that names no
+  group. Nothing else writes either property, so the value after this
+  call is always the whole of what mpv is playing.
+- **What the viewer fixed is remembered under what caused it, and the
+  two keys are deliberately different.** `SubtitleSyncMemory`
+  (`lib/core/subtitle_sync.dart`, one preferences key, `subtitleSync`)
+  keys a *speed* on the series and the addon's `g`, because what a file
+  was timed against is a property of where it came from and video
+  releases of one show share a frame rate; it keys a *shift* on the
+  video release as well, because an offset is the video's pre-roll less
+  whatever the subtitle's source assumed and so depends on both sides.
+  The release is the whole filename from `castFilename` -- the file the
+  server says it opened, else the addon's claim -- lower-cased, and not
+  a release group parsed out of it: a parse is a guess, and two encodes
+  by one group can still start in different places. Any part of a key
+  nobody can name means that adjustment is not remembered at all, and
+  back to untouched is *forgotten* rather than stored as a zero, since
+  nothing remembered is what nothing applied looks like next time. A
+  narrower key is forgotten more often, which is the price of never
+  being wrong.
+- **Only a press on the panel is a judgement, and a press does not
+  write.** `_adjustTiming` is the one path that remembers; every other
+  call on the timing is the machine putting a file back the way it found
+  it, and writing that down would overwrite what an earlier evening
+  decided. The write itself waits (`_pendingSync`) until the adjusting
+  is over -- the panel closing, something changing what is on screen, or
+  the player going away -- because the shift repeats eight times a
+  second under a held key and two overlapping `prefsSet` calls land on
+  FRB's worker pool in no particular order, so twenty of them could
+  leave the file holding a number the panel is not showing. What waits
+  is a closure over the file the press was made on, and
+  `_resetSubtitleTiming` flushes it *before* it moves, or the next press
+  on the file that replaced it drops the one before.
 - **Both values are re-applied after a re-open, and the file goes back
   first.** A network error, a false end of file and a buffer change all
   re-open the stream keeping the position; the values belong to the
