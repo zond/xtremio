@@ -8,9 +8,11 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use url::Url;
+use xtremio_core::addon_health::{self, Outcome, ResourceKind, Sweep, PREFS_KEY};
 use xtremio_core::api::core::{core_init, core_is_initialized, core_shutdown, CoreConfig};
 use xtremio_core::api::server::{server_base_url, ServerConfig};
-use xtremio_core::state;
+use xtremio_core::state::{self, AppState};
 
 /// Each boot gets its own directories, so a write the previous instance was
 /// still finishing cannot be mistaken for state the next one inherited.
@@ -53,6 +55,35 @@ fn drain_until_quiet(rx: &Receiver<String>, quiet: Duration) {
     }
 }
 
+/// The transport URL of the addon the sweep below is about.
+const AN_ADDON: &str = "https://v3-cinemeta.strem.io/manifest.json";
+
+/// Counts one answer into `app`, leaving the table with changes the file
+/// does not have. The throttle keeps this out of the file (the table was
+/// written -- loaded -- a moment ago at init), so the only write that can
+/// follow is shutdown's forced one.
+fn dirty_the_health_table(app: &AppState) {
+    let mut sweep = Sweep::new();
+    sweep.observe(
+        &Url::parse(AN_ADDON).expect("parse"),
+        ResourceKind::Catalog,
+        Outcome::Answered,
+    );
+    assert!(
+        addon_health::commit_in(app, sweep),
+        "one addon answering is evidence"
+    );
+}
+
+/// The addon keys the preferences file holds a health record for.
+fn stored_health_keys() -> Vec<String> {
+    let preferences = xtremio_core::prefs::get_all().expect("read preferences");
+    let Some(serde_json::Value::Object(addons)) = preferences.get(PREFS_KEY) else {
+        return vec![];
+    };
+    addons.keys().cloned().collect()
+}
+
 #[test]
 fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> anyhow::Result<()> {
     let tmp = tempfile::tempdir()?;
@@ -80,6 +111,7 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
 
     core_init(config(tmp.path(), "one"))?;
     assert!(core_is_initialized()?);
+    let key = addon_health::key_for(&Url::parse(AN_ADDON).expect("parse"));
     assert!(
         Arc::ptr_eq(&first, &state::current().expect("init keeps a state")),
         "init adopted the state the subscriber created, rather than replacing it"
@@ -89,6 +121,12 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
         pumped_an_event(&rx),
         "the first runtime's events reached the first sink"
     );
+
+    // Shutdown writes the addon-health table out whatever the throttle
+    // says, so the table has to be dirty for that path to run at all --
+    // otherwise this test would be asserting the invariant about a flush
+    // that returned before touching the preferences file.
+    dirty_the_health_table(&first);
 
     core_shutdown()?;
     assert!(
@@ -100,6 +138,10 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
     assert!(
         state::current().is_none(),
         "and nothing on the way out put one back"
+    );
+    assert!(
+        stored_health_keys().contains(&key),
+        "the last answers never reached the file"
     );
 
     // Whatever the retired instance still had in flight lands in the sink

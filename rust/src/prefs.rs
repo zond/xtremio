@@ -82,10 +82,31 @@ fn read_object(path: &std::path::Path) -> Map<String, Value> {
 
 /// Stores `value` under `key`, or removes the key when it is `None`,
 /// leaving every other key exactly as it was.
+///
+/// Serialized on the process state's file lock, which is what an FFI
+/// caller wants; a caller that is already holding a state writes into that
+/// one with [`set_in`].
 pub fn set(key: &str, value: Option<Value>) -> anyhow::Result<()> {
+    set_in(&crate::state::state(), key, value)
+}
+
+/// [`set`] into the file lock of a state the caller already has.
+///
+/// `crate::core::shutdown` takes the state out of the process on its first
+/// line and *then* flushes the addon-health table through here. Looking the
+/// state up at that point would build a fresh one and leave it in the
+/// process static -- undoing the `take` -- and would lock a mutex nobody
+/// else holds, so a concurrent FFI [`set`] that started before the `take`
+/// would be doing its own read-modify-write of the same file at the same
+/// time and one of the two keys would be lost. The state comes in as an
+/// argument for the same reason `crate::server::stop_in` takes one.
+pub(crate) fn set_in(
+    app: &crate::state::AppState,
+    key: &str,
+    value: Option<Value>,
+) -> anyhow::Result<()> {
     let path = path().context("preferences: storage directory is not set")?;
-    let state = crate::state::state();
-    let _guard = state.prefs.file();
+    let _guard = app.prefs.file();
     let mut object = read_object(&path);
     match value {
         Some(value) => {
