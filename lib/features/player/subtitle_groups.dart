@@ -9,6 +9,7 @@ final class SubtitleOption {
     required this.subtitle,
     required this.sourceName,
     required this.index,
+    this.ambiguousName = false,
   });
 
   final SubtitleInfo subtitle;
@@ -19,6 +20,11 @@ final class SubtitleOption {
 
   /// 1-based position among the files of its language, in merge order.
   final int index;
+
+  /// Whether another file of the same language derives the same name, so
+  /// the name on its own does not tell them apart. Set by
+  /// [groupSubtitlesByLanguage]; see [name].
+  final bool ambiguousName;
 
   /// What `PlaybackTracks.activeSubtitleId` holds while this file is on.
   String get id => subtitle.url.toString();
@@ -32,7 +38,16 @@ final class SubtitleOption {
   /// fifteen English uploads was `Option N` and the addon's name. The
   /// derived names are what tell them apart now; `Option $index` is still
   /// the floor, for an addon that says nothing but a URL.
-  String get name =>
+  ///
+  /// A derived name only earns its place by being *different* from its
+  /// neighbours, and often it is not: all three Czech files OpenSubtitles
+  /// answers for The Godfather are `subtitleFileName: "1.srt"`, and its
+  /// Breaking Bad answer has three Romanian `101`s. Those get their
+  /// position back on the end (`1 (2)`) -- a name that says nothing is no
+  /// worse for it, and three rows reading `1` are unpickable.
+  String get name => ambiguousName ? '$_derived ($index)' : _derived;
+
+  String get _derived =>
       subtitle.label ??
       _release ??
       _fromFileName(subtitle.subtitleFileName) ??
@@ -264,7 +279,34 @@ List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
     for (final key in order)
       SubtitleLanguageGroup(
         language: labels[key]!,
-        options: List.unmodifiable(byLanguage[key]!),
+        options: List.unmodifiable(_disambiguated(byLanguage[key]!)),
       ),
+  ];
+}
+
+/// [options] with every one whose name another file of the same language
+/// derives too marked [SubtitleOption.ambiguousName], so the menu never
+/// shows one language two rows that read alike.
+///
+/// The names come from what the addon said about each upload, and an
+/// addon repeats itself: the same `subtitleFileName` for three different
+/// cuts, the same release group for two. `Option N` was at least unique.
+List<SubtitleOption> _disambiguated(List<SubtitleOption> options) {
+  final taken = <String, int>{};
+  for (final option in options) {
+    taken.update(option.name, (count) => count + 1, ifAbsent: () => 1);
+  }
+  if (taken.length == options.length) return options;
+  return [
+    for (final option in options)
+      if (taken[option.name]! > 1)
+        SubtitleOption(
+          subtitle: option.subtitle,
+          sourceName: option.sourceName,
+          index: option.index,
+          ambiguousName: true,
+        )
+      else
+        option,
   ];
 }

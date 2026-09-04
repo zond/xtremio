@@ -609,7 +609,11 @@ connection.
   offered it plus whatever the file itself is worth calling: the addon's
   `label` if it sent one, else its release group (`DFN`, or `DFN BluRay`
   with the format), else its `subtitleFileName` cleaned up into words,
-  else its `movieReleaseName`, and only then `Option N`. Those come from
+  else its `movieReleaseName`, and only then `Option N`. A derived name
+  only earns its place by differing from its neighbours, and an addon
+  repeats itself -- all three Czech files OpenSubtitles answers for The
+  Godfather are named `1.srt` -- so any name two files of one language
+  both derive gets its position back on the end (`1 (2)`). Those come from
   the addon's own properties the pinned stremio-core keeps
   (`SubtitleInfo` in `lib/core/state/player.dart`); OpenSubtitles v3
   sends no label, so before that pin fifteen English uploads were fifteen

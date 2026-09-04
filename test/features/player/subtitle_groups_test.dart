@@ -162,6 +162,77 @@ void main() {
     expect(nameOf(const {}), 'Option 1');
   });
 
+  test('two uploads the addon named alike are still told apart', () {
+    // OpenSubtitles answers The Godfather with three Czech files whose
+    // `subtitleFileName` is `1.srt` for all three, and Breaking Bad with
+    // three Romanian `101`s. Three rows reading `1` are worse than the
+    // `Option N` they replaced, so the position goes back on.
+    final groups = groupSubtitlesByLanguage([
+      for (var i = 1; i <= 3; i++)
+        source(
+          'cze',
+          'https://subs/cs$i.srt',
+          properties: const {'subtitleFileName': '1.srt'},
+        ),
+      // A language whose names already differ is left alone.
+      source(
+        'eng',
+        'https://subs/en1.srt',
+        properties: const {'releaseGroup': 'DFN'},
+      ),
+      source(
+        'eng',
+        'https://subs/en2.srt',
+        properties: const {'releaseGroup': 'ORPHEUS'},
+      ),
+    ]);
+    expect(groups.first.options.map((o) => o.name), [
+      '1 (1)',
+      '1 (2)',
+      '1 (3)',
+    ]);
+    expect(groups.last.options.map((o) => o.name), ['DFN', 'ORPHEUS']);
+    // It is per language, not across the menu: the same name in another
+    // language is not a collision, because it is not another row's
+    // neighbour.
+    final across = groupSubtitlesByLanguage([
+      source(
+        'cze',
+        'https://subs/cs1.srt',
+        properties: const {'subtitleFileName': '1.srt'},
+      ),
+      source(
+        'pol',
+        'https://subs/pl1.srt',
+        properties: const {'subtitleFileName': '1.srt'},
+      ),
+    ]);
+    expect(across.map((g) => g.options.single.name), ['1', '1']);
+    // Only some of a language's names repeating marks only those.
+    final partial = groupSubtitlesByLanguage([
+      source(
+        'eng',
+        'https://subs/en1.srt',
+        properties: const {'releaseGroup': 'DFN'},
+      ),
+      source(
+        'eng',
+        'https://subs/en2.srt',
+        properties: const {'releaseGroup': 'DFN'},
+      ),
+      source(
+        'eng',
+        'https://subs/en3.srt',
+        properties: const {'releaseGroup': 'ORPHEUS'},
+      ),
+    ]);
+    expect(partial.single.options.map((o) => o.name), [
+      'DFN (1)',
+      'DFN (2)',
+      'ORPHEUS',
+    ]);
+  });
+
   test('cleans a filename into something a menu row can show', () {
     // The directory, the extension and the dots and underscores a release
     // name is written with all go.
