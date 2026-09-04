@@ -209,18 +209,19 @@ void main() {
       expect(MediaQuery.paddingOf(pushed), EdgeInsets.zero);
     });
 
-    testWidgets('Details keeps its app bar out of the band', (tester) async {
+    testWidgets('Details keeps its app bar out of the band and its backdrop '
+        'under it', (tester) async {
       useScreen(tester, tvSize);
       await pumpDetails(tester, device: tv);
 
+      // The artwork is the one thing on this screen that is *meant* to be
+      // cropped, so the scaffold fills the panel and the band is held
+      // clear inside it -- the same split the player makes between its
+      // picture and its controls.
+      expect(tester.getRect(find.byType(Scaffold)), Offset.zero & tvSize);
       expect(
-        tester.getRect(find.byType(Scaffold)),
-        Rect.fromLTRB(
-          tvSize.width * 0.05,
-          tvSize.height * 0.05,
-          tvSize.width * 0.95,
-          tvSize.height * 0.95,
-        ),
+        tester.getTopLeft(find.byType(AppBar)),
+        Offset(tvSize.width * 0.05, tvSize.height * 0.05),
       );
     });
 

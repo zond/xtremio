@@ -21,6 +21,7 @@ import '../downloads/remove_download_dialog.dart';
 import '../player/player_screen.dart';
 import 'stream_facts.dart';
 import 'stream_sources.dart';
+import 'tv_backdrop.dart';
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
 /// shows the meta item, its episodes (for a series) and every stream the
@@ -678,50 +679,56 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         ),
       );
     }
-    return TvSafeArea(
-      child: Scaffold(
-        body: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide =
-                constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
-            _isWide = isWide;
-            final info = _infoSlivers(state, meta, isWide: isWide);
-            final streams = _streamSlivers(state, meta);
-            if (!isWide) {
-              return CustomScrollView(
-                controller: _narrowScroll,
-                slivers: [...info, ...streams],
-              );
-            }
-            final paneWidth = (constraints.maxWidth * 0.38).clamp(320.0, 480.0);
-            final isTv = DeviceScope.isTv(context);
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _tvGroup(isTv, CustomScrollView(slivers: info)),
-                ),
-                const VerticalDivider(width: 1),
-                SizedBox(
-                  width: paneWidth,
-                  child: _tvGroup(
-                    isTv,
-                    CustomScrollView(
-                      slivers: [
-                        SliverPadding(
-                          padding: EdgeInsets.only(
-                            top: MediaQuery.paddingOf(context).top + 8,
-                          ),
-                        ),
-                        ...streams,
-                      ],
+    final isTv = DeviceScope.isTv(context);
+    final body = LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
+        _isWide = isWide;
+        final info = _infoSlivers(state, meta, isWide: isWide, isTv: isTv);
+        final streams = _streamSlivers(state, meta);
+        if (!isWide) {
+          return CustomScrollView(
+            controller: _narrowScroll,
+            slivers: [...info, ...streams],
+          );
+        }
+        final paneWidth = (constraints.maxWidth * 0.38).clamp(320.0, 480.0);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _tvGroup(isTv, CustomScrollView(slivers: info))),
+            const VerticalDivider(width: 1),
+            SizedBox(
+              width: paneWidth,
+              child: _tvGroup(
+                isTv,
+                CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      padding: EdgeInsets.only(
+                        top: MediaQuery.paddingOf(context).top + 8,
+                      ),
                     ),
-                  ),
+                    ...streams,
+                  ],
                 ),
-              ],
-            );
-          },
-        ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    if (!isTv) return TvSafeArea(child: Scaffold(body: body));
+    // On a television the artwork fills the panel and the content keeps
+    // clear of the overscan band inside it, which is why this is a plain
+    // `SafeArea` rather than [TvSafeArea]: that one paints the band with
+    // the scaffold's own colour, which would cover the backdrop with a
+    // strip of ground at every edge.
+    return Scaffold(
+      body: TvBackdrop(
+        background: meta.background,
+        poster: meta.poster,
+        child: SafeArea(child: body),
       ),
     );
   }
@@ -731,10 +738,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       isTv ? FocusTraversalGroup(child: child) : child;
 
   /// Hero, facts and (for a series) the season selector and episode list.
+  ///
+  /// On a television the hero is gone: [TvBackdrop] is already drawing the
+  /// artwork across the whole panel, so a second copy of it inside a
+  /// collapsing app bar would be the same picture twice. What is left of
+  /// the bar is the way back and the way to the downloads list, floating
+  /// over the backdrop.
   List<Widget> _infoSlivers(
     MetaDetailsState state,
     MetaItem meta, {
     required bool isWide,
+    required bool isTv,
   }) {
     final seasons = meta.seasons;
     final season =
@@ -746,8 +760,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final now = DateTime.now().toUtc();
     return [
       SliverAppBar(
-        pinned: true,
-        expandedHeight: isWide ? 300 : 220,
+        pinned: !isTv,
+        expandedHeight: isTv ? null : (isWide ? 300 : 220),
+        backgroundColor: isTv ? Colors.transparent : null,
+        scrolledUnderElevation: isTv ? 0 : null,
         actions: [
           if (_downloadsClient != null)
             IconButton(
@@ -756,10 +772,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               icon: const Icon(Icons.download_outlined),
             ),
         ],
-        flexibleSpace: FlexibleSpaceBar(
-          title: Text(meta.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-          background: _Backdrop(url: meta.background, logo: meta.logo),
-        ),
+        flexibleSpace: isTv
+            ? null
+            : FlexibleSpaceBar(
+                title: Text(
+                  meta.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                background: _Backdrop(url: meta.background, logo: meta.logo),
+              ),
       ),
       SliverToBoxAdapter(
         child: _MetaHeader(
