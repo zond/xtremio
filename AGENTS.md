@@ -205,8 +205,10 @@ test; see README, *Subtitles*.
   correction in force in it could only be swapped for its reciprocal by
   the button that *is* drawn, and never taken back to 1.0 at all. It is
   reachable without anything remembering anything, because the rate is
-  one bounded read taken when the media loads and a press made while it
-  says nothing can land in the direction the answer then rules out.
+  observed rather than read -- mpv reports `container-fps` when it has
+  probed the container, which on a torrent is well after playback began
+  -- and a press made while it still says nothing can land in the
+  direction the answer then rules out.
 - **The speed is a toggle, so a second press is exactly 1.0.**
   `SubtitleTiming.speedDirection` is a direction and not a count of
   presses, which is what makes that structural rather than arithmetic --
@@ -326,13 +328,22 @@ test; see README, *Subtitles*.
   The row a direction key walks may hold one button rather than two, so
   a press with nowhere to go has to stay in the panel rather than fall
   through to the seek bar.
-- **Only what the container declares is a rate.** `videoFrameRate` reads
-  `container-fps` and nothing else. `estimated-vf-fps` is the obvious
-  second choice and is a *measurement* -- ten frame durations averaged,
-  read the moment the media loads, which mpv's own manual calls unstable
+- **Only what the container declares is a rate, and it is observed
+  rather than asked for.** `videoFrameRate` is an `observeProperty` on
+  `container-fps` and nothing else, because when mpv knows the rate is
+  not ours to choose: it learns it as the demuxer probes the container,
+  and a torrent's container is only there once the pieces holding it
+  have arrived. A read taken at any fixed moment calls such a video's
+  rate unknown for the whole film, which is what offered both speed
+  buttons for a 23.976 episode. A late answer may point the button, and
+  that is safe only because of the rule above -- a correction in force
+  keeps its own button -- so do not weaken that one.
+  `estimated-vf-fps` is the obvious second choice and is a *measurement*
+  -- ten frame durations averaged, which mpv's own manual calls unstable
   for the imprecise timestamps a torrent stream is full of. It would
   point the speed button off a number the stall invented, confidently
-  and the wrong way. Do not add a fallback.
+  and the wrong way, and observed it would do so on every stall. Do not
+  add a fallback: there is one property, not a list of them.
 - **An unknown rate decides nothing.** Cast, offline, a fake, a
   container that says nothing, a read that threw: all of it is null, and
   null means the panel offers both directions. Never substitute a

@@ -661,10 +661,16 @@ connection.
   25 against 23.976 is 1.0427 (`SubtitleTiming.speedStep`, written
   through `PlaybackEngine.setSubtitleSpeed`), and the reciprocal is the
   mistake to make here, since it doubles the drift rather than removing
-  it. The video's rate is one read of libmpv's `container-fps` through
-  `PlaybackEngine.videoFrameRate`, taken once when the media loads -- the
-  stats OSD polls the same property, but only while it is on screen, and
-  this has to be known whether or not anyone ever opens it. Only what the
+  it. The video's rate comes from an observation of libmpv's
+  `container-fps` through `PlaybackEngine.videoFrameRate`, which reports
+  whenever mpv works the rate out: the demuxer has to probe the container
+  first, and a torrent's container is only there once the pieces holding
+  it have arrived, so on a thin swarm the answer legitimately lands
+  minutes into the film. A read taken at a fixed moment after the media
+  loaded took that silence for "no rate" and left the panel offering both
+  buttons for the rest of the episode. The stats OSD polls the same
+  property, but only while it is on screen, and this has to be known
+  whether or not anyone ever opens it. Only what the
   container *declares* is trusted: `estimated-vf-fps` is an average of
   the last ten frame durations, which mpv itself calls unstable for the
   imprecise timestamps a torrent stream is full of, and a stall rendering
@@ -714,9 +720,10 @@ connection.
   toggle kept reachable: a correction already in force keeps its own
   button whatever the video says, because a gap cannot be pressed and
   the button that *is* drawn would swap the direction for its reciprocal
-  rather than reach 1.0. The rate is one bounded read taken when the
-  media loads, so a press made before it lands can be in the direction
-  the answer then rules out. Reset goes back to untouched, 1.0 and 0.0,
+  rather than reach 1.0. The rate arrives when mpv has probed the
+  container and not before, so a press made while it still says nothing
+  can be in the direction the answer then rules out. Reset goes back to
+  untouched, 1.0 and 0.0,
   because with nothing else writing either property that is what "undo
   what I did" means. What the viewer fixes is **remembered, keyed on what caused
   it** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`, under the
