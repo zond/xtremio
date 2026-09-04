@@ -784,11 +784,13 @@ connection.
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`6abb25d`: generated
+  features, `zond/stream-server` at a fixed rev (`9e0c9f4`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
   counts, the buffer profiles behind `?buffer=`, cache usage and
-  on-demand cleaning, the piece-aligned start-up window that follows the
+  on-demand cleaning, a DHT bootstrap list trimmed to the hosts that
+  actually answer and resolved over DNS-over-HTTPS when the system
+  resolver will not, the piece-aligned start-up window that follows the
   reader plus the `pieceLength` it is measured in, `inFlightPiece`, the
   byte progress of the one piece the reader is sitting on, and
   `ServerHandle::dht_status` for the diagnostics screen). To bump: change the rev, `cargo update -p <crate>`, run
