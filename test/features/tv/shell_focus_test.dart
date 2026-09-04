@@ -355,6 +355,41 @@ void main() {
     expect(focusIn<NavigationRail>(), isTrue);
   });
 
+  testWidgets('right from a full search field reaches Clear, and it presses', (
+    tester,
+  ) async {
+    useScreen(tester, const Size(1280, 720));
+    final core = fakeCore();
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+    await focusSearchDestination(tester);
+    await press(tester, LogicalKeyboardKey.select);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<TvTextField>(), isTrue);
+
+    answerTextEntry('night of the living dead');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settleTextEntry(tester);
+    core.setState(CoreField.search, loadSearchFixture());
+    await tester.pumpAndSettle();
+    expect(find.widgetWithIcon(IconButton, Icons.close), findsOneWidget);
+
+    // The button is beside the field, so the D-pad walks to it, and it is
+    // outside the field's RemotePress, so select is its own press rather
+    // than another trip to the typing screen.
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusIn<IconButton>(), isTrue);
+
+    final calls = answerTextEntry('never asked for');
+    await press(tester, LogicalKeyboardKey.select);
+    expect(calls, isEmpty);
+    expect(find.widgetWithIcon(IconButton, Icons.close), findsNothing);
+    expect(
+      tester.widget<TvTextField>(find.byType(TvTextField)).controller.text,
+      isEmpty,
+    );
+  });
+
   testWidgets('down from the search field goes to the results', (tester) async {
     useScreen(tester, const Size(1280, 720));
     final core = fakeCore();

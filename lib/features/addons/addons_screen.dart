@@ -594,18 +594,12 @@ class _CommunityTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
           child: TvTextField(
             controller: search,
-            decoration: InputDecoration(
+            onClear: search.clear,
+            decoration: const InputDecoration(
               hintText: 'Search addons',
-              prefixIcon: const Icon(Icons.search),
+              prefixIcon: Icon(Icons.search),
               isDense: true,
-              border: const OutlineInputBorder(),
-              suffixIcon: search.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear',
-                      icon: const Icon(Icons.close),
-                      onPressed: search.clear,
-                    ),
+              border: OutlineInputBorder(),
             ),
           ),
         ),

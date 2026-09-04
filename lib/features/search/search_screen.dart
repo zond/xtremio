@@ -293,17 +293,11 @@ class _SearchField extends StatelessWidget {
       textInputAction: TextInputAction.search,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
-      decoration: InputDecoration(
+      onClear: onClear,
+      decoration: const InputDecoration(
         hintText: 'Search',
         border: InputBorder.none,
-        prefixIcon: const Icon(Icons.search),
-        suffixIcon: controller.text.isEmpty
-            ? null
-            : IconButton(
-                tooltip: 'Clear',
-                icon: const Icon(Icons.close),
-                onPressed: onClear,
-              ),
+        prefixIcon: Icon(Icons.search),
       ),
     );
   }

@@ -35,6 +35,7 @@ class TvTextField extends StatefulWidget {
     this.textInputAction,
     this.onChanged,
     this.onSubmitted,
+    this.onClear,
   });
 
   final TextEditingController controller;
@@ -51,6 +52,19 @@ class TvTextField extends StatefulWidget {
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
+
+  /// Empties the field, from a button at its trailing edge that shows only
+  /// while there is something to clear.
+  ///
+  /// Off a television that button is the decoration's `suffixIcon`, drawn
+  /// inside the box, where it has always been. On one it sits beside the
+  /// box instead, as a control of its own, because inside it is neither
+  /// reachable nor pressable: the field takes focus as a whole, so
+  /// directional traversal has nothing to the right of the text to step
+  /// to, and [RemotePress] takes select for the typing screen before any
+  /// descendant of it can. A button drawn where a remote cannot go is
+  /// worse than no button.
+  final VoidCallback? onClear;
 
   /// What the text-entry screen is headed with: whatever this field is
   /// already labelled, so nothing has to be named twice.
@@ -90,13 +104,26 @@ class _TvTextFieldState extends State<TvTextField> {
     widget.onSubmitted?.call(typed);
   }
 
+  /// The Clear button, or nothing when there is nothing to clear.
+  Widget? _clearButton() {
+    final onClear = widget.onClear;
+    if (onClear == null || !widget.enabled || widget.controller.text.isEmpty) {
+      return null;
+    }
+    return IconButton(
+      tooltip: 'Clear',
+      icon: const Icon(Icons.close),
+      onPressed: onClear,
+    );
+  }
+
   @override
   Widget build(BuildContext context) =>
       DeviceScope.isTv(context) ? _buildTv(context) : _buildField();
 
   Widget _buildField() => TextField(
     controller: widget.controller,
-    decoration: widget.decoration,
+    decoration: widget.decoration.copyWith(suffixIcon: _clearButton()),
     enabled: widget.enabled,
     autofocus: widget.autofocus,
     keyboardType: widget.kind.keyboardType,
@@ -111,22 +138,22 @@ class _TvTextFieldState extends State<TvTextField> {
   Widget _buildTv(BuildContext context) {
     final theme = Theme.of(context);
     final onTap = widget.enabled ? _edit : null;
-    return RemotePress(
-      onTap: onTap,
-      child: InkWell(
-        onTap: onTap,
-        autofocus: widget.autofocus,
-        focusColor: theme.colorScheme.primary.withValues(
-          alpha: TvTextField.focusFill,
-        ),
-        onFocusChange: (focused) {
-          if (mounted) setState(() => _focused = focused);
-        },
-        child: ListenableBuilder(
-          listenable: widget.controller,
-          builder: (context, _) {
-            final text = widget.controller.text;
-            return InputDecorator(
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) {
+        final text = widget.controller.text;
+        final field = RemotePress(
+          onTap: onTap,
+          child: InkWell(
+            onTap: onTap,
+            autofocus: widget.autofocus,
+            focusColor: theme.colorScheme.primary.withValues(
+              alpha: TvTextField.focusFill,
+            ),
+            onFocusChange: (focused) {
+              if (mounted) setState(() => _focused = focused);
+            },
+            child: InputDecorator(
               decoration: widget.decoration.copyWith(enabled: widget.enabled),
               isFocused: _focused,
               isEmpty: text.isEmpty,
@@ -138,10 +165,21 @@ class _TvTextFieldState extends State<TvTextField> {
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.titleMedium,
               ),
-            );
-          },
-        ),
-      ),
+            ),
+          ),
+        );
+        // Beside the field, not inside it: its own focus stop, to the right
+        // of the one the field is, and outside the [RemotePress] that would
+        // otherwise turn select on it into the typing screen. The row is
+        // there whether or not the button is, so that a first character
+        // arriving does not reparent the field and take its focus with it.
+        return Row(
+          children: [
+            Expanded(child: field),
+            _clearButton() ?? const SizedBox.shrink(),
+          ],
+        );
+      },
     );
   }
 }
