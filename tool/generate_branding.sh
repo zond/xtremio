@@ -137,17 +137,37 @@ for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
     "$RES/mipmap-$d/ic_launcher_round.png"
 done
 
+# ---------------------------------------------------------------- lockup ----
+# The wordmark uses the mark itself as the x in "xtremio", so the X is scaled
+# to the font's x-height (with the overshoot a pointed glyph wants) and sat on
+# the same baseline as the remaining letters.
+lockup() { # $1=pointsize $2=out (transparent png)
+  local ps=$1 out=$2 xh s ink top gap tx base canvas marky
+  xh=$(magick -font "$FONT" -pointsize "$ps" label:x -trim -format "%h" info:)
+  # the X ink fills 64 of the 108 grid, so the raster has to be scaled past the
+  # height we actually want to see
+  s=$(awk -v x="$xh" 'BEGIN{printf "%d", x * 1.06 * 108 / 64}')
+  ink=$(awk -v s="$s" 'BEGIN{printf "%d", s * 64 / 108}')
+  top=$(awk -v s="$s" 'BEGIN{printf "%d", s * 22 / 108}')
+  gap=$(awk -v x="$xh" 'BEGIN{printf "%d", x * 0.20}')
+  base=$((ps * 3))
+  tx=$((60 + ink + gap))
+  canvas=$((tx + ps * 6))
+  marky=$((base - top - ink))
+  cut_out "$s" "$OUT/lockup_mark.png"
+  magick -size "${canvas}x$((base + ps))" xc:none \
+    "$OUT/lockup_mark.png" -geometry "+60+${marky}" -composite \
+    -font "$FONT" -pointsize "$ps" -fill "$INK" -gravity none \
+    -annotate "+${tx}+${base}" "tremio" \
+    -trim +repage "$out"
+}
+lockup 140 "$OUT/lockup.png"
+
 # ------------------------------------------------------------- TV banner ----
 # The leanback launcher shows a 320x180 xhdpi banner instead of the square icon.
-# Built loose, then trimmed and centred, so the lockup sits in the middle of
-# the banner whatever the wordmark measures at this point size.
-cut_out 104 "$OUT/mark104.png"
-magick -size 420x180 xc:none \
-  "$OUT/mark104.png" -gravity west -geometry +0+0 -composite \
-  -font "$FONT" -pointsize 46 -fill "$INK" -gravity west -annotate +118-2 "xtremio" \
-  -trim +repage "$OUT/banner_lockup.png"
-magick -size 320x180 "xc:$BG" "$OUT/banner_lockup.png" \
-  -gravity center -composite "$RES/drawable-xhdpi/banner.png"
+magick -size 320x180 "xc:$BG" \
+  \( "$OUT/lockup.png" -resize 252x104 \) -gravity center -composite \
+  "$RES/drawable-xhdpi/banner.png"
 
 # ---------------------------------------------------------- desktop / iOS ----
 for s in 16 32 64 128 256 512 1024; do
@@ -182,11 +202,7 @@ render_flat 512 linux/com.zond.xtremio.png
 
 # ------------------------------------------------------------------ logo ----
 # Horizontal lockup for the README and anywhere the name needs to appear.
-cut_out 232 "$OUT/mark232.png"
-magick -size 1400x360 xc:none \
-  "$OUT/mark232.png" -gravity west -geometry +0+0 -composite \
-  -font "$FONT" -pointsize 140 -fill "$INK" -gravity west -annotate +290-6 "xtremio" \
-  -trim +repage -bordercolor none -border 56 \
+magick "$OUT/lockup.png" -bordercolor none -border 56 \
   -background "$BG" -alpha remove -alpha off assets/branding/xtremio-logo.png
 
 echo "brand assets regenerated"
