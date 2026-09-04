@@ -383,6 +383,20 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     let refused = json(&downloads_open("tt-nothing:tt-nothing".into())?);
     assert_eq!(refused["reason"], "unknown", "{refused}");
 
+    // Unpin the file at the server *before* corrupting the stored path: the
+    // background ticker is still running (tt-missing is unfinished) and
+    // calls `refresh` about once a second, which folds the server's live
+    // info back onto every entry that matches its (infoHash, fileIdx) --
+    // including this one, overwriting whatever path is written here with
+    // the real one the engine still resolves. Whether that tick lands in
+    // the gap between this write and the `downloads_open` below is exactly
+    // the kind of timing the CI runner and this machine disagreed on. With
+    // no pin left for (info_hash, have_idx), `refresh` finds nothing to
+    // match and never touches this entry again, so the corruption survives
+    // on every runner, not just the ones slow enough to miss a tick.
+    // `deleteFiles: false`, so `have.bin` stays on disk for the assertions
+    // below it and the re-add further down.
+    xtremio_core::server::unpin_download(&info_hash, have_idx, false)?;
     xtremio_core::downloads::update(|registry| {
         let entry = registry
             .items
@@ -392,6 +406,14 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         entry.path = Some(managed.join("unplugged.bin").to_string_lossy().into_owned());
         Ok(())
     })?;
+    // The corrupted path is what has to make this a refusal, not merely the
+    // absence of a pin: the real file is still on disk and still a `state:
+    // complete` entry away from playing, so if `downloads_open` somehow
+    // still resolved `have.bin` here, this would pass for the wrong reason.
+    assert!(
+        !managed.join("unplugged.bin").exists(),
+        "the substituted path must really not exist"
+    );
     let refused = json(&downloads_open("tt-have:tt-have".into())?);
     assert_eq!(refused["ok"], false, "{refused}");
     assert_eq!(refused["reason"], "missing", "{refused}");
