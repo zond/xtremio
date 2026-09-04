@@ -29,8 +29,8 @@ void main() {
     const client = RustPrefsClient();
     expect(await client.getAll(), isEmpty);
 
-    await client.set(AppPrefs.streamsFlatKey, true);
-    expect(await client.getAll(), {AppPrefs.streamsFlatKey: true});
+    await client.set(AppPrefs.streamsSectionedKey, false);
+    expect(await client.getAll(), {AppPrefs.streamsSectionedKey: false});
     expect(
       File('${tmp.path}/support/core/xtremio_prefs.json').existsSync(),
       isTrue,
@@ -40,9 +40,9 @@ void main() {
     final prefs = AppPrefs(client: client);
     addTearDown(prefs.dispose);
     await prefs.load();
-    expect(prefs.streamsFlat, isTrue);
+    expect(prefs.streamsSectioned, isFalse);
 
-    await client.set(AppPrefs.streamsFlatKey, null);
+    await client.set(AppPrefs.streamsSectionedKey, null);
     expect(await client.getAll(), isEmpty);
   });
 }

@@ -70,30 +70,70 @@ class AppPrefs extends ChangeNotifier {
   /// Where the values are read from and written to; null persists nothing.
   final PrefsClient? client;
 
-  /// The `streamsFlat` key: whether the Details screen lists every addon's
-  /// streams together, in a collapsible section per resolution, instead of
-  /// a section per addon. False — grouped by addon, the engine's own order
-  /// — is the default.
-  static const String streamsFlatKey = 'streamsFlat';
+  /// The `streamsSectioned` key: whether the Details screen lists every
+  /// addon's streams together, cut into a collapsible section per
+  /// resolution, instead of one section per addon. True — sectioned — is
+  /// the default: a fresh install has never chosen, and a fresh install is
+  /// what this flag now defaults to showing.
+  ///
+  /// This used to be named `streamsFlat`, back when grouped by addon was
+  /// the default and this flag meant "cut across every addon instead"; the
+  /// stored key changed with the rename so the default's own meaning could
+  /// change without also flipping what an old install's saved `false`
+  /// meant. [load] still reads that older key as a fallback so nobody's
+  /// choice is lost by the rename — see there.
+  static const String streamsSectionedKey = 'streamsSectioned';
+
+  /// The boolean an install from before the rename may still have under
+  /// its old name, `streamsFlat`. [load] reads it only when
+  /// [streamsSectionedKey] itself is unset, and nothing here ever writes
+  /// to it again — the first toggle after an upgrade moves the choice to
+  /// the new key and the old one is left stale.
+  static const String legacyStreamsFlatKey = 'streamsFlat';
 
   /// The `streamsOrder` key: what order the streams inside one resolution
   /// section of that list are in (see [StreamOrder]). Global for the same
-  /// reason [streamsFlatKey] is — an order chosen on one title is the order
-  /// the next title comes up in.
+  /// reason [streamsSectionedKey] is — an order chosen on one title is the
+  /// order the next title comes up in.
   static const String streamsOrderKey = 'streamsOrder';
+
+  /// The `openStreamSections` key: which resolution sections of the
+  /// sectioned sources list are expanded, as a list of each section's
+  /// stored label (a resolution's own [StreamResolution.label], or
+  /// `'unknown'` for the section nothing could be read a resolution from —
+  /// see `_sectionStorageLabel` in `meta_details_screen.dart`). Global and
+  /// sticky the same way the layout and the order are: a section opened on
+  /// one title is open on the next, and on the next restart.
+  ///
+  /// Every section starts collapsed until the viewer opens one — an empty
+  /// list is a real, deliberately-chosen value ("collapse everything"),
+  /// not "nothing chosen yet", so [load] keeps that apart from a missing
+  /// key the same way it does for [streamsSectionedKey]. See
+  /// [openStreamSections].
+  static const String openStreamSectionsKey = 'openStreamSections';
 
   /// The `bufferAhead` key: how far ahead playback buffers by default (see
   /// [BufferAhead]). The player takes this unless the viewer overrides it
   /// for the playback on screen.
   static const String bufferAheadKey = 'bufferAhead';
 
-  bool _streamsFlat = false;
+  bool _streamsSectioned = true;
 
-  bool get streamsFlat => _streamsFlat;
+  bool get streamsSectioned => _streamsSectioned;
 
   StreamOrder _streamsOrder = StreamOrder.peersPerSize;
 
   StreamOrder get streamsOrder => _streamsOrder;
+
+  /// The stored labels of the resolution sections currently expanded, or
+  /// null when nothing has ever been chosen — a fresh install, or a load
+  /// that has not run yet. The sources list also draws null and an empty
+  /// set the same way (every section collapsed), but the two are not the
+  /// same stored value: once a viewer has collapsed everything on purpose,
+  /// that empty set has to keep reading back as "on purpose", including
+  /// across a restart, never fall through to some other default.
+  Set<String>? get openStreamSections => _openStreamSections;
+  Set<String>? _openStreamSections;
 
   BufferAhead _bufferAhead = BufferAhead.normal;
 
@@ -115,10 +155,22 @@ class AppPrefs extends ChangeNotifier {
       return;
     }
     var changed = false;
-    final flat = stored[streamsFlatKey];
-    if (flat is bool && flat != _streamsFlat) {
-      _streamsFlat = flat;
-      changed = true;
+    final sectioned = stored[streamsSectionedKey];
+    if (sectioned is bool) {
+      if (sectioned != _streamsSectioned) {
+        _streamsSectioned = sectioned;
+        changed = true;
+      }
+    } else {
+      // No choice under the current name: fall back to the name an older
+      // install may have written under, where false meant grouped and
+      // true meant this same sectioned layout, just called "flat". Read
+      // once, as a migration, and never written back here.
+      final legacy = stored[legacyStreamsFlatKey];
+      if (legacy is bool && legacy != _streamsSectioned) {
+        _streamsSectioned = legacy;
+        changed = true;
+      }
     }
     // An unparseable value -- a name a newer build wrote, a number -- reads
     // as "not set", which is the default, not a failure.
@@ -126,6 +178,17 @@ class AppPrefs extends ChangeNotifier {
     if (order != null && order != _streamsOrder) {
       _streamsOrder = order;
       changed = true;
+    }
+    final openSections = stored[openStreamSectionsKey];
+    if (openSections is List) {
+      final parsed = <String>{
+        for (final entry in openSections)
+          if (entry is String) entry,
+      };
+      if (!setEquals(parsed, _openStreamSections)) {
+        _openStreamSections = parsed;
+        changed = true;
+      }
     }
     final buffer = BufferAhead.parse(stored[bufferAheadKey]);
     if (buffer != null && buffer != _bufferAhead) {
@@ -135,11 +198,11 @@ class AppPrefs extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  Future<void> setStreamsFlat(bool value) async {
-    if (_streamsFlat == value) return;
-    _streamsFlat = value;
+  Future<void> setStreamsSectioned(bool value) async {
+    if (_streamsSectioned == value) return;
+    _streamsSectioned = value;
     notifyListeners();
-    await _write(streamsFlatKey, value);
+    await _write(streamsSectionedKey, value);
   }
 
   Future<void> setStreamsOrder(StreamOrder value) async {
@@ -147,6 +210,13 @@ class AppPrefs extends ChangeNotifier {
     _streamsOrder = value;
     notifyListeners();
     await _write(streamsOrderKey, value.stored);
+  }
+
+  Future<void> setOpenStreamSections(Set<String> value) async {
+    if (setEquals(_openStreamSections, value)) return;
+    _openStreamSections = value;
+    notifyListeners();
+    await _write(openStreamSectionsKey, value.toList());
   }
 
   Future<void> setBufferAhead(BufferAhead value) async {
