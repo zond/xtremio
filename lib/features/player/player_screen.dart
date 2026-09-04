@@ -1606,6 +1606,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
               subtitlesMatchingFrameRate(
                 state?.externalSubtitleSources ?? const [],
                 videoFrameRate: _videoFrameRate,
+                // Never the file that is playing: the menu is on offer
+                // before the rate lands, so a pick can predate it.
+                activeId: tracks.activeSubtitleId,
               ),
               addonName: _subtitleAddonName,
             ),

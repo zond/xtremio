@@ -620,7 +620,11 @@ connection.
   so a remote reaches it by moving down (directional traversal skips a node
   inside the focused one's rect). Whichever file is playing is what its
   language row shows as selected and what it re-applies, so a pick two
-  rows deep survives the list being rebuilt when a slow addon answers.
+  rows deep survives the list being rebuilt when a slow addon answers --
+  and survives the frame rate arriving, because the file that is playing
+  is exempt from the filter. The menu is reachable before the media
+  loads, so a pick can predate the rate; dropping it would leave every
+  row unselected, Off included, with subtitles still on screen.
   Which track is active comes from mpv's
   own `sid`/`aid` (observed through `NativePlayer.observeProperty`), so a
   default or forced track mpv picked by itself shows as selected too —

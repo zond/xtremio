@@ -159,12 +159,18 @@ const List<double> subtitleFrameRateRatios = [1, 1.25, 2, 2.5];
 /// - A language that filtering would empty keeps every one of its files.
 ///   Losing every Polish subtitle because the container lied about its
 ///   rate is worse than offering one that drifts.
+/// - The file named by [activeId] is never dropped. The rate can arrive
+///   after a pick -- the menu is reachable from the moment the controls
+///   are -- and taking the playing file out of the list would leave the
+///   menu with nothing selected while its subtitles are on screen, and no
+///   row anywhere to turn them off from or go back to.
 ///
 /// Embedded tracks never come through here: they are part of the file and
 /// declare no rate of their own.
 List<SubtitleSource> subtitlesMatchingFrameRate(
   Iterable<SubtitleSource> sources, {
   required double? videoFrameRate,
+  String? activeId,
 }) {
   final all = sources.toList();
   if (videoFrameRate == null) return all;
@@ -181,7 +187,11 @@ List<SubtitleSource> subtitlesMatchingFrameRate(
   };
   return [
     for (var i = 0; i < all.length; i++)
+      // The exemption is read after `answered`, not folded into it: a
+      // language whose only files all mismatch keeps all of them whether
+      // or not one of them happens to be playing.
       if (matches[i] ||
+          all[i].subtitle.url.toString() == activeId ||
           !answered.contains(
             _languageLabel(all[i].subtitle.lang).toLowerCase(),
           ))

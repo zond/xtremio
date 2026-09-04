@@ -657,6 +657,67 @@ void main() {
     ]);
   });
 
+  testWidgets('a pick made before the rate landed survives it', (tester) async {
+    useWideViewport(tester);
+    // The Subtitles button works from the moment the controls do, which
+    // is before the media loads and the rate is read. Picking the 23.980
+    // file against what turns out to be a 25 fps container must not take
+    // that file off the menu: the alternative is subtitles on screen with
+    // every row unselected, Off included, and no row to turn them off.
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.frameRate = 25,
+    );
+    harness.fixture['subtitlePreference'] = null;
+    harness.fixture['subtitles'] = [
+      subtitlesResponse([
+        {
+          'id': 'en-1',
+          'lang': 'eng',
+          'url': 'https://subs.example.org/en-25.srt',
+          'fpsMilli': 25000,
+          'releaseGroup': 'PAL',
+        },
+        {
+          'id': 'en-2',
+          'lang': 'eng',
+          'url': 'https://subs.example.org/en-23980.srt',
+          'fpsMilli': 23980,
+          'releaseGroup': 'ROUNDED',
+        },
+      ]),
+    ];
+    await harness.pump(tester);
+    final engine = harness.engine;
+    expect(engine.videoFrameRateCalls, 0);
+
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1 other English file'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ROUNDED'));
+    await tester.pumpAndSettle();
+    expect(engine.externalSubtitles, [
+      (Uri.parse('https://subs.example.org/en-23980.srt'), 'English', 'eng'),
+    ]);
+
+    // Now the container answers 25, which says that file is the wrong
+    // cut -- but it is the one playing.
+    engine.emitDuration(const Duration(minutes: 47));
+    await pumpEvents(tester);
+    expect(engine.videoFrameRateCalls, 1);
+
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    // The English row is selected, and it names the file that is on.
+    expect(find.text('ROUNDED · subs.example.org'), findsOneWidget);
+    expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
+    await tester.tap(find.text('1 other English file'));
+    await tester.pumpAndSettle();
+    expect(find.text('ROUNDED'), findsOneWidget);
+    // The 25 fps file is still on offer; only the exemption is special.
+    expect(find.text('PAL'), findsOneWidget);
+  });
+
   testWidgets('an engine that cannot say the rate filters nothing', (
     tester,
   ) async {

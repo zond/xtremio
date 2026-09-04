@@ -16,11 +16,17 @@ void main() {
         addonBase: 'https://opensubtitles-v3.strem.io/manifest.json',
       );
 
-  /// The URLs left of [sources] against a video running at [rate].
-  List<String> kept(List<SubtitleSource> sources, double? rate) => [
+  /// The URLs left of [sources] against a video running at [rate], with
+  /// [playing] the URL of the file the engine is showing right now.
+  List<String> kept(
+    List<SubtitleSource> sources,
+    double? rate, {
+    String? playing,
+  }) => [
     for (final source in subtitlesMatchingFrameRate(
       sources,
       videoFrameRate: rate,
+      activeId: playing,
     ))
       source.subtitle.url.toString(),
   ];
@@ -111,6 +117,45 @@ void main() {
       'https://subs/text.srt',
       // A quoted rate is still a rate, and 25 against 23.976 is the wrong
       // cut whichever way the addon spelled it.
+    ]);
+  });
+
+  test('the file that is playing is never taken out from under it', () {
+    // The subtitle menu is reachable from the moment the controls are,
+    // which is before the media loads and the rate is read: a pick can
+    // predate the filter. Dropping what is playing would leave every row
+    // in the menu unselected -- Off included -- with subtitles on screen
+    // and no row to turn them off from.
+    final sources = [
+      source('eng', 'https://subs/en-23980.srt', fpsMilli: 23980),
+      source('eng', 'https://subs/en-25000.srt', fpsMilli: 25000),
+    ];
+    expect(kept(sources, 25), ['https://subs/en-25000.srt']);
+    expect(kept(sources, 25, playing: 'https://subs/en-23980.srt'), [
+      'https://subs/en-23980.srt',
+      'https://subs/en-25000.srt',
+    ]);
+    // It is an exemption for one file, not an amnesty: the others of its
+    // language go as they would have.
+    final three = [
+      ...sources,
+      source('eng', 'https://subs/en-24000.srt', fpsMilli: 24000),
+    ];
+    expect(kept(three, 25, playing: 'https://subs/en-23980.srt'), [
+      'https://subs/en-23980.srt',
+      'https://subs/en-25000.srt',
+    ]);
+    // An embedded track is the active id too, and names no file here.
+    expect(kept(sources, 25, playing: '3'), ['https://subs/en-25000.srt']);
+    // And the valve is decided before the exemption, so a language whose
+    // files all mismatch keeps all of them, playing one or not.
+    final polish = [
+      source('pol', 'https://subs/pl-23980.srt', fpsMilli: 23980),
+      source('pol', 'https://subs/pl-24000.srt', fpsMilli: 24000),
+    ];
+    expect(kept(polish, 25, playing: 'https://subs/pl-23980.srt'), [
+      'https://subs/pl-23980.srt',
+      'https://subs/pl-24000.srt',
     ]);
   });
 
