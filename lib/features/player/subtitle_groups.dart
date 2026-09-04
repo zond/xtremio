@@ -47,11 +47,15 @@ final class SubtitleOption {
   /// worse for it, and three rows reading `1` are unpickable.
   String get name => ambiguousName ? '$_derived ($index)' : _derived;
 
+  /// Every candidate goes through [_short]: they are all addon text, and
+  /// a `movieReleaseName` of a hundred and twenty characters is six lines
+  /// of one menu row and an addon name pushed off the end of the detail
+  /// line beneath it.
   String get _derived =>
-      subtitle.label ??
+      _short(subtitle.label) ??
       _release ??
       _fromFileName(subtitle.subtitleFileName) ??
-      subtitle.movieReleaseName ??
+      _short(subtitle.movieReleaseName) ??
       'Option $index';
 
   /// The release group, with the format when the addon named both
@@ -61,12 +65,22 @@ final class SubtitleOption {
     final group = subtitle.releaseGroup;
     if (group == null) return null;
     final format = subtitle.releaseFormat;
-    return format == null ? group : '$group $format';
+    return _short(format == null ? group : '$group $format');
   }
 
   /// Past this many characters a name has stopped telling two uploads
   /// apart and the row would only ellipsize it anyway.
   static const _limit = 60;
+
+  /// [text] cut to [_limit] with an ellipsis, or as it stands when it
+  /// already fits. Null in, null out.
+  static String? _short(String? text) {
+    if (text == null || text.length <= _limit) return text;
+    // Cutting a string is the one thing that can break a surrogate pair
+    // in half, and half a character is what Flutter's text layout refuses
+    // to draw -- so the cut goes back through the guard.
+    return '${wellFormedText(text.substring(0, _limit))!.trimRight()}\u2026';
+  }
 
   /// The extensions worth dropping off a subtitle filename, spelled out
   /// rather than matched as "a short trailing dot-group": a release name
@@ -88,12 +102,7 @@ final class SubtitleOption {
         .replaceFirst(_extension, '')
         .replaceAll(RegExp(r'[._\s]+'), ' ')
         .trim();
-    if (name.isEmpty) return null;
-    if (name.length <= _limit) return name;
-    // Cutting a string is the one thing that can break a surrogate pair
-    // in half, and half a character is what Flutter's text layout refuses
-    // to draw -- so the cut goes back through the guard.
-    return '${wellFormedText(name.substring(0, _limit))!.trimRight()}\u2026';
+    return name.isEmpty ? null : _short(name);
   }
 }
 

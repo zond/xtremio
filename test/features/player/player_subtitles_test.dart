@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/features/player/subtitle_groups.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/fixtures.dart';
@@ -781,6 +782,57 @@ void main() {
     expect(find.text('ROUNDED'), findsOneWidget);
     // The 25 fps file is still on offer; only the exemption is special.
     expect(find.text('PAL'), findsOneWidget);
+  });
+
+  testWidgets('a menu row stays a row, however long the addon name is', (
+    tester,
+  ) async {
+    // `movieReleaseName` is addon text and arrives as long as it likes --
+    // the real Breaking Bad answer has one of 122 characters -- and a
+    // `ListTile` grows to fit whatever it is handed. On a phone that made
+    // one alternative six lines tall, where `Option N` had been one.
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SubtitleSource named(String url, String release) => SubtitleSource(
+      SubtitleInfo(<String, dynamic>{
+        'lang': 'eng',
+        'url': url,
+        'movieReleaseName': release,
+      }),
+      addonBase: 'https://opensubtitles-v3.strem.io/manifest.json',
+    );
+    final groups = groupSubtitlesByLanguage([
+      named('https://subs/1.srt', 'Breaking Bad Season 1 Complete ${'x' * 90}'),
+      named('https://subs/2.srt', 'Breaking Bad Season 1 Pilot ${'y' * 90}'),
+    ], addonName: (_) => 'OpenSubtitles v3');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SubtitleMenu(
+            embedded: const [],
+            groups: groups,
+            activeId: null,
+            loading: false,
+            onOff: () {},
+            onEmbedded: (_) {},
+            onExternal: (_) {},
+          ),
+        ),
+      ),
+    );
+    double heightOf(Finder text) => tester
+        .getSize(find.ancestor(of: text, matching: find.byType(ListTile)))
+        .height;
+    // The language row, whose second line names the file it would apply.
+    expect(heightOf(find.text('English')), lessThan(100));
+
+    await tester.tap(find.text('1 other English file'));
+    await tester.pumpAndSettle();
+    expect(
+      heightOf(find.textContaining('Breaking Bad Season 1 Pilot')),
+      lessThan(100),
+    );
   });
 
   testWidgets('an engine that cannot say the rate filters nothing', (

@@ -619,7 +619,11 @@ connection.
   sends no label, so before that pin fifteen English uploads were fifteen
   numbers. Every one of them is addon text on its way to the screen and
   goes through `wellFormedText` (`lib/core/well_formed_text.dart`), which
-  drops the half characters Flutter's text layout refuses to draw. That
+  drops the half characters Flutter's text layout refuses to draw, and
+  every one is cut to the same 60 characters -- an addon's
+  `movieReleaseName` runs to a hundred and twenty, and a menu row is
+  something to choose between, not a paragraph (the rows cap at two lines
+  on top of that, since a `ListTile` grows to fit whatever it is given). That
   row is a *sibling* of the language row rather than a button inside it,
   so a remote reaches it by moving down (directional traversal skips a node
   inside the focused one's rect). Whichever file is playing is what its

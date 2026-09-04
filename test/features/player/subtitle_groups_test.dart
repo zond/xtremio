@@ -160,6 +160,13 @@ void main() {
     );
     // Nothing said at all is still the numbered fallback.
     expect(nameOf(const {}), 'Option 1');
+
+    // Every candidate is cut to the same length, not just the filename:
+    // a `movieReleaseName` runs to a hundred and twenty characters on the
+    // real Breaking Bad answer, and a menu row is not a paragraph.
+    expect(nameOf({'label': 'L' * 200}), '${'L' * 60}\u2026');
+    expect(nameOf({'movieReleaseName': 'M' * 200}), '${'M' * 60}\u2026');
+    expect(nameOf({'releaseGroup': 'G' * 200}), '${'G' * 60}\u2026');
   });
 
   test('two uploads the addon named alike are still told apart', () {

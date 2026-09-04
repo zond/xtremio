@@ -513,8 +513,14 @@ class _MenuTile extends StatelessWidget {
     leading: Icon(
       selected ? Icons.radio_button_checked : Icons.radio_button_off,
     ),
-    title: Text(title),
-    subtitle: subtitle == null ? null : Text(subtitle!),
+    // A row is a thing to choose between, not a paragraph to read. Both
+    // lines are addon text -- a release name runs to a hundred and twenty
+    // characters, which is six lines of one row on a phone -- and
+    // `ListTile` grows to fit whatever it is given, so the cap is here.
+    title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+    subtitle: subtitle == null
+        ? null
+        : Text(subtitle!, maxLines: 2, overflow: TextOverflow.ellipsis),
     selected: selected,
     onTap: onTap,
   );
