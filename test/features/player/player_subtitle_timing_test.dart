@@ -265,6 +265,87 @@ void main() {
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 
+  testWidgets('a rate in neither family offers both', (tester) async {
+    useWideViewport(tester);
+    // 15 fps reduces to nothing in either lineage, so it says as little
+    // about which way a file has to be pressed as no rate at all. A
+    // number we cannot place is not a licence to guess.
+    await playing(tester, frameRate: 15);
+    await openPanel(tester);
+    expect(
+      find.byKey(const ValueKey('subtitle-speed-stretch')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('subtitle-speed-compress')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a rate that arrives after playback started still points the '
+      'button', (tester) async {
+    useWideViewport(tester);
+    // The bug from the field: on a torrent mpv cannot probe the
+    // container until the pieces holding it have arrived, so the rate is
+    // legitimately minutes late and the read this replaced took its
+    // silence for "no rate" -- both buttons for the whole of a 23.976
+    // episode that could only ever need the stretch.
+    final player = await playing(tester, frameRate: null);
+    final engine = player.engine;
+    await openPanel(tester);
+    expect(
+      find.byKey(const ValueKey('subtitle-speed-compress')),
+      findsOneWidget,
+    );
+
+    engine.emitFrameRate(23.976);
+    await pumpEvents(tester);
+    // The panel is open while it lands, so the direction has to reach
+    // the buttons that are already drawn.
+    expect(find.byKey(const ValueKey('subtitle-speed-compress')), findsNothing);
+    await step(tester, 'subtitle-speed-stretch');
+    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+  });
+
+  testWidgets('a correction the viewer already made survives a rate arriving '
+      'after it', (tester) async {
+    useWideViewport(tester);
+    // Taking a late direction is only safe because of this: while the
+    // rate said nothing the panel offered both, and a press could land
+    // in the direction the answer then rules out. The toggle is the only
+    // way back to exactly 1.0 and a gap cannot be pressed, so the button
+    // for a correction in force stays whatever the video turns out to
+    // be.
+    final player = await playing(tester, frameRate: null);
+    final engine = player.engine;
+    await openPanel(tester);
+    await step(tester, 'subtitle-speed-compress');
+    expect(engine.subtitleSpeed, closeTo(0.9590, 0.0001));
+
+    engine.emitFrameRate(23.976);
+    await pumpEvents(tester);
+    expect(
+      find.byKey(const ValueKey('subtitle-speed-compress')),
+      findsOneWidget,
+    );
+    await step(tester, 'subtitle-speed-compress');
+    expect(engine.subtitleSpeed, 1);
+  });
+
+  testWidgets('the observation goes with the player', (tester) async {
+    useWideViewport(tester);
+    final player = await playing(tester);
+    expect(player.engine.observingFrameRate, isTrue);
+
+    await tester.pumpWidget(const SizedBox());
+    expect(player.engine.frameRateListeners, 0);
+    // And a rate mpv works out after the screen has gone reaches nobody:
+    // the handler is a `setState` on an element the framework has
+    // already taken apart.
+    player.engine.emitFrameRate(25);
+    await pumpEvents(tester);
+  });
+
   testWidgets('a file whose declared rate differs is still played as it '
       'stands', (tester) async {
     useWideViewport(tester);

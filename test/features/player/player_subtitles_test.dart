@@ -646,13 +646,13 @@ void main() {
     harness.torrentStats.response = openedStats;
     await harness.pump(tester);
     final engine = harness.engine;
-    // Nothing is asked before there is a video to ask about, and the rate
-    // arrives with the media -- long before the menu can be opened.
-    expect(engine.videoFrameRateCalls, 0);
+    // Nothing is asked for the rate: it is observed, so it arrives when
+    // mpv has probed the container -- here with the media, long before
+    // the menu can be opened.
+    expect(engine.observingFrameRate, isTrue);
     engine.emitDuration(const Duration(minutes: 96));
     await pumpEvents(tester);
-    expect(engine.videoFrameRateCalls, 1);
-    // Read, not polled: the stats OSD is off and stays off.
+    // Observed, not polled: the stats OSD is off and stays off.
     expect(engine.sampling, isFalse);
 
     await tester.tap(find.byTooltip('Subtitles (S)'));

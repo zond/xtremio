@@ -218,9 +218,9 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// gap cannot be pressed: the button that *is* drawn would replace the
   /// direction with its reciprocal and never reach 1.0 at all. That is
   /// reachable without anything remembering anything -- [videoDirection]
-  /// comes from one bounded read of `container-fps` when the media
-  /// loads, so a press made while it says nothing can land in the
-  /// direction the answer then rules out.
+  /// follows `container-fps`, which mpv works out when it has probed the
+  /// container and not before, so a press made while it still says
+  /// nothing can land in the direction the answer then rules out.
   Widget _speedButton(SubtitleSpeedDirection direction) {
     final inForce = timing.speedDirection == direction;
     if (!inForce && videoDirection != null && videoDirection != direction) {

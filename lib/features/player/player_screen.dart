@@ -128,13 +128,6 @@ class PlayerScreen extends StatefulWidget {
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
 
-  /// How long the subtitle auto-pick waits for the engine to say what the
-  /// video runs at before going ahead without it. One property read on a
-  /// player that has already loaded its media is immediate; this only
-  /// bounds a backend that answers neither way, so that a preferred
-  /// subtitle is late rather than never.
-  static const Duration frameRateTimeout = Duration(seconds: 2);
-
   static const List<double> rates = [0.75, 1, 1.25, 1.5, 2];
 
   /// Below this width the transport sits in the middle of the video and
@@ -317,12 +310,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// auto-pick waits for this.
   bool _mediaLoaded = false;
 
-  /// What the video playing runs at, once the engine has said
-  /// ([_sampleFrameRate]); null until then, and for a backend that cannot
-  /// say at all. Read to point the timing panel's speed control and for
-  /// nothing else -- it is never shown, and it no longer orders the
-  /// subtitle list: the point is a button that presses the right way,
-  /// not a number to reason about.
+  /// What the video playing runs at, as far as the engine has said
+  /// ([_onFrameRate]); null until it says, and for a backend or a
+  /// container that cannot say at all. Read to point the timing panel's
+  /// speed control and for nothing else -- it is never shown, and it no
+  /// longer orders the subtitle list: the point is a button that presses
+  /// the right way, not a number to reason about.
   double? _videoFrameRate;
 
   /// What the viewer has asked of the subtitles on screen, and the whole
@@ -605,6 +598,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       engine.engineLog.listen(_onEngineLog),
       engine.volume.listen((v) => setState(() => _volume = v)),
       engine.tracks.listen(_onTracks),
+      engine.videoFrameRate.listen(_onFrameRate),
     ]);
   }
 
@@ -705,6 +699,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _mediaLoaded = false;
     // A different video: what the last one ran at says nothing about it,
     // and neither does the adjustment the last subtitle was played with.
+    // The observation is the player's and outlives the file, so the rate
+    // has to be cleared here; mpv reports this video's own once it has
+    // probed the container.
     _videoFrameRate = null;
     _resetSubtitleTiming();
     _dismissUpNext();
@@ -1000,47 +997,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _pauseTorrentStats();
     });
     _syncTorrentStats();
-    _sampleFrameRate();
     _maybeAutoPickSubtitles();
   }
 
-  /// Asks the engine what the video runs at, once per opened media and as
-  /// soon as there is a video to ask about.
+  /// What the engine says the video runs at, whenever it works it out.
   ///
-  /// Nothing waits on the answer: the rate points the timing panel's
-  /// speed control and orders nothing, so a panel opened before it lands
-  /// offers both directions and picks up the one it is told as soon as
-  /// the engine says.
+  /// Nothing waits on it and nothing asks for it: the rate points the
+  /// timing panel's speed control and orders nothing else, so a panel
+  /// opened before mpv has probed the container offers both directions
+  /// and takes the one it is told as soon as it is told. On a torrent
+  /// that is regularly long after playback started, which is the whole
+  /// reason this is observed rather than read.
   ///
-  /// The stats OSD samples the same property, but only while it is up.
-  /// This must not depend on that, and must not turn the poll on to get
-  /// one number, so it is a single read (see
-  /// [PlaybackEngine.videoFrameRate]).
-  void _sampleFrameRate() {
-    final url = _opened;
-    final engine = _engine;
-    if (engine == null) {
-      _onFrameRateSampled(url, null);
-      return;
-    }
-    engine
-        .videoFrameRate()
-        // An engine that has not answered by now has not said, and an
-        // unknown rate corrects nothing. Without the bound the auto-pick
-        // below would wait on it for the whole film.
-        .timeout(PlayerScreen.frameRateTimeout, onTimeout: () => null)
-        .then(
-          (rate) => _onFrameRateSampled(url, rate),
-          // A backend that refused the read simply has not said.
-          onError: (Object _) => _onFrameRateSampled(url, null),
-        );
-  }
-
-  /// The engine's answer for [url], or the absence of one. A `setState`
-  /// because the timing panel is drawn from it: a direction that arrived
-  /// after the panel opened has to reach the buttons.
-  void _onFrameRateSampled(Uri? url, double? rate) {
-    if (!mounted || _opened != url) return;
+  /// A `setState` because the panel is drawn from it: a direction that
+  /// arrived after the panel opened has to reach the buttons. Letting a
+  /// late one point them is safe only because a correction already in
+  /// force keeps its own button (`SubtitleTimingOverlay`), so a press
+  /// made while the rate said nothing can never be left without the
+  /// toggle that undoes it.
+  void _onFrameRate(double? rate) {
+    if (!mounted) return;
     setState(() => _videoFrameRate = rate);
   }
 

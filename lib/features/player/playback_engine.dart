@@ -51,15 +51,22 @@ abstract interface class PlaybackEngine {
   /// simply never emits.
   Stream<PlaybackStats> get stats;
 
-  /// The frame rate of the video playing, read once, or null when this
-  /// backend cannot say -- no video open yet, no such property, or an
-  /// engine that is not libmpv.
+  /// What the video playing runs at, emitted whenever the backend learns
+  /// it, and null whenever it cannot say -- no video open, a container
+  /// that declares no rate, or an engine that is not libmpv.
+  ///
+  /// An observation rather than a read, because *when* the answer exists
+  /// is not ours to choose: mpv learns the rate as the demuxer probes the
+  /// container, and a torrent's container is only there once the pieces
+  /// holding it have arrived, which on a thin swarm is well after
+  /// playback has begun. A read taken at any fixed moment calls such a
+  /// video's rate unknown for the whole film.
   ///
   /// [stats] carries the same number, but only while the stats OSD is on
-  /// screen and at the cost of a poll. What reads this needs it whether or
-  /// not anyone ever opens the OSD, and needs it once, so it is a plain
-  /// read rather than a subscription.
-  Future<double?> videoFrameRate();
+  /// screen and at the cost of a poll. This is neither polled nor waited
+  /// on: it costs nothing until the value changes, and whoever reads it
+  /// works with what has arrived so far.
+  Stream<double?> get videoFrameRate;
 
   /// Opens [url] and starts playing from [start].
   Future<void> open(Uri url, {Duration start = Duration.zero});
@@ -226,7 +233,10 @@ class MediaKitEngine implements PlaybackEngine {
       }),
     ];
     final native = _player.platform;
-    if (native is NativePlayer) _observeSelection(native).ignore();
+    if (native is NativePlayer) {
+      _observeSelection(native).ignore();
+      _observeFrameRate(native).ignore();
+    }
   }
 
   final Player _player;
@@ -291,6 +301,12 @@ class MediaKitEngine implements PlaybackEngine {
 
   final StreamController<PlaybackTracks> _tracks =
       StreamController<PlaybackTracks>.broadcast();
+
+  /// What [videoFrameRate] carries. Broadcast and with no value of its
+  /// own: the screen subscribes as it builds the engine, before anything
+  /// is open, so nothing this emits is emitted to nobody.
+  final StreamController<double?> _frameRate =
+      StreamController<double?>.broadcast();
   late final List<StreamSubscription<void>> _trackSubscriptions;
   Tracks _lastTracks = const Tracks();
   Track _lastTrack = const Track();
@@ -372,6 +388,39 @@ class MediaKitEngine implements PlaybackEngine {
       // Torn down before the player initialised: media_kit's own
       // selection reports still work.
     }
+  }
+
+  /// Follows [frameRateProperty] so the rate arrives when mpv works it
+  /// out rather than when we happen to ask.
+  ///
+  /// The read this replaced was taken a fixed two seconds after the media
+  /// loaded, which a local file answers at once and a torrent does not:
+  /// mpv cannot probe the container until the pieces holding it are in,
+  /// so the answer came back empty and the timing panel offered both
+  /// speed buttons for a 23.976 episode that could only ever need one.
+  ///
+  /// The current value is read *after* registering, because an
+  /// observation reports changes and a property that already has its
+  /// value need never change again -- a file open before this ran would
+  /// otherwise go unreported. Both paths land on [_emitFrameRate], so an
+  /// answer either way is the same answer.
+  Future<void> _observeFrameRate(NativePlayer native) async {
+    try {
+      await native.observeProperty(
+        frameRateProperty,
+        (value) async => _emitFrameRate(value),
+      );
+      _emitFrameRate(await native.getProperty(frameRateProperty));
+    } catch (_) {
+      // Torn down before the player initialised, or a libmpv without the
+      // property: the rate stays unknown, and an unknown rate corrects
+      // nothing.
+    }
+  }
+
+  void _emitFrameRate(String? value) {
+    if (_disposed || _frameRate.isClosed) return;
+    _frameRate.add(frameRateFrom(value));
   }
 
   void _emitTracks() {
@@ -503,51 +552,36 @@ class MediaKitEngine implements PlaybackEngine {
     }
   }
 
-  /// The mpv properties [videoFrameRate] reads: only what the container
-  /// *declares*, never a measurement of it.
+  @override
+  Stream<double?> get videoFrameRate => _frameRate.stream;
+
+  /// The one mpv property a rate may come from: what the container
+  /// *declares*, never a measurement of it. One property and not a list
+  /// of them, because a second would be a fallback and a fallback here is
+  /// the bug below.
   ///
   /// `estimated-vf-fps` is the obvious second choice and is the wrong
   /// one: mpv averages the last ten frame durations, warns that the
   /// number is unstable for imprecise timestamps (Matroska, which is what
-  /// a torrent stream mostly is) and wrong while frames are dropped, and
-  /// this reads it at the moment the media loads, when ten frames may not
-  /// have been drawn yet. That estimate then decides which frame-rate
-  /// family the video is in, within a hundredth of a frame
-  /// (`subtitleFrameRateTolerance` in `subtitle_groups.dart`), so a
-  /// jittery 24.10 for a true 23.976 would put the timing panel's speed
-  /// control the wrong way round or take its direction away. A container
-  /// that declares nothing is the safe answer, and the one this gives.
-  static const List<String> frameRateProperties = ['container-fps'];
+  /// a torrent stream mostly is) and wrong while frames are dropped. That
+  /// estimate would then decide which frame-rate family the video is in,
+  /// within a hundredth of a frame (`subtitleFrameRateTolerance` in
+  /// `subtitle_groups.dart`), so a stalling swarm rendering 12 frames a
+  /// second reads as film -- 12 is 24 halved -- and points the timing
+  /// panel's speed control confidently the wrong way. Observing the
+  /// container makes that worse rather than better: the estimate answers
+  /// on every stall, for the whole film. A container that declares
+  /// nothing is the safe answer, and the one this gives.
+  static const String frameRateProperty = 'container-fps';
 
-  @override
-  Future<double?> videoFrameRate() async {
-    final native = _player.platform;
-    // Only the native (libmpv) backend exposes raw properties.
-    if (native is! NativePlayer || _disposed) return null;
-    final values = <String?>[];
-    for (final property in frameRateProperties) {
-      try {
-        values.add(await native.getProperty(property));
-      } catch (_) {
-        // Unavailable property or a player torn down mid-read: not a
-        // rate, and an unknown rate corrects nothing.
-        values.add(null);
-      }
-    }
-    return frameRateFrom(values);
-  }
-
-  /// The first of [values] that is a frame rate at all: a number that
-  /// parses, is finite and is above zero. mpv answers an empty string for
-  /// a property it has no value for, and `0` for a container that
-  /// declares no rate -- neither says anything about the video, so both
-  /// read as null rather than as a rate of nothing.
-  static double? frameRateFrom(Iterable<String?> values) {
-    for (final value in values) {
-      final rate = double.tryParse(value?.trim() ?? '');
-      if (rate != null && rate.isFinite && rate > 0) return rate;
-    }
-    return null;
+  /// [value] if it is a frame rate at all: a number that parses, is
+  /// finite and is above zero. mpv answers an empty string for a property
+  /// it has no value for, and `0` for a container that declares no rate
+  /// -- neither says anything about the video, so both read as null
+  /// rather than as a rate of nothing.
+  static double? frameRateFrom(String? value) {
+    final rate = double.tryParse(value?.trim() ?? '');
+    return rate != null && rate.isFinite && rate > 0 ? rate : null;
   }
 
   @override
@@ -738,6 +772,10 @@ class MediaKitEngine implements PlaybackEngine {
     }
     await _tracks.close();
     await _stats.close();
+    // The property observation outlives nothing: the callback checks this
+    // controller before it emits, and the player it is registered on is
+    // about to go.
+    await _frameRate.close();
     try {
       await _player.stop();
     } finally {
