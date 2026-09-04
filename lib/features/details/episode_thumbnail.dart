@@ -2,6 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 
+/// `yyyy-MM-dd` of the air date, when the addon knows it.
+///
+/// Next to the still because both layouts put it under the same picture:
+/// it is the second line of a row on a phone and of a card on a
+/// television, and the two must not drift apart.
+String? episodeDateLabel(VideoInfo video) {
+  final date = video.releasedAt;
+  if (date == null) return null;
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${date.year}-${two(date.month)}-${two(date.day)}';
+}
+
 /// One episode's still, with the episode number over it.
 ///
 /// The picture is the addon's `thumbnail`; a neutral box stands in when
@@ -10,6 +22,11 @@ import '../../core/core.dart';
 /// picture rather than beside it because it belongs to the still whatever
 /// size the still is given -- a 96 dp leading image in the phone's episode
 /// list, a whole card's width on a television.
+///
+/// The decode is bounded to the box the still is drawn in. A television
+/// builds a whole season of these at once so that the D-pad can reach the
+/// end of the row, and a season of stills decoded at whatever size the
+/// addon serves them is real memory on the modest box this runs on.
 class EpisodeThumbnail extends StatelessWidget {
   const EpisodeThumbnail({
     super.key,
@@ -34,6 +51,8 @@ class EpisodeThumbnail extends StatelessWidget {
     final theme = Theme.of(context);
     final thumbnail = video.thumbnail;
     final episode = video.episode;
+    // `cacheWidth` counts physical pixels, which is why the ratio is here.
+    final pixels = (width * MediaQuery.devicePixelRatioOf(context)).round();
     return SizedBox(
       width: width,
       height: height,
@@ -47,6 +66,7 @@ class EpisodeThumbnail extends StatelessWidget {
               Image.network(
                 thumbnail,
                 fit: BoxFit.cover,
+                cacheWidth: pixels > 0 ? pixels : null,
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             if (episode != null)

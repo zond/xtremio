@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/details/tv_episode_row.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/downloads/remove_download_dialog.dart';
@@ -152,17 +153,16 @@ List<String> innerActions(FakeCoreClient core) => [
 Object? innerArgs(CoreAction action) =>
     (action.action['args'] as Map<String, dynamic>)['args'];
 
-/// The title of the [ListTile] holding primary focus (an episode's name;
-/// its first text is the thumbnail's "E1" badge).
-String? focusedTileTitle() {
-  final tile = FocusManager.instance.primaryFocus?.context
-      ?.findAncestorWidgetOfExactType<ListTile>();
-  return (tile?.title as Text?)?.data;
+/// The name of the episode card holding primary focus.
+String? focusedEpisodeTitle() {
+  final card = FocusManager.instance.primaryFocus?.context
+      ?.findAncestorWidgetOfExactType<TvEpisodeCard>();
+  return card == null ? null : TvEpisodeCard.title(card.video);
 }
 
 /// From the streams pane, left lands on the header (the bookmark, nearest
 /// to the stream at the top); [down] presses from there reach [T], the
-/// season selector or an episode tile.
+/// season selector or an episode card.
 Future<void> stepLeftAndDownTo<T extends Widget>(
   WidgetTester tester, {
   int limit = 8,
@@ -541,14 +541,14 @@ void main() {
   });
 
   group('series', () {
-    testWidgets('down the info column reaches the episodes; the menu key '
-        'toggles one watched; down and select load the next', (tester) async {
+    testWidgets('down the info column reaches the episode row; the menu key '
+        'toggles one watched; right and select load the next', (tester) async {
       final core = await mountSeries(tester);
       final meta = MetaDetailsState.fromJson(seriesWithTorrent()).meta!;
       final season1 = meta.videosOfSeason(1);
 
-      await stepLeftAndDownTo<ListTile>(tester);
-      final episode = focusedTileTitle();
+      await stepLeftAndDownTo<TvEpisodeCard>(tester);
+      final episode = focusedEpisodeTitle();
       final video = season1.singleWhere((v) => v.title == episode);
 
       await press(tester, LogicalKeyboardKey.contextMenu);
@@ -557,8 +557,9 @@ void main() {
       expect((args[0] as Map<String, dynamic>)['id'], video.id);
       expect(args[1], video.id != pilotId, reason: 'flips the state');
 
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      final next = focusedTileTitle();
+      // The episodes are a row now, so the next one is sideways.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      final next = focusedEpisodeTitle();
       final nextVideo = season1.singleWhere((v) => v.title == next);
       expect(season1.indexOf(nextVideo), season1.indexOf(video) + 1);
 
@@ -573,7 +574,7 @@ void main() {
       tester,
     ) async {
       final core = await mountSeries(tester);
-      await stepLeftAndDownTo<ListTile>(tester);
+      await stepLeftAndDownTo<TvEpisodeCard>(tester);
       final loads = core.dispatched.length;
 
       await hold(

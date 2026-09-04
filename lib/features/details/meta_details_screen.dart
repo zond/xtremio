@@ -23,6 +23,7 @@ import 'episode_thumbnail.dart';
 import 'stream_facts.dart';
 import 'stream_sources.dart';
 import 'tv_backdrop.dart';
+import 'tv_episode_row.dart';
 import 'tv_meta_header.dart';
 
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
@@ -123,6 +124,12 @@ import 'tv_meta_header.dart';
 /// description ([TvMetaHeader]) rather than the poster and the collapsing
 /// hero a phone shows: at three metres the poster was a third of the
 /// layout and the rows are what the remote came for.
+///
+/// The episodes are one of those rows there ([TvEpisodeRow]) rather than
+/// the vertical list a phone and a desktop keep: a remote walks a row with
+/// two keys and a list with a hundred, and the panel has width to spare
+/// and no height at all once the backdrop and the sources are on it. The
+/// season pills above it were already a row.
 ///
 /// On a TV the info column and the streams pane are separate
 /// [FocusTraversalGroup]s, focus starts on the stream the user most likely
@@ -326,6 +333,20 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// engine's own selection.
   String? _selectedVideoId(MetaDetailsState state) =>
       _awaitingVideoId ?? state.streamPath?.id;
+
+  /// How far into [video] the library says the viewer got, `0..1`, or null
+  /// when it says nothing about this episode.
+  ///
+  /// The engine keeps one resume point per title (`libraryItem.state`), so
+  /// this answers for at most one episode of a series -- the last one
+  /// played -- and null for every other. That is the whole of what is
+  /// known: there is no per-episode progress to read, and inventing one
+  /// from the watched list would draw a bar nobody's viewing produced.
+  double? _resumeProgress(MetaDetailsState state, VideoInfo video) {
+    final item = state.libraryItem;
+    if (item == null || item.videoId != video.id) return null;
+    return item.progress;
+  }
 
   /// Whether the streams on screen are the previous selection's, because a
   /// tap has asked for another episode and nothing has come back yet.
@@ -752,6 +773,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// collapsing app bar would be the same picture twice. What is left of
   /// the bar is the way back and the way to the downloads list, floating
   /// over the backdrop.
+  ///
+  /// The episodes are a [TvEpisodeRow] there and a [SliverList] of
+  /// [_EpisodeTile]s everywhere else. The two carry the same things about
+  /// an episode and are otherwise unrelated shapes, which is why this is a
+  /// branch rather than one list laid out two ways.
   List<Widget> _infoSlivers(
     MetaDetailsState state,
     MetaItem meta, {
@@ -820,22 +846,36 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               ),
             ),
           ),
-        SliverList.builder(
-          itemCount: episodes.length,
-          itemBuilder: (context, index) {
-            final video = episodes[index];
-            return _EpisodeTile(
-              video: video,
-              isSelected: video.id == _selectedVideoId(state),
-              isWatched: state.isWatched(video),
-              isReleased: video.isReleased(now),
-              download: _downloads?.forVideo(widget.id, video.id),
-              onDeleteDownload: _deleteDownload,
-              onTap: () => _selectVideo(video, reveal: true),
-              onLongPress: () => _toggleWatched(state, video),
-            );
-          },
-        ),
+        if (isTv)
+          SliverToBoxAdapter(
+            child: TvEpisodeRow(
+              episodes: episodes,
+              selectedVideoId: _selectedVideoId(state),
+              now: now,
+              isWatched: state.isWatched,
+              resumeProgress: (video) => _resumeProgress(state, video),
+              downloadOf: (video) => _downloads?.forVideo(widget.id, video.id),
+              onSelect: (video) => _selectVideo(video, reveal: true),
+              onToggleWatched: (video) => _toggleWatched(state, video),
+            ),
+          )
+        else
+          SliverList.builder(
+            itemCount: episodes.length,
+            itemBuilder: (context, index) {
+              final video = episodes[index];
+              return _EpisodeTile(
+                video: video,
+                isSelected: video.id == _selectedVideoId(state),
+                isWatched: state.isWatched(video),
+                isReleased: video.isReleased(now),
+                download: _downloads?.forVideo(widget.id, video.id),
+                onDeleteDownload: _deleteDownload,
+                onTap: () => _selectVideo(video, reveal: true),
+                onLongPress: () => _toggleWatched(state, video),
+              );
+            },
+          ),
       ],
       const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
     ];
@@ -1705,14 +1745,6 @@ class _EpisodeTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  /// `yyyy-MM-dd` of the air date, when known.
-  static String? dateLabel(VideoInfo video) {
-    final date = video.releasedAt;
-    if (date == null) return null;
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${date.year}-${two(date.month)}-${two(date.day)}';
-  }
-
   /// The watched check (or the selection's play arrow), with the download
   /// badge in front of it when this episode is kept on the device.
   ///
@@ -1744,7 +1776,7 @@ class _EpisodeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final date = dateLabel(video);
+    final date = episodeDateLabel(video);
     final episode = video.episode;
     final title = video.title.isEmpty && episode != null
         ? 'Episode $episode'
