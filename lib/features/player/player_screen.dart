@@ -1682,6 +1682,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final preference = state?.subtitlePreference;
     if (state == null || preference == null) return;
     final before = _tracks.value;
+    // Where the multiplier has to go back to if the engine refuses the
+    // pick below: the file playing now, if it is one of the addons'.
+    // Putting the tracks back without this leaves the refused file's
+    // multiplier on a subtitle that was in step.
+    final beforeSubtitle = state.externalSubtitleSources
+        .map((source) => source.subtitle)
+        .where((subtitle) => subtitle.url.toString() == before.activeSubtitleId)
+        .firstOrNull;
     final Future<void>? applied;
     if (!preference.enabled) {
       _tracks.value = before.copyWith(clearSubtitle: true);
@@ -1740,7 +1748,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           onError: (Object _) {
             // Rejected (mpv could not add the track): show what is really
             // selected and try again on the next tracks/state change.
-            if (_opened == url && mounted) _tracks.value = before;
+            // Reverting is a change of what is on screen like any other,
+            // so the multiplier comes back with it.
+            if (_opened == url && mounted) {
+              _tracks.value = before;
+              _retimeSubtitles(beforeSubtitle);
+            }
           },
         )
         .whenComplete(() => _autoPickingSubtitles = false);

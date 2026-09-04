@@ -903,6 +903,48 @@ void main() {
     expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 
+  testWidgets('an auto-pick the engine refuses puts the multiplier back', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // The one path that changes what is on screen and then changes it
+    // back. mpv is already drawing a default-flagged embedded track that
+    // is in step with the video; the preference asks for a 25 fps addon
+    // file and mpv refuses it. Restoring the tracks without restoring the
+    // multiplier leaves the refused file's 1.0427 on the subtitle that
+    // stayed on screen -- four seconds a minute out, on a file nobody
+    // asked us to touch.
+    final harness = harnessRated(
+      23.976,
+      [
+        upload(
+          'en-1',
+          'eng',
+          'https://subs.example.org/en-25.srt',
+          'PAL',
+          fpsMilli: 25000,
+        ),
+      ],
+      preference: {'enabled': true, 'source': 'external', 'language': 'eng'},
+    );
+    await harness.pump(tester);
+    final engine = harness.engine..subtitleError = StateError('mpv: no');
+    engine.emitTracks(
+      const PlaybackTracks(
+        subtitle: [TrackInfo(id: '3', title: 'English', language: 'eng')],
+        activeSubtitleId: '3',
+      ),
+    );
+    engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+
+    // It tried, and it re-timed for the file it was about to add.
+    expect(engine.externalSubtitles, hasLength(1));
+    expect(engine.subtitleSpeeds, contains(closeTo(1.0427, 0.0001)));
+    // The embedded track is what is drawn, and it is drawn as written.
+    expect(engine.subtitleSpeed, 1);
+  });
+
   testWidgets('a menu row stays a row, however long the addon name is', (
     tester,
   ) async {
