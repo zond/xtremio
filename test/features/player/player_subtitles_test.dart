@@ -657,6 +657,71 @@ void main() {
     ]);
   });
 
+  testWidgets('the session preference picks from the filtered list too', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // The auto-pick is the one path that applies a subtitle without the
+    // viewer looking, so it is the one that must not reach past the
+    // filter. English was picked on the previous episode; the addon
+    // answers a 25 fps upload first and a 23.980 one second, and the
+    // container is 23.976 film.
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.frameRate = 23.976,
+    );
+    harness.fixture['subtitlePreference'] = {
+      'enabled': true,
+      'source': 'external',
+      'language': 'eng',
+    };
+    harness.fixture['subtitles'] = [
+      subtitlesResponse([
+        {
+          'id': 'en-1',
+          'lang': 'eng',
+          'url': 'https://subs.example.org/en-25.srt',
+          'fpsMilli': 25000,
+          'releaseGroup': 'PAL',
+        },
+        {
+          'id': 'en-2',
+          'lang': 'eng',
+          'url': 'https://subs.example.org/en-23980.srt',
+          'fpsMilli': 23980,
+          'releaseGroup': 'ROUNDED',
+        },
+      ]),
+    ];
+    await harness.pump(tester);
+    final engine = harness.engine;
+    expect(engine.externalSubtitles, isEmpty);
+    engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+
+    // The 25 fps file is what came first, and it is the file this whole
+    // filter exists to keep away: four seconds a minute of drift, applied
+    // to a viewer who never opened the menu.
+    expect(engine.externalSubtitles, [
+      (Uri.parse('https://subs.example.org/en-23980.srt'), 'English', 'eng'),
+    ]);
+
+    // And the menu agrees with what is playing: the row is selected.
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(
+            find.ancestor(
+              of: find.text('English'),
+              matching: find.byType(ListTile),
+            ),
+          )
+          .selected,
+      isTrue,
+    );
+  });
+
   testWidgets('a pick made before the rate landed survives it', (tester) async {
     useWideViewport(tester);
     // The Subtitles button works from the moment the controls do, which

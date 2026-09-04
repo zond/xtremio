@@ -124,6 +124,13 @@ class PlayerScreen extends StatefulWidget {
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
 
+  /// How long the subtitle auto-pick waits for the engine to say what the
+  /// video runs at before going ahead without it. One property read on a
+  /// player that has already loaded its media is immediate; this only
+  /// bounds a backend that answers neither way, so that a preferred
+  /// subtitle is late rather than never.
+  static const Duration frameRateTimeout = Duration(seconds: 2);
+
   static const List<double> rates = [0.75, 1, 1.25, 1.5, 2];
 
   /// Below this width the transport sits in the middle of the video and
@@ -271,6 +278,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// say at all. Read only by the subtitle filter -- it is never shown:
   /// the point is a list that is right, not a number to reason about.
   double? _videoFrameRate;
+
+  /// Whether the engine has been asked and has answered (or declined, or
+  /// timed out): the difference between "no rate" and "no rate yet",
+  /// which is what the subtitle auto-pick waits on.
+  bool _frameRateSampled = false;
 
   /// The torrent overlays: while [_torrentStatsTimer] runs the server's
   /// stats are polled and the latest answer shown ([_torrentStats], null
@@ -592,6 +604,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _mediaLoaded = false;
     // A different video: what the last one ran at says nothing about it.
     _videoFrameRate = null;
+    _frameRateSampled = false;
     _dismissUpNext();
     final progress = state.progress;
     final start = progress != null && progress.isResumable
@@ -870,14 +883,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _pauseTorrentStats();
     });
     _syncTorrentStats();
+    // Before the auto-pick, which waits on its answer: the pick has to be
+    // made out of the same list the menu will show.
     _sampleFrameRate();
     _maybeAutoPickSubtitles();
   }
 
   /// Asks the engine what the video runs at, once per opened media and as
-  /// soon as there is a video to ask about -- which is well before the
-  /// controls can put the subtitle menu on screen, so the menu is filtered
-  /// from the first time it is opened.
+  /// soon as there is a video to ask about.
+  ///
+  /// Not before the menu can be opened, though -- the Subtitles button
+  /// works from the moment the controls do -- so a manual pick can still
+  /// predate the answer. That is what the filter's exemption for the
+  /// playing file is for (`subtitlesMatchingFrameRate`).
   ///
   /// The stats OSD samples the same property, but only while it is up.
   /// This must not depend on that, and must not turn the poll on to get
@@ -885,15 +903,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// [PlaybackEngine.videoFrameRate]).
   void _sampleFrameRate() {
     final url = _opened;
-    _engine?.videoFrameRate().then(
-      (rate) {
-        if (!mounted || _opened != url || rate == _videoFrameRate) return;
-        setState(() => _videoFrameRate = rate);
-      },
-      // A backend that refused the read simply has not said, which is the
-      // case the filter already gives way to.
-      onError: (Object _) {},
-    );
+    final engine = _engine;
+    if (engine == null) {
+      _onFrameRateSampled(url, null);
+      return;
+    }
+    engine
+        .videoFrameRate()
+        // An engine that has not answered by now has not said, which is
+        // the case the filter gives way to. Without the bound the
+        // auto-pick below would wait on it for the whole film.
+        .timeout(PlayerScreen.frameRateTimeout, onTimeout: () => null)
+        .then(
+          (rate) => _onFrameRateSampled(url, rate),
+          // A backend that refused the read simply has not said.
+          onError: (Object _) => _onFrameRateSampled(url, null),
+        );
+  }
+
+  /// The engine's answer for [url], or the absence of one -- and the
+  /// go-ahead for the auto-pick that was waiting on it.
+  void _onFrameRateSampled(Uri? url, double? rate) {
+    if (!mounted || _opened != url) return;
+    setState(() {
+      _videoFrameRate = rate;
+      _frameRateSampled = true;
+    });
+    _maybeAutoPickSubtitles();
   }
 
   /// mpv's own error log. Not shown, only recorded: this is where the
@@ -1486,13 +1522,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// this Player session, e.g. the previous episode) to freshly opened
   /// media: off stays off; otherwise the first track in the preferred
   /// language, from the preferred source first. Waits for the engine to
-  /// report the media loaded (see [_mediaLoaded]), then retries as tracks
-  /// and addon results arrive until something matches, and counts as done
-  /// only once the engine accepted the pick.
+  /// report the media loaded (see [_mediaLoaded]) and to have answered
+  /// about the frame rate (see [_frameRateSampled]), then retries as
+  /// tracks and addon results arrive until something matches, and counts
+  /// as done only once the engine accepted the pick.
   void _maybeAutoPickSubtitles() {
     if (_autoPickedSubtitles ||
         _autoPickingSubtitles ||
         !_mediaLoaded ||
+        // The rate decides which files are on offer at all, and this
+        // applies one without the viewer looking: picking before the
+        // engine has answered would apply a file the menu then hides.
+        !_frameRateSampled ||
         _opened == null ||
         _handedOver) {
       return;
@@ -1512,7 +1553,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
           (candidate != null &&
               languageName(candidate).toLowerCase() ==
                   languageName(language).toLowerCase());
-      final external = state.externalSubtitles
+      // The same list the menu is built from. This is the one path that
+      // applies a subtitle without the viewer looking, so it is the one
+      // that must not reach past the filter for a file the menu hides.
+      final offered = subtitlesMatchingFrameRate(
+        state.externalSubtitleSources,
+        videoFrameRate: _videoFrameRate,
+      );
+      final external = offered
+          .map((source) => source.subtitle)
           .where((s) => matches(s.lang))
           .firstOrNull;
       final embedded = before.subtitle

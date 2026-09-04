@@ -632,7 +632,12 @@ connection.
   dispatches `SubtitlePreferenceChanged`, which the core keeps for the
   Player session; the next episode's player applies it automatically to
   the first matching track once the media is loaded (mpv refuses
-  `sub-add` while it is still between files). Text subtitles are rendered by Flutter
+  `sub-add` while it is still between files) and the engine has answered
+  about the frame rate -- the automatic pick comes out of the same
+  filtered list the menu shows, since it is the one path that applies a
+  file without anybody looking at it. A backend that answers neither way
+  is waited on for two seconds (`PlayerScreen.frameRateTimeout`) and then
+  treated as having said nothing, which filters nothing. Text subtitles are rendered by Flutter
   (media_kit's default `libass: false` sets mpv `sub-visibility=no` and
   feeds the text lines to a `SubtitleView`), so size, colour and the
   background box are a `TextStyle` in `SubtitleViewConfiguration`, not
