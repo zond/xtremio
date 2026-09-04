@@ -790,16 +790,18 @@ connection.
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`6c13799`: generated
+  features, `zond/stream-server` at a fixed rev (`4dceb21`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
   counts, the buffer profiles behind `?buffer=`, cache usage and
   on-demand cleaning, a DHT bootstrap list trimmed to the two hosts that
   actually answer and resolved over DNS-over-HTTPS when the system
   resolver will not, with the IPv6 literals dropped on a device that has
-  no route to them, the piece-aligned start-up window that follows the
-  reader plus the `pieceLength` it is measured in, `inFlightPiece`, the
-  byte progress of the one piece the reader is sitting on, and
+  no route to them -- and named in the log as route-dropped rather than
+  counted as a name DNS failed on, the piece-aligned start-up window that
+  follows the reader plus the `pieceLength` it is measured in,
+  `inFlightPiece`, the byte progress of the one piece the reader is
+  sitting on, and
   `ServerHandle::dht_status` for the diagnostics screen). To bump: change the rev, `cargo update -p <crate>`, run
   `cargo test`, re-record any fixture whose shape moved, move the
   `[patch]` key along if the source URL changed (it names the URL being
