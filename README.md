@@ -719,9 +719,9 @@ connection.
   playback…", `error` → "The torrent failed to start" with the server's
   `error` string as the detail; no answer yet → "Connecting to server…".
   The bar is determinate whenever there is a percentage; `downloadSpeed`
-  and, once anything is connected, the swarm line (`seeds 2 of 137 ·
-  peers 5 · 12 found`) show when non-zero. While it is still finding
-  peers there is no connection to call a seed, so that line is the
+  and, once anything is connected, the swarm line (`connected 4 ·
+  seeds 137 · swarm 539`) show when non-zero. While it is still finding
+  peers there is nothing connected to count, so that line is the
   `peerDiscovery` counts plus, when a tracker answered, `137 seeds in the
   swarm`. Polling pauses when the media loads (see
   the stall card below) and ends on an engine error and on dispose; direct
@@ -742,14 +742,20 @@ connection.
   *indeterminate* bar (past the head of the file the server measures no
   target, so a full bar would be a lie), `error` is "The torrent stopped"
   with the server's reason. The detail line always says `downloadSpeed`
-  and the swarm, zeros included — during a stall `0 B/s · seeds 0 ·
-  peers 0 · 12 found` is the diagnosis, and whether any of those
-  connections is a *seed* (`connectedSeeders`) is the difference between
-  a slow swarm and one that cannot finish the file at all. When the
-  server's tracker scrape knows the swarm's own seeder count it is
-  written as `seeds 2 of 137`; when no tracker answered (`swarmSeeders`
-  null) the "of" half is simply left off, never printed as a 0 or a dash,
-  because a swarm we could not ask about is not an empty one. Playback
+  and the swarm, zeros included — during a stall `0 B/s · connected 0`
+  is the diagnosis, and whether the swarm holds a *seed* at all is the
+  difference between a slow swarm and one that cannot finish the file.
+  The swarm line is one formatter (`TorrentProgressCard.formatSwarm`,
+  rendered by the start-up card, the stall card and the progress card
+  alike) saying three numbers: our live connections, the tracker-scraped
+  `swarmSeeders`, and `swarmSeeders + swarmLeechers` for the whole swarm.
+  Only the first is ours to count; a scrape that never answered leaves
+  the other two *missing*, never printed as a 0 or a dash, because a
+  swarm we could not ask about is not an empty one — so a torrent with no
+  trackers says just `connected 4`, and seeders without leechers stops at
+  `seeds`. Connections that hold the whole file (`connectedSeeders`) and
+  addresses merely discovered are not on this line; the stats overlay
+  still shows both. Playback
   resuming drops the card, the timer and the last answer; an answer that
   arrives after the stall ended is discarded.
 - **Next episode.** `player.nextVideo`/`nextStream` come from the core.

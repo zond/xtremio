@@ -696,20 +696,24 @@ void main() {
           peers: 3,
           connectedSeeders: 1,
           swarmSeeders: 137,
+          swarmLeechers: 402,
         ),
       );
       expect(buffering.label, 'Buffering start… 50%');
       expect(buffering.progress, 0.5);
-      expect(buffering.detail, '2.5 MB/s · seeds 1 of 137 · peers 3 · 9 found');
+      expect(
+        buffering.detail,
+        '2.5 MB/s · connected 3 · seeds 137 · swarm 539',
+      );
 
-      // Nobody could be asked about the swarm: the count of ours stands
-      // alone rather than being written as a share of an unknown.
+      // Nobody could be asked about the swarm: our connection count stands
+      // alone rather than being written against an unknown.
       final ready = TorrentStartupOverlay.describe(
         const TorrentStats(phase: TorrentPhase.ready, peers: 1),
       );
       expect(ready.label, 'Starting playback…');
       expect(ready.progress, 1);
-      expect(ready.detail, 'seeds 0 · peers 1');
+      expect(ready.detail, 'connected 1');
 
       final failed = TorrentStartupOverlay.describe(
         const TorrentStats(phase: TorrentPhase.error),
@@ -796,11 +800,12 @@ void main() {
       peers: 4,
       connectedSeeders: 2,
       swarmSeeders: 137,
+      swarmLeechers: 402,
     );
     await poll(tester);
     expect(overlayText('Buffering start… 75%'), findsOneWidget);
     expect(
-      overlayText('1.5 MB/s · seeds 2 of 137 · peers 4 · 9 found'),
+      overlayText('1.5 MB/s · connected 4 · seeds 137 · swarm 539'),
       findsOneWidget,
     );
     expect(progressBar(tester).value, 0.75);
@@ -825,6 +830,86 @@ void main() {
     expect(find.textContaining('Buffering from the torrent…'), findsOneWidget);
     expect(overlay, findsNothing);
     expect(find.byType(TorrentStallOverlay), findsOneWidget);
+  });
+
+  group('TorrentProgressCard.formatSwarm', () {
+    test('says the three numbers, and omits the ones nobody answered', () {
+      // All three: our live connections, then what the trackers scraped --
+      // the seeders, and the whole swarm they and the leechers make up.
+      expect(
+        TorrentProgressCard.formatSwarm(
+          const TorrentStats(
+            phase: TorrentPhase.ready,
+            peers: 5,
+            connectedSeeders: 2,
+            swarmSeeders: 137,
+            swarmLeechers: 402,
+            peerDiscovery: PeerDiscovery(seen: 12, live: 5),
+          ),
+        ),
+        'connected 5 · seeds 137 · swarm 539',
+      );
+
+      // No scrape at all -- no trackers, a private torrent, or an answer
+      // still on its way. The two swarm figures are missing, not zero: a
+      // 0 here would say the swarm is empty, which nobody claimed.
+      expect(
+        TorrentProgressCard.formatSwarm(
+          const TorrentStats(
+            phase: TorrentPhase.ready,
+            peers: 5,
+            peerDiscovery: PeerDiscovery(seen: 12, live: 5),
+          ),
+        ),
+        'connected 5',
+      );
+
+      // Half a scrape: the seeder count stands, but the swarm total needs
+      // the leechers to be a total at all, so it is left off.
+      expect(
+        TorrentProgressCard.formatSwarm(
+          const TorrentStats(
+            phase: TorrentPhase.ready,
+            peers: 5,
+            swarmSeeders: 137,
+          ),
+        ),
+        'connected 5 · seeds 137',
+      );
+
+      // Our own end is always countable, so zero connections is an answer
+      // and prints -- unlike the swarm figures, which are only ever
+      // omitted or true.
+      expect(
+        TorrentProgressCard.formatSwarm(
+          const TorrentStats(
+            phase: TorrentPhase.ready,
+            swarmSeeders: 0,
+            swarmLeechers: 0,
+          ),
+        ),
+        'connected 0 · seeds 0 · swarm 0',
+      );
+    });
+
+    test('is the one formatter all three cards render', () {
+      // The stall overlay and the start-up overlay have each grown their
+      // own swarm wording before; the same stats must reach the screen as
+      // the same string, or the three drift apart again.
+      const stats = TorrentStats(
+        phase: TorrentPhase.ready,
+        downloadSpeed: 1500000,
+        peers: 4,
+        connectedSeeders: 2,
+        swarmSeeders: 137,
+        swarmLeechers: 402,
+        peerDiscovery: PeerDiscovery(seen: 9, live: 4),
+      );
+      const swarm = 'connected 4 · seeds 137 · swarm 539';
+      expect(TorrentProgressCard.formatSwarm(stats), swarm);
+      expect(TorrentStallOverlay.describe(stats).detail, contains(swarm));
+      expect(TorrentStartupOverlay.describe(stats).detail, contains(swarm));
+    });
   });
 
   group('the DHT explanation for a trackerless magnet', () {

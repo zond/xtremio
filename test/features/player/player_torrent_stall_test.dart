@@ -69,7 +69,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(cardText('Buffering from the torrent…'), findsOneWidget);
     expect(
-      cardText('1.5 MB/s · seeds 2 of 137 · peers 4 · 9 found'),
+      cardText('1.5 MB/s · connected 4 · seeds 137 · swarm 539'),
       findsOneWidget,
     );
     // Past the head of the file the server measures no target: an honest
@@ -92,7 +92,7 @@ void main() {
     await tester.pump();
     expect(stats.requests, hasLength(whilePlaying + 2));
     expect(cardText('Buffering from the torrent… 25%'), findsOneWidget);
-    expect(cardText('250 kB/s · seeds 0 · peers 1'), findsOneWidget);
+    expect(cardText('250 kB/s · connected 1'), findsOneWidget);
     expect(progressBar(tester).value, 0.25);
 
     // Playing again: the card goes and so does the polling.
@@ -164,17 +164,17 @@ void main() {
   });
 
   group('TorrentStallOverlay.describe', () {
-    test('says what a stall is waiting for, in seeds as well as peers', () {
+    test('says what a stall is waiting for, in the swarm as well as us', () {
       // Nothing back yet: the sentence the player has always shown.
       final waiting = TorrentStallOverlay.describe(null);
       expect(waiting.label, 'Buffering from the torrent…');
       expect(waiting.progress, isNull);
       expect(waiting.detail, isNull);
 
-      // Live but starved: zeros are the answer. No tracker answered here,
-      // so the swarm half of the seeds count is left off entirely rather
-      // than printed as an "of 0" that would read as an empty swarm; the
-      // addresses found only add a number when they exceed the connections.
+      // Live but starved: the zero connection count is the answer. No
+      // tracker answered here, so both swarm figures are left off entirely
+      // rather than printed as zeros that would read as an empty swarm,
+      // and the addresses merely discovered are no longer on this line.
       final starved = TorrentStallOverlay.describe(
         const TorrentStats(
           phase: TorrentPhase.ready,
@@ -183,11 +183,11 @@ void main() {
       );
       expect(starved.label, 'Buffering from the torrent…');
       expect(starved.progress, isNull);
-      expect(starved.detail, '0 B/s · seeds 0 · peers 0 · 12 found');
+      expect(starved.detail, '0 B/s · connected 0');
 
-      // The same stall with a scrape behind it: connected seeds out of the
-      // swarm's, which is the difference between a slow swarm and one that
-      // has nobody who can finish the file.
+      // The same stall with a scrape behind it: five connections out of a
+      // swarm of 539, 137 of which can finish the file. The leechers were
+      // scraped too, so the whole swarm is there to compare against.
       expect(
         TorrentStallOverlay.describe(
           const TorrentStats(
@@ -195,10 +195,11 @@ void main() {
             peers: 5,
             connectedSeeders: 0,
             swarmSeeders: 137,
+            swarmLeechers: 402,
             peerDiscovery: PeerDiscovery(seen: 12, live: 5),
           ),
         ).detail,
-        '0 B/s · seeds 0 of 137 · peers 5 · 12 found',
+        '0 B/s · connected 5 · seeds 137 · swarm 539',
       );
       expect(
         TorrentStallOverlay.describe(
@@ -207,13 +208,14 @@ void main() {
             downloadSpeed: 2500000,
             peers: 3,
             swarmSeeders: 0,
+            swarmLeechers: 0,
             peerDiscovery: PeerDiscovery(seen: 3, live: 3),
           ),
         ).detail,
         // A swarm the trackers say is empty is still a swarm we asked
-        // about, so it prints its zero -- `seeds 0 of 0`, which is not the
-        // `seeds 0` of the unasked swarm above.
-        '2.5 MB/s · seeds 0 of 0 · peers 3',
+        // about, so it prints its zeros -- which is not the same line as
+        // the unasked swarm above, where they are missing altogether.
+        '2.5 MB/s · connected 3 · seeds 0 · swarm 0',
       );
 
       // The head window is the one target a stall can have a bar for.
@@ -227,7 +229,7 @@ void main() {
       );
       expect(head.label, 'Buffering from the torrent… 75%');
       expect(head.progress, 0.75);
-      expect(head.detail, '0 B/s · seeds 0 · peers 1');
+      expect(head.detail, '0 B/s · connected 1');
 
       final checking = TorrentStallOverlay.describe(
         const TorrentStats(
@@ -260,7 +262,7 @@ void main() {
         TorrentStallOverlay.describe(
           const TorrentStats(phase: TorrentPhase.unknown, peers: 2),
         ).detail,
-        '0 B/s · seeds 0 · peers 2',
+        '0 B/s · connected 2',
       );
     });
   });

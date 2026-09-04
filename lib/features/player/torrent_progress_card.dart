@@ -114,23 +114,35 @@ class TorrentProgressCard extends StatelessWidget {
   static String withPercent(String label, double? progress) =>
       progress == null ? label : '$label ${(progress * 100).round()}%';
 
-  /// Who is on the other end, in the convention every torrent client
-  /// uses: `seeds 2 of 137 · peers 5 · 12 found`. The first number is
-  /// connections that hold the whole file, the second the swarm's own
-  /// seeder count from the trackers, then live connections and, when the
-  /// search has turned up more addresses than that, how many.
+  /// Who is on the other end, in the three numbers this is judged by:
+  /// `connected 5 · seeds 137 · swarm 539`. Live connections of any kind,
+  /// then the swarm's own seeder count from the trackers, then the whole
+  /// swarm -- seeders and leechers together. The first is what we have,
+  /// the other two are what there is to have.
   ///
-  /// A swarm nobody could ask about (`swarmSeeders` null) simply loses its
-  /// half of the first part -- `seeds 2` -- rather than printing a 0, a
-  /// dash or a "?", every one of which would read as an answer about the
-  /// swarm.
+  /// **A figure nobody could ask about is left out, never printed.** Only
+  /// the connection count is ours to count; the swarm figures come from a
+  /// tracker scrape, and a torrent with no trackers, a private one or a
+  /// scrape that has not answered yet leaves them null -- so the line is
+  /// then just `connected 5`. A 0, a dash or a "?" would each read as an
+  /// answer about the swarm, and there is none. `swarm` needs both halves
+  /// of the scrape, so seeders without leechers stops after `seeds`.
+  ///
+  /// This is the one swarm formatter: the progress card, the stall overlay
+  /// and the start-up overlay all render this string, so they cannot say
+  /// the same thing three ways.
+  ///
+  /// Connections holding the whole file (`connectedSeeders`) and addresses
+  /// discovered but not connected (`peerDiscovery.seen`) were on this line
+  /// and are not any more -- they describe our own end rather than the
+  /// swarm, and the stats overlay still shows both.
   static String formatSwarm(TorrentStats stats) {
-    final swarm = stats.swarmSeeders;
-    final seen = stats.peerDiscovery.seen;
+    final seeders = stats.swarmSeeders;
+    final leechers = stats.swarmLeechers;
     return [
-      'seeds ${stats.connectedSeeders}${swarm == null ? '' : ' of $swarm'}',
-      'peers ${stats.peers}',
-      if (seen > stats.peers) '$seen found',
+      'connected ${stats.peers}',
+      if (seeders != null) 'seeds $seeders',
+      if (seeders != null && leechers != null) 'swarm ${seeders + leechers}',
     ].join(' · ');
   }
 
