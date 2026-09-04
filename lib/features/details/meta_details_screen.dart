@@ -2119,6 +2119,29 @@ final class _StreamDownloads {
     if (isPending(stream)) return null;
     return () => onDownload(group, stream);
   }
+
+  /// What a hold on the source [stream] is drawn on does about the copy on
+  /// the device, for a remote that cannot press the button.
+  ///
+  /// Directional traversal skips a node inside the focused one's rect, and
+  /// the button is inside the row or the card the remote activates as a
+  /// whole, so on a television it can be looked at and never reached. A
+  /// long press -- hold select, or the remote's menu key -- is the "more
+  /// options" gesture everywhere else in the app, and here there is
+  /// exactly one option: whatever the button beside the play arrow would
+  /// do. Null while there is nothing to do (a stream the server cannot
+  /// keep, a pin in flight, a download still arriving), which leaves a
+  /// hold meaning what it meant before -- a tap on release.
+  VoidCallback? remoteAction(StreamInfo stream) {
+    if (isPending(stream)) return null;
+    final entry = entryOf(stream);
+    if (entry == null) return starter(stream);
+    return switch (entry.state) {
+      DownloadState.complete => () => onDelete(entry),
+      DownloadState.error => starter(stream),
+      _ => null,
+    };
+  }
 }
 
 /// One resolution's worth of the sources list: a header that says what it
@@ -2487,33 +2510,9 @@ class _StreamTile extends StatelessWidget {
     if (!isTv) return withTooltip;
     return RemotePress(
       onTap: onTap,
-      onLongPress: _remoteDownloadAction(),
+      onLongPress: downloads?.remoteAction(stream),
       child: withTooltip,
     );
-  }
-
-  /// What the download button on this tile does, for a remote that cannot
-  /// press it.
-  ///
-  /// Directional traversal skips a node inside the focused one's rect, and
-  /// the button is inside the tile the remote activates as a whole, so on a
-  /// television it can be looked at and never reached. The tile's long
-  /// press -- hold select, or the remote's menu key -- is the "more
-  /// options" gesture everywhere else in the app, and here there is exactly
-  /// one option: whatever the button beside the play arrow would do. Null
-  /// while there is nothing to do (no client, a stream the server cannot
-  /// keep, a pin in flight, a download still arriving), which leaves a hold
-  /// meaning what it meant before -- a tap on release.
-  VoidCallback? _remoteDownloadAction() {
-    final downloads = this.downloads;
-    if (downloads == null || downloads.isPending(stream)) return null;
-    final entry = downloads.entryOf(stream);
-    if (entry == null) return downloads.starter(stream);
-    return switch (entry.state) {
-      DownloadState.complete => () => downloads.onDelete(entry),
-      DownloadState.error => downloads.starter(stream),
-      _ => null,
-    };
   }
 
   /// The download affordance (when there is one) beside the play one.
