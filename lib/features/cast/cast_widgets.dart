@@ -204,13 +204,24 @@ class CastRemotePanel extends StatelessWidget {
 /// -- letting the load fail on the television -- is what this whole check
 /// exists to avoid.
 class CastRefusedDialog extends StatelessWidget {
-  const CastRefusedDialog({super.key, required this.explanation});
+  const CastRefusedDialog({
+    super.key,
+    required this.explanation,
+    this.title = defaultTitle,
+  });
+
+  /// What a refusal is headed when it is an answer, which is all but one.
+  static const String defaultTitle = 'This stream cannot be cast';
 
   final String explanation;
 
+  /// The heading. A refusal that is only a "not yet" says so here rather
+  /// than under a title that has already made up its mind.
+  final String title;
+
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('This stream cannot be cast'),
+    title: Text(title),
     content: Text(explanation),
     actions: [
       TextButton(

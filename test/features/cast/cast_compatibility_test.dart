@@ -23,12 +23,39 @@ CastCompatibility check({
   StreamFacts? facts,
   String? filename,
   PlaybackStats? stats,
+  bool containerPending = false,
 }) => CastCompatibility.of(
   url: url ?? torrentUrl,
   facts: facts,
   filename: filename,
   stats: stats,
+  containerPending: containerPending,
 );
+
+/// A `player` state whose selected stream carries [claimed] as the addon's
+/// `behaviorHints.filename`, and whose converted stream carries [converted]:
+/// the two ends of the chain [castFilename] walks.
+PlayerState playerState({String? claimed, String? converted}) =>
+    PlayerState.fromJson({
+      'selected': {
+        'stream': {
+          'infoHash': '11ea02584fa6351956f35671962ab46354d99060',
+          'fileIdx': 0,
+          'behaviorHints': {'filename': ?claimed},
+        },
+      },
+      'stream': {
+        'type': 'Ready',
+        'content': [
+          {'streaming_url': torrentUrl.toString()},
+          if (converted != null)
+            {
+              'infoHash': '11ea02584fa6351956f35671962ab46354d99060',
+              'behaviorHints': {'filename': converted},
+            },
+        ],
+      },
+    });
 
 CastRefusal? refusalOf(CastCompatibility result) =>
     result is CastRefused ? result.reason : null;
@@ -67,6 +94,24 @@ void main() {
         url: Uri.parse('https://cdn.example.com/movies/sintel.mp4'),
       );
       expect(result, isA<CastReady>());
+    });
+
+    test('a torrent whose server has not answered is a "not yet"', () {
+      // The first seconds of a torrent: nothing names the file, but the
+      // server is about to. That is a wait, not the verdict below it.
+      final result = check(containerPending: true);
+      expect(refusalOf(result), CastRefusal.containerPending);
+      expect((result as CastRefused).explanation, contains('try again'));
+      // Never the sentence that says conversion is what is missing: what is
+      // missing here is an answer.
+      expect(result.explanation, isNot(contains('conversion')));
+    });
+
+    test('a pending answer cannot rescue a container that is known', () {
+      // The server has not spoken, but the addon has, and it named a
+      // Matroska file. Waiting would not change it.
+      final result = check(filename: 'Sintel.mkv', containerPending: true);
+      expect(refusalOf(result), CastRefusal.container);
     });
 
     test('the filename wins over the URL, being about the file itself', () {
@@ -165,6 +210,54 @@ void main() {
         stats: const PlaybackStats(videoCodec: 'hevc (Main 10)'),
       );
       expect(result, isA<CastReady>());
+    });
+  });
+
+  group('the server outranks the addon about the file it opened', () {
+    test('the server name is used when the addon claimed nothing', () {
+      expect(
+        castFilename(playerState(), serverFilename: 'Big Buck Bunny.mp4'),
+        'Big Buck Bunny.mp4',
+      );
+    });
+
+    test('the server wins when the two disagree', () {
+      // The addon linked to what it thinks is an mkv; the server opened an
+      // mp4. Only one of them has the file open.
+      final filename = castFilename(
+        playerState(claimed: 'Sintel.2010.1080p.mkv'),
+        serverFilename: 'Sintel.2010.1080p.mp4',
+      );
+      expect(filename, 'Sintel.2010.1080p.mp4');
+      expect(check(filename: filename), isA<CastReady>());
+    });
+
+    test('and it outranks the converted stream, which is the same claim', () {
+      // `Stream::to_converted` clones `behavior_hints` verbatim, so for a
+      // torrent the converted stream's filename *is* the addon's. Only the
+      // server has the file open.
+      expect(
+        castFilename(
+          playerState(claimed: 'claimed.mkv', converted: 'claimed.mkv'),
+          serverFilename: 'opened.mp4',
+        ),
+        'opened.mp4',
+      );
+    });
+
+    test('an offline play reads the file on disk, having no server name', () {
+      // The offline stream the app builds is a `url` stream with the real
+      // on-disk name; there is no torrent behind it, so nothing outranks it.
+      expect(
+        castFilename(
+          playerState(claimed: 'on-disk.mp4', converted: 'on-disk.mp4'),
+        ),
+        'on-disk.mp4',
+      );
+    });
+
+    test('no server name falls back to what the addon claimed', () {
+      expect(castFilename(playerState(claimed: 'claimed.mp4')), 'claimed.mp4');
     });
   });
 }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/cast_widgets.dart';
+import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/fake_cast_client.dart';
 import '../../support/fixtures.dart';
@@ -161,19 +163,153 @@ void main() {
       expect(find.byType(CastRemotePanel), findsNothing);
     });
 
-    testWidgets('a stream with nothing to identify it is refused', (
+    testWidgets('a torrent nothing has named yet is a "not yet"', (
       tester,
     ) async {
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
-      // The recorded fixture as it is: a torrent URL, no filename anywhere.
+      // The recorded fixture as it is: a torrent URL, no filename anywhere,
+      // and a server that has not said what it opened. That is a question
+      // still open, not a stream that cannot be cast.
       final harness = castHarness(cast: cast, filename: null);
       await harness.pump(tester);
 
       await castTo(tester, livingRoom);
 
       expect(find.byType(CastRefusedDialog), findsOneWidget);
+      expect(find.text(CastRefusedDialog.defaultTitle), findsNothing);
+      expect(find.textContaining('try again'), findsOneWidget);
       expect(cast.loads, isEmpty);
+    });
+
+    testWidgets('the server naming the file makes it castable, in place', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan, filename: null);
+      await harness.pump(tester);
+
+      await castTo(tester, livingRoom);
+      expect(find.byType(CastRefusedDialog), findsOneWidget);
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      // The server answers the next poll with the file it actually opened.
+      // Nothing is reopened and no screen is left: the same player learns
+      // what it is playing.
+      harness.torrentStats.response = const TorrentStats(
+        phase: TorrentPhase.buffering,
+        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
+        initialWindowReadyBytes: 0,
+        initialWindowBytes: 4194304,
+      );
+      await tester.pump(PlayerScreen.torrentStatsInterval);
+      await tester.pump();
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.loads, hasLength(1));
+      expect(cast.loads.single.$1.contentType, 'video/mp4');
+    });
+
+    testWidgets('a later answer with no name does not take the name back', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan, filename: null);
+      harness.torrentStats.response = const TorrentStats(
+        phase: TorrentPhase.buffering,
+        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
+        initialWindowReadyBytes: 0,
+        initialWindowBytes: 4194304,
+      );
+      await harness.pump(tester);
+      await tester.pump(PlayerScreen.torrentStatsInterval);
+      await tester.pump();
+
+      // A restarted engine, a torrent-level answer, a server that has
+      // forgotten: whatever the reason, an answer that names nothing says
+      // nothing about which file this is. Which file it is does not expire.
+      harness.torrentStats.response = const TorrentStats(
+        phase: TorrentPhase.buffering,
+        initialWindowReadyBytes: 1024,
+        initialWindowBytes: 4194304,
+      );
+      await tester.pump(PlayerScreen.torrentStatsInterval);
+      await tester.pump();
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.loads.single.$1.contentType, 'video/mp4');
+    });
+
+    testWidgets('a torrent-level answer never names the file', (tester) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast, filename: null);
+      // The server has nothing for this file and answers only about the
+      // torrent, where `streamName` is the file it *guessed* -- the largest
+      // one, which is not what `/{infoHash}/0` streams. Judging the
+      // container by it would be the same mistake in mirror image.
+      harness.torrentStats
+        ..response = null
+        ..responses[const TorrentStatsRequest(
+          infoHash: '11ea02584fa6351956f35671962ab46354d99060',
+        )] = const TorrentStats(
+          phase: TorrentPhase.buffering,
+          streamName: 'The.Biggest.File.mp4',
+          initialWindowReadyBytes: 0,
+          initialWindowBytes: 4194304,
+        );
+      // Mounted by hand: until the fallback answers, the start-up overlay
+      // is an indeterminate spinner and `pumpAndSettle` never settles.
+      await tester.pumpWidget(harness.build());
+      await tester.pump();
+      await tester.pump(PlayerScreen.torrentStatsInterval);
+      await tester.pump();
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsOneWidget);
+      expect(find.textContaining('try again'), findsOneWidget);
+      expect(cast.loads, isEmpty);
+    });
+
+    testWidgets('the server outranks the addon about the container', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      // The addon claims a Matroska file; the server opened an MP4. The
+      // addon is guessing about a torrent it linked to, the server has the
+      // file open.
+      final harness = castHarness(
+        cast: cast,
+        lanMedia: lan,
+        filename: 'Night.of.the.Living.Dead.1080p.mkv',
+      );
+      harness.torrentStats.response = const TorrentStats(
+        phase: TorrentPhase.buffering,
+        streamName: 'Night.of.the.Living.Dead.1080p.mp4',
+        initialWindowReadyBytes: 0,
+        initialWindowBytes: 4194304,
+      );
+      await harness.pump(tester);
+      // One poll: the server's answer lands before anything is cast.
+      await tester.pump(PlayerScreen.torrentStatsInterval);
+      await tester.pump();
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.loads.single.$1.contentType, 'video/mp4');
     });
 
     testWidgets('a proxied stream is refused', (tester) async {

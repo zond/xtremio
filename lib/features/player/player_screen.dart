@@ -327,6 +327,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _torrentStatsFetching = false;
   TorrentStats? _torrentStats;
 
+  /// The name of the file the server says it opened for this torrent
+  /// ([TorrentStats.streamName]), kept from the last answer that carried
+  /// one. It is what the cast check judges the container by, above the
+  /// addon's `behaviorHints.filename`: the addon claims, the server serves.
+  ///
+  /// Sticky on purpose. [_torrentStats] describes a moment and is dropped
+  /// when it would state the past as the present, but which file this is
+  /// does not go stale, and the polling stops entirely once playback is
+  /// under way. It is cleared only with the torrent itself.
+  String? _serverFilename;
+
   /// What reads [_dhtStatus] (absent the FFI one). Cheap and synchronous,
   /// so unlike the stats client above this is called directly rather than
   /// awaited.
@@ -1107,6 +1118,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStats = null;
     _torrentStatsRequest = null;
     _torrentStatsFallback = null;
+    _serverFilename = null;
     _dhtStatus = null;
   }
 
@@ -1171,8 +1183,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (request == null || client == null || _torrentStatsFetching) return;
     _torrentStatsFetching = true;
     TorrentStats? stats;
+    // Whether the answer is about the file being streamed rather than the
+    // torrent as a whole. It matters for the name below: the torrent-level
+    // `streamName` is the file the server *guessed*, which is the streamed
+    // one only when the stream carried no `fileIdx` -- and then the primary
+    // request is the torrent-level one anyway.
+    var aboutTheFile = false;
     try {
       stats = await client.fetch(request);
+      aboutTheFile = stats != null;
       if (stats == null &&
           fallback != null &&
           _torrentStatsRequest == request) {
@@ -1180,18 +1199,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } on Object {
       stats = null;
+      aboutTheFile = false;
     } finally {
       _torrentStatsFetching = false;
     }
     // Still the same torrent, still polling for it (a stall that ended
     // while the fetch was out wants no answer), and something changed.
+    final opened = aboutTheFile ? stats?.streamName : null;
     if (!mounted ||
         _torrentStatsTimer == null ||
         _torrentStatsRequest != request ||
-        stats == _torrentStats) {
+        (stats == _torrentStats && opened == _serverFilename)) {
       return;
     }
-    setState(() => _torrentStats = stats);
+    setState(() {
+      _torrentStats = stats;
+      // A poll that came back empty says nothing about the file the server
+      // opened; only an answer that names one replaces the name.
+      if (opened != null) _serverFilename = opened;
+    });
   }
 
   /// The start-up overlay replaces the status text from `open` until the
@@ -2076,11 +2102,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final compatibility = CastCompatibility.of(
       url: local,
       facts: _streamFacts,
-      filename: castFilename(state),
+      filename: castFilename(state, serverFilename: _serverFilename),
       stats: _lastStats,
+      // A torrent the server has not named the file of yet: the answer is
+      // "not until it has", and it comes without reopening anything, since
+      // the poll that names it rebuilds this screen.
+      containerPending: _torrentStatsRequest != null && _serverFilename == null,
     );
     if (compatibility is CastRefused) {
-      await _explainCast(compatibility.explanation);
+      await _explainCast(compatibility.explanation, title: compatibility.title);
       return;
     }
     if (!await cast.connect(device)) {
@@ -2197,11 +2227,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Says why casting did not happen. A dialog, because it is the answer to
   /// something that was asked for and it is worth reading.
-  Future<void> _explainCast(String explanation) async {
+  Future<void> _explainCast(String explanation, {String? title}) async {
     if (!mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (context) => CastRefusedDialog(explanation: explanation),
+      builder: (context) => CastRefusedDialog(
+        explanation: explanation,
+        title: title ?? CastRefusedDialog.defaultTitle,
+      ),
     );
   }
 

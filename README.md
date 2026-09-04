@@ -995,11 +995,17 @@ Because nothing is converted, the honest part of this is the refusal.
 (`lib/features/cast/cast_compatibility.dart`): MP4 or WebM, H.264 or HEVC
 video, AAC audio.
 
-- The **container** comes from `behaviorHints.filename`, the converted
-  stream's filename, or a URL path that ends in a real file name. A torrent's
-  streaming URL is `/{infoHash}/{fileIdx}` and says nothing, so the filename is
-  usually all there is — and a container nothing identifies is a **refusal**,
-  not a maybe. A guess here is a guess about whether the evening works.
+- The **container** comes from the name of the file the embedded server says
+  it opened (`streamName` in the `stats.json` the player already polls), then
+  the converted stream's filename, then `behaviorHints.filename`, then a URL
+  path that ends in a real file name. The server comes first because a
+  torrent's streaming URL is `/{infoHash}/{fileIdx}` and says nothing, and the
+  addon is often silent or guessing: it says what it believes it linked to,
+  the server says what it opened. (For a torrent the converted stream is the
+  same claim — `Stream::to_converted` clones `behavior_hints` verbatim — while
+  an offline play, where it really is the file on disk, has no server behind
+  it at all.) A container nothing identifies is a **refusal**, not a maybe. A
+  guess here is a guess about whether the evening works.
 - The **codecs** come from mpv while the stream is playing locally
   (`video-codec` and `audio-codec-name`, sampled while the receiver list is
   open), and otherwise from what the release claims about itself — the
@@ -1014,6 +1020,16 @@ video, AAC audio.
 A refusal is a dialog that says what is wrong and that the conversion which
 would fix it does not exist yet; `CastRefusal` names which rule refused, which
 is the seam Media3 fills.
+
+One refusal is not a verdict. In the first seconds of a torrent the server has
+not opened a file yet, so nothing anywhere names it; that is
+`CastRefusal.containerPending`, headed "Still working out what this file is"
+rather than "This stream cannot be cast", and it answers itself — the poll that
+names the file makes the same button work, with nothing reopened. The name is
+kept for as long as the player is on that stream, because the polling stops
+once playback is under way while which file this is does not go stale, and it
+is only ever taken from an answer about the file being streamed: the
+torrent-level fallback's `streamName` is the file the server *guessed*.
 
 **The URL the receiver is given.** A Chromecast cannot fetch from
 `127.0.0.1`, so a loopback URL is rebuilt on the server's **LAN media

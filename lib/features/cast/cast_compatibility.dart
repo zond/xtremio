@@ -14,12 +14,16 @@ import '../player/playback_stats.dart';
 /// is H.264 or HEVC and whose audio is AAC. That is the rule as implemented
 /// here, judged from what the app already knows:
 ///
-/// - the **container** from `behaviorHints.filename` (or the converted
-///   stream's, or a URL path that ends in a real file name). A torrent's
-///   streaming URL is `/{infoHash}/{fileIdx}` and carries no extension, so
-///   the filename is usually the only source — and an unknown container is
-///   a refusal, not a maybe: a guess here is a guess about whether the
-///   evening works.
+/// - the **container** from the best filename known (see [castFilename]:
+///   the file the *server* says it opened, then the converted stream's,
+///   then `behaviorHints.filename`), or failing that a URL path that ends
+///   in a real file name. A torrent's streaming URL is
+///   `/{infoHash}/{fileIdx}` and carries no extension, so a filename is the
+///   only source — and an unknown container is a refusal, not a maybe: a
+///   guess here is a guess about whether the evening works. The one thing
+///   that is not a refusal is a torrent whose server has not named the file
+///   *yet*; that is [CastRefusal.containerPending], a "not yet" rather than
+///   a "no".
 /// - the **codecs** from mpv, when this stream is playing locally and has
 ///   reported them, and otherwise from what the release says about itself
 ///   ([StreamFacts]'s tags, and the filename). Those are *claims*, so they
@@ -38,19 +42,27 @@ sealed class CastCompatibility {
   /// The result of judging [url] with everything known about it.
   ///
   /// [facts] is what the stream said about itself, [filename] the best
-  /// filename known (the converted stream's included), and [stats] mpv's
-  /// last report while playing this locally, when there is one.
+  /// filename known ([castFilename]), and [stats] mpv's last report while
+  /// playing this locally, when there is one. [containerPending] says that
+  /// a filename may still arrive -- a torrent whose stats have not named
+  /// the file the server opened -- which turns the unknown container from a
+  /// verdict into a wait.
   factory CastCompatibility.of({
     required Uri url,
     StreamFacts? facts,
     String? filename,
     PlaybackStats? stats,
+    bool containerPending = false,
   }) {
     final proxied = _proxyPrefix(url);
     if (proxied != null) return CastRefused._proxy(proxied);
 
     final container = _containerOf(filename) ?? _containerOf(_urlFilename(url));
-    if (container == null) return const CastRefused._unknownContainer();
+    if (container == null) {
+      return containerPending
+          ? const CastRefused._containerPending()
+          : const CastRefused._unknownContainer();
+    }
     if (!_castableContainers.containsKey(container)) {
       return CastRefused._container(_describeContainer(container));
     }
@@ -80,7 +92,7 @@ final class CastReady extends CastCompatibility {
 
 /// The stream cannot go to a receiver as it is, with the sentence to show.
 final class CastRefused extends CastCompatibility {
-  const CastRefused._(this.reason, this.explanation);
+  const CastRefused._(this.reason, this.explanation, {this.title});
 
   const CastRefused._proxy(String prefix)
     : this._(
@@ -95,6 +107,17 @@ final class CastRefused extends CastCompatibility {
         'Nothing here says what kind of file this stream is, so there is no '
         'telling whether a Chromecast could play it. Casting it would need '
         'conversion, which this app cannot do yet.',
+      );
+
+  const CastRefused._containerPending()
+    : this._(
+        CastRefusal.containerPending,
+        'The server has not said yet which file this torrent streams, so '
+        'there is no telling what kind of file it is. It knows once the '
+        'torrent has started; try again in a moment.',
+        // The one refusal that is not a verdict, so it does not get to be
+        // headed like one.
+        title: 'Still working out what this file is',
       );
 
   const CastRefused._container(String description)
@@ -122,6 +145,11 @@ final class CastRefused extends CastCompatibility {
   /// a particular refusal is the one Media3 could remux around.
   final CastRefusal reason;
 
+  /// The heading over [explanation], or null for the dialog's own -- which
+  /// says the stream cannot be cast, and is right for every refusal that is
+  /// an answer.
+  final String? title;
+
   /// What to put in front of the viewer. Says what is wrong and that the
   /// conversion which would fix it is not built, rather than "cannot cast".
   final String explanation;
@@ -129,10 +157,13 @@ final class CastRefused extends CastCompatibility {
 
 /// Why a stream was refused. The seam for Media3: [container], [videoCodec]
 /// and [audioCodec] are the three a remux could answer, [proxied] never is,
-/// and [unknownContainer] is a question rather than an answer.
+/// [unknownContainer] is a question rather than an answer, and
+/// [containerPending] is not even that yet -- ask again when the server has
+/// opened the file.
 enum CastRefusal {
   proxied,
   unknownContainer,
+  containerPending,
   container,
   videoCodec,
   audioCodec,
@@ -296,7 +327,24 @@ final Map<String, RegExp> _audioPatterns = {
 String _describeContainer(String extension) =>
     _knownContainers[extension] ?? 'a .$extension file';
 
-/// What to call the media on the receiver, and the filename the check
-/// should read: the converted stream's, the selected stream's, or nothing.
-String? castFilename(PlayerState? state) =>
-    state?.convertedStream?.filename ?? state?.selectedStream?.filename;
+/// The filename the check should read, first hit wins: [serverFilename],
+/// then the converted stream's, then the selected stream's
+/// `behaviorHints.filename`, then nothing.
+///
+/// [serverFilename] is `TorrentStats.streamName`, the file the embedded
+/// server actually opened, and it comes first on purpose. The addon says
+/// what it believes it linked to and is often silent; the server says what
+/// it is serving, and for a torrent stream whose URL is
+/// `/{infoHash}/{fileIdx}` it is the only thing that ever names the file.
+///
+/// It outranks the converted stream too, because for a torrent the two are
+/// the same claim: `Stream::to_converted` clones `behavior_hints` verbatim,
+/// so a converted stream's filename is the addon's filename. The one place
+/// a converted stream knows better is an offline play, where the app builds
+/// the stream from the file on disk -- and that is a `url` stream with no
+/// torrent behind it, so [serverFilename] is null there and the order never
+/// comes up.
+String? castFilename(PlayerState? state, {String? serverFilename}) =>
+    serverFilename ??
+    state?.convertedStream?.filename ??
+    state?.selectedStream?.filename;
