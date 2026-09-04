@@ -319,6 +319,19 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     if let Some(embedded) = &server_base_url {
         retarget_loopback_server(&mut profile, embedded);
     }
+    // The record is about addons this profile has. Once one has been gone
+    // long enough that reinstalling it would not be "the same addon" any
+    // more, its counts are only a host name the file keeps forever.
+    // After the retarget, so the local addon is judged installed by the
+    // URL the profile actually holds.
+    crate::addon_health::prune_uninstalled_in(
+        &app,
+        &profile
+            .addons
+            .iter()
+            .map(|addon| crate::addon_health::key_for(&addon.transport_url))
+            .collect(),
+    );
     let uid = profile.uid();
     let mut library_bucket = LibraryBucket::new(uid.clone(), vec![]);
     if let Some(recent) = recent {
