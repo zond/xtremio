@@ -28,7 +28,8 @@ void main() {
   test('a rounded rate is the same cut; a neighbouring one is not', () {
     // The boundary the tolerance exists for. OpenSubtitles rounds 23.976
     // to `23980`, four thousandths away: the same file. A real 24 fps cut
-    // is twenty-four thousandths away and drifts a second every fifty.
+    // is twenty-four thousandths away -- a tenth of a percent, seven
+    // seconds of drift over a feature.
     final sources = [
       source('eng', 'https://subs/23980.srt', fpsMilli: 23980),
       source('eng', 'https://subs/23976.srt', fpsMilli: 23976),
@@ -49,6 +50,47 @@ void main() {
 
     // The same list against a 25 fps video keeps the other end of it.
     expect(kept(sources, 25), ['https://subs/25000.srt']);
+  });
+
+  test('telecine and frame doubling are the same seconds, so they stay', () {
+    // An SRT is timed in seconds, not frames, so a declared rate only
+    // means drift when the two rates imply a different running time. NTSC
+    // film in a 29.97 container is the same seconds as the 23.976 master
+    // -- five frames drawn for every four -- so a `23976` file plays in
+    // sync against it, and OpenSubtitles' English answer for one Breaking
+    // Bad episode is six of those against a single `29970`.
+    final ntsc = [
+      source('eng', 'https://subs/23976.srt', fpsMilli: 23976),
+      source('eng', 'https://subs/23980.srt', fpsMilli: 23980),
+      source('eng', 'https://subs/29970.srt', fpsMilli: 29970),
+      source('eng', 'https://subs/59940.srt', fpsMilli: 59940),
+      // PAL is the pair the filter exists for: 25 against 29.97 is a
+      // different running time whichever way it is scaled.
+      source('eng', 'https://subs/25000.srt', fpsMilli: 25000),
+    ];
+    expect(kept(ntsc, 29.97), [
+      'https://subs/23976.srt',
+      'https://subs/23980.srt',
+      'https://subs/29970.srt',
+      'https://subs/59940.srt',
+    ]);
+    // The same holds seen from the film side, and for the integer family
+    // (24 telecined to 30), and for a doubled PAL encode.
+    expect(kept(ntsc, 23.976), [
+      'https://subs/23976.srt',
+      'https://subs/23980.srt',
+      'https://subs/29970.srt',
+      'https://subs/59940.srt',
+    ]);
+    final integer = [
+      source('eng', 'https://subs/24000.srt', fpsMilli: 24000),
+      source('eng', 'https://subs/25000.srt', fpsMilli: 25000),
+    ];
+    expect(kept(integer, 30), ['https://subs/24000.srt']);
+    expect(kept(integer, 50), ['https://subs/25000.srt']);
+    // And the ratios are the family relations, not a licence: 25 against
+    // 23.976 is still 4.3 % of speed-up and still goes.
+    expect(kept([ntsc.first, ntsc.last], 23.976), ['https://subs/23976.srt']);
   });
 
   test('a file that declares no rate is never the wrong file', () {

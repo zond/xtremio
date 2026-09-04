@@ -586,9 +586,13 @@ connection.
   a torrent stream is full of, and a filter with a hundredth-of-a-frame
   tolerance fed a jittery estimate hides the correct files rather than
   the wrong ones. Rates
-  within 0.01 fps are the same cut (`23980` is a rounded 23.976);
-  anything further is the wrong file and is dropped, and a file that
-  declares no rate is always kept. Two rules stop the filter taking the
+  within 0.01 fps are the same cut (`23980` is a rounded 23.976), and so
+  are rates a telecine or a doubling apart -- an SRT is timed in seconds,
+  not frames, so 23.976 film in a 29.97 container is the same seconds
+  (five frames drawn for every four) and a `23976` file plays in sync
+  against it. What the filter is for is the PAL/NTSC pair, where the
+  running time really does differ. Anything else is the wrong file and is
+  dropped, and a file that declares no rate is always kept. Two rules stop the filter taking the
   list away: nothing at all is filtered when the engine cannot say what
   the video runs at, and a language filtering would empty keeps every one
   of its files -- losing every Polish subtitle because the container lied

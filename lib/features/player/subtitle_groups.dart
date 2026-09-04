@@ -115,11 +115,29 @@ final class SubtitleLanguageGroup {
 ///
 /// Wide enough for rounding, narrow enough to catch a different cut.
 /// OpenSubtitles' `23980` against a 23.976 container is 0.004 away and is
-/// the same file; a genuine 24 fps cut is 0.024 away, and that one drifts
-/// a second every fifty. There is nothing legitimate in between: no addon
-/// knows a rate to a thousandth of a frame it did not round from one of
-/// the handful of rates film and video are shot at.
+/// the same file; a genuine 24 fps cut is 0.024 away, which is a tenth of
+/// a percent -- seven seconds of drift over a feature, and growing. There
+/// is nothing legitimate in between: no addon knows a rate to a
+/// thousandth of a frame it did not round from one of the handful of
+/// rates film and video are shot at.
 const double subtitleFrameRateTolerance = 0.01;
+
+/// The ratios between a video's frame rate and a subtitle's declared one
+/// that mean the *same content at the same speed*, so the file plays in
+/// sync however far apart the two numbers look.
+///
+/// A subtitle file is timed in wall-clock seconds, so a declared rate only
+/// predicts drift when the two rates imply a different running time for
+/// the same material. That is exactly the PAL/NTSC pair this filter exists
+/// for -- 25 against 23.976 is a 4.3 % speed-up, four seconds a minute --
+/// and it is exactly *not* the telecine and frame-doubling relations
+/// inside one family: 23.976 film in a 29.97 container is 5/4 as many
+/// frames of the same seconds, and a 50 fps encode of 25 fps material is
+/// twice as many. OpenSubtitles' English answer for one Breaking Bad
+/// episode is six `23976` files and one `29970`; against the NTSC rip
+/// those all belong, and a bare `|a - b|` test would show one of the
+/// seven.
+const List<double> subtitleFrameRateRatios = [1, 1.25, 2, 2.5];
 
 /// [sources] without the files cut for a video of a different frame rate,
 /// which is what the subtitle menu is built from.
@@ -132,6 +150,9 @@ const double subtitleFrameRateTolerance = 0.01;
 ///
 /// - A file that declares no rate is always kept. Most addons declare
 ///   none, and silence is not a mismatch.
+/// - A rate that differs only by telecine or frame doubling is the same
+///   cut, because a subtitle is timed in seconds and those relations
+///   leave the seconds alone (see [subtitleFrameRateRatios]).
 /// - Nothing at all is dropped when [videoFrameRate] is null. An engine
 ///   that cannot say (or has not said yet) is no evidence against any
 ///   file.
@@ -171,10 +192,20 @@ List<SubtitleSource> subtitlesMatchingFrameRate(
 /// Whether [subtitle] was cut for a video running at [videoFrameRate].
 /// A rate the addon did not give -- absent, unparsable, or a zero or
 /// negative that is no rate at all -- is not a mismatch.
+///
+/// The two rates are compared after dividing the larger one down by each
+/// of [subtitleFrameRateRatios], so the comparison always happens at the
+/// content's own rate and [subtitleFrameRateTolerance] keeps its meaning
+/// there.
 bool _matchesFrameRate(SubtitleInfo subtitle, double videoFrameRate) {
   final milli = subtitle.fpsMilli;
   if (milli == null || milli <= 0) return true;
-  return (milli / 1000 - videoFrameRate).abs() <= subtitleFrameRateTolerance;
+  final rate = milli / 1000;
+  final low = rate < videoFrameRate ? rate : videoFrameRate;
+  final high = rate < videoFrameRate ? videoFrameRate : rate;
+  return subtitleFrameRateRatios.any(
+    (ratio) => (low - high / ratio).abs() <= subtitleFrameRateTolerance,
+  );
 }
 
 /// The display name a language code is grouped under: what the code
