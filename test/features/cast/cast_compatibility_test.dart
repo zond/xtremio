@@ -205,12 +205,22 @@ void main() {
       expect(result, isA<CastReady>());
     });
 
-    test('HEVC is castable, being one of the two the receiver decodes', () {
+    test('HEVC is castable, being one the receiver decodes', () {
       final result = check(
         filename: 'Sintel.2160p.HEVC.mp4',
         stats: const PlaybackStats(videoCodec: 'hevc (Main 10)'),
       );
       expect(result, isA<CastReady>());
+    });
+
+    test('the video refusal names every codec the gate does take', () {
+      // Read off the same table the check reads, so the sentence cannot go
+      // on naming two codecs after the table grew to four.
+      final result = check(
+        filename: 'clip.mp4',
+        stats: const PlaybackStats(videoCodec: 'av1'),
+      ) as CastRefused;
+      expect(result.explanation, contains('H.264, HEVC, VP8 or VP9 video'));
     });
   });
 
@@ -247,6 +257,20 @@ void main() {
         stats: const PlaybackStats(audioCodec: 'vorbis'),
       );
       expect(result, isA<CastReady>());
+    });
+
+    test('a WebM carrying the video WebM actually carries is castable', () {
+      // The audio table above is unreachable for a real WebM unless the
+      // video check lets VP8 and VP9 through: no WebM in the wild carries
+      // H.264, so a gate that took only H.264 and HEVC refused every one
+      // of them before their audio was ever looked at.
+      for (final codec in ['vp9', 'vp8']) {
+        final result = check(
+          filename: 'clip.webm',
+          stats: PlaybackStats(videoCodec: codec, audioCodec: 'opus'),
+        );
+        expect(result, isA<CastReady>(), reason: codec);
+      }
     });
 
     test('a WebM with MP3 audio is refused', () {

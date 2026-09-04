@@ -11,9 +11,9 @@ import '../player/playback_stats.dart';
 /// cast fail on the television.
 ///
 /// What a Chromecast plays without help is an MP4 or WebM file whose video
-/// is H.264 or HEVC and whose audio is one the container is allowed to
-/// carry -- AAC or MP3 in an MP4, Opus or Vorbis in a WebM. That is the
-/// rule as implemented here, judged from what the app already knows:
+/// is H.264, HEVC, VP8 or VP9 and whose audio is one the container is
+/// allowed to carry -- AAC or MP3 in an MP4, Opus or Vorbis in a WebM. That
+/// is the rule as implemented here, judged from what the app already knows:
 ///
 /// - the **container** from the best filename known (see [castFilename]:
 ///   the file the *server* says it opened, then the converted stream's,
@@ -71,7 +71,7 @@ sealed class CastCompatibility {
 
     final video = _videoCodec(facts: facts, stats: stats);
     if (video != null && !_castableVideo.contains(video)) {
-      return CastRefused._video(video);
+      return CastRefused._video(video, _orList(_castableVideo));
     }
     final audio = _audioCodec(facts: facts, filename: filename, stats: stats);
     if (audio != null && !format.audio.contains(audio)) {
@@ -129,10 +129,10 @@ final class CastRefused extends CastCompatibility {
         'Casting it would need conversion, which this app cannot do yet.',
       );
 
-  const CastRefused._video(String codec)
+  const CastRefused._video(String codec, String supported)
     : this._(
         CastRefusal.videoCodec,
-        'A Chromecast decodes H.264 and HEVC video; this stream is $codec. '
+        'A Chromecast decodes $supported video; this stream is $codec. '
         'Casting it would need conversion, which this app cannot do yet.',
       );
 
@@ -208,16 +208,30 @@ const Map<String, String> _knownContainers = {
   'divx': 'a DivX file',
 };
 
-/// The video codecs a receiver decodes -- and unlike the table above, this
-/// one is a guess that leans permissive. Only Chromecast Ultra, Chromecast
-/// with Google TV and the Google TV Streamer decode HEVC; a first- to
-/// third-generation Chromecast and a Nest Hub take H.264 and VP8 only, so
-/// an HEVC stream this gate calls ready fails on those receivers with
-/// nothing said. Fixing it honestly means asking the session what the
-/// receiver in the room supports -- the Cast SDK reports the device's
-/// capabilities -- rather than holding one table for every device, and
-/// that is a larger change than this one.
-const Set<String> _castableVideo = {'H.264', 'HEVC'};
+/// The video codecs a receiver decodes. Unlike the table above this one is
+/// a guess, and it errs in both directions rather than only the safe one.
+///
+/// It **leans permissive** over HEVC and VP9: only Chromecast Ultra,
+/// Chromecast with Google TV and the Google TV Streamer decode HEVC, and
+/// VP9 wants one of those or a Nest Hub, so a stream this gate calls ready
+/// still fails on a first- to third-generation Chromecast with nothing
+/// said. Fixing that honestly means asking the session what the receiver in
+/// the room supports -- the Cast SDK reports the device's capabilities --
+/// rather than holding one table for every device, which is a larger change
+/// than any made here.
+///
+/// It **leaned strict** over VP8 and VP9, which is what put them in the
+/// set: no WebM in the wild carries H.264, so a table of H.264 and HEVC
+/// refused every real WebM at the video check, before the audio the
+/// container half of this file had just been taught was ever consulted. A
+/// caveat written in one direction hid that for as long as it stood, so
+/// this one is written in both.
+///
+/// And it is **not keyed on the container**, which the audio table is: a
+/// WebM claiming H.264 is called ready as `video/webm`, a pair Cast lists
+/// no media type for. A file that does not exist in practice, left alone
+/// and named here rather than rediscovered.
+const Set<String> _castableVideo = {'H.264', 'HEVC', 'VP8', 'VP9'};
 
 /// The `/proxy` or `/ftp` prefix [url] is served under, or null.
 ///
@@ -347,7 +361,18 @@ final Map<String, RegExp> _audioPatterns = {
 /// "AAC or MP3 audio in an MP4 file".
 String _describeAudioSupport(
   ({String contentType, String name, Set<String> audio}) format,
-) => '${format.audio.join(' or ')} audio in ${format.name}';
+) => '${_orList(format.audio)} audio in ${format.name}';
+
+/// [names] as a sentence lists them -- "AAC or MP3", "H.264, HEVC, VP8 or
+/// VP9". Both refusals read their own table through this, so neither can
+/// name a codec the check does not take, or miss one it does. A const set
+/// literal iterates in declaration order, so the wording is the table's own
+/// order and stays put.
+String _orList(Iterable<String> names) {
+  final items = names.toList();
+  if (items.length < 2) return items.join();
+  return '${items.take(items.length - 1).join(', ')} or ${items.last}';
+}
 
 /// The name of the container [extension] belongs to, for a refusal that
 /// says what the file is rather than repeating the three letters.
