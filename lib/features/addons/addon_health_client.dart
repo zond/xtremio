@@ -90,16 +90,25 @@ class AddonHealthNotifier extends ChangeNotifier {
     }
   }
 
-  /// Forgets one addon's record and reads the rest back.
-  Future<void> forget(String key) async {
+  /// Forgets one addon's record and reads the rest back, answering whether
+  /// the record is actually gone.
+  ///
+  /// False covers both a call that threw and one that found nothing under
+  /// the key, because from up here they are the same claim: the history the
+  /// viewer asked to be rid of may still be there, and a screen that says
+  /// "forgotten" over a verdict still on the tile is claiming something the
+  /// app did not do.
+  Future<bool> forget(String key) async {
     final client = this.client;
-    if (client == null) return;
+    if (client == null) return false;
+    var forgotten = false;
     try {
-      await client.forget(key);
+      forgotten = await client.forget(key);
     } catch (error) {
       if (kDebugMode) debugPrint('addon health not forgotten: $error');
     }
     await load();
+    return forgotten;
   }
 
   bool _disposed = false;

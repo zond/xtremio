@@ -273,6 +273,45 @@ void main() {
     expect(find.text('Forget this addon\'s history'), findsNothing);
   });
 
+  testWidgets('a forget that threw is not reported as one', (tester) async {
+    final health = await pumpScreen(tester);
+    // The core going away between the read and the tap.
+    health.forgetFails = true;
+
+    await openMenuOf(tester, 'WatchHub');
+    await tester.tap(find.text('Forget this addon\'s history'));
+    await tester.pumpAndSettle();
+
+    // Saying "forgot" about a record that is still there is a claim about
+    // something the app did not do, and the verdict still on the tile
+    // contradicts it on the same screen.
+    expect(find.text('Forgot how WatchHub has been answering'), findsNothing);
+    expect(
+      find.text('Could not forget how WatchHub has been answering'),
+      findsOneWidget,
+    );
+    expect(find.text('Often unreachable'), findsOneWidget);
+  });
+
+  testWidgets('a forget with nothing to drop says so too', (tester) async {
+    final health = await pumpScreen(tester);
+    // The record went out from under the screen -- evicted, or a table the
+    // Rust side never finished loading. The menu item is still on the tile
+    // the last read drew.
+    health.addons.clear();
+
+    await openMenuOf(tester, 'WatchHub');
+    await tester.tap(find.text('Forget this addon\'s history'));
+    await tester.pumpAndSettle();
+
+    expect(health.forgotten, [addonHealthKey(watchhub)]);
+    expect(find.text('Forgot how WatchHub has been answering'), findsNothing);
+    expect(
+      find.text('Could not forget how WatchHub has been answering'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a verdict adds no way at all to remove an addon', (
     tester,
   ) async {

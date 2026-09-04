@@ -12,6 +12,7 @@ class FakeAddonHealthClient implements AddonHealthClient {
     Map<String, Map<AddonResourceKind, AddonHealthRecord>>? addons,
     this.everyAnswerFailed = false,
     this.failing = false,
+    this.forgetFails = false,
   }) : addons = {...?addons};
 
   /// What is "recorded", keyed by [addonHealthKey].
@@ -22,6 +23,11 @@ class FakeAddonHealthClient implements AddonHealthClient {
   /// One that throws from both sides: the screen goes on listing the addons
   /// with nothing said about any of them.
   final bool failing;
+
+  /// One that reads fine but cannot drop a record -- the core going away
+  /// between the read and the tap, which is the shape the screen must not
+  /// report as a successful forget.
+  bool forgetFails;
 
   final List<String> forgotten = [];
   int reads = 0;
@@ -40,7 +46,7 @@ class FakeAddonHealthClient implements AddonHealthClient {
 
   @override
   Future<bool> forget(String key) async {
-    if (failing) throw StateError('no core');
+    if (failing || forgetFails) throw StateError('no core');
     forgotten.add(key);
     return addons.remove(key) != null;
   }

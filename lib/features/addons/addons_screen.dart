@@ -159,14 +159,24 @@ class _AddonsScreenState extends State<AddonsScreen> {
   /// old key's failures are about a configuration that no longer exists.
   /// It removes history and nothing else: the addon stays installed.
   Future<void> _forgetHistory(AddonDescriptor addon) async {
-    await _health?.forget(addonHealthKey(addon.transportUrl));
+    final health = _health;
+    final forgotten =
+        health != null &&
+        await health.forget(addonHealthKey(addon.transportUrl));
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)
-        ?.showSnackBar(SnackBar(content: Text(_forgottenMessage(addon))));
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(_forgottenMessage(addon, forgotten))),
+    );
   }
 
-  static String _forgottenMessage(AddonDescriptor addon) =>
-      'Forgot how ${addon.manifest.name} has been answering';
+  /// What the viewer is told afterwards. Only a record that is really gone
+  /// gets the past tense: the call can throw (a core on its way out) or
+  /// find nothing under the key, and either way the verdict is still on the
+  /// tile behind the snackbar.
+  static String _forgottenMessage(AddonDescriptor addon, bool forgotten) =>
+      forgotten
+      ? 'Forgot how ${addon.manifest.name} has been answering'
+      : 'Could not forget how ${addon.manifest.name} has been answering';
 
   @override
   Widget build(BuildContext context) {
