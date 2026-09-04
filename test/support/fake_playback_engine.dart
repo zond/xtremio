@@ -56,6 +56,14 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// The multiplier in force, which is the last one set.
   double get subtitleSpeed => subtitleSpeeds.isEmpty ? 1 : subtitleSpeeds.last;
 
+  /// Every `setSubtitleDelay` call, in order -- what a test reads to see
+  /// which way a shift moved the lines and that the next pick put the
+  /// offset back.
+  final List<double> subtitleDelays = [];
+
+  /// The offset in force, which is the last one set.
+  double get subtitleDelay => subtitleDelays.isEmpty ? 0 : subtitleDelays.last;
+
   /// When set, `open` records the call and then fails with it (mpv refusing
   /// the URL).
   Object? openError;
@@ -211,6 +219,11 @@ class FakePlaybackEngine implements PlaybackEngine {
   @override
   Future<void> setSubtitleSpeed(double speed) async {
     subtitleSpeeds.add(speed);
+  }
+
+  @override
+  Future<void> setSubtitleDelay(double seconds) async {
+    subtitleDelays.add(seconds);
   }
 
   @override

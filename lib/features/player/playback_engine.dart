@@ -98,6 +98,23 @@ abstract interface class PlaybackEngine {
   /// behind by the previous pick would ruin a subtitle that was correct.
   Future<void> setSubtitleSpeed(double speed);
 
+  /// Shifts the subtitle events being drawn by [seconds]: positive makes
+  /// a line appear later than the file asks for, negative earlier.
+  ///
+  /// The other half of putting a file back in step, and the half no rate
+  /// can be computed: a multiplier fixes a subtitle that drifts, an
+  /// offset fixes one cut for a release that starts somewhere else -- a
+  /// distributor logo this video does not have. Only a viewer watching
+  /// the picture can judge it, so nothing sets this by itself.
+  ///
+  /// libmpv's `sub-delay`; any other backend does nothing here, exactly
+  /// as [videoFrameRate] says nothing there.
+  ///
+  /// Like the multiplier it belongs to the player rather than to the
+  /// file, so every path that changes what is on screen sets it, `0.0`
+  /// included.
+  Future<void> setSubtitleDelay(double seconds);
+
   /// Applies to the subtitles drawn over the video from the next build.
   Future<void> setSubtitleStyle(SubtitleStyle style);
 
@@ -615,6 +632,36 @@ class MediaKitEngine implements PlaybackEngine {
       // out-of-range write is silent and leaves the property as it was.
       // That is why the range is enforced where the number is computed
       // (`minSubtitleSpeed` in `subtitle_groups.dart`) rather than here.
+    }
+  }
+
+  /// The mpv property that shifts subtitle event timestamps, in seconds.
+  /// Positive is later, which is mpv's own sign and the one the overlay
+  /// puts in front of the number.
+  static const String subtitleDelayProperty = 'sub-delay';
+
+  /// [seconds] as mpv reads it. Three decimals is a millisecond, finer
+  /// than the tenth of a second a viewer can ask for and finer than any
+  /// subtitle format times its own cues.
+  static String subtitleDelayValue(double seconds) =>
+      seconds.toStringAsFixed(3);
+
+  @override
+  Future<void> setSubtitleDelay(double seconds) async {
+    final native = _player.platform;
+    // Only the native (libmpv) backend has properties; a cast or an
+    // offline backend shifts nothing and needs nothing put back.
+    if (native is! NativePlayer || _disposed) return;
+    try {
+      await native.setProperty(
+        subtitleDelayProperty,
+        subtitleDelayValue(seconds),
+      );
+    } catch (_) {
+      // A player torn down mid-write, or a build of libmpv without the
+      // property. The latter never shifted anything either, so there is
+      // no stale offset for a failed reset to leave behind. Unlike
+      // `sub-speed` this property has no range to fall outside of.
     }
   }
 
