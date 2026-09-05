@@ -1,5 +1,6 @@
 //! The process state's lifetime: created once, adopted by `init`, taken
-//! whole by `shutdown`, and never inherited by the next `init`.
+//! whole by `shutdown`, never inherited by the next `init`, and never put
+//! back by work the shutdown outran.
 //!
 //! Its own test binary because it drives `core_init`/`core_shutdown`, which
 //! own the process while they run.
@@ -142,6 +143,22 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
     assert!(
         stored_health_keys().contains(&key),
         "the last answers never reached the file"
+    );
+
+    // A shutdown does not stop the background work of the instance it
+    // retires: the downloads ticker is somewhere inside a blocking refresh,
+    // the boot's re-pin inside a magnet the tracker has not answered yet.
+    // Both go on addressing the state they were started for, which is what
+    // they hold -- and asking that state anything must not build a new one,
+    // which is exactly what the resurrecting `state::state` accessor does.
+    // Driven here rather than raced: the window is real but it is
+    // milliseconds wide, and a test that has to win it proves nothing on the
+    // runs it loses.
+    xtremio_core::downloads::ensure_ticker_in(&first);
+    xtremio_core::downloads::repin_unfinished_in(&first);
+    assert!(
+        state::current().is_none(),
+        "the retired instance's background work rebuilt the state shutdown took"
     );
 
     // Whatever the retired instance still had in flight lands in the sink

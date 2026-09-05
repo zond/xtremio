@@ -395,9 +395,15 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     // path: a pin blocks while a magnet resolves its metadata, and nothing
     // on screen waits for it.
     if server_base_url.is_some() {
-        XtremioEnv::exec_concurrent(async {
+        // Against the state this boot built, not whatever the process holds
+        // when it gets there: a pin blocks until the tracker answers, so a
+        // shutdown can retire this state first, and looking one up would
+        // rebuild what the shutdown took.
+        let booted = Arc::clone(&app);
+        XtremioEnv::exec_concurrent(async move {
             if let Err(error) =
-                tokio::task::spawn_blocking(crate::downloads::repin_unfinished).await
+                tokio::task::spawn_blocking(move || crate::downloads::repin_unfinished_in(&booted))
+                    .await
             {
                 tracing::warn!(%error, "re-pinning the offline downloads panicked");
             }

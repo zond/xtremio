@@ -647,7 +647,14 @@ fn move_aside(path: &std::path::Path, reason: &str) {
 
 /// The registry as it is on disk.
 pub fn load() -> anyhow::Result<Registry> {
-    let app = crate::state::state();
+    load_in(&crate::state::state())
+}
+
+/// [`load`] against a state the caller already holds, which is the only
+/// thing background work may do: `state::state` *creates* a state when there
+/// is none, so work that outlived a shutdown would put one back into the
+/// process rather than quietly finish against its own.
+fn load_in(app: &AppState) -> anyhow::Result<Registry> {
     let _guard = app.downloads.file();
     load_locked()
 }
@@ -656,7 +663,15 @@ pub fn load() -> anyhow::Result<Registry> {
 /// The file lock is held throughout, so two concurrent updates cannot lose
 /// each other's edits.
 pub fn update<T>(f: impl FnOnce(&mut Registry) -> anyhow::Result<T>) -> anyhow::Result<T> {
-    update_when(f, |_, _, _| true)
+    update_in(&crate::state::state(), f)
+}
+
+/// [`update`] against a state the caller already holds. See [`load_in`].
+fn update_in<T>(
+    app: &AppState,
+    f: impl FnOnce(&mut Registry) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    update_when_in(app, f, |_, _, _| true)
 }
 
 /// The same, with a say in whether the change is worth a write. `needed` is
@@ -664,11 +679,11 @@ pub fn update<T>(f: impl FnOnce(&mut Registry) -> anyhow::Result<T>) -> anyhow::
 /// leaves the file as it was, edits and all: the caller must be one whose
 /// change the next write picks up again anyway. [`refresh`] is that caller,
 /// and the only one.
-fn update_when<T>(
+fn update_when_in<T>(
+    app: &AppState,
     f: impl FnOnce(&mut Registry) -> anyhow::Result<T>,
     needed: impl FnOnce(&RegistryFile, &Registry, &Registry) -> bool,
 ) -> anyhow::Result<T> {
-    let app = crate::state::state();
     let mut file = app.downloads.file();
     let mut registry = load_locked()?;
     let before = registry.clone();
@@ -1337,10 +1352,25 @@ pub struct Refresh {
 /// what moved. The file is rewritten for anything but a byte count, and for
 /// a byte count no more often than [`PROGRESS_WRITE_INTERVAL`].
 pub fn refresh() -> anyhow::Result<Refresh> {
+    refresh_in(&crate::state::state())
+}
+
+/// [`refresh`] against a state the caller already holds -- the ticker's, so
+/// that a tick finishing after a shutdown merges into the registry of the
+/// state it was started for and re-arms nothing but that state's ticker.
+/// See [`load_in`].
+///
+/// The live stats are the one thing still asked of the process rather than
+/// of `app`, and they may be: `crate::server::downloads` reads
+/// [`crate::state::current`], which answers "not running" instead of
+/// building a state, and a tick whose own server a shutdown has stopped has
+/// nothing left to merge anyway.
+fn refresh_in(app: &Arc<AppState>) -> anyhow::Result<Refresh> {
     let live = crate::server::downloads()?;
     let now = Utc::now();
     let mut merged = Registry::default();
-    let moved = update_when(
+    let moved = update_when_in(
+        app,
         |registry| {
             let mut moved = Vec::new();
             for (key, entry) in registry.items.iter_mut() {
@@ -1366,7 +1396,7 @@ pub fn refresh() -> anyhow::Result<Refresh> {
     // `set_event_sink` are its only other callers and neither runs
     // afterwards, so progress would stay silent for the rest of the
     // session.
-    ensure_ticker();
+    ensure_ticker_in(app);
     Ok(Refresh {
         registry: merged,
         moved,
@@ -1509,10 +1539,11 @@ pub fn is_ticking() -> bool {
     crate::state::current().is_some_and(|app| *app.downloads.ticking())
 }
 
-/// True while any entry is neither complete nor paused — an errored one
-/// counts, because peers can still turn up and the poll is one cheap call.
-fn anything_unfinished() -> bool {
-    load()
+/// True while any entry of `app`'s registry is neither complete nor paused —
+/// an errored one counts, because peers can still turn up and the poll is
+/// one cheap call.
+fn anything_unfinished_in(app: &AppState) -> bool {
+    load_in(app)
         .map(|registry| registry.items.values().any(Entry::unfinished))
         .unwrap_or(false)
 }
@@ -1523,9 +1554,11 @@ pub fn ensure_ticker() {
     ensure_ticker_in(&crate::state::state());
 }
 
-fn ensure_ticker_in(app: &Arc<AppState>) {
+/// [`ensure_ticker`] against a state the caller already holds. See
+/// [`load_in`].
+pub fn ensure_ticker_in(app: &Arc<AppState>) {
     let mut ticking = app.downloads.ticking();
-    if *ticking || !anything_unfinished() {
+    if *ticking || !anything_unfinished_in(app) {
         return;
     }
     *ticking = true;
@@ -1539,6 +1572,12 @@ fn ensure_ticker_in(app: &Arc<AppState>) {
 /// It holds the state it was started for, and stops as soon as that is no
 /// longer the process's: a shutdown retired its sink and its server, and a
 /// later `init` gets its own ticker rather than inheriting this one.
+///
+/// That check is where the tick stops, not where it becomes safe: a shutdown
+/// can land anywhere inside the blocking refresh that follows it, and the
+/// whole refresh is the window. So every call the tick makes is an `_in`
+/// against the state in hand; one that looked a state up would create the
+/// one the shutdown has just taken.
 async fn ticker(app: Arc<AppState>) {
     loop {
         tokio::time::sleep(TICK).await;
@@ -1546,13 +1585,14 @@ async fn ticker(app: Arc<AppState>) {
             *app.downloads.ticking() = false;
             return;
         }
-        match tokio::task::spawn_blocking(refresh).await {
+        let tick = Arc::clone(&app);
+        match tokio::task::spawn_blocking(move || refresh_in(&tick)).await {
             Ok(Ok(refreshed)) => emit(&app, &refreshed.moved),
             Ok(Err(error)) => tracing::debug!(%error, "downloads progress tick failed"),
             Err(error) => tracing::warn!(%error, "downloads progress tick panicked"),
         }
         let mut ticking = app.downloads.ticking();
-        if !anything_unfinished() {
+        if !anything_unfinished_in(&app) {
             *ticking = false;
             return;
         }
@@ -1565,7 +1605,16 @@ async fn ticker(app: Arc<AppState>) {
 /// alone: their bytes are on disk and re-pinning them would only re-check.
 /// Blocks per entry while a magnet resolves, so run it off the boot path.
 pub fn repin_unfinished() {
-    let items = match load() {
+    repin_unfinished_in(&crate::state::state())
+}
+
+/// [`repin_unfinished`] against a state the caller already holds -- `init`'s,
+/// which is the state this work belongs to. It is the other half of the
+/// boot that can still be running after a shutdown (a magnet blocks it for
+/// as long as the tracker takes), so it may not look a state up either. See
+/// [`load_in`].
+pub fn repin_unfinished_in(app: &Arc<AppState>) {
+    let items = match load_in(app) {
         Ok(registry) => registry.items,
         Err(error) => {
             tracing::warn!(%error, "could not read the downloads registry to re-pin");
@@ -1581,7 +1630,7 @@ pub fn repin_unfinished() {
             Err(error) => {
                 let failure = PinFailure::classify(&error);
                 tracing::warn!(key, message = failure.message(), "could not re-pin");
-                let _ = update(|registry| {
+                let _ = update_in(app, |registry| {
                     if let Some(entry) = registry.items.get_mut(&key) {
                         entry.state = State::Error;
                         entry.error = Some(failure.message().to_owned());
@@ -1591,7 +1640,7 @@ pub fn repin_unfinished() {
             }
         }
     }
-    ensure_ticker();
+    ensure_ticker_in(app);
 }
 
 #[cfg(test)]
@@ -2279,7 +2328,8 @@ mod tests {
             .expect("first write");
             let written = std::fs::read(&file).expect("the registry is on disk");
 
-            update_when(
+            update_when_in(
+                &crate::state::state(),
                 |registry| {
                     registry.items.get_mut("tt1:tt1").unwrap().downloaded = 4096;
                     Ok(())
@@ -2293,7 +2343,8 @@ mod tests {
                 "a byte count alone is not worth an fsync a second"
             );
 
-            update_when(
+            update_when_in(
+                &crate::state::state(),
                 |registry| {
                     let entry = registry.items.get_mut("tt1:tt1").unwrap();
                     entry.downloaded = 8192;
