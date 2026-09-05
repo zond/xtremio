@@ -2735,6 +2735,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _handedOver = true;
     DiagnosticsLog.info('player', 'handing over to the next episode');
+    // Before the push, not in [dispose]. `pushReplacement` keeps this
+    // screen alive until the transition finishes, and the new player can
+    // read its file's rate and ask for it inside that -- an already
+    // downloaded episode opens at once -- whereupon this screen's dispose
+    // would clear the ask the successor had just made. Nothing is left
+    // holding a rate either way, because the release comes first.
+    _releaseDisplayFrameRate();
     final streamRequest = state.streamRequest ?? widget.streamRequest;
     final subtitlesPath = state.subtitlesPath ?? widget.subtitlesPath;
     navigator.pushReplacement(
@@ -3333,11 +3340,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // player out of fullscreen. Off a television the successor makes no
     // such claim, and the window leaves fullscreen as it always has.
     if (_fullscreenOn && !(_isTv && _handedOver)) _fullscreen?.exit().ignore();
-    // The rate goes back whatever else is true, hand-over included: the
-    // next episode's player asks for its own once its file reports one,
-    // which is well after this screen is gone. Unlike fullscreen, leaving
+    // The rate goes back whatever else is true. Unlike fullscreen, leaving
     // it in force is the fault -- a display held at 24 Hz by a player that
-    // no longer exists judders every menu the viewer goes back to.
+    // no longer exists judders every menu the viewer goes back to. A
+    // hand-over has already released it ([_handOver], before it pushes),
+    // so this is a no-op there rather than a clear that would land after
+    // the successor's own ask.
     _releaseDisplayFrameRate();
     final engine = _engine;
     _engine = null;

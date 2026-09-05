@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:xtremio/features/player/player_screen.dart';
+
 import '../../support/player_harness.dart';
 import '../../support/tv.dart';
 
@@ -224,6 +226,40 @@ void main() {
 
     expect(harness.displayFrameRate.requested, [filmRate]);
     expect(harness.displayFrameRate.clears, 0);
+  });
+
+  testWidgets('the hand-over gives the rate back before the next player is '
+      'built', (tester) async {
+    useScreen(tester, tvSize);
+    final harness = PlayerHarness(device: tv);
+    harness.fixture['nextVideo'] = const {
+      'id': 'tt0063350:1:2',
+      'title': 'The Cellar',
+      'season': 1,
+      'episode': 2,
+    };
+    harness.fixture['nextStream'] = const {
+      'url': 'https://x.example/e2.mp4',
+      'name': 'Direct',
+    };
+    await harness.pump(tester);
+    harness.engine.emitVideoFrameRate(filmRate);
+    await pumpEvents(tester);
+    expect(harness.displayFrameRate.requested, [filmRate]);
+
+    // Next pressed in the middle of the episode: the film has not ended,
+    // so nothing has released the rate yet. `pushReplacement` keeps this
+    // screen alive for the length of the transition, and the next
+    // player's own ask lands inside it -- so the release has to be out of
+    // the way before the push, not left to a dispose that runs after.
+    await tester.tap(find.byTooltip('Next episode (N)'));
+    await tester.pump();
+
+    expect(harness.displayFrameRate.clears, 1);
+    expect(find.byType(PlayerScreen), findsWidgets);
+
+    await tester.pumpAndSettle();
+    expect(harness.displayFrameRate.clears, 1);
   });
 
   testWidgets('a phone is neither asked nor cleared', (tester) async {
