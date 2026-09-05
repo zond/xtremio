@@ -1,0 +1,327 @@
+# Builds the app for every platform the README calls supported, and puts the
+# results somewhere a person can download them.
+#
+# Deliberately not `ci.yml`. That one runs on every push and is the feedback
+# anybody actually reads; this one cross-compiles Rust with `lto = true` and
+# `codegen-units = 1` six times over, and hanging that off every push would
+# make the fast checks useless without making these any more informative.
+#
+# Nothing here is allowed to fail softly. Windows and macOS have never been
+# built by anyone -- there is no Mac in the project and nobody has tried
+# Windows -- so a red job here is the answer to a question the README has so
+# far only asserted, and `continue-on-error` would throw that answer away.
+name: Build
+
+on:
+  # A version tag is a release: these artifacts become its downloads.
+  push:
+    tags: ['v*']
+  # Someone asking, usually because they changed something native.
+  workflow_dispatch:
+  # Weekly, so rot in a toolchain, an SDK or a pod is found in a quiet week
+  # rather than on the morning of a release.
+  schedule:
+    - cron: '23 4 * * 1'
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: 3.47.1
+
+# A newer dispatch supersedes an older one on the same ref, but a tag build is
+# never cancelled: it is the one whose artifacts a Release is made of.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  android:
+    name: Android ${{ matrix.abi }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One ABI failing must not cancel the other: which of the two broke is
+      # the whole information this job carries.
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            target: apk
+            # aws-lc-sys ships pregenerated bindings for aarch64-linux-android.
+            libclang: false
+          - abi: armeabi-v7a
+            target: apk-tv
+            # ...and for nothing else, so armv7 generates them at build time
+            # and needs libclang on the host (ANDROID.md, "Prerequisites").
+            libclang: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - if: matrix.libclang
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # cargokit adds these itself on first build; pre-adding keeps that
+          # first Gradle run from stopping to fetch a target mid-build.
+          targets: aarch64-linux-android, armv7-linux-androideabi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          # cargokit does not build into `rust/target`: it passes
+          # `--target-dir` pointing at the Gradle plugin's build directory, so
+          # without this the only thing cached is the registry and every ABI
+          # recompiles the whole graph from scratch.
+          cache-directories: build/xtremio_core/build
+          # A failed job's artifacts are worth keeping while this is being
+          # got working: the next attempt should not pay for the last one's
+          # failure by recompiling everything before reaching it.
+          cache-on-failure: true
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+
+      - run: make ${{ matrix.target }}
+
+      # These are signed with the Flutter template's debug key -- see the
+      # release notes below. Say so in the name, because the name is all a
+      # person downloading it sees.
+      - name: Name the APK after the build it is
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             "xtremio-${{ matrix.abi }}-debug-key.apk"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: xtremio-${{ matrix.abi }}-debug-key
+          path: xtremio-${{ matrix.abi }}-debug-key.apk
+          if-no-files-found: error
+
+  linux:
+    name: Linux x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # media_kit links libmpv; the rest is what `flutter build linux` wants.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libmpv-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          cache-directories: build/linux/x64/release/plugins/xtremio_core/cargokit_build
+          cache-on-failure: true
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+
+      - run: make linux
+
+      # A bundle is a directory of a binary, its libraries and its assets, and
+      # it has to arrive as one: uploading the tree loose loses the executable
+      # bit, which leaves a download that cannot be started.
+      - run: tar -czf xtremio-linux-x64.tar.gz -C build/linux/x64/release bundle
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: xtremio-linux-x64
+          path: xtremio-linux-x64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # aws-lc-sys assembles its x86_64 primitives with NASM, which the
+      # Windows image does not ship.
+      - uses: ilammy/setup-nasm@v1
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          cache-directories: build/windows/x64/plugins/xtremio_core/cargokit_build
+          cache-on-failure: true
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+
+      # The Makefile's job, spelled out: this runner has no make, and a build
+      # without the two defines reports `app: unknown` in Diagnostics.
+      - name: flutter build windows, stamped the way the Makefile stamps
+        shell: bash
+        run: |
+          flutter build windows --release \
+            --dart-define=XTREMIO_VERSION="$(sed -n 's/^version: //p' pubspec.yaml)" \
+            --dart-define=XTREMIO_GIT_COMMIT="$(git rev-parse --short HEAD)"
+
+      - name: Archive the release directory
+        shell: bash
+        run: |
+          cd build/windows/x64/runner
+          7z a -tzip ../../../../xtremio-windows-x64.zip Release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: xtremio-windows-x64
+          path: xtremio-windows-x64.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Which of the two Xcode asks cargokit for depends on the archs the
+          # Flutter build settles on, so have both.
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          # Xcode's TARGET_TEMP_DIR for the plugin's pod, which is what
+          # cargokit's build_pod.sh hands cargo as `--target-dir`.
+          cache-directories: build/macos/Build/Intermediates.noindex/Pods.build/Release/xtremio_core.build
+          cache-on-failure: true
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+
+      - run: make macos
+
+      # `ditto` rather than `zip`: an .app is symlinks and resource forks, and
+      # a plain zip flattens enough of that to produce a bundle that will not
+      # launch.
+      - run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/macos/Build/Products/Release/xtremio.app xtremio-macos.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: xtremio-macos
+          path: xtremio-macos.zip
+          if-no-files-found: error
+
+  ios:
+    name: iOS (compile only)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          cache-directories: build/ios/Build/Intermediates.noindex/Pods.build/Release-iphoneos/xtremio_core.build
+          cache-on-failure: true
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+
+      # No artifact: there is no signing identity, so nothing this produces
+      # can be installed. The answer it gives is whether it compiles at all.
+      - run: make ios
+
+  release:
+    name: GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [android, linux, windows, macos, ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cat > notes.md <<'NOTES'
+          ## Downloads
+
+          | File | For |
+          |---|---|
+          | `xtremio-arm64-v8a-debug-key.apk` | Android phones and 64-bit TV boxes |
+          | `xtremio-armeabi-v7a-debug-key.apk` | Chromecast with Google TV and other 32-bit Android TV boxes |
+          | `xtremio-linux-x64.tar.gz` | Linux desktop (needs `libmpv`) |
+          | `xtremio-windows-x64.zip` | Windows desktop |
+          | `xtremio-macos.zip` | macOS (unsigned; right-click, Open) |
+
+          iOS is built in CI to prove it compiles, but not shipped: there is no
+          signing identity here, and App Store terms are incompatible with the
+          GPL-3 the compiled binary carries.
+
+          ## The APKs are test builds, signed with a throwaway key
+
+          Both APKs are signed with the Flutter template's **debug key**, which
+          is public and identical on every machine. They install and run, but
+          they are test builds and nothing about that signature identifies
+          them as ours.
+
+          **This has a consequence worth knowing before you install.** Android
+          refuses to replace an app with one signed by a different key. When a
+          real keystore eventually replaces this one, upgrading in place will
+          fail with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, and everybody running
+          one of these builds will have to uninstall -- losing local library,
+          settings and downloads -- before the signed build will install. That
+          is a decision deferred, not one avoided.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            artifacts/*/*
