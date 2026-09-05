@@ -35,16 +35,32 @@ cases. Changing the rule therefore changes no stored data.
 | --- | --- |
 | **Not used yet** | Fewer than 5 observations on every kind |
 | **Often unreachable** | Some kind asked ≥ 5 times failed at least half of them, **and** the addon has answered nothing at all in over 7 days |
+| **Never answered here** | All of that, and nothing it was ever asked came back: no answer with content, none with nothing in it, no time at which one did |
 | **Rarely has anything** | Every declared kind was asked ≥ 20 times and carried content in under 5% of them |
 | **Working · streams 34%** | Anything else, with how often the kind it is asked for most actually had something |
 
 Both halves of *unreachable* are required. The ratio alone condemns an
 addon that is failing right now but worked an hour ago — that is the
 network, not the addon — and the silence alone condemns one that is simply
-rarely asked. *Rarely has anything* needs **every** declared kind to be
-answering nothing, so one live resource rescues an addon, and a declared
-kind nothing has asked for yet keeps the verdict off entirely. Five percent
-is deliberately far below what a catalog addon manages: a stream specialist
+rarely asked. *Never answered here* is decided inside that verdict's own
+branch rather than beside it, so it always rests on at least as much
+evidence: an addon can only be called it once it could have been called
+unreachable, and a handful of failures on something installed yesterday is
+stopped by the same five-observation guard. It is the one verdict that
+settles the question without a judgement call — an addon that has never
+once worked here is nothing this device is getting anything from — which
+is why it sorts above the rest. An empty answer still counts as an answer,
+because it is one: that addon replied and had nothing, which is *rarely has
+anything* and not this. And the label says **here** because that is the
+whole of what was measured — requests this device made, over the life of a
+record that begins when the addon was installed. An addon the rest of the
+world reaches perfectly well looks identical from a network that cannot
+get to it, so the evidence behind the chip says so in as many words.
+
+*Rarely has anything* needs **every** declared kind to be answering
+nothing, so one live resource rescues an addon, and a declared kind
+nothing has asked for yet keeps the verdict off entirely. Five percent is
+deliberately far below what a catalog addon manages: a stream specialist
 that answers one title in twenty is working as intended.
 
 **Counts decay rather than accumulate**: every count halves every 14 days,
