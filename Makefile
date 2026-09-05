@@ -12,6 +12,8 @@
 #   make apk-split      release APKs per ABI (arm, arm64, x64)
 #   make apk-debug      debug APK for the x86_64 emulator
 #   make linux          release Linux desktop bundle
+#   make macos          release macOS .app
+#   make ios            release iOS build, unsigned -- does it compile at all
 #   make run            flutter run, stamped the same way
 #   make version        show what would be stamped
 #
@@ -28,7 +30,7 @@ DEFINES := --dart-define=XTREMIO_VERSION=$(VERSION) \
 FLAGS ?=
 DEVICE ?=
 
-.PHONY: apk apk-tv apk-split apk-debug linux run version
+.PHONY: apk apk-tv apk-split apk-debug linux macos ios run version
 
 apk:
 	flutter build apk --release --target-platform android-arm64 $(DEFINES) $(FLAGS)
@@ -49,6 +51,14 @@ apk-debug:
 
 linux:
 	flutter build linux --release $(DEFINES) $(FLAGS)
+
+macos:
+	flutter build macos --release $(DEFINES) $(FLAGS)
+
+# There is no signing identity to build against, so this answers whether the
+# iOS half compiles and nothing else -- the .app it leaves cannot be installed.
+ios:
+	flutter build ios --release --no-codesign $(DEFINES) $(FLAGS)
 
 run:
 	flutter run $(if $(DEVICE),-d $(DEVICE),) $(DEFINES) $(FLAGS)
