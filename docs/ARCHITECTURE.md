@@ -490,13 +490,21 @@ what every model field means. The shape of the thing is in the
   of an episode, so two files with nothing to do with each other already
   overlap heavily, and the number reported is
   `(dice - chance) / (1 - chance)` from `dice = 2|A∩B| / (|A|+|B|)` and
-  `chance = 2·da·db / (da+db)`: on the owner's files the three pairings
-  that belong together score 1.00, 0.66 and 0.66 where two wrong
-  episodes score 0.25 and 0.20. `CONVINCING` sits at 0.45 between them
-  and is **provisional** -- five pairings show that the metric separates
-  them at all, and choosing the number needs a spread of shows,
-  languages and deliberate mismatches with the worst genuine pair and
-  the best wrong pair named out of it. **The search goes coarse to
+  `chance = 2·da·db / (da+db)`. `CONVINCING` sits at 0.45 and is
+  **measured**: 39,000 pairings of 717 files the OpenSubtitles addon
+  offered for forty titles in thirty-seven languages, split into the
+  pairings whose transform is right -- judged by where it puts the lines,
+  not by the score -- and the deliberate mismatches. The first have a
+  fifth percentile of 0.54 and a median of 0.81; the best of the 30,918
+  mismatches reaches 0.376, and a different episode of the same season
+  0.222. **The two overlap**, so 0.45 is not a midpoint but a line drawn
+  above the mismatches: it clears the best of them by 0.074 and costs one
+  pairing in fifty that really does align -- pairs whose files keep text
+  on screen for very different shares of the episode, which Dice's
+  ceiling holds down however well the lines land. The measurement,
+  including what each neighbouring threshold would have cost, is
+  `rust/tests/subtitle_threshold.rs` and its fixture; re-run it with
+  `cargo test --release --test subtitle_threshold -- --ignored`. **The search goes coarse to
   fine.** The rate window is 0.90 to 1.10 and stays there, because PAL
   against film is 4.27 % away and finding it unaided is the whole point;
   that is far too wide to sweep against every offset at a tenth of a

@@ -373,14 +373,33 @@ and neither is true any more. Each rule below has a test; see
   unrelated files already overlap heavily; what is reported and
   thresholded is `(dice - chance) / (1 - chance)`, `chance` coming from
   the two files' own densities. Do not threshold Dice, a count of cues,
-  or anything else that a talkative programme moves. **`CONVINCING` is a
-  placeholder.** Five pairings of the owner's files put genuine ones at
-  1.00/0.66/0.66 and wrong episodes at 0.25/0.20, which shows the metric
-  separates them and does not set a number. Calibrating it means a
-  spread of shows, languages, merge-and-split styles and deliberate
-  mismatches, and reporting the worst genuine pair and the best wrong
-  pair before choosing -- the justification is that gap, and if the gap
-  is small, say so rather than picking the midpoint. **The score is the
+  or anything else that a talkative programme moves. **`CONVINCING` is
+  measured, at 0.45, and the populations it separates overlap.** 39,000
+  pairings of 717 real files from the OpenSubtitles addon -- forty films
+  and episodes, thirty-seven languages -- put the pairings whose
+  transform is right (median cue start within a third of a second of the
+  reference's nearest, half of them that close: a statistic the score
+  does not use) at a fifth percentile of 0.54 and a median of 0.81, and
+  the deliberate mismatches at a best of **0.376** over 30,918 of them,
+  0.222 for a different episode of the same season. The worst pairing
+  that should be applied scores below the best mismatch, **so there is no
+  gap and the number is set above the mismatches rather than between the
+  two**: 0.45 clears the best of them by 0.074 and refuses one in fifty
+  of the pairings that really align. Do not lower it to catch those --
+  0.40 leaves 0.024 of margin and 0.35 lets nine mismatches through --
+  and do not move it on an argument that has not been measured:
+  `rust/tests/subtitle_threshold.rs` records the corpus, the populations
+  and the cost of each neighbouring threshold, its guard tests pin the
+  constant into the window the numbers allow, and
+  `cargo test --release --test subtitle_threshold -- --ignored` takes the
+  measurement again. **What the threshold costs is a scoring problem, not
+  a threshold one**: the pairings it refuses are those whose two files
+  keep text on screen for very different shares of the episode, where
+  Dice's own ceiling holds the score down however well the lines land --
+  a partial track that recovers the ratio exactly and lands four fifths
+  of its starts within a third of a second scored 0.33, under the
+  mismatches' own best. Taking those means a different score, not a lower
+  number. **The score is the
   answer either way, and a refusal says what was found**: the score
   *and* the transform. A fraction of cues is what sent the owner looking
   for a different reference when the reference was fine, and it is not
@@ -394,7 +413,8 @@ and neither is true any more. Each rule below has a test; see
   scoring against chance moved the count at which an unrelated pair
   stops being alignable by accident down to about eight a side. It stays
   because a file with fewer cues is a signs track rather than a
-  translation, and re-tuning it is calibration. **The rate window stays
+  translation, and because the mismatches that come closest to convincing
+  are the shortest files in the calibration corpus. **The rate window stays
   0.90 to 1.10**, because PAL is 4.27 % away and finding it *unaided* is
   the point; that is too wide to sweep against every offset at a tenth
   of a second, so the search is coarse to fine -- a second per bin over

@@ -177,15 +177,41 @@ const WIDEST_OFFSET: f64 = 600.0;
 /// How far above chance two files have to overlap before the transform is
 /// worth applying.
 ///
-/// **Provisional.** Prototyped on the owner's own files, where the three
-/// genuine pairings score 1.00, 0.66 and 0.66 and the two wrong episodes
-/// score 0.25 and 0.20, this sits in the gap with room on both sides. Five
-/// pairings are enough to show the metric separates them at all and not
-/// enough to set a number: what that needs is a spread of shows,
-/// languages, merge-and-split styles and deliberate mismatches, and the
-/// worst genuine pair and the best wrong pair named out of it. Until that
-/// is measured this constant is a placeholder, and the case for it is the
-/// gap rather than the value.
+/// **Measured.** 39,000 pairings of real files -- 717 of them, offered by
+/// the OpenSubtitles addon for forty films and episodes in thirty-seven
+/// languages, translators who merge lines (a Swedish file carries two
+/// thirds of the English one's cues for the same episode) and translators
+/// who split them (a Greek one carries a tenth more). Which population a
+/// pairing belongs to is decided by where the transform puts the lines and
+/// not by the score: the median cue start within a third of a second of
+/// the reference's nearest, at least half of them that close. The
+/// measurement is `tests/subtitle_threshold.rs` and its fixture, which is
+/// also how it is taken again.
+///
+/// | | pairings | 5th | median | best |
+/// |---|---|---|---|---|
+/// | to apply: the same title, transform confirmed | 2,434 | 0.54 | 0.81 | 1.00 |
+/// | to refuse: another episode, season, film or title | 30,918 | 0.04 | 0.11 | **0.376** |
+///
+/// **The two populations overlap, so there is no gap to sit in the middle
+/// of** -- the worst pairing that should be applied scores below zero, and
+/// two per cent of them score under the best mismatch. What the threshold
+/// can do is clear the mismatches: at 0.45 not one of the 30,918 is
+/// accepted, with 0.074 in hand over the best of them and a great deal
+/// more over the mistake a viewer actually makes (a different episode of
+/// the same season tops out at 0.222, a different season at 0.257), while
+/// 98 % of the confirmed pairings are accepted. The recorded cost curve is
+/// the argument against its neighbours: 0.40 accepts 98.8 % but leaves
+/// 0.024 of margin, 0.35 lets nine mismatches through, and 0.55 refuses
+/// one confirmed pairing in twenty to buy margin nothing measured needs.
+///
+/// The two per cent it costs are not random. They are pairs whose two
+/// files keep text on screen for very different shares of the episode,
+/// where the Dice coefficient's own ceiling holds the score down however
+/// well the lines land -- a partial track that recovers the ratio exactly
+/// and puts four fifths of its starts within a third of a second scored
+/// 0.33. Buying those back means scoring differently, not lowering this;
+/// see [`tests::chance_is_measured_from_both_densities`].
 pub const CONVINCING: f64 = 0.45;
 
 /// How few cues make a file useless as evidence either way.
@@ -202,10 +228,11 @@ pub const CONVINCING: f64 = 0.45;
 /// [`tests::a_handful_of_cues_can_be_laid_onto_anything`] measures it at
 /// about eight cues a side, and at fifty the best an unrelated pair reaches
 /// is well under [`CONVINCING`] -- so the floor is now generous rather than
-/// tight. It stays where it is because it costs nothing real (a file with
-/// fewer than fifty cues is a signs track, not a translation) and because
-/// re-tuning it is calibration, which is the next piece of work and not
-/// this one.
+/// tight. Calibrating that threshold left it where it is: a file with
+/// fewer than fifty cues is a signs track rather than a translation, so
+/// the floor costs nothing real, and the mismatches that come closest to
+/// being convincing are the shortest files in that corpus, which is an
+/// argument for the floor rather than against it.
 const FEWEST_CUES: usize = 50;
 
 /// The bounds the first pass's ratio step is kept between; what it
@@ -719,10 +746,18 @@ mod tests {
         // coefficient rather than of the threshold: when the reference is
         // lit a quarter as much as the playing file, `2|A∩B| / (|A|+|B|)`
         // cannot exceed 0.4 however perfectly the two line up, and the
-        // chance term for those densities is 0.26 of that. A partial
-        // subtitle is therefore not evidence this metric can accept, and
-        // whoever calibrates `CONVINCING` has to decide whether that is
-        // the right answer or the reason to score a different way.
+        // chance term for those densities is 0.26 of that.
+        //
+        // Calibration answered the question this used to leave open, and
+        // the answer is that the threshold cannot rescue it. A real
+        // partial track -- a Romanian file carrying a quarter of the
+        // Russian one's lines for the same film -- recovers the ratio
+        // exactly, puts four fifths of its starts within a third of a
+        // second, and scores 0.33, while unrelated files reach 0.376. No
+        // threshold accepts the first and refuses the second, so a partial
+        // subtitle is not evidence *this score* can accept, and taking it
+        // means scoring a different way (an overlap coefficient does not
+        // have the ceiling) rather than moving `CONVINCING`.
         assert!(!honest.is_convincing(), "{honest:?}");
     }
 

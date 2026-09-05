@@ -13,6 +13,8 @@ cargo test --test meta_details -- --ignored   # network: meta + streams + Player
 cargo test --test board -- --ignored          # network: Board rows + a search over the default addons, refreshes fixtures
 cargo test --test library_addons -- --ignored # network: ctx (logged out), installed/remote addons, addon details (Cinemeta), library fixtures
 cargo test --test downloads -- --ignored      # no network: rebuilds downloads_registry.json (a finished movie, a half-done episode, an empty one) from two torrents it builds itself
+cargo test --release --test subtitle_threshold -- --ignored   # network: re-measures where CONVINCING sits over ~39,000 pairings of real subtitle files (downloads ~70 MB into $XTREMIO_SUBTITLE_CORPUS or a temp dir, ~15 min); refreshes subtitle_threshold.json
+cargo test --test subtitles -- --ignored      # no network: rewrites subtitle_starts.json from XTREMIO_SUBTITLE_PLAYING and XTREMIO_SUBTITLE_REFERENCE
 # ctx_logged_in.json is hand-authored (a fake account); there is no recorder for it, and a real session must never be committed
 
 # Dart (FFI-backed tests load rust/target/debug/libxtremio_core.* directly;
