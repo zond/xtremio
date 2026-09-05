@@ -30,12 +30,12 @@ The point of Xtremio is to go past what existing Stremio apps do:
 
 - **Offline downloads** — cache a full episode or movie to the device and keep
   watching with no connection (through a tunnel, on a plane), the way Netflix
-  does. Built (see **Downloads** in [docs/STATUS.md](docs/STATUS.md)): the whole file is fetched, pinned so
-  it is never evicted, managed from a screen of its own, put somewhere the
-  platform will not purge it, and played straight off the disk as a
-  `file://` stream — so a finished download needs no server, no network and
-  no torrent, and on Android a foreground service keeps it going after the
-  user leaves the app.
+  does. Built (see **Downloads** in [docs/STATUS.md](docs/STATUS.md)): the
+  whole file is fetched, pinned so it is never evicted, managed from a screen
+  of its own, put somewhere the platform will not purge it, and played
+  straight off the disk as a `file://` stream — so a finished download needs
+  no server, no network and no torrent, and on Android a foreground service
+  keeps it going after the user leaves the app.
 - **Cloud storage sources** (e.g. Google Drive) — stream from a personal cloud
   drive, most naturally via a Stremio addon that resolves cloud files to
   playable URLs. Provider OAuth / API-key setup is the fiddly part.
