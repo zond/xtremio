@@ -106,7 +106,6 @@ abstract interface class PlaybackEngine {
   /// included.
   Future<void> setSubtitleDelay(double seconds);
 
-  /// Applies to the subtitles drawn over the video from the next build.
   /// Where the cue on screen starts on the **subtitle file's own
   /// timeline**, in seconds: its raw time in the file, before
   /// [setSubtitleSpeed] multiplied it and [setSubtitleDelay] moved it.
@@ -124,6 +123,7 @@ abstract interface class PlaybackEngine {
   /// answered the other one.
   Future<double?> subtitleCueStart();
 
+  /// Applies to the subtitles drawn over the video from the next build.
   Future<void> setSubtitleStyle(SubtitleStyle style);
 
   /// The video surface, without any built-in controls. Subtitles are drawn
