@@ -177,8 +177,12 @@ breaks it silently, on a file that was in sync when it arrived. So
 behind "Adjust timing" (`SubtitleTiming` in
 `lib/features/player/subtitle_timing.dart`). **A declared rate now
 decides nothing**: it ordered the list once and pointed one button once,
-and neither is true any more. Each rule below has a test; see
-`docs/ARCHITECTURE.md`, *Subtitles*.
+and neither is true any more. Each rule below has a test except the one
+about `sub-start`, which is a fact about libmpv rather than about this
+code: the fake engine *defines* the raw-time contract that a rule states
+and so cannot check it, and nothing here can drive a real player. What
+holds that one up is the measurement written down beside the property.
+See `docs/ARCHITECTURE.md`, *Subtitles*.
 
 - **A multiplier is measured, never judged.** The toggle that offered
   25/23.976 and its reciprocal is gone, and so are
