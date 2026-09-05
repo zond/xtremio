@@ -596,6 +596,8 @@ void main() {
         'id': '1',
         'lang': 'eng',
         'url': 'https://subs/1.srt',
+        // Sent by the addon and modelled by nothing here, which is the
+        // ordinary case: an unknown key is carried and never read.
         'SubEncoding': 'CP1252',
         'fpsMilli': 23980,
         'subtitleFileName': 'The.Godfather.1972.720p.BluRay.x264-DFN.srt',
@@ -605,7 +607,6 @@ void main() {
         'g': 6,
       });
       expect(full.fpsMilli, 23980);
-      expect(full.subEncoding, 'CP1252');
       expect(
         full.subtitleFileName,
         'The.Godfather.1972.720p.BluRay.x264-DFN.srt',
@@ -622,7 +623,6 @@ void main() {
         'url': 'https://subs/2.srt',
       });
       expect(bare.fpsMilli, isNull);
-      expect(bare.subEncoding, isNull);
       expect(bare.subtitleFileName, isNull);
       expect(bare.movieReleaseName, isNull);
       expect(bare.releaseGroup, isNull);

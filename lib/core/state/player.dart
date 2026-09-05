@@ -117,10 +117,6 @@ final class SubtitleInfo {
     return value is int ? '$value' : _text('g');
   }
 
-  /// The character encoding of the bytes the URL hands back (`CP1252`).
-  /// Capitalized on the wire, unlike every other key here.
-  String? get subEncoding => _text('SubEncoding');
-
   /// [key] as display text: null unless the addon sent a string with
   /// something in it, and guarded by [wellFormedText] because every one of
   /// these ends up in the subtitle menu.
