@@ -39,14 +39,51 @@ void main() {
     await tester.pump();
   }
 
-  test('mpv is told the stream is seekable, because it is', () {
+  group('mpv is told our own stream is seekable, because it is', () {
     // A demuxer decides seekability from what it could read when the file
     // opened -- a Matroska index sits at the end of the file, which on a
     // torrent arrives last -- and mpv then restores the position instead
     // of seeking. The embedded server serves any byte range and waits for
     // a cold one rather than refusing it, so this is the one place where
     // the caller really does know better than the demuxer.
-    expect(MediaKitEngine.mpvOverrides['force-seekable'], 'yes');
+    test('the embedded server is the claim', () {
+      expect(
+        MediaKitEngine.forcesSeekable(
+          Uri.parse('http://127.0.0.1:11470/abc123/0?tr=udp%3A%2F%2Fx'),
+        ),
+        isTrue,
+      );
+      expect(
+        MediaKitEngine.forcesSeekable(Uri.parse('http://localhost:43123/a/0')),
+        isTrue,
+      );
+      expect(
+        MediaKitEngine.forcesSeekable(Uri.parse('http://[::1]:11470/a/0')),
+        isTrue,
+      );
+    });
+
+    test('an addon answering with its own host is not', () {
+      // The claim is about `server/src/routes/stream.rs`, which is not
+      // what is at the other end here. A live HLS playlist really cannot
+      // be seeked in, and forcing it turns a refusal the viewer sees into
+      // a bar sitting at a position no packets will ever arrive for.
+      expect(
+        MediaKitEngine.forcesSeekable(
+          Uri.parse('https://cdn.example.com/live/stream.m3u8'),
+        ),
+        isFalse,
+      );
+      expect(
+        MediaKitEngine.forcesSeekable(Uri.parse('http://10.0.0.5:8080/f.mkv')),
+        isFalse,
+      );
+      // An offline download is seekable and the demuxer knows it.
+      expect(
+        MediaKitEngine.forcesSeekable(Uri.parse('file:///downloads/e2.mkv')),
+        isFalse,
+      );
+    });
   });
 
   testWidgets('a seek that leaves the position where it was is written down', (

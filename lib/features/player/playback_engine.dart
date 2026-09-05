@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
@@ -295,32 +296,54 @@ class MediaKitEngine implements PlaybackEngine {
   /// swarm trips it and short enough that a connection that is really gone
   /// still ends up an error rather than a hang.
   ///
-  /// `force-seekable`: mpv refuses a seek the demuxer says it cannot make
-  /// -- it restores the position rather than waiting -- and a demuxer
-  /// decides that from what it could read when the file opened, not from
-  /// what the stream can serve. A Matroska file keeps its index at the
-  /// end, which on a torrent is the last thing to arrive, so the demuxer
-  /// concludes the file is unseekable and every seek past the buffered
-  /// part puts the position straight back. The option exists for exactly
-  /// the case where the caller knows better than the demuxer, and here we
-  /// do: `server/src/routes/stream.rs` answers any byte range with
+  /// `force-seekable` is not here: it is a claim about the stream being
+  /// opened rather than about the player, so [forcesSeekable] decides it
+  /// per `open`.
+  static const Map<String, String> mpvOverrides = {'network-timeout': '300'};
+
+  /// Whether to tell mpv that [url] can be seeked in whatever the demuxer
+  /// concluded (`force-seekable`), which is decided per stream because it
+  /// is a claim about *this* server and not about seeking in general.
+  ///
+  /// mpv refuses a seek the demuxer says it cannot make -- it restores the
+  /// position rather than waiting -- and a demuxer decides that from what
+  /// it could read when the file opened, not from what the stream can
+  /// serve. A Matroska file keeps its index at the end, which on a torrent
+  /// is the last thing to arrive, so the demuxer concludes the file is
+  /// unseekable and every seek past the buffered part puts the position
+  /// straight back. The option exists for exactly the case where the
+  /// caller knows better than the demuxer, and for our own stream we do:
+  /// `server/src/routes/stream.rs` answers any byte range with
   /// `Accept-Ranges: bytes`, seeks the torrent reader to the offset --
   /// which re-prioritises the swarm around it -- and streams from there.
-  /// A cold offset waits; it is never refused. So the honest thing to
-  /// tell mpv is that the stream is seekable, and let a seek into a part
-  /// nobody has yet be the wait it really is -- a wait `network-timeout`
-  /// above already covers, and one longer than that arrives as the false
-  /// end of file the player re-opens from.
+  /// A cold offset waits; it is never refused. So the honest thing to tell
+  /// mpv is that the stream is seekable, and let a seek into a part nobody
+  /// has yet be the wait it really is -- a wait `network-timeout` above
+  /// already covers, and one longer than that arrives as the false end of
+  /// file the player re-opens from.
   ///
-  /// What it cannot do is invent an index. A demuxer with no index at all
-  /// may still refuse the seek itself, which is a different fault with a
-  /// different fix (fetching the tail of the file at open, on the server
-  /// side), and the stats OSD's `seekable` and `ranges` rows are what
-  /// tell the two apart.
-  static const Map<String, String> mpvOverrides = {
-    'network-timeout': '300',
-    'force-seekable': 'yes',
-  };
+  /// **That claim is about the embedded server and nothing else**, so it
+  /// is made only for the loopback address the server binds
+  /// (`http://127.0.0.1:<port>/`). An addon can answer with a URL on its
+  /// own host, and the player opens that untouched: a live HLS playlist,
+  /// or a host that ignores `Range`, really cannot be seeked in, and
+  /// forcing it there does not make a seek work -- it turns a refusal the
+  /// viewer sees into a bar sitting at a position no packets will ever
+  /// arrive for. A refusal is the better failure. An offline `file://` is
+  /// left alone too: it is seekable and the demuxer knows it.
+  ///
+  /// What forcing cannot do is invent an index. A demuxer with no index at
+  /// all may still refuse the seek itself, which is a different fault with
+  /// a different fix (fetching the tail of the file at open, on the server
+  /// side), and the stats OSD's `partially` and `ranges` rows are what
+  /// tell the two apart -- `seekable` is our own answer here, not the
+  /// demuxer's.
+  static bool forcesSeekable(Uri url) {
+    if (!url.isScheme('http') && !url.isScheme('https')) return false;
+    final host = url.host;
+    if (host == 'localhost') return true;
+    return InternetAddress.tryParse(host)?.isLoopback ?? false;
+  }
 
   /// Sets [mpvOverrides] on the native backend. Only libmpv has
   /// properties; any other backend keeps its own behaviour, and a player
@@ -328,12 +351,25 @@ class MediaKitEngine implements PlaybackEngine {
   static Future<void> _applyOverrides(PlatformPlayer? platform) async {
     if (platform is! NativePlayer) return;
     for (final MapEntry(:key, :value) in mpvOverrides.entries) {
-      try {
-        await platform.setProperty(key, value);
-      } catch (_) {
-        // Gone, or a build of libmpv without the property. Playback is
-        // still playback.
-      }
+      await _write(platform, key, value);
+    }
+  }
+
+  /// One mpv property on this player's backend, if it has one.
+  Future<void> _setProperty(String name, String value) =>
+      _write(_player.platform, name, value);
+
+  static Future<void> _write(
+    PlatformPlayer? platform,
+    String name,
+    String value,
+  ) async {
+    if (platform is! NativePlayer) return;
+    try {
+      await platform.setProperty(name, value);
+    } catch (_) {
+      // Gone, or a build of libmpv without the property. Playback is
+      // still playback.
     }
   }
 
@@ -613,6 +649,10 @@ class MediaKitEngine implements PlaybackEngine {
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     _externalSubtitleUrls.clear();
     await _overrides;
+    // Before the `loadfile`, and before every one of them: mpv reads
+    // `force-seekable` once, when it builds the demuxer, so it has to be
+    // set for the stream about to be opened and not for the last one.
+    await _setProperty('force-seekable', forcesSeekable(url) ? 'yes' : 'no');
     await _player.open(Media(url.toString(), start: start));
   }
 
