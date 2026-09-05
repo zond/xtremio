@@ -160,6 +160,19 @@ jobs:
     name: Windows x64
     runs-on: windows-latest
     steps:
+      # Before the checkout, because it decides what the checkout writes.
+      # Git for Windows ships core.autocrlf=true and this repository has no
+      # .gitattributes, so every text file lands with CRLF -- whereupon
+      # `flutter pub get` finds the seven generated plugin registrants
+      # (Linux's and macOS's as well as this platform's) different from what
+      # it renders, rewrites them all with LF, and git reports them modified
+      # for the rest of the job. The build then gets stamped `<commit>-dirty`
+      # off a tree nobody touched, which is a report calling itself something
+      # it is not. Check out the bytes that are in the repository and none of
+      # it happens. (The repository-wide answer is a .gitattributes; that is
+      # a decision about everyone's checkout, not just this runner's.)
+      - run: git config --global core.autocrlf false
+
       - uses: actions/checkout@v7
 
       # aws-lc-sys assembles its x86_64 primitives with NASM, which the
