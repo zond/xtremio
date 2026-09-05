@@ -10,6 +10,7 @@ import 'package:xtremio/features/player/subtitle_timing.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/shell/device_profile.dart';
 
+import '../../support/fake_prefs_client.dart';
 import '../../support/player_harness.dart';
 import '../../support/tv.dart';
 
@@ -21,6 +22,12 @@ import '../../support/tv.dart';
 /// time declare a mismatched rate just as often as files that drift -- so
 /// the viewer watching the picture is the only one who can judge it.
 void main() {
+  /// A multiplier a measurement can come to, and what the stored
+  /// memory below puts back on the `PLAIN` file: the panel has no
+  /// control that sets one any more, so this is how a speed gets in
+  /// force in front of the reset rule.
+  const measured = 1.044;
+
   const palUrl = 'https://subs.example.org/en-25.srt';
   const plainUrl = 'https://subs.example.org/en-plain.srt';
 
@@ -37,14 +44,11 @@ void main() {
     'fpsMilli': ?fpsMilli,
   };
 
-  /// A 23.976 fps film with two English uploads on offer: one the addon
-  /// says nothing about (`PLAIN`) and one it says was cut for 25 fps
+  /// Two English uploads on offer: one the addon says nothing about
+  /// (`PLAIN`, from its group 6) and one it says was cut for 25 fps
   /// (`PAL`). Both are played exactly as they were written.
-  PlayerHarness harness({DeviceProfile? device, double? frameRate = 23.976}) {
-    final harness = PlayerHarness(
-      device: device,
-      configureEngine: (engine) => engine.frameRate = frameRate,
-    );
+  PlayerHarness harness({DeviceProfile? device, AppPrefs? prefs}) {
+    final harness = PlayerHarness(device: device, prefs: prefs);
     harness.fixture['subtitlePreference'] = null;
     harness.fixture['subtitles'] = [
       {
@@ -60,7 +64,7 @@ void main() {
         'content': {
           'type': 'Ready',
           'content': [
-            upload('en-1', plainUrl, 'PLAIN'),
+            {...upload('en-1', plainUrl, 'PLAIN'), 'g': 6},
             upload('en-2', palUrl, 'PAL', fpsMilli: 25000),
           ],
         },
@@ -100,9 +104,9 @@ void main() {
     WidgetTester tester, {
     String pick = 'PLAIN',
     DeviceProfile? device,
-    double? frameRate = 23.976,
+    AppPrefs? prefs,
   }) async {
-    final player = harness(device: device, frameRate: frameRate);
+    final player = harness(device: device, prefs: prefs);
     await player.pump(tester);
     player.engine.emitDuration(const Duration(minutes: 96));
     player.engine.emitPlaying(true);
@@ -110,6 +114,17 @@ void main() {
     await selectFile(tester, pick);
     return player;
   }
+
+  /// Preferences holding [measured] for the `PLAIN` file's group, so the
+  /// file arrives with a multiplier the reset rule has something to
+  /// undo.
+  AppPrefs prefsWithSpeed() => AppPrefs(
+    client: FakePrefsClient({
+      'subtitleSync': [
+        {'series': 'tt0063350', 'group': '6', 'speed': measured},
+      ],
+    }),
+  );
 
   /// A `player` state change that alters nothing -- what makes the screen
   /// run everything it runs on a state event, the auto-pick included.
@@ -206,146 +221,6 @@ void main() {
     expect(find.text('-0.1 s'), findsOneWidget);
   });
 
-  testWidgets('a film video offers one press, and it stretches', (
-    tester,
-  ) async {
-    useWideViewport(tester);
-    // 23.976 is the film family, which can only be facing a PAL-sourced
-    // file: 25 fps events over a 23.976 fps picture, so 1.0427 and never
-    // its reciprocal. Reversed it does not half-fix the drift, it
-    // doubles it, so the direction is not a thing to leave to a guess in
-    // front of the picture.
-    final player = await playing(tester);
-    final engine = player.engine;
-    expect(engine.subtitleSpeed, 1);
-    await openPanel(tester);
-    expect(find.byKey(const ValueKey('subtitle-speed-compress')), findsNothing);
-
-    await step(tester, 'subtitle-speed-stretch');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
-    expect(find.text('1.043×'), findsOneWidget);
-
-    // And a second press is exactly 1.0, not the ratio squared.
-    await step(tester, 'subtitle-speed-stretch');
-    expect(engine.subtitleSpeed, 1);
-    expect(find.text('1.000×'), findsOneWidget);
-  });
-
-  testWidgets('a PAL video offers the press the other way', (tester) async {
-    useWideViewport(tester);
-    // 25 fps is the PAL family, and the file it can be out of step with
-    // is a film-sourced one that has to be compressed: 23.976/25.
-    final player = await playing(tester, frameRate: 25);
-    final engine = player.engine;
-    await openPanel(tester);
-    expect(find.byKey(const ValueKey('subtitle-speed-stretch')), findsNothing);
-
-    await step(tester, 'subtitle-speed-compress');
-    expect(engine.subtitleSpeed, closeTo(0.9590, 0.0001));
-    expect(find.text('0.959×'), findsOneWidget);
-    await step(tester, 'subtitle-speed-compress');
-    expect(engine.subtitleSpeed, 1);
-  });
-
-  testWidgets('a container that declares no rate offers both', (tester) async {
-    useWideViewport(tester);
-    // A video needs no declared rate to play -- frames carry timestamps
-    // -- so `container-fps` is legitimately absent for variable-rate
-    // content and for transport streams. With no direction to choose,
-    // both buttons are the only honest answer: without them a stream
-    // whose rate mpv never reports would be unfixable.
-    final player = await playing(tester, frameRate: null);
-    final engine = player.engine;
-    await openPanel(tester);
-    await step(tester, 'subtitle-speed-compress');
-    expect(engine.subtitleSpeed, closeTo(0.9590, 0.0001));
-    // The other button replaces the direction rather than compounding
-    // it, so the pair still cannot reach the ratio squared.
-    await step(tester, 'subtitle-speed-stretch');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
-  });
-
-  testWidgets('a rate in neither family offers both', (tester) async {
-    useWideViewport(tester);
-    // 15 fps reduces to nothing in either lineage, so it says as little
-    // about which way a file has to be pressed as no rate at all. A
-    // number we cannot place is not a licence to guess.
-    await playing(tester, frameRate: 15);
-    await openPanel(tester);
-    expect(
-      find.byKey(const ValueKey('subtitle-speed-stretch')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('subtitle-speed-compress')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('a rate that arrives after playback started still points the '
-      'button', (tester) async {
-    useWideViewport(tester);
-    // The bug from the field: on a torrent mpv cannot probe the
-    // container until the pieces holding it have arrived, so the rate is
-    // legitimately minutes late and the read this replaced took its
-    // silence for "no rate" -- both buttons for the whole of a 23.976
-    // episode that could only ever need the stretch.
-    final player = await playing(tester, frameRate: null);
-    final engine = player.engine;
-    await openPanel(tester);
-    expect(
-      find.byKey(const ValueKey('subtitle-speed-compress')),
-      findsOneWidget,
-    );
-
-    engine.emitFrameRate(23.976);
-    await pumpEvents(tester);
-    // The panel is open while it lands, so the direction has to reach
-    // the buttons that are already drawn.
-    expect(find.byKey(const ValueKey('subtitle-speed-compress')), findsNothing);
-    await step(tester, 'subtitle-speed-stretch');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
-  });
-
-  testWidgets('a correction the viewer already made survives a rate arriving '
-      'after it', (tester) async {
-    useWideViewport(tester);
-    // Taking a late direction is only safe because of this: while the
-    // rate said nothing the panel offered both, and a press could land
-    // in the direction the answer then rules out. The toggle is the only
-    // way back to exactly 1.0 and a gap cannot be pressed, so the button
-    // for a correction in force stays whatever the video turns out to
-    // be.
-    final player = await playing(tester, frameRate: null);
-    final engine = player.engine;
-    await openPanel(tester);
-    await step(tester, 'subtitle-speed-compress');
-    expect(engine.subtitleSpeed, closeTo(0.9590, 0.0001));
-
-    engine.emitFrameRate(23.976);
-    await pumpEvents(tester);
-    expect(
-      find.byKey(const ValueKey('subtitle-speed-compress')),
-      findsOneWidget,
-    );
-    await step(tester, 'subtitle-speed-compress');
-    expect(engine.subtitleSpeed, 1);
-  });
-
-  testWidgets('the observation goes with the player', (tester) async {
-    useWideViewport(tester);
-    final player = await playing(tester);
-    expect(player.engine.observingFrameRate, isTrue);
-
-    await tester.pumpWidget(const SizedBox());
-    expect(player.engine.frameRateListeners, 0);
-    // And a rate mpv works out after the screen has gone reaches nobody:
-    // the handler is a `setState` on an element the framework has
-    // already taken apart.
-    player.engine.emitFrameRate(25);
-    await pumpEvents(tester);
-  });
-
   testWidgets('a file whose declared rate differs is still played as it '
       'stands', (tester) async {
     useWideViewport(tester);
@@ -360,20 +235,23 @@ void main() {
     expect(engine.subtitleSpeed, 1);
     expect(find.text('1.000×'), findsNothing);
     await openPanel(tester);
+    // The panel says what is in force -- which here is the file's own
+    // timing -- and offers no control that changes it: a multiplier is
+    // measured now, never pressed.
     expect(find.text('1.000×'), findsOneWidget);
-    await step(tester, 'subtitle-speed-stretch');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleSpeed, 1);
   });
 
   testWidgets('reset goes back to untouched', (tester) async {
     useWideViewport(tester);
-    final player = await playing(tester, pick: 'PAL');
+    final prefs = prefsWithSpeed();
+    await prefs.load();
+    final player = await playing(tester, prefs: prefs);
     final engine = player.engine;
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-stretch');
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleSpeed, closeTo(measured, 1e-9));
 
     // With nothing else writing either property, "undo what I did" and
     // "back to what the file says" are the same thing.
@@ -387,12 +265,13 @@ void main() {
     tester,
   ) async {
     useWideViewport(tester);
-    final player = await playing(tester);
+    final prefs = prefsWithSpeed();
+    await prefs.load();
+    final player = await playing(tester, prefs: prefs);
     final engine = player.engine;
     await openPanel(tester);
-    await step(tester, 'subtitle-speed-stretch');
     await step(tester, 'subtitle-shift-later');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleSpeed, closeTo(measured, 1e-9));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
 
     // Another file is another judgement, and it starts from the timing
@@ -408,11 +287,13 @@ void main() {
 
   testWidgets('turning subtitles off puts both back', (tester) async {
     useWideViewport(tester);
-    final player = await playing(tester, pick: 'PAL');
+    final prefs = prefsWithSpeed();
+    await prefs.load();
+    final player = await playing(tester, prefs: prefs);
     final engine = player.engine;
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-stretch');
+    expect(engine.subtitleSpeed, closeTo(measured, 1e-9));
     await openMenu(tester);
     await tester.tap(find.text('Off'));
     await tester.pumpAndSettle();
@@ -424,11 +305,12 @@ void main() {
     tester,
   ) async {
     useWideViewport(tester);
-    final player = await playing(tester);
+    final prefs = prefsWithSpeed();
+    await prefs.load();
+    final player = await playing(tester, prefs: prefs);
     final engine = player.engine;
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-stretch');
     engine.subtitleSpeeds.clear();
     engine.subtitleDelays.clear();
 
@@ -440,7 +322,7 @@ void main() {
     engine.emitCompleted();
     await pumpEvents(tester);
     expect(engine.opened, hasLength(2));
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleSpeed, closeTo(measured, 1e-9));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
   });
 
@@ -473,8 +355,6 @@ void main() {
     await selectFile(tester, 'PAL');
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-stretch');
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
 
     // The refusal lands. What it has to undo is its own attempt, and
@@ -483,7 +363,6 @@ void main() {
     // label the menu with a selection nobody made.
     gate.complete();
     await pumpEvents(tester);
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
     expect(find.text('+0.1 s'), findsOneWidget);
   });
@@ -493,13 +372,13 @@ void main() {
     final player = await refusedAutoPick(tester);
     final engine = player.engine;
 
-    // The viewer picks for themselves, and stretches what they picked.
+    // The viewer picks for themselves, and shifts what they picked.
     engine.subtitleError = null;
     await selectFile(tester, 'PAL');
     await openPanel(tester);
-    await step(tester, 'subtitle-speed-stretch');
+    await step(tester, 'subtitle-shift-later');
     expect(engine.externalSubtitles, hasLength(2));
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
 
     // Nothing counted the refused pick as done, so it went on retrying on
     // every state and tracks event -- taking the viewer's file away again
@@ -508,7 +387,7 @@ void main() {
     pokeState(player);
     await pumpEvents(tester);
     expect(engine.externalSubtitles, hasLength(2));
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
+    expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
   });
 
   testWidgets('a hand adjustment ends a refused auto-pick', (tester) async {
@@ -542,7 +421,6 @@ void main() {
     expect(engine.externalSubtitles, hasLength(1));
     await openPanel(tester);
     await step(tester, 'subtitle-shift-later');
-    await step(tester, 'subtitle-speed-stretch');
 
     // `open` is `loadfile`, and nothing `sub-add` put in survives one:
     // mpv comes back drawing whatever it selects by its own rules,
@@ -555,7 +433,6 @@ void main() {
     expect(engine.opened, hasLength(2));
     expect(engine.externalSubtitles, hasLength(2));
     expect(engine.externalSubtitles.last.$1.toString(), palUrl);
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
 
     // And only while there is a file to put back. An embedded track and
@@ -629,11 +506,11 @@ void main() {
     // Left and right walk the row; up and down move between them.
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTooltip(), 'Subtitles later');
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedTooltip(), 'Subtitles run slower');
-    // This video's rate is known, so the speed row is one button and a
-    // left press along it has nowhere to go. It stays in the panel
-    // rather than escaping onto the seek bar behind.
+    // A left press at the first stepper has nowhere to go along the row.
+    // It stays in the panel rather than escaping onto the seek bar
+    // behind.
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedTooltip(), 'Subtitles earlier');
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusIn<SubtitleTimingOverlay>(), isTrue);
 
@@ -694,7 +571,7 @@ void main() {
       BorderSide(color: primary, width: 2),
     );
 
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 3; i++) {
       await press(tester, LogicalKeyboardKey.arrowDown);
     }
     expect(focusedLabel(tester), SubtitleTimingOverlay.resetLabel);
@@ -703,28 +580,5 @@ void main() {
       BorderSide(color: primary, width: 2),
     );
     expect(ring(tester, 'subtitle-timing-close'), BorderSide.none);
-  });
-
-  testWidgets('the speed toggle held on a remote presses once', (tester) async {
-    useScreen(tester, tvSize);
-    final player = await playing(tester, device: tv);
-    final engine = player.engine;
-    await openPanel(tester);
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedTooltip(), 'Subtitles run slower');
-
-    // The shift stepper repeats while it is held, because twenty presses
-    // for a two-second offset is a chore. A toggle must not: held down
-    // at the stepper's rate it would flip eight times a second and land
-    // on whichever side the release happened to fall.
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
-    await tester.pump(SubtitleTimingOverlay.holdDelay);
-    for (var i = 0; i < 20; i++) {
-      await tester.pump(SubtitleTimingOverlay.repeatInterval);
-    }
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
-    await tester.pump(SubtitleTimingOverlay.repeatInterval * 4);
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
   });
 }

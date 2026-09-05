@@ -6,74 +6,56 @@ import 'package:flutter/services.dart';
 import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/remote_press.dart';
-import 'subtitle_groups.dart';
 import 'subtitle_match.dart';
 
-/// What a viewer has asked of the subtitles' timing by hand, counted in
-/// presses rather than in seconds and multipliers.
+/// What a viewer has asked of the subtitles' timing: a measured
+/// multiplier and offset, and the presses they have made on top.
 ///
-/// Two controls, because there are two ways a file can be out and only
-/// one of them is computable. A **shift** answers a subtitle cut for a
-/// release that starts somewhere else -- a distributor logo this video
-/// does not have -- which no declared frame rate says anything about. A
-/// **stretch** answers a rate that drifts.
+/// Two quantities, because there are two ways a file can be out. A
+/// **shift** answers a subtitle cut for a release that starts somewhere
+/// else -- a distributor logo this video does not have. A **stretch**
+/// answers a rate that drifts.
 ///
 /// Nothing else writes either property, so what is in this is the whole
 /// of what mpv is playing: a declared frame rate is a claim about the
 /// release an upload was made for, and the same claim covers files that
 /// keep time and files that do not, so acting on it fixes one and breaks
-/// the other in equal measure. The viewer watching the drift is the only
-/// one who can tell those apart.
+/// the other in equal measure. What the viewer *observes* is the only
+/// thing that tells those apart, and there are two ways to observe it --
+/// marking the picture right (`SubtitleCalibration`) and matching
+/// against a file they say is in sync (`SubtitleMatchClient`). Both
+/// solve for [calibratedSpeed] and [calibratedDelay].
 ///
-/// The shift is counted in integer presses so that ten forward and ten
-/// back land exactly where they started; a double accumulated a tenth at
-/// a time does not. The toggle is not counted at all -- it is one
-/// direction or none.
-///
-/// Both also have a measured form ([calibratedSpeed], [calibratedDelay]),
-/// which is what the viewer marking the picture right solves for
-/// (`SubtitleCalibration`). A measurement wins over the toggle and the
-/// presses count on top of the measured offset, so pressing after a
-/// calibration still comes back to it exactly.
+/// The presses are counted as integers so that ten forward and ten back
+/// land exactly where they started; a double accumulated a tenth at a
+/// time does not. They count *on top of* the measured offset rather than
+/// into it, so a nudge after a measurement still comes back to the
+/// measured value exactly.
 @immutable
 final class SubtitleTiming {
   const SubtitleTiming({
     this.shiftSteps = 0,
-    this.speedDirection,
     this.calibratedSpeed,
     this.calibratedDelay,
   });
 
-  /// Presses of the shift control, positive being later.
+  /// Presses of the shift control, positive being later. A press is
+  /// worth [shiftStep], and a held button hands over several at a time
+  /// ([SubtitleTimingOverlay.shiftStrideAt]).
   final int shiftSteps;
 
-  /// Which way the speed control has been pressed, and null for the
-  /// file's own timing.
+  /// The multiplier a measurement solved for, and null for the file's
+  /// own timing.
   ///
-  /// A direction rather than a count, because there is nothing to count:
-  /// the only mismatch a subtitle can have with a video is PAL against
-  /// film, so the correction is either in force or it is not. Holding it
-  /// this way is what makes a second press land on exactly 1.0 rather
-  /// than on the ratio squared, which is a place no viewer means to
-  /// arrive.
-  final SubtitleSpeedDirection? speedDirection;
-
-  /// The ratio a calibration solved for, and null when none has.
-  ///
-  /// It wins over [speedDirection], which is a guess at the same
-  /// quantity from a declared frame rate: two marks far enough apart
-  /// measure the drift on this pair of files instead of naming the
-  /// family it probably came from. The owner's own Swedish file wants
-  /// 1.0440 where the PAL constant is 1.0427, which is three seconds
-  /// across an episode that no toggle reaches.
+  /// A measurement and not a menu of values: the owner's own Swedish
+  /// file wants 1.0440 where the PAL constant is 1.0427, which is three
+  /// seconds across an episode. The toggle that offered the constant and
+  /// its reciprocal is gone for exactly that reason -- it was too blunt
+  /// for the case it was written for.
   final double? calibratedSpeed;
 
-  /// The offset a calibration solved for, in seconds, and null when none
-  /// has.
-  ///
-  /// The presses are counted on top of it rather than folded into it, so
-  /// a nudge after a calibration still comes back to the calibrated
-  /// value exactly.
+  /// The offset a measurement solved for, in seconds, and null when none
+  /// has been made.
   final double? calibratedDelay;
 
   /// One press of the shift control. A tenth of a second is about the
@@ -81,37 +63,18 @@ final class SubtitleTiming {
   /// holding the key is how a two-second correction gets made.
   static const double shiftStep = 0.1;
 
-  /// What the speed control is worth: the PAL ratio, 25/23.976 =
-  /// 1.042709.
-  ///
-  /// The whole correction in one press, not a nudge towards it, because
-  /// PAL against film is the only mismatch there is to fix -- every other
-  /// pair of rates is the same seconds. [SubtitleSpeedDirection.compress]
-  /// divides by it, and getting those two round the wrong way does not
-  /// half-fix the drift, it doubles it.
-  static const double speedStep = 25 / 23.976;
-
   /// The offset for libmpv's `sub-delay`, in seconds. Positive delays the
   /// lines, which is mpv's own sign.
   double get delay => (calibratedDelay ?? 0) + shiftSteps * shiftStep;
 
-  /// The multiplier for libmpv's `sub-speed`: three values and no
-  /// others, all of them well inside the `<0.1-10.0>` mpv accepts.
-  double get speed =>
-      calibratedSpeed ??
-      switch (speedDirection) {
-        null => 1,
-        SubtitleSpeedDirection.stretch => speedStep,
-        SubtitleSpeedDirection.compress => 1 / speedStep,
-      };
+  /// The multiplier for libmpv's `sub-speed`, and 1.0 -- the file's own
+  /// timing -- until something has measured otherwise.
+  double get speed => calibratedSpeed ?? 1;
 
   /// The viewer has touched something, so there is a correction of theirs
   /// to undo. Reset is offered for exactly this.
   bool get adjusted =>
-      shiftSteps != 0 ||
-      speedDirection != null ||
-      calibratedSpeed != null ||
-      calibratedDelay != null;
+      shiftSteps != 0 || calibratedSpeed != null || calibratedDelay != null;
 
   /// The offset as the overlay shows it: signed, because which way it has
   /// gone is the whole of what a viewer is tracking between presses.
@@ -125,44 +88,27 @@ final class SubtitleTiming {
   /// [steps] more presses of the shift control.
   SubtitleTiming shiftedBy(int steps) => SubtitleTiming(
     shiftSteps: shiftSteps + steps,
-    speedDirection: speedDirection,
     calibratedSpeed: calibratedSpeed,
     calibratedDelay: calibratedDelay,
   );
-
-  /// [direction] applied, or taken off again when it is already what is
-  /// in force: the control is a toggle, so a second press is how a
-  /// viewer who judged wrong gets back to exactly 1.0.
-  /// A calibrated ratio is dropped by the press: it is the same quantity
-  /// measured rather than judged, and leaving it in force would make the
-  /// button do nothing at all.
-  SubtitleTiming toggledSpeed(SubtitleSpeedDirection direction) =>
-      SubtitleTiming(
-        shiftSteps: shiftSteps,
-        speedDirection: speedDirection == direction ? null : direction,
-        calibratedDelay: calibratedDelay,
-      );
 
   @override
   bool operator ==(Object other) =>
       other is SubtitleTiming &&
       other.shiftSteps == shiftSteps &&
-      other.speedDirection == speedDirection &&
       other.calibratedSpeed == calibratedSpeed &&
       other.calibratedDelay == calibratedDelay;
 
   @override
-  int get hashCode =>
-      Object.hash(shiftSteps, speedDirection, calibratedSpeed, calibratedDelay);
+  int get hashCode => Object.hash(shiftSteps, calibratedSpeed, calibratedDelay);
 
   @override
   String toString() =>
-      'SubtitleTiming(delay: $delay, speed: $speed, '
-      'shift: $shiftSteps, direction: ${speedDirection?.name})';
+      'SubtitleTiming(delay: $delay, speed: $speed, shift: $shiftSteps)';
 }
 
-/// The panel that drives a [SubtitleTiming]: a stepper, a toggle and a
-/// reset.
+/// The panel that drives a [SubtitleTiming]: a stepper, what a
+/// measurement has put on the speed, and a reset.
 ///
 /// It is deliberately not part of the player's OSD. Adjusting means
 /// pressing, then watching the picture for several seconds to see what
@@ -173,9 +119,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
   const SubtitleTimingOverlay({
     super.key,
     required this.timing,
-    required this.videoDirection,
     required this.onShift,
-    required this.onSpeed,
     required this.onReset,
     required this.onClose,
     this.onMatch,
@@ -186,28 +130,11 @@ class SubtitleTimingOverlay extends StatelessWidget {
 
   final SubtitleTiming timing;
 
-  /// Which way this video's subtitles have to be pressed
-  /// ([subtitleSpeedDirection]), and null when the container declared no
-  /// rate we can place in either family.
-  ///
-  /// The video decides the direction, so the speed control is one button
-  /// and pressing it twice comes back to 1.0. Both buttons are offered
-  /// for that null: a stream whose rate mpv never reports would
-  /// otherwise be unfixable, and offering the pair is the one honest
-  /// answer to knowing nothing. The other case is [_speedButton]'s: a
-  /// correction already in force is never left without the button that
-  /// takes it off.
-  final SubtitleSpeedDirection? videoDirection;
-
   /// A press of the shift control, in presses of
   /// [SubtitleTiming.shiftStep] and signed: negative earlier, positive
   /// later. A tap is always `-1` or `1`; a hold hands over larger
   /// strides as it accelerates ([shiftStrideAt]).
   final ValueChanged<int> onShift;
-
-  /// A press on the speed control, which is a toggle: pressing the
-  /// direction already in force takes it off again.
-  final ValueChanged<SubtitleSpeedDirection> onSpeed;
 
   /// Back to untouched: speed 1.0, shift 0.0. With nothing else writing
   /// either property, "undo what I did" and "back to untouched" are the
@@ -317,40 +244,6 @@ class SubtitleTimingOverlay extends StatelessWidget {
     ),
   );
 
-  /// The speed button for [direction], or the space it would have taken
-  /// when the video has already ruled it out and nothing is in force in
-  /// it.
-  ///
-  /// mpv multiplies the event timestamps by `sub-speed`, so the larger
-  /// multiplier pushes every cue later and spreads them further apart:
-  /// the subtitle runs *slower* through the film, which is what a file
-  /// cut for 25 fps needs against 23.976 fps footage.
-  ///
-  /// A correction that is in force keeps its button whatever the video
-  /// says, because the toggle is the only way back to exactly 1.0 and a
-  /// gap cannot be pressed: the button that *is* drawn would replace the
-  /// direction with its reciprocal and never reach 1.0 at all. That is
-  /// reachable without anything remembering anything -- [videoDirection]
-  /// follows `container-fps`, which mpv works out when it has probed the
-  /// container and not before, so a press made while it still says
-  /// nothing can land in the direction the answer then rules out.
-  Widget _speedButton(SubtitleSpeedDirection direction) {
-    final inForce = timing.speedDirection == direction;
-    if (!inForce && videoDirection != null && videoDirection != direction) {
-      return const _ButtonGap();
-    }
-    final stretch = direction == SubtitleSpeedDirection.stretch;
-    return _PanelButton(
-      key: ValueKey(
-        stretch ? 'subtitle-speed-stretch' : 'subtitle-speed-compress',
-      ),
-      icon: stretch ? Icons.unfold_more : Icons.unfold_less,
-      tooltip: stretch ? 'Subtitles run slower' : 'Subtitles run faster',
-      toggled: timing.speedDirection == direction,
-      onPress: (_) => onSpeed(direction),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -425,7 +318,6 @@ class SubtitleTimingOverlay extends StatelessWidget {
                     key: const ValueKey('subtitle-shift-earlier'),
                     icon: Icons.remove,
                     tooltip: 'Subtitles earlier',
-                    repeats: true,
                     focusNode: firstFocusNode,
                     onPress: (fire) => onShift(-shiftStrideAt(fire)),
                   ),
@@ -433,20 +325,22 @@ class SubtitleTimingOverlay extends StatelessWidget {
                     key: const ValueKey('subtitle-shift-later'),
                     icon: Icons.add,
                     tooltip: 'Subtitles later',
-                    repeats: true,
                     onPress: (fire) => onShift(shiftStrideAt(fire)),
                   ),
                 ),
+                // Read only: nothing here presses a multiplier any
+                // more, and what is on it was measured rather than
+                // judged. It is still shown, because the panel is the
+                // surface operated after the OSD bar has faded and a
+                // stretch in force is otherwise invisible -- a subtitle
+                // that is right at this moment and wrong in ten minutes
+                // looks exactly like one that is right. The two gaps
+                // keep the number in the same column as the shift's.
                 _TimingRow(
                   label: speedLabel,
                   value: timing.speedText,
-                  // The direction the video does *not* call for leaves a
-                  // gap the width of a button, so the value and the
-                  // button that is there stay in the same columns as the
-                  // shift row's -- and a press lands where the eye is
-                  // already looking.
-                  before: _speedButton(SubtitleSpeedDirection.compress),
-                  after: _speedButton(SubtitleSpeedDirection.stretch),
+                  before: const _ButtonGap(),
+                  after: const _ButtonGap(),
                 ),
                 Align(
                   alignment: Alignment.centerRight,
@@ -473,7 +367,8 @@ class SubtitleTimingOverlay extends StatelessWidget {
 /// is why the buttons are siblings in a `Row` and not something drawn
 /// inside a focusable tile. Both rows share the layout so that the value
 /// sits in one column and the buttons in two, whichever of them a row
-/// has.
+/// has -- the speed row has neither, and draws two [_ButtonGap]s so its
+/// number still lines up under the shift's.
 class _TimingRow extends StatelessWidget {
   const _TimingRow({
     required this.label,
@@ -533,18 +428,16 @@ class _ButtonGap extends StatelessWidget {
       SizedBox.square(dimension: _buttonSize(context));
 }
 
-/// A round icon button on the panel, which when [repeats] is set fires
-/// once on press and then keeps firing while it is held down, by pointer
-/// or by the remote's select key.
+/// A round icon button on the panel: it fires once on press and then
+/// keeps firing while it is held down, by pointer or by the remote's
+/// select key.
 ///
 /// Twenty presses for a two-second offset is not an adjustment, it is a
 /// chore, so holding is the way a large shift gets made. The repeat is
 /// this widget's own timer rather than the key's auto-repeat, so it runs
 /// at the same rate on a mouse, a touch screen and a D-pad, and it stops
 /// on a release, a cancel and a lost focus alike -- a timer left running
-/// after the finger has gone would walk the value off on its own. The
-/// speed control does not repeat: it is a toggle, and a toggle held down
-/// would flip eight times a second.
+/// after the finger has gone would walk the value off on its own.
 ///
 /// Each fire carries how many went before it in this hold, which is
 /// what lets a caller step further the longer the button is held
@@ -557,8 +450,6 @@ class _PanelButton extends StatefulWidget {
     required this.icon,
     required this.tooltip,
     required this.onPress,
-    this.repeats = false,
-    this.toggled,
     this.focusNode,
   });
 
@@ -568,12 +459,6 @@ class _PanelButton extends StatefulWidget {
   /// The press itself, and every repeat while the button is held, given
   /// how many fires have gone before it -- 0 for the press.
   final ValueChanged<int> onPress;
-
-  final bool repeats;
-
-  /// Whether this button's own correction is in force, for a button that
-  /// is a toggle; null for one that is not.
-  final bool? toggled;
 
   final FocusNode? focusNode;
 
@@ -606,7 +491,6 @@ class _PanelButtonState extends State<_PanelButton> {
     _stop();
     _fires = 0;
     _fire();
-    if (!widget.repeats) return;
     _hold = Timer(SubtitleTimingOverlay.holdDelay, () {
       _hold = null;
       _repeat = Timer.periodic(
@@ -679,7 +563,6 @@ class _PanelButtonState extends State<_PanelButton> {
         onFocusChange: _onFocusChange,
         child: Semantics(
           button: true,
-          toggled: widget.toggled,
           label: widget.tooltip,
           // A [Listener] rather than a [GestureDetector]: a repeat has to
           // begin the moment the button is touched, and a tap recognizer
@@ -701,12 +584,7 @@ class _PanelButtonState extends State<_PanelButton> {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  // A toggle that is on is filled, because the panel has
-                  // to say what is in force after the OSD bar has gone
-                  // and the number alone is a three-decimal difference.
-                  color: widget.toggled ?? false
-                      ? theme.colorScheme.primary.withValues(alpha: 0.45)
-                      : Colors.white.withValues(alpha: 0.12),
+                  color: Colors.white.withValues(alpha: 0.12),
                   border: Border.all(
                     color: _focused
                         ? theme.colorScheme.primary

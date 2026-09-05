@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/features/player/subtitle_match.dart';
 import 'package:xtremio/features/player/subtitle_timing.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
@@ -126,15 +127,39 @@ void main() {
   AppPrefs prefsWith([Map<String, dynamic>? stored]) =>
       AppPrefs(client: FakePrefsClient(stored));
 
-  testWidgets('a speed press is remembered against the subtitle group', (
-    tester,
-  ) async {
+  /// Measures the playing file against the other one on offer, which is
+  /// the only thing on the panel that puts a multiplier in force: the
+  /// toggle that used to is gone, and the marks a calibration is made of
+  /// have no control yet.
+  Future<void> matchAgainst(
+    WidgetTester tester,
+    PlayerHarness player,
+    String reference, {
+    double ratio = stretch,
+    double offset = 0.3,
+  }) async {
+    player.subtitleMatch.response = SubtitleMatch(
+      ratio: ratio,
+      offset: offset,
+      matched: 613,
+      cues: 694,
+      referenceCues: 683,
+      convincing: true,
+    );
+    await tester.tap(find.text(SubtitleTimingOverlay.matchLabel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(reference));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a measured multiplier is remembered against the subtitle '
+      'group', (tester) async {
     useWideViewport(tester);
     final prefs = prefsWith();
-    await playing(tester, prefs: prefs);
+    final player = await playing(tester, prefs: prefs);
     await openPanel(tester);
 
-    await press(tester, 'subtitle-speed-stretch');
+    await matchAgainst(tester, player, 'NONE', offset: 0);
     await closePanel(tester);
 
     // Series and group, and no release: what a file was timed against is
@@ -187,11 +212,11 @@ void main() {
   ) async {
     useWideViewport(tester);
     final prefs = prefsWith();
-    await playing(tester, pick: 'NONE', prefs: prefs);
+    final player = await playing(tester, pick: 'NONE', prefs: prefs);
     await openPanel(tester);
 
     await press(tester, 'subtitle-shift-later');
-    await press(tester, 'subtitle-speed-stretch');
+    await matchAgainst(tester, player, 'SIX');
     await closePanel(tester);
 
     // Nothing keys it, and applying it to the files it might belong to
@@ -206,11 +231,11 @@ void main() {
     final prefs = prefsWith();
     // A torrent whose server has not said which file it opened, and an
     // addon that claimed no filename either.
-    await playing(tester, prefs: prefs, streamName: null);
+    final player = await playing(tester, prefs: prefs, streamName: null);
     await openPanel(tester);
 
     await press(tester, 'subtitle-shift-later');
-    await press(tester, 'subtitle-speed-stretch');
+    await matchAgainst(tester, player, 'NONE', offset: 0);
     await closePanel(tester);
 
     // The speed still is: it never depended on the release.

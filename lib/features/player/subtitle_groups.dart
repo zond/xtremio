@@ -142,44 +142,6 @@ final class SubtitleLanguageGroup {
       activeId != null && options.any((option) => option.id == activeId);
 }
 
-/// How far a rate may sit from one of the two families' bases and still
-/// be read as that family, in frames per second.
-///
-/// Wide enough for rounding, narrow enough to keep the families apart. A
-/// container rounding 23.976 to `23.98` is four thousandths away and is
-/// film; 25 is a whole frame away and is PAL. There is nothing
-/// legitimate in between: nobody knows a rate to a thousandth of a frame
-/// they did not round from one of the handful of rates film and video
-/// are shot at.
-const double subtitleFrameRateTolerance = 0.01;
-
-/// The ratios between two frame rates that mean the *same content at the
-/// same speed*, so a video running at one keeps the seconds a video
-/// running at the other keeps, however far apart the numbers look.
-///
-/// A subtitle file is timed in wall-clock seconds, so two rates only
-/// imply drift when they imply a different running time for the same
-/// material. That is exactly the PAL/NTSC pair -- 25 against 23.976 is a
-/// 4.3 % speed-up, four seconds a minute -- and it is exactly *not* the
-/// telecine and frame-doubling relations inside one family: 23.976 film
-/// in a 29.97 container is 5/4 as many frames of the same seconds, and a
-/// 50 fps encode of 25 fps material is twice as many. Which is why
-/// [subtitleSpeedDirection] reduces a container's rate by these before
-/// asking which family it is in: a 29.97 fps video is film and a 50 fps
-/// video is PAL, whatever the two numbers look like beside 23.976 and
-/// 25.
-const List<double> subtitleFrameRateRatios = [1, 1.25, 2, 2.5];
-
-/// [rate] and the rates that are the same seconds as it: [rate] scaled by
-/// each of [subtitleFrameRateRatios] either way, since telecine and frame
-/// doubling go in both directions.
-Iterable<double> _frameRateFamily(double rate) sync* {
-  for (final ratio in subtitleFrameRateRatios) {
-    yield rate * ratio;
-    yield rate / ratio;
-  }
-}
-
 /// The smallest multiplier libmpv's `sub-speed` accepts (the property is
 /// `<0.1-10.0>`), and with [maxSubtitleSpeed] the range a value has to
 /// fall in to be set at all.
@@ -187,103 +149,19 @@ Iterable<double> _frameRateFamily(double rate) sync* {
 /// media_kit writes the property with `mpv_set_property_string` and
 /// discards its return code, so a value outside the range is refused in
 /// silence -- nothing throws, and the multiplier the *previous* file
-/// left behind stays in force while the panel claims a new one. What
-/// keeps the panel clear of it is that a toggle has three values and the
-/// furthest is 4 % from 1.0; the pair is here so that a test can say so
-/// rather than so that anything clamps.
+/// left behind stays in force while the panel claims a new one. Every
+/// path that can produce a multiplier keeps well clear of it on its own
+/// -- a calibration and a match each believe a ratio only within about
+/// a tenth of the file's own timing, where the largest real mismatch,
+/// PAL against film, is 4.3 % -- and this pair is what a stored one is
+/// checked against on the way back in
+/// (`PlayerScreen._rememberedSpeed`), since a preferences file will
+/// hold whatever somebody puts in it.
 const double minSubtitleSpeed = 0.1;
 
 /// The largest multiplier libmpv's `sub-speed` accepts; see
 /// [minSubtitleSpeed] for what falling outside the range costs.
 const double maxSubtitleSpeed = 10;
-
-/// Which way a subtitle has to be pressed to keep time with the video,
-/// for the timing panel's speed control.
-enum SubtitleSpeedDirection {
-  /// Stretch it: every timestamp multiplied by 25/23.976, so the lines
-  /// are spread further apart and run slower through the picture. What a
-  /// PAL-sourced file needs against a film-family video.
-  stretch,
-
-  /// Compress it: the reciprocal, for a film-sourced file against a
-  /// PAL-family video.
-  compress;
-
-  /// What the direction is stored as when a viewer's press is remembered
-  /// (`SubtitleSyncMemory`).
-  String get stored => name;
-
-  /// The direction [stored] was written from, or null for anything else:
-  /// a name a newer build wrote, a value of the wrong type, a key that
-  /// was never there. An adjustment that cannot be read is one that is
-  /// not applied, which is what every other unknown here means too.
-  static SubtitleSpeedDirection? parse(Object? stored) {
-    for (final direction in values) {
-      if (direction.stored == stored) return direction;
-    }
-    return null;
-  }
-}
-
-/// The rates that are film, and the rates that are PAL, before either is
-/// scaled by [subtitleFrameRateRatios].
-///
-/// Film is two bases rather than one because 24 and 23.976 are a
-/// thousandth of a percent apart in seconds -- the NTSC pulldown -- and
-/// both are film. 30 reduces to 24 and 29.97 to 23.976, which is why
-/// both are on the film side despite the numbers.
-const List<double> _filmFrameRates = [24000 / 1001, 24];
-const List<double> _palFrameRates = [25];
-
-/// Which way [videoFrameRate] says its subtitles have to be pressed, or
-/// null when nothing here says: no rate at all, or a rate in neither
-/// family.
-///
-/// Frame rates come in two lineages. The film family is 23.976 and 24
-/// and everything telecined or doubled from them -- 29.97, 30, 47.952,
-/// 48, 59.94, 60 -- all of which are the same seconds. The PAL family is
-/// 25 and 50, which run 4.27 % faster. Drift only ever appears *between*
-/// the two, so the video picks the direction: a film-family video can
-/// only be facing a PAL-sourced subtitle, which has to be stretched, and
-/// a PAL-family video the reverse. Under [subtitleFrameRateRatios] the
-/// two families are disjoint -- the closest members are 9.6 and 10, four
-/// tenths of a frame apart against a tolerance of a hundredth -- so no
-/// rate is ever both.
-///
-/// Only the container's own figure should reach this. A measurement of
-/// the frames actually delivered is a different number on a stalling
-/// torrent, and one that lands in neither family, which is the answer
-/// that takes the direction away.
-SubtitleSpeedDirection? subtitleSpeedDirection(double? videoFrameRate) {
-  if (videoFrameRate == null) return null;
-  if (_reducesTo(videoFrameRate, _filmFrameRates)) {
-    return SubtitleSpeedDirection.stretch;
-  }
-  if (_reducesTo(videoFrameRate, _palFrameRates)) {
-    return SubtitleSpeedDirection.compress;
-  }
-  // Neither family: 15 fps, which no telecine or doubling relates to
-  // 23.976, 24 or 25; a broadcast oddity; a container that answered
-  // something we cannot read. We know nothing, and the panel offers
-  // both directions rather than guessing at one.
-  //
-  // 12 is *not* one of these -- it is 24 halved, so it reads as film and
-  // points the button confidently -- which is the whole reason a
-  // measurement of the frames a stalling stream actually delivered must
-  // never reach here.
-  return null;
-}
-
-/// Whether any rate that is the same seconds as [rate] is one of [bases],
-/// within [subtitleFrameRateTolerance].
-bool _reducesTo(double rate, List<double> bases) {
-  for (final member in _frameRateFamily(rate)) {
-    for (final base in bases) {
-      if ((member - base).abs() <= subtitleFrameRateTolerance) return true;
-    }
-  }
-  return false;
-}
 
 /// Whether the addon says [subtitle] was cut for [release] -- the video
 /// file that is playing, by the best name the player knows it by.

@@ -28,9 +28,7 @@ void main() {
 
   /// A film-timed video with [uploads] on offer from one addon.
   PlayerHarness harness({required List<Map<String, dynamic>> uploads}) {
-    final harness = PlayerHarness(
-      configureEngine: (engine) => engine.frameRate = 23.976,
-    );
+    final harness = PlayerHarness();
     harness.fixture['subtitlePreference'] = null;
     harness.fixture['subtitles'] = [
       {

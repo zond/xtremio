@@ -25,24 +25,6 @@ class FakePlaybackEngine implements PlaybackEngine {
   int statsListeners = 0;
   bool get sampling => statsListeners > 0;
 
-  /// The rate this fake's container declares, reported on [open] the way
-  /// mpv reports one as soon as it has probed the file. Null is a
-  /// container that says nothing, and says nothing at all: mpv's
-  /// observation is silent for a property it has no value for, which is
-  /// what a torrent looks like until the pieces holding the container
-  /// have arrived. [emitFrameRate] is that late answer.
-  double? frameRate;
-
-  late final _frameRate = StreamController<double?>.broadcast(
-    onListen: () => frameRateListeners++,
-    onCancel: () => frameRateListeners--,
-  );
-
-  /// Live subscribers to [videoFrameRate]; > 0 means the screen is
-  /// observing the rate.
-  int frameRateListeners = 0;
-  bool get observingFrameRate => frameRateListeners > 0;
-
   /// Every `open` call: the URL and the requested start position.
   final List<(Uri, Duration)> opened = [];
   final List<Duration> seeks = [];
@@ -167,19 +149,10 @@ class FakePlaybackEngine implements PlaybackEngine {
   Stream<PlaybackStats> get stats => _stats.stream;
 
   @override
-  Stream<double?> get videoFrameRate => _frameRate.stream;
-
-  /// mpv working the rate out, whenever that is: on a torrent it can be
-  /// minutes after playback started, and on a container that declares
-  /// none it never happens at all.
-  void emitFrameRate(double? rate) => _frameRate.add(rate);
-
-  @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     opened.add((url, start));
     callLog?.add('open');
     if (openError != null) throw openError!;
-    if (frameRate != null) emitFrameRate(frameRate);
   }
 
   @override

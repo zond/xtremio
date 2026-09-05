@@ -311,16 +311,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// auto-pick waits for this.
   bool _mediaLoaded = false;
 
-  /// What the video playing runs at, as far as the engine has said
-  /// ([_onFrameRate]); null until it says, and for a backend or a
-  /// container that cannot say at all. It is never shown, and it no
-  /// longer orders the subtitle list: the point is a button that presses
-  /// the right way, not a number to reason about.
-  ///
-  /// One thing reads it and has to answer again when a late observation
-  /// changes it: the timing panel's speed control, which it points.
-  double? _videoFrameRate;
-
   /// What the viewer has asked of the subtitles on screen, and the whole
   /// of what mpv is playing them at: nothing else writes either property.
   ///
@@ -616,7 +606,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       engine.engineLog.listen(_onEngineLog),
       engine.volume.listen((v) => setState(() => _volume = v)),
       engine.tracks.listen(_onTracks),
-      engine.videoFrameRate.listen(_onFrameRate),
     ]);
   }
 
@@ -715,12 +704,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _autoPickedSubtitles = false;
     _subtitlesChosenByHand = false;
     _mediaLoaded = false;
-    // A different video: what the last one ran at says nothing about it,
-    // and neither does the adjustment the last subtitle was played with.
-    // The observation is the player's and outlives the file, so the rate
-    // has to be cleared here; mpv reports this video's own once it has
-    // probed the container.
-    _videoFrameRate = null;
+    // A different video: the adjustment the last subtitle was played
+    // with says nothing about it.
     _resetSubtitleTiming();
     _dismissUpNext();
     final progress = state.progress;
@@ -1016,23 +1001,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
     _syncTorrentStats();
     _maybeAutoPickSubtitles();
-  }
-
-  /// What the engine says the video runs at, whenever it works it out.
-  ///
-  /// Nothing waits on it and nothing asks for it, so a panel opened
-  /// before mpv has probed the container offers both directions and
-  /// takes the one it is told as soon as it is told. On a torrent that
-  /// is regularly long after playback started, which is the whole reason
-  /// this is observed rather than read.
-  ///
-  /// A `setState` and nothing else: the panel is drawn from
-  /// [_videoFrameRate], and the rate decides which of the speed buttons
-  /// it offers. Nothing is applied here -- a rate is not a judgement
-  /// about a file, and what is on the player is the viewer's.
-  void _onFrameRate(double? rate) {
-    if (!mounted) return;
-    setState(() => _videoFrameRate = rate);
   }
 
   /// mpv's own error log. Not shown, only recorded: this is where the
@@ -3352,13 +3320,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           node: _timingScope,
                           child: SubtitleTimingOverlay(
                             timing: _timing,
-                            // The container's own figure and nothing
-                            // else: what a stalling stream is measured
-                            // at would put this control the wrong way
-                            // round on a video whose rate we know.
-                            videoDirection: subtitleSpeedDirection(
-                              _videoFrameRate,
-                            ),
                             firstFocusNode: _timingFocus,
                             // Null with nothing else on offer, which is
                             // what leaves the whole option undrawn.
@@ -3369,8 +3330,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             matchNote: _subtitleMatchNote,
                             onShift: (step) =>
                                 _adjustTiming(_timing.shiftedBy(step)),
-                            onSpeed: (direction) =>
-                                _adjustTiming(_timing.toggledSpeed(direction)),
                             onReset: () =>
                                 _adjustTiming(const SubtitleTiming()),
                             onClose: _hideSubtitleTiming,

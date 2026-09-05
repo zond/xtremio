@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/subtitle_calibration.dart';
-import 'package:xtremio/features/player/subtitle_groups.dart';
 import 'package:xtremio/features/player/subtitle_timing.dart';
 
 /// The viewer marking the picture right: what one mark is worth, what two
@@ -43,10 +42,7 @@ void main() {
       // the transform was at the time. Recording the shift in force
       // instead would have to be unwound every time something else
       // touched the timing.
-      const inForce = SubtitleTiming(
-        shiftSteps: 12,
-        speedDirection: SubtitleSpeedDirection.stretch,
-      );
+      const inForce = SubtitleTiming(shiftSteps: 12, calibratedSpeed: 1.044);
       final result = SubtitleCalibration.none.marking(
         markAt(300),
         inForce: inForce,
@@ -96,10 +92,7 @@ void main() {
       expect(shown(result.timing, 1500), closeTo(rate * 1500 + offset, 1e-9));
       // The measurement is what is believed, not the constant it is
       // near: PAL would leave 1.7 seconds on the second mark.
-      expect(
-        result.timing.speed,
-        isNot(closeTo(SubtitleTiming.speedStep, 1e-4)),
-      );
+      expect(result.timing.speed, isNot(closeTo(25 / 23.976, 1e-4)));
     });
 
     test('close together do not, and say that instead', () {
@@ -228,24 +221,6 @@ void main() {
       expect(timing.adjusted, isTrue);
       expect(timing.shiftText, '-1.3 s');
       expect(timing.speedText, '1.000×');
-    });
-
-    test('gives way to a press on the speed toggle', () {
-      // The toggle is a judgement about the same quantity the marks
-      // measured. Left in force, the measured ratio would make the button
-      // do nothing at all.
-      final calibrated = SubtitleCalibration.none
-          .marking(markAt(30), inForce: const SubtitleTiming())
-          .calibration
-          .marking(markAt(1500), inForce: const SubtitleTiming())
-          .timing;
-      expect(calibrated.calibratedSpeed, isNotNull);
-
-      final pressed = calibrated.toggledSpeed(SubtitleSpeedDirection.stretch);
-      expect(pressed.speed, closeTo(SubtitleTiming.speedStep, 1e-12));
-      // The measured offset is not the thing being judged, so it stays.
-      expect(pressed.delay, calibrated.delay);
-      expect(pressed.toggledSpeed(SubtitleSpeedDirection.stretch).speed, 1);
     });
   });
 }

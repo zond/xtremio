@@ -214,14 +214,14 @@ final class SubtitleCalibration {
         );
       }
     }
-    // The speed stays exactly what it was -- the toggle's direction or an
-    // earlier calibration's ratio -- because one point says nothing about
-    // a rate. The presses fold into the offset, which is now the whole of
-    // it: the mark already accounts for the shift that was in force.
+    // The speed stays exactly what it was -- whatever an earlier
+    // calibration or a match measured -- because one point says nothing
+    // about a rate. The presses fold into the offset, which is now the
+    // whole of it: the mark already accounts for the shift that was in
+    // force.
     return SubtitleCalibrationResult(
       calibration: next,
       timing: SubtitleTiming(
-        speedDirection: inForce.speedDirection,
         calibratedSpeed: inForce.calibratedSpeed,
         calibratedDelay: mark.videoPosition - inForce.speed * mark.cueStart,
       ),

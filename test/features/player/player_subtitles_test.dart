@@ -573,18 +573,14 @@ void main() {
     expect(harness.engine.rates, [1.5]);
   });
 
-  /// A harness whose container is [videoFrameRate] and whose addon answers
-  /// [items], with no session preference to auto-apply.
-  PlayerHarness harnessRated(
-    double? videoFrameRate,
+  /// A harness whose addon answers [items], with no session preference to
+  /// auto-apply.
+  PlayerHarness subtitleHarness(
     List<Map<String, dynamic>> items, {
     Map<String, dynamic>? preference,
     AppPrefs? prefs,
   }) {
-    final harness = PlayerHarness(
-      configureEngine: (engine) => engine.frameRate = videoFrameRate,
-      prefs: prefs,
-    );
+    final harness = PlayerHarness(prefs: prefs);
     harness.fixture['subtitlePreference'] = preference;
     harness.fixture['subtitles'] = [subtitlesResponse(items)];
     return harness;
@@ -620,13 +616,14 @@ void main() {
   testWidgets('the menu offers every file, the ones cut for this release '
       'first', (tester) async {
     useWideViewport(tester);
-    // A 23.976 fps container and three uploads, two of which declare a
-    // rate. The rate orders nothing: it is a claim about the release an
-    // upload was made for, and ten English files for one film declaring
-    // six different rates all end within 1 % of the same runtime. What
-    // the addon says about *which release* does order them, because two
-    // files cut for one release keep its time.
-    final harness = harnessRated(23.976, [
+    // Three uploads, two of which declare a rate. The rate orders
+    // nothing -- nothing reads it at all any more -- because it is a
+    // claim about the release an upload was made for, and ten English
+    // files for one film declaring six different rates all end within
+    // 1 % of the same runtime. What the addon says about *which release*
+    // does order them, because two files cut for one release keep its
+    // time.
+    final harness = subtitleHarness([
       upload(
         'en-1',
         'eng',
@@ -646,13 +643,10 @@ void main() {
     harness.torrentStats.response = openedStats;
     await harness.pump(tester);
     final engine = harness.engine;
-    // Nothing is asked for the rate: it is observed, so it arrives when
-    // mpv has probed the container -- here with the media, long before
-    // the menu can be opened.
-    expect(engine.observingFrameRate, isTrue);
     engine.emitDuration(const Duration(minutes: 96));
     await pumpEvents(tester);
-    // Observed, not polled: the stats OSD is off and stays off.
+    // Nothing polls the player to order this list: the stats OSD is off
+    // and stays off.
     expect(engine.sampling, isFalse);
 
     await tester.tap(find.byTooltip('Subtitles (S)'));
@@ -693,7 +687,7 @@ void main() {
     // The failure this whole design is most likely to produce: the
     // timing belongs to the player, not to the file, so one left over
     // from the previous pick silently ruins a subtitle that was correct.
-    final harness = harnessRated(23.976, [
+    final harness = subtitleHarness([
       upload(
         'en-1',
         'eng',
@@ -728,16 +722,14 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// Picks [row] and moves both values off untouched by hand, which is
-    /// now the only way either of them moves at all.
+    /// Picks [row] and moves the offset off untouched by hand, which is
+    /// now the only way it moves at all.
     Future<void> pickAndAdjust(String row) async {
       await pick(row);
       await pick(SubtitleMenu.adjustTimingLabel);
       await tester.tap(find.byKey(const ValueKey('subtitle-shift-later')));
-      await tester.tap(find.byKey(const ValueKey('subtitle-speed-stretch')));
       await tester.pump();
       expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
-      expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     }
 
     await pickAndAdjust('English');
@@ -768,7 +760,7 @@ void main() {
     useWideViewport(tester);
     // The next episode opens on the same engine, and an adjustment made
     // for the last video's subtitle is nonsense on this one's.
-    final harness = harnessRated(23.976, [
+    final harness = subtitleHarness([
       upload(
         'en-1',
         'eng',
@@ -789,10 +781,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text(SubtitleMenu.adjustTimingLabel));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('subtitle-speed-stretch')));
     await tester.tap(find.byKey(const ValueKey('subtitle-shift-later')));
     await tester.pump();
-    expect(engine.subtitleSpeed, closeTo(1.0427, 0.0001));
     expect(engine.subtitleDelay, closeTo(0.1, 1e-9));
 
     // The core resolves a different stream: same screen, same engine.
@@ -820,8 +810,7 @@ void main() {
     // shows. English was picked on the previous episode; the addon
     // answers an upload for another release first and one for this
     // release second.
-    final harness = harnessRated(
-      23.976,
+    final harness = subtitleHarness(
       [
         upload('en-1', 'eng', 'https://subs.example.org/en-yts.srt', 'YTS'),
         upload('en-2', 'eng', 'https://subs.example.org/en-dfn.srt', 'DFN'),
@@ -866,8 +855,7 @@ void main() {
     // the file whose declared rate differs -- and plays it exactly as it
     // was written. This is the pick with nobody watching it, which is
     // the last place to act on a guess.
-    final harness = harnessRated(
-      23.976,
+    final harness = subtitleHarness(
       [
         upload(
           'en-1',
@@ -898,8 +886,7 @@ void main() {
     // is in step with the video; the preference asks for a 25 fps addon
     // file and mpv refuses it. Both values go back with the tracks, and
     // neither was ever anything but untouched.
-    final harness = harnessRated(
-      23.976,
+    final harness = subtitleHarness(
       [
         upload(
           'en-1',
@@ -938,7 +925,7 @@ void main() {
     // The name comes from the server -- the file it actually opened --
     // which is the same name a shift is remembered against, so the row
     // and the memory are talking about one video.
-    final harness = harnessRated(23.976, [
+    final harness = subtitleHarness([
       upload('en-1', 'eng', 'https://subs.example.org/en-yts.srt', 'YTS'),
       upload('en-2', 'eng', 'https://subs.example.org/en-dfn.srt', 'DFN'),
     ]);
@@ -1027,7 +1014,7 @@ void main() {
     // file yet: nothing names the video, so nothing can be said to have
     // been cut for it. The addons' own order stands and no row is
     // marked -- knowing nothing has to look like knowing nothing.
-    final harness = harnessRated(23.976, [
+    final harness = subtitleHarness([
       upload('en-1', 'eng', 'https://subs.example.org/en-yts.srt', 'YTS'),
       upload('en-2', 'eng', 'https://subs.example.org/en-dfn.srt', 'DFN'),
     ]);
@@ -1068,7 +1055,7 @@ void main() {
       }),
     );
     await prefs.load();
-    final harness = harnessRated(23.976, [
+    final harness = subtitleHarness([
       upload('en-1', 'eng', 'https://subs.example.org/en-plain.srt', 'PLAIN'),
       {
         ...upload('en-2', 'eng', 'https://subs.example.org/en-six.srt', 'SIX'),
