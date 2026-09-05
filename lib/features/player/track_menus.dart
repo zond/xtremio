@@ -214,17 +214,19 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
 /// Which file to measure the playing subtitle against.
 ///
 /// Opened from the timing panel's [SubtitleTimingOverlay.matchLabel], and
-/// listing every *other* file on offer -- the one playing is what is being
-/// measured, so it is not among them. The ordering is the menu's own, so
-/// a file the addon says was cut for this release is at the head of its
-/// language here too: it is the likeliest to be in sync, and being in
-/// sync is the whole of what makes a good reference.
+/// offering every *other* file on offer -- the one playing is what is
+/// being measured, so it is not among them. The ordering is the menu's
+/// own, so a file the addon says was cut for this release is at the head
+/// of its language here too: it is the likeliest to be in sync, and being
+/// in sync is the whole of what makes a good reference. **One row per
+/// language**, for the same reason the subtitle menu has one, with the
+/// rest of a language behind a row of their own.
 ///
 /// **The viewer picks, and nothing guesses.** The measurement is only as
 /// good as the reference's own sync with the video, which no metadata
 /// knows and no addon claims -- the viewer, having tried a file or two,
 /// does.
-class SubtitleReferenceMenu extends StatelessWidget {
+class SubtitleReferenceMenu extends StatefulWidget {
   const SubtitleReferenceMenu({
     super.key,
     required this.groups,
@@ -250,36 +252,90 @@ class SubtitleReferenceMenu extends StatelessWidget {
       'are what this one is measured against, so the answer is only as '
       'good as that file.';
 
+  /// What the row that shows or hides a language's remaining candidates
+  /// says. [others] is the count behind it, the head of the language
+  /// being drawn already.
+  static String othersLabel(
+    String language,
+    int others, {
+    required bool expanded,
+  }) {
+    if (expanded) return 'Hide other $language files';
+    return '$others other $language ${others == 1 ? 'file' : 'files'}';
+  }
+
+  @override
+  State<SubtitleReferenceMenu> createState() => _SubtitleReferenceMenuState();
+}
+
+class _SubtitleReferenceMenuState extends State<SubtitleReferenceMenu> {
+  /// The languages whose other files are shown, by display name. Kept in
+  /// the state so a `player` update (an addon that answered late) does
+  /// not fold an open group back up.
+  final Set<String> _expanded = {};
+
   @override
   Widget build(BuildContext context) {
     return ListView(
       shrinkWrap: true,
       children: [
-        const _MenuHeader(title),
-        const _SectionNote(note),
-        for (final group in groups)
-          if (group.options.any((option) => option.id != playingId)) ...[
-            _SectionLabel(group.language),
-            for (final option in group.options)
-              if (option.id != playingId)
-                ListTile(
-                  leading: const Icon(Icons.compare_arrows),
-                  title: Text(
-                    option.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    SubtitleMenu.optionDetail(option),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onTap: () => onPick(option.subtitle),
-                ),
-          ],
+        const _MenuHeader(SubtitleReferenceMenu.title),
+        const _SectionNote(SubtitleReferenceMenu.note),
+        for (final group in widget.groups) ..._language(group),
       ],
     );
   }
+
+  /// One language: the file it would offer first, and the rest behind a
+  /// row of their own.
+  ///
+  /// The same shape as [SubtitleMenu], and for the same reason. A
+  /// language answers with sixty-nine files often enough that listing
+  /// every candidate of every language puts the second language sixty-odd
+  /// presses down a remote's D-pad -- and reaching for a *second*
+  /// language is exactly what this sheet is for, since the reason to
+  /// match at all is that the file in one language is out of sync. The
+  /// head of a language is the likeliest reference anyway: the ordering
+  /// puts the file the addon says was cut for this release first.
+  List<Widget> _language(SubtitleLanguageGroup group) {
+    final candidates = group.options
+        .where((option) => option.id != widget.playingId)
+        .toList();
+    if (candidates.isEmpty) return const [];
+    final expanded = _expanded.contains(group.language);
+    return [
+      _SectionLabel(group.language),
+      _referenceTile(candidates.first),
+      if (candidates.length > 1) ...[
+        _AlternativesTile(
+          label: SubtitleReferenceMenu.othersLabel(
+            group.language,
+            candidates.length - 1,
+            expanded: expanded,
+          ),
+          expanded: expanded,
+          onTap: () => setState(() {
+            if (!_expanded.remove(group.language)) {
+              _expanded.add(group.language);
+            }
+          }),
+        ),
+        if (expanded)
+          for (final option in candidates.skip(1)) _referenceTile(option),
+      ],
+    ];
+  }
+
+  Widget _referenceTile(SubtitleOption option) => ListTile(
+    leading: const Icon(Icons.compare_arrows),
+    title: Text(option.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+    subtitle: Text(
+      SubtitleMenu.optionDetail(option),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    ),
+    onTap: () => widget.onPick(option.subtitle),
+  );
 }
 
 /// The row under a language that shows or hides its other files. A row of

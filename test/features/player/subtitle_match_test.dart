@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/subtitle_match.dart';
 import 'package:xtremio/features/player/subtitle_timing.dart';
@@ -19,12 +20,12 @@ void main() {
   const plainUrl = 'https://subs.example.org/en-plain.srt';
   const palUrl = 'https://subs.example.org/en-25.srt';
 
-  Map<String, dynamic> upload(String id, String url, String releaseGroup) => {
-    'id': id,
-    'lang': 'eng',
-    'url': url,
-    'releaseGroup': releaseGroup,
-  };
+  Map<String, dynamic> upload(
+    String id,
+    String url,
+    String releaseGroup, {
+    String lang = 'eng',
+  }) => {'id': id, 'lang': lang, 'url': url, 'releaseGroup': releaseGroup};
 
   /// A film-timed video with [uploads] on offer from one addon.
   PlayerHarness harness({required List<Map<String, dynamic>> uploads}) {
@@ -194,6 +195,65 @@ void main() {
     // An addon's subtitle URL can carry a debrid API key, so no failure
     // puts one on the screen.
     expect(find.textContaining('subs.example.org'), findsNothing);
+  });
+
+  testWidgets('a language offers one candidate and hides the rest', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // OpenSubtitles answers one Gilmore Girls episode with sixty-nine
+    // English files. Listing every candidate of every language put the
+    // second language sixty-odd presses down a remote's D-pad -- and a
+    // second language is what this sheet is for, since the reason to
+    // match at all is that the file in the first one is out of sync.
+    final many = [
+      for (var index = 1; index <= 15; index++)
+        upload(
+          'en-$index',
+          'https://subs.example.org/en-$index.srt',
+          'Sub$index',
+        ),
+      upload('sv-1', 'https://subs.example.org/sv.srt', 'Svensk', lang: 'swe'),
+    ];
+    final player = harness(uploads: many);
+    await player.pump(tester);
+    player.engine.emitDuration(const Duration(minutes: 96));
+    player.engine.emitPlaying(true);
+    await pumpEvents(tester);
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(SubtitleMenu.adjustTimingLabel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(SubtitleTimingOverlay.matchLabel));
+    await tester.pumpAndSettle();
+
+    // One candidate per language: the head of English and the only
+    // Swedish file, so the other language is a press away rather than
+    // thirteen.
+    final candidate = find.descendant(
+      of: find.byType(SubtitleReferenceMenu),
+      matching: find.byIcon(Icons.compare_arrows),
+    );
+    expect(candidate, findsNWidgets(2));
+    expect(find.text('Svensk'), findsOneWidget);
+    expect(find.text('13 other English files'), findsOneWidget);
+    expect(find.text('Sub3'), findsNothing, reason: 'nothing expanded');
+
+    // And the rest are behind that row, as they are in the subtitle menu.
+    await tester.tap(find.text('13 other English files'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hide other English files'), findsOneWidget);
+    expect(find.text('Sub3'), findsOneWidget);
+    await tester.tap(find.text('Sub3'));
+    await tester.pumpAndSettle();
+    expect(
+      player.subtitleMatch.calls.single.$2,
+      Uri.parse('https://subs.example.org/en-3.srt'),
+    );
   });
 
   testWidgets('with nothing to match against the option is not there', (
