@@ -5,8 +5,8 @@ explains what the code does; this is about how changes are made.
 
 ## Read first
 
-- `README.md` → "How the Rust core is wired in" (state crosses as JSON,
-  what each model field is, what the app reads from the settings).
+- `docs/ARCHITECTURE.md`, "How the Rust core is wired in" (state crosses as
+  JSON, what each model field is, what the app reads from the settings).
 - `docs/phase3-design.md` when touching account, library, addons or
   settings: it lists the exact action JSON, state shapes and the engine's
   surprises. Its line offsets were read at the rev it names, which is
@@ -176,8 +176,8 @@ breaks it silently, on a file that was in sync when it arrived. So
 behind "Adjust timing" (`SubtitleTiming` in
 `lib/features/player/subtitle_timing.dart`). **A declared rate now
 decides nothing**: it ordered the list once and pointed one button once,
-and neither is true any more. Each rule below has a test; see README,
-*Subtitles*.
+and neither is true any more. Each rule below has a test; see
+`docs/ARCHITECTURE.md`, *Subtitles*.
 
 - **A multiplier is measured, never judged.** The toggle that offered
   25/23.976 and its reciprocal is gone, and so are

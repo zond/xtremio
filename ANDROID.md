@@ -3,7 +3,7 @@
 This is the detailed reference for building, running and verifying Xtremio on
 Android. The high-level architecture (`stremio-core` + embedded
 `stream-server` + `media_kit`/libmpv) is described in the main
-[README](README.md#how-the-rust-core-is-wired-in); this file is Android-only.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); this file is Android-only.
 
 ## Prerequisites
 

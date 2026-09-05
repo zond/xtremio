@@ -47,11 +47,11 @@ final class LibraryProgress {
 ///
 /// Everything past `id`/`lang`/`url`/`label` is addon-specific: the pinned
 /// stremio-core keeps it in a flattened catch-all rather than dropping it
-/// (see README, "Pinned upstreams"), so it arrives here as ordinary keys
-/// beside the modelled ones. That map is whatever the addon sent -- no
-/// schema, no promise about a type -- so every accessor below reads
-/// through it defensively: absent, empty or wrongly typed all read as
-/// null, and none of them throws.
+/// (see docs/ARCHITECTURE.md, "Pinned upstreams"), so it arrives here as
+/// ordinary keys beside the modelled ones. That map is whatever the addon
+/// sent -- no schema, no promise about a type -- so every accessor below
+/// reads through it defensively: absent, empty or wrongly typed all read
+/// as null, and none of them throws.
 final class SubtitleInfo {
   const SubtitleInfo(this.json);
 
