@@ -15,12 +15,18 @@ use xtremio_core::api::core::{core_init, core_is_initialized, core_shutdown, Cor
 use xtremio_core::api::server::{server_base_url, ServerConfig};
 use xtremio_core::state::{self, AppState};
 
+/// Where a boot's registry, preferences and stremio-core storage live.
+fn storage_of(root: &std::path::Path, run: &str) -> std::path::PathBuf {
+    root.join(run).join("core")
+}
+
 /// Each boot gets its own directories, so a write the previous instance was
 /// still finishing cannot be mistaken for state the next one inherited.
 fn config(root: &std::path::Path, run: &str) -> CoreConfig {
+    let storage = storage_of(root, run);
     let root = root.join(run);
     CoreConfig {
-        storage_dir: root.join("core").display().to_string(),
+        storage_dir: storage.display().to_string(),
         cache_dir: root.join("cache").join("core").display().to_string(),
         server: Some(ServerConfig {
             config_dir: root.join("server").display().to_string(),
@@ -76,6 +82,24 @@ fn dirty_the_health_table(app: &AppState) {
     );
 }
 
+/// Puts one unfinished download in `storage`'s registry, because an empty
+/// one is not something a shutdown can outrun: `ensure_ticker_in` starts no
+/// ticker without work to do, and `repin_unfinished_in` never enters its
+/// loop, so between them they reach the registry's `load` and nothing past
+/// it. With an entry here both walk the paths a tick and a boot really take.
+///
+/// Written out rather than added through `downloads::add`, which wants a
+/// server that will accept the pin; the registry is deliberately forgiving
+/// about what it reads, and what the assertions below need from this one is
+/// that it is unfinished (no `state` is `queued`) and untouched.
+fn an_unfinished_download(storage: &std::path::Path) {
+    std::fs::write(
+        storage.join("downloads.json"),
+        br#"{"version":1,"items":{"tt-pending:tt-pending":{"metaId":"tt-pending","videoId":"tt-pending","type":"movie","name":"A Film","infoHash":"0123456789abcdef0123456789abcdef01234567","fileIdx":0,"announce":["udp://tracker.invalid:1337"]}}}"#,
+    )
+    .expect("write the registry the retired instance works against");
+}
+
 /// The addon keys the preferences file holds a health record for.
 fn stored_health_keys() -> Vec<String> {
     let preferences = xtremio_core::prefs::get_all().expect("read preferences");
@@ -128,6 +152,7 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
     // otherwise this test would be asserting the invariant about a flush
     // that returned before touching the preferences file.
     dirty_the_health_table(&first);
+    an_unfinished_download(&storage_of(tmp.path(), "one"));
 
     core_shutdown()?;
     assert!(
@@ -154,6 +179,14 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
     // Driven here rather than raced: the window is real but it is
     // milliseconds wide, and a test that has to win it proves nothing on the
     // runs it loses.
+    //
+    // What these two reach with the registry above in place: the registry's
+    // `load`, its read-modify-write (the re-pin records a pin it could not
+    // take) and the ticker's own re-arming. What they do not reach is the
+    // rest of `refresh`, which asks the *process* for live stats first and
+    // gets "not running" -- so a retired tick stops there, and nothing a
+    // test can drive tells that half's `_in` calls apart from the
+    // resurrecting ones.
     xtremio_core::downloads::ensure_ticker_in(&first);
     xtremio_core::downloads::repin_unfinished_in(&first);
     assert!(
