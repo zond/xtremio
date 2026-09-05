@@ -135,7 +135,31 @@ class PlaybackStatsOverlay extends StatelessWidget {
         '${s.width != null && s.height != null ? ' ${s.width}x${s.height}' : ''}',
     'bitrate  ${formatBitrate(s.videoBitrate)}',
     'cache    ${_cache(s)}',
+    // Only when mpv answered: on a backend that has no such properties
+    // the rows would be three dashes claiming something was measured.
+    if (s.seekable != null || s.partiallySeekable != null)
+      'seekable ${_flag(s.seekable)} · partially ${_flag(s.partiallySeekable)}',
+    if (s.seekableRanges case final ranges?) 'ranges   ${_ranges(ranges)}',
   ];
+
+  /// A yes/no mpv answered, or a dash for one it did not.
+  static String _flag(bool? value) => switch (value) {
+    null => '-',
+    true => 'yes',
+    false => 'no',
+  };
+
+  /// The demuxer's seekable ranges, in whole seconds of playback time.
+  ///
+  /// `none` is a reading, not a blank: a demuxer that reports no range at
+  /// all is one that will refuse every seek, which is what "the position
+  /// jumps back" is from the sofa.
+  static String _ranges(List<SeekableRange> ranges) => ranges.isEmpty
+      ? 'none'
+      : [
+          for (final range in ranges)
+            '${range.start.inSeconds}-${range.end.inSeconds}s',
+        ].join(', ');
 
   /// The torrent rows, in the same label column as the mpv ones: what the
   /// swarm is doing right now. Null stats means the poll has not answered

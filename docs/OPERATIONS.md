@@ -131,6 +131,18 @@ frames, the **hwdec** in use (or `software` when libmpv is decoding on the
 CPU), codec and resolution, video bitrate, and demuxer cache / buffering
 state, sampled twice a second only while it is on screen.
 
+Two more rows are about seeking rather than performance: mpv's `seekable`
+and `partially-seekable` on one, the demuxer's own seekable ranges out of
+`demuxer-cache-state` on the other. They are there because
+"fast-forwarding past the downloaded part makes the position jump back" is
+a demuxer refusing the seek rather than a slow one serving it: mpv
+restores the position when the demuxer says it cannot seek, and nothing
+else on screen tells that apart from a seek that worked and then rewound.
+A `seekable no`, or a `ranges none`, is the reading that says so. `ranges`
+says `none` only when mpv answered with no ranges; both rows are absent
+when it did not answer at all, since a dash there would be a measurement
+nobody made.
+
 For a torrent it also carries the swarm, from the same `stats.json` the
 start-up and stall cards read: download speed, `<connectedSeeders>
 connected` seeds, `<live> connected / <seen> found` peers, a `swarm` row,

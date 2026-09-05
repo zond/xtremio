@@ -1,3 +1,31 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+
+/// One range of the open media the demuxer says it can seek within, as
+/// `demuxer-cache-state`'s `seekable-ranges` reports it.
+///
+/// For a network stream that is the cache, not the file: what has been
+/// read and is still held. It is what says whether a seek the viewer just
+/// asked for was inside what mpv thought it could reach.
+@immutable
+class SeekableRange {
+  const SeekableRange(this.start, this.end);
+
+  final Duration start;
+  final Duration end;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SeekableRange && other.start == start && other.end == end;
+
+  @override
+  int get hashCode => Object.hash(start, end);
+
+  @override
+  String toString() => 'SeekableRange($start, $end)';
+}
+
 /// One sample of playback performance, as the stats OSD shows it.
 ///
 /// Every field is nullable: before the first frame (and for audio-only
@@ -18,6 +46,9 @@ class PlaybackStats {
     this.cacheDuration,
     this.pausedForCache,
     this.cacheBufferingState,
+    this.seekable,
+    this.partiallySeekable,
+    this.seekableRanges,
   });
 
   /// The mpv properties [fromMpv] reads, in one place so the engine polls
@@ -36,6 +67,9 @@ class PlaybackStats {
     'demuxer-cache-duration',
     'paused-for-cache',
     'cache-buffering-state',
+    'seekable',
+    'partially-seekable',
+    'demuxer-cache-state',
   ];
 
   /// Parses mpv property strings (as `mpv_get_property_string` returns
@@ -80,6 +114,9 @@ class PlaybackStats {
           : Duration(milliseconds: (cache * 1000).round()),
       pausedForCache: flag('paused-for-cache'),
       cacheBufferingState: integer('cache-buffering-state'),
+      seekable: flag('seekable'),
+      partiallySeekable: flag('partially-seekable'),
+      seekableRanges: _ranges(text('demuxer-cache-state')),
     );
   }
 
@@ -126,6 +163,58 @@ class PlaybackStats {
   /// Cache fill while stalled, 0-100 (`cache-buffering-state`).
   final int? cacheBufferingState;
 
+  /// Whether the demuxer says the open media can be seeked in at all
+  /// (`seekable`), and whether it can only be seeked within what it has
+  /// cached (`partially-seekable`).
+  ///
+  /// These are the two properties mpv restores the position from: a
+  /// demuxer that says no does not wait for the seek, it refuses it, and
+  /// from the sofa a refusal looks exactly like the film jumping back.
+  /// Our own stream is served by the embedded server, which answers any
+  /// byte range, so a `no` here is the demuxer's own conclusion (a
+  /// Matroska file whose index sits at the end and had not arrived when
+  /// it opened) rather than the truth about the stream.
+  final bool? seekable;
+  final bool? partiallySeekable;
+
+  /// What the demuxer says it can currently seek within
+  /// (`demuxer-cache-state`'s `seekable-ranges`). Null when mpv did not
+  /// answer at all; empty when it answered with no ranges, which is not
+  /// the same thing and is exactly the reading this is here for.
+  final List<SeekableRange>? seekableRanges;
+
+  /// The seekable ranges out of `demuxer-cache-state`, which mpv answers
+  /// as JSON (a node property converted to a string). Anything that does
+  /// not parse, or an answer without the key, is no answer at all: the
+  /// panel then omits the row rather than claiming there are none.
+  static List<SeekableRange>? _ranges(String? state) {
+    if (state == null) return null;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(state);
+    } catch (_) {
+      return null;
+    }
+    if (decoded is! Map) return null;
+    final ranges = decoded['seekable-ranges'];
+    if (ranges is! List) return null;
+    final parsed = <SeekableRange>[];
+    for (final range in ranges) {
+      if (range is! Map) continue;
+      final start = _seconds(range['start']);
+      final end = _seconds(range['end']);
+      if (start == null || end == null) continue;
+      parsed.add(SeekableRange(start, end));
+    }
+    return parsed;
+  }
+
+  static Duration? _seconds(Object? value) {
+    final number = value is num ? value.toDouble() : null;
+    if (number == null || !number.isFinite) return null;
+    return Duration(milliseconds: (number * 1000).round());
+  }
+
   /// True when mpv reports it is decoding without a hardware decoder. Null
   /// while [hwdec] is unknown (no video yet).
   bool? get isSoftwareDecoding => switch (hwdec) {
@@ -149,7 +238,10 @@ class PlaybackStats {
       other.videoBitrate == videoBitrate &&
       other.cacheDuration == cacheDuration &&
       other.pausedForCache == pausedForCache &&
-      other.cacheBufferingState == cacheBufferingState;
+      other.cacheBufferingState == cacheBufferingState &&
+      other.seekable == seekable &&
+      other.partiallySeekable == partiallySeekable &&
+      listEquals(other.seekableRanges, seekableRanges);
 
   @override
   int get hashCode => Object.hash(
@@ -166,6 +258,9 @@ class PlaybackStats {
     cacheDuration,
     pausedForCache,
     cacheBufferingState,
+    seekable,
+    partiallySeekable,
+    seekableRanges == null ? null : Object.hashAll(seekableRanges!),
   );
 
   @override
@@ -174,5 +269,7 @@ class PlaybackStats {
       '/$decoderDroppedFrames, hwdec: $hwdec, codec: $videoCodec'
       '/$audioCodec, '
       '${width}x$height, bitrate: $videoBitrate, cache: $cacheDuration, '
-      'pausedForCache: $pausedForCache, buffering: $cacheBufferingState)';
+      'pausedForCache: $pausedForCache, buffering: $cacheBufferingState, '
+      'seekable: $seekable, partiallySeekable: $partiallySeekable, '
+      'ranges: $seekableRanges)';
 }

@@ -96,6 +96,74 @@ void main() {
     );
   });
 
+  test('reads what the demuxer says it can seek in', () {
+    // The reading the "seeking past the buffer jumps back" report is
+    // taken from: mpv restores the position instead of seeking when the
+    // demuxer says it cannot, and these are the properties that say so.
+    // `demuxer-cache-state` is a node property, which mpv converts to
+    // JSON on its way out through `mpv_get_property_string`.
+    final stats = PlaybackStats.fromMpv({
+      'seekable': 'yes',
+      'partially-seekable': 'yes',
+      'demuxer-cache-state':
+          '{"seekable-ranges":[{"start":300.5,"end":420.0},'
+          '{"start":0.0,"end":12.25}],"eof-cached":false,"fw-bytes":1234}',
+    });
+    expect(stats.seekable, isTrue);
+    expect(stats.partiallySeekable, isTrue);
+    expect(stats.seekableRanges, [
+      const SeekableRange(
+        Duration(milliseconds: 300500),
+        Duration(seconds: 420),
+      ),
+      const SeekableRange(Duration.zero, Duration(milliseconds: 12250)),
+    ]);
+    expect(
+      PlaybackStatsOverlay.describe(stats),
+      containsAllInOrder([
+        'seekable yes · partially yes',
+        'ranges   300-420s, 0-12s',
+      ]),
+    );
+  });
+
+  test('no range is an answer; no answer is not', () {
+    // Two different readings the panel must not confuse. A demuxer that
+    // reports no seekable range at all will refuse every seek, which is
+    // the fault being chased; a backend that does not answer has told us
+    // nothing, and a row claiming `none` there would be a measurement
+    // nobody made.
+    final none = PlaybackStats.fromMpv({
+      'seekable': 'no',
+      'demuxer-cache-state': '{"seekable-ranges":[]}',
+    });
+    expect(none.seekableRanges, isEmpty);
+    expect(
+      PlaybackStatsOverlay.describe(none),
+      containsAllInOrder(['seekable no · partially -', 'ranges   none']),
+    );
+
+    for (final state in const [
+      'nothing mpv would ever say',
+      '[1,2]',
+      '{"fw-bytes":12}',
+    ]) {
+      final stats = PlaybackStats.fromMpv({'demuxer-cache-state': state});
+      expect(stats.seekableRanges, isNull, reason: state);
+      expect(
+        PlaybackStatsOverlay.describe(stats),
+        isNot(contains(startsWith('ranges'))),
+        reason: state,
+      );
+    }
+
+    // Nothing about seeking answered at all: neither row is drawn.
+    expect(
+      PlaybackStatsOverlay.describe(const PlaybackStats(hwdec: 'no')),
+      isNot(anyElement(startsWith('seekable'))),
+    );
+  });
+
   test('the swarm rows say peers, and the phase only until it is ready', () {
     // Nothing back from the server yet: the panel says so rather than
     // showing zeros it has not measured.
