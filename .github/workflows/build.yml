@@ -301,13 +301,35 @@ jobs:
       # No artifact: there is no signing identity, so nothing this produces
       # can be installed. The answer it gives is whether it compiles at all.
       #
-      # Do not believe this job's failure message. Flutter prints its
-      # "requires a selected Development Team with a Provisioning Profile"
-      # advice for *any* failed device build where DEVELOPMENT_TEAM is unset,
-      # which `--no-codesign` guarantees, and it swallows the xcodebuild
-      # output that says what actually went wrong. Re-run with
-      # `make ios FLAGS=--verbose` to see the real error.
-      - run: make ios
+      # `--verbose` permanently, because without it this job cannot answer
+      # that. Flutter meets any failed device build with its "requires a
+      # selected Development Team with a Provisioning Profile" advice --
+      # `--no-codesign` leaves DEVELOPMENT_TEAM unset, so that text appears
+      # whatever went wrong -- and swallows the xcodebuild output that says
+      # what did. A job whose whole output is a misdiagnosis is worse than no
+      # job. The logs are long; the answer is in them.
+      - run: make ios FLAGS=--verbose
+
+      # ...and the misdiagnosis is still printed last, where a person opening
+      # a red job reads it first. Say so in the log rather than in a comment
+      # in this file, which is not what they have open.
+      - name: What that failure actually means
+        if: failure()
+        run: |
+          echo 'Ignore the "Development Team / Provisioning Profile" advice'
+          echo 'above: --no-codesign makes Flutter print it for every failed'
+          echo 'device build. Search the log for "BuildTool failed" and for'
+          echo '"error[" to find the real one.'
+          echo
+          echo 'Known blocker as of 2026-09-05, upstream and unfixed here:'
+          echo '  librqbit-dualstack-sockets 0.7.0, src/bind_device.rs:54'
+          echo '  error[E0599]: no method named `bind_device` found for'
+          echo '  reference `&Socket`'
+          echo 'It gates the socket2 call on `not(any(macos, windows))`, but'
+          echo 'socket2 only offers bind_device on Linux, Android and Fuchsia;'
+          echo 'the Apple platforms get bind_device_by_index_v4/v6, which the'
+          echo 'crate already uses -- for macOS alone. Fixing it means'
+          echo 'widening that branch to iOS upstream.'
 
   release:
     name: GitHub Release
