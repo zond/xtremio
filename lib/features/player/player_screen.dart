@@ -547,6 +547,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Duration? _seekFrom;
   DateTime? _seekFromAt;
 
+  /// The last position the engine reported, as against the one the seek
+  /// bar shows -- [_seekTo] moves that one itself so the bar does not sit
+  /// still under the press. Only this one is evidence about where playback
+  /// really is (see [_watchSeek]). Null until the engine has said.
+  Duration? _reportedPosition;
+
   bool get _statsVisible => _statsPinned ?? _statsHover;
 
   /// The app is in the background (see [_onAppHidden]): nothing on this
@@ -780,6 +786,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ? Duration(milliseconds: progress.timeOffset)
         : Duration.zero;
     _position.value = start;
+    _reportedPosition = null;
     _cancelOpenRetry();
     _openState = state;
     _openStart = start;
@@ -1020,6 +1027,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onPosition(Duration position) {
     if (_handedOver || _casting) return;
+    _reportedPosition = position;
     _position.value = position;
     _reportTime(position);
   }
@@ -1750,7 +1758,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _seekFrom = null;
       _seekFromAt = null;
       if (!mounted || _handedOver || _casting) return;
-      final now = _position.value;
+      // The engine's own position, never the one on the bar: [_seekTo]
+      // writes the target there itself. A refusal while paused moves
+      // nothing at all -- mpv leaves `time-pos` where it was and reports
+      // nothing -- so reading the bar would find the target sitting there
+      // and conclude the seek landed, which is exactly the refusal a
+      // viewer scrubbing a paused film would hit and the one this line
+      // exists to record.
+      final now = _reportedPosition;
+      if (now == null) return;
       if ((now - to).abs() <= PlayerScreen.seekTolerance) return;
       // Playback goes on while the check waits, so "back where it
       // started" is the starting position plus however long the run of

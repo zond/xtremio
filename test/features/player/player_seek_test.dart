@@ -112,6 +112,54 @@ void main() {
     );
   });
 
+  testWidgets('a seek refused while the film is paused is written down', (
+    tester,
+  ) async {
+    // Scrubbing a paused film is where a viewer meets a refusal, and it
+    // is the one case that reported nothing: mpv leaves `time-pos` where
+    // it was, so no position arrives, and the bar is showing the target
+    // because the press put it there. The bar snaps back on the next
+    // press of play, long after the check has run.
+    final lines = captureDiagnostics();
+    useWideViewport(tester);
+    final harness = PlayerHarness();
+    await harness.pump(tester);
+    harness.engine.emitDuration(total);
+    harness.engine.emitPosition(at);
+    await pumpEvents(tester);
+
+    await seekTo(tester, 0.75);
+    expect(harness.engine.seeks, [const Duration(minutes: 72)]);
+
+    await tester.pump(PlayerScreen.seekCheckDelay);
+    expect(
+      lines,
+      contains(
+        'info player seek to 4320s did not take: the position is back at 65s '
+        '(from 65s)',
+      ),
+    );
+  });
+
+  testWidgets('a seek accepted while paused says nothing', (tester) async {
+    // mpv answers a seek with a `time-pos` change whether it is playing or
+    // not, so a paused seek that landed is still a report.
+    final lines = captureDiagnostics();
+    useWideViewport(tester);
+    final harness = PlayerHarness();
+    await harness.pump(tester);
+    harness.engine.emitDuration(total);
+    harness.engine.emitPosition(at);
+    await pumpEvents(tester);
+
+    await seekTo(tester, 0.75);
+    harness.engine.emitPosition(const Duration(minutes: 71, seconds: 58));
+    await pumpEvents(tester);
+    await tester.pump(PlayerScreen.seekCheckDelay);
+
+    expect(lines, isNot(anyElement(contains('did not take'))));
+  });
+
   testWidgets('a seek that lands says nothing', (tester) async {
     final lines = captureDiagnostics();
     final harness = await pumpPlaying(tester);
