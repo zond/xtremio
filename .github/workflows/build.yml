@@ -384,7 +384,22 @@ jobs:
           settings and downloads -- before the signed build will install. That
           is a decision deferred, not one avoided.
           NOTES
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file notes.md \
-            artifacts/*/*
+          # Draft, upload, publish -- three steps because `gh release create`
+          # with the files on the end is not one. It creates the release
+          # first and then uploads the assets one at a time, so a single
+          # failed upload (the macOS zip is 70 MB) leaves a *public* release
+          # missing half its downloads, and the obvious retry dies at
+          # `create` with `already_exists` without ever attaching the rest.
+          # A plain "re-run all jobs" on a tag that already released fails
+          # the same way, at a step that has nothing to do with any build.
+          #
+          # This way nothing is visible until every file is attached, and
+          # running the job again lands in the same place instead of failing.
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --draft \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file notes.md
+          fi
+          gh release upload "$GITHUB_REF_NAME" artifacts/*/* --clobber
+          gh release edit "$GITHUB_REF_NAME" \
+            --draft=false --notes-file notes.md
