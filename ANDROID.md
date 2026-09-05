@@ -147,11 +147,12 @@ existing Flutter escape hatch out of ABI filtering entirely.
   URL, so `https://host/manifest.json` is opened as
   `stremio://host/manifest.json` and Xtremio shows that addon's details
   screen (nothing is installed without a press — see
-  [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). No `android:host` and no `android:autoVerify`:
-  the host is the *addon's* domain, so there is no domain this app could
-  claim, and App Links verification (which serves `assetlinks.json` from
-  the claimed domain) is impossible by construction. `MainActivity` was
-  already `android:launchMode="singleTop"`, which is what makes a link
+  [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). No `android:host` and no
+  `android:autoVerify`: the host is the *addon's* domain, so there is no
+  domain this app could claim, and App Links verification (which serves
+  `assetlinks.json` from the claimed domain) is impossible by
+  construction. `MainActivity` was already
+  `android:launchMode="singleTop"`, which is what makes a link
   arriving while the app is up go to the running instance's `onNewIntent`
   instead of starting a second one. To try it on a device or emulator:
 

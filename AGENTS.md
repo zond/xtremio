@@ -160,8 +160,9 @@ rules hold it in place, and each has a test:
   scheme, not the link.
 
 `lib/shell/deep_link.dart` decides what a link means, `XtremioApp` acts on
-it, and the platform registrations are listed in `docs/DEEP_LINKS.md`. A widget test drives links through `FakeDeepLinks`
-(`test/support/`); nothing in the tests touches `app_links`.
+it, and the platform registrations are listed in `docs/DEEP_LINKS.md`. A
+widget test drives links through `FakeDeepLinks` (`test/support/`);
+nothing in the tests touches `app_links`.
 
 ## Nothing re-times a subtitle but the viewer
 
