@@ -212,6 +212,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// so that nothing is said to the channel at all on a phone.
   bool _frameRateAsked = false;
 
+  /// What rate the file on screen declares (`container-fps`), remembered
+  /// so the ask can be made again. The engine reports a rate once per
+  /// value and never repeats it, and an ask does not survive everything
+  /// that happens to a playback (see [_askDisplayFrameRate]), so a rate
+  /// kept only in the event is a rate that can be lost for good.
+  double? _containerFrameRate;
+
   /// A [_scheduleFocusCheck] callback is pending for the coming frame.
   bool _focusCheckScheduled = false;
 
@@ -729,6 +736,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// panel -- gets its numbers moving again.
   void _onAppShown() {
     _appHidden = false;
+    // The surface this app draws into is destroyed when it goes away and
+    // a new one built on the way back, and a `Surface.setFrameRate` vote
+    // lives on the surface it was made against. So a claim we still think
+    // we hold is one the platform has already forgotten.
+    if (_frameRateAsked) _askDisplayFrameRate();
     _syncTorrentStats();
   }
 
@@ -757,7 +769,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subtitlesChosenByHand = false;
     _mediaLoaded = false;
     // A different video: the adjustment the last subtitle was played
-    // with says nothing about it.
+    // with says nothing about it, and neither does the rate the last
+    // container declared -- this one reports its own, and until it does
+    // there is nothing to ask again for.
+    _containerFrameRate = null;
     _resetSubtitleTiming();
     _dismissUpNext();
     final progress = state.progress;
@@ -1342,6 +1357,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // purpose, and its report says nothing about what is being watched.
     if (_handedOver || _casting) return;
     if (playing) _onMediaLoaded();
+    // Playing again with the rate given back: the film ended and the
+    // viewer has rewound into it, or an open that failed has been retried.
+    // Either way the picture is back and wants the rate the picture is.
+    if (playing && !_frameRateAsked) _askDisplayFrameRate();
     if (_playing != playing) {
       setState(() => _playing = playing);
       _showControls();
@@ -1475,19 +1494,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // --- The display's own frame rate ----------------------------------------
 
   /// The engine has read what rate the container declares, which is once
-  /// per file: ask the display to present at it.
-  ///
-  /// A television only. On a phone the panel is the phone's and nothing
-  /// about a film is a reason to switch it, and on a desktop the platform
-  /// has no such API at all -- so the gate is here, where the device is
-  /// known, rather than in the channel.
+  /// per value: write it down and ask the display to present at it.
   ///
   /// Nothing is asked when the rate is unknown, because nothing arrives:
   /// the engine emits only a rate it read. Asking for a rate we are
   /// guessing at is worse than not asking, since what a wrong guess buys
   /// is a mode change and the same uneven cadence afterwards.
   void _onVideoFrameRate(double fps) {
-    if (!_isTv) return;
+    _containerFrameRate = fps;
+    _askDisplayFrameRate();
+  }
+
+  /// Asks the display for [_containerFrameRate], if the file has said what
+  /// it is.
+  ///
+  /// Asking is not once per file, because an ask does not last as long as
+  /// a file does. On Android 12 and up it is a vote on the surface Flutter
+  /// draws into, and that surface is destroyed and rebuilt when the app
+  /// goes to the background and comes back -- a vote made before goes with
+  /// it, and the rest of the film then plays on the cadence this exists to
+  /// remove. And every path that releases the rate leaves the file on
+  /// screen playable: the film ends, the viewer rewinds into the last ten
+  /// minutes, and nothing would ask again because the engine reports a
+  /// rate it has already reported no further times.
+  ///
+  /// Repeating the same ask is cheap in the case that matters: the panel
+  /// is already on the rate asked for, so the platform has nothing to
+  /// change and no picture to blank.
+  /// A television only. On a phone the panel is the phone's and nothing
+  /// about a film is a reason to switch it, and on a desktop the platform
+  /// has no such API at all -- so the gate is here, where the device is
+  /// known, rather than in the channel.
+  void _askDisplayFrameRate() {
+    final fps = _containerFrameRate;
+    if (!_isTv || fps == null || _engineError != null) return;
     _frameRateAsked = true;
     _displayFrameRate?.request(fps).ignore();
   }

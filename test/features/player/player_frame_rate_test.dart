@@ -141,6 +141,91 @@ void main() {
     expect(harness.displayFrameRate.clears, 1);
   });
 
+  /// To the background and back, through the transitions the framework
+  /// allows.
+  Future<void> sendApp(WidgetTester tester, List<AppLifecycleState> to) async {
+    for (final state in to) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+      await tester.pump();
+    }
+  }
+
+  testWidgets('the ask is made again after the app has been away', (
+    tester,
+  ) async {
+    useScreen(tester, tvSize);
+    final harness = PlayerHarness(device: tv);
+    await harness.pump(tester);
+    harness.engine.emitVideoFrameRate(filmRate);
+    harness.engine.emitDuration(const Duration(hours: 2));
+    harness.engine.emitPosition(const Duration(minutes: 20));
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+    expect(harness.displayFrameRate.requested, [filmRate]);
+
+    // Home, then back to the film. The surface the app draws into was
+    // destroyed and rebuilt, and a `Surface.setFrameRate` vote lives on
+    // the surface it was made against -- so the ask has to be made again
+    // or the rest of the film plays on the 3:2 cadence.
+    await sendApp(tester, [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+    ]);
+    await sendApp(tester, [
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]);
+    await pumpEvents(tester);
+
+    expect(harness.displayFrameRate.requested, [filmRate, filmRate]);
+    expect(harness.displayFrameRate.clears, 0);
+  });
+
+  testWidgets('the ask is made again when a finished film plays on', (
+    tester,
+  ) async {
+    useScreen(tester, tvSize);
+    final harness = PlayerHarness(device: tv);
+    await harness.pump(tester);
+    harness.engine.emitVideoFrameRate(filmRate);
+    await pumpEvents(tester);
+
+    // The film ends and the rate goes back with it...
+    harness.engine.emitEnd();
+    await pumpEvents(tester);
+    expect(harness.displayFrameRate.clears, 1);
+
+    // ...and the viewer rewinds to watch the last ten minutes again. The
+    // engine reports a rate once per value and this file's has not
+    // changed, so nothing else would ever ask for it again.
+    harness.engine.emitPosition(const Duration(minutes: 86));
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+
+    expect(harness.displayFrameRate.requested, [filmRate, filmRate]);
+  });
+
+  testWidgets('a pause is not a release and does not re-ask', (tester) async {
+    useScreen(tester, tvSize);
+    final harness = PlayerHarness(device: tv);
+    await harness.pump(tester);
+    harness.engine.emitVideoFrameRate(filmRate);
+    harness.engine.emitDuration(const Duration(hours: 2));
+    harness.engine.emitPosition(const Duration(minutes: 20));
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+
+    // A mode change costs a second of black picture each way, so a pause
+    // keeps the rate -- and the play after it must not buy another one.
+    harness.engine.emitPlaying(false);
+    await pumpEvents(tester);
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+
+    expect(harness.displayFrameRate.requested, [filmRate]);
+    expect(harness.displayFrameRate.clears, 0);
+  });
+
   testWidgets('a phone is neither asked nor cleared', (tester) async {
     usePhoneViewport(tester);
     final harness = PlayerHarness();

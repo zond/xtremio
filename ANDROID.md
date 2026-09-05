@@ -256,6 +256,18 @@ other platform has the API. `MainActivity` answers with one of two paths:
   ever switches seamlessly, which is the switch a television cannot do, so
   it takes the mode path with everything older.
 
+**The ask is made again whenever it can have lapsed.** It is not once per
+file: on API 31+ it is a vote on the surface Flutter draws into, and that
+surface is destroyed when the app goes to the background and rebuilt on
+the way back, taking the vote with it — so the player asks again on
+resume. It also asks again when playback runs after the rate was given
+back, which is the viewer rewinding into a film that had ended. libmpv
+reports `container-fps` once per value and never repeats it, so a rate
+kept only in that event is a rate lost for the rest of the playback;
+`PlayerScreen` writes it down instead. Repeating an ask the panel is
+already honouring costs nothing — there is no mode to change and no
+picture to blank.
+
 **Giving it back matters more than asking.** A display left at 24 Hz makes
 the whole system UI judder, which is a worse fault than the one being
 fixed. It is cleared when playback ends, when playback fails (the failure
