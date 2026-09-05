@@ -5,3 +5,8 @@
 # Xcode-related
 **/dgph
 **/xcuserdata/
+
+# `pod install` writes this during the build, and no Mac here can produce one
+# to commit. Left untracked it makes the tree dirty, and the Makefile reads
+# that to decide whether a build may name the commit it came from.
+Podfile.lock
