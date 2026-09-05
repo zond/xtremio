@@ -150,6 +150,30 @@ void main() {
     expect(find.text('Last worked 3 days ago'), findsOneWidget);
   });
 
+  testWidgets('a verdict arriving leaves the remote where it was', (
+    tester,
+  ) async {
+    // The record is read once on mount, so every row is built without a
+    // verdict and then again with one -- and by then the viewer has had a
+    // second to press down. A tile whose root widget changed type there
+    // would be a different element: the ring the remote was on is disposed
+    // and whatever autofocuses answers the next press instead.
+    useScreen(tester, tvSize);
+    final health = FakeAddonHealthClient(addons: records())..holdReads();
+    await tester.pumpWidget(harness(health));
+    await tester.pumpAndSettle();
+    expect(find.byType(AddonHealthChip), findsNothing);
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedTileName(tester), 'WatchHub');
+
+    health.releaseReads();
+    await tester.pumpAndSettle();
+    expect(find.byType(AddonHealthChip), findsWidgets);
+    expect(focusedTileName(tester), 'WatchHub');
+  });
+
   testWidgets('a verdict is drawn beside the tile, never inside it', (
     tester,
   ) async {

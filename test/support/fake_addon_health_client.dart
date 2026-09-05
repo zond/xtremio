@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:xtremio/features/addons/addon_health.dart';
 import 'package:xtremio/features/addons/addon_health_client.dart';
 
@@ -32,8 +34,24 @@ class FakeAddonHealthClient implements AddonHealthClient {
   final List<String> forgotten = [];
   int reads = 0;
 
+  /// Open while a read is being held: what the screen looks like between
+  /// mounting and the record arriving, which on a device is an FFI call and
+  /// not a microtask. A test that never calls [holdReads] never waits.
+  Completer<void>? _gate;
+
+  /// Makes every read from now on wait for [releaseReads].
+  void holdReads() => _gate ??= Completer<void>();
+
+  /// Lets the held reads answer.
+  void releaseReads() {
+    _gate?.complete();
+    _gate = null;
+  }
+
   @override
   Future<AddonHealthReport> read() async {
+    final gate = _gate;
+    if (gate != null) await gate.future;
     if (failing) throw StateError('no core');
     reads++;
     return AddonHealthReport(

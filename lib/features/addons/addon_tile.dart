@@ -121,15 +121,22 @@ class AddonTile extends StatelessWidget {
         ),
       ),
     );
-    if (beneath == null) return tile;
+    // The column is the root whether or not anything is drawn beneath, so
+    // that the tile keeps its element -- and with it the focus node the
+    // remote is on -- when a verdict arrives. The health record is read
+    // once on mount, so every row is built without a status and then again
+    // with one; a root that changed type between those two builds is a
+    // widget the framework cannot update in place, and the whole tile is
+    // torn down and rebuilt under a D-pad already two rows into the list.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         tile,
-        Padding(
-          padding: const EdgeInsets.fromLTRB(statusIndent, 0, 12, 12),
-          child: beneath,
-        ),
+        if (beneath != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(statusIndent, 0, 12, 12),
+            child: beneath,
+          ),
       ],
     );
   }
