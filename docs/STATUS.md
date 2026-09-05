@@ -4,8 +4,8 @@ Screen by screen, what the app does and why it does it that way. What the
 app *is* is in the [README](../README.md).
 
 **Status:** phase 3 (account, library, addons, settings) is complete
-on top of phase 2 (browse → details → play); the roadmap items in the README
-are not started. The app boots `stremio-core` and the
+on top of phase 2 (browse → details → play); what the README calls next is
+not started. The app boots `stremio-core` and the
 embedded `stream-server` at start-up, and nothing in the app talks HTTP
 to that server except libmpv fetching media: the server's control API
 takes a per-launch bearer token that only the Rust side holds

@@ -2,7 +2,7 @@
 
 Where the Dart side and the Rust core meet: the bridge, what crosses it, and
 what every model field means. The shape of the thing is in the
-[README](../README.md#architecture); this is the wiring.
+[README](../README.md#how-it-works); this is the wiring.
 
 - **Bridge:** [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge)
   2.13.0 with the cargokit backend. Codegen, Dart package and Rust crate must

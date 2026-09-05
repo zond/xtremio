@@ -45,10 +45,10 @@ void main() {
 
     test('the README fits on arrival', () {
       // It was 1637 lines, of which 1008 were architecture. What is left is
-      // what xtremio is, the map, goals and parity, installing an addon,
-      // platform support, getting started and the licence. Anything that
-      // pushes it back past a couple of hundred lines belongs in a document
-      // the map names instead.
+      // the front page: what xtremio is and does, how to get it, how it
+      // works, what it runs on, what is next, the map, and the licence.
+      // Anything that pushes it back past a couple of hundred lines belongs
+      // in a document the map names instead.
       final lines = File('README.md').readAsLinesSync().length;
       expect(lines, lessThan(220), reason: 'README.md is $lines lines');
     });
