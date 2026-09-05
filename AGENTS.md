@@ -174,52 +174,41 @@ automatically fixes one and breaks the other in equal measure -- and
 breaks it silently, on a file that was in sync when it arrived. So
 `sub-speed` and `sub-delay` are the viewer's alone, through the panel
 behind "Adjust timing" (`SubtitleTiming` in
-`lib/features/player/subtitle_timing.dart`). What a rate still decides
-is the *direction* of one button, and nothing else -- the list is
-ordered by the release an upload was cut for. Each rule below has a
-test; see README, *Subtitles*.
+`lib/features/player/subtitle_timing.dart`). **A declared rate now
+decides nothing**: it ordered the list once and pointed one button once,
+and neither is true any more. Each rule below has a test; see README,
+*Subtitles*.
 
-- **The ratio is `fps_sub / fps_video`, and the reciprocal is the bug.**
-  A film of N frames sits at `N / fps_sub` in the subtitle and at
-  `N / fps_video` in the picture, so 25 against 23.976 is 1.0427
-  (`SubtitleTiming.speedStep`). Reversed it does not half-fix the drift,
-  it doubles it -- the cue lands further from where it belongs than
-  leaving the file alone. That is why the speed control is pointed by
-  the video rather than offered both ways, and
-  `subtitleSpeedDirection` is what points it.
-- **The video picks the direction, and only the container may say so.**
-  Frame rates are two lineages -- film (23.976, 24, and the 29.97, 30,
-  47.952, 48, 59.94, 60 telecined or doubled off them, all the same
-  seconds) and PAL (25, 50, 4.27 % faster) -- and drift appears only
-  between them. So a film-family video is facing a PAL-sourced file and
-  needs it stretched, a PAL-family video the reverse, and the two
-  families are disjoint under `subtitleFrameRateRatios`. **Two buttons
-  exist for exactly one case**: a container that declares no rate, or a
-  rate in neither family, where no direction can be chosen and a stream
-  would otherwise be unfixable. A measurement must never reach this: a
-  stall rendering 12 frames a second reads as film (12 is 24 halved) and
-  points the button confidently the wrong way.
-- **A correction in force always has its own button.** That is not a
-  second case for the pair above but the rule below kept reachable: the
-  gap where a ruled-out direction would be cannot be pressed, so a
-  correction in force in it could only be swapped for its reciprocal by
-  the button that *is* drawn, and never taken back to 1.0 at all. It is
-  reachable without anything remembering anything, because the rate is
-  observed rather than read -- mpv reports `container-fps` when it has
-  probed the container, which on a torrent is well after playback began
-  -- and a press made while it still says nothing can land in the
-  direction the answer then rules out.
-- **The speed is a toggle, so a second press is exactly 1.0.**
-  `SubtitleTiming.speedDirection` is a direction and not a count of
-  presses, which is what makes that structural rather than arithmetic --
-  a stepper's two presses were the ratio squared, nine per cent out and
-  a state nobody means to reach. It follows that the multiplier is three
-  values, all far inside `sub-speed`'s `<0.1-10.0>`, so no press can
-  reach a write mpv would refuse in silence. The shift is still counted
-  in integer presses (ten forward and ten back must land on zero) and is
-  still the only hold-to-repeat in the app; a *toggle* must never repeat,
-  since held at the stepper's rate it flips eight times a second and
-  lands wherever the release falls.
+- **A multiplier is measured, never judged.** The toggle that offered
+  25/23.976 and its reciprocal is gone, and so are
+  `SubtitleSpeedDirection`, `subtitleSpeedDirection` and the
+  frame-rate-family reduction that pointed it. It was both too blunt and
+  too narrow for the case it existed for: the owner's Swedish Gilmore
+  Girls file needs 1.0440 where the PAL constant is 1.0427, PAL-ish plus
+  0.12 %, three seconds across an episode that no toggle reaches and no
+  offset cancels. The two things that replaced it -- marks the viewer
+  makes (`SubtitleCalibration`) and a match against another file
+  (`subtitles_match`) -- solve for the ratio these two files actually
+  need. Do not re-derive a multiplier from a declared rate; that is the
+  premise this whole section exists to refuse.
+- **The panel shows the multiplier and cannot press it.** A subtitle
+  that is right at this moment and wrong in ten minutes looks exactly
+  like one that is right, so the number is the only thing on screen that
+  says which -- and the panel is the surface operated *after* the OSD
+  bar has faded. The row draws the space two buttons would have taken so
+  the number stays in the shift row's column.
+- **The shift accelerates under a hold, and only under a hold.** Ten
+  steps of a tenth, fifteen of a whole second, then five-second strides
+  (`SubtitleTimingOverlay.shiftStrideAt`). The offsets are three orders
+  of magnitude apart -- a tenth is what is visible against speech, a
+  mis-cut release is out by seconds, an uncorrected PAL file is a
+  hundred and fifteen seconds out by the end of an episode, which is
+  exactly where a calibration's second mark is made and eleven hundred
+  presses at a tenth each. The stride count belongs to the button and a
+  release, a cancel or a lost focus ends it, so **every tap is a tenth**
+  however large the correction before it was; and every stride is a
+  whole number of presses, so ten forward and ten back still land on
+  zero. This is still the only hold-to-repeat in the app.
 - **Every path that changes what is shown recomputes both from
   scratch.** Another file, an embedded track, subtitles off, the next
   video, and the auto-pick restoring the tracks after the engine refused
@@ -238,7 +227,9 @@ test; see README, *Subtitles*.
 - **What the viewer fixed is remembered under what caused it, and the
   two keys are deliberately different.** `SubtitleSyncMemory`
   (`lib/core/subtitle_sync.dart`, one preferences key, `subtitleSync`)
-  keys a *speed* on the series and the addon's `g`, because what a file
+  stores a multiplier and an offset in seconds, both real numbers
+  because both are measured, and keys a *speed* on the series and the
+  addon's `g`, because what a file
   was timed against is a property of where it came from and video
   releases of one show share a frame rate; it keys a *shift* on the
   video release as well, because an offset is the video's pre-roll less
@@ -251,23 +242,22 @@ test; see README, *Subtitles*.
   back to untouched is *forgotten* rather than stored as a zero, since
   nothing remembered is what nothing applied looks like next time. A
   narrower key is forgotten more often, which is the price of never
-  being wrong. **A remembered speed the video's own family contradicts
-  is not applied.** A speed carries across releases because releases of
-  one show almost always share a rate; where one does not, putting it
-  back is the reciprocal mistake the first rule above is about. It is
-  dropped rather than reversed -- a remembered stretch says the group's
-  files are PAL-timed, and a PAL-timed file on a PAL video needs
-  nothing -- and it stays in the file, because the next release is
-  likely to be the family it was learned on. **The rule runs again when
-  a late rate arrives**, because the rate is observed and on a torrent
-  that is normally after the file went on: enforcing it only where the
-  answer was already in makes it dead code for exactly the population it
-  was written for, and leaves 4.27 % on a subtitle that was in sync when
-  it arrived, with nothing that resets it. Only the machine's speed is
-  withdrawn -- `PlayerScreen._restoredSpeed` is what tells the two
-  apart -- because a press is a judgement about the drift on screen, and
-  a press keeps its own button, so the toggle back to exactly 1.0 stays
-  reachable.
+  being wrong. **The file is forgiving, so the player is where a stored
+  multiplier is refused.** `PlayerScreen._rememberedSpeed` checks it
+  against mpv's `<0.1-10.0>` (`minSubtitleSpeed`/`maxSubtitleSpeed`):
+  media_kit writes `sub-speed` with `mpv_set_property_string` and throws
+  the return code away, so a value outside it is refused in silence
+  while the *previous* file's multiplier keeps running under a panel
+  claiming this one. A row the toggle's build wrote -- a direction
+  string, a count of presses under `shift` -- is dropped rather than
+  reinterpreted, which is what the rename to `shiftSeconds` is for:
+  three presses read as three seconds is thirty times the adjustment
+  that was made. **What is not guarded any more** is a remembered
+  multiplier carried onto a release of the other frame-rate family. The
+  rule that dropped one read a stored `stretch` as "this group's files
+  are PAL-timed", which is an inference about a toggle's two values and
+  not about a measurement. If it bites, key the speed on the release as
+  the shift already is; do not reason from a declared rate again.
 - **Only a press on the panel is a judgement, and a press does not
   write.** `_adjustTiming` is the one path that remembers; every other
   call on the timing is the machine putting a file back the way it found
@@ -334,9 +324,8 @@ test; see README, *Subtitles*.
   own focus scope so a left press walks its row instead of seeking, and
   its own rung on the Back ladder above the bar, on every device rather
   than only on a television, since on a phone Back is the only way out.
-  The row a direction key walks may hold one button rather than two, so
-  a press with nowhere to go has to stay in the panel rather than fall
-  through to the seek bar.
+  A press with nowhere to go along a row -- left at the first stepper --
+  has to stay in the panel rather than fall through to the seek bar.
 - **A match is measured in Rust, chosen by the viewer, and refused out
   loud.** "Match to another subtitle" solves for the ratio and offset
   mapping the playing file onto one the viewer says is in sync
@@ -358,31 +347,13 @@ test; see README, *Subtitles*.
   and the panel says one fixed sentence. What is measured belongs to the
   file it was measured for, so `_resetSubtitleTiming` drops the note and
   an answer that lands after the subtitle changed is thrown away.
-
-- **Only what the container declares is a rate, and it is observed
-  rather than asked for.** `videoFrameRate` is an `observeProperty` on
-  `container-fps` and nothing else, because when mpv knows the rate is
-  not ours to choose: it learns it as the demuxer probes the container,
-  and a torrent's container is only there once the pieces holding it
-  have arrived. A read taken at any fixed moment calls such a video's
-  rate unknown for the whole film, which is what offered both speed
-  buttons for a 23.976 episode. A late answer may point the button, and
-  that is safe only because of the rule above -- a correction in force
-  keeps its own button -- so do not weaken that one.
-  `estimated-vf-fps` is the obvious second choice and is a *measurement*
-  -- ten frame durations averaged, which mpv's own manual calls unstable
-  for the imprecise timestamps a torrent stream is full of. It would
-  point the speed button off a number the stall invented, confidently
-  and the wrong way, and observed it would do so on every stall. Do not
-  add a fallback: there is one property, not a list of them.
-- **An unknown rate decides nothing.** Cast, offline, a fake, a
-  container that says nothing, a read that threw: all of it is null, and
-  null means the panel offers both directions and a remembered speed put
-  back unchallenged. Never substitute a default, a guess or a last-known
-  rate. Two things read the rate and both have to answer again when a
-  late observation changes it -- the panel's direction, and the
-  remembered speed above -- so unknown is a state to be left behind,
-  never a verdict to be recorded.
+- **Nothing in the player reads the video's frame rate.** There is no
+  `videoFrameRate` on the engine and no observation of `container-fps`
+  for subtitles: the one thing that used it was the toggle's direction.
+  `PlaybackStats` still polls the property, but only while the stats OSD
+  is on screen and only to print it. Adding the observation back means
+  adding a consumer that reasons from a declared rate, which is what
+  this section refuses.
 - **Nothing is hidden; what orders a language is the release.**
   `subtitlesByRelease` puts a language's files that the addon says were
   cut for the release actually playing first, then the ones from a group
@@ -441,15 +412,6 @@ Three more things that are easy to undo by accident:
   the engine for the rate until the release replaced it, and what it asks
   now (the server's filename, the series, the memory) is either there or
   is not.
-- **The tolerance is 0.01 fps, and the ratios that reach it are the ones
-  that preserve *seconds*.** A subtitle is timed in wall-clock seconds,
-  so telecine and frame doubling (5/4, 2, 5/2) leave a rate in the same
-  family -- 23.976 film in a 29.97 container is identical seconds --
-  while 25 against 23.976 is a 4.3 % speed-up and is the other family.
-  That reduction is the whole of what a declared rate is used for now:
-  it places the *video* in its family so the speed button can be pointed.
-  Widening the tolerance instead of adding a ratio is the wrong repair:
-  0.01 is what separates a rounded 23.98 from a real 24 fps cut.
 - **A row says the addon and why it is first, never a rate or a
   verdict.** A file matching the release earns two words for it
   (`SubtitleMenu.releaseNote`), on the row and on the language row that

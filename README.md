@@ -714,37 +714,15 @@ connection.
   claim on *one* file of a language, which is what the rule above is
   for. A row carries the addon that offered the file and, where it earned
   one, two words saying it was cut for this release -- a fact about the
-  upload, never a rate and never a verdict about its timing. What the
-  video's own rate still decides is the direction of the panel's speed
-  button, and nothing else. The drift is linear, so when a viewer judges
-  it one press removes the whole of it: a film of N frames sits at
-  `N / fps_sub` in the subtitle and at `N / fps_video` in the picture, so
-  25 against 23.976 is 1.0427 (`SubtitleTiming.speedStep`, written
-  through `PlaybackEngine.setSubtitleSpeed`), and the reciprocal is the
-  mistake to make here, since it doubles the drift rather than removing
-  it. The video's rate comes from an observation of libmpv's
-  `container-fps` through `PlaybackEngine.videoFrameRate`, which reports
-  whenever mpv works the rate out: the demuxer has to probe the container
-  first, and a torrent's container is only there once the pieces holding
-  it have arrived, so on a thin swarm the answer legitimately lands
-  minutes into the film. A read taken at a fixed moment after the media
-  loaded took that silence for "no rate" and left the panel offering both
-  buttons for the rest of the episode. The stats OSD polls the same
-  property, but only while it is on screen, and this has to be known
-  whether or not anyone ever opens it. Only what the
-  container *declares* is trusted: `estimated-vf-fps` is an average of
-  the last ten frame durations, which mpv itself calls unstable for the
-  imprecise timestamps a torrent stream is full of, and a stall rendering
-  12 frames a second would point the speed button off a number it
-  invented. Rates within 0.01 fps are the same rate (a container rounding
-  23.976 to 23.98), and so are rates a telecine or a doubling apart -- an
-  SRT is timed in seconds, not frames, so 23.976 film in a 29.97
-  container is the same seconds, five frames drawn for every four. That
-  reduction is what places a video in its family: a 50 fps PAL encode is
-  25 fps material and a 29.97 fps container is 23.976 fps film, so both
-  families are walked and the rate is read as whichever base it reduces
-  to. An engine that cannot say what the video runs at simply leaves the
-  panel offering both directions. Every
+  upload, never a rate and never a verdict about its timing. **The
+  video's declared frame rate now decides nothing at all**, and nothing
+  in the player reads it: it pointed one button, and that button is
+  gone. What replaced it measures the drift rather than naming the
+  family it probably came from -- the owner's own Swedish Gilmore Girls
+  file wants 1.0440 where the PAL constant is 1.0427, three seconds
+  across an episode that the constant does not reach. libmpv's
+  `container-fps` survives only in the stats OSD's own poll, which is
+  where it was always a number to look at rather than to act on. Every
   path that changes what is on screen -- another file, an embedded
   track, subtitles off, the next video, and the auto-pick putting the
   tracks back after the engine refused one -- goes through the one
@@ -757,33 +735,29 @@ connection.
   there only while a subtitle is actually showing, since there is nothing
   to move otherwise. Shift+S opens and closes it directly, and on a
   television the remote lands on its first stepper, walks the rows with
-  the direction keys and closes it with Back. It holds two controls. The
-  **shift** is a stepper in 0.1 s steps on libmpv's `sub-delay`
-  (positive delays the lines, which is mpv's own sign); it repeats while
-  it is held, by pointer or by the remote's centre key, because twenty
-  presses for a two-second offset is a chore rather than an adjustment,
-  and it is counted in whole presses (`SubtitleTiming` in
+  the direction keys and closes it with Back. It holds one control and
+  one reading. The **shift** is a stepper in 0.1 s steps on libmpv's
+  `sub-delay` (positive delays the lines, which is mpv's own sign),
+  counted in whole presses (`SubtitleTiming` in
   `lib/features/player/subtitle_timing.dart`) so that ten forward and ten
-  back land exactly where they started. The **speed** is a *toggle*, and
-  the video points it. Frame rates are two lineages -- film (23.976, 24,
-  and the 29.97, 30, 47.952, 48, 59.94, 60 telecined or doubled off
-  them, all the same seconds) and PAL (25, 50, which run 4.27 % faster)
-  -- and drift appears only between the two, so a film-family video can
-  only be facing a PAL-sourced file and needs it stretched, a PAL-family
-  video the reverse (`subtitleSpeedDirection`). One button, therefore,
-  and a second press is exactly 1.0 rather than the ratio squared, which
-  is nine per cent out and a state nobody means to reach; the toggle
-  does not repeat under a held key, since at the stepper's rate it would
-  flip eight times a second. Two buttons appear in exactly one case: a
-  container that declares no rate at all, or one in neither family,
-  where no direction can be chosen and a stream would otherwise be
-  unfixable. The other time both appear is not a case at all but the
-  toggle kept reachable: a correction already in force keeps its own
-  button whatever the video says, because a gap cannot be pressed and
-  the button that *is* drawn would swap the direction for its reciprocal
-  rather than reach 1.0. The rate arrives when mpv has probed the
-  container and not before, so a press made while it still says nothing
-  can be in the direction the answer then rules out. Above both of them
+  back land exactly where they started. It repeats while it is held, by
+  pointer or by the remote's centre key, and **the hold accelerates
+  through three strides** -- ten steps of a tenth, fifteen of a whole
+  second, then five-second strides
+  (`SubtitleTimingOverlay.shiftStrideAt`). The offsets it has to reach
+  are three orders of magnitude apart: a tenth is the smallest
+  difference visible against speech, a mis-cut release is out by
+  seconds, and an uncorrected PAL file is a hundred and fifteen seconds
+  out by the end of an episode -- which is exactly where a calibration's
+  second mark gets made, and eleven hundred presses at a tenth each.
+  Three strides put it about six seconds of holding away. Only the hold
+  accelerates: the count belongs to the button and a release ends it, so
+  every tap is a tenth however large the correction before it was. The
+  **speed** is shown and cannot be pressed. A multiplier is measured
+  now, never judged -- the panel says what is in force because a
+  subtitle that is right at this moment and wrong in ten minutes looks
+  exactly like one that is right, and the number is the only thing that
+  says which. Above them
   the panel offers **Match to another subtitle**, which measures the
   drift instead of asking the viewer to find it by eye. Two subtitle
   files for one video are two clocks, so their disagreement is a line:
@@ -831,16 +805,16 @@ connection.
   a key nobody can name -- an addon that sends no `g`, a torrent nothing
   has named the file of -- means that adjustment is simply not
   remembered: a narrower key is forgotten more often, and that is the
-  price of never being wrong. A remembered speed whose direction this
-  video's own family contradicts is not put back either -- a stretch
-  says the group's files are PAL-timed, and against a PAL video that
-  needs nothing rather than needing the reciprocal -- though it stays in
-  the file, since the next release of the show is likely to be the
-  family it was learned on. Because the rate is observed, on a torrent
-  the answer usually arrives *after* the file went on and the speed with
-  it, so the same rule runs again when it lands and takes back off what
-  it has just ruled out; a speed the viewer *pressed* is a judgement
-  about the drift in front of them and is never withdrawn. Reset *forgets* rather than storing a
+  price of never being wrong. Both values stored are real numbers, a
+  multiplier and an offset in seconds, because both are measured: no
+  menu of values contains 1.0440. The preferences file is forgiving by
+  design, so the one place a stored multiplier becomes `sub-speed` is
+  where it is checked against mpv's `<0.1-10.0>`
+  (`PlayerScreen._rememberedSpeed`) -- media_kit throws the property
+  write's return code away, and a value outside that range is refused in
+  silence while the previous file's multiplier keeps running. Rows the
+  build before this one wrote name a toggle direction and a count of
+  presses, and are dropped rather than reinterpreted. Reset *forgets* rather than storing a
   correction of none, since nothing remembered is what nothing applied
   looks like next time; the store is bounded by recency, so a viewer who
   fixes twenty shows does not pay for the twenty-first; and only a press
@@ -870,11 +844,9 @@ connection.
   bar, and on every device rather than only on a television. Every button
   on it, Reset and the close cross included, wears the same two-pixel
   focus ring, since this is the one surface meant to be operated after
-  the bar has gone, and a toggle that is on is filled as well as
-  counted. Where the video has ruled a direction out and nothing is in
-  force in it, the button's place is left empty rather than filled with a
-  second control, so the value and the button stay in the columns the
-  shift row put them in. Then
+  the bar has gone. The speed row has no buttons and draws the space two
+  would have taken, so its number stays in the column the shift row put
+  its own in. Then
   `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)
   makes one row per language, since OpenSubtitles answers a single movie
   with 69 files, nineteen of them Spanish. Codes group on what they mean
