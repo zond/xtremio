@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
 import '../../widgets/focusable_tile.dart';
 import 'addon_widgets.dart';
 
@@ -28,7 +29,22 @@ class AddonTile extends StatelessWidget {
 
   /// Drawn under the type labels: the Installed list puts the addon's
   /// health verdict here. Nothing when there is nothing to say about it.
+  ///
+  /// On a television it is drawn under the *tile* instead, outside it. The
+  /// tile takes focus as a whole, so directional traversal has nothing
+  /// inside it to step to, and its [RemotePress] takes select before any
+  /// descendant's own activation runs -- a status that opens something,
+  /// like the health verdict, would be drawn and dead. Beside the thing is
+  /// where such a control goes (see `TvTextField.onClear`), and here that
+  /// means beneath: a verdict belongs under the addon it judges, and a
+  /// list a remote walks downwards gains one stop rather than a stop off
+  /// to one side of another.
   final Widget? status;
+
+  /// Where the status sits when it is drawn under the tile: lined up with
+  /// the text column, past the logo, so it still reads as belonging to the
+  /// addon above it rather than to the list.
+  static const double statusIndent = 16 + AddonLogo.defaultSize + 12;
 
   final VoidCallback? onTap;
 
@@ -41,7 +57,8 @@ class AddonTile extends StatelessWidget {
     final theme = Theme.of(context);
     final manifest = addon.manifest;
     final description = manifest.description;
-    return FocusableTile(
+    final beneath = DeviceScope.isTv(context) ? status : null;
+    final tile = FocusableTile(
       onTap: onTap,
       memoryId: memoryId,
       defaultFocus: defaultFocus,
@@ -92,7 +109,7 @@ class AddonTile extends StatelessWidget {
                     const SizedBox(height: 6),
                     AddonTypeLabels(types: manifest.types),
                   ],
-                  if (status != null) ...[
+                  if (status != null && beneath == null) ...[
                     const SizedBox(height: 6),
                     Align(alignment: Alignment.centerLeft, child: status!),
                   ],
@@ -103,6 +120,17 @@ class AddonTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+    if (beneath == null) return tile;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        tile,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(statusIndent, 0, 12, 12),
+          child: beneath,
+        ),
+      ],
     );
   }
 }

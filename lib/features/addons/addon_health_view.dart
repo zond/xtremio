@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
+import '../../shell/tv_density.dart';
+import '../../widgets/focusable_tile.dart';
 import 'addon_health.dart';
 
 /// How the Installed list is ordered.
@@ -108,36 +111,66 @@ class AddonHealthChip extends StatelessWidget {
     return '${verdict.label} · ${busiest.label} $percent%';
   }
 
+  /// The chip's own rounding, which is also the shape of the ring drawn
+  /// round it on a television: a stadium, so the radius only has to be at
+  /// least half the height.
+  static final BorderRadius shape = BorderRadius.circular(999);
+
+  void _open(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (_) => AddonHealthEvidence(addon: addon, health: health, now: now),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final verdict = health.verdict(now);
     final color = colorOf(verdict, theme);
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
-      onTap: () => showDialog<void>(
-        context: context,
-        builder: (_) =>
-            AddonHealthEvidence(addon: addon, health: health, now: now),
+    final isTv = DeviceScope.isTv(context);
+    final label = Padding(
+      // A television gives it the app's minimum target's worth of height
+      // (the box is grown below), so the ring round it reads as a ring
+      // from a sofa rather than as a line under the type labels.
+      padding: EdgeInsets.symmetric(horizontal: isTv ? 12 : 8, vertical: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            labelOf(health, now),
+            style: theme.textTheme.labelSmall?.copyWith(color: color),
+          ),
+          const SizedBox(width: 2),
+          Icon(affordance, size: affordanceSize, color: color),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              labelOf(health, now),
-              style: theme.textTheme.labelSmall?.copyWith(color: color),
-            ),
-            const SizedBox(width: 2),
-            Icon(affordance, size: affordanceSize, color: color),
-          ],
+    );
+    if (!isTv) {
+      return InkWell(
+        borderRadius: shape,
+        onTap: () => _open(context),
+        child: label,
+      );
+    }
+    // The same indicator every focusable thing on a television wears,
+    // rather than the ink well's own highlight, which is a tint of about a
+    // tenth -- the one cue a bright room takes away. The node is the ink
+    // well's, so nothing is added to the focus tree and the remote simply
+    // finds one more stop where the chip already was.
+    return FocusHighlighted(
+      borderRadius: shape,
+      builder: (context, node) => InkWell(
+        focusNode: node,
+        borderRadius: shape,
+        onTap: () => _open(context),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: TvDensity.minTarget),
+          child: Center(widthFactor: 1, child: label),
         ),
       ),
     );

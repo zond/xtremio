@@ -14,7 +14,11 @@ import '../../widgets/content_type_label.dart';
 /// The manifest's logo, or an extension icon when there is none or it does
 /// not load.
 class AddonLogo extends StatelessWidget {
-  const AddonLogo({super.key, required this.url, this.size = 48});
+  const AddonLogo({super.key, required this.url, this.size = defaultSize});
+
+  /// What a list draws it at, and what anything lining up with the text
+  /// beside it has to indent past.
+  static const double defaultSize = 48;
 
   final String? url;
   final double size;
