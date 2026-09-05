@@ -56,7 +56,10 @@ List<AddonDescriptor> sortedByHealth(
 ///
 /// It is tappable because a verdict nobody can check is a verdict nobody
 /// should act on: the counts, when the addon last worked, and which of its
-/// resources the numbers are about are all one tap away.
+/// resources the numbers are about are all one tap away. The chevron is
+/// what says so -- a verdict drawn as bare words reads as a label, which
+/// is why the evidence behind it was asked for a second time by someone
+/// who already had it.
 class AddonHealthChip extends StatelessWidget {
   const AddonHealthChip({
     super.key,
@@ -68,6 +71,15 @@ class AddonHealthChip extends StatelessWidget {
   final AddonDescriptor addon;
   final AddonHealth health;
   final DateTime now;
+
+  /// The glyph for "there is more behind this": the same chevron a
+  /// settings row, a track submenu and a source section wear, rather than a
+  /// fifth way of saying it.
+  static const IconData affordance = Icons.chevron_right;
+
+  /// How big the chevron is drawn: a shade above the label's own size, so
+  /// it is legible without becoming the loudest thing on the row.
+  static const double affordanceSize = 14;
 
   /// The colour a verdict is drawn in: red for unreachable, amber for
   /// rarely having anything, grey for not knowing, and the theme's own
@@ -123,6 +135,8 @@ class AddonHealthChip extends StatelessWidget {
               labelOf(health, now),
               style: theme.textTheme.labelSmall?.copyWith(color: color),
             ),
+            const SizedBox(width: 2),
+            Icon(affordance, size: affordanceSize, color: color),
           ],
         ),
       ),

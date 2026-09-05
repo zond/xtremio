@@ -168,6 +168,35 @@ void main() {
     expect(find.byType(AddonHealthChip), findsNWidgets(4));
   });
 
+  testWidgets('every verdict says there is something behind it', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+
+    // One chevron per chip, and each drawn in its verdict's own colour, so
+    // the invitation reads as part of the verdict rather than as a control
+    // parked next to it.
+    final chevrons = find.descendant(
+      of: find.byType(AddonHealthChip),
+      matching: find.byIcon(AddonHealthChip.affordance),
+    );
+    expect(chevrons, findsNWidgets(4));
+    final theme = Theme.of(tester.element(find.byType(AddonsScreen)));
+    expect(
+      tester
+          .widget<Icon>(
+            find
+                .descendant(
+                  of: chipOf('WatchHub'),
+                  matching: find.byIcon(AddonHealthChip.affordance),
+                )
+                .first,
+          )
+          .color,
+      AddonHealthChip.colorOf(AddonHealthVerdict.broken, theme),
+    );
+  });
+
   testWidgets('the evidence behind a verdict is one tap away', (tester) async {
     await pumpScreen(tester);
     await tester.tap(chipOf('Public Domain Movies'));
