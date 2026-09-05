@@ -850,6 +850,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         expandedHeight: isTv ? null : (isWide ? 300 : 220),
         backgroundColor: isTv ? Colors.transparent : null,
         scrolledUnderElevation: isTv ? 0 : null,
+        // The way out, and it leaves rather than going through
+        // `Navigator.maybePop` the way the bar's own [BackButton] does:
+        // on a television that press is answered by the ladder below,
+        // which puts the open row of sources away and leaves the viewer
+        // on the screen they aimed to leave. Back is the key that comes
+        // down a ladder, because it is one key for every layer; this is a
+        // control the viewer pointed at. Drawn only where there is
+        // something to go back to, as the implied one is, so it is never
+        // an arrow that does nothing.
+        leading: Navigator.of(context).canPop()
+            ? BackButton(onPressed: () => Navigator.of(context).pop())
+            : null,
         actions: [
           if (_downloadsClient != null)
             IconButton(

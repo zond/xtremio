@@ -84,10 +84,15 @@ Map<String, dynamic> withLastUsed(Map<String, dynamic> fixture) {
   return fixture;
 }
 
+/// The screen under the scopes it needs, as the app's only route -- or,
+/// with [pushed], one press away from a route that stays behind it, which
+/// is the only arrangement where leaving the screen is something a test
+/// can see happen.
 Widget harness(
   FakeCoreClient core, {
   DeviceProfile device = tv,
   required AppPrefs prefs,
+  bool pushed = false,
 }) => DeviceScope(
   profile: device,
   child: CoreScope(
@@ -97,8 +102,24 @@ Widget harness(
       child: PlaybackScope(
         createEngine: FakePlaybackEngine.new,
         torrentStats: FakeTorrentStatsClient(),
-        child: const MaterialApp(
-          home: MetaDetailsScreen(type: 'movie', id: movieId),
+        child: MaterialApp(
+          home: pushed
+              ? Builder(
+                  builder: (context) => Scaffold(
+                    body: TextButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const MetaDetailsScreen(
+                            type: 'movie',
+                            id: movieId,
+                          ),
+                        ),
+                      ),
+                      child: const Text('open the title'),
+                    ),
+                  ),
+                )
+              : const MetaDetailsScreen(type: 'movie', id: movieId),
         ),
       ),
     ),
@@ -123,6 +144,7 @@ Future<FakeCoreClient> mount(
   DeviceProfile device = tv,
   Size size = tvSize,
   Map<CoreField, Map<String, dynamic>> also = const {},
+  bool pushed = false,
 }) async {
   useScreen(tester, size);
   final core = FakeCoreClient(state: {CoreField.metaDetails: fixture, ...also});
@@ -131,9 +153,14 @@ Future<FakeCoreClient> mount(
       core,
       device: device,
       prefs: await prefsFor(sectioned: sectioned),
+      pushed: pushed,
     ),
   );
   await tester.pumpAndSettle();
+  if (pushed) {
+    await tester.tap(find.text('open the title'));
+    await tester.pumpAndSettle();
+  }
   return core;
 }
 
@@ -605,5 +632,34 @@ void main() {
     expect(find.byType(TvSourceRows), findsNothing);
     expect(find.byType(TvSourceGroupCard), findsNothing);
     expect(find.byKey(streamSectionKey(StreamResolution.fhd1080)), findsOne);
+  });
+
+  testWidgets('the back arrow leaves the screen with a row open', (
+    tester,
+  ) async {
+    // The arrow is an explicit way out rather than a Back press: a
+    // `Navigator.maybePop` here is answered by the rung the open row
+    // holds, so the press a viewer aimed at the way out would put the row
+    // away and leave them on the screen. The key keeps its ladder --
+    // `backLeaves` below is that ladder, still holding the press -- and
+    // the two differ on purpose.
+    await mount(
+      tester,
+      movieWith([
+        group('alpha.example', [
+          torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
+          torrent(hash(2), 'Alpha 720p', '\u{1f464} 30 \u{1f4be} 900 MB'),
+        ]),
+      ]),
+      sectioned: true,
+      pushed: true,
+    );
+    await press(tester, LogicalKeyboardKey.select);
+    expect(sourceTitles(tester), ['Alpha 1080p']);
+    expect(backLeaves(tester), isFalse, reason: 'a row is open');
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(MetaDetailsScreen), findsNothing);
   });
 }
