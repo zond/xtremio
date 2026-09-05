@@ -533,12 +533,18 @@ itself says a test cannot reach it.
   the row and kept the rung, and the press that should have left the
   screen did nothing at all.
 - **A button drawn inside a focusable thing is not a button.** On a
-  television a tile, a row or a text field takes focus as a whole, so
-  directional traversal has nothing inside it to move to, and the
+  television a tile, a row or a text field takes focus as a whole, and the
   `RemotePress` above it takes select before any descendant's own
   activation runs. Anything that must be pressed on its own goes *beside*
-  the thing, outside that `RemotePress` -- see `TvTextField.onClear`. Drawn
-  and dead is worse than absent.
+  the thing, outside that `RemotePress` -- see `TvTextField.onClear` and
+  the addon health verdict, which is drawn under its tile rather than in
+  it. Drawn and dead is worse than absent. `FocusableTile` now enforces
+  the rule rather than stating it: on a television it wraps its child in
+  an `ExcludeFocus`, so **directional traversal really does have nothing
+  inside a tile to move to**. It used to, and the failure was invisible --
+  the installed list's ⋮ menus took focus one per row, the ring lit up on
+  the whole tile as if the tile had it, select still opened the addon, and
+  the walk went menu to menu past everything drawn under a row.
 - **A subtitle's position is pushed, not configured.** media_kit's
   `SubtitleView` reads `SubtitleViewConfiguration.padding` once, when its
   state is created, and a `GlobalKey` inside `VideoState` keeps that state

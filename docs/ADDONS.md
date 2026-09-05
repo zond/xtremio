@@ -55,7 +55,11 @@ float can say "it last worked three days ago". Tapping a verdict shows all
 of it: when the addon last worked, and the three counts for every kind it
 declares, with a kind nothing has asked for reading *not asked yet* — the
 pump only sees what a screen actually requested, which is also why "not
-used yet" is a first-class verdict and not a placeholder.
+used yet" is a first-class verdict and not a placeholder. A chevron on the
+chip is what says the verdict can be opened, since three words and a
+coloured dot read as a label; and on a television the chip is drawn under
+its tile rather than inside it, because a tile takes focus as a whole and
+a control inside one is reachable by nobody.
 
 **A broken network is charged to nobody.** The addons on a board are asked
 together and, with no connection, they fail together. One field's worth of
