@@ -192,7 +192,7 @@ addons down again on demand. An addon found on the web installs from
 inside the app: its site's Install button hands the platform a
 `stremio://` link, which Xtremio registers and opens as that addon's
 details screen (see [Installing an addon from the
-web](../README.md#installing-an-addon-from-the-web-stremio-links)).
+web](DEEP_LINKS.md)).
 **Settings** holds
 the Stremio account (sign in, create an account, sync, log out), the
 engine's own settings (player, subtitles, interface, streaming server)
