@@ -334,7 +334,13 @@ jobs:
   release:
     name: GitHub Release
     if: github.ref_type == 'tag'
-    needs: [android, linux, windows, macos, ios]
+    # Not `ios`. That job produces no artifact -- the notes below say iOS is
+    # deliberately not shipped -- and it is red on an upstream crate nobody
+    # here can fix, so gating on it means a tag builds four good downloads
+    # and publishes none of them, which is the whole point of this file
+    # undone. Dropping it from `needs` leaves the job exactly as red and
+    # exactly as visible; it just stops it holding the door.
+    needs: [android, linux, windows, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
