@@ -662,6 +662,18 @@ fn load_in(app: &AppState) -> anyhow::Result<Registry> {
 /// Runs `f` against the registry and writes it back if `f` changed anything.
 /// The file lock is held throughout, so two concurrent updates cannot lose
 /// each other's edits.
+///
+/// "The" lock is one `AppState`'s, though, and the path comes from the
+/// process-wide storage directory: two instances writing one
+/// `downloads.json` take different mutexes, and since this is a
+/// read-modify-write ending in an atomic rename, the loser's edits go whole
+/// rather than interleaved. That cannot happen while there is one instance,
+/// which is the ordinary case and the only one today -- the paths a retired
+/// instance can still write through are the ticker's, and it stops on
+/// `is_current`, and the re-pin's, and so does that. It would stop being
+/// true if something gave a retired instance a *reason* to keep writing;
+/// the lock would have to leave [`AppState`] first, and it is a field of it
+/// deliberately (see [`crate::state`]).
 pub fn update<T>(f: impl FnOnce(&mut Registry) -> anyhow::Result<T>) -> anyhow::Result<T> {
     update_in(&crate::state::state(), f)
 }
