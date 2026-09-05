@@ -220,6 +220,65 @@ focus as a whole, so there is nothing to the right of the text to step to)
 nor press it (`RemotePress` is above every descendant and takes select for
 the typing screen), which is a button drawn where the remote cannot go.
 
+## Telling the television what rate the film is
+
+A 23.98 fps film presented on a 59.94 Hz output lands on a 3:2 cadence:
+some frames shown twice and some three times, which is what the owner sees
+as the picture "jumping really strangely", and the frames that miss their
+vsync are dropped. On his Chromecast with Google TV driving an Acer 1080p
+projector that read `dropped 560 vo / 0 decoder` — every drop at the video
+output, none at the decoder, on a stream with 125 seconds buffered. The
+panel was on `mActiveModeId=1074` (59.94 Hz) while its own list offered
+1920x1080 at 23.976 (1082) and at 24.0 (1083), because nothing here had
+ever asked for a rate.
+
+So while a film is playing the player asks for one, and gives it back when
+it stops. `DisplayFrameRate` (`lib/shell/display_frame_rate.dart`) is the
+Dart half, on the `xtremio/device` channel; the rate is the container's,
+observed off libmpv (`PlaybackEngine.videoFrameRate`), and it is asked for
+only on a television — a phone's panel has no business switching, and no
+other platform has the API. `MainActivity` answers with one of two paths:
+
+- **Android 12 (API 31) and up**: `Surface.setFrameRate` on Flutter's own
+  surface, with `FRAME_RATE_COMPATIBILITY_FIXED_SOURCE` (what the content
+  *is*, leaving the mode to the platform) and `CHANGE_FRAME_RATE_ALWAYS`
+  (a change the panel cannot make invisibly is allowed — 59.94 Hz to
+  23.976 Hz retrains the HDMI link and blanks the picture for about a
+  second, and every useful switch on a television is of that kind). The
+  device's own **Match content frame rate** setting can still refuse a
+  non-seamless switch; that is the viewer's call, and if a box is set to
+  "Seamless only" nothing here can or should override it.
+- **Android 11 (API 30) and below**: the window's `preferredDisplayModeId`,
+  naming a mode outright. `FrameRateMode.matching` picks which — the mode
+  of the current resolution whose refresh rate is the evenest whole
+  multiple of the content's. API 30 does have a two-argument
+  `setFrameRate`, but it predates `CHANGE_FRAME_RATE_ALWAYS` and so only
+  ever switches seamlessly, which is the switch a television cannot do, so
+  it takes the mode path with everything older.
+
+**Giving it back matters more than asking.** A display left at 24 Hz makes
+the whole system UI judder, which is a worse fault than the one being
+fixed. It is cleared when playback ends, when the player is left, and in
+`PlayerScreen.dispose` — which is the one that covers every other way out,
+since no route leaves this screen without disposing it. Both platform
+paths are cleared whichever of them set one. What is *not* handled here is
+the app being killed outright: a surface vote dies with the surface and a
+window attribute with the window, so there is nothing left behind.
+
+**Verifying it on a device.** `FrameRateMode` is the piece with no Android
+in it and has a JVM test (`./gradlew :app:testDebugUnitTest`); the surface,
+the window and the display need a real panel:
+
+```bash
+adb shell dumpsys display | grep -E 'mActiveModeId|mBaseDisplayInfo'  # while playing
+adb shell settings get secure match_content_frame_rate                # null = the box's default
+```
+
+The proof is a reading rather than a test: the stats OSD's dropped count
+should barely move on the file that dropped 560, and `dumpsys display`
+should name the 23.976 mode while that film is on screen and the 59.94 one
+again once it is not.
+
 ## Where offline downloads go, and when they run
 
 - **The destination is set by the app, once.** The embedded server's own
