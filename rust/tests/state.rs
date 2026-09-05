@@ -181,8 +181,7 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
     // runs it loses.
     //
     // What these two reach with the registry above in place: the registry's
-    // `load`, its read-modify-write (the re-pin records a pin it could not
-    // take) and the ticker's own re-arming. What they do not reach is the
+    // `load`, twice, and the re-pin's loop. What they do not reach is the
     // rest of `refresh`, which asks the *process* for live stats first and
     // gets "not running" -- so a retired tick stops there, and nothing a
     // test can drive tells that half's `_in` calls apart from the
@@ -192,6 +191,18 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
     assert!(
         state::current().is_none(),
         "the retired instance's background work rebuilt the state shutdown took"
+    );
+    // And it wrote nothing about the download either. Every pin the loop
+    // could still take fails against the server `core_shutdown` stopped, and
+    // recording that would leave the next boot listing a failure this
+    // process caused as the download's own.
+    let registry: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        storage_of(tmp.path(), "one").join("downloads.json"),
+    )?)?;
+    assert_eq!(
+        registry["items"]["tt-pending:tt-pending"]["state"],
+        serde_json::Value::Null,
+        "a retired re-pin recorded a failure of its own making: {registry}"
     );
 
     // Whatever the retired instance still had in flight lands in the sink

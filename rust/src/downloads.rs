@@ -1611,8 +1611,12 @@ pub fn repin_unfinished() {
 /// [`repin_unfinished`] against a state the caller already holds -- `init`'s,
 /// which is the state this work belongs to. It is the other half of the
 /// boot that can still be running after a shutdown (a magnet blocks it for
-/// as long as the tracker takes), so it may not look a state up either. See
-/// [`load_in`].
+/// as long as the tracker takes), so it may not look a state up either, and
+/// it stops once its instance has been retired. See [`load_in`].
+///
+/// Stopping there is also why [`update_in`]'s no-resurrection has no test
+/// left: this was the one path a shutdown could drive into it, and the
+/// point of the check is that it no longer does.
 pub fn repin_unfinished_in(app: &Arc<AppState>) {
     let items = match load_in(app) {
         Ok(registry) => registry.items,
@@ -1625,11 +1629,27 @@ pub fn repin_unfinished_in(app: &Arc<AppState>) {
         if !entry.unfinished() {
             continue;
         }
+        // The ticker's check, in the loop that needs it most, and twice:
+        // once so a retired instance starts no more work, and once around
+        // the pin, which is where the window actually is -- it blocks for
+        // as long as a magnet takes to resolve. Every pin issued after a
+        // shutdown fails against a server that is not running any more, and
+        // the arm below would write that down as the download's own state.
+        // A registry of "embedded server is not running" is then what the
+        // next boot lists, until its own re-pin and the first tick after it
+        // put the server's reading back over the top -- a failure this
+        // process caused, reported as the download's.
+        if !crate::state::is_current(app) {
+            return;
+        }
         match crate::server::pin_download(&entry.info_hash, entry.file_idx, &entry.announce) {
             Ok(_) => tracing::info!(key, "re-pinned an unfinished download"),
             Err(error) => {
                 let failure = PinFailure::classify(&error);
                 tracing::warn!(key, message = failure.message(), "could not re-pin");
+                if !crate::state::is_current(app) {
+                    return;
+                }
                 let _ = update_in(app, |registry| {
                     if let Some(entry) = registry.items.get_mut(&key) {
                         entry.state = State::Error;
