@@ -9,66 +9,75 @@
 # Needs ImageMagick 7 (`magick`) and Cantarell Extra Bold for the wordmark.
 set -euo pipefail
 
-# ImageMagick stamps the wall-clock time into every PNG it writes -- a `tIME`
-# chunk and the `date:create`/`date:modify` text -- so a re-run that changed no
-# pixel still rewrote all 36 assets with fresh bytes. That noise both invites
-# committing a diff that means nothing and hides a real one inside it, so the
-# chunks are dropped. Done here rather than at each call site so a `magick`
-# added later is reproducible without anyone remembering this.
-magick() { command magick -define png:exclude-chunk=date,time "$@"; }
-
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
 
 BG="#0E0B16"      # scaffoldBackgroundColor
-VIOLET="#8E6BFF"  # lighter sibling of the 0xFF7B5BF5 seed
-TEAL="#2ED9C3"
+CYAN="#22D3EE"    # the mark has its own palette; the app stays violet/teal
+AMBER="#F59E0B"
+STROKE=31         # on the 256 grid the chevrons are drawn on
+# The adaptive icon's glyph must sit inside the circle every launcher mask
+# leaves visible. At full size the chevron tips reach 133 of a 128 radius, so
+# the vector layers draw the same coordinates scaled about the centre.
+SAFE_SCALE=0.64
 INK="#F2EEFF"
 FONT=$(fc-match -f "%{file}" "Cantarell:style=Extra Bold")
 
 # ---------------------------------------------------------------- geometry --
-# All coordinates live on the 108x108 adaptive-icon grid. `mark` draws the X
-# with a given bounding box and arm thickness; the adaptive foreground keeps the
-# glyph inside the 72dp circle that every launcher mask leaves visible, while
-# the flat icons can run wider because nothing crops them.
-mark_paths() { # $1=x0 $2=x1 $3=thickness  -> two <path> elements, teal under violet
-  local a=$1 b=$2 t=$3
-  printf '<path d="M%s %s L%s %s L%s %s L%s %s Z" fill="%s"/>' \
-    "$b" "$a" "$((b-t))" "$a" "$a" "$b" "$((a+t))" "$b" "$TEAL"
-  printf '<path d="M%s %s L%s %s L%s %s L%s %s Z" fill="%s"/>' \
-    "$a" "$a" "$((a+t))" "$a" "$b" "$b" "$((b-t))" "$b" "$VIOLET"
+# Two interlocking chevrons on a 256 grid: a cyan "<" and an amber ">" passing
+# through each other with a diamond of ground between them. It reads as
+# rewind-and-forward rather than as a letter, which is the point -- a two-tone
+# X sat too close to another company's mark.
+#
+# Each chevron is a round-capped, round-joined polyline of width 31.
+# ImageMagick's own renderer draws neither strokes nor gradients (both were
+# found the hard way), so raster output writes the stroke out as what it
+# geometrically is: a quad per segment plus a disc at each vertex. The Android
+# vector drawables keep the real stroke, which AAPT does support.
+LEFT_CHEVRON="206,40 50,128 206,216"
+RIGHT_CHEVRON="50,40 206,128 50,216"
+
+mark_svg() { # $1=background(or "none") $2=left-colour $3=right-colour
+  python3 -c '
+import math, sys
+bg, cyan, amber, left, right, width = sys.argv[1:7]
+w = float(width)
+
+def stroked(spec):
+    pts = [tuple(float(v) for v in q.split(",")) for q in spec.split()]
+    r, out = w / 2, []
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+        dx, dy = x2 - x1, y2 - y1
+        L = math.hypot(dx, dy)
+        nx, ny = -dy / L * r, dx / L * r
+        c = [(x1 + nx, y1 + ny), (x2 + nx, y2 + ny),
+             (x2 - nx, y2 - ny), (x1 - nx, y1 - ny)]
+        out.append("<polygon points=\"%s\"/>" % " ".join("%.2f,%.2f" % v for v in c))
+    out += ["<circle cx=\"%g\" cy=\"%g\" r=\"%g\"/>" % (x, y, r) for x, y in pts]
+    return "".join(out)
+
+parts = ["<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"1024\" height=\"1024\">"]
+if bg != "none":
+    parts.append("<rect width=\"256\" height=\"256\" fill=\"%s\"/>" % bg)
+parts.append("<g fill=\"%s\">%s</g>" % (cyan, stroked(left)))
+parts.append("<g fill=\"%s\">%s</g>" % (amber, stroked(right)))
+sys.stdout.write("".join(parts) + "</svg>")
+' "$1" "$2" "$3" "$LEFT_CHEVRON" "$RIGHT_CHEVRON" "$STROKE"
 }
-FG_PATHS=$(mark_paths 30 78 14)   # adaptive foreground, safe inside the mask
-FLAT_PATHS=$(mark_paths 22 86 19) # flat square icons, full bleed
 
-svg() { # $1=background-fill(or none) $2=paths -> stdout
-  printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="1024" height="1024">'
-  [ "$1" = none ] || printf '<rect width="108" height="108" fill="%s"/>' "$1"
-  printf '%s</svg>' "$2"
-}
+mark_svg "$BG" "$CYAN" "$AMBER" > "$OUT/flat.svg"
+mark_svg black white white > "$OUT/stencil.svg"
 
-svg "$BG" "$FLAT_PATHS" > "$OUT/flat.svg"
-
-# ImageMagick's built-in SVG renderer loses paths drawn on a background-less
-# canvas, so cut-outs come from a black/white stencil composited as alpha.
-stencil() { # $1=paths -> stdout
-  printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="1024" height="1024">'
-  printf '<rect width="108" height="108" fill="black"/>'
-  printf '%s' "$1" | sed 's/fill="[^"]*"/fill="white"/g'
-  printf '</svg>'
-}
-stencil "$FLAT_PATHS" > "$OUT/stencil.svg"
-
-cut_out() { # $1=size $2=out  -- the mark on transparency
+cut_out() { # $1=size $2=out -- the mark on transparency
   magick "$OUT/flat.svg" -resize "${1}x${1}" \
     \( "$OUT/stencil.svg" -resize "${1}x${1}" -colorspace gray -alpha off \) \
     -alpha off -compose CopyOpacity -composite "$2"
 }
 
 # ------------------------------------------------------------ shared source --
-svg "$BG" "$FLAT_PATHS" > assets/branding/xtremio-mark.svg
+mark_svg "$BG" "$CYAN" "$AMBER" > assets/branding/xtremio-mark.svg
 cut_out 1024 assets/branding/xtremio-mark-1024.png
 
 # ------------------------------------------------------- android adaptive ----
@@ -82,18 +91,48 @@ vector() { # $1=file $2=paths-as-android-xml
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
+    android:viewportWidth="256"
+    android:viewportHeight="256">
 $2</vector>
 XML
 }
-vector "$RES/drawable/ic_launcher_foreground.xml" \
-"    <path android:pathData=\"M78,30 L64,30 L30,78 L44,78 Z\" android:fillColor=\"$TEAL\"/>
-    <path android:pathData=\"M30,30 L44,30 L78,78 L64,78 Z\" android:fillColor=\"$VIOLET\"/>"
+# The two vector layers keep the real stroke, which AAPT supports and which
+# keeps the file a few hundred bytes. The group scales the same coordinates the
+# rasters use into the circle every launcher mask leaves visible.
+chevron_vector() { # $1=file $2=left-colour $3=right-colour
+  cat > "$1" <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated by tool/generate_branding.sh; edit that script, not this file. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <group
+        android:scaleX="$SAFE_SCALE"
+        android:scaleY="$SAFE_SCALE"
+        android:pivotX="128"
+        android:pivotY="128">
+        <path
+            android:pathData="M206,40 L50,128 L206,216"
+            android:strokeColor="$2"
+            android:strokeWidth="$STROKE"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"/>
+        <path
+            android:pathData="M50,40 L206,128 L50,216"
+            android:strokeColor="$3"
+            android:strokeWidth="$STROKE"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"/>
+    </group>
+</vector>
+XML
+}
+
+chevron_vector "$RES/drawable/ic_launcher_foreground.xml" "$CYAN" "$AMBER"
 # The themed-icon layer is tinted by the launcher, so it is one flat colour.
-vector "$RES/drawable/ic_launcher_monochrome.xml" \
-"    <path android:pathData=\"M78,30 L64,30 L30,78 L44,78 Z\" android:fillColor=\"#FFFFFF\"/>
-    <path android:pathData=\"M30,30 L44,30 L78,78 L64,78 Z\" android:fillColor=\"#FFFFFF\"/>"
+chevron_vector "$RES/drawable/ic_launcher_monochrome.xml" "#FFFFFF" "#FFFFFF"
 
 cat > "$RES/values/ic_launcher_background.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
@@ -154,14 +193,21 @@ lockup() { # $1=pointsize $2=out (transparent png)
   xh=$(magick -font "$FONT" -pointsize "$ps" label:x -trim -format "%h" info:)
   # the X ink fills 64 of the 108 grid, so the raster has to be scaled past the
   # height we actually want to see
-  s=$(awk -v x="$xh" 'BEGIN{printf "%d", x * 1.06 * 108 / 64}')
-  ink=$(awk -v s="$s" 'BEGIN{printf "%d", s * 64 / 108}')
-  top=$(awk -v s="$s" 'BEGIN{printf "%d", s * 22 / 108}')
-  gap=$(awk -v x="$xh" 'BEGIN{printf "%d", x * 0.20}')
+  # The mark's ink, caps included, spans 24.5..231.5 of the 256 grid: 81% of
+  # the raster, where the old X filled 59%. It is also a symbol rather than a
+  # letter, so it is set a little taller than the x-height and centred on that
+  # band, overshooting it evenly above and below the way a round glyph does.
+  s=$(awk -v x="$xh" 'BEGIN{printf "%d", x * 1.30 * 256 / 207}')
+  ink=$(awk -v s="$s" 'BEGIN{printf "%d", s * 207 / 256}')
+  top=$(awk -v s="$s" 'BEGIN{printf "%d", s * 24.5 / 256}')
+  gap=$(awk -v x="$xh" 'BEGIN{printf "%d", x * 0.30}')
   base=$((ps * 3))
   tx=$((60 + ink + gap))
   canvas=$((tx + ps * 6))
-  marky=$((base - top - ink))
+  # Centre the overshoot on the x-height band rather than sitting the ink on
+  # the baseline: a symmetrical mark reads as sunk when its foot is the datum.
+  marky=$(awk -v b="$base" -v t="$top" -v i="$ink" -v x="$xh" \
+    'BEGIN{printf "%d", b - t - i + (i - x) / 2}')
   cut_out "$s" "$OUT/lockup_mark.png"
   magick -size "${canvas}x$((base + ps))" xc:none \
     "$OUT/lockup_mark.png" -geometry "+60+${marky}" -composite \
