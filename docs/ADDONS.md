@@ -4,7 +4,9 @@ The record Xtremio keeps of how each installed addon has been answering,
 and the verdict the Installed tab reads off it. The rule itself is
 `lib/features/addons/addon_health.dart`.
 
-A profile collects addons. Some of them die quietly — the host goes away, a
+A profile collects addons — from the Addons tab, or from an addon site's
+Install button, which hands the OS a `stremio://` link
+([docs/DEEP_LINKS.md](DEEP_LINKS.md)). Some of them die quietly — the host goes away, a
 debrid key expires, a catalog 404s — and nothing in a Stremio client tells
 you which. Xtremio keeps a small record of **how each installed addon has
 been answering**, and the Installed tab reads a verdict off it, so the
