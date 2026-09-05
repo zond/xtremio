@@ -205,6 +205,20 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
         "a retired re-pin recorded a failure of its own making: {registry}"
     );
 
+    // The other thing that outlives a shutdown is an FFI call already in
+    // flight, and on Android one is guaranteed: the notification service
+    // re-lists every five seconds and nothing cancels that timer before the
+    // app awaits `core_shutdown`. A listing is an observer, so the answer is
+    // "not initialized" and the process is left as the shutdown left it.
+    assert!(
+        xtremio_core::downloads::list().is_err(),
+        "a listing after shutdown answered off a state it had just built"
+    );
+    assert!(
+        state::current().is_none(),
+        "and a listing after shutdown put a state back into the process"
+    );
+
     // Whatever the retired instance still had in flight lands in the sink
     // that asked for it; wait that out so what follows is unambiguous.
     drain_until_quiet(&rx, Duration::from_millis(500));

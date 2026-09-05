@@ -1352,7 +1352,19 @@ pub struct Refresh {
 /// what moved. The file is rewritten for anything but a byte count, and for
 /// a byte count no more often than [`PROGRESS_WRITE_INTERVAL`].
 pub fn refresh() -> anyhow::Result<Refresh> {
-    refresh_in(&crate::state::state())
+    refresh_in(&not_initialized_unless_running()?)
+}
+
+/// The process state for a caller that only wants to *read* it. Reaching
+/// for the resurrecting accessor here is what let an FFI call in flight
+/// across a shutdown put a fresh state back into the process: the Android
+/// notification service re-lists every five seconds and nothing cancels
+/// that timer before the app awaits `core_shutdown`, so a tick landing in
+/// the window undid the shutdown's whole point. See [`crate::state::state`]
+/// for which callers may build one -- the ones that *install* something.
+fn not_initialized_unless_running() -> anyhow::Result<Arc<AppState>> {
+    crate::state::current()
+        .ok_or_else(|| anyhow::anyhow!("the core is not initialized; is `core_init` done?"))
 }
 
 /// [`refresh`] against a state the caller already holds -- the ticker's, so
@@ -1405,19 +1417,26 @@ fn refresh_in(app: &Arc<AppState>) -> anyhow::Result<Refresh> {
 
 /// The whole registry with live progress merged in. Falls back to what is on
 /// disk when the server cannot be asked, so the list still renders offline.
+/// It is an observer, so it raises before an `init` and after a
+/// `shutdown` rather than building a state to read -- the caller before an
+/// `init` had no storage directory to read from either, and the one after a
+/// shutdown is a timer nobody stopped.
 ///
 /// Entries this build cannot parse stay on disk (that is the whole point of
 /// keeping them) but are left out here: the caller could not read them
 /// either, and the list is a payload, not the file.
 pub fn list() -> anyhow::Result<Registry> {
-    let registry = match refresh() {
+    // One state for both halves, and it is `current`: the fallback is a
+    // second chance at the registry, not a second chance at the process.
+    let app = not_initialized_unless_running()?;
+    let registry = match refresh_in(&app) {
         // What the refresh merged, not a re-read: a tick that only moved
         // byte counts leaves the file behind on purpose, and a listing off
         // the disk would then be the one place showing the older numbers.
         Ok(refreshed) => refreshed.registry,
         Err(error) => {
             tracing::debug!(%error, "listing downloads without live progress");
-            load()?
+            load_in(&app)?
         }
     };
     Ok(Registry {
