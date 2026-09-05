@@ -490,25 +490,20 @@ void main() {
 
     await press(tester, LogicalKeyboardKey.arrowRight);
     await press(tester, LogicalKeyboardKey.select);
-    expect(sourceTitles(tester), [
-      'mirror.example',
-      '1 addon had nothing for this title',
-    ]);
+    expect(sourceTitles(tester), ['mirror.example', 'quiet.example']);
     expect(
       inSource('mirror.example', find.text('Failed to fetch: 404 Not Found')),
       findsOneWidget,
     );
     expect(
-      inSource(
-        '1 addon had nothing for this title',
-        find.text('quiet.example'),
-      ),
+      inSource('quiet.example', find.text(kAddonHadNothing)),
       findsOneWidget,
     );
 
     // Select on the dead one opens its details, whose manifest fetch is
     // the reachability test.
     await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusedLabel(tester), 'mirror.example');
     // Not `press`: the screen it pushes fetches the manifest and spins
     // while it waits, so nothing ever settles.
@@ -516,6 +511,52 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.byType(AddonDetailsScreen), findsOneWidget);
+  });
+
+  testWidgets('every addon that had nothing is named on a card the remote '
+      'can reach', (tester) async {
+    // A phone unfolds the summary into a name per line. Joined into one
+    // card's second line here, the fourth name is already ellipsized and
+    // there is no press that shows the rest -- and with nothing in the
+    // row taking focus, the row cannot even be scrolled to it.
+    await mount(
+      tester,
+      movieWith([
+        group('alpha.example', [
+          torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
+        ]),
+        for (final host in ['one', 'two', 'three', 'four', 'five'])
+          emptyGroup('$host.example'),
+      ]),
+      also: {CoreField.ctx: loadCtxLoggedOutFixture()},
+    );
+
+    expect(
+      find.text('5 addons had nothing for this title'),
+      findsOneWidget,
+      reason: 'the card that opens the row still counts them',
+    );
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(sourceTitles(tester), [
+      'one.example',
+      'two.example',
+      'three.example',
+      'four.example',
+      'five.example',
+    ]);
+
+    // And the remote walks to the last of them, which is off the panel:
+    // five cards 300 wide is more than a 720p television is.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    for (var i = 0; i < 8 && focusedLabel(tester) != 'five.example'; i++) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+    }
+    expect(focusedLabel(tester), 'five.example');
+    final row = tester.getRect(find.byType(TvSourceRows));
+    final card = tester.getRect(find.byType(TvSourceCard).last);
+    expect(card.left, greaterThanOrEqualTo(row.left));
+    expect(card.right, lessThanOrEqualTo(row.right));
   });
 
   testWidgets('nobody having anything at all names the card, and the card '

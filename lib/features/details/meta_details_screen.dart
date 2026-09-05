@@ -1361,11 +1361,16 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   }) {
     if (empties.isEmpty && failures.isEmpty && !foundNothing) return null;
     final locked = profile?.addonsLocked ?? false;
-    final names = [
+    final quiet = [
       for (final group in empties)
-        profile?.installedAddon(group.request.base)?.manifest.name ??
-            group.addonLabel,
+        (
+          name:
+              profile?.installedAddon(group.request.base)?.manifest.name ??
+              group.addonLabel,
+          transportUrl: group.request.base,
+        ),
     ];
+    final names = [for (final addon in quiet) addon.name];
     return (
       label: foundNothing
           ? _NoStreamsNotice.titleOf(isEpisode)
@@ -1412,20 +1417,24 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                       confirmAndUninstallAddon(context, _client, failure.addon!)
                 : null,
           ),
-        if (names.isNotEmpty)
+        // One card each rather than one card listing them all: a joined
+        // line is ellipsized at the fourth name in a card 300 wide, and
+        // there is no press on a television that unfolds it -- which is
+        // how the phone's summary shows the same names. Each takes a
+        // press to its own details, the same one a failed addon's card
+        // takes, which is also what lets the remote walk the row far
+        // enough to read the last of them.
+        for (final addon in quiet)
           (
             icon: Icons.inbox_outlined,
-            title: _EmptyAddonsSummary.summaryLabel(
-              names.length,
-              isEpisode: isEpisode,
-            ),
-            detail: names.join(', '),
+            title: addon.name,
+            detail: kAddonHadNothing,
             badges: const <String>[],
             alsoFrom: null,
             highlighted: false,
             download: null,
             downloading: false,
-            onSelect: null,
+            onSelect: () => openAddonDetails(context, addon.transportUrl),
             onHold: null,
           ),
       ],
@@ -2196,6 +2205,11 @@ const String kSourceAccountingLabel = 'Addons';
 /// What that card says when every addon answered and none of them said
 /// anything worth counting.
 const String kNothingCameBack = 'Nothing came back';
+
+/// What one card of that row says under an addon that answered with
+/// nothing. The count and the wording that goes with it -- for this
+/// episode, for this title -- are on the card that opens the row.
+const String kAddonHadNothing = 'Had nothing to offer';
 
 /// What the toggle in the section header says the layout on screen right
 /// now is, as its own short label (drawn beside it, when there is room)
