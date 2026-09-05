@@ -256,6 +256,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// another group.
   String? _openSourceGroup;
 
+  /// Whether the build now in progress has actually drawn a row for
+  /// [_openSourceGroup]: a rung the last state offered and this one does
+  /// not leaves the label naming nothing, and the row went with it.
+  ///
+  /// Back has to ask this rather than whether the label is set, or a
+  /// stale one swallows a whole press with nothing happening on screen --
+  /// which happens whenever the streams are re-fetched, a dead addon
+  /// comes back, or an episode is picked from the row above while a
+  /// resolution is open.
+  bool _openSourceRowDrawn = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -741,13 +752,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     }
     final isTv = DeviceScope.isTv(context);
     _isTv = isTv;
+    // Built here rather than inside the [LayoutBuilder] below because the
+    // sources are the same list at every width, and because building them
+    // is what answers [_openSourceRowDrawn] -- which the `PopScope` a few
+    // lines down reads. A `LayoutBuilder` runs at layout, after the widget
+    // above it was built, so the answer would be a frame old there.
+    final streams = _streamSlivers(state, meta);
     final body = LayoutBuilder(
       builder: (context, constraints) {
         final isWide =
             !isTv && constraints.maxWidth >= MetaDetailsScreen.wideBreakpoint;
         _isWide = isWide;
         final info = _infoSlivers(state, meta, isWide: isWide, isTv: isTv);
-        final streams = _streamSlivers(state, meta);
         if (!isWide) {
           return CustomScrollView(
             controller: _narrowScroll,
@@ -788,7 +804,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // open row of sources is put away first, and only a press with
     // nothing left to put away leaves the screen.
     return PopScope(
-      canPop: _openSourceGroup == null,
+      canPop: !_openSourceRowDrawn,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) setState(() => _openSourceGroup = null);
       },
@@ -924,6 +940,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// asked. Between a tap and that first state there is nothing at all to
   /// list, and the section says so where the tap can see it.
   List<Widget> _streamSlivers(MetaDetailsState state, MetaItem meta) {
+    // Nothing is open until the rows below say otherwise: every path out
+    // of here that is not [_tvSourceSlivers] draws no row at all.
+    _openSourceRowDrawn = false;
     final isSectioned = _prefs?.streamsSectioned ?? true;
     final order = _prefs?.streamsOrder ?? StreamOrder.peersPerSize;
     final lastUsed = state.lastUsedStream;
@@ -1261,6 +1280,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         isEpisode: state.hasVideos,
       ),
     ];
+    // What Back has to put away, which is the row [TvSourceRows] will
+    // actually draw rather than the label on its own (see
+    // [_openSourceRowDrawn]).
+    _openSourceRowDrawn = groups.any((g) => g.label == _openSourceGroup);
     return [
       SliverToBoxAdapter(
         child: _StreamsHeader(

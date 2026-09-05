@@ -116,7 +116,7 @@ Future<AppPrefs> prefsFor({required bool sectioned}) async {
   return prefs;
 }
 
-Future<void> mount(
+Future<FakeCoreClient> mount(
   WidgetTester tester,
   Map<String, dynamic> fixture, {
   bool sectioned = false,
@@ -125,15 +125,29 @@ Future<void> mount(
   Map<CoreField, Map<String, dynamic>> also = const {},
 }) async {
   useScreen(tester, size);
+  final core = FakeCoreClient(state: {CoreField.metaDetails: fixture, ...also});
   await tester.pumpWidget(
     harness(
-      FakeCoreClient(state: {CoreField.metaDetails: fixture, ...also}),
+      core,
       device: device,
       prefs: await prefsFor(sectioned: sectioned),
     ),
   );
   await tester.pumpAndSettle();
+  return core;
 }
+
+/// Whether a Back press would leave the screen rather than be taken by the
+/// open row of sources.
+///
+/// The screen is the test app's only route, so a press that is *not* taken
+/// leaves nothing behind to look at -- on a device it is the app exiting.
+/// What the system Back asks is this `PopScope`, so this is the answer
+/// itself rather than a stand-in for it.
+bool backLeaves(WidgetTester tester) => tester
+    .widgetList<PopScope<dynamic>>(find.byWidgetPredicate((w) => w is PopScope))
+    .single
+    .canPop;
 
 /// The labels of the group row, left to right.
 List<String> groupLabels(WidgetTester tester) => [
@@ -339,6 +353,42 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowRight);
     }
     expect(focusedLabel(tester), 'Release 19');
+  });
+
+  testWidgets('a rung the streams stop offering stops taking the Back '
+      'press with it', (tester) async {
+    // The row is drawn for a group that is *there*, so a label naming one
+    // that has gone is nothing open -- and Back has to agree, or the press
+    // that should have left the screen is swallowed by a row nobody can
+    // see. Streams are re-fetched, dead addons come back, and picking an
+    // episode from the row above replaces the lot.
+    final core = await mount(
+      tester,
+      movieWith([
+        group('alpha.example', [
+          torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
+          torrent(hash(2), 'Alpha 720p', '\u{1f464} 30 \u{1f4be} 900 MB'),
+        ]),
+      ]),
+      sectioned: true,
+    );
+    await press(tester, LogicalKeyboardKey.select);
+    expect(sourceTitles(tester), ['Alpha 1080p']);
+    expect(backLeaves(tester), isFalse, reason: 'a row is open');
+
+    core.setState(
+      CoreField.metaDetails,
+      movieWith([
+        group('alpha.example', [
+          torrent(hash(2), 'Alpha 720p', '\u{1f464} 30 \u{1f4be} 900 MB'),
+        ]),
+      ]),
+    );
+    await tester.pumpAndSettle();
+
+    expect(groupLabels(tester), ['720p']);
+    expect(sourceTitles(tester), isEmpty, reason: 'the row went with 1080p');
+    expect(backLeaves(tester), isTrue);
   });
 
   testWidgets('the addons that failed and the ones that had nothing are '
