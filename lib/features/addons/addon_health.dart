@@ -142,8 +142,21 @@ final class AddonHealthRecord {
       value is String ? DateTime.tryParse(value)?.toUtc() : null;
 }
 
-/// The four things that can be said about an installed addon.
+/// The five things that can be said about an installed addon.
 enum AddonHealthVerdict {
+  /// Nothing it was ever asked came back: every request failed, and it has
+  /// never once answered this device. Strictly more than [broken] -- it is
+  /// decided inside that verdict's own branch, so it can never be said on
+  /// less evidence -- and the only verdict that settles the question
+  /// without a judgement call.
+  ///
+  /// The label says *here* because that is the whole of what was measured:
+  /// the record belongs to this device and begins when the addon was
+  /// installed, so an addon that answers everyone else and cannot be
+  /// reached from this network reads exactly the same. Which is still the
+  /// answer to "should this be on this device".
+  neverAnswered('Never answered here'),
+
   /// Something it is asked for fails at least half the time, and nothing it
   /// was asked has worked in a week.
   broken('Often unreachable'),
@@ -230,6 +243,22 @@ final class AddonHealth {
     return latest;
   }
 
+  /// Whether nothing this device asked of it has ever come back: no answer
+  /// carrying content, no answer carrying nothing, and no moment at which
+  /// one did.
+  ///
+  /// An empty answer counts as an answer on purpose. An addon that replied
+  /// with nothing replied, which is [AddonHealthVerdict.useless]'s
+  /// territory and the reason the record has three buckets; only a record
+  /// that is failures and nothing else can be called never-answering.
+  ///
+  /// Read off the record as stored rather than off a decayed copy, because
+  /// decay cannot change the answer: halving a count leaves zero at zero,
+  /// and the timestamps do not decay at all.
+  bool get hasNeverAnswered =>
+      lastOk == null &&
+      records.values.every((record) => record.ok == 0 && record.empty == 0);
+
   /// The records aged to [now].
   Map<AddonResourceKind, AddonHealthRecord> decayedTo(DateTime now) => {
     for (final entry in records.entries) entry.key: entry.value.decayedTo(now),
@@ -249,7 +278,7 @@ final class AddonHealth {
     return busiest;
   }
 
-  /// **The rule.** One pure function, four outcomes, evaluated in order.
+  /// **The rule.** One pure function, five outcomes, evaluated in order.
   ///
   /// - [AddonHealthVerdict.notEnoughEvidence] when no kind has been asked
   ///   [minimumObservations] times. Checked first, because every other
@@ -263,6 +292,14 @@ final class AddonHealth {
   ///   right now but worked an hour ago (which is the network, not the
   ///   addon), and the silence alone condemns one that is simply rarely
   ///   asked.
+  /// - [AddonHealthVerdict.neverAnswered] for the addon that is broken
+  ///   *and* has [hasNeverAnswered]. It is decided inside broken's branch
+  ///   rather than beside it, which is what makes "at least as much
+  ///   evidence as broken" structural instead of a threshold that has to
+  ///   be kept in step: every never-answered addon is one this rule would
+  ///   otherwise have called unreachable, so a handful of failures on
+  ///   something installed yesterday is stopped by the same
+  ///   [minimumObservations] guard that stops it being called broken.
   /// - [AddonHealthVerdict.useless] when every kind it *declares* has been
   ///   asked [uselessObservations] times and carried content in fewer than
   ///   [uselessAnswerRatio] of them. Every declared kind, so one live
@@ -286,7 +323,11 @@ final class AddonHealth {
     );
     final worked = lastOk;
     final silent = worked == null || now.difference(worked) > brokenSilence;
-    if (failing && silent) return AddonHealthVerdict.broken;
+    if (failing && silent) {
+      return hasNeverAnswered
+          ? AddonHealthVerdict.neverAnswered
+          : AddonHealthVerdict.broken;
+    }
     if (declared.isNotEmpty &&
         declared.every((kind) {
           final record = aged[kind];

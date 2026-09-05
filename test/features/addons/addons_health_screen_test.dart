@@ -38,11 +38,18 @@ void main() {
   );
 
   /// A record for every addon the verdicts have something to say about:
-  /// WatchHub unreachable, Public Domain Movies answering with nothing,
-  /// YouTube working, Cinemeta (protected) with a record it is never
-  /// labelled for, and OpenSubtitles with none at all.
+  /// WatchHub unreachable -- it answered once, a month ago, which is what
+  /// keeps it out of the never-answered bucket -- Public Domain Movies
+  /// answering with nothing, YouTube working, Cinemeta (protected) with a
+  /// record it is never labelled for, and OpenSubtitles with none at all.
   Map<String, Map<AddonResourceKind, AddonHealthRecord>> records() => {
-    addonHealthKey(watchhub): {AddonResourceKind.stream: record(fail: 12)},
+    addonHealthKey(watchhub): {
+      AddonResourceKind.stream: record(
+        ok: 1,
+        fail: 12,
+        workedAgo: const Duration(days: 30),
+      ),
+    },
     addonHealthKey(publicDomain): {
       AddonResourceKind.catalog: record(empty: 40),
       AddonResourceKind.stream: record(empty: 40),
@@ -111,6 +118,21 @@ void main() {
         ),
         matching: find.byIcon(Icons.more_vert),
       ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  /// Puts the list in [sort] through the menu the screen offers.
+  Future<void> chooseSort(WidgetTester tester, AddonHealthSort sort) async {
+    await tester.tap(find.byType(DropdownMenu<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(MenuItemButton),
+            matching: find.text(sort.label),
+          )
+          .last,
     );
     await tester.pumpAndSettle();
   }
@@ -237,17 +259,7 @@ void main() {
     final profileOrder = listedNames(tester);
     expect(profileOrder.first, 'Cinemeta');
 
-    await tester.tap(find.byType(DropdownMenu<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(MenuItemButton),
-            matching: find.text(AddonHealthSort.leastUsefulFirst.label),
-          )
-          .last,
-    );
-    await tester.pumpAndSettle();
+    await chooseSort(tester, AddonHealthSort.leastUsefulFirst);
 
     // Unreachable, then rarely-has-anything, then the ones nothing is known
     // about, then the working one; a protected addon sorts last, because it
@@ -262,18 +274,51 @@ void main() {
     ]);
 
     // And back, without losing anything.
-    await tester.tap(find.byType(DropdownMenu<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(MenuItemButton),
-            matching: find.text(AddonHealthSort.profileOrder.label),
-          )
-          .last,
-    );
-    await tester.pumpAndSettle();
+    await chooseSort(tester, AddonHealthSort.profileOrder);
     expect(listedNames(tester), profileOrder);
+  });
+
+  testWidgets('the one that never answered sorts above the unreliable one', (
+    tester,
+  ) async {
+    // YouTube answered once, a month ago, and has failed ever since;
+    // WatchHub has never answered at all. YouTube is ahead of WatchHub in
+    // the profile, so the order below is the rank and not the fixture.
+    await pumpScreen(
+      tester,
+      health: FakeAddonHealthClient(
+        addons: {
+          ...records(),
+          addonHealthKey(youtube): {
+            AddonResourceKind.catalog: record(
+              ok: 1,
+              fail: 12,
+              workedAgo: const Duration(days: 30),
+            ),
+          },
+          addonHealthKey(watchhub): {
+            AddonResourceKind.stream: record(fail: 12),
+          },
+        },
+      ),
+    );
+    expect(
+      listedNames(tester).indexOf('YouTube'),
+      lessThan(listedNames(tester).indexOf('WatchHub')),
+      reason: 'the profile order this sort has to overturn',
+    );
+
+    // The chip says the stronger thing, and says it about the addon that
+    // has failed every time it was ever asked.
+    expect(
+      tester.widget<AddonHealthChip>(chipOf('WatchHub')).health.verdict(now),
+      AddonHealthVerdict.neverAnswered,
+    );
+    expect(find.text('Never answered here'), findsOneWidget);
+    expect(find.text('Often unreachable'), findsOneWidget);
+
+    await chooseSort(tester, AddonHealthSort.leastUsefulFirst);
+    expect(listedNames(tester).take(2), ['WatchHub', 'YouTube']);
   });
 
   testWidgets('an addon\'s history can be forgotten, by its key alone', (

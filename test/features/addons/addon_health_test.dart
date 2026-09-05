@@ -50,9 +50,41 @@ void main() {
         }),
         AddonHealthVerdict.notEnoughEvidence,
       ),
-      'five failures and it has never worked': (
+      'five failures and nothing else, ever': (
         health({AddonResourceKind.catalog: record(fail: 5)}),
+        AddonHealthVerdict.neverAnswered,
+      ),
+      'it answered once, a month ago, and has failed ever since': (
+        health({
+          AddonResourceKind.catalog: record(
+            ok: 1,
+            fail: 12,
+            workedAgo: const Duration(days: 30),
+          ),
+        }),
         AddonHealthVerdict.broken,
+      ),
+      'an addon that has answered with nothing has answered': (
+        // Twenty empties and five failures: it is reachable and has had
+        // nothing, which is the difference the three buckets exist for.
+        health({
+          AddonResourceKind.catalog: record(empty: 20),
+          AddonResourceKind.stream: record(fail: 5),
+        }),
+        AddonHealthVerdict.broken,
+      ),
+      'four failures on something installed yesterday is not a dead addon': (
+        health({AddonResourceKind.catalog: record(fail: 4)}),
+        AddonHealthVerdict.notEnoughEvidence,
+      ),
+      'failures spread too thin to accuse any one resource': (
+        // Six failures in total and never an answer, but no single kind has
+        // been asked five times -- the same guard that keeps `broken` off.
+        health({
+          AddonResourceKind.catalog: record(fail: 3),
+          AddonResourceKind.stream: record(fail: 3),
+        }),
+        AddonHealthVerdict.notEnoughEvidence,
       ),
       'half of them failed and it has not worked in a month': (
         health({
@@ -156,6 +188,20 @@ void main() {
         health({AddonResourceKind.catalog: record(fail: 30, empty: 30)}),
         AddonHealthVerdict.broken,
       ),
+      'a record old enough to have decayed still remembers the answer': (
+        // Counts halve; `lastOk` does not, which is what keeps an addon
+        // that worked in the spring out of the never-answered bucket
+        // however small its `ok` has become.
+        health({
+          AddonResourceKind.catalog: record(
+            ok: 1,
+            fail: 40,
+            workedAgo: const Duration(days: 120),
+            ago: const Duration(days: 28),
+          ),
+        }),
+        AddonHealthVerdict.broken,
+      ),
     };
 
     cases.forEach((description, expected) {
@@ -224,15 +270,58 @@ void main() {
       );
     });
 
+    test('never answered is broken, plus more, and never less', () {
+      // The evidence floor is structural rather than a second threshold:
+      // the verdict is decided inside broken's own branch, so every record
+      // that earns it is one this rule would otherwise have called
+      // unreachable. Walk a record up from nothing and it can only be said
+      // once broken could have been.
+      for (
+        var failures = 0;
+        failures < AddonHealth.minimumObservations;
+        failures++
+      ) {
+        expect(
+          health({AddonResourceKind.catalog: record(fail: failures.toDouble())})
+              .verdict(now),
+          AddonHealthVerdict.notEnoughEvidence,
+          reason: '$failures failures',
+        );
+      }
+      expect(
+        health({
+          AddonResourceKind.catalog: record(
+            fail: AddonHealth.minimumObservations.toDouble(),
+          ),
+        }).verdict(now),
+        AddonHealthVerdict.neverAnswered,
+      );
+    });
+
+    test('the silence half is satisfied by there being no answer at all', () {
+      // `lastOk` is null, so the addon has been silent for as long as it
+      // has existed -- there is no fresh-failure case to exclude here, the
+      // way an addon that worked an hour ago is excluded from broken.
+      final dead = health({
+        AddonResourceKind.stream: record(fail: 9, ago: Duration.zero),
+      });
+      expect(dead.hasNeverAnswered, isTrue);
+      expect(dead.lastOk, isNull);
+      expect(dead.verdict(now), AddonHealthVerdict.neverAnswered);
+    });
+
     test('an empty answer is never counted as a failure', () {
       // The whole reason the record has three buckets: a public-domain
       // catalog with nothing for this year's blockbuster answers, every
       // time, with nothing.
       final specialist = health({AddonResourceKind.catalog: record(empty: 50)});
       expect(specialist.verdict(now), isNot(AddonHealthVerdict.broken));
+      // And it has answered, fifty times, which is why the strongest
+      // verdict is off it as well.
+      expect(specialist.hasNeverAnswered, isFalse);
       expect(
         health({AddonResourceKind.catalog: record(fail: 50)}).verdict(now),
-        AddonHealthVerdict.broken,
+        AddonHealthVerdict.neverAnswered,
       );
     });
   });

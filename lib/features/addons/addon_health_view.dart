@@ -13,8 +13,8 @@ enum AddonHealthSort {
   /// shows them in.
   profileOrder('Profile order'),
 
-  /// The two verdicts that name a problem first, so the addons worth
-  /// deciding about are at the top of the list rather than somewhere in it.
+  /// The verdicts that name a problem first, so the addons worth deciding
+  /// about are at the top of the list rather than somewhere in it.
   leastUsefulFirst('Least useful first');
 
   const AddonHealthSort(this.label);
@@ -24,16 +24,18 @@ enum AddonHealthSort {
 
 /// Where a verdict puts an addon in [AddonHealthSort.leastUsefulFirst].
 ///
-/// Broken, then useless, then not-yet-known, then working; an addon with no
-/// verdict at all (a protected one) sorts last, since it cannot be
-/// uninstalled and is never a decision to make. Ties keep profile order, so
-/// the sort rearranges as little as it can.
+/// Never-answered first, because it is the one verdict that can be acted on
+/// without a judgement call; then broken, useless, not-yet-known and
+/// working. An addon with no verdict at all (a protected one) sorts last,
+/// since it cannot be uninstalled and is never a decision to make. Ties
+/// keep profile order, so the sort rearranges as little as it can.
 int addonUsefulnessRank(AddonHealthVerdict? verdict) => switch (verdict) {
-  AddonHealthVerdict.broken => 0,
-  AddonHealthVerdict.useless => 1,
-  AddonHealthVerdict.notEnoughEvidence => 2,
-  AddonHealthVerdict.useful => 3,
-  null => 4,
+  AddonHealthVerdict.neverAnswered => 0,
+  AddonHealthVerdict.broken => 1,
+  AddonHealthVerdict.useless => 2,
+  AddonHealthVerdict.notEnoughEvidence => 3,
+  AddonHealthVerdict.useful => 4,
+  null => 5,
 };
 
 /// [addons] ordered by [sort], stably.
@@ -84,12 +86,17 @@ class AddonHealthChip extends StatelessWidget {
   /// it is legible without becoming the loudest thing on the row.
   static const double affordanceSize = 14;
 
-  /// The colour a verdict is drawn in: red for unreachable, amber for
-  /// rarely having anything, grey for not knowing, and the theme's own
-  /// accent for working. The label says the same thing in words, so the
-  /// colour is a second reading and never the only one.
+  /// The colour a verdict is drawn in: red for never having answered and
+  /// for unreachable, amber for rarely having anything, grey for not
+  /// knowing, and the theme's own accent for working. The two faults share
+  /// the one colour the scheme has for a fault, and the words are what
+  /// separate them -- a second red invented here would be a distinction the
+  /// theme never agreed to, on a set the viewer has to learn. The label
+  /// says the same thing in words, so the colour is a second reading and
+  /// never the only one.
   static Color colorOf(AddonHealthVerdict verdict, ThemeData theme) =>
       switch (verdict) {
+        AddonHealthVerdict.neverAnswered => theme.colorScheme.error,
         AddonHealthVerdict.broken => theme.colorScheme.error,
         AddonHealthVerdict.useless => Colors.amber.shade400,
         AddonHealthVerdict.notEnoughEvidence =>
