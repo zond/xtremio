@@ -7,6 +7,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../core/core.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
+import 'subtitle_match.dart';
 import 'torrent_stats.dart';
 
 export 'playback_stats.dart';
@@ -171,6 +172,7 @@ class PlaybackScope extends InheritedWidget {
     required this.createEngine,
     this.fullscreen,
     this.torrentStats,
+    this.subtitleMatch,
     this.dhtStatus,
     required super.child,
   });
@@ -178,6 +180,9 @@ class PlaybackScope extends InheritedWidget {
   final PlaybackEngineFactory createEngine;
   final FullscreenController? fullscreen;
   final TorrentStatsClient? torrentStats;
+
+  /// What "Match to another subtitle" asks for a ratio and an offset.
+  final SubtitleMatchClient? subtitleMatch;
 
   /// What the start-up card's one DHT explanation reads
   /// (`ServerHandle::dht_status`). A plain function rather than a client
@@ -198,6 +203,9 @@ class PlaybackScope extends InheritedWidget {
   static TorrentStatsClient torrentStatsOf(BuildContext context) =>
       _maybeOf(context)?.torrentStats ?? const RustTorrentStatsClient();
 
+  static SubtitleMatchClient subtitleMatchOf(BuildContext context) =>
+      _maybeOf(context)?.subtitleMatch ?? const RustSubtitleMatchClient();
+
   static DhtStatus Function() dhtStatusOf(BuildContext context) =>
       _maybeOf(context)?.dhtStatus ?? (() => const ServerClient().dhtStatus);
 
@@ -206,6 +214,7 @@ class PlaybackScope extends InheritedWidget {
       createEngine != oldWidget.createEngine ||
       fullscreen != oldWidget.fullscreen ||
       torrentStats != oldWidget.torrentStats ||
+      subtitleMatch != oldWidget.subtitleMatch ||
       dhtStatus != oldWidget.dhtStatus;
 }
 

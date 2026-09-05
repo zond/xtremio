@@ -7,6 +7,7 @@ import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/remote_press.dart';
 import 'subtitle_groups.dart';
+import 'subtitle_match.dart';
 
 /// What a viewer has asked of the subtitles' timing by hand, counted in
 /// presses rather than in seconds and multipliers.
@@ -177,6 +178,9 @@ class SubtitleTimingOverlay extends StatelessWidget {
     required this.onSpeed,
     required this.onReset,
     required this.onClose,
+    this.onMatch,
+    this.matching = false,
+    this.matchNote,
     this.firstFocusNode,
   });
 
@@ -208,11 +212,34 @@ class SubtitleTimingOverlay extends StatelessWidget {
   final VoidCallback onReset;
   final VoidCallback onClose;
 
+  /// Opens the list of other subtitle files to measure this one against,
+  /// and **null when there is no other file on offer** -- in which case
+  /// nothing about matching is drawn at all. A control that cannot do
+  /// anything is worse than one that is not there, and here it would be
+  /// worse still: it would say the app has a way of fixing this that it
+  /// does not have for this video.
+  final VoidCallback? onMatch;
+
+  /// Whether a measurement is running. Two HTTP fetches, so it is worth
+  /// seconds on a slow connection and the panel says so rather than
+  /// looking like a press that did nothing.
+  final bool matching;
+
+  /// What the last measurement said, and null when none has been made
+  /// against the file on screen. The count is shown whichever way it
+  /// went: it is the evidence for applying the transform, and the
+  /// evidence for refusing to.
+  final String? matchNote;
+
   /// Attached to the first button: where the remote lands when the panel
   /// opens.
   final FocusNode? firstFocusNode;
 
   static const String title = 'Subtitle timing';
+
+  /// The primary action, above the manual controls: the two mechanisms
+  /// fix the same thing, and this one measures where the steppers guess.
+  static const String matchLabel = 'Match to another subtitle';
   static const String shiftLabel = 'Shift';
   static const String speedLabel = 'Speed';
   static const String resetLabel = 'Reset';
@@ -325,6 +352,31 @@ class SubtitleTimingOverlay extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (onMatch != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const ValueKey('subtitle-match'),
+                      style: focusRing(theme.colorScheme),
+                      // Disabled rather than hidden while one runs: a
+                      // button that vanishes under the remote takes the
+                      // focus ring with it.
+                      onPressed: matching ? null : onMatch,
+                      icon: const Icon(Icons.compare_arrows, size: 18),
+                      label: const Text(matchLabel),
+                    ),
+                  ),
+                if (matching || matchNote != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 0, 8, 8),
+                    child: Text(
+                      key: const ValueKey('subtitle-match-note'),
+                      matching ? subtitleMatchingNote : matchNote!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ),
                 _TimingRow(
                   label: shiftLabel,
                   value: timing.shiftText,

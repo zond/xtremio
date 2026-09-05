@@ -22,6 +22,7 @@ import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
 import 'subtitle_groups.dart';
+import 'subtitle_match.dart';
 import 'subtitle_timing.dart';
 import 'torrent_stall_overlay.dart';
 import 'torrent_startup_overlay.dart';
@@ -368,6 +369,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// made on rather than whatever is playing when it is finally made.
   VoidCallback? _pendingSync;
 
+  /// What "Match to another subtitle" asks for a ratio and an offset,
+  /// and what a widget test answers with instead of reaching FFI.
+  SubtitleMatchClient? _subtitleMatchClient;
+
+  /// Whether a measurement is running, and what the last one against the
+  /// file on screen said.
+  ///
+  /// The note is the count either way -- it is the evidence for applying
+  /// a transform and the evidence for refusing one -- and it belongs to
+  /// the file it was measured for, so [_resetSubtitleTiming] drops it
+  /// with everything else that file's.
+  bool _matchingSubtitle = false;
+  String? _subtitleMatchNote;
+
   /// Whether the timing panel is up. Not part of the OSD, so it is not
   /// what [_controlsVisible] says (see [_showSubtitleTiming]).
   bool _timingShown = false;
@@ -588,6 +603,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     _fullscreen = PlaybackScope.fullscreenOf(context);
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
+    _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
     // A television has no window to be one part of: the video fills the
     // screen from the moment the player opens, with the system bars out of
@@ -1711,6 +1727,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // that is on its way out, not to the one replacing it.
     _flushRememberedTiming();
     _externalSubtitle = subtitle;
+    // A count measured against the file going off says nothing about the
+    // one coming on, and left on screen it would look like a claim about
+    // it.
+    _subtitleMatchNote = null;
     _timing = _rememberedTiming(subtitle);
     // Whatever speed this put on is the machine's, so a rate arriving
     // afterwards may still withdraw it ([_onFrameRate]).
@@ -1924,6 +1944,117 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _timing = timing);
     _applySubtitleTiming();
     _rememberTiming();
+  }
+
+  /// Whether any file *other* than the one playing is on offer, which is
+  /// what a match can be measured against.
+  ///
+  /// Nothing about matching is drawn without one: with a single file
+  /// there is nothing to compare it with, and an embedded track has no
+  /// URL to fetch at all. Hiding it is the honest answer -- an offered
+  /// control that cannot work says the app has a way of fixing this
+  /// video that it has not got.
+  bool _hasOtherSubtitleFile(PlayerState? state) {
+    final playing = _externalSubtitle?.url;
+    if (playing == null || state == null) return false;
+    return state.externalSubtitleSources.any(
+      (source) => source.subtitle.url != playing,
+    );
+  }
+
+  /// Asks which file to measure the playing one against, and measures it.
+  ///
+  /// The list is the subtitle menu's own ordering, so what is at the head
+  /// of a language here is what the addon says was cut for this release --
+  /// the likeliest to be in sync, which is the whole of what makes a
+  /// reference worth choosing. The choice itself is the viewer's, because
+  /// nothing else knows.
+  Future<void> _openSubtitleMatch() async {
+    final playing = _externalSubtitle;
+    if (playing == null) return;
+    SubtitleInfo? reference;
+    await _showSheet(
+      (context) => ValueListenableBuilder<Map<String, dynamic>?>(
+        valueListenable: _player!,
+        builder: (context, json, _) {
+          final state = json == null ? null : PlayerState.fromJson(json);
+          return SubtitleReferenceMenu(
+            groups: groupSubtitlesByLanguage(
+              _offeredSubtitles(state?.externalSubtitleSources ?? const []),
+              addonName: _subtitleAddonName,
+              release: _syncRelease,
+            ),
+            playingId: playing.url.toString(),
+            onPick: (subtitle) {
+              reference = subtitle;
+              Navigator.of(context).pop();
+            },
+          );
+        },
+      ),
+    );
+    final picked = reference;
+    if (picked != null) await _matchSubtitleTo(playing, picked);
+  }
+
+  /// Measures [playing] against [reference] and applies the answer, or
+  /// says why it did not.
+  ///
+  /// The count is what is shown either way. A pair that does not match --
+  /// two files for different episodes, half a film against a whole one, a
+  /// reference that is itself adrift -- comes back with the same number
+  /// in it, and saying "only 184 of 694 cues matched" is what makes the
+  /// refusal something the viewer can judge instead of an apology.
+  ///
+  /// A convincing answer goes through [_adjustTiming] like a press does,
+  /// because it is one: the viewer chose the file it was measured
+  /// against, so the result is their judgement and not the machine
+  /// putting anything back.
+  Future<void> _matchSubtitleTo(
+    SubtitleInfo playing,
+    SubtitleInfo reference,
+  ) async {
+    final client = _subtitleMatchClient;
+    if (client == null || _matchingSubtitle) return;
+    setState(() {
+      _matchingSubtitle = true;
+      _subtitleMatchNote = null;
+    });
+    SubtitleMatch? match;
+    String note;
+    try {
+      match = await client.match(
+        playing: playing.url,
+        reference: reference.url,
+      );
+      note = subtitleMatchNote(match);
+    } on Object {
+      // One sentence for every failure: what went wrong is a fetch of a
+      // URL, and an addon's subtitle URL can carry a debrid API key,
+      // which this app neither logs nor puts on a screen.
+      note = subtitleMatchFailureNote;
+    }
+    if (!mounted) return;
+    // Two fetches take seconds, and the viewer can have changed the
+    // subtitle in the meantime: a transform measured for a file that is
+    // no longer on screen would ruin the one that replaced it, and its
+    // count would be a claim about a file nobody measured.
+    if (_externalSubtitle?.url != playing.url) {
+      setState(() => _matchingSubtitle = false);
+      return;
+    }
+    setState(() {
+      _matchingSubtitle = false;
+      _subtitleMatchNote = note;
+    });
+    if (match != null && match.convincing) {
+      _adjustTiming(
+        SubtitleTiming(
+          calibratedSpeed: match.ratio,
+          calibratedDelay: match.offset,
+        ),
+      );
+    }
   }
 
   void _selectEmbeddedSubtitle(TrackInfo track) {
@@ -2150,6 +2281,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         opener.context != null &&
         opener.ancestors.contains(_controlsScope)) {
       opener.requestFocus();
+    } else if (_timingShown && _isTv) {
+      // A sheet opened from the timing panel goes back to the panel: the
+      // video is not a legitimate place for the ring while something
+      // visible is on screen, and a direction key there seeks instead of
+      // walking the panel's row.
+      _timingFocus.requestFocus();
     } else {
       _focusNode.requestFocus();
     }
@@ -3271,6 +3408,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               _videoFrameRate,
                             ),
                             firstFocusNode: _timingFocus,
+                            // Null with nothing else on offer, which is
+                            // what leaves the whole option undrawn.
+                            onMatch: _hasOtherSubtitleFile(state)
+                                ? () => unawaited(_openSubtitleMatch())
+                                : null,
+                            matching: _matchingSubtitle,
+                            matchNote: _subtitleMatchNote,
                             onShift: (step) =>
                                 _adjustTiming(_timing.shiftedBy(step)),
                             onSpeed: (direction) =>

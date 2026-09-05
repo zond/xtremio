@@ -6,6 +6,7 @@ import 'language_names.dart';
 import 'playback_engine.dart';
 import 'subtitle_color_chips.dart';
 import 'subtitle_groups.dart';
+import 'subtitle_timing.dart';
 
 /// The subtitle picker.
 ///
@@ -207,6 +208,77 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
     final chosen = group.chosen(activeId);
     final detail = SubtitleMenu.optionDetail(chosen);
     return group.hasAlternatives ? '${chosen.name} · $detail' : detail;
+  }
+}
+
+/// Which file to measure the playing subtitle against.
+///
+/// Opened from the timing panel's [SubtitleTimingOverlay.matchLabel], and
+/// listing every *other* file on offer -- the one playing is what is being
+/// measured, so it is not among them. The ordering is the menu's own, so
+/// a file the addon says was cut for this release is at the head of its
+/// language here too: it is the likeliest to be in sync, and being in
+/// sync is the whole of what makes a good reference.
+///
+/// **The viewer picks, and nothing guesses.** The measurement is only as
+/// good as the reference's own sync with the video, which no metadata
+/// knows and no addon claims -- the viewer, having tried a file or two,
+/// does.
+class SubtitleReferenceMenu extends StatelessWidget {
+  const SubtitleReferenceMenu({
+    super.key,
+    required this.groups,
+    required this.playingId,
+    required this.onPick,
+  });
+
+  /// The files on offer, grouped as the subtitle menu groups them.
+  final List<SubtitleLanguageGroup> groups;
+
+  /// What is playing ([SubtitleOption.id]), which is the file being
+  /// measured and so never a reference.
+  final String? playingId;
+
+  final ValueChanged<SubtitleInfo> onPick;
+
+  static const String title = SubtitleTimingOverlay.matchLabel;
+
+  /// Said once, at the top: the one thing the viewer knows that the app
+  /// cannot work out for itself.
+  static const String note =
+      'Pick a file you have seen keep time with this video. Its timings '
+      'are what this one is measured against, so the answer is only as '
+      'good as that file.';
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      shrinkWrap: true,
+      children: [
+        const _MenuHeader(title),
+        const _SectionNote(note),
+        for (final group in groups)
+          if (group.options.any((option) => option.id != playingId)) ...[
+            _SectionLabel(group.language),
+            for (final option in group.options)
+              if (option.id != playingId)
+                ListTile(
+                  leading: const Icon(Icons.compare_arrows),
+                  title: Text(
+                    option.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    SubtitleMenu.optionDetail(option),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => onPick(option.subtitle),
+                ),
+          ],
+      ],
+    );
   }
 }
 

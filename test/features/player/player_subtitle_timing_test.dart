@@ -678,15 +678,25 @@ void main() {
     // operated after the OSD bar has faded.
     expect(ring(tester, 'subtitle-timing-reset'), BorderSide.none);
     await press(tester, LogicalKeyboardKey.arrowUp);
+    // Match sits between the steppers and the header -- the two files on
+    // offer here are what makes it drawn at all -- and it is a
+    // [TextButton] like Reset, so it needs the same ring for the same
+    // reason.
+    expect(focusedLabel(tester), SubtitleTimingOverlay.matchLabel);
+    expect(
+      ring(tester, 'subtitle-match'),
+      BorderSide(color: primary, width: 2),
+    );
+    await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedTooltip(), 'Close');
     expect(
       ring(tester, 'subtitle-timing-close'),
       BorderSide(color: primary, width: 2),
     );
 
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    await press(tester, LogicalKeyboardKey.arrowDown);
+    for (var i = 0; i < 4; i++) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+    }
     expect(focusedLabel(tester), SubtitleTimingOverlay.resetLabel);
     expect(
       ring(tester, 'subtitle-timing-reset'),

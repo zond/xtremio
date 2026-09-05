@@ -11,6 +11,7 @@ import 'package:xtremio/shell/tv_density.dart';
 
 import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
+import 'fake_subtitle_match_client.dart';
 import 'fake_torrent_stats_client.dart';
 import 'fixtures.dart';
 
@@ -65,6 +66,10 @@ class PlayerHarness {
   final List<FakePlaybackEngine> engines = [];
   FakePlaybackEngine get engine => engines.first;
   final FakeFullscreenController fullscreen = FakeFullscreenController();
+
+  /// What "Match to another subtitle" asks; answers nothing until a test
+  /// sets [FakeSubtitleMatchClient.response].
+  final FakeSubtitleMatchClient subtitleMatch = FakeSubtitleMatchClient();
 
   /// What the start-up overlay polls; answers nothing (`null`) until a test
   /// sets [FakeTorrentStatsClient.response].
@@ -123,6 +128,7 @@ class PlayerHarness {
         },
         fullscreen: fullscreen,
         torrentStats: torrentStats,
+        subtitleMatch: subtitleMatch,
         dhtStatus: () {
           dhtStatusReads++;
           return dhtStatus;
