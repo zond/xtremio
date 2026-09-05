@@ -187,9 +187,18 @@ jobs:
       - name: flutter build windows, stamped the way the Makefile stamps
         shell: bash
         run: |
+          # Git for Windows checks out CRLF and `$( )` strips the trailing
+          # newline but not the CR, so without `tr` the version define carries
+          # one into the Diagnostics header. `-dirty` is the Makefile's rule
+          # (its comment says why) and means the same thing here: a report
+          # must not name a commit it was not built from, and the only reason
+          # this is spelled out twice is that the runner has no make.
+          version=$(sed -n 's/^version: //p' pubspec.yaml | tr -d '\r')
+          commit=$(git rev-parse --short HEAD | tr -d '\r')
+          [ -z "$(git status --porcelain)" ] || commit="$commit-dirty"
           flutter build windows --release \
-            --dart-define=XTREMIO_VERSION="$(sed -n 's/^version: //p' pubspec.yaml)" \
-            --dart-define=XTREMIO_GIT_COMMIT="$(git rev-parse --short HEAD)"
+            --dart-define=XTREMIO_VERSION="$version" \
+            --dart-define=XTREMIO_GIT_COMMIT="$commit"
 
       - name: Archive the release directory
         shell: bash
