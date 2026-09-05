@@ -146,8 +146,8 @@ existing Flutter escape hatch out of ABI filtering entirely.
   button reaches the app: it swaps the scheme on the addon's own manifest
   URL, so `https://host/manifest.json` is opened as
   `stremio://host/manifest.json` and Xtremio shows that addon's details
-  screen (nothing is installed without a press — README, "Installing an
-  addon from the web"). No `android:host` and no `android:autoVerify`:
+  screen (nothing is installed without a press — see
+  [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). No `android:host` and no `android:autoVerify`:
   the host is the *addon's* domain, so there is no domain this app could
   claim, and App Links verification (which serves `assetlinks.json` from
   the claimed domain) is impossible by construction. `MainActivity` was
