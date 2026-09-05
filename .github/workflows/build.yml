@@ -272,6 +272,13 @@ jobs:
 
       # No artifact: there is no signing identity, so nothing this produces
       # can be installed. The answer it gives is whether it compiles at all.
+      #
+      # Do not believe this job's failure message. Flutter prints its
+      # "requires a selected Development Team with a Provisioning Profile"
+      # advice for *any* failed device build where DEVELOPMENT_TEAM is unset,
+      # which `--no-codesign` guarantees, and it swallows the xcodebuild
+      # output that says what actually went wrong. Re-run with
+      # `make ios FLAGS=--verbose` to see the real error.
       - run: make ios
 
   release:
