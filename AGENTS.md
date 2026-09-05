@@ -602,7 +602,14 @@ itself says a test cannot reach it.
   group that is still in the list, and keyed its rung to the label being
   set instead: a label naming a rung the streams had stopped offering lost
   the row and kept the rung, and the press that should have left the
-  screen did nothing at all.
+  screen did nothing at all. **The ladder is the key's, and an on-screen
+  arrow is not on it.** Back is one key for every layer, so it has to take
+  them in order; an arrow is a control the viewer aimed at, and the layer
+  it would put away first is the one it is drawn on. Both arrows learned
+  this the hard way -- the player's, which dismissed the OSD around it,
+  and the details screen's, which collapsed the open row of sources -- so
+  each leaves outright (`PlayerScreen._leavePlayer`, and a `leading` of
+  its own on the details app bar) and neither calls `Navigator.maybePop`.
 - **A button drawn inside a focusable thing is not a button.** On a
   television a tile, a row or a text field takes focus as a whole, and the
   `RemotePress` above it takes select before any descendant's own
