@@ -6,7 +6,6 @@ A native, cross-platform **Stremio client** built on a pure-Rust core with a
 Flutter UI.
 
 [![CI](https://github.com/zond/xtremio/actions/workflows/ci.yml/badge.svg)](https://github.com/zond/xtremio/actions/workflows/ci.yml)
-[![Build](https://github.com/zond/xtremio/actions/workflows/build.yml/badge.svg)](https://github.com/zond/xtremio/actions/workflows/build.yml)
 [![source: MIT](https://img.shields.io/badge/source-MIT-blue)](#license)
 [![binaries: GPL-3.0-or-later](https://img.shields.io/badge/binaries-GPL--3.0--or--later-blue)](#license)
 
