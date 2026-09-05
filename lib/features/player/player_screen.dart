@@ -21,6 +21,7 @@ import 'language_names.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
+import 'subtitle_calibration.dart';
 import 'subtitle_groups.dart';
 import 'subtitle_match.dart';
 import 'subtitle_timing.dart';
@@ -319,6 +320,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// to the file it was made for exactly as strictly as the multiplier
   /// does.
   SubtitleTiming _timing = const SubtitleTiming();
+
+  /// The marks made against the subtitle on screen, and what the last of
+  /// them did.
+  ///
+  /// Working state and not something remembered: a mark is a point
+  /// measured against one subtitle file, so it says nothing about
+  /// another and [_resetSubtitleTiming] throws the lot away with the rest
+  /// of what belongs to the file going off. Only what the marks *derive*
+  /// -- the multiplier and the offset now in [_timing] -- is worth
+  /// keeping, and it is kept under the ordinary keys with everything
+  /// else the viewer fixes.
+  SubtitleCalibration _calibration = SubtitleCalibration.none;
+  String? _markNote;
 
   /// The addon file [_timing] belongs to, and null whenever what is
   /// shown is not one -- an embedded track, subtitles off, another video.
@@ -1652,6 +1666,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // one coming on, and left on screen it would look like a claim about
     // it.
     _subtitleMatchNote = null;
+    // The same for the marks, and worse: a mark is a point on the old
+    // file's timeline, so one left behind would pair with the next file's
+    // marks to give a lever arm across two files and a rate solved from
+    // neither.
+    _calibration = SubtitleCalibration.none;
+    _markNote = null;
     _timing = _rememberedTiming(subtitle);
     _applySubtitleTiming();
   }
@@ -1864,6 +1884,54 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _timing = timing);
     _applySubtitleTiming();
     _rememberTiming();
+  }
+
+  /// A press of "This is right": the line on screen belongs at this
+  /// moment, which is one mark.
+  ///
+  /// The two halves come from opposite sides of the transform on
+  /// purpose. The video position is the clock the viewer is judging
+  /// against, and the cue's start is its raw time in the file
+  /// ([PlaybackEngine.subtitleCueStart]) -- so the mark is a point on
+  /// the line `position = speed * cue + delay`, which is what
+  /// [SubtitleCalibration] fits and what stays true when the next mark
+  /// moves the speed and the delay under it. Reading the cue's *drawn*
+  /// time instead would make every mark say the same thing -- that the
+  /// transform in force is the transform in force -- and solve nothing.
+  ///
+  /// The position is read before the property so that both describe the
+  /// moment of the press, and the answer is dropped if the subtitle
+  /// changed while it was out: a property read is not the seconds-long
+  /// fetch a match is, but a mark landing on the file that replaced the
+  /// one it was made against is the same wrong answer.
+  Future<void> _markSubtitleTiming() async {
+    final engine = _engine;
+    if (engine == null) return;
+    final position = _position.value;
+    final marked = _externalSubtitle?.url;
+    final cueStart = await engine.subtitleCueStart();
+    if (!mounted || _externalSubtitle?.url != marked) return;
+    if (cueStart == null) {
+      // Between two lines, or subtitles off: there is nothing on screen
+      // the viewer can have been pointing at, and inventing a cue start
+      // from the position would be a mark saying the file is already
+      // right.
+      setState(() => _markNote = subtitleNoCueNote);
+      return;
+    }
+    final result = _calibration.marking(
+      SubtitleMark(
+        cueStart: cueStart,
+        videoPosition: position.inMicroseconds / Duration.microsecondsPerSecond,
+      ),
+      inForce: _timing,
+    );
+    _calibration = result.calibration;
+    setState(() => _markNote = result.outcome.note);
+    // Through the ordinary press path, because that is what it is: the
+    // viewer judged the picture in front of them, so the answer is
+    // theirs to keep and is remembered under the same keys as a shift.
+    _adjustTiming(result.timing);
   }
 
   /// Whether any file *other* than the one playing is on offer, which is
@@ -3337,6 +3405,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 : null,
                             matching: _matchingSubtitle,
                             matchNote: _subtitleMatchNote,
+                            onMark: () => unawaited(_markSubtitleTiming()),
+                            markNote: _markNote,
                             onShift: (step) =>
                                 _adjustTiming(_timing.shiftedBy(step)),
                             onReset: () =>

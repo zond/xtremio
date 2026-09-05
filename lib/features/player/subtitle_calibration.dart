@@ -57,6 +57,15 @@ enum SubtitleCalibrationOutcome {
   final String note;
 }
 
+/// What a mark says when there was nothing on screen to make it out of.
+///
+/// A press is aimed at a line the viewer can see, but the gaps between
+/// cues are most of a film and the button cannot come and go with them
+/// (`SubtitleTimingOverlay.onMark`), so a press between two lines has to
+/// be answered rather than ignored: nothing moved, and a panel that said
+/// nothing would look like one that had silently agreed.
+const String subtitleNoCueNote = 'No subtitle on screen to mark';
+
 /// A calibration and the timing it resolved to: what
 /// [SubtitleCalibration.marking] answers.
 @immutable

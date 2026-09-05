@@ -128,9 +128,10 @@ void main() {
       AppPrefs(client: FakePrefsClient(stored));
 
   /// Measures the playing file against the other one on offer, which is
-  /// the only thing on the panel that puts a multiplier in force: the
-  /// toggle that used to is gone, and the marks a calibration is made of
-  /// have no control yet.
+  /// one of the two things on the panel that put a multiplier in force --
+  /// the other being two marks far enough apart to have a lever arm
+  /// (`player_subtitle_marks_test.dart`). A multiplier is measured either
+  /// way: the toggle that offered one is gone.
   Future<void> matchAgainst(
     WidgetTester tester,
     PlayerHarness player,

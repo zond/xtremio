@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/features/player/subtitle_calibration.dart';
 import 'package:xtremio/features/player/subtitle_groups.dart';
 import 'package:xtremio/features/player/subtitle_match.dart';
 import 'package:xtremio/features/player/subtitle_timing.dart';
@@ -108,6 +109,8 @@ void main() {
       VoidCallback? onClose,
       VoidCallback? onMatch,
       String? matchNote,
+      VoidCallback? onMark,
+      String? markNote,
       FocusNode? firstFocusNode,
       double inset = 0,
     }) => MaterialApp(
@@ -120,10 +123,12 @@ void main() {
               timing: timing,
               firstFocusNode: firstFocusNode,
               onShift: (step) => shifts?.add(step),
+              onMark: onMark ?? () {},
               onReset: onReset ?? () {},
               onClose: onClose ?? () {},
               onMatch: onMatch,
               matchNote: matchNote,
+              markNote: markNote,
             ),
           ),
         ),
@@ -140,7 +145,9 @@ void main() {
       // of the screen -- Reset being the way back from the state the
       // viewer has just landed in. It is also the one case the panel
       // cannot avoid reaching, since a refusal is the honest answer to a
-      // bad reference.
+      // bad reference. Everything is on the panel at once here: a mark's
+      // own line sits under the refusal, and what a second note costs is
+      // a row further between the top of the panel and Reset.
       //
       // Built by `subtitleMatchNote` rather than written out, because a
       // sentence quoted here goes stale the moment the sentence changes
@@ -164,6 +171,7 @@ void main() {
           inset: 64,
           onMatch: () {},
           matchNote: refusal,
+          markNote: SubtitleCalibrationOutcome.rate.note,
         ),
       );
       expect(tester.takeException(), isNull);
@@ -189,6 +197,39 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('subtitle-shift-earlier')));
       await tester.pump();
       expect(shifts, [1, -1]);
+    });
+
+    testWidgets('the mark button presses once, and the panel says what the '
+        'press did', (tester) async {
+      var marks = 0;
+      // Drawn with no other file on offer, where the match button is
+      // not: a mark is measured against the picture in front of the
+      // viewer and needs nothing else, so it is the one fix a language
+      // that answers with a single file has.
+      await tester.pumpWidget(
+        panel(const SubtitleTiming(), onMark: () => marks++),
+      );
+      expect(find.byKey(const ValueKey('subtitle-match')), findsNothing);
+      expect(find.byKey(const ValueKey('subtitle-mark-note')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('subtitle-mark')));
+      await tester.pump();
+      expect(marks, 1);
+
+      // Which of the two things a mark did cannot be seen in the
+      // picture: an offset and a rate both look like the line landing
+      // where it belongs, and only one of them still holds in ten
+      // minutes. So the panel is where it is said.
+      await tester.pumpWidget(
+        panel(
+          const SubtitleTiming(calibratedSpeed: measured),
+          markNote: SubtitleCalibrationOutcome.rate.note,
+        ),
+      );
+      expect(find.text(SubtitleCalibrationOutcome.rate.note), findsOneWidget);
+      expect(
+        SubtitleCalibrationOutcome.rate.note,
+        isNot(SubtitleCalibrationOutcome.offset.note),
+      );
     });
 
     testWidgets('the multiplier is shown and cannot be pressed', (

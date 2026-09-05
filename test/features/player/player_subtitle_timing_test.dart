@@ -555,10 +555,14 @@ void main() {
     // operated after the OSD bar has faded.
     expect(ring(tester, 'subtitle-timing-reset'), BorderSide.none);
     await press(tester, LogicalKeyboardKey.arrowUp);
-    // Match sits between the steppers and the header -- the two files on
-    // offer here are what makes it drawn at all -- and it is a
-    // [TextButton] like Reset, so it needs the same ring for the same
-    // reason.
+    // The two measurements sit between the steppers and the header, the
+    // mark nearest the steppers because it is the one always drawn --
+    // the match needs another file on offer, which these two uploads are
+    // what provides. Both are [TextButton]s like Reset and need the same
+    // ring for the same reason.
+    expect(focusedLabel(tester), SubtitleTimingOverlay.markLabel);
+    expect(ring(tester, 'subtitle-mark'), BorderSide(color: primary, width: 2));
+    await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedLabel(tester), SubtitleTimingOverlay.matchLabel);
     expect(
       ring(tester, 'subtitle-match'),
@@ -571,7 +575,7 @@ void main() {
       BorderSide(color: primary, width: 2),
     );
 
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 4; i++) {
       await press(tester, LogicalKeyboardKey.arrowDown);
     }
     expect(focusedLabel(tester), SubtitleTimingOverlay.resetLabel);

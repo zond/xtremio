@@ -21,12 +21,14 @@ import 'subtitle_match.dart';
 /// release an upload was made for, and the same claim covers files that
 /// keep time and files that do not, so acting on it fixes one and breaks
 /// the other in equal measure. What the viewer *observes* is the only
-/// thing that tells those apart, and what observes it today is a match
-/// against a file they say is in sync (`SubtitleMatchClient`), which
-/// solves for [calibratedSpeed] and [calibratedDelay] together.
-/// `SubtitleCalibration` solves the same pair from marks the viewer
-/// makes, and nothing constructs a mark yet -- it is a solver with no
-/// control above it, so do not describe it as something the viewer has.
+/// thing that tells those apart, and what observes it are the panel's
+/// two measurements: a match against a file they say is in sync
+/// (`SubtitleMatchClient`), and the marks they make on the file in front
+/// of them -- "this line belongs at this moment", `SubtitleCalibration`.
+/// Both solve for [calibratedSpeed] and [calibratedDelay] together, and
+/// a mark arrives here as the pair it solved rather than as presses:
+/// what it says is where the line goes, not how many tenths were needed
+/// to get it there.
 ///
 /// The presses are counted as integers so that ten forward and ten back
 /// land exactly where they started; a double accumulated a tenth at a
@@ -122,11 +124,13 @@ class SubtitleTimingOverlay extends StatelessWidget {
     super.key,
     required this.timing,
     required this.onShift,
+    required this.onMark,
     required this.onReset,
     required this.onClose,
     this.onMatch,
     this.matching = false,
     this.matchNote,
+    this.markNote,
     this.firstFocusNode,
   });
 
@@ -137,6 +141,16 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// later. A tap is always `-1` or `1`; a hold hands over larger
   /// strides as it accelerates ([shiftStrideAt]).
   final ValueChanged<int> onShift;
+
+  /// "This is right": the line on screen belongs at this moment.
+  ///
+  /// Always drawn, unlike [onMatch], because whether it can do anything
+  /// is a property of the instant it is pressed and not of the video:
+  /// there is a cue on screen or there is not, it changes several times a
+  /// minute, and a button that came and went at that rate would take the
+  /// remote's ring with it every time. A press that finds nothing to mark
+  /// says so in [markNote].
+  final VoidCallback onMark;
 
   /// Back to untouched: speed 1.0, shift 0.0. With nothing else writing
   /// either property, "undo what I did" and "back to untouched" are the
@@ -163,15 +177,29 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// transform beside it -- the evidence for refusing to.
   final String? matchNote;
 
+  /// What the last mark did, and null until one has been made against
+  /// the file on screen.
+  ///
+  /// A mark that set an offset and one that learned a rate look exactly
+  /// alike in the picture -- the line lands where it belongs either way
+  /// -- and only one of them still holds in ten minutes, so which
+  /// happened is not something the viewer can see. It is also where a
+  /// press that found no cue on screen is answered, since that press
+  /// changes nothing at all.
+  final String? markNote;
+
   /// Attached to the first button: where the remote lands when the panel
   /// opens.
   final FocusNode? firstFocusNode;
 
   static const String title = 'Subtitle timing';
 
-  /// The primary action, above the manual controls: the two mechanisms
-  /// fix the same thing, and this one measures where the steppers guess.
+  /// The two measurements, above the manual controls: all three fix the
+  /// same thing, and these two measure where the steppers guess. The
+  /// match needs another file to measure against; a mark needs only the
+  /// viewer, which is why it is the one that is always there.
   static const String matchLabel = 'Match to another subtitle';
+  static const String markLabel = 'This is right';
   static const String shiftLabel = 'Shift';
   static const String speedLabel = 'Speed';
   static const String resetLabel = 'Reset';
@@ -314,16 +342,22 @@ class SubtitleTimingOverlay extends StatelessWidget {
                       ),
                     ),
                   if (matching || matchNote != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 0, 8, 8),
-                      child: Text(
-                        key: const ValueKey('subtitle-match-note'),
-                        matching ? subtitleMatchingNote : matchNote!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.white70,
-                        ),
-                      ),
+                    _Note(
+                      key: const ValueKey('subtitle-match-note'),
+                      matching ? subtitleMatchingNote : matchNote!,
                     ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const ValueKey('subtitle-mark'),
+                      style: focusRing(theme.colorScheme),
+                      onPressed: onMark,
+                      icon: const Icon(Icons.adjust, size: 18),
+                      label: const Text(markLabel),
+                    ),
+                  ),
+                  if (markNote != null)
+                    _Note(key: const ValueKey('subtitle-mark-note'), markNote!),
                   _TimingRow(
                     label: shiftLabel,
                     value: timing.shiftText,
@@ -372,6 +406,28 @@ class SubtitleTimingOverlay extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What a measurement above it came back with: a match's score and
+/// transform, or which of the two things a mark did.
+///
+/// One widget for both so that the two lines sit in the same column and
+/// wear the same type, which is what makes a panel with both of them on
+/// it read as one column rather than as two answers competing.
+class _Note extends StatelessWidget {
+  const _Note(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 0, 8, 8),
+    child: Text(
+      text,
+      style: Theme.of(context).textTheme.bodySmall
+          ?.copyWith(color: Colors.white70),
+    ),
+  );
 }
 
 /// One labelled row: a control, the value it is showing, and a control.
