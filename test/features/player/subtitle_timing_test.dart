@@ -349,6 +349,93 @@ void main() {
       expect(shifts.length, 4);
     });
 
+    test('the three strides are a tenth, a second and five seconds', () {
+      // Named in presses of `shiftStep`, so the seconds they are worth
+      // are arithmetic rather than a promise. Every one of them is a
+      // whole number of presses, which is what keeps ten forward and ten
+      // back landing on exactly nothing after a hold as well as after a
+      // tap.
+      const step = SubtitleTiming.shiftStep;
+      const tenths = SubtitleTimingOverlay.tenthStrideSteps;
+      const seconds = SubtitleTimingOverlay.secondStrideSteps;
+      expect(SubtitleTimingOverlay.shiftStrideAt(0) * step, closeTo(0.1, 1e-9));
+      expect(
+        SubtitleTimingOverlay.shiftStrideAt(tenths) * step,
+        closeTo(1, 1e-9),
+      );
+      expect(
+        SubtitleTimingOverlay.shiftStrideAt(tenths + seconds) * step,
+        closeTo(5, 1e-9),
+      );
+    });
+
+    testWidgets('a held shift accelerates through its three strides', (
+      tester,
+    ) async {
+      // A file whose *rate* is wrong is out by minutes at the end of an
+      // episode, and marking a point out there means shifting by that
+      // much. At a tenth a step that is eleven hundred steps; the whole
+      // reason the strides exist is that the toggle which used to fix a
+      // rate has gone.
+      final shifts = <int>[];
+      await tester.pumpWidget(panel(const SubtitleTiming(), shifts: shifts));
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('subtitle-shift-later'))),
+      );
+      await tester.pump(SubtitleTimingOverlay.holdDelay);
+      await tester.pump(SubtitleTimingOverlay.repeatInterval * 40);
+      await gesture.up();
+      await tester.pump();
+      const tenths = SubtitleTimingOverlay.tenthStrideSteps;
+      const seconds = SubtitleTimingOverlay.secondStrideSteps;
+      expect(shifts.length, 41);
+      expect(shifts.take(tenths), everyElement(1));
+      expect(shifts.skip(tenths).take(seconds), everyElement(10));
+      expect(shifts.skip(tenths + seconds), everyElement(50));
+      // In order, and every stride a step further out than the one
+      // before it: an acceleration that went backwards would still pass
+      // the three buckets above.
+      expect(shifts, orderedEquals(List.of(shifts)..sort()));
+    });
+
+    testWidgets('six seconds of holding reaches the end of a PAL episode', (
+      tester,
+    ) async {
+      // 4.27 % of a three-quarter-hour episode is a hundred and fifteen
+      // seconds, which is where the second mark of a calibration gets
+      // made. This is the number that says the strides are big enough:
+      // without them the same hold is four seconds of shift.
+      final shifts = <int>[];
+      await tester.pumpWidget(panel(const SubtitleTiming(), shifts: shifts));
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('subtitle-shift-later'))),
+      );
+      await tester.pump(const Duration(seconds: 6));
+      await gesture.up();
+      await tester.pump();
+      final seconds =
+          shifts.fold<int>(0, (sum, step) => sum + step) *
+          SubtitleTiming.shiftStep;
+      expect(seconds, greaterThan(115));
+    });
+
+    testWidgets('a tap after a long hold is a tenth again', (tester) async {
+      // The strides belong to the hold, not to the control: a viewer who
+      // has just crossed a minute still has to be able to nudge the last
+      // tenth, and a stride left over from the hold would take it away.
+      final shifts = <int>[];
+      await tester.pumpWidget(panel(const SubtitleTiming(), shifts: shifts));
+      final later = find.byKey(const ValueKey('subtitle-shift-later'));
+      final gesture = await tester.startGesture(tester.getCenter(later));
+      await tester.pump(const Duration(seconds: 6));
+      await gesture.up();
+      await tester.pump();
+      expect(shifts.last, 50);
+      await tester.tap(later);
+      await tester.pump();
+      expect(shifts.last, 1);
+    });
+
     testWidgets('reset is offered only once there is something to undo', (
       tester,
     ) async {

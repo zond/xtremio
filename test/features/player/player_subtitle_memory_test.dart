@@ -456,16 +456,21 @@ void main() {
     await gesture.up();
     await closePanel(tester);
 
-    // Eleven presses of the stepper, one preferences file written: the
+    // Eleven steps of the stepper, one preferences file written: the
     // shift repeats eight times a second and a preferences file is not a
-    // keystroke log.
+    // keystroke log. Ten of those steps are a tenth and the eleventh is
+    // already a whole second, because a hold accelerates
+    // (`SubtitleTimingOverlay.shiftStrideAt`).
     expect(
       prefs.subtitleSync.shiftStepsFor(
         series: series,
         group: '6',
         release: opened.toLowerCase(),
       ),
-      11,
+      SubtitleTimingOverlay.tenthStrideSteps +
+          SubtitleTimingOverlay.shiftStrideAt(
+            SubtitleTimingOverlay.tenthStrideSteps,
+          ),
     );
     expect(client.writes, ['subtitleSync']);
   });

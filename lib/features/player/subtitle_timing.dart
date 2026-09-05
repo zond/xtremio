@@ -199,7 +199,10 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// takes it off.
   final SubtitleSpeedDirection? videoDirection;
 
-  /// One press of the shift control: `-1` earlier, `1` later.
+  /// A press of the shift control, in presses of
+  /// [SubtitleTiming.shiftStep] and signed: negative earlier, positive
+  /// later. A tap is always `-1` or `1`; a hold hands over larger
+  /// strides as it accelerates ([shiftStrideAt]).
   final ValueChanged<int> onShift;
 
   /// A press on the speed control, which is a toggle: pressing the
@@ -257,6 +260,44 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// is a couple of seconds of holding, slow enough to let go on a value.
   static const Duration repeatInterval = Duration(milliseconds: 120);
 
+  /// How many times a held shift button steps in tenths before it moves
+  /// to whole seconds, and how many times in whole seconds before it
+  /// moves to five-second strides.
+  ///
+  /// The offsets a viewer has to reach are three orders of magnitude
+  /// apart, so one stride cannot serve them. A tenth is the smallest
+  /// difference visible against speech; a subtitle cut for a release
+  /// that starts somewhere else is out by seconds; and a file whose
+  /// *rate* is wrong is out by minutes -- an uncorrected PAL file runs
+  /// 4.27 % short, which over a three-quarter-hour episode is nearly
+  /// two minutes by the end of it. Marking a point out there means
+  /// shifting by that much, and at a tenth a step that is eleven
+  /// hundred steps: over two minutes of holding the key down, which is
+  /// not an adjustment anybody makes.
+  ///
+  /// Ten steps of a tenth cover the first second, fifteen steps of a
+  /// second cover the next fifteen, and five-second strides after that
+  /// put the whole of an episode's drift within about six seconds of
+  /// holding.
+  static const int tenthStrideSteps = 10;
+  static const int secondStrideSteps = 15;
+
+  /// What the [fire]th step of a held shift button is worth, counted in
+  /// presses of [SubtitleTiming.shiftStep]: one tenth, then a whole
+  /// second (ten of them), then five seconds (fifty).
+  ///
+  /// [fire] is 0 for the press itself and counts up for as long as the
+  /// button is held, so **only a hold accelerates**. Every tap starts
+  /// again at the first stride, which is what keeps a tenth reachable
+  /// however large the correction before it was -- and what keeps ten
+  /// forward and ten back landing on exactly nothing, since every
+  /// stride is a whole number of presses.
+  static int shiftStrideAt(int fire) {
+    if (fire < tenthStrideSteps) return 1;
+    if (fire < tenthStrideSteps + secondStrideSteps) return 10;
+    return 50;
+  }
+
   /// The ring the steppers wear, given to Reset and Close as a border of
   /// their own.
   ///
@@ -306,7 +347,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
       icon: stretch ? Icons.unfold_more : Icons.unfold_less,
       tooltip: stretch ? 'Subtitles run slower' : 'Subtitles run faster',
       toggled: timing.speedDirection == direction,
-      onPress: () => onSpeed(direction),
+      onPress: (_) => onSpeed(direction),
     );
   }
 
@@ -386,14 +427,14 @@ class SubtitleTimingOverlay extends StatelessWidget {
                     tooltip: 'Subtitles earlier',
                     repeats: true,
                     focusNode: firstFocusNode,
-                    onPress: () => onShift(-1),
+                    onPress: (fire) => onShift(-shiftStrideAt(fire)),
                   ),
                   after: _PanelButton(
                     key: const ValueKey('subtitle-shift-later'),
                     icon: Icons.add,
                     tooltip: 'Subtitles later',
                     repeats: true,
-                    onPress: () => onShift(1),
+                    onPress: (fire) => onShift(shiftStrideAt(fire)),
                   ),
                 ),
                 _TimingRow(
@@ -504,6 +545,12 @@ class _ButtonGap extends StatelessWidget {
 /// after the finger has gone would walk the value off on its own. The
 /// speed control does not repeat: it is a toggle, and a toggle held down
 /// would flip eight times a second.
+///
+/// Each fire carries how many went before it in this hold, which is
+/// what lets a caller step further the longer the button is held
+/// ([SubtitleTimingOverlay.shiftStrideAt]). The count is the button's
+/// because the hold is: a release, a cancel or a lost focus ends it,
+/// and the next press starts again at nothing.
 class _PanelButton extends StatefulWidget {
   const _PanelButton({
     super.key,
@@ -517,7 +564,11 @@ class _PanelButton extends StatefulWidget {
 
   final IconData icon;
   final String tooltip;
-  final VoidCallback onPress;
+
+  /// The press itself, and every repeat while the button is held, given
+  /// how many fires have gone before it -- 0 for the press.
+  final ValueChanged<int> onPress;
+
   final bool repeats;
 
   /// Whether this button's own correction is in force, for a button that
@@ -540,6 +591,11 @@ class _PanelButtonState extends State<_PanelButton> {
   bool _keyDown = false;
   bool _focused = false;
 
+  /// How many times this hold has fired so far, and what the caller
+  /// counts its strides in. Reset by [_start], so a tap is always the
+  /// first stride.
+  int _fires = 0;
+
   @override
   void dispose() {
     _stop();
@@ -548,16 +604,19 @@ class _PanelButtonState extends State<_PanelButton> {
 
   void _start() {
     _stop();
-    widget.onPress();
+    _fires = 0;
+    _fire();
     if (!widget.repeats) return;
     _hold = Timer(SubtitleTimingOverlay.holdDelay, () {
       _hold = null;
       _repeat = Timer.periodic(
         SubtitleTimingOverlay.repeatInterval,
-        (_) => widget.onPress(),
+        (_) => _fire(),
       );
     });
   }
+
+  void _fire() => widget.onPress(_fires++);
 
   void _stop() {
     _hold?.cancel();
