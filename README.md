@@ -783,8 +783,31 @@ connection.
   the button that *is* drawn would swap the direction for its reciprocal
   rather than reach 1.0. The rate arrives when mpv has probed the
   container and not before, so a press made while it still says nothing
-  can be in the direction the answer then rules out. Reset goes back to
-  untouched, 1.0 and 0.0,
+  can be in the direction the answer then rules out. Above both of them
+  the panel offers **Match to another subtitle**, which measures the
+  drift instead of asking the viewer to find it by eye. Two subtitle
+  files for one video are two clocks, so their disagreement is a line:
+  the viewer picks a file they have seen keep time, and Rust fetches
+  both, reads their cue *start* times and solves for the ratio and
+  offset that make the most starts coincide (`rust/src/subtitles.rs`,
+  over FFI as `subtitles_match`, because two HTTP fetches and a sweep
+  over two arrays do not belong on the UI thread of a Chromecast).
+  Only the starts, and no text at all: different languages split one
+  sentence into two lines and merge two into one, but a line of dialogue
+  still starts when somebody starts speaking. Against the owner's own
+  files that is a 25 fps file matched to a 23.976 fps one at 1.0424 with
+  613 of its 694 cues landing within a third of a second. **Refusing is
+  the point.** Ten pairs of real files for one episode that belong
+  together score 87-100 %, and every pair that does not -- another
+  episode, another cut, half a film against the whole -- scores 22-53 %;
+  below 60 % the viewer is told "only 184 of 694 cues matched" and
+  nothing is applied, because a nonsense transform would ruin a subtitle
+  that was merely a little out. The count is shown either way: it is the
+  evidence for applying the line and the evidence for refusing it. The
+  reference is always the viewer's to pick, since the answer is only as
+  good as that file's own sync and nothing in the metadata knows which
+  file that is; with no other file on offer the option is not drawn at
+  all. Reset goes back to untouched, 1.0 and 0.0,
   because with nothing else writing either property that is what "undo
   what I did" means. What the viewer fixes is **remembered, keyed on what caused
   it** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`, under the

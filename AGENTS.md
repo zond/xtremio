@@ -337,6 +337,28 @@ test; see README, *Subtitles*.
   The row a direction key walks may hold one button rather than two, so
   a press with nowhere to go has to stay in the panel rather than fall
   through to the seek bar.
+- **A match is measured in Rust, chosen by the viewer, and refused out
+  loud.** "Match to another subtitle" solves for the ratio and offset
+  mapping the playing file onto one the viewer says is in sync
+  (`rust/src/subtitles.rs`, `subtitles_match` over FFI;
+  `SubtitleMatchClient` in `lib/features/player/subtitle_match.dart`).
+  Four things hold it up, each with a test. **Only cue starts are read**
+  -- a translation moves the words and splits the lines, and an end
+  drifts with reading speed, but a line still starts on a speech onset.
+  **The count is the answer either way**: below the threshold nothing is
+  applied and the viewer is told how badly it matched, because the pairs
+  that must be refused (another episode, another cut, half a film) score
+  22-53 % where a real pair scores 87-100 %, and a nonsense transform
+  ruins a subtitle that was merely a little out. **The reference is
+  never guessed**, since the measurement is only as good as that file's
+  own sync with the video and no metadata knows which file that is --
+  which is also why the option is not drawn at all with nothing else on
+  offer. **A subtitle URL is never quoted back**: it can carry a debrid
+  API key, so `crate::env::fetch_text` strips it out of every failure
+  and the panel says one fixed sentence. What is measured belongs to the
+  file it was measured for, so `_resetSubtitleTiming` drops the note and
+  an answer that lands after the subtitle changed is thrown away.
+
 - **Only what the container declares is a rate, and it is observed
   rather than asked for.** `videoFrameRate` is an `observeProperty` on
   `container-fps` and nothing else, because when mpv knows the rate is
