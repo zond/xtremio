@@ -84,6 +84,15 @@ decoded on a chip or on the CPU), the embedded server and the pinned
 clipboard. This section is in release builds on purpose: it is the only way
 to get a log off a phone without ADB.
 
+One playback event in there is worth knowing about, because it is
+invisible from the sofa: `seek to <n>s did not take: the position is back
+at <m>s`. mpv refuses a seek it cannot serve rather than waiting for it --
+a demuxer that reports itself unseekable makes it restore the position --
+and the film jumping back is all that shows. The player checks two seconds
+after each run of presses and writes one line when the position is still
+where the run began; the stats OSD carries the demuxer's own answer
+(`seekable`, `partially-seekable`, `ranges`) beside it.
+
 Everything shown and copied goes through `redactSecrets`
 (`lib/features/diagnostics/diagnostics_report.dart`) first: the embedded
 server's bearer token, any `Authorization` value, auth and API keys,

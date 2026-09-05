@@ -128,6 +128,19 @@ class PlayerScreen extends StatefulWidget {
   /// no frame depends on them.
   static const Duration torrentStatsOverlayInterval = Duration(seconds: 5);
 
+  /// How long after a seek the position is looked at again to see whether
+  /// the seek happened at all, and how far from the target it may land and
+  /// still count as having happened.
+  ///
+  /// mpv seeks to a keyframe unless asked for an exact position, so a
+  /// couple of seconds either way is an ordinary seek; the case being
+  /// watched for is a seek of minutes that leaves the position where it
+  /// started. The wait is long enough for a demuxer that really is
+  /// seeking to have got there and short enough that the viewer's next
+  /// press replaces it rather than queueing behind it.
+  static const Duration seekCheckDelay = Duration(seconds: 2);
+  static const Duration seekTolerance = Duration(seconds: 5);
+
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
 
@@ -514,6 +527,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _statsHover = false;
   bool? _statsPinned;
   Timer? _statsHoverTimer;
+
+  /// The check waiting on the last seek this screen issued; see
+  /// [_watchSeek]. At most one: a new seek replaces it, since only the
+  /// last one of a run of presses is the one the viewer is waiting on.
+  Timer? _seekCheck;
+
+  /// Where the position was when that run of seeks began, and when. A
+  /// press during a run keeps them: with each press moving the position
+  /// optimistically, the press's own idea of where it came from is the
+  /// last target rather than anywhere playback has been.
+  Duration? _seekFrom;
+  DateTime? _seekFromAt;
 
   bool get _statsVisible => _statsPinned ?? _statsHover;
 
@@ -1613,6 +1638,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _seekTo(Duration target) {
+    final from = _position.value;
     final upper = _duration > Duration.zero ? _duration : target;
     final clamped = target < Duration.zero
         ? Duration.zero
@@ -1627,6 +1653,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _cast?.seek(clamped).ignore();
     } else {
       _engine?.seek(clamped);
+      _watchSeek(from: from, to: clamped);
     }
     if (_opened != null && _duration > Duration.zero) {
       _client?.dispatch(
@@ -1646,6 +1673,55 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _seekBy(Duration delta) => _seekTo(_position.value + delta);
+
+  /// Writes down the one thing about a seek nobody watching can see: that
+  /// it did not happen.
+  ///
+  /// mpv does not wait for a position it cannot reach -- it refuses the
+  /// seek and restores the position -- and a demuxer reports itself
+  /// unseekable for reasons that have nothing to do with whether the
+  /// bytes are available (a Matroska index that had not arrived when the
+  /// file opened). From the sofa that is indistinguishable from the film
+  /// jumping back on its own, and it is the event a report has no line
+  /// for. The stats OSD carries the demuxer's own answer
+  /// (`PlaybackStats.seekable`); this is the same question asked from the
+  /// outside, so a report taken without the panel up still shows it.
+  ///
+  /// One line per seek, at info: it is not an error -- the viewer asking
+  /// for a position we cannot reach is a legitimate thing to ask -- and a
+  /// burst of presses is one check, because each seek replaces the one
+  /// before it.
+  void _watchSeek({required Duration from, required Duration to}) {
+    _seekCheck?.cancel();
+    final start = _seekFrom ?? from;
+    final startedAt = _seekFromAt ?? DateTime.now();
+    _seekFrom = start;
+    _seekFromAt = startedAt;
+    _seekCheck = Timer(PlayerScreen.seekCheckDelay, () {
+      _seekCheck = null;
+      _seekFrom = null;
+      _seekFromAt = null;
+      if (!mounted || _handedOver || _casting) return;
+      final now = _position.value;
+      if ((now - to).abs() <= PlayerScreen.seekTolerance) return;
+      // Playback goes on while the check waits, so "back where it
+      // started" is the starting position plus however long the run of
+      // presses and the wait after it took. Anywhere else and something
+      // other than a refusal moved the position -- a re-open, the film
+      // ending -- and this line would name the wrong cause.
+      final elapsed = DateTime.now().difference(startedAt);
+      final drift = now - start;
+      if (drift < -PlayerScreen.seekTolerance ||
+          drift > elapsed + PlayerScreen.seekTolerance) {
+        return;
+      }
+      DiagnosticsLog.info(
+        'player',
+        'seek to ${to.inSeconds}s did not take: the position is back at '
+            '${now.inSeconds}s (from ${start.inSeconds}s)',
+      );
+    });
+  }
 
   void _setVolume(double volume) {
     final clamped = volume.clamp(0, 100).toDouble();
@@ -3197,6 +3273,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_casting || _lanMediaOn) unawaited(_teardownCast());
     _cancelOpenRetry();
     _statsHoverTimer?.cancel();
+    _seekCheck?.cancel();
     _controlsTimer?.cancel();
     _upNextTimer?.cancel();
     _stopTorrentStats();
