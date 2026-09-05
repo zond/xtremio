@@ -69,6 +69,27 @@ void main() {
     expect(harness.displayFrameRate.clears, 0);
   });
 
+  testWidgets('the rate is given back when playback fails', (tester) async {
+    useScreen(tester, tvSize);
+    final harness = PlayerHarness(device: tv);
+    await harness.pump(tester);
+    harness.engine.emitVideoFrameRate(filmRate);
+    harness.engine.emitDuration(const Duration(hours: 2));
+    harness.engine.emitPosition(const Duration(minutes: 20));
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+
+    // The failure card replaces the picture and this screen stays up, so
+    // nothing else on the way out runs: without the release here the
+    // panel sits at the film's rate under a static card, and under every
+    // menu the viewer opens over it, until they press Back.
+    harness.engine.emitError('the stream stopped sending data');
+    await pumpEvents(tester);
+
+    expect(find.textContaining('Playback failed'), findsOneWidget);
+    expect(harness.displayFrameRate.clears, 1);
+  });
+
   testWidgets('the rate is given back when the player is left', (tester) async {
     useScreen(tester, tvSize);
     final harness = PlayerHarness(device: tv);

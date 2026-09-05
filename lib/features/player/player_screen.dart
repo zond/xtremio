@@ -1074,6 +1074,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_scheduleOpenRetry(error)) return;
     DiagnosticsLog.error('player', 'playback failed: $error');
     _cancelOpenRetry();
+    // Nothing is being presented any more, and this screen stays up: the
+    // card and every menu drawn over it would otherwise sit on a panel
+    // held at the film's rate until the viewer pressed Back, which is the
+    // juddering system UI this feature exists to avoid.
+    _releaseDisplayFrameRate();
     setState(() {
       _engineError = error;
       _stopTorrentStats();
@@ -1490,13 +1495,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Gives the display's rate back.
   ///
   /// Called from every path that ends this player's claim on it: the film
-  /// reaching its end, the viewer leaving, and [dispose]. The last is the
-  /// one that makes the list complete -- Back down the ladder, the Stop
-  /// key, the arrow on the bar and the hand-over to the next episode all
-  /// pop or replace this route, and no route leaves without being disposed
-  /// of -- and the two before it are there because a film that has ended
-  /// is no longer being presented, and because leaving should not wait for
-  /// a frame. [_frameRateAsked] makes the repeats free.
+  /// reaching its end, playback failing, the viewer leaving, and
+  /// [dispose]. The last is the one that makes the list complete -- Back
+  /// down the ladder, the Stop key, the arrow on the bar and the hand-over
+  /// to the next episode all pop or replace this route, and no route
+  /// leaves without being disposed of -- and the ones before it are there
+  /// because a film that has ended or failed is no longer being presented,
+  /// and because leaving should not wait for a frame. [_frameRateAsked]
+  /// makes the repeats free.
   ///
   /// Not called when playback merely pauses: a mode change costs a second
   /// of black picture each way, and a pause is usually seconds long.

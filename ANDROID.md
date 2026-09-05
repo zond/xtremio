@@ -258,9 +258,10 @@ other platform has the API. `MainActivity` answers with one of two paths:
 
 **Giving it back matters more than asking.** A display left at 24 Hz makes
 the whole system UI judder, which is a worse fault than the one being
-fixed. It is cleared when playback ends, when the player is left, and in
-`PlayerScreen.dispose` — which is the one that covers every other way out,
-since no route leaves this screen without disposing it. Both platform
+fixed. It is cleared when playback ends, when playback fails (the failure
+card keeps this screen up, so nothing else would), when the player is
+left, and in `PlayerScreen.dispose` — which is the one that covers every
+other way out, since no route leaves this screen without disposing it. Both platform
 paths are cleared whichever of them set one. What is *not* handled here is
 the app being killed outright: a surface vote dies with the surface and a
 window attribute with the window, so there is nothing left behind.
