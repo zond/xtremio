@@ -748,9 +748,8 @@ connection.
   are three orders of magnitude apart: a tenth is the smallest
   difference visible against speech, a mis-cut release is out by
   seconds, and an uncorrected PAL file is a hundred and fifteen seconds
-  out by the end of an episode -- which is exactly where a calibration's
-  second mark gets made, and eleven hundred presses at a tenth each.
-  Three strides put it about six seconds of holding away. Only the hold
+  out by the end of an episode -- eleven hundred presses at a tenth
+  each. Three strides put it about six seconds of holding away. Only the hold
   accelerates: the count belongs to the button and a release ends it, so
   every tap is a tenth however large the correction before it was. The
   **speed** is shown and cannot be pressed. A multiplier is measured
@@ -769,19 +768,47 @@ connection.
   Only the starts, and no text at all: different languages split one
   sentence into two lines and merge two into one, but a line of dialogue
   still starts when somebody starts speaking. Against the owner's own
-  files that is a 25 fps file matched to a 23.976 fps one at 1.0424 with
-  613 of its 694 cues landing within a third of a second. **Refusing is
-  the point.** Ten pairs of real files for one episode that belong
-  together score 87-100 %, and every pair that does not -- another
-  episode, another cut, half a film against the whole -- scores 22-53 %;
-  below 60 % the viewer is told "only 184 of 694 cues matched" and
-  nothing is applied, because a nonsense transform would ruin a subtitle
-  that was merely a little out. The count is shown either way: it is the
-  evidence for applying the line and the evidence for refusing it. The
-  reference is always the viewer's to pick, since the answer is only as
-  good as that file's own sync and nothing in the metadata knows which
-  file that is; with no other file on offer the option is not drawn at
-  all. Reset goes back to untouched, 1.0 and 0.0,
+  files the Swedish Gilmore Girls file matches either of two English
+  ones at 1.0440, with 679 of its 765 cues landing within a third of a
+  second -- the ratio recovered to six figures from two references that
+  know nothing about each other. **How finely the ratio is swept comes
+  from how long the file is**, not from a constant: a ratio out by `d`
+  throws a cue `d * t` seconds, so the step nearest the right answer has
+  to keep the whole file within the tolerance, and a step that only kept
+  part of it there let the peak sink into the coincidences. Over all
+  2756 ordered pairs of 53 real subtitle files for one episode, that is
+  the difference between 163 pairs wrongly refused and 20 -- among the
+  163, a Czech file and a Hungarian one whose timings agree to a
+  millisecond. **Refusing is the point.** Ten pairs of real files for one
+  episode that belong together score 87-100 %, and every pair that does
+  not -- another episode, another cut, half a film against the whole --
+  scores 22-53 %; below 60 % the viewer is told "only 184 of 694 cues
+  matched" and nothing is applied, because a nonsense transform would
+  ruin a subtitle that was merely a little out. The count is shown either
+  way: it is the evidence for applying the line and the evidence for
+  refusing it. Two files with fewer than fifty cue starts are not
+  evidence either way and are not measured at all -- with twenty
+  observations to satisfy, and a ratio and an offset of the sweep's own
+  choosing, an unrelated file is called convincing about half the time --
+  and nothing matching *at all* is reported as its own answer, naming how
+  many cues the chosen file turned out to have, since two files that
+  merely disagree still land a fifth to a half of their cues on each
+  other. The reference is always the viewer's to pick, since the answer
+  is only as good as that file's own sync and nothing in the metadata
+  knows which file that is; with no other file on offer the option is not
+  drawn at all, and the sheet that asks is one row per language with the
+  rest of a language behind a row of their own, because reaching a
+  *second* language is what opening it is usually for. **So the rate fix
+  a viewer has is the match, and only the match.** A language that
+  answers with one file, or with several that share the same bad timing,
+  has nothing to be measured against and nothing else will guess a
+  multiplier for it: the shift moves the whole file together and cannot
+  cancel a drift. The other way of measuring one, marks the viewer makes
+  by shifting until a line is right and saying so, is solved and tested
+  (`SubtitleCalibration` in
+  `lib/features/player/subtitle_calibration.dart`, two marks far apart
+  giving the line through both) but **not wired to any control** -- there
+  is no "This is right" on the panel yet. Reset goes back to untouched, 1.0 and 0.0,
   because with nothing else writing either property that is what "undo
   what I did" means. What the viewer fixes is **remembered, keyed on what caused
   it** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`, under the
@@ -844,7 +871,11 @@ connection.
   bar, and on every device rather than only on a television. Every button
   on it, Reset and the close cross included, wears the same two-pixel
   focus ring, since this is the one surface meant to be operated after
-  the bar has gone. The speed row has no buttons and draws the space two
+  the bar has gone. It scrolls inside whatever height the screen leaves
+  it, because a 360 dp-tall phone held sideways leaves under 300 and a
+  refusal's three lines do not fit in that -- overflowing there pushed
+  Reset off the bottom of the screen, which is the way back from the
+  state the viewer had just landed in. The speed row has no buttons and draws the space two
   would have taken, so its number stays in the column the shift row put
   its own in. Then
   `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)

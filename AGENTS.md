@@ -186,11 +186,28 @@ and neither is true any more. Each rule below has a test; see README,
   too narrow for the case it existed for: the owner's Swedish Gilmore
   Girls file needs 1.0440 where the PAL constant is 1.0427, PAL-ish plus
   0.12 %, three seconds across an episode that no toggle reaches and no
-  offset cancels. The two things that replaced it -- marks the viewer
-  makes (`SubtitleCalibration`) and a match against another file
-  (`subtitles_match`) -- solve for the ratio these two files actually
-  need. Do not re-derive a multiplier from a declared rate; that is the
-  premise this whole section exists to refuse.
+  offset cancels. **A rate is only ever derived from evidence about
+  these two files -- a scored alignment, or two marks far enough apart
+  to have a lever arm -- and never from a declared frame rate.** Do not
+  re-derive a multiplier from a rate an addon or a container claims;
+  that is the premise this whole section exists to refuse.
+- **One of the two mechanisms is built and one is not, and the
+  difference is not cosmetic.** What the viewer has is the match
+  (`subtitles_match`, below). `SubtitleCalibration`
+  (`lib/features/player/subtitle_calibration.dart`) solves the same line
+  from marks the viewer makes -- "this line belongs at this moment" --
+  and it is **not reachable from the sofa**: nothing in `lib/`
+  constructs a `SubtitleMark`, there is no "This is right" on the panel,
+  and nothing reads `sub-start`. It is a solver with its tests and no
+  consumer. So a language that answers with one file, or with several
+  that share the same bad timing, has no rate fix at all today, and no
+  document here or in README may say otherwise. Wiring it up means
+  answering the question its own header leaves open first: whether
+  mpv's `sub-start` reports a cue already moved by `sub-delay` and
+  `sub-speed` or its raw time in the file, **verified against the
+  running player** rather than against the manual -- the sign of
+  `sub-speed` was assumed from documentation once and had to be
+  confirmed on the owner's television.
 - **The panel shows the multiplier and cannot press it.** A subtitle
   that is right at this moment and wrong in ten minutes looks exactly
   like one that is right, so the number is the only thing on screen that
@@ -202,9 +219,11 @@ and neither is true any more. Each rule below has a test; see README,
   (`SubtitleTimingOverlay.shiftStrideAt`). The offsets are three orders
   of magnitude apart -- a tenth is what is visible against speech, a
   mis-cut release is out by seconds, an uncorrected PAL file is a
-  hundred and fifteen seconds out by the end of an episode, which is
-  exactly where a calibration's second mark is made and eleven hundred
-  presses at a tenth each. The stride count belongs to the button and a
+  hundred and fifteen seconds out by the end of an episode -- eleven
+  hundred presses at a tenth each, which is where the strides come
+  from. They are what a second mark would need too, if the marks were
+  ever wired up; nothing makes one today and the strides do not wait on
+  that. The stride count belongs to the button and a
   release, a cancel or a lost focus ends it, so **every tap is a tenth**
   however large the correction before it was; and every stride is a
   whole number of presses, so ten forward and ten back still land on
@@ -326,27 +345,55 @@ and neither is true any more. Each rule below has a test; see README,
   than only on a television, since on a phone Back is the only way out.
   A press with nowhere to go along a row -- left at the first stepper --
   has to stay in the panel rather than fall through to the seek bar.
+  **It scrolls inside whatever height it is given**, because what it is
+  tall enough for is not its own to decide: a 360 dp-tall phone held
+  sideways leaves it under 300, and with the match button and a
+  refusal's three lines on it the panel that overflowed pushed Reset off
+  the bottom of the screen -- Reset being the way back from the state
+  the viewer had just landed in. Anything added to it is added to a
+  column that already does not fit somewhere.
 - **A match is measured in Rust, chosen by the viewer, and refused out
   loud.** "Match to another subtitle" solves for the ratio and offset
   mapping the playing file onto one the viewer says is in sync
   (`rust/src/subtitles.rs`, `subtitles_match` over FFI;
   `SubtitleMatchClient` in `lib/features/player/subtitle_match.dart`).
-  Four things hold it up, each with a test. **Only cue starts are read**
-  -- a translation moves the words and splits the lines, and an end
-  drifts with reading speed, but a line still starts on a speech onset.
-  **The count is the answer either way**: below the threshold nothing is
-  applied and the viewer is told how badly it matched, because the pairs
-  that must be refused (another episode, another cut, half a film) score
-  22-53 % where a real pair scores 87-100 %, and a nonsense transform
-  ruins a subtitle that was merely a little out. **The reference is
-  never guessed**, since the measurement is only as good as that file's
-  own sync with the video and no metadata knows which file that is --
-  which is also why the option is not drawn at all with nothing else on
-  offer. **A subtitle URL is never quoted back**: it can carry a debrid
-  API key, so `crate::env::fetch_text` strips it out of every failure
-  and the panel says one fixed sentence. What is measured belongs to the
-  file it was measured for, so `_resetSubtitleTiming` drops the note and
-  an answer that lands after the subtitle changed is thrown away.
+  Seven things hold it up, each with a test. **Only cue starts are
+  read** -- a translation moves the words and splits the lines, and an
+  end drifts with reading speed, but a line still starts on a speech
+  onset. **The count is the answer either way**: below the threshold
+  nothing is applied and the viewer is told how badly it matched,
+  because the pairs that must be refused (another episode, another cut,
+  half a film) score 22-53 % where a real pair scores 87-100 %, and a
+  nonsense transform ruins a subtitle that was merely a little out.
+  **Nothing matching at all is a different answer and says so**, naming
+  the reference's own cue count: two files that merely disagree still
+  land a fifth to a half of their cues on each other, so a zero means
+  the file the viewer picked could not be read as a subtitle -- and
+  "only 0 of 694 cues matched" would describe the file they are trying
+  to fix instead. **Fifty cue starts is the floor on both sides**
+  (`FEWEST_CUES`), because with twenty observations to satisfy and a
+  ratio and an offset of its own choosing the sweep calls an unrelated
+  file convincing about half the time; the floor guards the *playing*
+  file as much as the reference, since the agreement is counted over the
+  playing file's cues. **The sweep's step comes from the file's length**
+  (`coarse_step`), never from a constant: a ratio out by `d` throws a
+  cue `d * t` and the nearest step to the right ratio has to keep the
+  whole file inside `TOLERANCE`, so `h <= 4 * TOLERANCE / span`. A fixed
+  0.002 was seven times too coarse for an episode and refused real pairs
+  that agree to a millisecond -- 163 wrong refusals out of 2756 real
+  pairs, against 20 now. **The reference is never guessed**, since the
+  measurement is only as good as that file's own sync with the video and
+  no metadata knows which file that is -- which is also why the option
+  is not drawn at all with nothing else on offer, and why the sheet that
+  asks is one row per language with the rest behind a row of their own,
+  the subtitle menu's shape and for its reason: a language answers with
+  sixty-nine files, and the *other* language is what a viewer opening
+  this sheet is reaching for. **A subtitle URL is never quoted back**:
+  it can carry a debrid API key, so `crate::env::fetch_text` strips it
+  out of every failure and the panel says one fixed sentence. What is
+  measured belongs to the file it was measured for, so
+  `_resetSubtitleTiming` drops the note and an answer that lands after
+  the subtitle changed is thrown away.
 - **Nothing in the player reads the video's frame rate.** There is no
   `videoFrameRate` on the engine and no observation of `container-fps`
   for subtitles: the one thing that used it was the toggle's direction.

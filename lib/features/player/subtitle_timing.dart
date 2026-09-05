@@ -21,10 +21,12 @@ import 'subtitle_match.dart';
 /// release an upload was made for, and the same claim covers files that
 /// keep time and files that do not, so acting on it fixes one and breaks
 /// the other in equal measure. What the viewer *observes* is the only
-/// thing that tells those apart, and there are two ways to observe it --
-/// marking the picture right (`SubtitleCalibration`) and matching
-/// against a file they say is in sync (`SubtitleMatchClient`). Both
-/// solve for [calibratedSpeed] and [calibratedDelay].
+/// thing that tells those apart, and what observes it today is a match
+/// against a file they say is in sync (`SubtitleMatchClient`), which
+/// solves for [calibratedSpeed] and [calibratedDelay] together.
+/// `SubtitleCalibration` solves the same pair from marks the viewer
+/// makes, and nothing constructs a mark yet -- it is a solver with no
+/// control above it, so do not describe it as something the viewer has.
 ///
 /// The presses are counted as integers so that ten forward and ten back
 /// land exactly where they started; a double accumulated a tenth at a
