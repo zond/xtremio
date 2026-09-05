@@ -207,11 +207,17 @@ class AddonHealthEvidence extends StatelessWidget {
   /// and nothing else. An addon the rest of the world can reach reads the
   /// same as one that is gone, and this sentence is what keeps the chip
   /// from claiming otherwise.
+  ///
+  /// Where the record begins is named both ways, because the row this
+  /// dialog opens from offers to forget the addon's history and the next
+  /// failed request then starts a fresh record. "Since it was installed"
+  /// alone would be a claim the app's own menu falsifies -- on the one
+  /// verdict that is meant to settle the question.
   static const String neverAnsweredHere =
       'Every request this device has made of it failed. It has never once '
       'answered here, over the whole record kept for it, which begins when '
-      'it was installed. That is all that was measured — it may well be '
-      'answering someone else.';
+      'it was installed or when its history was last forgotten. That is all '
+      'that was measured — it may well be answering someone else.';
   static const String notAsked = 'not asked yet';
   static const String fading =
       'Counts fade: an answer is worth half as much a fortnight later, so an '

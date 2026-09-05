@@ -313,6 +313,47 @@ void main() {
     expect(find.text(AddonHealthEvidence.neverAnsweredHere), findsNothing);
   });
 
+  testWidgets('the evidence does not claim a record this row can reset', (
+    tester,
+  ) async {
+    // The sentence behind *Never answered here* is what bounds the app's
+    // strongest verdict, so it has to be true of every record it is shown
+    // over -- including one the viewer has already wiped.
+    await pumpScreen(
+      tester,
+      health: FakeAddonHealthClient(
+        addons: {
+          ...records(),
+          addonHealthKey(watchhub): {
+            AddonResourceKind.stream: record(fail: 12),
+          },
+        },
+      ),
+    );
+    await tester.tap(chipOf('WatchHub'));
+    await tester.pumpAndSettle();
+    final claim = tester
+        .widget<Text>(find.text(AddonHealthEvidence.neverAnsweredHere))
+        .data!;
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+
+    // Because the very row the verdict is drawn under offers to delete the
+    // record (`Table::forget` drops the addon's key outright, and the next
+    // failed request starts a fresh one), a record does not begin at
+    // installation for any addon this menu item has been used on.
+    // So the sentence has to name both places a record can begin, not just
+    // the install.
+    await openMenuOf(tester, 'WatchHub');
+    expect(find.text('Forget this addon\'s history'), findsOneWidget);
+    expect(claim, contains('installed'));
+    expect(
+      claim,
+      contains('forgotten'),
+      reason: 'the record does not survive the forget this row offers',
+    );
+  });
+
   testWidgets('the one that never answered sorts above the unreliable one', (
     tester,
   ) async {

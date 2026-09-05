@@ -53,9 +53,10 @@ is why it sorts above the rest. An empty answer still counts as an answer,
 because it is one: that addon replied and had nothing, which is *rarely has
 anything* and not this. And the label says **here** because that is the
 whole of what was measured — requests this device made, over the life of a
-record that begins when the addon was installed. An addon the rest of the
-world reaches perfectly well looks identical from a network that cannot
-get to it, so the evidence behind the chip says so in as many words.
+record that begins when the addon was installed, or when its history was
+last forgotten from the row's own menu. An addon the rest of the world
+reaches perfectly well looks identical from a network that cannot get to
+it, so the evidence behind the chip says so in as many words.
 
 *Rarely has anything* needs **every** declared kind to be answering
 nothing, so one live resource rescues an addon, and a declared kind
