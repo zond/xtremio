@@ -2,45 +2,71 @@
 //!
 //! Two subtitle files for one video are two clocks. When they disagree the
 //! disagreement is a line -- `reference = ratio * playing + offset` -- and
-//! this module is how that line is measured: read the cue *start* times out
-//! of both files and solve for the ratio and the offset that make the most
-//! starts coincide.
+//! this module is how that line is measured: turn each file into a bitmap
+//! of **when it has text on screen** and find the ratio and shift that make
+//! the two bitmaps overlap most.
 //!
-//! **Only the starts are read, and the text is thrown away.** Different
-//! languages split one sentence into two lines and merge two into one, so
-//! neither the number of cues nor the words in them survive a translation;
-//! what does survive is that a line of dialogue starts when somebody starts
-//! speaking. Ends drift with reading speed and with each translator's
-//! habits, so an end is a worse observation of the same moment than the
-//! start next to it.
+//! **Both timestamps of every cue are read, and the text is thrown away.**
+//! The measurement this replaced compared cue *starts*, and it refused a
+//! pairing that was perfectly good: the owner's Swedish Gilmore Girls file
+//! has 690 cues where the English one for the same episode has 1024,
+//! because the translator merges lines and starts each merged line on its
+//! own beat. At the best ratio and offset only 54 % of its starts land
+//! within a third of a second of an English start -- but 97 % land within
+//! a second and a half, and the two files have text on screen at the same
+//! time almost all of the time. Merging and splitting stop mattering to a
+//! bitmap: a merged line *overlaps* both the lines it covers, and a line
+//! one file does not have costs its own bins rather than a whole match.
+//!
+//! **The overlap is scored against chance, never absolutely.** Subtitles
+//! are on screen roughly two thirds of an episode, so two files that have
+//! nothing to do with each other already overlap a great deal. What is
+//! reported and thresholded is therefore how far the overlap beats what
+//! two files of these two densities would reach by accident -- see
+//! [`above_chance`].
 
-/// Every cue start in `text`, in seconds, sorted and without duplicates.
+/// One cue's span: when a line goes up and when it comes down, in seconds.
+///
+/// Both ends, because the whole point of this module is the interval
+/// rather than the instant. Ends drift with reading speed and with each
+/// translator's habits, which is why the old measurement threw them away;
+/// what that missed is that a *set* of intervals describes the episode's
+/// speech even when no single interval agrees with its counterpart.
+pub type Cue = (f64, f64);
+
+/// Every cue in `text`, as `(start, end)` seconds, sorted by start.
 ///
 /// SRT and WebVTT both write a cue as `<start> --> <end>` on a line of its
 /// own, so the parse is that line and nothing around it: no cue numbering,
 /// no `WEBVTT` header, no `NOTE` block, no styling and no text. Anything
 /// this does not recognise is skipped rather than refused -- a subtitle
-/// file with one damaged cue in it is still a usable set of observations,
-/// and the caller judges the result by how many cues came out.
+/// file with one damaged cue in it is still a usable description of when
+/// somebody is speaking, and the caller judges the result by how much of
+/// it overlaps the other file.
 ///
 /// The two formats differ in the fraction separator (`,` against `.`) and
 /// in whether the hours are written at all, and files in the wild mix both
 /// conventions, so both are accepted in either format rather than the file
-/// being sniffed for which one it claims to be.
+/// being sniffed for which one it claims to be. WebVTT also writes cue
+/// settings (`line:90% align:middle`) after the end time, so only the
+/// first token on the right of the arrow is read.
 ///
-/// Sorted because everything downstream binary-searches this; deduplicated
-/// because two cues that start at the same moment (a speaker change split
-/// across two boxes) are one observation of one speech onset, and counting
-/// it twice would let a file with many of them outvote one without.
-pub fn cue_starts(text: &str) -> Vec<f64> {
-    let mut starts: Vec<f64> = text
+/// Cues are *not* deduplicated and *not* merged: two boxes on screen
+/// together are one lit interval once the bitmap is built, and a cue whose
+/// end precedes its start is dropped because it describes no interval at
+/// all. Sorted because the extent of the file is read off the ends.
+pub fn cue_spans(text: &str) -> Vec<Cue> {
+    let mut cues: Vec<Cue> = text
         .lines()
-        .filter_map(|line| line.split("-->").next())
-        .filter_map(timestamp_seconds)
+        .filter_map(|line| {
+            let (start, end) = line.split_once("-->")?;
+            let start = timestamp_seconds(start)?;
+            let end = timestamp_seconds(end.split_whitespace().next()?)?;
+            (end >= start).then_some((start, end))
+        })
         .collect();
-    starts.sort_by(f64::total_cmp);
-    starts.dedup();
-    starts
+    cues.sort_by(|left, right| left.0.total_cmp(&right.0));
+    cues
 }
 
 /// `HH:MM:SS,mmm` (SRT), `MM:SS.mmm` (WebVTT's short form) and every
@@ -88,7 +114,7 @@ fn timestamp_seconds(stamp: &str) -> Option<f64> {
 }
 
 /// The line that maps the playing subtitle's clock onto the reference's,
-/// and how much of the file agrees with it.
+/// and how far above chance the two files then agree.
 ///
 /// `reference = ratio * playing + offset`, which is exactly the transform
 /// mpv applies: `sub-speed` multiplies the file's timestamps and
@@ -101,185 +127,141 @@ pub struct Alignment {
     pub ratio: f64,
     /// What is added afterwards, in seconds.
     pub offset: f64,
-    /// How many of the playing file's cue starts land within
-    /// [`TOLERANCE`] of a cue start in the reference under this line.
-    pub matched: usize,
-    /// How many cue starts the playing file has: the denominator of the
-    /// evidence, and the number the viewer is shown it against.
-    pub cues: usize,
+    /// How much of the overlap this line achieves is more than two files
+    /// of these densities would have reached by accident: 1 for two files
+    /// lit over exactly the same moments, 0 for two that do no better than
+    /// chance, negative for two that do worse. See [`above_chance`].
+    pub score: f64,
 }
 
-/// How close two cue starts have to be to be called the same moment.
+/// The width of a bin in the bitmap the two files are compared as, at each
+/// pass of the search.
 ///
-/// A third of a second is about what two translators disagree by on the
-/// same speech onset, and is well under the quarter-second a viewer
-/// notices as being out. Tighter and an honest match is thrown away by
-/// two subtitlers' habits; looser and the accidental coincidences of an
-/// unrelated file start counting, which is what the refusal below depends
-/// on being rare.
-pub const TOLERANCE: f64 = 0.35;
+/// The first pass is over the whole rate window and every offset, so its
+/// bin is a second: an episode is then some tens of machine words, which
+/// is what makes a quarter of a million (ratio, offset) pairs affordable
+/// on a Chromecast. The passes after it look only near the winner, so
+/// they can afford the hundred milliseconds the spans are really worth --
+/// about the shortest interval two subtitlers agree on -- and then a fifth
+/// of that, which takes the residual drift over an episode below what a
+/// viewer can see.
+const COARSE_BIN: f64 = 1.0;
+const FINE_BIN: f64 = 0.1;
+const FINEST_BIN: f64 = 0.02;
 
 /// The window the ratio is looked for in, either side of the file's own
 /// timing.
 ///
-/// PAL against film -- 25 fps timings on a 23.976 fps cut -- is 4.3 %, and
-/// is the largest mismatch that really occurs; everything else is
-/// telecine, which preserves seconds and needs no ratio at all. A tenth
-/// either way is room enough for that plus anything a hand-retimed file
-/// has picked up, and stops the sweep from "explaining" two unrelated
-/// files by stretching one of them into the shape of the other.
+/// PAL against film -- 25 fps timings on a 23.976 fps cut -- is 4.27 %,
+/// and is the largest mismatch that really occurs; everything else is
+/// telecine, which preserves seconds and needs no ratio at all. **Finding
+/// that unaided is the point**, so the window has to be wide enough that
+/// nothing in it is a hint: a tenth either way is room for PAL plus
+/// anything a hand-retimed file has picked up, and still narrow enough to
+/// stop the search "explaining" two unrelated files by stretching one into
+/// the shape of the other.
 pub const LOWEST_RATIO: f64 = 0.90;
 pub const HIGHEST_RATIO: f64 = 1.10;
 
-/// The share of the playing file's cues that has to land on the reference
-/// before the answer is worth applying.
+/// How far apart the two files' clocks may be before an offset stops being
+/// considered.
 ///
-/// Measured against the owner's own files: ten pairs of real English
-/// subtitles for one episode align at 87-100 %, and every pair that
-/// should not be aligned at all -- two different episodes, two different
-/// cuts of one episode, half a film against the whole -- comes in at
-/// 22-53 %. The gap between those two populations is where this sits.
-/// Below it the honest answer is that these two files do not describe the
-/// same recording, which the viewer is told rather than shown as a
-/// transform that ruins a subtitle that was merely a little out.
-pub const CONVINCING: f64 = 0.60;
+/// Ten minutes covers a subtitle written for a disc with its own pre-roll,
+/// a broadcast recording that keeps the recap, and a distributor's logo
+/// reel. Past that the two files are not two timings of one recording but
+/// two different things -- the second half of a film against the whole, an
+/// episode against its neighbour -- which is a pairing to refuse rather
+/// than one to search harder for.
+const WIDEST_OFFSET: f64 = 600.0;
+
+/// How far above chance two files have to overlap before the transform is
+/// worth applying.
+///
+/// **Provisional.** Prototyped on the owner's own files, where the three
+/// genuine pairings score 1.00, 0.66 and 0.66 and the two wrong episodes
+/// score 0.25 and 0.20, this sits in the gap with room on both sides. Five
+/// pairings are enough to show the metric separates them at all and not
+/// enough to set a number: what that needs is a spread of shows,
+/// languages, merge-and-split styles and deliberate mismatches, and the
+/// worst genuine pair and the best wrong pair named out of it. Until that
+/// is measured this constant is a placeholder, and the case for it is the
+/// gap rather than the value.
+pub const CONVINCING: f64 = 0.45;
 
 /// How few cues make a file useless as evidence either way.
 ///
-/// A forced-subtitle track of a dozen signs can be aligned onto anything
-/// by accident, and a coincidence rate over so small a denominator says
-/// nothing. Refusing to measure is better than measuring badly.
+/// A forced-subtitle track of a dozen signs is lit so rarely that the
+/// chance it is scored against is near zero -- which is exactly the regime
+/// where a handful of accidental coincidences reads as a strong result.
+/// Refusing to measure is better than measuring badly, and the floor
+/// guards both sides because either file can be the sparse one.
 ///
-/// Fifty because that is where the coincidence stops being reachable. A
-/// cue lands within [`TOLERANCE`] of an unrelated file's nearest cue
-/// about a fifth of the time -- a third of a second either way against
-/// gaps averaging three seconds -- and the sweep gets to choose the
-/// ratio and the offset that suit it best, so what has to be impossible
-/// is not one lucky cue but [`CONVINCING`] of them at once. Thirty of
-/// fifty at a fifth each is beyond the thousands of lines the sweep
-/// tries; twelve of twenty is not, and measured against the owner's own
-/// files a twenty-cue slice of one episode is called convincing against
-/// a *different* episode about half the time. Twenty-five is a third of
-/// the time, thirty one in twenty-five, and from forty on it stops
-/// happening at all. Fifty is that floor with room over it, and by
-/// fifty a pair that really does match is recognised nineteen times in
-/// twenty.
-///
-/// The threshold guards both sides: a reference of a dozen signs is the
-/// case it was written for, and a *playing* file of a dozen signs is the
-/// one that scores the coincidence, because [`Alignment::agreement`]
-/// divides by the playing file's cues.
+/// Fifty is inherited from the measurement this replaced, where it was the
+/// count at which an unrelated file stopped being alignable by accident.
+/// Scoring against chance moved that count a long way down --
+/// [`tests::a_handful_of_cues_can_be_laid_onto_anything`] measures it at
+/// about eight cues a side, and at fifty the best an unrelated pair reaches
+/// is well under [`CONVINCING`] -- so the floor is now generous rather than
+/// tight. It stays where it is because it costs nothing real (a file with
+/// fewer than fifty cues is a signs track, not a translation) and because
+/// re-tuning it is calibration, which is the next piece of work and not
+/// this one.
 const FEWEST_CUES: usize = 50;
 
-/// How many cues of each file the offset histogram is built from.
+/// The bounds the first pass's ratio step is kept between; what it
+/// actually takes is [`coarse_step`], which is a property of the file's
+/// length.
 ///
-/// The histogram is the one quadratic step (every sampled cue against
-/// every sampled cue, once per ratio tried), so this is what keeps a
-/// three-hour film costing the same as an episode. A few hundred starts
-/// spread across a file describe its timeline as well as all of them do:
-/// the line being fitted has two parameters, and the sample keeps the
-/// span, which is what a ratio is read off.
-const SAMPLE_CAP: usize = 300;
-
-/// The bin the pairwise differences are counted in, and how far apart the
-/// two files' clocks may be before a difference stops being considered.
-///
-/// The bin is under [`TOLERANCE`] so the mode of the differences already
-/// names an offset that scores; the exact value is recovered afterwards by
-/// [`Alignment::refit`]. An hour of offset covers a subtitle written for a
-/// disc with a different pre-roll and even a half-film reference, while
-/// keeping the histogram small enough to clear once per ratio.
-const OFFSET_BIN: f64 = 0.25;
-const WIDEST_OFFSET: f64 = 3600.0;
-
-/// The bounds the coarse sweep's step is kept between; what it actually
-/// takes is [`coarse_step`], which is a property of the file's length.
-///
-/// The coarser bound is for a file too short for the derivation to mean
+/// The coarser bound is for a file too short for the derivation to ask for
 /// anything, and the finer one is a stop against a ten-hour timeline
-/// spending a television's afternoon on a sweep. Neither is reached by a
+/// spending a television's afternoon on a search. Neither is reached by a
 /// film or an episode.
-const COARSEST_STEP: f64 = 0.002;
+const COARSEST_STEP: f64 = 0.005;
 const FINEST_STEP: f64 = 0.00002;
 
-/// How many ratios the winner is refined against, either side of it, at a
-/// step of [`coarse_step`] divided by the same number. Enough to close
-/// the coarse step, after which [`refit`] answers to the data rather than
-/// to any grid.
-const FINE_STEPS: i32 = 10;
-
-/// The coarse sweep's step for a playing file spanning `span` seconds.
+/// The step the ratio is swept at for a playing file spanning `span`
+/// seconds, when the bitmap's bins are `bin` wide.
 ///
 /// **The step cannot be a constant, because what a wrong ratio costs
 /// depends on how long the file is.** A ratio out by `d` puts a cue `t`
-/// seconds into the file `d * t` from where it belongs; the offset comes
-/// from the mode of the differences, which centres that error on the
-/// file, so the worst cue is out by `d * span / 2`, and a step of `h`
-/// leaves `d` as large as `h / 2`.
-///
-/// For the right ratio to *win* the sweep, the nearest step to it has to
-/// keep the **whole** file within [`TOLERANCE`]. Half the file landing is
-/// not enough: two unrelated files already agree on 22-53 % of their cues
-/// by accident, with a ratio and an offset of the sweep's own choosing,
-/// and that background is what the peak has to beat. So `h * span / 4`
-/// must not exceed [`TOLERANCE`], which is `h <= 4 * TOLERANCE / span`,
-/// and this is that with a factor of two in hand.
-///
-/// The 0.002 this replaced was seven times too coarse for a
-/// three-quarter-hour episode: it left up to two and a half seconds of
-/// drift across it, so only about a quarter of the file landed and the
-/// peak sank into the background. It refused pairs from the owner's own
-/// files that agree to a millisecond -- a Czech subtitle against a
-/// Hungarian one for the same episode, 713 of its 714 cues on a cue of
-/// the other, reported as "180 of 714 matched, so nothing was changed".
-/// Four more pairs did the same, and the sweep's own score agreed the
-/// answer it gave was the worse one by a factor of eight.
-///
-/// What it costs is linear and small: an episode is about seven hundred
-/// ratios where it was a hundred, which is a few tens of milliseconds.
-fn coarse_step(span: f64) -> f64 {
+/// seconds into the file `d * t` from where it belongs; the offset the
+/// search chooses centres that error on the file, so the worst cue is out
+/// by `d * span / 2`, and a step of `h` leaves `d` as large as `h / 2`.
+/// For the right ratio to be found at all, the nearest step to it has to
+/// keep the whole file inside a bin: `h * span / 4 <= bin`, which is this
+/// with a factor of two in hand.
+fn coarse_step(span: f64, bin: f64) -> f64 {
     if span > 0.0 {
-        (2.0 * TOLERANCE / span).clamp(FINEST_STEP, COARSEST_STEP)
+        (2.0 * bin / span).clamp(FINEST_STEP, COARSEST_STEP)
     } else {
         COARSEST_STEP
     }
 }
 
 impl Alignment {
-    /// The share of the playing file's cues this line puts on a cue of the
-    /// reference. Zero when the file has no cues at all.
-    pub fn agreement(&self) -> f64 {
-        if self.cues == 0 {
-            0.0
-        } else {
-            self.matched as f64 / self.cues as f64
-        }
-    }
-
     /// Whether these two files agree well enough ([`CONVINCING`]) for the
     /// line to be worth applying.
     pub fn is_convincing(&self) -> bool {
-        self.agreement() >= CONVINCING
+        self.score >= CONVINCING
     }
 }
 
 /// Solves for the line that maps `playing` onto `reference`, both being
-/// cue starts as [`cue_starts`] answers them.
+/// cue spans as [`cue_spans`] answers them.
 ///
 /// None when either file has too few cues to be evidence ([`FEWEST_CUES`]);
 /// otherwise an [`Alignment`] and its score, *including* when the score is
-/// hopeless -- refusing is [`Alignment::is_convincing`]'s call to make and
-/// the count is what the viewer is owed either way.
+/// hopeless -- refusing is [`Alignment::is_convincing`]'s call to make, and
+/// what was found is what the viewer is owed either way.
 ///
-/// The measurement is a sweep rather than anything cleverer because the
+/// The measurement is a search rather than anything cleverer because the
 /// two unknowns are not independent: an offset can only be read once a
-/// ratio is assumed, since the same pair of files at the wrong ratio has
-/// no single offset at all. So for each ratio in the window the offset is
-/// taken from the mode of the pairwise differences -- the offset the most
-/// cues agree on -- and the ratio is judged by how well that lands the
-/// cues. Then the winner is refined, and refitted until it stops
-/// improving.
-pub fn align(playing: &[f64], reference: &[f64]) -> Option<Alignment> {
+/// ratio is assumed, since the same pair of files at the wrong ratio has no
+/// single offset at all. Cross-correlating by FFT would answer every offset
+/// at once, which is what ffsubsync does; going coarse to fine costs no new
+/// dependency and, at a second per bin, gets the whole rate window and
+/// every offset into a few hundred thousand machine words.
+pub fn align(playing: &[Cue], reference: &[Cue]) -> Option<Alignment> {
     if playing.len() < FEWEST_CUES || reference.len() < FEWEST_CUES {
         return None;
     }
@@ -288,257 +270,324 @@ pub fn align(playing: &[f64], reference: &[f64]) -> Option<Alignment> {
 
 /// The measurement itself, with the floor already checked.
 ///
-/// Split out so a test can put two files through the sweep that [`align`]
+/// Split out so a test can put two files through the search that [`align`]
 /// refuses to measure at all, which is how the floor is shown to be worth
 /// having rather than merely asserted.
-fn solve(playing: &[f64], reference: &[f64]) -> Alignment {
-    let sampled_playing = sample(playing, SAMPLE_CAP);
-    let sampled_reference = sample(reference, SAMPLE_CAP);
-    let mut histogram = vec![0u32; (2.0 * WIDEST_OFFSET / OFFSET_BIN) as usize + 1];
+fn solve(playing: &[Cue], reference: &[Cue]) -> Alignment {
+    let span = extent(playing);
 
-    // Judged against the *whole* reference rather than its sample: the
-    // sample is there to make the histogram affordable, and scoring a
-    // sampled playing cue against a sampled reference would call a real
-    // match a miss whenever the sampling dropped the cue it belongs to.
-    let mut line = (1.0, 0.0);
-    let mut closest = -1.0;
-    let mut try_ratio = |ratio: f64, line: &mut (f64, f64), closest: &mut f64| {
-        let offset = mode_offset(&sampled_playing, &sampled_reference, ratio, &mut histogram);
-        let closeness = closeness(&sampled_playing, reference, ratio, offset);
-        if closeness > *closest {
-            *closest = closeness;
-            *line = (ratio, offset);
-        }
-    };
-    let coarse = coarse_step(
-        playing.last().copied().unwrap_or_default() - playing.first().copied().unwrap_or_default(),
+    // First pass: the whole rate window and every offset, at a second per
+    // bin. Everything after it is a local search, so this is the pass that
+    // has to actually contain the answer.
+    let coarse = coarse_step(span, COARSE_BIN);
+    let coarse_shift = (WIDEST_OFFSET / COARSE_BIN) as i64;
+    let mut best = sweep(
+        playing,
+        reference,
+        COARSE_BIN,
+        &ratios(LOWEST_RATIO, HIGHEST_RATIO, coarse),
+        -coarse_shift..=coarse_shift,
     );
-    let coarse_steps = ((HIGHEST_RATIO - LOWEST_RATIO) / coarse).round() as i32;
-    for step in 0..=coarse_steps {
-        try_ratio(
-            LOWEST_RATIO + f64::from(step) * coarse,
-            &mut line,
-            &mut closest,
+
+    // Then twice near the winner, each pass narrowing the ratio window to
+    // the step the pass before it could resolve and the offset window to
+    // its bin. Two passes rather than one because the ratio and the offset
+    // trade off against each other: a ratio a step out is partly hidden by
+    // an offset half a bin out, and the second pass is where that comes
+    // apart.
+    for (bin, coarser_bin, coarser_step) in [
+        (FINE_BIN, COARSE_BIN, coarse),
+        (FINEST_BIN, FINE_BIN, coarse_step(span, FINE_BIN)),
+    ] {
+        let step = coarse_step(span, bin);
+        let steps = ratios(best.ratio - coarser_step, best.ratio + coarser_step, step);
+        let around = (best.offset / bin).round() as i64;
+        let reach = (coarser_bin / bin).ceil() as i64;
+        best = sweep(
+            playing,
+            reference,
+            bin,
+            &steps,
+            (around - reach)..=(around + reach),
         );
     }
-    let around = line.0;
-    let fine = coarse / f64::from(FINE_STEPS);
-    for step in -FINE_STEPS..=FINE_STEPS {
-        let ratio = around + f64::from(step) * fine;
-        if (LOWEST_RATIO..=HIGHEST_RATIO).contains(&ratio) {
-            try_ratio(ratio, &mut line, &mut closest);
-        }
-    }
-
-    // From here on every cue counts, not only the sampled ones: the sweep
-    // is over, and the line that comes out of this is the transform the
-    // viewer gets. Bounded because a fit that neither improves nor settles
-    // is oscillating between two equally good answers, and the loop is not
-    // where that should be discovered.
-    let mut closest = closeness(playing, reference, line.0, line.1);
-    for _ in 0..8 {
-        let Some(fitted) = refit(playing, reference, line.0, line.1) else {
-            break;
-        };
-        if !(LOWEST_RATIO..=HIGHEST_RATIO).contains(&fitted.0) {
-            break;
-        }
-        let closeness = closeness(playing, reference, fitted.0, fitted.1);
-        if closeness <= closest {
-            break;
-        }
-        closest = closeness;
-        line = fitted;
-    }
-    Alignment {
-        ratio: line.0,
-        offset: line.1,
-        matched: matches(playing, reference, line.0, line.1),
-        cues: playing.len(),
-    }
+    best
 }
 
-/// The least-squares line through the pairs `ratio` and `offset` already
-/// match, or None when they match too few to fit one.
+/// Every ratio from `from` to `to` at `step`, clamped to the window the
+/// search is allowed to answer in.
 ///
-/// The sweep answers to the precision of its own step and of the offset
-/// histogram's bin. Fitting a line through the pairs it *found* costs one
-/// pass and answers to the precision of the data instead -- on two files
-/// that really are one recording it recovers the ratio exactly. It is also
-/// how a coarse winner improves itself: a ratio that was slightly out
-/// matched the middle of the file, and the fit through that middle points
-/// at a ratio that reaches the ends too, so repeating it converges rather
-/// than wandering.
-fn refit(playing: &[f64], reference: &[f64], ratio: f64, offset: f64) -> Option<(f64, f64)> {
-    let pairs: Vec<(f64, f64)> = playing
-        .iter()
-        .filter_map(|&start| {
-            let want = ratio * start + offset;
-            nearest(reference, want)
-                .filter(|near| (near - want).abs() <= TOLERANCE)
-                .map(|near| (start, near))
-        })
+/// Inclusive of `to` up to a rounding, because a window that is not a whole
+/// number of steps long would otherwise leave its own end unexamined --
+/// and the end of the *refined* window is where the answer sits whenever
+/// the pass before it was half a step out.
+fn ratios(from: f64, to: f64, step: f64) -> Vec<f64> {
+    let count = ((to - from) / step).round().max(0.0) as usize;
+    let candidates: Vec<f64> = (0..=count)
+        .map(|index| from + index as f64 * step)
+        .filter(|ratio| (LOWEST_RATIO..=HIGHEST_RATIO).contains(ratio))
         .collect();
-    if pairs.len() < 2 {
-        return None;
+    if candidates.is_empty() {
+        // A refined window can fall wholly outside the allowed one only by
+        // a rounding at its very edge. The edge itself is then the answer
+        // to refine around, and a pass with nothing to score would throw
+        // away everything the pass before it found.
+        return vec![from.clamp(LOWEST_RATIO, HIGHEST_RATIO)];
     }
-    let count = pairs.len() as f64;
-    let mean_playing = pairs.iter().map(|(start, _)| start).sum::<f64>() / count;
-    let mean_reference = pairs.iter().map(|(_, near)| near).sum::<f64>() / count;
-    let mut variance = 0.0;
-    let mut covariance = 0.0;
-    for (start, near) in pairs {
-        variance += (start - mean_playing) * (start - mean_playing);
-        covariance += (start - mean_playing) * (near - mean_reference);
-    }
-    if variance <= 0.0 {
-        return None;
-    }
-    let ratio = covariance / variance;
-    Some((ratio, mean_reference - ratio * mean_playing))
+    candidates
 }
 
-/// At most `cap` of `cues`, spread evenly so the sample keeps the file's
-/// whole span -- which is what a ratio is measured over, and what taking
-/// the first `cap` cues would throw away.
-fn sample(cues: &[f64], cap: usize) -> Vec<f64> {
-    if cues.len() <= cap {
-        return cues.to_vec();
-    }
-    let step = cues.len() as f64 / cap as f64;
-    (0..cap)
-        .map(|index| cues[(index as f64 * step) as usize])
-        .collect()
-}
-
-/// How many of `playing`'s starts land within [`TOLERANCE`] of a start in
-/// `reference` under `ratio` and `offset`. Both must be sorted.
-fn matches(playing: &[f64], reference: &[f64], ratio: f64, offset: f64) -> usize {
-    playing
-        .iter()
-        .filter(|&&start| {
-            let want = ratio * start + offset;
-            nearest(reference, want).is_some_and(|near| (near - want).abs() <= TOLERANCE)
-        })
-        .count()
-}
-
-/// How well `playing` sits on `reference` under this line: every cue
-/// counts for how close it landed, one for an exact coincidence and
-/// nothing at all at [`TOLERANCE`] or beyond.
+/// The best line over `candidates` and `shifts`, with both files binned at
+/// `bin`.
 ///
-/// Used to choose between lines, where [`matches`] is used to report one.
-/// A count of cues inside the tolerance is what the viewer is owed as
-/// evidence, but it is a poor thing to steer by: it cannot tell a line
-/// that lands every cue dead on from one that leaves them all a third of
-/// a second out, and it lets a ratio that is slightly wrong beat the right
-/// one on a single cue that crossed the threshold by luck. That was not
-/// hypothetical -- it kept a fit at 1.0424 where the files said 1.0427.
-fn closeness(playing: &[f64], reference: &[f64], ratio: f64, offset: f64) -> f64 {
-    playing
-        .iter()
-        .map(|&start| {
-            let want = ratio * start + offset;
-            match nearest(reference, want) {
-                Some(near) => (1.0 - (near - want).abs() / TOLERANCE).max(0.0),
-                None => 0.0,
+/// The reference's bitmap is built once for the whole sweep and the
+/// playing file's once per ratio, because scaling the playing file is what
+/// a ratio *is*: `sub-speed` multiplies its timestamps, so a cue two
+/// seconds long at 1.0427 is on screen for two and a tenth.
+fn sweep(
+    playing: &[Cue],
+    reference: &[Cue],
+    bin: f64,
+    candidates: &[f64],
+    shifts: std::ops::RangeInclusive<i64>,
+) -> Alignment {
+    let reference = Bitmap::of(reference, 1.0, bin);
+    let mut best = Alignment {
+        ratio: 1.0,
+        offset: 0.0,
+        score: f64::NEG_INFINITY,
+    };
+    for &ratio in candidates {
+        let playing = Bitmap::of(playing, ratio, bin);
+        for shift in shifts.clone() {
+            let score = above_chance(&playing, &reference, shift);
+            if score > best.score {
+                best = Alignment {
+                    ratio,
+                    offset: shift as f64 * bin,
+                    score,
+                };
             }
-        })
-        .sum()
-}
-
-/// The value in a sorted `cues` closest to `want`.
-fn nearest(cues: &[f64], want: f64) -> Option<f64> {
-    let after = cues.partition_point(|&start| start < want);
-    let before = after.checked_sub(1).map(|index| cues[index]);
-    match (before, cues.get(after).copied()) {
-        (Some(before), Some(after)) => Some(if want - before <= after - want {
-            before
-        } else {
-            after
-        }),
-        (Some(only), None) | (None, Some(only)) => Some(only),
-        (None, None) => None,
+        }
     }
+    best
 }
 
-/// The offset the most cues agree on at this `ratio`: the mode of every
-/// pairwise difference, binned at [`OFFSET_BIN`].
-///
-/// The mode rather than a mean or a median of the differences, because
-/// most of the pairs are between cues that have nothing to do with each
-/// other -- with a few hundred cues on each side, only a few hundred of
-/// the tens of thousands of differences are real. An average over that is
-/// an average over noise; the pile-up at one value is the signal.
-///
-/// `histogram` is borrowed rather than allocated because this runs once
-/// per ratio tried, a couple of hundred times per alignment.
-fn mode_offset(playing: &[f64], reference: &[f64], ratio: f64, histogram: &mut [u32]) -> f64 {
-    histogram.fill(0);
-    let middle = (histogram.len() / 2) as i64;
-    for &start in playing {
-        let scaled = ratio * start;
-        for &near in reference {
-            let difference = near - scaled;
-            if difference.abs() <= WIDEST_OFFSET {
-                let bin = middle + (difference / OFFSET_BIN).round() as i64;
-                if let Some(count) = histogram.get_mut(bin as usize) {
-                    *count += 1;
+/// When a file has text on screen, as one bit per bin from time zero.
+struct Bitmap {
+    /// Bin `index` is bit `index % 64` of word `index / 64`.
+    words: Vec<u64>,
+    /// How many bins are lit: the file's `|A|` in the Dice coefficient.
+    lit: u32,
+    /// How many bins the file reaches over, lit or not.
+    bins: usize,
+}
+
+impl Bitmap {
+    /// `cues` with their timestamps multiplied by `ratio`, binned at `bin`.
+    ///
+    /// A bin is lit when text covers **at least half** of it, rather than
+    /// any part of it. That rule is what makes the coarse pass mean
+    /// anything: lighting a bin from any overlap turns a file of two-second
+    /// lines with one-second gaps into a bitmap that is ninety per cent lit
+    /// at a second per bin, and two files that are both nearly all lit have
+    /// no headroom above chance left to tell them apart -- measured, the
+    /// right ratio scored 0.14 there and a wrong one 0.34. Rounding to the
+    /// nearer answer keeps a file's density roughly what it is at every bin
+    /// width, so the coarse pass and the fine passes are measuring the same
+    /// thing at different resolutions.
+    fn of(cues: &[Cue], ratio: f64, bin: f64) -> Self {
+        let bins = ((ratio * extent(cues) / bin).ceil() as usize).max(1);
+        let mut covered = vec![0.0f64; bins];
+        for &(start, end) in cues {
+            let (start, end) = (ratio * start / bin, ratio * end / bin);
+            let from = (start.floor().max(0.0) as usize).min(bins);
+            let to = ((end.ceil() as usize).max(from + 1)).min(bins);
+            for (index, share) in covered.iter_mut().enumerate().take(to).skip(from) {
+                let within = end.min((index + 1) as f64) - start.max(index as f64);
+                if within > 0.0 {
+                    *share += within;
                 }
             }
         }
-    }
-    // Three bins wide, so an offset that falls on a bin edge is not beaten
-    // by a worse one that happens to sit in the middle of its own.
-    let mut best_bin = middle;
-    let mut best_count = 0;
-    for bin in 1..histogram.len() - 1 {
-        let count = histogram[bin - 1] + histogram[bin] + histogram[bin + 1];
-        if count > best_count {
-            best_count = count;
-            best_bin = bin as i64;
+        let mut words = vec![0u64; bins.div_ceil(64)];
+        let mut lit = 0;
+        for (index, share) in covered.iter().enumerate() {
+            if *share >= 0.5 {
+                words[index / 64] |= 1 << (index % 64);
+                lit += 1;
+            }
         }
+        Self { words, lit, bins }
     }
-    (best_bin - middle) as f64 * OFFSET_BIN
+}
+
+/// The last moment `cues` has anything on screen.
+fn extent(cues: &[Cue]) -> f64 {
+    cues.iter().map(|&(_, end)| end).fold(0.0, f64::max)
+}
+
+/// How much better than chance `playing` and `reference` overlap when the
+/// playing file's bins are moved `shift` bins later.
+///
+/// The overlap itself is the Dice coefficient, `2|A∩B| / (|A|+|B|)`, which
+/// is the natural score for two sets of lit bins: it asks what share of
+/// the two files' on-screen time is on screen in both.
+///
+/// **Dice alone would accept anything.** A subtitle is up for something
+/// like two thirds of an episode, so two files that have nothing to do
+/// with each other -- a different episode, a different show -- already
+/// score around two thirds, and the pairs that must be accepted score in
+/// the high eighties: a threshold between them is a threshold between two
+/// numbers that are mostly measuring how talkative the programme is. So
+/// what is reported is how far the overlap beat the overlap two files of
+/// these densities would reach if they were lit independently:
+/// `chance = 2·da·db / (da+db)` from the two densities over the timeline
+/// the pair covers, and the answer is `(dice − chance) / (1 − chance)`.
+/// One is two files lit over exactly the same moments, zero is two files
+/// doing no better than their densities predict, and the wrong-episode
+/// pairs the old metric could not separate come out at a fifth to a
+/// quarter.
+///
+/// The timeline is the union of the two files' reach *under this shift*,
+/// so pushing one file off the end of the other lowers the densities
+/// rather than quietly shrinking the denominator the chance is computed
+/// over.
+fn above_chance(playing: &Bitmap, reference: &Bitmap, shift: i64) -> f64 {
+    let lit_playing = f64::from(playing.lit);
+    let lit_reference = f64::from(reference.lit);
+    if lit_playing <= 0.0 || lit_reference <= 0.0 {
+        return 0.0;
+    }
+    let first = shift.min(0);
+    let last = (shift + playing.bins as i64).max(reference.bins as i64);
+    let bins = (last - first) as f64;
+    let (density_playing, density_reference) = (lit_playing / bins, lit_reference / bins);
+    let chance = 2.0 * density_playing * density_reference / (density_playing + density_reference);
+    if chance >= 1.0 {
+        // Both files lit in every bin of the timeline: they agree
+        // perfectly and the agreement says nothing at all.
+        return 0.0;
+    }
+    let dice = 2.0 * f64::from(overlap(playing, reference, shift)) / (lit_playing + lit_reference);
+    (dice - chance) / (1.0 - chance)
+}
+
+/// How many bins are lit in both files when the playing file's bin `index`
+/// is read against the reference's bin `index + shift`.
+///
+/// Word at a time rather than bin at a time: an episode is a few tens of
+/// words at the coarse bin, and the first pass asks this question a
+/// quarter of a million times.
+fn overlap(playing: &Bitmap, reference: &Bitmap, shift: i64) -> u32 {
+    let (whole, part) = (shift.div_euclid(64), shift.rem_euclid(64) as u32);
+    let word = |index: i64| -> u64 {
+        usize::try_from(index)
+            .ok()
+            .and_then(|index| reference.words.get(index))
+            .copied()
+            .unwrap_or(0)
+    };
+    playing
+        .words
+        .iter()
+        .enumerate()
+        .map(|(index, &lit)| {
+            if lit == 0 {
+                return 0;
+            }
+            let index = index as i64 + whole;
+            let against = if part == 0 {
+                word(index)
+            } else {
+                (word(index) >> part) | (word(index + 1) << (64 - part))
+            };
+            (lit & against).count_ones()
+        })
+        .sum()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Cue starts that look like a real file's: `count` of them, with
-    /// irregular gaps averaging about three seconds.
+    /// Cue spans that look like a real file's: `count` of them, with
+    /// irregular gaps and irregular lengths averaging about two seconds on
+    /// screen in every three.
     ///
     /// Irregular deliberately. Cues spaced exactly alike are a comb, and a
-    /// comb aligns onto itself at every shift of one tooth, so an aligner
+    /// comb aligns onto itself at every shift of one tooth, so a matcher
     /// with a real bug in it would still score perfectly against evenly
     /// spaced test data. What makes a subtitle file identifiable is that
-    /// the *pattern* of its gaps occurs once.
-    fn synthetic_cues(count: usize) -> Vec<f64> {
+    /// the *pattern* of its intervals occurs once.
+    fn synthetic_cues(count: usize) -> Vec<Cue> {
         synthetic_cues_from(0x2545_f491_4f6c_dd1d, count)
     }
 
     /// The same, from a chosen seed, so that two files can be *unrelated*
     /// rather than one being the other retimed.
-    fn synthetic_cues_from(seed: u64, count: usize) -> Vec<f64> {
+    fn synthetic_cues_from(seed: u64, count: usize) -> Vec<Cue> {
         let mut state = seed;
+        let mut random = move || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            f64::from((state >> 40) as u32) / 16_777_216.0
+        };
         let mut at = 12.0;
         (0..count)
             .map(|_| {
-                state = state
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407);
-                let gap = 0.4 + 5.6 * f64::from((state >> 40) as u32) / 16_777_216.0;
-                at += gap;
-                (at * 1000.0).round() / 1000.0
+                let length = 0.8 + 2.4 * random();
+                let gap = 0.2 + 1.8 * random();
+                let start = at;
+                at += length + gap;
+                (round_ms(start), round_ms(start + length))
             })
             .collect()
     }
 
+    /// A subtitle file's timestamps are written to the millisecond.
+    fn round_ms(at: f64) -> f64 {
+        (at * 1000.0).round() / 1000.0
+    }
+
     /// `cues` as another file would carry them: the same moments through
     /// `ratio` and `offset`.
-    fn retimed(cues: &[f64], ratio: f64, offset: f64) -> Vec<f64> {
-        cues.iter().map(|start| ratio * start + offset).collect()
+    fn retimed(cues: &[Cue], ratio: f64, offset: f64) -> Vec<Cue> {
+        cues.iter()
+            .map(|&(start, end)| (ratio * start + offset, ratio * end + offset))
+            .collect()
+    }
+
+    /// `cues` with neighbours that are already close written as one cue,
+    /// the way a translator merges two short exchanges into one subtitle
+    /// and gives the merged line its own beat.
+    ///
+    /// Only the close ones, because that is what merging really is: a
+    /// translator does not join two lines a scene apart, and a merge that
+    /// swallowed a long pause would put text on screen where the programme
+    /// is silent -- a difference the bitmap is *supposed* to notice.
+    fn merged(cues: &[Cue]) -> Vec<Cue> {
+        let mut merged: Vec<Cue> = Vec::new();
+        for &(start, end) in cues {
+            match merged.last_mut() {
+                Some(last) if start - last.1 < 0.8 => last.1 = end,
+                _ => merged.push((start, end)),
+            }
+        }
+        merged
+    }
+
+    /// `cues` with every cue written as two, the way a translator splits a
+    /// line that will not fit on screen at once. The halves are parted by
+    /// a frame's worth of nothing, as a subtitler's tooling does.
+    fn split(cues: &[Cue]) -> Vec<Cue> {
+        cues.iter()
+            .flat_map(|&(start, end)| {
+                let middle = (start + end) / 2.0;
+                [(start, middle - 0.04), (middle, end)]
+            })
+            .collect()
     }
 
     #[test]
@@ -546,9 +595,41 @@ mod tests {
         let playing = synthetic_cues(400);
         let reference = retimed(&playing, 1.0427, 2.5);
         let alignment = align(&playing, &reference).expect("align");
-        assert!((alignment.ratio - 1.0427).abs() < 1e-9, "{alignment:?}");
-        assert!((alignment.offset - 2.5).abs() < 1e-6, "{alignment:?}");
-        assert_eq!((alignment.matched, alignment.cues), (400, 400));
+        // To the precision the finest bin can resolve: a fiftieth of a
+        // second of offset, and a ratio whose error over the whole file is
+        // less than that.
+        assert!((alignment.ratio - 1.0427).abs() < 1e-4, "{alignment:?}");
+        assert!((alignment.offset - 2.5).abs() < FINEST_BIN, "{alignment:?}");
+        assert!(alignment.score > 0.97, "{alignment:?}");
+    }
+
+    #[test]
+    fn merging_and_splitting_cost_almost_nothing() {
+        // The reason this measurement exists. A translation with 690 cues
+        // against an original with 1024 is not a worse pairing, it is the
+        // same pairing written differently, and a bitmap of when text is
+        // on screen barely notices: a merged line covers both the lines it
+        // replaced, and a split one covers the same interval twice.
+        let playing = synthetic_cues(400);
+        let reference = retimed(&playing, 1.0427, 2.5);
+        let whole = align(&playing, &reference).expect("align");
+        for (what, retold) in [("merged", merged(&playing)), ("split", split(&playing))] {
+            let alignment = align(&retold, &reference).expect("align");
+            assert!(
+                (alignment.ratio - 1.0427).abs() < 1e-4,
+                "{what}: {alignment:?}"
+            );
+            assert!(
+                alignment.score > whole.score - 0.15 && alignment.score > 0.8,
+                "{what}: {alignment:?} against {whole:?}"
+            );
+            assert!(alignment.is_convincing(), "{what}: {alignment:?}");
+        }
+        // And the retellings really are retellings: the old measurement
+        // compared cue starts, and these are the files whose starts stopped
+        // lining up.
+        assert!(merged(&playing).len() * 4 < playing.len() * 3, "merged");
+        assert_eq!(split(&playing).len(), playing.len() * 2);
     }
 
     #[test]
@@ -556,16 +637,41 @@ mod tests {
         // Every translation drops and adds lines. What that may not do is
         // move the line the rest of them agree on.
         let playing = synthetic_cues(400);
-        let reference: Vec<f64> = retimed(&playing, 1.0427, 2.5)
+        let reference: Vec<Cue> = retimed(&playing, 1.0427, 2.5)
             .into_iter()
             .enumerate()
             .filter(|(index, _)| index % 5 != 0)
-            .map(|(_, start)| start)
+            .map(|(_, cue)| cue)
             .collect();
         let alignment = align(&playing, &reference).expect("align");
-        assert!((alignment.ratio - 1.0427).abs() < 1e-9, "{alignment:?}");
-        assert_eq!(alignment.matched, 320);
+        assert!((alignment.ratio - 1.0427).abs() < 1e-4, "{alignment:?}");
         assert!(alignment.is_convincing(), "{alignment:?}");
+    }
+
+    #[test]
+    fn an_unrelated_pair_is_measured_and_refused() {
+        // The answer is still an alignment with a score in it: the viewer
+        // is told what was found, which is the evidence for the refusal,
+        // rather than being shown an error with no number in it.
+        //
+        // Both of these overlap the playing file heavily in absolute
+        // terms -- text is on screen two thirds of the time in all of them
+        // -- which is exactly what the normalisation is for.
+        let playing = synthetic_cues(400);
+        for (what, unrelated) in [
+            (
+                "another episode",
+                synthetic_cues_from(0x9e37_79b9_7f4a_7c15, 400),
+            ),
+            (
+                "another episode retimed",
+                retimed(&synthetic_cues(400), 1.11, 173.0),
+            ),
+        ] {
+            let alignment = align(&playing, &unrelated).expect("align");
+            assert!(!alignment.is_convincing(), "{what}: {alignment:?}");
+            assert!(alignment.score < 0.35, "{what}: {alignment:?}");
+        }
     }
 
     #[test]
@@ -576,58 +682,48 @@ mod tests {
         let playing = synthetic_cues(400);
         let reference = retimed(&playing[..200], 1.0427, 2.5);
         let alignment = align(&playing, &reference).expect("align");
-        assert!((alignment.ratio - 1.0427).abs() < 1e-6, "{alignment:?}");
-        assert_eq!(alignment.matched, 200);
         assert!(!alignment.is_convincing(), "{alignment:?}");
     }
 
     #[test]
-    fn noise_around_each_cue_averages_out() {
-        // Two subtitlers do not agree to the millisecond about when a line
-        // goes up, so every real pair is this test with a smaller number.
-        let playing = synthetic_cues(400);
-        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
-        let reference: Vec<f64> = retimed(&playing, 1.0427, 2.5)
-            .into_iter()
-            .map(|start| {
-                state = state
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407);
-                start + (0.3 * f64::from((state >> 40) as u32) / 16_777_216.0 - 0.15)
-            })
-            .collect();
-        let alignment = align(&playing, &reference).expect("align");
-        assert!((alignment.ratio - 1.0427).abs() < 1e-4, "{alignment:?}");
-        assert_eq!(alignment.matched, 400, "{alignment:?}");
-    }
-
-    #[test]
-    fn an_unrelated_pair_is_measured_and_refused() {
-        // The answer is still an alignment with a count in it: the viewer
-        // is told how badly it matched, which is the evidence for the
-        // refusal, rather than being shown an error with no number in it.
-        let playing = synthetic_cues(400);
-        let unrelated = synthetic_cues(400)
+    fn chance_is_measured_from_both_densities() {
+        // What the normalisation does when one file is lit far less than
+        // the other -- a full translation against one that carries only a
+        // quarter of the lines, which is what a forced or partial track
+        // really looks like.
+        //
+        // The chance term is computed from *both* densities, so the sparse
+        // file's own thinness is the yardstick: an unrelated sparse file
+        // overlaps a dense one a great deal in absolute terms and lands at
+        // nothing at all here, while the sparse file that really belongs to
+        // this episode recovers the ratio and the offset exactly and scores
+        // clear of it.
+        let dense = synthetic_cues(400);
+        let sparse: Vec<Cue> = dense
             .iter()
-            .map(|start| start * 1.11 + 173.0)
-            .collect::<Vec<_>>();
-        let alignment = align(&playing, &unrelated).expect("align");
-        assert!(!alignment.is_convincing(), "{alignment:?}");
-        assert_eq!(alignment.cues, 400);
-    }
+            .step_by(4)
+            .map(|&(start, end)| (start, end))
+            .collect();
+        let honest = align(&dense, &retimed(&sparse, 1.0427, 2.5)).expect("align");
+        let unrelated: Vec<Cue> = synthetic_cues_from(0x9e37_79b9_7f4a_7c15, 400)
+            .into_iter()
+            .step_by(4)
+            .collect();
+        let wrong = align(&dense, &unrelated).expect("align");
+        assert!((honest.ratio - 1.0427).abs() < 1e-4, "{honest:?}");
+        assert!((honest.offset - 2.5).abs() < FINE_BIN, "{honest:?}");
+        assert!(wrong.score < 0.05, "{wrong:?}");
+        assert!(honest.score > wrong.score + 0.1, "{honest:?} / {wrong:?}");
 
-    #[test]
-    fn the_sampling_cap_does_not_change_the_answer() {
-        // A three-hour film costs what an episode does because only a few
-        // hundred cues reach the quadratic step. That is only affordable
-        // if it is also free of consequences.
-        let short = synthetic_cues(SAMPLE_CAP - 50);
-        let long = synthetic_cues(SAMPLE_CAP * 5);
-        let under = align(&short, &retimed(&short, 1.0427, 2.5)).expect("align");
-        let over = align(&long, &retimed(&long, 1.0427, 2.5)).expect("align");
-        assert!((under.ratio - 1.0427).abs() < 1e-9, "{under:?}");
-        assert!((over.ratio - 1.0427).abs() < 1e-9, "{over:?}");
-        assert_eq!(over.matched, over.cues);
+        // **And it is still refused**, which is a property of the Dice
+        // coefficient rather than of the threshold: when the reference is
+        // lit a quarter as much as the playing file, `2|A∩B| / (|A|+|B|)`
+        // cannot exceed 0.4 however perfectly the two line up, and the
+        // chance term for those densities is 0.26 of that. A partial
+        // subtitle is therefore not evidence this metric can accept, and
+        // whoever calibrates `CONVINCING` has to decide whether that is
+        // the right answer or the reason to score a different way.
+        assert!(!honest.is_convincing(), "{honest:?}");
     }
 
     #[test]
@@ -643,112 +739,153 @@ mod tests {
 
     #[test]
     fn a_handful_of_cues_can_be_laid_onto_anything() {
-        // Why the floor is where it is. Twenty cues of one file are put
-        // through the sweep against thirty-nine files that have nothing
-        // to do with them: with so few observations to satisfy, and a
-        // ratio and an offset of its own choosing to satisfy them with,
-        // the sweep finds a `CONVINCING` line about half the time.
-        // Thirty is rarer, fifty never happens -- the same shape the
-        // owner's own files show, where a twenty-cue slice of one
-        // episode is called convincing against a *different* episode
-        // about half the time and a fifty-cue slice never is.
-        let whole = synthetic_cues(400);
-        let slice = |count: usize| -> Vec<f64> {
-            let step = whole.len() / count;
-            (0..count).map(|index| whole[index * step]).collect()
+        // Why the floor is worth having. Two files of a handful of cues
+        // each are two files lit in a couple of dozen bins out of
+        // thousands, so chance is near nothing and there is nothing the
+        // search has to beat: with so little to satisfy, and a ratio and an
+        // offset of its own choosing to satisfy it with, it lays a
+        // forced-subtitle track onto an unrelated episode and calls it a
+        // match. Both sides are thinned because that is the shape it takes
+        // -- a dense file against a sparse one is held down by the sparse
+        // one's own density (`chance_is_measured_from_both_densities`), and
+        // it is two sparse files that leave no yardstick at all.
+        //
+        // Fifty is inherited from the measurement this replaced, and it now
+        // has far more room than it needs: three cues a side is convincing
+        // almost every time, eight is once in eleven, and by twelve it has
+        // stopped happening. What that room buys is the same thing the
+        // number was for, so it is left where it is rather than re-tuned by
+        // a test that is not calibrating anything.
+        let thin = |cues: &[Cue], count: usize| -> Vec<Cue> {
+            let step = cues.len() / count;
+            (0..count).map(|index| cues[index * step]).collect()
         };
-        let counts = [20usize, 30, FEWEST_CUES];
+        let whole = synthetic_cues(400);
+        let counts = [3usize, 8, FEWEST_CUES];
         let mut coincidences = [0usize; 3];
-        for seed in 1u64..40 {
+        let mut best = 0.0f64;
+        for seed in 1u64..12 {
             let unrelated = synthetic_cues_from(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15), 400);
             for (coincidences, &count) in coincidences.iter_mut().zip(&counts) {
-                if solve(&slice(count), &unrelated).is_convincing() {
+                let alignment = solve(&thin(&whole, count), &thin(&unrelated, count));
+                if count == FEWEST_CUES {
+                    best = best.max(alignment.score);
+                }
+                if alignment.is_convincing() {
                     *coincidences += 1;
                 }
             }
         }
-        assert!(coincidences[0] >= 15, "{coincidences:?}");
+        assert!(coincidences[0] >= 5, "{coincidences:?}");
         assert_eq!(coincidences[2], 0, "{coincidences:?}");
+        assert!(best < CONVINCING - 0.1, "{best} at the floor");
 
         // So nothing under the floor is measured at all, however much of
-        // it the sweep would have agreed with. This is the guard on the
-        // *playing* file, which is the side that scores the coincidence:
-        // `Alignment::agreement` divides by its cues.
+        // it the search would have agreed with. The floor guards both
+        // sides, because either file can be the thin one.
         let unrelated = synthetic_cues_from(0x9e37_79b9_7f4a_7c15, 400);
-        for count in [20usize, 30, FEWEST_CUES - 1] {
-            assert!(align(&slice(count), &unrelated).is_none(), "{count} cues");
+        for count in [3usize, 12, FEWEST_CUES - 1] {
+            assert!(
+                align(&thin(&whole, count), &unrelated).is_none(),
+                "{count} playing cues"
+            );
+            assert!(
+                align(&whole, &thin(&unrelated, count)).is_none(),
+                "{count} reference cues"
+            );
         }
     }
 
     #[test]
-    fn the_coarse_step_keeps_a_whole_file_inside_the_tolerance() {
-        // What the sweep's step has to be worth. Half a file landing is
-        // not enough for the right ratio to win: two unrelated files
-        // already agree on a quarter of their cues by accident, with a
-        // ratio and an offset of the sweep's own choosing, so the peak
-        // has to be the whole file rather than the part of it nearest
-        // the middle.
-        //
-        // The constant this replaced was 0.002 whatever the file was,
-        // which for anything longer than about twenty minutes leaves the
-        // nearest step to the right ratio throwing the ends of the file
-        // clear of `TOLERANCE`. Barely a quarter of a three-quarter-hour
-        // episode landed, and on the owner's own files that refused
-        // pairs whose timings agree to a millisecond.
+    fn the_first_pass_keeps_a_whole_file_inside_a_bin() {
+        // What the ratio step has to be worth. The passes after the first
+        // one only look near its winner, so a step that lets the ends of
+        // the file drift out of their bins does not lose precision, it
+        // loses the answer.
         for span in [300.0, 1_200.0, 2_600.0, 5_400.0, 10_800.0] {
-            let worst_ratio_error = coarse_step(span) / 2.0;
-            // The offset is the mode of the differences, which centres
-            // the error on the file, so the worst cue is half a span out
-            // from the middle.
+            let worst_ratio_error = coarse_step(span, COARSE_BIN) / 2.0;
+            // The offset the search picks centres the error on the file,
+            // so the worst cue is half a span out from the middle.
             let worst_cue_error = worst_ratio_error * span / 2.0;
             assert!(
-                worst_cue_error <= TOLERANCE,
+                worst_cue_error <= COARSE_BIN,
                 "{span} s: {worst_cue_error} s"
             );
         }
         // A file too short for that to ask anything is still swept at the
         // coarser bound, rather than in one enormous step.
-        assert_eq!(coarse_step(0.0), COARSEST_STEP);
-        assert_eq!(coarse_step(60.0), COARSEST_STEP);
+        assert_eq!(coarse_step(0.0, COARSE_BIN), COARSEST_STEP);
+        assert_eq!(coarse_step(60.0, COARSE_BIN), COARSEST_STEP);
     }
 
     #[test]
-    fn reads_the_starts_of_an_srt() {
+    fn reads_both_ends_of_an_srt() {
         let srt = "1\r\n00:00:01,000 --> 00:00:03,500\r\nFirst line\r\n\r\n\
                    2\r\n00:01:02,250 --> 00:01:04,000\r\nSecond line\r\n";
-        assert_eq!(cue_starts(srt), vec![1.0, 62.25]);
+        assert_eq!(cue_spans(srt), vec![(1.0, 3.5), (62.25, 64.0)]);
     }
 
     #[test]
-    fn reads_the_starts_of_a_webvtt() {
+    fn reads_both_ends_of_a_webvtt() {
         // Hours omitted, dots for the fraction, cue settings after the end
         // time, a header and a NOTE block -- all of which a WebVTT file
         // from an addon that does not normalise to SRT really carries.
+        // The settings are why only the first token after the arrow is
+        // read.
         let vtt = "WEBVTT\n\nNOTE this file came from a broadcast\n\n\
                    00:01.000 --> 00:03.500 line:90% align:middle\nFirst line\n\n\
                    intro\n01:02.250 --> 01:04.000\nSecond line\n";
-        assert_eq!(cue_starts(vtt), vec![1.0, 62.25]);
+        assert_eq!(cue_spans(vtt), vec![(1.0, 3.5), (62.25, 64.0)]);
     }
 
     #[test]
     fn skips_what_it_cannot_read_rather_than_refusing_the_file() {
-        // A damaged cue costs its own observation and no other: the file
-        // is still worth aligning against.
+        // A damaged cue costs its own interval and no other: the file is
+        // still worth measuring against. A cue that ends before it starts
+        // is damaged in the same way -- it describes no interval at all.
         let srt = "1\n00:00:01,000 --> 00:00:03,500\nGood\n\n\
-                   2\n00:00:9x,000 --> 00:00:12,000\nBroken\n\n\
-                   3\n00:00:20,000 --> 00:00:22,000\nGood\n";
-        assert_eq!(cue_starts(srt), vec![1.0, 20.0]);
-        assert!(cue_starts("nothing here at all\n").is_empty());
+                   2\n00:00:9x,000 --> 00:00:12,000\nBroken start\n\n\
+                   3\n00:00:14,000 --> 00:00:1x,000\nBroken end\n\n\
+                   4\n00:00:22,000 --> 00:00:20,000\nBackwards\n\n\
+                   5\n00:00:20,000 --> 00:00:22,000\nGood\n";
+        assert_eq!(cue_spans(srt), vec![(1.0, 3.5), (20.0, 22.0)]);
+        assert!(cue_spans("nothing here at all\n").is_empty());
     }
 
     #[test]
-    fn sorts_and_counts_one_moment_once() {
-        // Two boxes on screen together are one speech onset; a file out of
-        // order is still a set of observations.
+    fn sorts_by_when_the_line_goes_up() {
+        // A file out of order is still a set of intervals, and two boxes
+        // on screen together are two intervals that light the same bins
+        // rather than one observation counted twice.
         let srt = "00:00:10,000 --> 00:00:12,000\nOne\n\n\
                    00:00:10,000 --> 00:00:11,000\n- Two\n\n\
                    00:00:05,000 --> 00:00:06,000\nEarlier\n";
-        assert_eq!(cue_starts(srt), vec![5.0, 10.0]);
+        assert_eq!(cue_spans(srt), vec![(5.0, 6.0), (10.0, 12.0), (10.0, 11.0)]);
+    }
+
+    #[test]
+    fn a_coarser_bin_keeps_the_file_s_density() {
+        // The property the coarse pass rests on. Lighting a bin from any
+        // overlap would make a file of two-second lines and one-second gaps
+        // nearly all lit at a second per bin, and a chance term computed
+        // from two densities of 0.9 leaves nothing above it to measure --
+        // measured that way, the right ratio scored 0.14 where a wrong one
+        // scored 0.34. Rounding a bin to the nearer answer keeps every pass
+        // looking at the same file.
+        let cues = synthetic_cues(400);
+        let density = |bin: f64| {
+            let map = Bitmap::of(&cues, 1.0, bin);
+            f64::from(map.lit) / map.bins as f64
+        };
+        let truth = density(FINEST_BIN);
+        assert!((0.5..0.8).contains(&truth), "{truth}");
+        for bin in [FINE_BIN, COARSE_BIN] {
+            assert!(
+                (density(bin) - truth).abs() < 0.05,
+                "{bin}: {}",
+                density(bin)
+            );
+        }
     }
 
     #[test]

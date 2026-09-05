@@ -141,7 +141,7 @@ void main() {
     player.subtitleMatch.response = SubtitleMatch(
       ratio: ratio,
       offset: offset,
-      matched: 613,
+      score: 0.74,
       cues: 694,
       referenceCues: 683,
       convincing: true,

@@ -11,10 +11,11 @@ export '../../src/rust/api/subtitles.dart' show SubtitleMatch;
 ///
 /// [TorrentStatsClient]: torrent_stats.dart
 abstract interface class SubtitleMatchClient {
-  /// Fetches both files, reads their cue start times and solves for the
-  /// line between them. Throws only when a file cannot be read; two files
-  /// that do not describe the same recording come back as a measurement
-  /// with `convincing: false` and the counts that say so.
+  /// Fetches both files, reads when each of them has text on screen and
+  /// solves for the line between them. Throws only when a file cannot be
+  /// read; two files that do not describe the same recording come back as
+  /// a measurement with `convincing: false` and the score and transform
+  /// that say so.
   Future<rust.SubtitleMatch> match({
     required Uri playing,
     required Uri reference,
@@ -37,34 +38,56 @@ class RustSubtitleMatchClient implements SubtitleMatchClient {
   );
 }
 
-/// What the panel says about [match], which is the count either way.
+/// What the panel says about [match], which is the score either way.
 ///
-/// The number is the evidence, so it is shown whichever way the answer
-/// went: "matched 613 of 694" is what makes a match believable, and
-/// "only 184 of 694" is what makes the refusal something the viewer can
-/// judge rather than an apology. Neither line names a file -- the panel
-/// is drawn over the picture the viewer is watching, and the two files
-/// involved are the one playing and the one they just picked.
+/// **The score and not a count of cues.** "Only 303 of 690 cues matched"
+/// is what the measurement this replaced said about the owner's own
+/// Swedish file against an English one, and the pairing was fine: a
+/// translation that merges two lines into one has half the cues and the
+/// same subtitle, so a count of cues is not comparable between two files
+/// and never was evidence the viewer could judge. What is comparable is
+/// how much more of the time the two files have text on screen together
+/// than two files this talkative would manage by accident, which is what
+/// the number in these sentences is.
 ///
-/// **Nothing at all matching is a different answer, and says so.** Two
-/// subtitle files that have nothing to do with each other still agree on
-/// a fifth to a half of their cues by accident, so a zero is not two
-/// files disagreeing -- it is a reference that could not be read as a
-/// subtitle at all (an ASS file, an addon answering with an error page)
-/// or one with too few cues to be evidence. Saying "only 0 of 694 cues
-/// matched" there describes the file the viewer is trying to fix and
-/// hides the one they chose badly, so the reference's own count is what
-/// the sentence is about instead. That count is measured for exactly
-/// this.
+/// **A refusal says what was found, not merely that it was not enough.**
+/// The transform is in the sentence because it is the other half of the
+/// judgement: a reference that wants a plausible speed and a small shift
+/// and still scores badly is a file that disagrees, where one that wants
+/// to be stretched a tenth and pushed four minutes is the wrong episode.
+/// Told only a fraction, the owner went looking for a different reference
+/// when the reference was fine.
+///
+/// **Nothing to measure is a different answer, and names the reference.**
+/// No score at all means one of the two files had too few cues to be
+/// evidence -- an ASS file, an addon answering with an error page, a
+/// forced track of a dozen signs -- rather than two files that disagree.
+/// Saying "only 0 %" there describes the file the viewer is trying to fix
+/// and hides the one they chose badly, so both counts are what that
+/// sentence is about. They are measured for exactly this.
+///
+/// No line names a file: the panel is drawn over the picture the viewer is
+/// watching, and the two files involved are the one playing and the one
+/// they just picked.
 String subtitleMatchNote(rust.SubtitleMatch match) {
-  if (match.convincing) {
-    return 'Matched ${match.matched} of ${match.cues} cues';
-  }
-  if (match.matched == 0) {
-    return 'Nothing matched: ${match.cues} cue timings in this file, '
+  final score = match.score;
+  if (score == null) {
+    return 'Nothing to measure: ${match.cues} cue timings in this file, '
         '${match.referenceCues} in the one you picked';
   }
-  return 'Only ${match.matched} of ${match.cues} cues matched, '
+  // Clamped, because a pair that does *worse* than chance and one that
+  // merely does no better are the same answer to a viewer, and a negative
+  // percentage invites a reading of it that is not there.
+  final above = (score.clamp(0.0, 1.0) * 100).round();
+  if (match.convincing) {
+    return 'Matched: $above % more overlap than chance';
+  }
+  // The same shapes the panel's own rows use for these two numbers, since
+  // this sentence sits directly above them.
+  final speed = match.ratio.toStringAsFixed(3);
+  final shift = match.offset.toStringAsFixed(1);
+  return 'Only $above % more overlap than chance, at '
+      '$speed× and ${match.offset > 0 ? '+' : ''}$shift s, '
       'so nothing was changed';
 }
 

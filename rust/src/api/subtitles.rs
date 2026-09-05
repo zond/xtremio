@@ -26,22 +26,32 @@ pub struct SubtitleMatch {
     pub ratio: f64,
     /// What is added afterwards, in seconds.
     pub offset: f64,
-    /// How many of the playing file's cue starts land on a cue start of
-    /// the reference under this transform.
-    pub matched: u32,
-    /// How many cue starts the playing file has. `matched` of these is the
-    /// evidence the viewer is shown, whichever way the answer went.
+    /// How far above chance the two files have text on screen at the same
+    /// moments under this transform: 1 for two files lit over exactly the
+    /// same moments, 0 for two doing no better than their own talkativeness
+    /// predicts. **This is the number the viewer is shown**, because a
+    /// count of cues is not comparable between a file that merges lines and
+    /// one that does not -- a translation that merges two lines into one
+    /// has half the cues and the same subtitle.
+    ///
+    /// None when there was nothing to measure: one of the two files has too
+    /// few cues to be evidence either way, which is a different answer from
+    /// a bad score and is said differently.
+    pub score: Option<f64>,
+    /// How many cues the playing file has. Not evidence of a match -- it is
+    /// here so a file that could not be read as a subtitle at all can be
+    /// told from two files that merely disagree, which is what a missing
+    /// `score` is reported with.
     pub cues: u32,
-    /// How many the reference has, which is what separates "these two
-    /// files disagree" from "the reference was not a subtitle file at
-    /// all".
+    /// How many the reference has, for the same reason.
     pub reference_cues: u32,
     /// Whether the two agree well enough for the transform to be worth
     /// applying. **False is an answer, not an error**: two files for
     /// different episodes, half a film against the whole, or a reference
-    /// that is itself adrift all score badly, and saying so with the count
-    /// is honest where applying the transform anyway would ruin a subtitle
-    /// that was merely a little out.
+    /// that is itself adrift all measure, none of them should be applied,
+    /// and saying so with the score and the transform is honest where
+    /// applying it anyway would ruin a subtitle that was merely a little
+    /// out.
     pub convincing: bool,
 }
 
@@ -56,10 +66,10 @@ const MOST_BYTES: usize = 4 * 1024 * 1024;
 /// Matches the subtitle at `playing_url` to the one at `reference_url`,
 /// which the viewer has said is in sync with the video.
 ///
-/// Fetches both, reads their cue start times and solves for the line
-/// between them (`crate::subtitles`). Errors only when a file cannot be
-/// fetched -- a pair that does not match is a [`SubtitleMatch`] with
-/// `convincing: false` and the counts that say so.
+/// Fetches both, reads when each of them has text on screen and solves for
+/// the line between them (`crate::subtitles`). Errors only when a file
+/// cannot be fetched -- a pair that does not match is a [`SubtitleMatch`]
+/// with `convincing: false` and the score and transform that say so.
 ///
 /// Blocks the FRB worker for the length of two HTTP fetches and a sweep;
 /// never call it from the UI thread. The fetches run together, because
@@ -84,29 +94,29 @@ pub fn subtitles_match(
             )
             .await
         });
-        let playing = crate::subtitles::cue_starts(
+        let playing = crate::subtitles::cue_spans(
             &playing.map_err(|error| anyhow::anyhow!("the subtitle being played: {error}"))?,
         );
-        let reference = crate::subtitles::cue_starts(
+        let reference = crate::subtitles::cue_spans(
             &reference.map_err(|error| anyhow::anyhow!("the chosen subtitle: {error}"))?,
         );
-        // No alignment at all still answers with the counts rather than
-        // raising: "nothing matched, out of the eleven cues this file
-        // has" is the same kind of answer as a bad score, and the panel
-        // says it the same way.
+        // Too little to measure still answers with the counts rather than
+        // raising: "eleven cue timings in the file you picked" is the same
+        // kind of answer as a bad score, and the panel says it the same
+        // way.
         Ok(match crate::subtitles::align(&playing, &reference) {
             Some(alignment) => SubtitleMatch {
                 ratio: alignment.ratio,
                 offset: alignment.offset,
-                matched: alignment.matched as u32,
-                cues: alignment.cues as u32,
+                score: Some(alignment.score),
+                cues: playing.len() as u32,
                 reference_cues: reference.len() as u32,
                 convincing: alignment.is_convincing(),
             },
             None => SubtitleMatch {
                 ratio: 1.0,
                 offset: 0.0,
-                matched: 0,
+                score: None,
                 cues: playing.len() as u32,
                 reference_cues: reference.len() as u32,
                 convincing: false,

@@ -472,38 +472,55 @@ what every model field means. The shape of the thing is in the
   drift instead of asking the viewer to find it by eye. Two subtitle
   files for one video are two clocks, so their disagreement is a line:
   the viewer picks a file they have seen keep time, and Rust fetches
-  both, reads their cue *start* times and solves for the ratio and
-  offset that make the most starts coincide (`rust/src/subtitles.rs`,
-  over FFI as `subtitles_match`, because two HTTP fetches and a sweep
-  over two arrays do not belong on the UI thread of a Chromecast).
-  Only the starts, and no text at all: different languages split one
-  sentence into two lines and merge two into one, but a line of dialogue
-  still starts when somebody starts speaking. Against the owner's own
-  files the Swedish Gilmore Girls file matches either of two English
-  ones at 1.0440, with 679 of its 765 cues landing within a third of a
-  second -- the ratio recovered to six figures from two references that
-  know nothing about each other. **How finely the ratio is swept comes
-  from how long the file is**, not from a constant: a ratio out by `d`
-  throws a cue `d * t` seconds, so the step nearest the right answer has
-  to keep the whole file within the tolerance, and a step that only kept
-  part of it there let the peak sink into the coincidences. Over all
-  2756 ordered pairs of 53 real subtitle files for one episode, that is
-  the difference between 163 pairs wrongly refused and 20 -- among the
-  163, a Czech file and a Hungarian one whose timings agree to a
-  millisecond. **Refusing is the point.** Ten pairs of real files for one
-  episode that belong together score 87-100 %, and every pair that does
-  not -- another episode, another cut, half a film against the whole --
-  scores 22-53 %; below 60 % the viewer is told "only 184 of 694 cues
-  matched" and nothing is applied, because a nonsense transform would
-  ruin a subtitle that was merely a little out. The count is shown either
-  way: it is the evidence for applying the line and the evidence for
-  refusing it. Two files with fewer than fifty cue starts are not
-  evidence either way and are not measured at all -- with twenty
-  observations to satisfy, and a ratio and an offset of the sweep's own
-  choosing, an unrelated file is called convincing about half the time --
-  and nothing matching *at all* is reported as its own answer, naming how
-  many cues the chosen file turned out to have, since two files that
-  merely disagree still land a fifth to a half of their cues on each
+  both, turns each into a bitmap of **when it has text on screen** and
+  searches for the ratio and shift that make the two bitmaps overlap
+  most (`rust/src/subtitles.rs`, over FFI as `subtitles_match`, because
+  two HTTP fetches and a search over two bitmaps do not belong on the UI
+  thread of a Chromecast). **Both timestamps of every cue, and no text
+  at all.** Comparing cue *starts* was the measurement this replaced,
+  and it refused the owner's own Swedish Gilmore Girls file against an
+  English one: the Swedish file has 690 cues where the English has 1024,
+  because the translator merges lines and gives each merged line its own
+  beat, so only 54 % of its starts land within a third of a second of an
+  English start -- 89 % within a second, 97 % within a second and a
+  half. A bitmap does not mind: a merged line overlaps both the lines it
+  covers, and a line one file does not have costs its own bins rather
+  than a whole match. **What is scored is the overlap above chance,
+  never the overlap.** Subtitles are on screen something like two thirds
+  of an episode, so two files with nothing to do with each other already
+  overlap heavily, and the number reported is
+  `(dice - chance) / (1 - chance)` from `dice = 2|A∩B| / (|A|+|B|)` and
+  `chance = 2·da·db / (da+db)`: on the owner's files the three pairings
+  that belong together score 1.00, 0.66 and 0.66 where two wrong
+  episodes score 0.25 and 0.20. `CONVINCING` sits at 0.45 between them
+  and is **provisional** -- five pairings show that the metric separates
+  them at all, and choosing the number needs a spread of shows,
+  languages and deliberate mismatches with the worst genuine pair and
+  the best wrong pair named out of it. **The search goes coarse to
+  fine.** The rate window is 0.90 to 1.10 and stays there, because PAL
+  against film is 4.27 % away and finding it unaided is the whole point;
+  that is far too wide to sweep against every offset at a tenth of a
+  second, so the first pass bins at a second -- where an episode is a
+  few tens of machine words -- and two passes after it look only near
+  its winner, at 100 ms and then 20 ms. A bin is lit when text covers at
+  least *half* of it rather than any of it: lighting from any overlap
+  makes a file of two-second lines nearly all lit at a second per bin,
+  and two files that are both nearly all lit have no headroom above
+  chance left to tell them apart, which measured out as the right ratio
+  scoring 0.14 where a wrong one scored 0.34. How finely the ratio is
+  stepped comes from how long the file is, not from a constant: a ratio
+  out by `d` throws a cue `d * t` seconds, so the step nearest the right
+  answer has to keep the whole file inside a bin. **Refusing is the
+  point**, and a refusal says what was found -- the score and the
+  transform, not a fraction of cues. "Only 303 of 690 cues matched, so
+  nothing was changed" is what sent the owner looking for a different
+  reference when the reference was fine, and a count of cues was never
+  comparable between a file that merges lines and one that does not. Two
+  files with fewer than fifty cues are not evidence either way and are
+  not measured at all; that answer carries no score and names how many
+  cues each file turned out to have, because a file that could not be
+  read as a subtitle is a different problem from two files that disagree
+  with each
   other. The reference is always the viewer's to pick, since the answer
   is only as good as that file's own sync and nothing in the metadata
   knows which file that is; with no other file on offer the option is not

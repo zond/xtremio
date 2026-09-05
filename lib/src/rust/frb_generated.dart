@@ -1231,6 +1231,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_i_64(raw);
@@ -1313,6 +1319,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_f_64(raw);
+  }
+
+  @protected
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
@@ -1347,7 +1359,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return SubtitleMatch(
       ratio: dco_decode_f_64(arr[0]),
       offset: dco_decode_f_64(arr[1]),
-      matched: dco_decode_u_32(arr[2]),
+      score: dco_decode_opt_box_autoadd_f_64(arr[2]),
       cues: dco_decode_u_32(arr[3]),
       referenceCues: dco_decode_u_32(arr[4]),
       convincing: dco_decode_bool(arr[5]),
@@ -1410,6 +1422,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CoreConfig sse_decode_box_autoadd_core_config(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_core_config(deserializer));
+  }
+
+  @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_f_64(deserializer));
   }
 
   @protected
@@ -1512,6 +1530,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_f_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1555,14 +1584,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_ratio = sse_decode_f_64(deserializer);
     var var_offset = sse_decode_f_64(deserializer);
-    var var_matched = sse_decode_u_32(deserializer);
+    var var_score = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_cues = sse_decode_u_32(deserializer);
     var var_referenceCues = sse_decode_u_32(deserializer);
     var var_convincing = sse_decode_bool(deserializer);
     return SubtitleMatch(
       ratio: var_ratio,
       offset: var_offset,
-      matched: var_matched,
+      score: var_score,
       cues: var_cues,
       referenceCues: var_referenceCues,
       convincing: var_convincing,
@@ -1643,6 +1672,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_core_config(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_64(self, serializer);
   }
 
   @protected
@@ -1736,6 +1771,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_f_64(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_i_64(
     PlatformInt64? self,
     SseSerializer serializer,
@@ -1775,7 +1820,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_f_64(self.ratio, serializer);
     sse_encode_f_64(self.offset, serializer);
-    sse_encode_u_32(self.matched, serializer);
+    sse_encode_opt_box_autoadd_f_64(self.score, serializer);
     sse_encode_u_32(self.cues, serializer);
     sse_encode_u_32(self.referenceCues, serializer);
     sse_encode_bool(self.convincing, serializer);

@@ -1415,6 +1415,17 @@ impl SseDecode for Option<String> {
     }
 }
 
+impl SseDecode for Option<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<f64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<i64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1458,14 +1469,14 @@ impl SseDecode for crate::api::subtitles::SubtitleMatch {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_ratio = <f64>::sse_decode(deserializer);
         let mut var_offset = <f64>::sse_decode(deserializer);
-        let mut var_matched = <u32>::sse_decode(deserializer);
+        let mut var_score = <Option<f64>>::sse_decode(deserializer);
         let mut var_cues = <u32>::sse_decode(deserializer);
         let mut var_referenceCues = <u32>::sse_decode(deserializer);
         let mut var_convincing = <bool>::sse_decode(deserializer);
         return crate::api::subtitles::SubtitleMatch {
             ratio: var_ratio,
             offset: var_offset,
-            matched: var_matched,
+            score: var_score,
             cues: var_cues,
             reference_cues: var_referenceCues,
             convincing: var_convincing,
@@ -1694,7 +1705,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::subtitles::SubtitleMatch {
         [
             self.ratio.into_into_dart().into_dart(),
             self.offset.into_into_dart().into_dart(),
-            self.matched.into_into_dart().into_dart(),
+            self.score.into_into_dart().into_dart(),
             self.cues.into_into_dart().into_dart(),
             self.reference_cues.into_into_dart().into_dart(),
             self.convincing.into_into_dart().into_dart(),
@@ -1814,6 +1825,16 @@ impl SseEncode for Option<String> {
     }
 }
 
+impl SseEncode for Option<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <f64>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<i64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1849,7 +1870,7 @@ impl SseEncode for crate::api::subtitles::SubtitleMatch {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <f64>::sse_encode(self.ratio, serializer);
         <f64>::sse_encode(self.offset, serializer);
-        <u32>::sse_encode(self.matched, serializer);
+        <Option<f64>>::sse_encode(self.score, serializer);
         <u32>::sse_encode(self.cues, serializer);
         <u32>::sse_encode(self.reference_cues, serializer);
         <bool>::sse_encode(self.convincing, serializer);

@@ -358,43 +358,65 @@ and neither is true any more. Each rule below has a test; see
   mapping the playing file onto one the viewer says is in sync
   (`rust/src/subtitles.rs`, `subtitles_match` over FFI;
   `SubtitleMatchClient` in `lib/features/player/subtitle_match.dart`).
-  Seven things hold it up, each with a test. **Only cue starts are
-  read** -- a translation moves the words and splits the lines, and an
-  end drifts with reading speed, but a line still starts on a speech
-  onset. **The count is the answer either way**: below the threshold
-  nothing is applied and the viewer is told how badly it matched,
-  because the pairs that must be refused (another episode, another cut,
-  half a film) score 22-53 % where a real pair scores 87-100 %, and a
-  nonsense transform ruins a subtitle that was merely a little out.
-  **Nothing matching at all is a different answer and says so**, naming
-  the reference's own cue count: two files that merely disagree still
-  land a fifth to a half of their cues on each other, so a zero means
-  the file the viewer picked could not be read as a subtitle -- and
-  "only 0 of 694 cues matched" would describe the file they are trying
-  to fix instead. **Fifty cue starts is the floor on both sides**
-  (`FEWEST_CUES`), because with twenty observations to satisfy and a
-  ratio and an offset of its own choosing the sweep calls an unrelated
-  file convincing about half the time; the floor guards the *playing*
-  file as much as the reference, since the agreement is counted over the
-  playing file's cues. **The sweep's step comes from the file's length**
-  (`coarse_step`), never from a constant: a ratio out by `d` throws a
-  cue `d * t` and the nearest step to the right ratio has to keep the
-  whole file inside `TOLERANCE`, so `h <= 4 * TOLERANCE / span`. A fixed
-  0.002 was seven times too coarse for an episode and refused real pairs
-  that agree to a millisecond -- 163 wrong refusals out of 2756 real
-  pairs, against 20 now. **The reference is never guessed**, since the
-  measurement is only as good as that file's own sync with the video and
-  no metadata knows which file that is -- which is also why the option
-  is not drawn at all with nothing else on offer, and why the sheet that
-  asks is one row per language with the rest behind a row of their own,
-  the subtitle menu's shape and for its reason: a language answers with
-  sixty-nine files, and the *other* language is what a viewer opening
-  this sheet is reaching for. **A subtitle URL is never quoted back**:
-  it can carry a debrid API key, so `crate::env::fetch_text` strips it
-  out of every failure and the panel says one fixed sentence. What is
-  measured belongs to the file it was measured for, so
-  `_resetSubtitleTiming` drops the note and an answer that lands after
-  the subtitle changed is thrown away.
+  Eight things hold it up, each with a test. **Both timestamps of every
+  cue are read**, and each file becomes a bitmap of when it has text on
+  screen. Comparing cue *starts* is what this replaced, and it refused
+  the owner's own Swedish Gilmore Girls file against an English one: a
+  translator merges lines and gives the merged line its own beat, so
+  that file has 690 cues where the English has 1024 and only 54 % of its
+  starts land within a third of a second of an English start. Overlap
+  does not mind -- a merged line covers both the lines it replaced --
+  and the same representation is what a future version would correlate
+  against the audio's own speech detection, which is the only real
+  ground truth. **The score is the overlap *above chance*, never the
+  overlap.** Subtitles are on screen two thirds of the time, so two
+  unrelated files already overlap heavily; what is reported and
+  thresholded is `(dice - chance) / (1 - chance)`, `chance` coming from
+  the two files' own densities. Do not threshold Dice, a count of cues,
+  or anything else that a talkative programme moves. **`CONVINCING` is a
+  placeholder.** Five pairings of the owner's files put genuine ones at
+  1.00/0.66/0.66 and wrong episodes at 0.25/0.20, which shows the metric
+  separates them and does not set a number. Calibrating it means a
+  spread of shows, languages, merge-and-split styles and deliberate
+  mismatches, and reporting the worst genuine pair and the best wrong
+  pair before choosing -- the justification is that gap, and if the gap
+  is small, say so rather than picking the midpoint. **The score is the
+  answer either way, and a refusal says what was found**: the score
+  *and* the transform. A fraction of cues is what sent the owner looking
+  for a different reference when the reference was fine, and it is not
+  comparable between a file that merges lines and one that does not.
+  **Nothing to measure is a different answer and says so**, naming both
+  files' cue counts and carrying no score at all: a file that could not
+  be read as a subtitle is a different problem from two files that
+  disagree, and a percentage would describe the file the viewer is
+  trying to fix instead of the one they picked badly. **Fifty cues is
+  the floor on both sides** (`FEWEST_CUES`), inherited and now generous:
+  scoring against chance moved the count at which an unrelated pair
+  stops being alignable by accident down to about eight a side. It stays
+  because a file with fewer cues is a signs track rather than a
+  translation, and re-tuning it is calibration. **The rate window stays
+  0.90 to 1.10**, because PAL is 4.27 % away and finding it *unaided* is
+  the point; that is too wide to sweep against every offset at a tenth
+  of a second, so the search is coarse to fine -- a second per bin over
+  the whole window, then 100 ms and 20 ms near the winner -- and the
+  ratio step comes from the file's length rather than a constant, so the
+  step nearest the right answer keeps the whole file inside a bin. A bin
+  is lit when text covers at least *half* of it: lighting it from any
+  overlap leaves an episode ninety per cent lit at a second per bin,
+  with no headroom above chance to measure in, and the right ratio then
+  scored 0.14 where a wrong one scored 0.34. **The reference is never
+  guessed**, since the measurement is only as good as that file's own
+  sync with the video and no metadata knows which file that is -- which
+  is also why the option is not drawn at all with nothing else on offer,
+  and why the sheet that asks is one row per language with the rest
+  behind a row of their own, the subtitle menu's shape and for its
+  reason: a language answers with sixty-nine files, and the *other*
+  language is what a viewer opening this sheet is reaching for. **A
+  subtitle URL is never quoted back**: it can carry a debrid API key, so
+  `crate::env::fetch_text` strips it out of every failure and the panel
+  says one fixed sentence. What is measured belongs to the file it was
+  measured for, so `_resetSubtitleTiming` drops the note and an answer
+  that lands after the subtitle changed is thrown away.
 - **Nothing in the player reads the video's frame rate.** There is no
   `videoFrameRate` on the engine and no observation of `container-fps`
   for subtitles: the one thing that used it was the toggle's direction.

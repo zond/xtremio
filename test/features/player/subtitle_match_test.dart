@@ -94,7 +94,7 @@ void main() {
     player.subtitleMatch.response = const SubtitleMatch(
       ratio: 1.0424,
       offset: 1.5,
-      matched: 613,
+      score: 0.74,
       cues: 694,
       referenceCues: 683,
       convincing: true,
@@ -114,7 +114,7 @@ void main() {
     // them.
     expect(player.engine.subtitleSpeed, closeTo(1.0424, 1e-9));
     expect(player.engine.subtitleDelay, closeTo(1.5, 1e-9));
-    expect(find.text('Matched 613 of 694 cues'), findsOneWidget);
+    expect(find.text('Matched: 74 % more overlap than chance'), findsOneWidget);
   });
 
   testWidgets('a match that does not convince changes nothing and says so', (
@@ -123,12 +123,16 @@ void main() {
     useWideViewport(tester);
     // Two files for different episodes, half a film against the whole, a
     // reference that is itself adrift: all of them measure, none of them
-    // should be applied, and the count is what makes that judgeable.
+    // should be applied. The score is what makes that judgeable, and the
+    // transform is the other half of it -- a reference that wants to be
+    // slowed a twelfth and pushed four minutes is visibly the wrong
+    // recording, where a plausible speed and a small shift would mean two
+    // files that simply disagree.
     final player = await panelOver(tester, uploads: both, pick: 'PAL');
     player.subtitleMatch.response = const SubtitleMatch(
       ratio: 0.9157,
       offset: 229.5,
-      matched: 184,
+      score: 0.24,
       cues: 694,
       referenceCues: 754,
       convincing: false,
@@ -139,7 +143,10 @@ void main() {
     expect(player.engine.subtitleSpeed, 1);
     expect(player.engine.subtitleDelay, 0);
     expect(
-      find.text('Only 184 of 694 cues matched, so nothing was changed'),
+      find.text(
+        'Only 24 % more overlap than chance, at 0.916× and +229.5 s, '
+        'so nothing was changed',
+      ),
       findsOneWidget,
     );
   });
@@ -150,18 +157,17 @@ void main() {
     // What comes back when the chosen file is not a subtitle the
     // measurement can read: an ASS file, an addon answering 200 with an
     // error page, a forced track of a dozen signs. Rust refuses to
-    // measure and answers with the counts.
+    // measure at all and answers with no score and the two counts.
     //
     // Two files that merely have nothing to do with each other still
-    // agree on a fifth to a half of their cues by accident, so a zero is
-    // never "these two disagree" -- and "only 0 of 694 cues matched"
-    // would describe the file the viewer is trying to fix while saying
-    // nothing about the one they picked badly.
+    // overlap heavily by accident, so no score is never "these two
+    // disagree" -- and "only 0 %" would describe the file the viewer is
+    // trying to fix while saying nothing about the one they picked badly.
     final player = await panelOver(tester, uploads: both, pick: 'PAL');
     player.subtitleMatch.response = const SubtitleMatch(
       ratio: 1,
       offset: 0,
-      matched: 0,
+      score: null,
       cues: 694,
       referenceCues: 0,
       convincing: false,
@@ -171,12 +177,12 @@ void main() {
 
     expect(
       find.text(
-        'Nothing matched: 694 cue timings in this file, 0 in the '
+        'Nothing to measure: 694 cue timings in this file, 0 in the '
         'one you picked',
       ),
       findsOneWidget,
     );
-    expect(find.textContaining('of 694 cues matched'), findsNothing);
+    expect(find.textContaining('more overlap than chance'), findsNothing);
     expect(player.engine.subtitleSpeed, 1);
     expect(player.engine.subtitleDelay, 0);
   });
@@ -286,7 +292,7 @@ void main() {
       ..response = const SubtitleMatch(
         ratio: 1.0424,
         offset: 1.5,
-        matched: 613,
+        score: 0.74,
         cues: 694,
         referenceCues: 683,
         convincing: true,
@@ -310,6 +316,6 @@ void main() {
 
     expect(player.engine.subtitleSpeed, 1);
     expect(player.engine.subtitleDelay, 0);
-    expect(find.text('Matched 613 of 694 cues'), findsNothing);
+    expect(find.text('Matched: 74 % more overlap than chance'), findsNothing);
   });
 }
