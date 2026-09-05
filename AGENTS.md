@@ -58,8 +58,9 @@ stashing the `lib/` (or `rust/src`) change and running the new test
   touches FFI or libmpv. `test/core/core_client_test.dart` and
   `rust/tests/core.rs` are the FFI/engine tests.
 - Model-field states come from fixtures under `rust/tests/fixtures/`,
-  recorded by the `#[ignore]` network tests in `rust/tests/` (the README
-  lists the `cargo test --test <name> -- --ignored` commands) and loaded
+  recorded by the `#[ignore]` network tests in `rust/tests/`
+  (`docs/OPERATIONS.md` lists the `cargo test --test <name> -- --ignored`
+  commands) and loaded
   through `test/support/fixtures.dart`. Refresh a fixture by re-running its
   recorder, never by hand-editing recorded JSON; trim large catalogs.
 - `ctx_logged_in.json` is hand-authored with a fake account. Never commit a
