@@ -41,11 +41,13 @@ screen-by-screen inventory of it.
   remote shortcuts, audio tracks, embedded and addon subtitles, a stats OSD
   reporting hwdec and the swarm, and an up-next countdown that hands over to
   the next episode.
-- **Subtitle timing that is fixed by hand and then remembered.** Shift and
-  stretch from a panel that survives the controls fading, or have the
-  correction measured against a subtitle known to be in sync; what was fixed
-  is stored against the series and the release, so the next episode starts
-  right.
+- **Subtitle timing that is nudged or measured, and then remembered.** Shift
+  the lines by hand from a panel that survives the controls fading, or have
+  the drift measured against another subtitle the viewer says is in sync --
+  which is where a stretch comes from, since nothing here presses a
+  multiplier and no declared frame rate decides one. What was fixed is stored
+  against the series and the release, so the next episode starts right
+  ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 - **Android TV and Google TV as their own layout**, not a phone app on a big
   screen: D-pad traversal with a focus memory per tab, a focus ring built to
   read over unknown poster art, remote keys in the player, ten-foot density
