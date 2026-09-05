@@ -564,9 +564,15 @@ what every model field means. The shape of the thing is in the
   in the file, which is libmpv's `sub-start` and is its raw time there
   (measured against a running player, not read out of the manual, and
   written down at `MediaKitEngine.subtitleCueStart`), paired with the
-  video position of the press. One such pair moves the offset onto it;
-  two of them more than two minutes apart give the line through both, so
-  the rate comes with it; a mark within half a minute of an existing one
+  video position that cue is *drawn* at -- the transform in force
+  applied, which is the picture the viewer has just approved, and not
+  the instant the button was pressed, which is a reaction time. So one
+  mark on its own changes nothing, deliberately: the viewer shifted the
+  line into place themselves and the mark writes down where they put it.
+  Two of them at least two minutes apart give the line through both, so
+  the rate comes with it -- which is what the second mark is for, made
+  out at the far end after the strides have put the picture right there
+  too; a mark within half a minute of an existing one
   corrects that one rather than joining it, and the pair used is always
   the two furthest apart (`SubtitleCalibration` in
   `lib/features/player/subtitle_calibration.dart`). Which of the two

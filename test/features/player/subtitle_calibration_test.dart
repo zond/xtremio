@@ -197,14 +197,17 @@ void main() {
   });
 
   group('what the viewer is told', () {
-    test('names the moment and the episode differently', () {
+    test('asks for the second mark, and names the episode when it comes', () {
       // Both look the same in the picture -- the line landing where it
       // belongs -- and only one of them still holds ten minutes later.
+      // One point changes nothing at all, so a note that claimed a fix
+      // would be claiming the viewer's own shift; what it says instead
+      // is what turns the point into one.
       expect(
         SubtitleCalibrationOutcome.offset.note,
         isNot(SubtitleCalibrationOutcome.rate.note),
       );
-      expect(SubtitleCalibrationOutcome.offset.note, contains('moment'));
+      expect(SubtitleCalibrationOutcome.offset.note, contains('again'));
       expect(SubtitleCalibrationOutcome.rate.note, contains('episode'));
     });
   });

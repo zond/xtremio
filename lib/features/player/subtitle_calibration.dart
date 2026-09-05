@@ -22,6 +22,12 @@ final class SubtitleMark {
   final double cueStart;
 
   /// The video position, in seconds, that cue belongs at.
+  ///
+  /// Where the cue is *drawn*, under a transform the viewer has looked
+  /// at and approved -- never the instant a button was pressed. A cue is
+  /// on screen for seconds and a press can land anywhere in them, so the
+  /// press instant carries a reaction time into a number that is
+  /// otherwise exact (`PlayerScreen._markSubtitleTiming`).
   final double videoPosition;
 
   @override
@@ -38,12 +44,19 @@ final class SubtitleMark {
 }
 
 /// Which of the two things a mark did, which is what the viewer has to
-/// be told: an offset fixes the moment in front of them, a rate fixes
-/// the rest of the episode with it.
+/// be told: one point on its own keeps the moment in front of them, a
+/// pair of them fixes the rest of the episode as well.
 enum SubtitleCalibrationOutcome {
-  /// The offset moved and the speed did not. Everything the marks say
-  /// about this file is one point, so one point is what was solved.
-  offset('Fixed at this moment'),
+  /// One point, so the line through the marks is the one already in
+  /// force: the offset stays where the viewer put it and the speed is
+  /// untouched.
+  ///
+  /// The press is not wasted and the panel must not let it look like a
+  /// press that did nothing, because the mark it recorded is half of the
+  /// pair that fixes the drift -- so the note asks for the other half,
+  /// which is a mark made further on after the picture has been shifted
+  /// into place again out there.
+  offset('Marked. Mark again further on to fix drift'),
 
   /// Both moved: two marks far enough apart to trust a rate, and the
   /// drift between them is gone as well as the offset.

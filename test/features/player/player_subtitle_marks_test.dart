@@ -12,12 +12,14 @@ import '../../support/player_harness.dart';
 /// the marks add up to.
 ///
 /// A mark is a correspondence -- the cue's own time in the subtitle file
-/// paired with the video position the viewer says it belongs at -- and
-/// the arithmetic over those is `SubtitleCalibration`'s, tested on its
-/// own. What is tested here is the wiring: that a press makes a mark out
-/// of the right two numbers, that the panel says which of the two things
-/// it did, that the marks belong to the file that was playing, and that
-/// what they derive is remembered like every other correction.
+/// paired with the video position it is drawn at, under a transform the
+/// viewer has looked at and approved -- and the arithmetic over those is
+/// `SubtitleCalibration`'s, tested on its own. What is tested here is the
+/// wiring: that a press makes a mark out of the right two numbers and
+/// **not out of the moment it was pressed**, that the panel says which of
+/// the two things it did, that the marks belong to the file that was
+/// playing, and that what they derive is remembered like every other
+/// correction.
 void main() {
   /// The meta item the recorded fixture is a stream for, and the file the
   /// server says it opened: between them, the keys a correction is
@@ -119,51 +121,78 @@ void main() {
     await pumpEvents(tester);
   }
 
-  /// A press of "This is right" at video position [at], with the cue
-  /// written at [cue] in the file on screen.
+  /// A press of "This is right" with the cue written at [cue] in the file
+  /// on screen, the button pressed at video position [pressedAt].
   ///
-  /// The two are given separately and neither is derived from the other,
-  /// because that is the whole of what a mark is: [cue] is what libmpv's
-  /// `sub-start` answers -- the raw time in the file, before `sub-speed`
-  /// and `sub-delay` moved it -- and [at] is the clock the viewer is
-  /// judging against.
+  /// [cue] is what libmpv's `sub-start` answers -- the raw time in the
+  /// file, before `sub-speed` and `sub-delay` moved it. [pressedAt] is
+  /// the clock at the moment of the press, and is deliberately *not* half
+  /// of the mark: a cue is on screen for seconds and the press lands
+  /// wherever the viewer's hand did, so every test here presses somewhere
+  /// inside the cue rather than on its first frame.
   Future<void> mark(
     WidgetTester tester,
     PlayerHarness player, {
     required double? cue,
-    required double at,
+    double pressedAt = 0,
   }) async {
     player.engine.cueStart = cue;
     player.engine.emitPosition(
-      Duration(microseconds: (at * Duration.microsecondsPerSecond).round()),
+      Duration(
+        microseconds: (pressedAt * Duration.microsecondsPerSecond).round(),
+      ),
     );
     await pumpEvents(tester);
     await tester.tap(find.byKey(const ValueKey('subtitle-mark')));
     await tester.pumpAndSettle();
   }
 
-  testWidgets('one mark puts the line where the viewer says it belongs', (
-    tester,
-  ) async {
+  /// [presses] taps of the shift stepper, later for a positive count and
+  /// earlier for a negative one: the viewer putting the line where it
+  /// belongs by hand, which is what a mark is made *of*.
+  Future<void> shift(WidgetTester tester, int presses) async {
+    final key = ValueKey(
+      presses < 0 ? 'subtitle-shift-earlier' : 'subtitle-shift-later',
+    );
+    for (var i = 0; i < presses.abs(); i++) {
+      await tester.tap(find.byKey(key));
+      await tester.pump();
+    }
+  }
+
+  testWidgets('a mark records where the viewer put the line, not when they '
+      'pressed', (tester) async {
     useWideViewport(tester);
     final player = await playing(tester);
     await openPanel(tester);
 
-    // The cue the file writes at 10 s was judged to belong at 12 s, so
-    // the offset that puts it there is two seconds and the multiplier is
-    // not touched: one point says nothing about a rate.
-    await mark(tester, player, cue: 10, at: 12);
-    expect(player.engine.subtitleDelay, closeTo(2, 1e-9));
+    // The viewer shifts until the line on screen lands where it belongs
+    // -- six tenths later -- and then says so.
+    await shift(tester, 6);
+    expect(player.engine.subtitleDelay, closeTo(0.6, 1e-9));
+
+    // The press comes 4.5 seconds into a cue written at 10 s, because
+    // that is how long it took to decide and reach the button. Nothing
+    // moves: the transform the viewer approved is the one still running.
+    // Taking the press instant as the mark would put the cue at 14.5 --
+    // four seconds of reaction time applied to a subtitle the button
+    // just said was right.
+    await mark(tester, player, cue: 10, pressedAt: 14.5);
+    expect(
+      player.engine.subtitleDelay,
+      closeTo(0.6, 1e-9),
+      reason: 'the mark is where the cue is drawn, not when the press was',
+    );
     expect(player.engine.subtitleSpeed, 1);
-    expect(find.text('+2.0 s'), findsOneWidget);
+    expect(find.text('+0.6 s'), findsOneWidget);
 
     // And the panel says which of the two things happened, because the
-    // picture does not: an offset and a rate both land this line where
-    // it belongs, and only one of them still holds in ten minutes.
+    // picture does not: one mark holds this moment and asks for the one
+    // that fixes the rest, and both look alike here and now.
     expect(
       find.text(SubtitleCalibrationOutcome.offset.note),
       findsOneWidget,
-      reason: 'a single mark is an offset and the panel says so',
+      reason: 'a single mark is one point and the panel says so',
     );
   });
 
@@ -173,27 +202,35 @@ void main() {
     final player = await playing(tester);
     await openPanel(tester);
 
-    // Ninety seconds apart is a scene and a half: still one observation
-    // as far as a rate is concerned, because a tenth of a second of error
-    // over that span is three times the drift worth measuring.
-    await mark(tester, player, cue: 10, at: 12);
-    await mark(tester, player, cue: 100, at: 103);
+    // Right at the start, so the first mark is made on the file's own
+    // timing: the cue at 10 s is drawn at 10 s and belongs there.
+    await mark(tester, player, cue: 10, pressedAt: 13);
+
+    // A minute and a half later the line has drifted a tenth and the
+    // viewer shifts it back. Ninety seconds is a scene and a half, not a
+    // lever arm -- a tenth of a second of error over that span is three
+    // times the drift worth measuring -- so this is still one
+    // observation.
+    await shift(tester, 1);
+    await mark(tester, player, cue: 100, pressedAt: 101);
     expect(player.engine.subtitleSpeed, 1);
-    expect(player.engine.subtitleDelay, closeTo(3, 1e-9));
+    expect(player.engine.subtitleDelay, closeTo(0.1, 1e-9));
     expect(find.text(SubtitleCalibrationOutcome.offset.note), findsOneWidget);
 
-    // Ten minutes apart is a lever arm. The line through both marks is
-    // the answer, and both of them land exactly where the viewer put
-    // them.
-    await mark(tester, player, cue: 610, at: 613);
-    expect(player.engine.subtitleSpeed, closeTo(601 / 600, 1e-9));
+    // Ten minutes from the first mark it is six tenths out. The viewer
+    // shifts it right again and marks it, and now there is a lever arm:
+    // the line through the two marks is the answer, and both of them land
+    // exactly where the viewer put them.
+    await shift(tester, 5);
+    await mark(tester, player, cue: 610, pressedAt: 612);
+    expect(player.engine.subtitleSpeed, closeTo(600.6 / 600, 1e-9));
     expect(
       player.engine.subtitleSpeed * 10 + player.engine.subtitleDelay,
-      closeTo(12, 1e-9),
+      closeTo(10, 1e-9),
     );
     expect(
       player.engine.subtitleSpeed * 610 + player.engine.subtitleDelay,
-      closeTo(613, 1e-9),
+      closeTo(610.6, 1e-9),
     );
     expect(find.text(SubtitleCalibrationOutcome.rate.note), findsOneWidget);
     expect(find.text(SubtitleCalibrationOutcome.offset.note), findsNothing);
@@ -204,18 +241,21 @@ void main() {
     final player = await playing(tester);
     await openPanel(tester);
 
-    // Ten seconds later is the same observation made again -- the viewer
-    // watching the line they just marked and deciding they were early --
-    // so the second replaces the first instead of sitting beside it. Kept
-    // beside it, the stale judgement would still be one end of the widest
-    // pair and would set the rate over the correction of it.
-    await mark(tester, player, cue: 10, at: 12);
-    await mark(tester, player, cue: 20, at: 30);
-    await mark(tester, player, cue: 620, at: 640);
+    // The first judgement, and then the same one made again ten seconds
+    // later -- the viewer watching the line they just marked, deciding
+    // they were two tenths early and shifting it. That replaces the mark
+    // instead of sitting beside it: kept, the stale judgement would still
+    // be one end of the widest pair and would set the rate over the
+    // correction of it.
+    await mark(tester, player, cue: 10, pressedAt: 12);
+    await shift(tester, 2);
+    await mark(tester, player, cue: 20, pressedAt: 22);
+    await shift(tester, 4);
+    await mark(tester, player, cue: 620, pressedAt: 621);
 
-    // The line through the correction and the far mark, not the one
-    // through the judgement it replaced (which is 1.0295).
-    expect(player.engine.subtitleSpeed, closeTo(610 / 600, 1e-9));
+    // The line through the correction and the far mark (600.4 over 600),
+    // not the one through the judgement it replaced (610.6 over 610).
+    expect(player.engine.subtitleSpeed, closeTo(600.4 / 600, 1e-9));
     expect(find.text(SubtitleCalibrationOutcome.rate.note), findsOneWidget);
   });
 
@@ -230,14 +270,16 @@ void main() {
     // come and go with them. A press in one has nothing the viewer can
     // have been pointing at, and a mark invented from the position would
     // say the file is already right.
-    await mark(tester, player, cue: null, at: 12);
+    await mark(tester, player, cue: null, pressedAt: 12);
     expect(find.text(subtitleNoCueNote), findsOneWidget);
     expect(player.engine.subtitleDelay, 0);
     expect(player.engine.subtitleSpeed, 1);
 
-    // And it is not remembered as a mark either: the next press is still
-    // the first one, so it is an offset and not half of a rate.
-    await mark(tester, player, cue: 610, at: 613);
+    // And it is not remembered as a mark either: with the shift below in
+    // between, a kept one would have a ten-minute lever arm and set a
+    // rate. The next press is still the first mark, so it is one point.
+    await shift(tester, 3);
+    await mark(tester, player, cue: 610, pressedAt: 613);
     expect(find.text(SubtitleCalibrationOutcome.offset.note), findsOneWidget);
     expect(player.engine.subtitleSpeed, 1);
   });
@@ -246,8 +288,9 @@ void main() {
     useWideViewport(tester);
     final player = await playing(tester);
     await openPanel(tester);
-    await mark(tester, player, cue: 10, at: 12);
-    expect(player.engine.subtitleDelay, closeTo(2, 1e-9));
+    await shift(tester, 5);
+    await mark(tester, player, cue: 10, pressedAt: 12);
+    expect(player.engine.subtitleDelay, closeTo(0.5, 1e-9));
 
     await selectFile(tester, 'OTHER');
     await openPanel(tester);
@@ -256,11 +299,12 @@ void main() {
     // A mark is a point on one file's timeline, so a mark left over from
     // the last file would pair with this one across two of them: a lever
     // arm of ten minutes and a rate solved from neither file. The press
-    // below is the first mark on this file, so it is an offset.
-    await mark(tester, player, cue: 610, at: 613);
+    // below is the first mark on this file, so it is one point and the
+    // speed is untouched.
+    await mark(tester, player, cue: 610, pressedAt: 613);
     expect(find.text(SubtitleCalibrationOutcome.offset.note), findsOneWidget);
     expect(player.engine.subtitleSpeed, 1);
-    expect(player.engine.subtitleDelay, closeTo(3, 1e-9));
+    expect(player.engine.subtitleDelay, 0);
   });
 
   testWidgets('what the marks derive is remembered under the ordinary keys', (
@@ -270,8 +314,9 @@ void main() {
     final prefs = AppPrefs(client: FakePrefsClient());
     final player = await playing(tester, prefs: prefs);
     await openPanel(tester);
-    await mark(tester, player, cue: 10, at: 12);
-    await mark(tester, player, cue: 610, at: 613);
+    await mark(tester, player, cue: 10, pressedAt: 12);
+    await shift(tester, 6);
+    await mark(tester, player, cue: 610, pressedAt: 612);
     await closePanel(tester);
 
     // A press on the panel is a judgement whichever button made it, and
@@ -282,7 +327,7 @@ void main() {
     // marks would mean nothing on it.
     expect(
       prefs.subtitleSync.speedFor(series: series, group: '6'),
-      closeTo(601 / 600, 1e-9),
+      closeTo(600.6 / 600, 1e-9),
     );
     expect(
       prefs.subtitleSync.shiftSecondsFor(
@@ -290,7 +335,7 @@ void main() {
         group: '6',
         release: opened.toLowerCase(),
       ),
-      closeTo(12 - (601 / 600) * 10, 1e-9),
+      closeTo(10 - (600.6 / 600) * 10, 1e-9),
     );
   });
 }

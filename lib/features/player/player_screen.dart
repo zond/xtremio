@@ -1886,45 +1886,61 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _rememberTiming();
   }
 
-  /// A press of "This is right": the line on screen belongs at this
-  /// moment, which is one mark.
+  /// A press of "This is right": the line on screen is where it belongs,
+  /// which is one mark.
   ///
-  /// The two halves come from opposite sides of the transform on
-  /// purpose. The video position is the clock the viewer is judging
-  /// against, and the cue's start is its raw time in the file
-  /// ([PlaybackEngine.subtitleCueStart]) -- so the mark is a point on
-  /// the line `position = speed * cue + delay`, which is what
-  /// [SubtitleCalibration] fits and what stays true when the next mark
-  /// moves the speed and the delay under it. Reading the cue's *drawn*
-  /// time instead would make every mark say the same thing -- that the
-  /// transform in force is the transform in force -- and solve nothing.
+  /// The mark pairs the cue's raw time in the file
+  /// ([PlaybackEngine.subtitleCueStart]) with the video position that cue
+  /// is *drawn* at under the transform the viewer has just approved --
+  /// `speed * cue + delay` -- and never with the position the button was
+  /// pressed at. **A cue is on screen for seconds and the property
+  /// answers throughout them**, so the press instant is the viewer's
+  /// reaction time and not a measurement of anything: taken as the mark,
+  /// it would push a subtitle that was already in step late by however
+  /// long they took to press, off the button that says it was right, and
+  /// would put a second or two of reaction into each end of the lever arm
+  /// a rate is read off -- [SubtitleCalibration.rateSpan] is sized for a
+  /// tenth of a second of error at each end, and this is twenty times
+  /// that.
   ///
-  /// The position is read before the property so that both describe the
-  /// moment of the press, and the answer is dropped if the subtitle
-  /// changed while it was out: a property read is not the seconds-long
-  /// fetch a match is, but a mark landing on the file that replaced the
-  /// one it was made against is the same wrong answer.
+  /// So a single mark changes nothing, and that is the shape of the
+  /// feature rather than a hole in it: the viewer has already shifted the
+  /// line into place by hand, and the mark only writes down where they
+  /// put it. What learns a rate is a *second* mark far off, made after
+  /// shifting the picture into place again out there, which is what the
+  /// shift's strides exist for. The two are points on one line because
+  /// each is the viewer's judgement about where a cue belongs, and that
+  /// stays true whatever transform was in force when it was made -- which
+  /// is what [SubtitleCalibration] fits, and why a mark is not the shift
+  /// in force written down.
+  ///
+  /// The answer is dropped if the subtitle changed while the read was
+  /// out: a property read is not the seconds-long fetch a match is, but a
+  /// mark landing on the file that replaced the one it was made against
+  /// is the same wrong answer.
   Future<void> _markSubtitleTiming() async {
     final engine = _engine;
     if (engine == null) return;
-    final position = _position.value;
     final marked = _externalSubtitle?.url;
     final cueStart = await engine.subtitleCueStart();
     if (!mounted || _externalSubtitle?.url != marked) return;
     if (cueStart == null) {
       // Between two lines, or subtitles off: there is nothing on screen
-      // the viewer can have been pointing at, and inventing a cue start
-      // from the position would be a mark saying the file is already
-      // right.
+      // the viewer can have been pointing at, and a mark invented from
+      // the position would say the file is already right.
       setState(() => _markNote = subtitleNoCueNote);
       return;
     }
+    // What mpv is drawing that cue at, which is what `_timing` is: it is
+    // the only thing written to either property, so the picture the
+    // viewer judged is this line at this cue.
+    final inForce = _timing;
     final result = _calibration.marking(
       SubtitleMark(
         cueStart: cueStart,
-        videoPosition: position.inMicroseconds / Duration.microsecondsPerSecond,
+        videoPosition: inForce.speed * cueStart + inForce.delay,
       ),
-      inForce: _timing,
+      inForce: inForce,
     );
     _calibration = result.calibration;
     setState(() => _markNote = result.outcome.note);

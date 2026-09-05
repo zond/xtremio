@@ -201,10 +201,22 @@ and neither is true any more. Each rule below has a test; see
   fix for a language that answers with one file, or with several sharing
   the same bad timing, which is where a match has nothing to measure
   against. A press pairs the cue's own time in the file with the video
-  position it was pressed at and never the shift in force, because the
-  second mark moves that shift itself; the marks belong to the file that
-  was playing and `_resetSubtitleTiming` throws them away with the rest
-  of it, and only what they derive is remembered.
+  position that cue is *drawn* at -- the transform the viewer has just
+  approved, applied -- and **never with the instant the button was
+  pressed**: a cue stays on screen for seconds and `sub-start` answers
+  throughout them, so the press instant is a reaction time, and a mark
+  made of it pushes a subtitle that was in step late by however long the
+  press took, off the button that says it was right. So one mark changes
+  nothing and is meant to -- the viewer already put the line where it
+  belongs by hand, and the mark writes down where that was. What learns
+  a rate is a second mark far off, made after the strides have put the
+  picture right out there; the pair is two points on one line because
+  each is a judgement about where a cue belongs, which stays true
+  whatever transform was in force when it was made, and that is what
+  makes a mark a correspondence rather than the shift in force written
+  down. The marks belong to the file that was playing and
+  `_resetSubtitleTiming` throws them away with the rest of it, and only
+  what they derive is remembered.
 - **What `sub-start` answers was measured, not read.** The property
   reports the cue's **raw time in the file**, moved by neither
   `sub-delay` nor `sub-speed`, so a mark takes it as it stands. That was
