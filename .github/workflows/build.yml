@@ -214,7 +214,16 @@ jobs:
           # this is spelled out twice is that the runner has no make.
           version=$(sed -n 's/^version: //p' pubspec.yaml | tr -d '\r')
           commit=$(git rev-parse --short HEAD | tr -d '\r')
-          [ -z "$(git status --porcelain)" ] || commit="$commit-dirty"
+          dirt=$(git status --porcelain)
+          if [ -n "$dirt" ]; then
+            commit="$commit-dirty"
+            echo "Not building from a clean tree, so the stamp says so:"
+            echo "$dirt"
+          fi
+          # What `make version` prints, for the same reason: every other job
+          # gets its stamp echoed by make, and this one is the build nobody
+          # can go and look at the tree of afterwards.
+          echo "XTREMIO_VERSION=$version XTREMIO_GIT_COMMIT=$commit"
           flutter build windows --release \
             --dart-define=XTREMIO_VERSION="$version" \
             --dart-define=XTREMIO_GIT_COMMIT="$commit"
