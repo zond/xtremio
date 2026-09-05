@@ -163,9 +163,14 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   /// The demuxer's seekable ranges, in whole seconds of playback time.
   ///
-  /// `none` is a reading, not a blank: a demuxer that reports no range at
-  /// all is one that will refuse every seek, which is what "the position
-  /// jumps back" is from the sofa.
+  /// `none` is a reading and not a blank -- but it is not on its own a
+  /// fault, and it must not be read as one. mpv refuses a seek on
+  /// `seekable`; the ranges say only what the cache can serve without
+  /// going back to the demuxer, and nothing is recorded until a whole
+  /// keyframe range has been queued, so `none` is what every file reads
+  /// for its first seconds while every seek works. What the row is for is
+  /// the pair: which parts a seek lands in without a wait, next to the
+  /// `seekable`/`partially` row that says whether one can be made at all.
   static String _ranges(List<SeekableRange> ranges) => ranges.isEmpty
       ? 'none'
       : [

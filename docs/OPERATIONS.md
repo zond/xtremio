@@ -160,6 +160,15 @@ else. An addon's own URL is not forced and both rows read straight, `no`
 included. Both rows are absent when mpv answered neither, since a dash
 there would be a measurement nobody made.
 
+**`ranges none` is not a fault on its own.** The ranges say what the
+cache can serve a seek from without going back to the demuxer, not
+whether a seek can be made — that is the `seekable` row. Nothing is
+recorded there until a whole keyframe range has been queued, so every
+file reads `none` for its first seconds while every seek works. Read it
+next to the row above, as "which parts land without a wait"; `ranges`
+says `none` only when mpv answered with no ranges, and the row is absent
+when it did not answer.
+
 For a torrent it also carries the swarm, from the same `stats.json` the
 start-up and stall cards read: download speed, `<connectedSeeders>
 connected` seeds, `<live> connected / <seen> found` peers, a `swarm` row,

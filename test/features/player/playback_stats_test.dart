@@ -171,11 +171,11 @@ void main() {
   });
 
   test('no range is an answer; no answer is not', () {
-    // Two different readings the panel must not confuse. A demuxer that
-    // reports no seekable range at all will refuse every seek, which is
-    // the fault being chased; a backend that does not answer has told us
-    // nothing, and a row claiming `none` there would be a measurement
-    // nobody made.
+    // Two different readings the panel must not confuse. `none` is mpv
+    // saying the cache can serve a seek from nowhere yet -- which is what
+    // every file reads for its first seconds, and not on its own a fault;
+    // a backend that does not answer has told us nothing, and a row
+    // claiming `none` there would be a measurement nobody made.
     final none = PlaybackStats.fromMpv({
       'seekable': 'no',
       'demuxer-cache-state': '{"seekable-ranges":[]}',

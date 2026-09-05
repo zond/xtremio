@@ -189,10 +189,15 @@ class PlaybackStats {
   final bool? partiallySeekable;
   final bool? seekableForced;
 
-  /// What the demuxer says it can currently seek within
+  /// What the cache can currently serve a seek from
   /// (`demuxer-cache-state`'s `seekable-ranges`). Null when mpv did not
   /// answer at all; empty when it answered with no ranges, which is not
-  /// the same thing and is exactly the reading this is here for.
+  /// the same thing.
+  ///
+  /// Not what decides whether a seek is refused -- [seekable] is that --
+  /// and a range is recorded only once a whole keyframe range is queued,
+  /// so an empty list is what every file reads for its first seconds
+  /// while every seek works normally.
   final List<SeekableRange>? seekableRanges;
 
   /// The seekable ranges out of `demuxer-cache-state`, which mpv answers
