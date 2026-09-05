@@ -38,7 +38,14 @@ import '../../widgets/focusable_tile.dart';
 ///   exactly one row is open at a time and Back closes it, which is a
 ///   different thing wearing the same word. Nothing about opening a group
 ///   on a television is written down.
-class TvSourceRows extends StatefulWidget {
+///
+/// Closing the second row takes the card the remote was on off the screen
+/// with it, and nothing here puts the remote back: the enclosing
+/// [FocusScope] remembers what held focus before and hands it the ring
+/// when a focused node goes away, which is the group card that opened the
+/// row. A test walks that path, because "focus nowhere" on a television is
+/// a dead D-pad and the fallback is the only thing standing between them.
+class TvSourceRows extends StatelessWidget {
   const TvSourceRows({
     super.key,
     required this.groups,
@@ -104,47 +111,9 @@ class TvSourceRows extends StatefulWidget {
       math.max(1, TvDensity.textFactorOf(context));
 
   @override
-  State<TvSourceRows> createState() => _TvSourceRowsState();
-}
-
-class _TvSourceRowsState extends State<TvSourceRows> {
-  /// One node per group card, so closing the second row can put the remote
-  /// back on the card it was opened from.
-  final Map<String, FocusNode> _cards = {};
-
-  @override
-  void didUpdateWidget(TvSourceRows oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final closed = oldWidget.openLabel;
-    if (closed == null || widget.openLabel != null) return;
-    // The second row has gone, and with it whatever the remote was on. It
-    // belongs on the card that opened it -- not nowhere, which on a
-    // television is a dead D-pad.
-    final node = _cards[closed];
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && node != null && node.canRequestFocus) node.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    for (final node in _cards.values) {
-      node.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final groups = widget.groups;
     if (groups.isEmpty) return const SizedBox.shrink();
-    final labels = {for (final group in groups) group.label};
-    _cards.removeWhere((label, node) {
-      if (labels.contains(label)) return false;
-      node.dispose();
-      return true;
-    });
-    final open = groups.where((g) => g.label == widget.openLabel).firstOrNull;
+    final open = groups.where((g) => g.label == openLabel).firstOrNull;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -158,12 +127,10 @@ class _TvSourceRowsState extends State<TvSourceRows> {
                   width: TvSourceRows.groupCardWidth,
                   child: TvSourceGroupCard(
                     group: group,
-                    chosen: group.label == widget.openLabel,
-                    focusNode: _cards.putIfAbsent(group.label, FocusNode.new),
-                    defaultFocus: widget.defaultFocus && index == 0,
-                    onTap: () => widget.onOpen(
-                      group.label == widget.openLabel ? null : group.label,
-                    ),
+                    chosen: group.label == openLabel,
+                    defaultFocus: defaultFocus && index == 0,
+                    onTap: () =>
+                        onOpen(group.label == openLabel ? null : group.label),
                   ),
                 ),
             ],
@@ -238,7 +205,6 @@ class TvSourceGroupCard extends StatelessWidget {
     required this.group,
     required this.chosen,
     required this.onTap,
-    this.focusNode,
     this.defaultFocus = false,
   });
 
@@ -248,7 +214,6 @@ class TvSourceGroupCard extends StatelessWidget {
   final bool chosen;
 
   final VoidCallback onTap;
-  final FocusNode? focusNode;
   final bool defaultFocus;
 
   @override
@@ -257,7 +222,6 @@ class TvSourceGroupCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     return FocusableTile(
       onTap: onTap,
-      focusNode: focusNode,
       defaultFocus: defaultFocus,
       borderRadius: _cardRadius,
       child: _CardBox(

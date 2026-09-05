@@ -470,8 +470,10 @@ void main() {
 
       expect(find.byType(TvSourceCard), findsNothing);
       expect(find.byType(MetaDetailsScreen), findsOneWidget);
-      // The row the remote was in has gone, so it belongs on the card that
-      // opened it rather than nowhere, which is a dead D-pad.
+      // The card the remote was on went with the row, and the ring lands
+      // back on the one that opened it -- the enclosing scope's own memory
+      // of what held focus before, which is all that stands between this
+      // and a dead D-pad.
       expect(focusedLabel(tester), '2160p');
       expect(focusIn<TvSourceGroupCard>(), isTrue);
     });
