@@ -24,6 +24,36 @@ void main() {
     return harness;
   }
 
+  /// A television playing, with the player pushed onto a route so there is
+  /// something to pop back to -- which is how the app opens it, and which
+  /// [PlayerHarness.pump] on its own is not: mounted as the root route,
+  /// nothing can leave the player at all.
+  Future<void> pumpPushedTv(WidgetTester tester) async {
+    useScreen(tester, tvSize);
+    final harness = PlayerHarness(device: tv);
+    await harness.pump(
+      tester,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute<void>(builder: (_) => harness.screen())),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    harness.engine.emitDuration(total);
+    harness.engine.emitPosition(const Duration(seconds: 65));
+    // Playing, so the OSD is a bar that could fade: the top rung of the
+    // Back ladder only exists while it is one.
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+  }
+
   testWidgets('controls fade while playing and come back on input', (
     tester,
   ) async {
@@ -320,5 +350,35 @@ void main() {
       harness.engine.lastSubtitleBottomPadding,
       96 + PlayerScreen.subtitleControlGap,
     );
+  });
+
+  testWidgets('the back arrow leaves the player with the OSD up', (
+    tester,
+  ) async {
+    await pumpPushedTv(tester);
+    expect(controlsOpacity(tester), 1);
+
+    // One press, not two. The arrow is drawn on the OSD, so a
+    // `Navigator.maybePop` here would spend the press on the ladder's top
+    // rung -- putting away the bar the viewer just aimed at and leaving
+    // them in the film.
+    await tester.tap(find.byKey(const ValueKey('back')));
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerScreen), findsNothing);
+  });
+
+  testWidgets('the Back key still comes down the ladder', (tester) async {
+    await pumpPushedTv(tester);
+    expect(controlsOpacity(tester), 1);
+
+    // The key is one press for every layer, so it takes them in order:
+    // the OSD first, the player only once there is nothing left to put
+    // away. This is deliberately not what the arrow does.
+    await systemBack(tester);
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    expect(controlsOpacity(tester), 0);
+
+    await systemBack(tester);
+    expect(find.byType(PlayerScreen), findsNothing);
   });
 }

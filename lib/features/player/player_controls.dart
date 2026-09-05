@@ -20,6 +20,7 @@ class PlayerTopBar extends StatelessWidget {
   const PlayerTopBar({
     super.key,
     required this.title,
+    required this.onBack,
     required this.subtitlesOn,
     required this.onSubtitles,
     required this.onAudio,
@@ -33,6 +34,13 @@ class PlayerTopBar extends StatelessWidget {
   });
 
   final String title;
+
+  /// What the arrow does. It is an explicit "leave the player", not a
+  /// back gesture: a `Navigator.maybePop` here would spend the press on
+  /// the Back ladder's top rung -- dismissing the very OSD the arrow is
+  /// drawn on -- and leave the viewer where they were.
+  final VoidCallback onBack;
+
   final bool subtitlesOn;
 
   /// Null hides the button (no subtitle support wired up).
@@ -82,7 +90,7 @@ class PlayerTopBar extends StatelessWidget {
               tooltip: MaterialLocalizations.of(context).backButtonTooltip,
               color: Colors.white,
               focusNode: firstFocusNode,
-              onPressed: () => Navigator.maybePop(context),
+              onPressed: onBack,
               icon: const BackButtonIcon(),
             ),
             Expanded(

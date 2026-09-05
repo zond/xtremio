@@ -2786,8 +2786,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _hideControls();
   }
 
-  /// Leaves the player past that ladder: Stop ends the session, and what
-  /// happens to be on screen at the time does not change that.
+  /// Leaves the player past that ladder: the remote's Stop key and the
+  /// bar's own back arrow both end the session, and what happens to be on
+  /// screen at the time does not change that.
+  ///
+  /// The ladder belongs to Back, which is one key for every layer and so
+  /// has to take them in order. The arrow is a control the viewer aimed
+  /// at, and the layer it would put away first is the OSD it is drawn on.
   void _leavePlayer() {
     final navigator = Navigator.of(context);
     if (navigator.canPop()) navigator.pop();
@@ -3236,6 +3241,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           children: [
                             PlayerTopBar(
                               title: state?.title ?? '',
+                              onBack: _leavePlayer,
                               subtitlesOn:
                                   _tracks.value.activeSubtitleId != null,
                               onSubtitles: _openSubtitleMenu,
