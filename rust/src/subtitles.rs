@@ -110,7 +110,11 @@ fn timestamp_seconds(stamp: &str) -> Option<f64> {
         }
         None => 0.0,
     };
-    Some(f64::from(hours * 3600 + minutes * 60 + seconds) + fraction)
+    // Each field is widened before it is scaled, because the arithmetic
+    // is over a number a stranger's file chose: `hours * 3600` overflows
+    // `u32` past 1,193,046 hours, which panics a debug build and wraps a
+    // release one into a timestamp the file never carried.
+    Some(f64::from(hours) * 3600.0 + f64::from(minutes) * 60.0 + f64::from(seconds) + fraction)
 }
 
 /// The line that maps the playing subtitle's clock onto the reference's,
@@ -929,6 +933,23 @@ mod tests {
         assert_eq!(timestamp_seconds("00:00:01,500"), Some(1.5));
         assert_eq!(timestamp_seconds("00:00:01"), Some(1.0));
         assert_eq!(timestamp_seconds("1:02:03,000"), Some(3723.0));
+    }
+
+    #[test]
+    fn an_absurd_hour_is_a_number_and_not_an_overflow() {
+        // The hours are whatever the file wrote, and a file is a stranger's:
+        // scaling them inside `u32` panics a debug build past 1,193,046 and
+        // wraps a release one, which is a timestamp nothing in the file ever
+        // said. What such a cue then costs is `cue_spans`' problem, not this
+        // function's.
+        assert_eq!(
+            timestamp_seconds("1193047:00:00,000"),
+            Some(4_294_969_200.0)
+        );
+        assert_eq!(
+            timestamp_seconds("4000000:00:00,000"),
+            Some(14_400_000_000.0)
+        );
     }
 
     #[test]
