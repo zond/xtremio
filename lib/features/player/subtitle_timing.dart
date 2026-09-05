@@ -26,11 +26,22 @@ import 'subtitle_groups.dart';
 ///
 /// The shift is counted in integer presses so that ten forward and ten
 /// back land exactly where they started; a double accumulated a tenth at
-/// a time does not. The speed is not counted at all -- it is one
+/// a time does not. The toggle is not counted at all -- it is one
 /// direction or none.
+///
+/// Both also have a measured form ([calibratedSpeed], [calibratedDelay]),
+/// which is what the viewer marking the picture right solves for
+/// (`SubtitleCalibration`). A measurement wins over the toggle and the
+/// presses count on top of the measured offset, so pressing after a
+/// calibration still comes back to it exactly.
 @immutable
 final class SubtitleTiming {
-  const SubtitleTiming({this.shiftSteps = 0, this.speedDirection});
+  const SubtitleTiming({
+    this.shiftSteps = 0,
+    this.speedDirection,
+    this.calibratedSpeed,
+    this.calibratedDelay,
+  });
 
   /// Presses of the shift control, positive being later.
   final int shiftSteps;
@@ -45,6 +56,24 @@ final class SubtitleTiming {
   /// than on the ratio squared, which is a place no viewer means to
   /// arrive.
   final SubtitleSpeedDirection? speedDirection;
+
+  /// The ratio a calibration solved for, and null when none has.
+  ///
+  /// It wins over [speedDirection], which is a guess at the same
+  /// quantity from a declared frame rate: two marks far enough apart
+  /// measure the drift on this pair of files instead of naming the
+  /// family it probably came from. The owner's own Swedish file wants
+  /// 1.0440 where the PAL constant is 1.0427, which is three seconds
+  /// across an episode that no toggle reaches.
+  final double? calibratedSpeed;
+
+  /// The offset a calibration solved for, in seconds, and null when none
+  /// has.
+  ///
+  /// The presses are counted on top of it rather than folded into it, so
+  /// a nudge after a calibration still comes back to the calibrated
+  /// value exactly.
+  final double? calibratedDelay;
 
   /// One press of the shift control. A tenth of a second is about the
   /// smallest offset that is visible against speech and small enough that
@@ -63,24 +92,30 @@ final class SubtitleTiming {
 
   /// The offset for libmpv's `sub-delay`, in seconds. Positive delays the
   /// lines, which is mpv's own sign.
-  double get delay => shiftSteps * shiftStep;
+  double get delay => (calibratedDelay ?? 0) + shiftSteps * shiftStep;
 
   /// The multiplier for libmpv's `sub-speed`: three values and no
   /// others, all of them well inside the `<0.1-10.0>` mpv accepts.
-  double get speed => switch (speedDirection) {
-    null => 1,
-    SubtitleSpeedDirection.stretch => speedStep,
-    SubtitleSpeedDirection.compress => 1 / speedStep,
-  };
+  double get speed =>
+      calibratedSpeed ??
+      switch (speedDirection) {
+        null => 1,
+        SubtitleSpeedDirection.stretch => speedStep,
+        SubtitleSpeedDirection.compress => 1 / speedStep,
+      };
 
   /// The viewer has touched something, so there is a correction of theirs
   /// to undo. Reset is offered for exactly this.
-  bool get adjusted => shiftSteps != 0 || speedDirection != null;
+  bool get adjusted =>
+      shiftSteps != 0 ||
+      speedDirection != null ||
+      calibratedSpeed != null ||
+      calibratedDelay != null;
 
   /// The offset as the overlay shows it: signed, because which way it has
   /// gone is the whole of what a viewer is tracking between presses.
   String get shiftText =>
-      '${shiftSteps > 0 ? '+' : ''}${delay.toStringAsFixed(1)} s';
+      '${delay > 0 ? '+' : ''}${delay.toStringAsFixed(1)} s';
 
   /// The multiplier as the overlay shows it. Three decimals is what
   /// separates the correction from the file's own timing.
@@ -90,29 +125,39 @@ final class SubtitleTiming {
   SubtitleTiming shiftedBy(int steps) => SubtitleTiming(
     shiftSteps: shiftSteps + steps,
     speedDirection: speedDirection,
+    calibratedSpeed: calibratedSpeed,
+    calibratedDelay: calibratedDelay,
   );
 
   /// [direction] applied, or taken off again when it is already what is
   /// in force: the control is a toggle, so a second press is how a
   /// viewer who judged wrong gets back to exactly 1.0.
+  /// A calibrated ratio is dropped by the press: it is the same quantity
+  /// measured rather than judged, and leaving it in force would make the
+  /// button do nothing at all.
   SubtitleTiming toggledSpeed(SubtitleSpeedDirection direction) =>
       SubtitleTiming(
         shiftSteps: shiftSteps,
         speedDirection: speedDirection == direction ? null : direction,
+        calibratedDelay: calibratedDelay,
       );
 
   @override
   bool operator ==(Object other) =>
       other is SubtitleTiming &&
       other.shiftSteps == shiftSteps &&
-      other.speedDirection == speedDirection;
+      other.speedDirection == speedDirection &&
+      other.calibratedSpeed == calibratedSpeed &&
+      other.calibratedDelay == calibratedDelay;
 
   @override
-  int get hashCode => Object.hash(shiftSteps, speedDirection);
+  int get hashCode =>
+      Object.hash(shiftSteps, speedDirection, calibratedSpeed, calibratedDelay);
 
   @override
   String toString() =>
-      'SubtitleTiming(shift: $shiftSteps, speed: ${speedDirection?.name})';
+      'SubtitleTiming(delay: $delay, speed: $speed, '
+      'shift: $shiftSteps, direction: ${speedDirection?.name})';
 }
 
 /// The panel that drives a [SubtitleTiming]: a stepper, a toggle and a
