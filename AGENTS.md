@@ -496,7 +496,7 @@ an immutable record, so the rule can change without a migration. Empty is
 its own bucket, never folded into failed; a sweep in which every addon
 failed is recorded against nobody; and the embedded server and the local
 addon are never recorded against, on top of a protected addon never being
-labelled. See README, "Which addons are worth keeping".
+labelled. See `docs/ADDONS.md`.
 
 ## Eleven rules a real device taught us
 
