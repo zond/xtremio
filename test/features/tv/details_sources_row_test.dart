@@ -355,6 +355,55 @@ void main() {
     expect(focusedLabel(tester), 'Release 19');
   });
 
+  testWidgets('a sideways press at the end of a row stays in the row', (
+    tester,
+  ) async {
+    // Directional focus takes the nearest node in the direction pressed,
+    // and the nearest thing to the right of the last card is not in the
+    // row at all -- it was the layout toggle in the header, three rows
+    // up, reached by a press that reads as "next card".
+    await mount(
+      tester,
+      movieWith([
+        group('alpha.example', [
+          torrent(hash(1), 'Alpha 1080p a', '\u{1f464} 5 \u{1f4be} 1 GB'),
+          torrent(hash(2), 'Alpha 1080p b', '\u{1f464} 5 \u{1f4be} 1 GB'),
+          torrent(hash(3), 'Alpha 720p', '\u{1f464} 5 \u{1f4be} 1 GB'),
+        ]),
+      ]),
+      sectioned: true,
+    );
+
+    // The group row: left at the first rung and right past the last.
+    expect(focusedLabel(tester), '1080p');
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedLabel(tester), '1080p');
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedLabel(tester), '720p');
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedLabel(tester), '720p');
+    expect(focusIn<TvSourceGroupCard>(), isTrue);
+
+    // And the row of sources it opens, which is the one with cards wide
+    // enough to run off the panel.
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    await press(tester, LogicalKeyboardKey.select);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), 'Alpha 1080p a');
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedLabel(tester), 'Alpha 1080p a');
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedLabel(tester), 'Alpha 1080p b');
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedLabel(tester), 'Alpha 1080p b');
+    expect(focusIn<TvSourceCard>(), isTrue);
+
+    // Up and down still leave: only the two keys that run along the row
+    // are taken.
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusIn<TvSourceGroupCard>(), isTrue);
+  });
+
   testWidgets('a rung the streams stop offering stops taking the Back '
       'press with it', (tester) async {
     // The row is drawn for a group that is *there*, so a label naming one

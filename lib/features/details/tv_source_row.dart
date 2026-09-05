@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/download_badge.dart';
 import '../../widgets/focusable_tile.dart';
@@ -176,25 +178,63 @@ class TvSourceRow extends StatelessWidget {
 }
 
 /// A row of cards the remote walks end to end, built all at once (see
-/// [TvSourceRows]).
+/// [TvSourceRows]), and which a sideways press cannot walk out of.
+///
+/// Directional traversal takes the nearest node in the direction pressed,
+/// and "nearest" is not confined to the row: a press past the last card
+/// found the layout toggle in the header above and left the sources
+/// altogether, several rows from where the remote was, with no press that
+/// obviously undoes it. So the two keys that run along the row are
+/// swallowed at its ends -- the same thing the shell's rail does with up
+/// and down at its own ends, and for the same reason. Every other key
+/// passes, so up and down still leave the row.
 class _Strip extends StatelessWidget {
   const _Strip({required this.children});
 
   final List<Widget> children;
 
+  /// Left at the first card and right at the last stay where they are.
+  /// The cards a source cannot be played from are not focus stops and so
+  /// are not in this list, which is what makes the ends the ends.
+  static KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final back = key == LogicalKeyboardKey.arrowLeft;
+    if (!back && key != LogicalKeyboardKey.arrowRight) {
+      return KeyEventResult.ignored;
+    }
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused == null) return KeyEventResult.ignored;
+    final cards = node.traversalDescendants.toList();
+    final index = cards.indexOf(focused);
+    if (index < 0) return KeyEventResult.ignored;
+    final atEnd = back ? index == 0 : index == cards.length - 1;
+    return atEnd ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    padding: const EdgeInsets.symmetric(
-      horizontal: TvSourceRows.sidePadding,
-      vertical: TvSourceRows.focusSlack,
-    ),
-    child: Row(
-      spacing: TvSourceRows.gap,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
-    ),
-  );
+  Widget build(BuildContext context) {
+    final strip = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(
+        horizontal: TvSourceRows.sidePadding,
+        vertical: TvSourceRows.focusSlack,
+      ),
+      child: Row(
+        spacing: TvSourceRows.gap,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
+    if (!DeviceScope.isTv(context)) return strip;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      includeSemantics: false,
+      onKeyEvent: _onKey,
+      child: strip,
+    );
+  }
 }
 
 /// One card of the first row: a resolution rung or an addon, what it
