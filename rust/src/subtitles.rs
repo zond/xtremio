@@ -835,6 +835,11 @@ mod tests {
         // Both of these overlap the playing file heavily in absolute
         // terms -- text is on screen two thirds of the time in all of them
         // -- which is exactly what the normalisation is for.
+        //
+        // The second is retimed by a ratio the search *can* reach, so what
+        // refuses it is the evidence and not the rate window: a wrong file
+        // stretched into the right shape is the thing a window from 0.90 to
+        // 1.10 cannot be asked to rule out.
         let playing = synthetic_cues(400);
         for (what, unrelated) in [
             (
@@ -843,7 +848,11 @@ mod tests {
             ),
             (
                 "another episode retimed",
-                retimed(&synthetic_cues(400), 1.11, 173.0),
+                retimed(
+                    &synthetic_cues_from(0xa076_1d64_78bd_642f, 400),
+                    1.0427,
+                    173.0,
+                ),
             ),
         ] {
             let alignment = align(&playing, &unrelated).expect("align");
