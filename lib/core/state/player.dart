@@ -391,11 +391,6 @@ final class PlayerState {
     return result;
   }
 
-  /// [externalSubtitleSources] without the provenance.
-  List<SubtitleInfo> get externalSubtitles => [
-    for (final source in externalSubtitleSources) source.subtitle,
-  ];
-
   /// Some subtitle addon has not answered yet.
   bool get subtitlesLoading => subtitles.any((entry) => entry.isLoading);
 

@@ -530,7 +530,9 @@ void main() {
       });
       expect(state.subtitles, hasLength(3));
       expect(state.subtitlesLoading, isTrue);
-      final external = state.externalSubtitles;
+      final external = [
+        for (final source in state.externalSubtitleSources) source.subtitle,
+      ];
       expect(external.map((s) => s.url.toString()), [eng, spa]);
       expect(external.first.label, 'English (SDH)');
       expect(external.last.lang, 'spa');
@@ -684,7 +686,7 @@ void main() {
           {'id': '3', 'lang': 'eng', 'url': 'https://subs.example.org/1.srt/'},
         ],
       });
-      expect(byUrl.externalSubtitles, hasLength(1));
+      expect(byUrl.externalSubtitleSources, hasLength(1));
       expect(
         byUrl.externalSubtitleSources.single.addonBase,
         'https://a/manifest.json',
@@ -701,7 +703,7 @@ void main() {
           {'id': '3093321', 'lang': 'pob', 'url': 'https://mirror.example/b'},
         ],
       });
-      expect(byId.externalSubtitles, hasLength(1));
+      expect(byId.externalSubtitleSources, hasLength(1));
 
       // An id is only an identity within one language: two addons that
       // both number their answers from 1 do not merge unrelated files.
@@ -713,7 +715,7 @@ void main() {
           {'id': '1', 'lang': 'fre', 'url': 'https://b.example/1.srt'},
         ],
       });
-      expect(collided.externalSubtitles, hasLength(2));
+      expect(collided.externalSubtitleSources, hasLength(2));
 
       // The query is part of the file: `senc` picks its encoding.
       final encodings = stateWith({
@@ -726,7 +728,7 @@ void main() {
           },
         ],
       });
-      expect(encodings.externalSubtitles, hasLength(2));
+      expect(encodings.externalSubtitleSources, hasLength(2));
     });
 
     test('says which addon each file came from', () {
@@ -750,7 +752,7 @@ void main() {
       final state = PlayerState.fromJson(loadPlayerFixture());
       expect(state.subtitles, isEmpty);
       expect(state.subtitlesLoading, isFalse);
-      expect(state.externalSubtitles, isEmpty);
+      expect(state.externalSubtitleSources, isEmpty);
       expect(state.subtitlePreference, isNull);
       expect(state.nextStream, isNull);
       expect(state.convertedStream?.infoHash, state.selectedStream?.infoHash);
