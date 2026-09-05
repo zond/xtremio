@@ -199,6 +199,19 @@ class AddonHealthEvidence extends StatelessWidget {
   final DateTime now;
 
   static const String neverWorked = 'Never worked';
+
+  /// What [AddonHealthVerdict.neverAnswered] is claiming, and the bounds of
+  /// it. The verdict is the only one strong enough to act on without
+  /// weighing anything up, so the dialog behind it says exactly what was
+  /// measured: requests this device made, over the life of this record,
+  /// and nothing else. An addon the rest of the world can reach reads the
+  /// same as one that is gone, and this sentence is what keeps the chip
+  /// from claiming otherwise.
+  static const String neverAnsweredHere =
+      'Every request this device has made of it failed. It has never once '
+      'answered here, over the whole record kept for it, which begins when '
+      'it was installed. That is all that was measured — it may well be '
+      'answering someone else.';
   static const String notAsked = 'not asked yet';
   static const String fading =
       'Counts fade: an answer is worth half as much a fortnight later, so an '
@@ -262,6 +275,15 @@ class AddonHealthEvidence extends StatelessWidget {
               lastWorked(health.lastOk, now),
               style: theme.textTheme.bodyMedium,
             ),
+            if (verdict == AddonHealthVerdict.neverAnswered) ...[
+              const SizedBox(height: 8),
+              Text(
+                neverAnsweredHere,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             for (final kind in kinds)
               Padding(

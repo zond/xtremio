@@ -278,6 +278,41 @@ void main() {
     expect(listedNames(tester), profileOrder);
   });
 
+  testWidgets('the evidence says what was actually measured', (tester) async {
+    // WatchHub has failed every request it was ever given, which is the
+    // strongest thing this app says about an addon -- and the weakest
+    // possible claim about the addon itself.
+    await pumpScreen(
+      tester,
+      health: FakeAddonHealthClient(
+        addons: {
+          ...records(),
+          addonHealthKey(watchhub): {
+            AddonResourceKind.stream: record(fail: 12),
+          },
+        },
+      ),
+    );
+    await tester.tap(chipOf('WatchHub'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(AddonHealthEvidence.neverAnsweredHere), findsOneWidget);
+    expect(find.text(AddonHealthEvidence.neverWorked), findsOneWidget);
+    expect(
+      find.text('streams · 0 answered · 0 empty · 12 failed'),
+      findsOneWidget,
+    );
+
+    // It is said about that addon and no other: the one that is merely
+    // unreliable answered once, and the dialog behind it must not claim
+    // otherwise.
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    await tester.tap(chipOf('Public Domain Movies'));
+    await tester.pumpAndSettle();
+    expect(find.text(AddonHealthEvidence.neverAnsweredHere), findsNothing);
+  });
+
   testWidgets('the one that never answered sorts above the unreliable one', (
     tester,
   ) async {
