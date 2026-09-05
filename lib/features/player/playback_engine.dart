@@ -294,7 +294,33 @@ class MediaKitEngine implements PlaybackEngine {
   /// seconds and starts over" is. Five minutes is long enough that no
   /// swarm trips it and short enough that a connection that is really gone
   /// still ends up an error rather than a hang.
-  static const Map<String, String> mpvOverrides = {'network-timeout': '300'};
+  ///
+  /// `force-seekable`: mpv refuses a seek the demuxer says it cannot make
+  /// -- it restores the position rather than waiting -- and a demuxer
+  /// decides that from what it could read when the file opened, not from
+  /// what the stream can serve. A Matroska file keeps its index at the
+  /// end, which on a torrent is the last thing to arrive, so the demuxer
+  /// concludes the file is unseekable and every seek past the buffered
+  /// part puts the position straight back. The option exists for exactly
+  /// the case where the caller knows better than the demuxer, and here we
+  /// do: `server/src/routes/stream.rs` answers any byte range with
+  /// `Accept-Ranges: bytes`, seeks the torrent reader to the offset --
+  /// which re-prioritises the swarm around it -- and streams from there.
+  /// A cold offset waits; it is never refused. So the honest thing to
+  /// tell mpv is that the stream is seekable, and let a seek into a part
+  /// nobody has yet be the wait it really is -- a wait `network-timeout`
+  /// above already covers, and one longer than that arrives as the false
+  /// end of file the player re-opens from.
+  ///
+  /// What it cannot do is invent an index. A demuxer with no index at all
+  /// may still refuse the seek itself, which is a different fault with a
+  /// different fix (fetching the tail of the file at open, on the server
+  /// side), and the stats OSD's `seekable` and `ranges` rows are what
+  /// tell the two apart.
+  static const Map<String, String> mpvOverrides = {
+    'network-timeout': '300',
+    'force-seekable': 'yes',
+  };
 
   /// Sets [mpvOverrides] on the native backend. Only libmpv has
   /// properties; any other backend keeps its own behaviour, and a player

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/seek_bar.dart';
 
@@ -37,6 +38,16 @@ void main() {
     );
     await tester.pump();
   }
+
+  test('mpv is told the stream is seekable, because it is', () {
+    // A demuxer decides seekability from what it could read when the file
+    // opened -- a Matroska index sits at the end of the file, which on a
+    // torrent arrives last -- and mpv then restores the position instead
+    // of seeking. The embedded server serves any byte range and waits for
+    // a cold one rather than refusing it, so this is the one place where
+    // the caller really does know better than the demuxer.
+    expect(MediaKitEngine.mpvOverrides['force-seekable'], 'yes');
+  });
 
   testWidgets('a seek that leaves the position where it was is written down', (
     tester,
