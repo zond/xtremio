@@ -51,10 +51,12 @@ pub type Cue = (f64, f64);
 /// settings (`line:90% align:middle`) after the end time, so only the
 /// first token on the right of the arrow is read.
 ///
-/// Cues are *not* deduplicated and *not* merged: two boxes on screen
-/// together are one lit interval once the bitmap is built, and a cue whose
-/// end precedes its start is dropped because it describes no interval at
-/// all. Sorted because the extent of the file is read off the ends.
+/// Cues are *not* deduplicated and *not* merged, because [`Bitmap::of`]
+/// takes their union rather than their sum: two boxes on screen together
+/// are one lit interval once the bitmap is built. A cue whose end precedes
+/// its start is dropped because it describes no interval at all. **Sorted**
+/// because the extent of the file is read off the ends, and because that
+/// union is taken in one pass over cues in order of when they go up.
 ///
 /// **A cue past the file's [`horizon`] is dropped too**, and for the same
 /// reason: it parses, but it does not describe this recording. Everything
@@ -514,11 +516,33 @@ impl Bitmap {
     /// nearer answer keeps a file's density roughly what it is at every bin
     /// width, so the coarse pass and the fine passes are measuring the same
     /// thing at different resolutions.
+    ///
+    /// **What covers a bin is the union of the cues over it, not their
+    /// sum.** Two boxes on screen together -- an SDH speaker label beside
+    /// the line it belongs to, a sign captioned over dialogue, a song
+    /// subtitle under both -- are one lit interval and not two, and adding
+    /// their shares up counts the same moment as many times as the file
+    /// happens to write it: measured on the tests' own file with every cue
+    /// written twice, the coarse density read 0.81 where the file's is
+    /// 0.66, which cuts the headroom above chance by nearly half. It also
+    /// breaks the rule above outright -- two cues covering three tenths of
+    /// a bin between them summed to six and lit it. This is why [`cue_spans`]
+    /// does not have to deduplicate, and it is why it sorts: the union is
+    /// taken in one pass over cues in order of when they go up.
     fn of(cues: &[Cue], ratio: f64, bin: f64) -> Self {
         let bins = ((ratio * extent(cues) / bin).ceil() as usize).max(1);
         let mut covered = vec![0.0f64; bins];
+        let mut already_lit_to = 0.0f64;
         for &(start, end) in cues {
             let (start, end) = (ratio * start / bin, ratio * end / bin);
+            // Whatever an earlier cue already covers is already counted, so
+            // this one begins where that left off -- and a cue wholly
+            // inside another adds nothing at all.
+            let start = start.max(already_lit_to);
+            if end <= start {
+                continue;
+            }
+            already_lit_to = end;
             let from = (start.floor().max(0.0) as usize).min(bins);
             let to = ((end.ceil() as usize).max(from + 1)).min(bins);
             for (index, share) in covered.iter_mut().enumerate().take(to).skip(from) {
@@ -1104,6 +1128,41 @@ mod tests {
                 density(bin)
             );
         }
+    }
+
+    #[test]
+    fn two_boxes_on_screen_together_are_one_lit_interval() {
+        // What a file writes twice is not on screen twice. An SDH track
+        // puts the speaker label beside the line, a sign is captioned over
+        // dialogue, a song runs under both -- and summing those shares
+        // counts one moment as many times as the file happens to write it,
+        // which inflates the density the chance term is computed from and
+        // eats the headroom the whole measurement lives in.
+        let cues = synthetic_cues(400);
+        let doubled: Vec<Cue> = cues.iter().flat_map(|&cue| [cue, cue]).collect();
+        for bin in [COARSE_BIN, FINE_BIN, FINEST_BIN] {
+            let once = Bitmap::of(&cues, 1.0, bin);
+            let twice = Bitmap::of(&doubled, 1.0, bin);
+            assert_eq!(twice.bins, once.bins, "{bin}");
+            assert_eq!(twice.lit, once.lit, "{bin}");
+        }
+
+        // Overlapping rather than identical, including one cue wholly
+        // inside another: the union of these is 10 s to 25 s and nothing
+        // else.
+        let nested = [(10.0, 20.0), (11.0, 12.0), (13.0, 25.0)];
+        let map = Bitmap::of(&nested, 1.0, COARSE_BIN);
+        assert_eq!(map.lit, 15, "{} bins", map.bins);
+
+        // And the rule the coarse pass rests on holds: two cues covering
+        // three tenths of a bin between them do not light it. Summed they
+        // came to six tenths and did.
+        let together = cue_spans(
+            "1\n00:00:00,000 --> 00:00:00,300\nA\n\n\
+             2\n00:00:00,000 --> 00:00:00,300\n- B\n",
+        );
+        assert_eq!(together.len(), 2);
+        assert_eq!(Bitmap::of(&together, 1.0, COARSE_BIN).lit, 0);
     }
 
     #[test]
