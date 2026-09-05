@@ -18,8 +18,9 @@ Rust engine for addons, catalogs, library, and playback state) and
 
 ## What it does
 
-All of this is built and runs today; [docs/STATUS.md](docs/STATUS.md) is the
-screen-by-screen inventory of it.
+All of this is built and runs today. [docs/STATUS.md](docs/STATUS.md) is the
+screen-by-screen inventory; what it does not reach -- casting, subtitle
+timing -- is in the document each bullet links.
 
 - **Catalogs, search and a library across every addon installed.** A board of
   continue-watching and a row per catalog that answered, discover over the
