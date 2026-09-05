@@ -95,23 +95,74 @@ void main() {
 
   group('the panel', () {
     /// The overlay over a timing a test drives, recording every press.
+    ///
+    /// Drawn where the player draws it: top right, under the [inset] the
+    /// screen leaves for the OSD's own bar, with no height of its own to
+    /// stand on. What the panel is tall enough for is not something it
+    /// gets to decide.
     Widget panel(
       SubtitleTiming timing, {
       List<int>? shifts,
       VoidCallback? onReset,
       VoidCallback? onClose,
+      VoidCallback? onMatch,
+      String? matchNote,
       FocusNode? firstFocusNode,
+      double inset = 0,
     }) => MaterialApp(
       home: Scaffold(
-        body: SubtitleTimingOverlay(
-          timing: timing,
-          firstFocusNode: firstFocusNode,
-          onShift: (step) => shifts?.add(step),
-          onReset: onReset ?? () {},
-          onClose: onClose ?? () {},
+        body: Padding(
+          padding: EdgeInsets.only(top: inset),
+          child: Align(
+            alignment: Alignment.topRight,
+            child: SubtitleTimingOverlay(
+              timing: timing,
+              firstFocusNode: firstFocusNode,
+              onShift: (step) => shifts?.add(step),
+              onReset: onReset ?? () {},
+              onClose: onClose ?? () {},
+              onMatch: onMatch,
+              matchNote: matchNote,
+            ),
+          ),
         ),
       ),
     );
+
+    testWidgets('the panel fits the room a landscape phone leaves it', (
+      tester,
+    ) async {
+      // 360 dp tall is a Galaxy S-series phone held sideways, and the
+      // player draws the panel 64 below the top of it, so there is under
+      // 300 to sit in. A refusal is what does not fit: "Only 184 of 694
+      // cues matched, so nothing was changed" wraps to three lines, and
+      // the panel that overflowed pushed Reset off the bottom of the
+      // screen -- Reset being the way back from the state the viewer has
+      // just landed in. It is also the one case the panel cannot avoid
+      // reaching, since a refusal is the honest answer to a bad
+      // reference.
+      useScreen(tester, const Size(640, 360));
+      await tester.pumpWidget(
+        panel(
+          const SubtitleTiming(),
+          inset: 64,
+          onMatch: () {},
+          matchNote: 'Only 184 of 694 cues matched, so nothing was changed',
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getRect(find.byType(SubtitleTimingOverlay)).bottom,
+        lessThanOrEqualTo(360),
+      );
+
+      // Reset is below the fold, and the panel's own scroll is what
+      // reaches it -- which is what focus traversal does for a remote and
+      // a drag does for a finger.
+      final reset = find.byKey(const ValueKey('subtitle-timing-reset'));
+      await tester.scrollUntilVisible(reset, 40);
+      expect(tester.getRect(reset).bottom, lessThanOrEqualTo(360));
+    });
 
     testWidgets('each stepper presses in its own direction, once', (
       tester,

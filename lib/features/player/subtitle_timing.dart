@@ -259,99 +259,110 @@ class SubtitleTimingOverlay extends StatelessWidget {
             color: const Color(0xCC000000),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 4, 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
+          // Scrolls rather than overflows, because what the panel is
+          // tall enough for is not something it gets to decide: a
+          // 360 dp-tall phone held sideways leaves it under 300, and the
+          // refusal a match can come back with -- three lines of "only
+          // 184 of 694 cues matched" -- is exactly what does not fit.
+          // Overflowing there pushes Reset off the bottom of the screen,
+          // and Reset is the way back from the state the viewer has just
+          // landed in. Focus traversal scrolls what it moves to, so the
+          // remote still reaches every row.
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 4, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        key: const ValueKey('subtitle-timing-close'),
+                        tooltip: 'Close',
+                        color: Colors.white,
+                        iconSize: 20,
+                        style: focusRing(theme.colorScheme),
+                        onPressed: onClose,
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  if (onMatch != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: const ValueKey('subtitle-match'),
+                        style: focusRing(theme.colorScheme),
+                        // Disabled rather than hidden while one runs: a
+                        // button that vanishes under the remote takes the
+                        // focus ring with it.
+                        onPressed: matching ? null : onMatch,
+                        icon: const Icon(Icons.compare_arrows, size: 18),
+                        label: const Text(matchLabel),
+                      ),
+                    ),
+                  if (matching || matchNote != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 0, 8, 8),
                       child: Text(
-                        title,
-                        style: theme.textTheme.labelLarge?.copyWith(
+                        key: const ValueKey('subtitle-match-note'),
+                        matching ? subtitleMatchingNote : matchNote!,
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: Colors.white70,
                         ),
                       ),
                     ),
-                    IconButton(
-                      key: const ValueKey('subtitle-timing-close'),
-                      tooltip: 'Close',
-                      color: Colors.white,
-                      iconSize: 20,
-                      style: focusRing(theme.colorScheme),
-                      onPressed: onClose,
-                      icon: const Icon(Icons.close),
+                  _TimingRow(
+                    label: shiftLabel,
+                    value: timing.shiftText,
+                    before: _PanelButton(
+                      key: const ValueKey('subtitle-shift-earlier'),
+                      icon: Icons.remove,
+                      tooltip: 'Subtitles earlier',
+                      focusNode: firstFocusNode,
+                      onPress: (fire) => onShift(-shiftStrideAt(fire)),
                     ),
-                  ],
-                ),
-                if (onMatch != null)
+                    after: _PanelButton(
+                      key: const ValueKey('subtitle-shift-later'),
+                      icon: Icons.add,
+                      tooltip: 'Subtitles later',
+                      onPress: (fire) => onShift(shiftStrideAt(fire)),
+                    ),
+                  ),
+                  // Read only: nothing here presses a multiplier any
+                  // more, and what is on it was measured rather than
+                  // judged. It is still shown, because the panel is the
+                  // surface operated after the OSD bar has faded and a
+                  // stretch in force is otherwise invisible -- a subtitle
+                  // that is right at this moment and wrong in ten minutes
+                  // looks exactly like one that is right. The two gaps
+                  // keep the number in the same column as the shift's.
+                  _TimingRow(
+                    label: speedLabel,
+                    value: timing.speedText,
+                    before: const _ButtonGap(),
+                    after: const _ButtonGap(),
+                  ),
                   Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      key: const ValueKey('subtitle-match'),
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      key: const ValueKey('subtitle-timing-reset'),
                       style: focusRing(theme.colorScheme),
-                      // Disabled rather than hidden while one runs: a
-                      // button that vanishes under the remote takes the
-                      // focus ring with it.
-                      onPressed: matching ? null : onMatch,
-                      icon: const Icon(Icons.compare_arrows, size: 18),
-                      label: const Text(matchLabel),
+                      onPressed: timing.adjusted ? onReset : null,
+                      child: const Text(resetLabel),
                     ),
                   ),
-                if (matching || matchNote != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 0, 8, 8),
-                    child: Text(
-                      key: const ValueKey('subtitle-match-note'),
-                      matching ? subtitleMatchingNote : matchNote!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ),
-                _TimingRow(
-                  label: shiftLabel,
-                  value: timing.shiftText,
-                  before: _PanelButton(
-                    key: const ValueKey('subtitle-shift-earlier'),
-                    icon: Icons.remove,
-                    tooltip: 'Subtitles earlier',
-                    focusNode: firstFocusNode,
-                    onPress: (fire) => onShift(-shiftStrideAt(fire)),
-                  ),
-                  after: _PanelButton(
-                    key: const ValueKey('subtitle-shift-later'),
-                    icon: Icons.add,
-                    tooltip: 'Subtitles later',
-                    onPress: (fire) => onShift(shiftStrideAt(fire)),
-                  ),
-                ),
-                // Read only: nothing here presses a multiplier any
-                // more, and what is on it was measured rather than
-                // judged. It is still shown, because the panel is the
-                // surface operated after the OSD bar has faded and a
-                // stretch in force is otherwise invisible -- a subtitle
-                // that is right at this moment and wrong in ten minutes
-                // looks exactly like one that is right. The two gaps
-                // keep the number in the same column as the shift's.
-                _TimingRow(
-                  label: speedLabel,
-                  value: timing.speedText,
-                  before: const _ButtonGap(),
-                  after: const _ButtonGap(),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    key: const ValueKey('subtitle-timing-reset'),
-                    style: focusRing(theme.colorScheme),
-                    onPressed: timing.adjusted ? onReset : null,
-                    child: const Text(resetLabel),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
