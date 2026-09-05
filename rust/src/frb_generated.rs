@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2061349439;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1760243863;
 
 // Section: executor
 
@@ -1249,6 +1249,45 @@ fn wire__crate__api__server__server_update_settings_impl(
         },
     )
 }
+fn wire__crate__api__subtitles__subtitles_match_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "subtitles_match",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_playing_url = <String>::sse_decode(&mut deserializer);
+            let api_reference_url = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::subtitles::subtitles_match(
+                            api_playing_url,
+                            api_reference_url,
+                        )?;
+                        std::result::Result::Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -1324,6 +1363,13 @@ impl SseDecode for crate::api::diagnostics::DiagnosticsSnapshot {
             server_base_url: var_serverBaseUrl,
             log_lines: var_logLines,
         };
+    }
+}
+
+impl SseDecode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_f64::<NativeEndian>().unwrap()
     }
 }
 
@@ -1403,6 +1449,26 @@ impl SseDecode for crate::api::server::ServerConfig {
             cache_dir: var_cacheDir,
             port: var_port,
             fallback_to_ephemeral: var_fallbackToEphemeral,
+        };
+    }
+}
+
+impl SseDecode for crate::api::subtitles::SubtitleMatch {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_ratio = <f64>::sse_decode(deserializer);
+        let mut var_offset = <f64>::sse_decode(deserializer);
+        let mut var_matched = <u32>::sse_decode(deserializer);
+        let mut var_cues = <u32>::sse_decode(deserializer);
+        let mut var_referenceCues = <u32>::sse_decode(deserializer);
+        let mut var_convincing = <bool>::sse_decode(deserializer);
+        return crate::api::subtitles::SubtitleMatch {
+            ratio: var_ratio,
+            offset: var_offset,
+            matched: var_matched,
+            cues: var_cues,
+            reference_cues: var_referenceCues,
+            convincing: var_convincing,
         };
     }
 }
@@ -1508,6 +1574,7 @@ fn pde_ffi_dispatcher_primary_impl(
         35 => {
             wire__crate__api__server__server_update_settings_impl(port, ptr, rust_vec_len, data_len)
         }
+        36 => wire__crate__api__subtitles__subtitles_match_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1621,6 +1688,31 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::server::ServerConfig>
         self
     }
 }
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::subtitles::SubtitleMatch {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.ratio.into_into_dart().into_dart(),
+            self.offset.into_into_dart().into_dart(),
+            self.matched.into_into_dart().into_dart(),
+            self.cues.into_into_dart().into_dart(),
+            self.reference_cues.into_into_dart().into_dart(),
+            self.convincing.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::subtitles::SubtitleMatch
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::subtitles::SubtitleMatch>
+    for crate::api::subtitles::SubtitleMatch
+{
+    fn into_into_dart(self) -> crate::api::subtitles::SubtitleMatch {
+        self
+    }
+}
 
 impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -1675,6 +1767,13 @@ impl SseEncode for crate::api::diagnostics::DiagnosticsSnapshot {
         <Option<String>>::sse_encode(self.stremio_core_rev, serializer);
         <Option<String>>::sse_encode(self.server_base_url, serializer);
         <Vec<String>>::sse_encode(self.log_lines, serializer);
+    }
+}
+
+impl SseEncode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
     }
 }
 
@@ -1742,6 +1841,18 @@ impl SseEncode for crate::api::server::ServerConfig {
         <String>::sse_encode(self.cache_dir, serializer);
         <u16>::sse_encode(self.port, serializer);
         <bool>::sse_encode(self.fallback_to_ephemeral, serializer);
+    }
+}
+
+impl SseEncode for crate::api::subtitles::SubtitleMatch {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <f64>::sse_encode(self.ratio, serializer);
+        <f64>::sse_encode(self.offset, serializer);
+        <u32>::sse_encode(self.matched, serializer);
+        <u32>::sse_encode(self.cues, serializer);
+        <u32>::sse_encode(self.reference_cues, serializer);
+        <bool>::sse_encode(self.convincing, serializer);
     }
 }
 

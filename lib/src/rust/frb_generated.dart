@@ -10,6 +10,7 @@ import 'api/downloads.dart';
 import 'api/hello.dart';
 import 'api/prefs.dart';
 import 'api/server.dart';
+import 'api/subtitles.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -75,7 +76,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -2061349439;
+  int get rustContentHash => 1760243863;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -170,6 +171,11 @@ abstract class RustLibApi extends BaseApi {
 
   Future<String> crateApiServerServerUpdateSettings({
     required String patchJson,
+  });
+
+  Future<SubtitleMatch> crateApiSubtitlesSubtitlesMatch({
+    required String playingUrl,
+    required String referenceUrl,
   });
 }
 
@@ -1159,6 +1165,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["patchJson"],
       );
 
+  @override
+  Future<SubtitleMatch> crateApiSubtitlesSubtitlesMatch({
+    required String playingUrl,
+    required String referenceUrl,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(playingUrl, serializer);
+          sse_encode_String(referenceUrl, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 36,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_subtitle_match,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiSubtitlesSubtitlesMatchConstMeta,
+        argValues: [playingUrl, referenceUrl],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSubtitlesSubtitlesMatchConstMeta =>
+      const TaskConstMeta(
+        debugName: "subtitles_match",
+        argNames: ["playingUrl", "referenceUrl"],
+      );
+
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -1242,6 +1283,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double dco_decode_f_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as double;
+  }
+
+  @protected
   PlatformInt64 dco_decode_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dcoDecodeI64(raw);
@@ -1288,6 +1335,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       cacheDir: dco_decode_String(arr[1]),
       port: dco_decode_u_16(arr[2]),
       fallbackToEphemeral: dco_decode_bool(arr[3]),
+    );
+  }
+
+  @protected
+  SubtitleMatch dco_decode_subtitle_match(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return SubtitleMatch(
+      ratio: dco_decode_f_64(arr[0]),
+      offset: dco_decode_f_64(arr[1]),
+      matched: dco_decode_u_32(arr[2]),
+      cues: dco_decode_u_32(arr[3]),
+      referenceCues: dco_decode_u_32(arr[4]),
+      convincing: dco_decode_bool(arr[5]),
     );
   }
 
@@ -1407,6 +1470,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getFloat64();
+  }
+
+  @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getPlatformInt64();
@@ -1478,6 +1547,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       cacheDir: var_cacheDir,
       port: var_port,
       fallbackToEphemeral: var_fallbackToEphemeral,
+    );
+  }
+
+  @protected
+  SubtitleMatch sse_decode_subtitle_match(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ratio = sse_decode_f_64(deserializer);
+    var var_offset = sse_decode_f_64(deserializer);
+    var var_matched = sse_decode_u_32(deserializer);
+    var var_cues = sse_decode_u_32(deserializer);
+    var var_referenceCues = sse_decode_u_32(deserializer);
+    var var_convincing = sse_decode_bool(deserializer);
+    return SubtitleMatch(
+      ratio: var_ratio,
+      offset: var_offset,
+      matched: var_matched,
+      cues: var_cues,
+      referenceCues: var_referenceCues,
+      convincing: var_convincing,
     );
   }
 
@@ -1607,6 +1695,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putFloat64(self);
+  }
+
+  @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putPlatformInt64(self);
@@ -1674,6 +1768,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.cacheDir, serializer);
     sse_encode_u_16(self.port, serializer);
     sse_encode_bool(self.fallbackToEphemeral, serializer);
+  }
+
+  @protected
+  void sse_encode_subtitle_match(SubtitleMatch self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_64(self.ratio, serializer);
+    sse_encode_f_64(self.offset, serializer);
+    sse_encode_u_32(self.matched, serializer);
+    sse_encode_u_32(self.cues, serializer);
+    sse_encode_u_32(self.referenceCues, serializer);
+    sse_encode_bool(self.convincing, serializer);
   }
 
   @protected

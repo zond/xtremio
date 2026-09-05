@@ -4,6 +4,9 @@
 //! - **fetch**: reqwest + rustls; JSON bodies in, JSON out (errors name the
 //!   failing JSON path). A request to the embedded server carries its
 //!   bearer token (`crate::server::token_for`); no other host gets it.
+//!   [`fetch_text`] is the same path for a body that is not JSON -- a
+//!   subtitle file -- and shares the client and the token rule rather than
+//!   standing up a second one.
 //! - **storage**: one JSON file per key under a directory Dart chooses;
 //!   writes are temp-then-fsync-then-rename so a crash can never leave a
 //!   half-written bucket.
@@ -151,6 +154,56 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()>
         let _ = std::fs::remove_file(&tmp);
     }
     result
+}
+
+/// Fetches `url` as text, at most `most_bytes` of it.
+///
+/// [`Env::fetch`] is the crate's one HTTP path and it deserializes JSON,
+/// which a subtitle file is not -- so this is the same path with the
+/// decoding left off: the same [`CLIENT`] (one connection pool, one user
+/// agent, one set of timeouts) and the same rule about the embedded
+/// server's bearer token, and not a second client built somewhere else.
+///
+/// Decoded lossily on purpose. Plenty of subtitle files are Latin-1 or
+/// worse, and the caller reads only the ASCII digits and colons of their
+/// timing lines; refusing a file over an encoding would lose a set of
+/// observations that is perfectly readable.
+///
+/// The cap is a real bound rather than a check afterwards -- the body is
+/// accumulated chunk by chunk and abandoned the moment it is exceeded --
+/// because a URL that answers with something enormous must not be able to
+/// spend the device's memory on it.
+///
+/// **The URL never reaches the error.** An addon's URL can carry a debrid
+/// API key (`AGENTS.md`, "Deep links open an addon"), and `reqwest` puts
+/// the URL it was given into its own `Display`, so every error out of it
+/// is stripped with `without_url` before it becomes a message anyone can
+/// log.
+pub(crate) async fn fetch_text(url: &url::Url, most_bytes: usize) -> anyhow::Result<String> {
+    let mut request = CLIENT.get(url.clone());
+    if let Some(token) = crate::server::token_for(url) {
+        request = request.bearer_auth(token);
+    }
+    let mut response = request
+        .send()
+        .await
+        .map_err(|error| anyhow::anyhow!("fetch failed: {}", error.without_url()))?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("HTTP {}", status.as_u16());
+    }
+    let mut body: Vec<u8> = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| anyhow::anyhow!("fetch failed: {}", error.without_url()))?
+    {
+        if body.len() + chunk.len() > most_bytes {
+            anyhow::bail!("larger than {most_bytes} bytes");
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(String::from_utf8_lossy(&body).into_owned())
 }
 
 /// Uninhabited: `Env` is implemented on the type, never on a value.
@@ -409,6 +462,98 @@ mod tests {
         });
     }
 
+    /// A server that answers one request with `status` and `body`, and the
+    /// URL to reach it at.
+    ///
+    /// Twenty lines of `TcpStream` rather than the embedded server,
+    /// because what is being tested is the *reading* of a body -- its
+    /// size, its encoding, a status that is not 200 -- and the embedded
+    /// server has no route that would answer any of those on demand. It
+    /// also leaves the one test below the only one holding the process's
+    /// server.
+    fn one_shot(status: &'static str, body: Vec<u8>) -> url::Url {
+        use std::io::{BufRead, BufReader, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let url = url::Url::parse(&format!(
+            "http://{}/subtitle.srt",
+            listener.local_addr().expect("addr")
+        ))
+        .expect("url");
+        std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept");
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            while reader.read_line(&mut line).is_ok_and(|read| read > 2) {
+                line.clear();
+            }
+            let mut stream = reader.into_inner();
+            let _ = write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(&body);
+        });
+        url
+    }
+
+    #[test]
+    fn fetch_text_reads_a_body_that_is_not_json() {
+        let vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nHej\n";
+        let url = one_shot("200 OK", vtt.as_bytes().to_vec());
+        let body = CONCURRENT
+            .block_on(fetch_text(&url, 4096))
+            .expect("fetch the file");
+        assert_eq!(body, vtt);
+
+        // Latin-1, which plenty of subtitle files really are: the byte
+        // that is not UTF-8 becomes a replacement character and the timing
+        // lines -- the whole of what the caller reads -- survive.
+        let mut latin1 = b"00:00:01,000 --> 00:00:03,000\nH".to_vec();
+        latin1.push(0xe9);
+        latin1.push(b'j');
+        let url = one_shot("200 OK", latin1);
+        let body = CONCURRENT
+            .block_on(fetch_text(&url, 4096))
+            .expect("fetch a file that is not UTF-8");
+        assert!(body.starts_with("00:00:01,000 -->"), "{body:?}");
+    }
+
+    #[test]
+    fn fetch_text_refuses_what_is_too_big_or_not_there() {
+        let url = one_shot("200 OK", vec![b'x'; 4096]);
+        let error = CONCURRENT
+            .block_on(fetch_text(&url, 1024))
+            .expect_err("a body over the cap is refused");
+        assert!(error.to_string().contains("larger than 1024"), "{error}");
+
+        let url = one_shot("404 Not Found", Vec::new());
+        let error = CONCURRENT
+            .block_on(fetch_text(&url, 4096))
+            .expect_err("a 404 is an error");
+        assert!(error.to_string().contains("HTTP 404"), "{error}");
+    }
+
+    #[test]
+    fn fetch_text_keeps_the_url_out_of_its_errors() {
+        // An addon's subtitle URL can carry a debrid API key, so a failure
+        // that quotes the URL back writes the key into a log. `reqwest`
+        // puts the URL in its own Display; this is the test that it is
+        // taken out again.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("addr");
+        drop(listener);
+        let url =
+            url::Url::parse(&format!("http://{address}/subtitle.srt?apikey=hunter2")).expect("url");
+        let error = CONCURRENT
+            .block_on(fetch_text(&url, 4096))
+            .expect_err("nothing is listening there");
+        let message = error.to_string();
+        assert!(!message.contains("hunter2"), "{message}");
+        assert!(!message.contains(&address.to_string()), "{message}");
+    }
+
     #[derive(Debug, Deserialize)]
     struct Heartbeat {
         success: bool,
@@ -440,6 +585,14 @@ mod tests {
             .block_on(XtremioEnv::fetch(request))
             .expect("fetch heartbeat");
         assert!(heartbeat.success);
+
+        // The text path shares the client and the token rule rather than
+        // building a second one, and this route is what proves it: it
+        // answers 401 without the bearer.
+        let text = CONCURRENT
+            .block_on(fetch_text(&url.join("heartbeat").unwrap(), 4096))
+            .expect("fetch heartbeat as text");
+        assert!(text.contains("success"), "{text}");
 
         // Wrong shape names the JSON path.
         #[derive(Debug, Deserialize)]

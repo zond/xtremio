@@ -13,6 +13,7 @@ import 'api/downloads.dart';
 import 'api/hello.dart';
 import 'api/prefs.dart';
 import 'api/server.dart';
+import 'api/subtitles.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -60,6 +61,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DiagnosticsSnapshot dco_decode_diagnostics_snapshot(dynamic raw);
 
   @protected
+  double dco_decode_f_64(dynamic raw);
+
+  @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
@@ -79,6 +83,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ServerConfig dco_decode_server_config(dynamic raw);
+
+  @protected
+  SubtitleMatch dco_decode_subtitle_match(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -129,6 +136,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer);
+
+  @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
 
   @protected
@@ -150,6 +160,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ServerConfig sse_decode_server_config(SseDeserializer deserializer);
+
+  @protected
+  SubtitleMatch sse_decode_subtitle_match(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -218,6 +231,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
 
   @protected
@@ -246,6 +262,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_server_config(ServerConfig self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_subtitle_match(SubtitleMatch self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);
