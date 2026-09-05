@@ -16,8 +16,8 @@
 //! - `server`: the in-process stream-server (torrent/archive bytes over HTTP)
 //! - `guard`: panic containment at the FFI boundary
 //! - `logging`: the process-wide tracing subscriber and its in-memory ring
-//! - `subtitles`: cue start times, and the line that maps one
-//!   subtitle file's clock onto another's
+//! - `subtitles`: when each subtitle file has text on screen, and the
+//!   line that maps one file's clock onto another's
 //! - `diagnostics`: what this binary was built from (the pinned revisions)
 //! - `android`: JNI hooks the Kotlin side calls before Dart starts (Android only)
 
