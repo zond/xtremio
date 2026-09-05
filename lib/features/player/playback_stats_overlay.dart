@@ -138,7 +138,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
     // Only when mpv answered: on a backend that has no such properties
     // the rows would be three dashes claiming something was measured.
     if (s.seekable != null || s.partiallySeekable != null)
-      'seekable ${_flag(s.seekable)} · partially ${_flag(s.partiallySeekable)}',
+      'seekable ${_seekable(s)} · partially ${_flag(s.partiallySeekable)}',
     if (s.seekableRanges case final ranges?) 'ranges   ${_ranges(ranges)}',
   ];
 
@@ -148,6 +148,18 @@ class PlaybackStatsOverlay extends StatelessWidget {
     true => 'yes',
     false => 'no',
   };
+
+  /// Whether mpv will seek in the open media -- and whose answer that is.
+  ///
+  /// `forced` rather than `yes` when we set `force-seekable` for this
+  /// stream, which the player does for the embedded server's own URLs: the
+  /// row is then our claim rather than a reading, and reporting it as a
+  /// reading is what would send someone looking in the wrong place. What
+  /// still reads is `partially`, which mpv sets alongside a forced
+  /// `seekable`: a yes there under `forced` is the demuxer saying it could
+  /// not seek and being overruled.
+  static String _seekable(PlaybackStats s) =>
+      s.seekableForced == true ? 'forced' : _flag(s.seekable);
 
   /// The demuxer's seekable ranges, in whole seconds of playback time.
   ///

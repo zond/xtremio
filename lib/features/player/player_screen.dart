@@ -1729,9 +1729,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// bytes are available (a Matroska index that had not arrived when the
   /// file opened). From the sofa that is indistinguishable from the film
   /// jumping back on its own, and it is the event a report has no line
-  /// for. The stats OSD carries the demuxer's own answer
-  /// (`PlaybackStats.seekable`); this is the same question asked from the
-  /// outside, so a report taken without the panel up still shows it.
+  /// for. The stats OSD carries mpv's own answer
+  /// (`PlaybackStats.seekable`, and `partiallySeekable` where we forced
+  /// the first); this is the same question asked from the outside, and it
+  /// asks it of the playback rather than of the demuxer, so a report taken
+  /// without the panel up still shows it.
   ///
   /// One line per seek, at info: it is not an error -- the viewer asking
   /// for a position we cannot reach is a legitimate thing to ask -- and a

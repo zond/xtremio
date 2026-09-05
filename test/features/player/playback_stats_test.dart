@@ -127,6 +127,49 @@ void main() {
     );
   });
 
+  test('a seekable we asked for is not reported as one mpv concluded', () {
+    // The player sets `force-seekable` on the embedded server's own
+    // streams, and mpv then answers `seekable yes` whatever the demuxer
+    // thought -- so a panel printing `yes` there would be quoting our own
+    // claim back as a reading, and the fault it was raised to diagnose
+    // could never show. `partially-seekable`, which mpv sets alongside a
+    // forced `seekable`, is what carries the demuxer's answer instead.
+    final forced = PlaybackStats.fromMpv({
+      'seekable': 'yes',
+      'partially-seekable': 'yes',
+      'force-seekable': 'yes',
+    });
+    expect(forced.seekableForced, isTrue);
+    expect(
+      PlaybackStatsOverlay.describe(forced),
+      contains('seekable forced · partially yes'),
+    );
+
+    // The demuxer was content: our claim changed nothing and the fault is
+    // somewhere else.
+    final content = PlaybackStats.fromMpv({
+      'seekable': 'yes',
+      'partially-seekable': 'no',
+      'force-seekable': 'yes',
+    });
+    expect(
+      PlaybackStatsOverlay.describe(content),
+      contains('seekable forced · partially no'),
+    );
+
+    // An addon's own URL is not forced, and both rows read straight.
+    final addon = PlaybackStats.fromMpv({
+      'seekable': 'no',
+      'partially-seekable': 'no',
+      'force-seekable': 'no',
+    });
+    expect(addon.seekableForced, isFalse);
+    expect(
+      PlaybackStatsOverlay.describe(addon),
+      contains('seekable no · partially no'),
+    );
+  });
+
   test('no range is an answer; no answer is not', () {
     // Two different readings the panel must not confuse. A demuxer that
     // reports no seekable range at all will refuse every seek, which is

@@ -48,6 +48,7 @@ class PlaybackStats {
     this.cacheBufferingState,
     this.seekable,
     this.partiallySeekable,
+    this.seekableForced,
     this.seekableRanges,
   });
 
@@ -69,6 +70,7 @@ class PlaybackStats {
     'cache-buffering-state',
     'seekable',
     'partially-seekable',
+    'force-seekable',
     'demuxer-cache-state',
   ];
 
@@ -116,6 +118,7 @@ class PlaybackStats {
       cacheBufferingState: integer('cache-buffering-state'),
       seekable: flag('seekable'),
       partiallySeekable: flag('partially-seekable'),
+      seekableForced: flag('force-seekable'),
       seekableRanges: _ranges(text('demuxer-cache-state')),
     );
   }
@@ -163,19 +166,28 @@ class PlaybackStats {
   /// Cache fill while stalled, 0-100 (`cache-buffering-state`).
   final int? cacheBufferingState;
 
-  /// Whether the demuxer says the open media can be seeked in at all
-  /// (`seekable`), and whether it can only be seeked within what it has
-  /// cached (`partially-seekable`).
+  /// Whether mpv says the open media can be seeked in at all (`seekable`),
+  /// whether it can only be seeked within what it has cached
+  /// (`partially-seekable`), and whether we are the reason it says yes
+  /// (`force-seekable`, `MediaKitEngine.forcesSeekable`).
   ///
-  /// These are the two properties mpv restores the position from: a
-  /// demuxer that says no does not wait for the seek, it refuses it, and
-  /// from the sofa a refusal looks exactly like the film jumping back.
-  /// Our own stream is served by the embedded server, which answers any
-  /// byte range, so a `no` here is the demuxer's own conclusion (a
-  /// Matroska file whose index sits at the end and had not arrived when
-  /// it opened) rather than the truth about the stream.
+  /// `seekable` is what mpv refuses a seek on: a no there does not wait
+  /// for the seek, it restores the position, and from the sofa that looks
+  /// exactly like the film jumping back. But for a stream the embedded
+  /// server is serving we force it true, because the server answers any
+  /// byte range and the demuxer cannot know that -- so on our own stream
+  /// `seekable` is our answer and not a reading, which is what
+  /// [seekableForced] is on the panel to say.
+  ///
+  /// **`partially-seekable` is then the row that carries the demuxer's own
+  /// conclusion**: mpv sets it alongside the forced `seekable`, so a yes
+  /// there on a forced stream is the demuxer having said it could not seek
+  /// (a Matroska file whose index sits at the end and had not arrived when
+  /// it opened) and our claim overruling it. A stream nothing was forced
+  /// on reads both rows straight.
   final bool? seekable;
   final bool? partiallySeekable;
+  final bool? seekableForced;
 
   /// What the demuxer says it can currently seek within
   /// (`demuxer-cache-state`'s `seekable-ranges`). Null when mpv did not
@@ -241,6 +253,7 @@ class PlaybackStats {
       other.cacheBufferingState == cacheBufferingState &&
       other.seekable == seekable &&
       other.partiallySeekable == partiallySeekable &&
+      other.seekableForced == seekableForced &&
       listEquals(other.seekableRanges, seekableRanges);
 
   @override
@@ -260,6 +273,7 @@ class PlaybackStats {
     cacheBufferingState,
     seekable,
     partiallySeekable,
+    seekableForced,
     seekableRanges == null ? null : Object.hashAll(seekableRanges!),
   );
 

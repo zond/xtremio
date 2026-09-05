@@ -145,12 +145,20 @@ and `partially-seekable` on one, the demuxer's own seekable ranges out of
 `demuxer-cache-state` on the other. They are there because
 "fast-forwarding past the downloaded part makes the position jump back" is
 a demuxer refusing the seek rather than a slow one serving it: mpv
-restores the position when the demuxer says it cannot seek, and nothing
-else on screen tells that apart from a seek that worked and then rewound.
-A `seekable no`, or a `ranges none`, is the reading that says so. `ranges`
-says `none` only when mpv answered with no ranges; both rows are absent
-when it did not answer at all, since a dash there would be a measurement
-nobody made.
+restores the position when it says it cannot seek, and nothing else on
+screen tells that apart from a seek that worked and then rewound.
+
+**Read `seekable` knowing whose answer it is.** On a stream the embedded
+server is serving the player sets `force-seekable`, so the row reads
+`forced` rather than `yes`/`no` — it is our claim, not a reading, and the
+demuxer's own conclusion has moved to the row beside it. mpv sets
+`partially-seekable` alongside a forced `seekable`, so **`seekable
+forced · partially yes` is the demuxer saying it could not seek and being
+overruled** — the Matroska index that had not arrived — while `forced ·
+partially no` says the demuxer was content and the fault is somewhere
+else. An addon's own URL is not forced and both rows read straight, `no`
+included. Both rows are absent when mpv answered neither, since a dash
+there would be a measurement nobody made.
 
 For a torrent it also carries the swarm, from the same `stats.json` the
 start-up and stall cards read: download speed, `<connectedSeeders>
