@@ -543,9 +543,9 @@ what every model field means. The shape of the thing is in the
   transform, not a fraction of cues. "Only 303 of 690 cues matched, so
   nothing was changed" is what sent the owner looking for a different
   reference when the reference was fine, and a count of cues was never
-  comparable between a file that merges lines and one that does not. Two
-  files with fewer than fifty cues are not evidence either way and are
-  not measured at all; that answer carries no score and names how many
+  comparable between a file that merges lines and one that does not. A file
+  with fewer than fifty cues is not evidence either way, whichever side
+  of the pairing it is on, and the pairing is not measured at all; that answer carries no score and names how many
   cues each file turned out to have, because a file that could not be
   read as a subtitle is a different problem from two files that disagree
   with each
