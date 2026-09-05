@@ -45,10 +45,28 @@ class RustSubtitleMatchClient implements SubtitleMatchClient {
 /// judge rather than an apology. Neither line names a file -- the panel
 /// is drawn over the picture the viewer is watching, and the two files
 /// involved are the one playing and the one they just picked.
-String subtitleMatchNote(rust.SubtitleMatch match) => match.convincing
-    ? 'Matched ${match.matched} of ${match.cues} cues'
-    : 'Only ${match.matched} of ${match.cues} cues matched, '
-          'so nothing was changed';
+///
+/// **Nothing at all matching is a different answer, and says so.** Two
+/// subtitle files that have nothing to do with each other still agree on
+/// a fifth to a half of their cues by accident, so a zero is not two
+/// files disagreeing -- it is a reference that could not be read as a
+/// subtitle at all (an ASS file, an addon answering with an error page)
+/// or one with too few cues to be evidence. Saying "only 0 of 694 cues
+/// matched" there describes the file the viewer is trying to fix and
+/// hides the one they chose badly, so the reference's own count is what
+/// the sentence is about instead. That count is measured for exactly
+/// this.
+String subtitleMatchNote(rust.SubtitleMatch match) {
+  if (match.convincing) {
+    return 'Matched ${match.matched} of ${match.cues} cues';
+  }
+  if (match.matched == 0) {
+    return 'Nothing matched: ${match.cues} cue timings in this file, '
+        '${match.referenceCues} in the one you picked';
+  }
+  return 'Only ${match.matched} of ${match.cues} cues matched, '
+      'so nothing was changed';
+}
 
 /// What it says when a file could not be read at all.
 ///

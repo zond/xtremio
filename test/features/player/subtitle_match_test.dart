@@ -143,6 +143,43 @@ void main() {
     );
   });
 
+  testWidgets('a reference with nothing in it is named as the one at '
+      'fault', (tester) async {
+    useWideViewport(tester);
+    // What comes back when the chosen file is not a subtitle the
+    // measurement can read: an ASS file, an addon answering 200 with an
+    // error page, a forced track of a dozen signs. Rust refuses to
+    // measure and answers with the counts.
+    //
+    // Two files that merely have nothing to do with each other still
+    // agree on a fifth to a half of their cues by accident, so a zero is
+    // never "these two disagree" -- and "only 0 of 694 cues matched"
+    // would describe the file the viewer is trying to fix while saying
+    // nothing about the one they picked badly.
+    final player = await panelOver(tester, uploads: both, pick: 'PAL');
+    player.subtitleMatch.response = const SubtitleMatch(
+      ratio: 1,
+      offset: 0,
+      matched: 0,
+      cues: 694,
+      referenceCues: 0,
+      convincing: false,
+    );
+
+    await matchAgainst(tester, 'PLAIN');
+
+    expect(
+      find.text(
+        'Nothing matched: 694 cue timings in this file, 0 in the '
+        'one you picked',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('of 694 cues matched'), findsNothing);
+    expect(player.engine.subtitleSpeed, 1);
+    expect(player.engine.subtitleDelay, 0);
+  });
+
   testWidgets('a file that cannot be read says one sentence and no URL', (
     tester,
   ) async {
