@@ -119,7 +119,7 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 | Platform | Support | Notes |
 |---|---|---|
 | **Linux (desktop)** | ✅ First-class | The easiest target; video is software-rendered until media_kit's Linux renderer lands ([docs/OPERATIONS.md](docs/OPERATIONS.md#linux-video-is-software-rendered-for-now)). |
-| **Windows (desktop)** | ✅ First-class | As Linux, except that registering `stremio://` needs an installer and there is none ([docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). |
+| **Windows (desktop)** | ✅ First-class | Flutter desktop, media_kit and native Rust, as on Linux; registering `stremio://` needs an installer and there is none ([docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). |
 | **macOS (desktop)** | ✅ First-class | Native Rust + media_kit; built in CI, unsigned, and needs a Mac to build yourself. |
 | **Android** | ✅ Supported | Rust cross-compiles to the NDK and is embedded as a native lib; the primary mobile target ([ANDROID.md](ANDROID.md)). |
 | **Android TV / Google TV** | ✅ Supported | One build covers the boxes, given the ABI the box reports — a Chromecast with Google TV is 32-bit ([ANDROID.md](ANDROID.md)). |
