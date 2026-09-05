@@ -218,8 +218,11 @@ strength and scroll themselves into view — Settings → Interface →
 everything the remote is not on, for a projector in a bright room — the
 D-pad walks rows and columns (a held centre key is a long press, the
 context-menu key opens the same menu a long press does), the player takes
-the remote's centre and media keys and is immersive-fullscreen the whole
-time it is up, posters and text grow (1.15x text, a roomier density,
+the remote's centre and media keys, is immersive-fullscreen the whole
+time it is up and asks the panel to present a film at the film's own
+frame rate — a 23.98 fps film on a 59.94 Hz output is shown on a 3:2
+cadence, which is the picture jumping — giving the rate back the moment
+it stops, posters and text grow (1.15x text, a roomier density,
 48 dp targets), every screen holds 5% of every edge clear of overscan
 except the video itself and the Details backdrop, and the controls a
 remote cannot work (the volume slider, the fullscreen toggle, scrollbar
