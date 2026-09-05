@@ -149,7 +149,27 @@ pub const CONVINCING: f64 = 0.60;
 /// A forced-subtitle track of a dozen signs can be aligned onto anything
 /// by accident, and a coincidence rate over so small a denominator says
 /// nothing. Refusing to measure is better than measuring badly.
-const FEWEST_CUES: usize = 20;
+///
+/// Fifty because that is where the coincidence stops being reachable. A
+/// cue lands within [`TOLERANCE`] of an unrelated file's nearest cue
+/// about a fifth of the time -- a third of a second either way against
+/// gaps averaging three seconds -- and the sweep gets to choose the
+/// ratio and the offset that suit it best, so what has to be impossible
+/// is not one lucky cue but [`CONVINCING`] of them at once. Thirty of
+/// fifty at a fifth each is beyond the thousands of lines the sweep
+/// tries; twelve of twenty is not, and measured against the owner's own
+/// files a twenty-cue slice of one episode is called convincing against
+/// a *different* episode about half the time. Twenty-five is a third of
+/// the time, thirty one in twenty-five, and from forty on it stops
+/// happening at all. Fifty is that floor with room over it, and by
+/// fifty a pair that really does match is recognised nineteen times in
+/// twenty.
+///
+/// The threshold guards both sides: a reference of a dozen signs is the
+/// case it was written for, and a *playing* file of a dozen signs is the
+/// one that scores the coincidence, because [`Alignment::agreement`]
+/// divides by the playing file's cues.
+const FEWEST_CUES: usize = 50;
 
 /// How many cues of each file the offset histogram is built from.
 ///
@@ -221,6 +241,15 @@ pub fn align(playing: &[f64], reference: &[f64]) -> Option<Alignment> {
     if playing.len() < FEWEST_CUES || reference.len() < FEWEST_CUES {
         return None;
     }
+    Some(solve(playing, reference))
+}
+
+/// The measurement itself, with the floor already checked.
+///
+/// Split out so a test can put two files through the sweep that [`align`]
+/// refuses to measure at all, which is how the floor is shown to be worth
+/// having rather than merely asserted.
+fn solve(playing: &[f64], reference: &[f64]) -> Alignment {
     let sampled_playing = sample(playing, SAMPLE_CAP);
     let sampled_reference = sample(reference, SAMPLE_CAP);
     let mut histogram = vec![0u32; (2.0 * WIDEST_OFFSET / OFFSET_BIN) as usize + 1];
@@ -276,12 +305,12 @@ pub fn align(playing: &[f64], reference: &[f64]) -> Option<Alignment> {
         closest = closeness;
         line = fitted;
     }
-    Some(Alignment {
+    Alignment {
         ratio: line.0,
         offset: line.1,
         matched: matches(playing, reference, line.0, line.1),
         cues: playing.len(),
-    })
+    }
 }
 
 /// The least-squares line through the pairs `ratio` and `offset` already
@@ -441,7 +470,13 @@ mod tests {
     /// spaced test data. What makes a subtitle file identifiable is that
     /// the *pattern* of its gaps occurs once.
     fn synthetic_cues(count: usize) -> Vec<f64> {
-        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        synthetic_cues_from(0x2545_f491_4f6c_dd1d, count)
+    }
+
+    /// The same, from a chosen seed, so that two files can be *unrelated*
+    /// rather than one being the other retimed.
+    fn synthetic_cues_from(seed: u64, count: usize) -> Vec<f64> {
+        let mut state = seed;
         let mut at = 12.0;
         (0..count)
             .map(|_| {
@@ -559,6 +594,45 @@ mod tests {
         assert!(align(&playing[..FEWEST_CUES - 1], &reference).is_none());
         assert!(align(&playing, &reference[..FEWEST_CUES - 1]).is_none());
         assert!(align(&[], &[]).is_none());
+    }
+
+    #[test]
+    fn a_handful_of_cues_can_be_laid_onto_anything() {
+        // Why the floor is where it is. Twenty cues of one file are put
+        // through the sweep against thirty-nine files that have nothing
+        // to do with them: with so few observations to satisfy, and a
+        // ratio and an offset of its own choosing to satisfy them with,
+        // the sweep finds a `CONVINCING` line about half the time.
+        // Thirty is rarer, fifty never happens -- the same shape the
+        // owner's own files show, where a twenty-cue slice of one
+        // episode is called convincing against a *different* episode
+        // about half the time and a fifty-cue slice never is.
+        let whole = synthetic_cues(400);
+        let slice = |count: usize| -> Vec<f64> {
+            let step = whole.len() / count;
+            (0..count).map(|index| whole[index * step]).collect()
+        };
+        let counts = [20usize, 30, FEWEST_CUES];
+        let mut coincidences = [0usize; 3];
+        for seed in 1u64..40 {
+            let unrelated = synthetic_cues_from(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15), 400);
+            for (coincidences, &count) in coincidences.iter_mut().zip(&counts) {
+                if solve(&slice(count), &unrelated).is_convincing() {
+                    *coincidences += 1;
+                }
+            }
+        }
+        assert!(coincidences[0] >= 15, "{coincidences:?}");
+        assert_eq!(coincidences[2], 0, "{coincidences:?}");
+
+        // So nothing under the floor is measured at all, however much of
+        // it the sweep would have agreed with. This is the guard on the
+        // *playing* file, which is the side that scores the coincidence:
+        // `Alignment::agreement` divides by its cues.
+        let unrelated = synthetic_cues_from(0x9e37_79b9_7f4a_7c15, 400);
+        for count in [20usize, 30, FEWEST_CUES - 1] {
+            assert!(align(&slice(count), &unrelated).is_none(), "{count} cues");
+        }
     }
 
     #[test]
