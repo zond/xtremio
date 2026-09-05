@@ -20,6 +20,12 @@ void main() {
   /// The meta item the recorded fixture is a stream for.
   const series = 'tt0063350';
   const opened = 'Night.of.the.Living.Dead.1080p.mp4';
+
+  /// What a press of the stretch button comes to, which is what the file
+  /// now stores: the number that was on the player, not the name of the
+  /// button that put it there.
+  const stretch = 25 / 23.976;
+
   const plainUrl = 'https://subs.example.org/en-plain.srt';
   const otherUrl = 'https://subs.example.org/en-other.srt';
   const frenchUrl = 'https://subs.example.org/fr.srt';
@@ -39,11 +45,8 @@ void main() {
 
   /// Two English uploads: `SIX` from the addon's group 6, and `NONE` from
   /// an addon that says nothing about where its files came from.
-  PlayerHarness harness({AppPrefs? prefs, double? frameRate}) {
-    final harness = PlayerHarness(
-      prefs: prefs,
-      configureEngine: (engine) => engine.frameRate = frameRate,
-    );
+  PlayerHarness harness({AppPrefs? prefs}) {
+    final harness = PlayerHarness(prefs: prefs);
     harness.fixture['subtitlePreference'] = null;
     harness.fixture['subtitles'] = [
       {
@@ -78,9 +81,8 @@ void main() {
     String pick = 'SIX',
     AppPrefs? prefs,
     String? streamName = opened,
-    double? frameRate,
   }) async {
-    final player = harness(prefs: prefs, frameRate: frameRate);
+    final player = harness(prefs: prefs);
     player.torrentStats.response = TorrentStats(
       phase: TorrentPhase.buffering,
       streamName: streamName,
@@ -138,7 +140,10 @@ void main() {
     // Series and group, and no release: what a file was timed against is
     // a property of where it came from, so the same group's files carry
     // the correction to any release of this show.
-    expect(prefs.subtitleSync.speedFor(series: series, group: '6'), 'stretch');
+    expect(
+      prefs.subtitleSync.speedFor(series: series, group: '6'),
+      closeTo(stretch, 1e-9),
+    );
     expect(
       prefs.subtitleSync.entries.single.release,
       isNull,
@@ -160,15 +165,15 @@ void main() {
     // The offset is the video's pre-roll less whatever the subtitle's
     // source assumed, so it depends on both sides.
     expect(
-      prefs.subtitleSync.shiftStepsFor(
+      prefs.subtitleSync.shiftSecondsFor(
         series: series,
         group: '6',
         release: opened.toLowerCase(),
       ),
-      1,
+      closeTo(SubtitleTiming.shiftStep, 1e-9),
     );
     expect(
-      prefs.subtitleSync.shiftStepsFor(
+      prefs.subtitleSync.shiftSecondsFor(
         series: series,
         group: '6',
         release: 'some.other.release.mkv',
@@ -210,7 +215,10 @@ void main() {
 
     // The speed still is: it never depended on the release.
     expect(prefs.subtitleSync.entries, hasLength(1));
-    expect(prefs.subtitleSync.speedFor(series: series, group: '6'), 'stretch');
+    expect(
+      prefs.subtitleSync.speedFor(series: series, group: '6'),
+      closeTo(stretch, 1e-9),
+    );
   });
 
   testWidgets('a remembered adjustment is put back when the group plays', (
@@ -219,12 +227,12 @@ void main() {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': 'stretch'},
+        {'series': series, 'group': '6', 'speed': stretch},
         {
           'series': series,
           'group': '6',
           'release': opened.toLowerCase(),
-          'shift': 3,
+          'shiftSeconds': 0.3,
         },
       ],
     });
@@ -246,12 +254,12 @@ void main() {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': 'stretch'},
+        {'series': series, 'group': '6', 'speed': stretch},
         {
           'series': series,
           'group': '6',
           'release': 'a.different.release.mkv',
-          'shift': 3,
+          'shiftSeconds': 0.3,
         },
       ],
     });
@@ -266,10 +274,38 @@ void main() {
     expect(player.engine.subtitleDelay, 0);
   });
 
-  testWidgets('a speed the video rules out is dropped, not reversed', (
+  testWidgets('a stored speed no player would accept is not applied', (
     tester,
   ) async {
     useWideViewport(tester);
+    // The preferences file is forgiving on purpose and holds whatever
+    // number was on the player, so this is where a number that is not
+    // one is stopped. media_kit writes `sub-speed` with
+    // `mpv_set_property_string` and throws the return code away, so a
+    // value outside `<0.1-10.0>` is refused in silence and the multiplier
+    // the *previous* file left behind keeps running while the panel
+    // claims this one.
+    final prefs = prefsWith({
+      'subtitleSync': [
+        {'series': series, 'group': '6', 'speed': 40.0},
+      ],
+    });
+    await prefs.load();
+
+    final player = await playing(tester, prefs: prefs);
+
+    expect(player.engine.subtitleSpeed, 1);
+  });
+
+  testWidgets('a row the build before this one wrote is not read as one', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // That build stored the speed as the name of a toggle direction and
+    // the shift as a count of tenth-second presses. Neither survives:
+    // `stretch` is not a number, and `shift` is not `shiftSeconds` --
+    // which is the point of the rename, since reading 3 presses as 3
+    // seconds is thirty times the adjustment that was made.
     final prefs = prefsWith({
       'subtitleSync': [
         {'series': series, 'group': '6', 'speed': 'stretch'},
@@ -283,103 +319,18 @@ void main() {
     });
     await prefs.load();
 
-    // The stretch was learned where the video was film; this release is
-    // PAL, and a PAL-sourced file against a PAL video needs nothing.
-    // Carrying it over would spread the cues 4 % further apart -- the
-    // reciprocal mistake -- and the panel draws only the direction the
-    // video calls for, so there would be no button to take it off with:
-    // the one that is drawn lands on 0.959, never on 1.0.
-    final player = await playing(tester, prefs: prefs, frameRate: 25);
-    expect(player.engine.subtitleSpeed, 1);
-    // The offset is this release's own and still comes back.
-    expect(player.engine.subtitleDelay, closeTo(0.3, 1e-9));
-
-    await openPanel(tester);
-    expect(find.byKey(const ValueKey('subtitle-speed-stretch')), findsNothing);
-    expect(find.text('1.000×'), findsOneWidget);
-
-    // Dropped from this playback, not forgotten: the next release of
-    // this show is likely to be the family the speed was learned on.
-    expect(prefs.subtitleSync.speedFor(series: series, group: '6'), 'stretch');
-  });
-
-  testWidgets('a speed the video rules out is dropped when the rate arrives '
-      'late', (tester) async {
-    useWideViewport(tester);
-    final prefs = prefsWith({
-      'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': 'stretch'},
-        {
-          'series': series,
-          'group': '6',
-          'release': opened.toLowerCase(),
-          'shift': 3,
-        },
-      ],
-    });
-    await prefs.load();
-
-    // The same PAL video as above, over a torrent: mpv has not probed
-    // the container when the file is applied, so the rule that drops a
-    // contradicted speed has nothing to test it against and the stretch
-    // goes on.
     final player = await playing(tester, prefs: prefs);
-    expect(player.engine.subtitleSpeed, closeTo(25 / 23.976, 1e-9));
 
-    player.engine.emitFrameRate(25);
-    await pumpEvents(tester);
-
-    // The answer arriving is the answer, whenever it arrives. Left in
-    // force this is 4.27 % applied by the machine to a subtitle that was
-    // in sync when it arrived, and nothing else resets it.
+    expect(prefs.subtitleSync.entries, isEmpty);
     expect(player.engine.subtitleSpeed, 1);
-    // The offset is the release's own and no rate says anything about
-    // it.
-    expect(player.engine.subtitleDelay, closeTo(0.3, 1e-9));
-
-    await openPanel(tester);
-    expect(find.byKey(const ValueKey('subtitle-speed-stretch')), findsNothing);
-    expect(find.text('1.000\u00d7'), findsOneWidget);
-
-    // Still not forgotten, for the same reason as when the rate was
-    // known at the open.
-    expect(prefs.subtitleSync.speedFor(series: series, group: '6'), 'stretch');
-  });
-
-  testWidgets('a speed the viewer pressed survives the rate that rules it '
-      'out', (tester) async {
-    useWideViewport(tester);
-    final prefs = prefsWith();
-    await prefs.load();
-    final player = await playing(tester, prefs: prefs);
-    await openPanel(tester);
-
-    // A press made while the rate said nothing, which on a torrent is
-    // the ordinary way one gets made.
-    await press(tester, 'subtitle-speed-stretch');
-    expect(player.engine.subtitleSpeed, closeTo(25 / 23.976, 1e-9));
-
-    player.engine.emitFrameRate(25);
-    await pumpEvents(tester);
-    await tester.pumpAndSettle();
-
-    // Only the machine's guess is withdrawn. This is a judgement about
-    // the drift on screen, and it keeps its own button so the toggle
-    // back to exactly 1.0 is still there.
-    expect(player.engine.subtitleSpeed, closeTo(25 / 23.976, 1e-9));
-    expect(
-      find.byKey(const ValueKey('subtitle-speed-stretch')),
-      findsOneWidget,
-    );
-    await press(tester, 'subtitle-speed-stretch');
-    expect(player.engine.subtitleSpeed, 1);
+    expect(player.engine.subtitleDelay, 0);
   });
 
   testWidgets('another series remembers nothing of this one', (tester) async {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': 'tt0944947', 'group': '6', 'speed': 'stretch'},
+        {'series': 'tt0944947', 'group': '6', 'speed': stretch},
       ],
     });
     await prefs.load();
@@ -395,7 +346,7 @@ void main() {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': 'stretch'},
+        {'series': series, 'group': '6', 'speed': stretch},
       ],
     });
     await prefs.load();
@@ -414,7 +365,10 @@ void main() {
     expect(player.engine.subtitleSpeed, 1);
     // And the memory is untouched: playing another file is not a
     // judgement about the one that was on.
-    expect(prefs.subtitleSync.speedFor(series: series, group: '6'), 'stretch');
+    expect(
+      prefs.subtitleSync.speedFor(series: series, group: '6'),
+      closeTo(stretch, 1e-9),
+    );
   });
 
   testWidgets('Reset forgets rather than storing a correction of none', (
@@ -423,7 +377,7 @@ void main() {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': 'stretch'},
+        {'series': series, 'group': '6', 'speed': stretch},
       ],
     });
     await prefs.load();
@@ -462,15 +416,19 @@ void main() {
     // already a whole second, because a hold accelerates
     // (`SubtitleTimingOverlay.shiftStrideAt`).
     expect(
-      prefs.subtitleSync.shiftStepsFor(
+      prefs.subtitleSync.shiftSecondsFor(
         series: series,
         group: '6',
         release: opened.toLowerCase(),
       ),
-      SubtitleTimingOverlay.tenthStrideSteps +
-          SubtitleTimingOverlay.shiftStrideAt(
-            SubtitleTimingOverlay.tenthStrideSteps,
-          ),
+      closeTo(
+        (SubtitleTimingOverlay.tenthStrideSteps +
+                SubtitleTimingOverlay.shiftStrideAt(
+                  SubtitleTimingOverlay.tenthStrideSteps,
+                )) *
+            SubtitleTiming.shiftStep,
+        1e-9,
+      ),
     );
     expect(client.writes, ['subtitleSync']);
   });
@@ -498,12 +456,12 @@ void main() {
     await closePanel(tester);
 
     expect(
-      prefs.subtitleSync.shiftStepsFor(
+      prefs.subtitleSync.shiftSecondsFor(
         series: series,
         group: '6',
         release: opened.toLowerCase(),
       ),
-      1,
+      closeTo(SubtitleTiming.shiftStep, 1e-9),
     );
   });
 
@@ -524,12 +482,12 @@ void main() {
     await pumpEvents(tester);
 
     expect(
-      prefs.subtitleSync.shiftStepsFor(
+      prefs.subtitleSync.shiftSecondsFor(
         series: series,
         group: '6',
         release: opened.toLowerCase(),
       ),
-      1,
+      closeTo(SubtitleTiming.shiftStep, 1e-9),
     );
   });
 

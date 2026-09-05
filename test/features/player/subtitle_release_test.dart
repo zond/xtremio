@@ -234,8 +234,8 @@ void main() {
       series: series,
       group: '6',
       release: null,
-      speed: 'stretch',
-      shiftSteps: 0,
+      speed: 25 / 23.976,
+      shiftSeconds: 0,
     );
     final sources = [
       upload('https://subs/plain.srt', releaseGroup: 'PLAIN'),
@@ -272,7 +272,7 @@ void main() {
       group: '6',
       release: 'the.godfather.1972.720p.web.h264-yts.mkv',
       speed: null,
-      shiftSteps: 3,
+      shiftSeconds: 0.3,
     );
     final sources = [
       upload('https://subs/plain.srt', releaseGroup: 'PLAIN'),
@@ -288,7 +288,7 @@ void main() {
       group: '6',
       release: playing,
       speed: null,
-      shiftSteps: 3,
+      shiftSeconds: 0.3,
     );
     expect(offered(sources, release: playing, series: series, memory: here), [
       'https://subs/six.srt',

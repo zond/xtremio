@@ -1063,7 +1063,7 @@ void main() {
     final prefs = AppPrefs(
       client: FakePrefsClient({
         'subtitleSync': [
-          {'series': 'tt0063350', 'group': '6', 'speed': 'stretch'},
+          {'series': 'tt0063350', 'group': '6', 'speed': 25 / 23.976},
         ],
       }),
     );

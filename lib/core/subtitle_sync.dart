@@ -21,6 +21,14 @@
 ///   assumed, so it depends on *both* sides: change either and the answer
 ///   changes.
 ///
+/// Both are real numbers, because both are now *measured*: a viewer
+/// marking the picture right, or a match against a file they say is in
+/// sync, solves for a ratio and an offset that no menu of values
+/// contains. The ratio the owner's own Swedish files want is 1.0440
+/// where the PAL constant is 1.0427, and the three seconds between those
+/// two across an episode is the whole reason this stopped being a
+/// direction.
+///
 /// Any part of a key being unknown -- an addon that sends no group, a
 /// release nothing has named yet -- means that adjustment is not
 /// remembered at all. A narrower key is forgotten more often, and being
@@ -36,29 +44,29 @@ import 'package:flutter/foundation.dart';
 /// which is how the two are told apart both here and in the stored file.
 @immutable
 final class SubtitleSyncEntry {
-  /// A speed the viewer chose for [group]'s files of [series], as
-  /// [SubtitleSyncMemory] stores it (`SubtitleSpeedDirection.stored`).
+  /// The multiplier the viewer's corrections came to for [group]'s files
+  /// of [series]: `sub-speed`, with 1.0 being the file's own timing.
   ///
-  /// The value is opaque here: this is the file's shape, and what a
-  /// direction is called is the player's business.
+  /// Whether it was measured or judged is not recorded, because nothing
+  /// reads it back differently: what is stored is the number that was on
+  /// the player.
   const SubtitleSyncEntry.speed({
     required this.series,
     required this.group,
-    required String direction,
+    required double ratio,
   }) : release = null,
-       speed = direction,
-       shiftSteps = 0;
+       speed = ratio,
+       shiftSeconds = 0;
 
-  /// An offset the viewer measured between [group]'s files of [series]
-  /// and this particular [release], counted in presses of the shift
-  /// control so it is the same integer the panel is holding.
+  /// The offset the viewer's corrections came to between [group]'s files
+  /// of [series] and this particular [release]: `sub-delay`, in seconds.
   const SubtitleSyncEntry.shift({
     required this.series,
     required this.group,
     required String this.release,
-    required int steps,
+    required double seconds,
   }) : speed = null,
-       shiftSteps = steps;
+       shiftSeconds = seconds;
 
   /// The show or film the adjustment was made on: the meta item's id,
   /// not the episode's, since an episode is not what a subtitle group is
@@ -73,12 +81,11 @@ final class SubtitleSyncEntry {
   /// speed entry -- which does not depend on one.
   final String? release;
 
-  /// The stored direction of the speed toggle, and null on a shift
-  /// entry.
-  final String? speed;
+  /// The multiplier, and null on a shift entry.
+  final double? speed;
 
-  /// Presses of the shift control, and 0 on a speed entry.
-  final int shiftSteps;
+  /// The offset in seconds, and 0 on a speed entry.
+  final double shiftSeconds;
 
   /// The entry as it is written to the preferences file: only the fields
   /// that are part of this kind, so a speed row and a shift row are
@@ -88,13 +95,20 @@ final class SubtitleSyncEntry {
     'group': group,
     'release': ?release,
     'speed': ?speed,
-    if (release != null) 'shift': shiftSteps,
+    if (release != null) 'shiftSeconds': shiftSeconds,
   };
 
   /// One stored row, or null when it is not one this build can use: a
   /// missing key part, a value of the wrong type, a row that names
   /// neither adjustment. Preferences are forgiving -- a row that cannot
   /// be read is dropped, never a failure to load.
+  ///
+  /// That is also the whole of the migration off the build that stored a
+  /// direction and a count of presses. A `speed` of `"stretch"` is not a
+  /// number, and a row with no `shiftSeconds` names no offset, so both
+  /// are dropped and the viewer fixes the file once more -- where
+  /// reading the old `shift` as seconds would put a three-press
+  /// adjustment on as three seconds, thirty times what it was.
   static SubtitleSyncEntry? fromJson(Object? json) {
     if (json is! Map) return null;
     final series = _token(json['series']);
@@ -102,22 +116,18 @@ final class SubtitleSyncEntry {
     if (series == null || group == null) return null;
     final release = _token(json['release']);
     if (release == null) {
-      final speed = _token(json['speed']);
-      return speed == null
+      final ratio = _number(json['speed']);
+      return ratio == null
           ? null
-          : SubtitleSyncEntry.speed(
-              series: series,
-              group: group,
-              direction: speed,
-            );
+          : SubtitleSyncEntry.speed(series: series, group: group, ratio: ratio);
     }
-    final steps = json['shift'];
-    if (steps is! int || steps == 0) return null;
+    final seconds = _number(json['shiftSeconds']);
+    if (seconds == null || seconds == 0) return null;
     return SubtitleSyncEntry.shift(
       series: series,
       group: group,
       release: release,
-      steps: steps,
+      seconds: seconds,
     );
   }
 
@@ -136,6 +146,17 @@ final class SubtitleSyncEntry {
     return text.isEmpty ? null : text;
   }
 
+  /// [value] as a correction, or null when it is not one. A NaN or an
+  /// infinity is not: both survive a round trip through Dart's own JSON
+  /// codec, and both would reach `sub-speed` or `sub-delay` as a number
+  /// the player cannot use. What range a *usable* correction is in is
+  /// the player's business rather than the file's.
+  static double? _number(Object? value) {
+    if (value is! num) return null;
+    final number = value.toDouble();
+    return number.isFinite ? number : null;
+  }
+
   @override
   bool operator ==(Object other) =>
       other is SubtitleSyncEntry &&
@@ -143,10 +164,10 @@ final class SubtitleSyncEntry {
       other.group == group &&
       other.release == release &&
       other.speed == speed &&
-      other.shiftSteps == shiftSteps;
+      other.shiftSeconds == shiftSeconds;
 
   @override
-  int get hashCode => Object.hash(series, group, release, speed, shiftSteps);
+  int get hashCode => Object.hash(series, group, release, speed, shiftSeconds);
 }
 
 /// Every adjustment still remembered, most recently made first.
@@ -178,9 +199,9 @@ final class SubtitleSyncMemory {
   /// wanted again.
   static const int limit = 64;
 
-  /// The stored direction remembered for [group]'s files of [series], or
-  /// null when none is.
-  String? speedFor({required String? series, required String? group}) {
+  /// The multiplier remembered for [group]'s files of [series], or null
+  /// when none is.
+  double? speedFor({required String? series, required String? group}) {
     if (series == null || group == null) return null;
     for (final entry in entries) {
       if (entry.isSpeedFor(series, group)) return entry.speed;
@@ -188,24 +209,24 @@ final class SubtitleSyncMemory {
     return null;
   }
 
-  /// The presses of the shift control remembered for [group]'s files of
-  /// [series] against [release], and 0 when none are -- including when
-  /// any part of the key is unknown.
-  int shiftStepsFor({
+  /// The offset in seconds remembered for [group]'s files of [series]
+  /// against [release], and 0 when none is -- including when any part of
+  /// the key is unknown.
+  double shiftSecondsFor({
     required String? series,
     required String? group,
     required String? release,
   }) {
     if (series == null || group == null || release == null) return 0;
     for (final entry in entries) {
-      if (entry.isShiftFor(series, group, release)) return entry.shiftSteps;
+      if (entry.isShiftFor(series, group, release)) return entry.shiftSeconds;
     }
     return 0;
   }
 
   /// This memory with what the viewer has now got on screen written into
-  /// it: [speed] and [shiftSteps] under their own keys, both moved to the
-  /// front, and either dropped when it has gone back to untouched.
+  /// it: [speed] and [shiftSeconds] under their own keys, both moved to
+  /// the front, and either dropped when it has gone back to untouched.
   ///
   /// Untouched is *forgotten* rather than stored as a correction of zero.
   /// A viewer who presses Reset is saying this file needs nothing, and
@@ -221,8 +242,8 @@ final class SubtitleSyncMemory {
     required String? series,
     required String? group,
     required String? release,
-    required String? speed,
-    required int shiftSteps,
+    required double? speed,
+    required double shiftSeconds,
   }) {
     if (series == null || group == null) return this;
     final kept = [
@@ -233,13 +254,13 @@ final class SubtitleSyncMemory {
     ];
     final updated = <SubtitleSyncEntry>[
       if (speed != null)
-        SubtitleSyncEntry.speed(series: series, group: group, direction: speed),
-      if (release != null && shiftSteps != 0)
+        SubtitleSyncEntry.speed(series: series, group: group, ratio: speed),
+      if (release != null && shiftSeconds != 0)
         SubtitleSyncEntry.shift(
           series: series,
           group: group,
           release: release,
-          steps: shiftSteps,
+          seconds: shiftSeconds,
         ),
       ...kept,
     ];

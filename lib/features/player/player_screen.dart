@@ -317,23 +317,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// longer orders the subtitle list: the point is a button that presses
   /// the right way, not a number to reason about.
   ///
-  /// Two things read it, and both have to answer again when a late
-  /// observation changes it: the timing panel's speed control, which it
-  /// points, and [_rememberedSpeed], which drops a remembered speed this
-  /// video's own family contradicts.
+  /// One thing reads it and has to answer again when a late observation
+  /// changes it: the timing panel's speed control, which it points.
   double? _videoFrameRate;
-
-  /// Whether the speed in [_timing] is one [_rememberedSpeed] put back
-  /// rather than one the viewer pressed.
-  ///
-  /// The two have to be told apart because a rate arriving late has to
-  /// withdraw the first and must never touch the second
-  /// ([_onFrameRate]). A press is a judgement about the drift on screen
-  /// and outranks any rate; a restored speed is the machine's guess
-  /// from another release, and the rule it is subject to -- not applied
-  /// where the video's family contradicts it -- cannot be enforced at
-  /// the moment it is applied when the answer has not arrived yet.
-  bool _restoredSpeed = false;
 
   /// What the viewer has asked of the subtitles on screen, and the whole
   /// of what mpv is playing them at: nothing else writes either property.
@@ -1040,46 +1026,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// is regularly long after playback started, which is the whole reason
   /// this is observed rather than read.
   ///
-  /// A late answer has to do both of the jobs a rate known at the open
-  /// does, not only the visible one. It points the panel's speed control
-  /// -- a `setState`, because the panel is drawn from [_videoFrameRate]
-  /// -- and it withdraws a speed [_rememberedSpeed] restored that this
-  /// video's family now contradicts. Without the second, a remembered
-  /// stretch went on a PAL video and stayed: 4.27 % applied by the
-  /// machine to a subtitle that was in sync when it arrived, drifting
-  /// two and a half seconds a minute, with no path that resets it. That
-  /// hole was unreachable while the rate was read at the open, because
-  /// on a torrent the read answered nothing and the guard was vacuous;
-  /// observing the rate is exactly what makes the answer arrive after
-  /// the restore.
-  ///
-  /// Only the machine's speed is withdrawn. A press is a judgement about
-  /// the drift on screen and survives whatever the container turns out
-  /// to declare -- and it keeps its own button whatever the rate rules
-  /// out (`SubtitleTimingOverlay`), so the toggle back to exactly 1.0
-  /// stays reachable. The remembered speed stays in the file either way:
-  /// the next release of this show is likely to be the family it was
-  /// learned on.
+  /// A `setState` and nothing else: the panel is drawn from
+  /// [_videoFrameRate], and the rate decides which of the speed buttons
+  /// it offers. Nothing is applied here -- a rate is not a judgement
+  /// about a file, and what is on the player is the viewer's.
   void _onFrameRate(double? rate) {
     if (!mounted) return;
-    final video = subtitleSpeedDirection(rate);
-    // An unknown rate rules nothing out, which is what unknown means
-    // everywhere else here too.
-    final withdraw =
-        _restoredSpeed && video != null && video != _timing.speedDirection;
-    setState(() {
-      _videoFrameRate = rate;
-      if (withdraw) {
-        _restoredSpeed = false;
-        // Dropped and not reversed, and the shift left alone: it was
-        // measured against this release and no rate says anything
-        // about it.
-        _timing = SubtitleTiming(shiftSteps: _timing.shiftSteps);
-      }
-    });
-    // Only when something moved: every other emission would otherwise
-    // rewrite mpv's multiplier and offset with the values they hold.
-    if (withdraw) _applySubtitleTiming();
+    setState(() => _videoFrameRate = rate);
   }
 
   /// mpv's own error log. Not shown, only recorded: this is where the
@@ -1732,9 +1685,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // it.
     _subtitleMatchNote = null;
     _timing = _rememberedTiming(subtitle);
-    // Whatever speed this put on is the machine's, so a rate arriving
-    // afterwards may still withdraw it ([_onFrameRate]).
-    _restoredSpeed = _timing.speedDirection != null;
     _applySubtitleTiming();
   }
 
@@ -1749,53 +1699,54 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// from; the offset under the video release as well, since it is the
   /// video's pre-roll less whatever the subtitle's source assumed. See
   /// [SubtitleSyncMemory].
+  ///
+  /// Both come back as the measured halves of a [SubtitleTiming] rather
+  /// than as presses, because that is what they were when they were
+  /// written: a ratio and an offset in seconds, which no whole number of
+  /// presses names. The presses then count on top, so the first shift
+  /// after a file is put back moves it by a tenth from where it was left
+  /// rather than from nothing.
   SubtitleTiming _rememberedTiming(SubtitleInfo? subtitle) {
     final memory = _prefs?.subtitleSync;
     final group = subtitle?.group;
     if (memory == null || group == null) return const SubtitleTiming();
     final series = _syncSeries;
+    final seconds = memory.shiftSecondsFor(
+      series: series,
+      group: group,
+      release: _syncRelease,
+    );
     return SubtitleTiming(
-      shiftSteps: memory.shiftStepsFor(
-        series: series,
-        group: group,
-        release: _syncRelease,
-      ),
-      speedDirection: _rememberedSpeed(memory, series, group),
+      // Nothing remembered is what nothing applied looks like, so a
+      // stored zero and a stored 1.0 both come back as untouched rather
+      // than as a correction Reset would offer to undo.
+      calibratedSpeed: _rememberedSpeed(memory, series, group),
+      calibratedDelay: seconds == 0 ? null : seconds,
     );
   }
 
-  /// The speed [memory] holds for [group]'s files of [series], unless
-  /// this video's own rate says that direction cannot be the one.
+  /// The multiplier [memory] holds for [group]'s files of [series], and
+  /// null when it holds none this build will put on a player.
   ///
-  /// A speed carries across releases because releases of one show
-  /// almost always share a frame rate -- but when this one does not,
-  /// carrying it is the reciprocal mistake the whole design is built to
-  /// avoid. A remembered `stretch` says the group's files are PAL-timed,
-  /// which against a PAL-family video needs nothing rather than needing
-  /// compressing, so the remembered direction is dropped and not
-  /// reversed. It stays in the file: the next release of this show is
-  /// likely to be the family it was learned on.
-  ///
-  /// This is also what keeps the panel honest. The direction the video
-  /// ruled out has no button, so a correction in force in it could be
-  /// toggled off only by pressing the *other* one -- which lands on the
-  /// reciprocal rather than on 1.0, and never on 1.0 at all.
-  ///
-  /// The rate is observed, so on a torrent it regularly says nothing at
-  /// the moment this runs and the speed goes on unchallenged.
-  /// [_onFrameRate] applies the same rule to the answer when it arrives.
-  SubtitleSpeedDirection? _rememberedSpeed(
+  /// The file is forgiving by design and this is the one place a number
+  /// out of it becomes `sub-speed`, so the range is checked here rather
+  /// than there. media_kit writes the property with
+  /// `mpv_set_property_string` and throws the return code away, so a
+  /// value outside `<0.1-10.0>` is refused in silence and the multiplier
+  /// the *previous* file left behind stays in force while the panel
+  /// claims a new one -- a hand-edited preferences file is not worth
+  /// that. A stored 1.0 is the file's own timing and is nothing applied,
+  /// which is what nothing remembered looks like too.
+  double? _rememberedSpeed(
     SubtitleSyncMemory memory,
     String? series,
     String group,
   ) {
-    final stored = SubtitleSpeedDirection.parse(
-      memory.speedFor(series: series, group: group),
-    );
-    final video = subtitleSpeedDirection(_videoFrameRate);
-    // An unknown rate rules nothing out, which is what unknown means
-    // everywhere else here too.
-    return video == null || video == stored ? stored : null;
+    final stored = memory.speedFor(series: series, group: group);
+    if (stored == null || stored == 1) return null;
+    return stored >= minSubtitleSpeed && stored <= maxSubtitleSpeed
+        ? stored
+        : null;
   }
 
   /// The show or film an adjustment made here belongs to: the meta item's
@@ -1854,8 +1805,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final group = _externalSubtitle?.group;
     final series = _syncSeries;
     final release = _syncRelease;
-    final speed = _timing.speedDirection?.stored;
-    final shiftSteps = _timing.shiftSteps;
+    // What is on the player, not how it got there: a toggle, a
+    // calibration and a match all arrive at one multiplier and one
+    // offset, and next episode only the two numbers matter. 1.0 and 0.0
+    // are what untouched looks like, and untouched is forgotten.
+    final speed = _timing.speed == 1 ? null : _timing.speed;
+    final shiftSeconds = _timing.delay;
     _pendingSync = null;
     // No group from the addon, or no series: there is nothing to key the
     // adjustment on, and applying it to the files it might belong to is
@@ -1871,7 +1826,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               group: group,
               release: release,
               speed: speed,
-              shiftSteps: shiftSteps,
+              shiftSeconds: shiftSeconds,
             ),
           )
           .ignore();
@@ -1938,9 +1893,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _adjustTiming(SubtitleTiming timing) {
     if (timing == _timing) return;
     _subtitlesChosenByHand = true;
-    // Theirs from here, so a rate arriving late points the buttons and
-    // leaves the speed alone ([_onFrameRate]).
-    _restoredSpeed = false;
     setState(() => _timing = timing);
     _applySubtitleTiming();
     _rememberTiming();

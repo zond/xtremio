@@ -528,7 +528,7 @@ _ReleaseFit _fitOf(
   final group = subtitle.group;
   if (group != null &&
       (memory.speedFor(series: series, group: group) != null ||
-          memory.shiftStepsFor(
+          memory.shiftSecondsFor(
                 series: series,
                 group: group,
                 release: release,
