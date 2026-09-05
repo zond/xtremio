@@ -1886,6 +1886,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _rememberTiming();
   }
 
+  /// The panel's Reset: back to untouched, and the marks with it.
+  ///
+  /// Reset is the viewer undoing their own work, and the marks *are*
+  /// that work -- what is on `sub-speed` and `sub-delay` after two of
+  /// them is the line through them, so putting the two numbers back
+  /// without dropping the points they came from undoes nothing. The
+  /// next mark would join a pair the viewer has just discarded, which is
+  /// still the widest pair and so still the answer, and the panel
+  /// would go on saying the episode was fixed over a row reading 1.000x
+  /// and +0.0 s. Short of switching files there would then be no way to
+  /// take back a mark at all.
+  ///
+  /// It is not [_resetSubtitleTiming]: that one is the machine putting a
+  /// file back the way it found it and deliberately does not remember
+  /// what it did. This is a press, so it goes through [_adjustTiming]
+  /// like every other press -- back to untouched is *forgotten* rather
+  /// than stored as a zero, which is what that path already does.
+  void _undoSubtitleTiming() {
+    _calibration = SubtitleCalibration.none;
+    setState(() => _markNote = null);
+    _adjustTiming(const SubtitleTiming());
+  }
+
   /// A press of "This is right": the line on screen is where it belongs,
   /// which is one mark.
   ///
@@ -3425,8 +3448,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             markNote: _markNote,
                             onShift: (step) =>
                                 _adjustTiming(_timing.shiftedBy(step)),
-                            onReset: () =>
-                                _adjustTiming(const SubtitleTiming()),
+                            onReset: _undoSubtitleTiming,
                             onClose: _hideSubtitleTiming,
                           ),
                         ),

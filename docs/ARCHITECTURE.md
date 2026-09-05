@@ -581,9 +581,12 @@ what every model field means. The shape of the thing is in the
   still holds ten minutes later. The marks belong to the file that was
   playing and go with it, since a point on one file's timeline pairing
   with the next file's would be a lever arm across two of them; only what
-  they derive is kept. Reset goes back to untouched, 1.0 and 0.0,
-  because with nothing else writing either property that is what "undo
-  what I did" means. What the viewer fixes is **remembered, keyed on what caused
+  they derive is kept. Reset goes back to untouched, 1.0 and 0.0, and
+  throws the marks away with them, because with nothing else writing
+  either property that is what "undo what I did" means -- and what those
+  two numbers hold is the line through the marks, so keeping the points
+  would let the next press pair with a judgement just discarded and put
+  the whole answer back. What the viewer fixes is **remembered, keyed on what caused
   it** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`, under the
   one `subtitleSync` preference), so the same correction is not made
   again on the next episode, and `_resetSubtitleTiming` puts it back

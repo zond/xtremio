@@ -214,9 +214,13 @@ and neither is true any more. Each rule below has a test; see
   each is a judgement about where a cue belongs, which stays true
   whatever transform was in force when it was made, and that is what
   makes a mark a correspondence rather than the shift in force written
-  down. The marks belong to the file that was playing and
-  `_resetSubtitleTiming` throws them away with the rest of it, and only
-  what they derive is remembered.
+  down. The marks belong to the file that was playing, and both paths
+  that discard them discard all of them: `_resetSubtitleTiming` when
+  something changes what is on screen, and the panel's own Reset
+  (`_undoSubtitleTiming`), which is the viewer taking their work back --
+  and the marks are that work, since what a pair of them put on the two
+  properties is the line through the pair. Only what they derive is
+  remembered.
 - **What `sub-start` answers was measured, not read.** The property
   reports the cue's **raw time in the file**, moved by neither
   `sub-delay` nor `sub-speed`, so a mark takes it as it stands. That was

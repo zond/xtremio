@@ -284,6 +284,38 @@ void main() {
     expect(player.engine.subtitleSpeed, 1);
   });
 
+  testWidgets('Reset throws the marks away with the numbers they made', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final player = await playing(tester);
+    await openPanel(tester);
+    await mark(tester, player, cue: 10, pressedAt: 12);
+    await shift(tester, 6);
+    await mark(tester, player, cue: 610, pressedAt: 612);
+    expect(player.engine.subtitleSpeed, closeTo(600.6 / 600, 1e-9));
+
+    await tester.tap(find.byKey(const ValueKey('subtitle-timing-reset')));
+    await tester.pumpAndSettle();
+    expect(player.engine.subtitleSpeed, 1);
+    expect(player.engine.subtitleDelay, 0);
+
+    // The note goes too: left up it would say the episode was fixed over
+    // a row that now reads 1.000x and +0.0 s.
+    expect(find.text(SubtitleCalibrationOutcome.rate.note), findsNothing);
+    expect(find.text(SubtitleCalibrationOutcome.offset.note), findsNothing);
+
+    // And the marks themselves, which are the work Reset undoes: the
+    // pair the viewer just discarded is still the widest one there is, so
+    // a mark kept behind would come back as the answer at the next press
+    // -- and short of switching files there would be no way to take a bad
+    // mark back at all.
+    await mark(tester, player, cue: 300, pressedAt: 302);
+    expect(find.text(SubtitleCalibrationOutcome.offset.note), findsOneWidget);
+    expect(player.engine.subtitleSpeed, 1);
+    expect(player.engine.subtitleDelay, 0);
+  });
+
   testWidgets('switching subtitles throws the marks away', (tester) async {
     useWideViewport(tester);
     final player = await playing(tester);

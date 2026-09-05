@@ -155,6 +155,12 @@ class SubtitleTimingOverlay extends StatelessWidget {
   /// Back to untouched: speed 1.0, shift 0.0. With nothing else writing
   /// either property, "undo what I did" and "back to untouched" are the
   /// same thing.
+  ///
+  /// The marks behind those two numbers go as well
+  /// (`PlayerScreen._undoSubtitleTiming`), and so does [markNote]: what
+  /// a pair of marks put on the speed *is* the line through them, so
+  /// resetting the numbers and keeping the points undoes nothing that
+  /// the next press would not bring straight back.
   final VoidCallback onReset;
   final VoidCallback onClose;
 
