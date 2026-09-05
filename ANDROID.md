@@ -50,8 +50,9 @@ build, so it is one of the two that need libclang.
 
 Those are the `flutter build apk` lines below plus the two `--dart-define`s
 that put a version and a commit in the Diagnostics header (see the Makefile,
-and `docs/OPERATIONS.md`, "Diagnostics off a device"); a build without them reports
-`app: unknown`, which is the one line saying which build a report is about.
+and `docs/OPERATIONS.md`, "Diagnostics off a device"); a build without them
+reports `app: unknown`, which is the one line saying which build a report is
+about.
 The plain commands, for anything the Makefile does not cover:
 
 ```bash
