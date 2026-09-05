@@ -126,7 +126,18 @@ class _FocusableTileState extends State<FocusableTile> {
         child: FocusHighlight(
           focused: _focused,
           borderRadius: widget.borderRadius,
-          child: TileFocus(focused: _focused, child: widget.child),
+          // Nothing drawn inside a tile is a focus stop. The tile takes
+          // focus as a whole and the [RemotePress] above takes select, so
+          // a control in here is one the remote can land on and cannot
+          // press -- and the ring, which follows the tile's whole subtree,
+          // says the tile is focused while the D-pad is really sitting on
+          // a dead button somewhere in it. That was the installed addon
+          // list: down walked its ⋮ menus, one per row, and the walk
+          // could not reach anything below a menu that was not another
+          // menu. Something that must be pressed goes beside the tile.
+          child: ExcludeFocus(
+            child: TileFocus(focused: _focused, child: widget.child),
+          ),
         ),
       ),
     );

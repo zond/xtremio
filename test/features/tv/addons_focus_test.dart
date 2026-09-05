@@ -103,6 +103,31 @@ void main() {
     );
   });
 
+  testWidgets('the remote rests on the tile, not on a button inside it', (
+    tester,
+  ) async {
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(harness(fakeCore()));
+    await tester.pumpAndSettle();
+    await press(tester, LogicalKeyboardKey.arrowDown);
+
+    // Every row draws a menu button inside the tile, and a button inside a
+    // focusable thing is not a button: the tile takes select before it,
+    // and the ring follows the whole tile, so focus stopping on the menu
+    // looked exactly like focus on the tile while pressing did something
+    // else. It was also in the way -- the walk went menu to menu down the
+    // list, past anything drawn under a row.
+    final tile = find.descendant(
+      of: find.ancestor(
+        of: find.text('YouTube'),
+        matching: find.byType(AddonTile),
+      ),
+      matching: find.byType(FocusableTile),
+    );
+    expect(focusedTileName(tester), 'YouTube');
+    expect(FocusManager.instance.primaryFocus?.rect, tester.getRect(tile));
+  });
+
   testWidgets('the remote\'s select key opens the addon on the tile', (
     tester,
   ) async {
