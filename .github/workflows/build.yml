@@ -363,11 +363,26 @@ jobs:
           | `xtremio-armeabi-v7a-debug-key.apk` | Chromecast with Google TV and other 32-bit Android TV boxes |
           | `xtremio-linux-x64.tar.gz` | Linux desktop (needs `libmpv`) |
           | `xtremio-windows-x64.zip` | Windows desktop |
-          | `xtremio-macos.zip` | macOS (unsigned; right-click, Open) |
+          | `xtremio-macos.zip` | macOS, Intel and Apple silicon (unsigned -- see below) |
 
           iOS is built in CI to prove it compiles, but not shipped: there is no
           signing identity here, and App Store terms are incompatible with the
           GPL-3 the compiled binary carries.
+
+          ## The macOS build is unsigned, and Sequoia changed how you get past that
+
+          There is no Developer ID here, so macOS quarantines the download and
+          refuses to open it. Control-clicking and choosing Open **is no longer
+          a way round it**: macOS 15 Sequoia removed that override. Instead,
+          try to open the app once and let it be refused, then go to System
+          Settings > Privacy & Security, where an "Open Anyway" button now
+          appears for it.
+
+          Or clear the quarantine flag yourself before opening it:
+
+          ```
+          xattr -dr com.apple.quarantine /Applications/xtremio.app
+          ```
 
           ## The APKs are test builds, signed with a throwaway key
 
