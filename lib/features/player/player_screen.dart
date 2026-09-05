@@ -1920,11 +1920,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Measures [playing] against [reference] and applies the answer, or
   /// says why it did not.
   ///
-  /// The count is what is shown either way. A pair that does not match --
+  /// The score is what is shown either way. A pair that does not match --
   /// two files for different episodes, half a film against a whole one, a
-  /// reference that is itself adrift -- comes back with the same number
-  /// in it, and saying "only 184 of 694 cues matched" is what makes the
-  /// refusal something the viewer can judge instead of an apology.
+  /// reference that is itself adrift -- comes back with the same number in
+  /// it, and with the transform beside it, which is what makes the refusal
+  /// something the viewer can judge instead of an apology. A fraction of
+  /// cues is what this replaced: it is not comparable between a file that
+  /// merges lines and one that does not, and it sent the owner looking for
+  /// a different reference when the reference was fine.
   ///
   /// A convincing answer goes through [_adjustTiming] like a press does,
   /// because it is one: the viewer chose the file it was measured
@@ -1958,7 +1961,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Two fetches take seconds, and the viewer can have changed the
     // subtitle in the meantime: a transform measured for a file that is
     // no longer on screen would ruin the one that replaced it, and its
-    // count would be a claim about a file nobody measured.
+    // score would be a claim about a file nobody measured.
     if (_externalSubtitle?.url != playing.url) {
       setState(() => _matchingSubtitle = false);
       return;

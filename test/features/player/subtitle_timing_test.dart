@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/subtitle_groups.dart';
+import 'package:xtremio/features/player/subtitle_match.dart';
 import 'package:xtremio/features/player/subtitle_timing.dart';
 import 'package:xtremio/shell/device_profile.dart';
 
@@ -134,20 +135,35 @@ void main() {
     ) async {
       // 360 dp tall is a Galaxy S-series phone held sideways, and the
       // player draws the panel 64 below the top of it, so there is under
-      // 300 to sit in. A refusal is what does not fit: "Only 184 of 694
-      // cues matched, so nothing was changed" wraps to three lines, and
-      // the panel that overflowed pushed Reset off the bottom of the
-      // screen -- Reset being the way back from the state the viewer has
-      // just landed in. It is also the one case the panel cannot avoid
-      // reaching, since a refusal is the honest answer to a bad
-      // reference.
+      // 300 to sit in. A refusal is what does not fit: it wraps to three
+      // lines, and the panel that overflowed pushed Reset off the bottom
+      // of the screen -- Reset being the way back from the state the
+      // viewer has just landed in. It is also the one case the panel
+      // cannot avoid reaching, since a refusal is the honest answer to a
+      // bad reference.
+      //
+      // Built by `subtitleMatchNote` rather than written out, because a
+      // sentence quoted here goes stale the moment the sentence changes
+      // and the test then guards a string the app cannot produce. These
+      // are the widest numbers a refusal carries: two digits of score, a
+      // speed away from 1, and an offset at the far end of the window.
+      final refusal = subtitleMatchNote(
+        const SubtitleMatch(
+          ratio: 0.9034,
+          offset: -599.94,
+          score: 0.4432,
+          cues: 694,
+          referenceCues: 1024,
+          convincing: false,
+        ),
+      );
       useScreen(tester, const Size(640, 360));
       await tester.pumpWidget(
         panel(
           const SubtitleTiming(),
           inset: 64,
           onMatch: () {},
-          matchNote: 'Only 184 of 694 cues matched, so nothing was changed',
+          matchNote: refusal,
         ),
       );
       expect(tester.takeException(), isNull);

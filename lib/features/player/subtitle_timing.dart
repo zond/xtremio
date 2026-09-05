@@ -158,9 +158,9 @@ class SubtitleTimingOverlay extends StatelessWidget {
   final bool matching;
 
   /// What the last measurement said, and null when none has been made
-  /// against the file on screen. The count is shown whichever way it
-  /// went: it is the evidence for applying the transform, and the
-  /// evidence for refusing to.
+  /// against the file on screen. The score is shown whichever way it
+  /// went: it is the evidence for applying the transform, and -- with the
+  /// transform beside it -- the evidence for refusing to.
   final String? matchNote;
 
   /// Attached to the first button: where the remote lands when the panel
@@ -265,7 +265,8 @@ class SubtitleTimingOverlay extends StatelessWidget {
           // tall enough for is not something it gets to decide: a
           // 360 dp-tall phone held sideways leaves it under 300, and the
           // refusal a match can come back with -- three lines of "only
-          // 184 of 694 cues matched" -- is exactly what does not fit.
+          // 44 % more overlap than chance, at 0.903x and -599.9 s, so
+          // nothing was changed" -- is exactly what does not fit.
           // Overflowing there pushes Reset off the bottom of the screen,
           // and Reset is the way back from the state the viewer has just
           // landed in. Focus traversal scrolls what it moves to, so the
