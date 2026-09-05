@@ -192,16 +192,58 @@ const SAMPLE_CAP: usize = 300;
 const OFFSET_BIN: f64 = 0.25;
 const WIDEST_OFFSET: f64 = 3600.0;
 
-/// The ratios tried before refining: the coarse sweep's step, and the
-/// finer one taken around whatever it liked best.
+/// The bounds the coarse sweep's step is kept between; what it actually
+/// takes is [`coarse_step`], which is a property of the file's length.
 ///
-/// A step of 0.002 leaves at most 0.001 of ratio error, which over a
-/// quarter of an hour is under a second: enough of the file still lands
-/// within [`TOLERANCE`] for the right ratio to be the peak, even where it
-/// is not yet the exact answer. The refinement and then the refit are what
-/// make it exact.
-const COARSE_STEP: f64 = 0.002;
-const FINE_STEP: f64 = 0.0002;
+/// The coarser bound is for a file too short for the derivation to mean
+/// anything, and the finer one is a stop against a ten-hour timeline
+/// spending a television's afternoon on a sweep. Neither is reached by a
+/// film or an episode.
+const COARSEST_STEP: f64 = 0.002;
+const FINEST_STEP: f64 = 0.00002;
+
+/// How many ratios the winner is refined against, either side of it, at a
+/// step of [`coarse_step`] divided by the same number. Enough to close
+/// the coarse step, after which [`refit`] answers to the data rather than
+/// to any grid.
+const FINE_STEPS: i32 = 10;
+
+/// The coarse sweep's step for a playing file spanning `span` seconds.
+///
+/// **The step cannot be a constant, because what a wrong ratio costs
+/// depends on how long the file is.** A ratio out by `d` puts a cue `t`
+/// seconds into the file `d * t` from where it belongs; the offset comes
+/// from the mode of the differences, which centres that error on the
+/// file, so the worst cue is out by `d * span / 2`, and a step of `h`
+/// leaves `d` as large as `h / 2`.
+///
+/// For the right ratio to *win* the sweep, the nearest step to it has to
+/// keep the **whole** file within [`TOLERANCE`]. Half the file landing is
+/// not enough: two unrelated files already agree on 22-53 % of their cues
+/// by accident, with a ratio and an offset of the sweep's own choosing,
+/// and that background is what the peak has to beat. So `h * span / 4`
+/// must not exceed [`TOLERANCE`], which is `h <= 4 * TOLERANCE / span`,
+/// and this is that with a factor of two in hand.
+///
+/// The 0.002 this replaced was seven times too coarse for a
+/// three-quarter-hour episode: it left up to two and a half seconds of
+/// drift across it, so only about a quarter of the file landed and the
+/// peak sank into the background. It refused pairs from the owner's own
+/// files that agree to a millisecond -- a Czech subtitle against a
+/// Hungarian one for the same episode, 713 of its 714 cues on a cue of
+/// the other, reported as "180 of 714 matched, so nothing was changed".
+/// Four more pairs did the same, and the sweep's own score agreed the
+/// answer it gave was the worse one by a factor of eight.
+///
+/// What it costs is linear and small: an episode is about seven hundred
+/// ratios where it was a hundred, which is a few tens of milliseconds.
+fn coarse_step(span: f64) -> f64 {
+    if span > 0.0 {
+        (2.0 * TOLERANCE / span).clamp(FINEST_STEP, COARSEST_STEP)
+    } else {
+        COARSEST_STEP
+    }
+}
 
 impl Alignment {
     /// The share of the playing file's cues this line puts on a cue of the
@@ -268,18 +310,21 @@ fn solve(playing: &[f64], reference: &[f64]) -> Alignment {
             *line = (ratio, offset);
         }
     };
-    let coarse_steps = ((HIGHEST_RATIO - LOWEST_RATIO) / COARSE_STEP).round() as i32;
+    let coarse = coarse_step(
+        playing.last().copied().unwrap_or_default() - playing.first().copied().unwrap_or_default(),
+    );
+    let coarse_steps = ((HIGHEST_RATIO - LOWEST_RATIO) / coarse).round() as i32;
     for step in 0..=coarse_steps {
         try_ratio(
-            LOWEST_RATIO + f64::from(step) * COARSE_STEP,
+            LOWEST_RATIO + f64::from(step) * coarse,
             &mut line,
             &mut closest,
         );
     }
     let around = line.0;
-    let fine_steps = (COARSE_STEP / FINE_STEP).round() as i32;
-    for step in -fine_steps..=fine_steps {
-        let ratio = around + f64::from(step) * FINE_STEP;
+    let fine = coarse / f64::from(FINE_STEPS);
+    for step in -FINE_STEPS..=FINE_STEPS {
+        let ratio = around + f64::from(step) * fine;
         if (LOWEST_RATIO..=HIGHEST_RATIO).contains(&ratio) {
             try_ratio(ratio, &mut line, &mut closest);
         }
@@ -633,6 +678,38 @@ mod tests {
         for count in [20usize, 30, FEWEST_CUES - 1] {
             assert!(align(&slice(count), &unrelated).is_none(), "{count} cues");
         }
+    }
+
+    #[test]
+    fn the_coarse_step_keeps_a_whole_file_inside_the_tolerance() {
+        // What the sweep's step has to be worth. Half a file landing is
+        // not enough for the right ratio to win: two unrelated files
+        // already agree on a quarter of their cues by accident, with a
+        // ratio and an offset of the sweep's own choosing, so the peak
+        // has to be the whole file rather than the part of it nearest
+        // the middle.
+        //
+        // The constant this replaced was 0.002 whatever the file was,
+        // which for anything longer than about twenty minutes leaves the
+        // nearest step to the right ratio throwing the ends of the file
+        // clear of `TOLERANCE`. Barely a quarter of a three-quarter-hour
+        // episode landed, and on the owner's own files that refused
+        // pairs whose timings agree to a millisecond.
+        for span in [300.0, 1_200.0, 2_600.0, 5_400.0, 10_800.0] {
+            let worst_ratio_error = coarse_step(span) / 2.0;
+            // The offset is the mode of the differences, which centres
+            // the error on the file, so the worst cue is half a span out
+            // from the middle.
+            let worst_cue_error = worst_ratio_error * span / 2.0;
+            assert!(
+                worst_cue_error <= TOLERANCE,
+                "{span} s: {worst_cue_error} s"
+            );
+        }
+        // A file too short for that to ask anything is still swept at the
+        // coarser bound, rather than in one enormous step.
+        assert_eq!(coarse_step(0.0), COARSEST_STEP);
+        assert_eq!(coarse_step(60.0), COARSEST_STEP);
     }
 
     #[test]
