@@ -107,6 +107,23 @@ abstract interface class PlaybackEngine {
   Future<void> setSubtitleDelay(double seconds);
 
   /// Applies to the subtitles drawn over the video from the next build.
+  /// Where the cue on screen starts on the **subtitle file's own
+  /// timeline**, in seconds: its raw time in the file, before
+  /// [setSubtitleSpeed] multiplied it and [setSubtitleDelay] moved it.
+  /// Null when there is no cue on screen, and on every backend but
+  /// libmpv.
+  ///
+  /// This is half of a mark -- the other half is the video position the
+  /// viewer says that line belongs at -- and which timeline the number
+  /// is on decides every one of them: two marks read off different
+  /// timelines are points on two different lines, and
+  /// `SubtitleCalibration` fits a line. Which of the two libmpv answers
+  /// with was settled by measurement rather than by documentation; the
+  /// measurement is written down at [MediaKitEngine.subtitleCueStart],
+  /// which is the one place that would change if a build of libmpv ever
+  /// answered the other one.
+  Future<double?> subtitleCueStart();
+
   Future<void> setSubtitleStyle(SubtitleStyle style);
 
   /// The video surface, without any built-in controls. Subtitles are drawn
@@ -617,6 +634,57 @@ class MediaKitEngine implements PlaybackEngine {
       // property. The latter never shifted anything either, so there is
       // no stale offset for a failed reset to leave behind. Unlike
       // `sub-speed` this property has no range to fall outside of.
+    }
+  }
+
+  /// The mpv property holding the start time of the subtitle event being
+  /// drawn, in seconds.
+  static const String subtitleCueStartProperty = 'sub-start';
+
+  /// What that property answers, and how we know.
+  ///
+  /// mpv's own documentation leaves it open whether `sub-start` is the
+  /// cue's raw time in the file or one already moved by `sub-delay` and
+  /// `sub-speed`, and a mark is only worth making if the answer is the
+  /// raw one: mixing the two frames of reference gives two marks two
+  /// different lines to sit on, and the solve is then confidently wrong.
+  /// The sign of `sub-speed` was taken from the manual once and had to be
+  /// confirmed on the owner's television, so this one was measured first.
+  ///
+  /// **The probe.** libmpv 0.41.0 -- on Linux this is the very library
+  /// media_kit loads, `libmpv.so` from the system -- with a 60-second
+  /// video, a subtitle whose one cue is `20.000 --> 25.000`, and
+  /// `sub-speed=2.0` with `sub-delay=5.0` set before `loadfile`. The cue
+  /// is drawn from 45 s to 55 s of video: 46 and 54 have it on screen, 43
+  /// and 56 do not. That is `speed * cue + delay` at both ends, which is
+  /// the line `SubtitleCalibration` fits and the sign the panel shows.
+  /// At every position inside that window `sub-start` answered **20.000**
+  /// and `sub-end` 25.000 -- the times written in the file, moved by
+  /// neither property. The transform had to be a real one for the reading
+  /// to mean anything: at speed 1.0 and delay 0.0 the raw and the drawn
+  /// time are the same number and the probe proves nothing.
+  ///
+  /// So the value is passed on as it stands. What was *not* probed is the
+  /// libmpv media_kit ships for Android (mpv v0.36.0-549-g78d43740f5),
+  /// which a desktop cannot load; if a build ever answers the drawn time
+  /// instead, this is the one line to change -- `(value - delay) / speed`
+  /// for the two properties in force.
+  @override
+  Future<double?> subtitleCueStart() async {
+    final native = _player.platform;
+    // Only the native (libmpv) backend has properties, and only it draws
+    // subtitles we can be asked about.
+    if (native is! NativePlayer || _disposed) return null;
+    try {
+      return double.parse(await native.getProperty(subtitleCueStartProperty));
+    } catch (_) {
+      // No cue on screen: mpv answers an unavailable property with
+      // nothing at all, which media_kit hands back as an empty string, so
+      // that arrives here as a parse failure rather than as an error. A
+      // build without the property and a player torn down mid-read come
+      // out the same way, and all three mean the same thing -- there is
+      // nothing to mark.
+      return null;
     }
   }
 

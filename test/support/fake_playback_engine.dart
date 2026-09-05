@@ -233,6 +233,23 @@ class FakePlaybackEngine implements PlaybackEngine {
     subtitleDelays.add(seconds);
   }
 
+  /// What `subtitleCueStart` answers: the raw start of the cue a test
+  /// says is on screen, and null for a moment with no subtitle on it.
+  ///
+  /// The file's own timeline, as libmpv's `sub-start` reports it, so a
+  /// test sets the time written in the file and never the one the
+  /// transform in force would draw it at.
+  double? cueStart;
+
+  /// How many times it has been asked.
+  int cueStartReads = 0;
+
+  @override
+  Future<double?> subtitleCueStart() async {
+    cueStartReads++;
+    return cueStart;
+  }
+
   @override
   Future<void> setSubtitleStyle(SubtitleStyle style) async {
     subtitleStyle = style;
