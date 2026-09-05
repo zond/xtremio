@@ -523,8 +523,8 @@ it, except where the rule itself says a test cannot reach it.
   row cannot be reached at all -- silently, and only on a row longer than
   the screen. A row the remote walks end to end is a
   `SingleChildScrollView` over a `Row` (the season pills, the episode
-  cards), and its test walks to the *last* item of a row with more items
-  than fit. What that costs is paid down by bounding each image's decode
+  cards, both rows of source cards), and its test walks to the *last* item
+  of a row with more items than fit. What that costs is paid down by bounding each image's decode
   to the box it is drawn in, not by building fewer widgets.
 - **A width shared between N things is clamped at zero.** Anything of the
   form `(width - gaps) / n` goes negative on a narrow screen with a large

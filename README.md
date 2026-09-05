@@ -110,6 +110,23 @@ Rust engine for addons, catalogs, library, and playback state) and
 > instead. The row scrolls to the selected card, so resuming at episode
 > nineteen does not start the remote at episode one, and an episode that
 > has not aired is drawn saying so and takes no press and no focus. The
+> **sources** are the last two rows rather than a pane down the right: a card
+> per group -- a resolution rung or an addon, whichever the same
+> `streamsSectioned` preference already says, never a second setting --
+> carrying the line a collapsed section header carries on a phone, and under
+> whichever card is chosen a row of that group's sources. The group row stays
+> put with the chosen card marked, so another group is a sideways press away
+> rather than a press back and a press down; the order chips still order
+> inside one; the last-used shortcut is a card of its own above them and the
+> place the remote starts; and Back puts the open row away before it leaves
+> the screen, a rung on the same ladder the player comes down. Which group is
+> open is deliberately *not* the phone's `openStreamSections`: that is a
+> global set of resolutions kept across restarts, and this is one row at a
+> time that Back closes -- the same word for two different things. What the
+> addons did other than answer -- the ones that failed, the ones that had
+> nothing, and nobody having anything at all -- is the last card of that row,
+> counting on its own line so a viewer who never chooses it is still told,
+> and naming names in the row it opens. The
 > **player** plays torrents through the
 > embedded server and HTTP streams directly, with its own controls (seek
 > bar with the buffered range, play/pause, seek buttons, volume,
