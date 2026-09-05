@@ -184,8 +184,27 @@ jobs:
 
       # The Makefile's job, spelled out: this runner has no make, and a build
       # without the two defines reports `app: unknown` in Diagnostics.
+      #
+      # `permission_handler_windows` -- pulled in transitively by
+      # flutter_chrome_cast, and unreachable on this platform -- includes
+      # <experimental/coroutine>, which the MSVC 14.51 STL on the current
+      # image answers with a static assertion rather than a warning (C2338,
+      # STL1011). The macro is the escape hatch that error names, and there
+      # is no version of the plugin without the include: 0.2.2 is the newest,
+      # and `permission_handler` 13 still depends on ^0.2.2. When Microsoft
+      # finally removes the header, as that error promises, this stops
+      # working and the plugin has to be fixed upstream.
+      #
+      # CXXFLAGS, which CMake reads into CMAKE_CXX_FLAGS for the whole
+      # project, rather than cl.exe's own `CL`: this step runs under Git
+      # Bash, whose MSYS runtime rewrites an environment value that starts
+      # with `/` into a Windows path on the way to a native process, so a
+      # `/D...` there arrives as a directory name and CMake stops being able
+      # to find a C++ compiler at all. `-D` for the same reason.
       - name: flutter build windows, stamped the way the Makefile stamps
         shell: bash
+        env:
+          CXXFLAGS: -D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: |
           # Git for Windows checks out CRLF and `$( )` strips the trailing
           # newline but not the CR, so without `tr` the version define carries
