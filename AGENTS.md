@@ -495,13 +495,18 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   says one fixed sentence. What is measured belongs to the file it was
   measured for, so `_resetSubtitleTiming` drops the note and an answer
   that lands after the subtitle changed is thrown away.
-- **Nothing in the player reads the video's frame rate.** There is no
-  `videoFrameRate` on the engine and no observation of `container-fps`
-  for subtitles: the one thing that used it was the toggle's direction.
-  `PlaybackStats` still polls the property, but only while the stats OSD
-  is on screen and only to print it. Adding the observation back means
-  adding a consumer that reasons from a declared rate, which is what
-  this section refuses.
+- **Nothing about a subtitle reads the video's frame rate.** The engine
+  does observe `container-fps` (`PlaybackEngine.videoFrameRate`), and
+  `PlaybackStats` polls it while the stats OSD is up, but neither is
+  reachable from anything in this section: the observation exists for the
+  *display*, which is asked to present the film at the rate the film is
+  (`DisplayFrameRate`, ANDROID.md). That is the one thing a declared rate
+  may decide, because it is a claim about the video's own presentation
+  and it is checked against the picture within seconds. A subtitle's
+  timing is the case this section is about, and the rate says nothing
+  about it -- the thing that used to read it was the toggle's direction.
+  A second consumer here means a consumer that reasons from a declared
+  rate, which is what this section refuses.
 - **Nothing is hidden; what orders a language is the release.**
   `subtitlesByRelease` puts a language's files that the addon says were
   cut for the release actually playing first, then the ones from a group

@@ -16,6 +16,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   final _engineLog = StreamController<String>.broadcast();
   final _volume = StreamController<double>.broadcast();
   final _tracks = StreamController<PlaybackTracks>.broadcast();
+  final _videoFrameRate = StreamController<double>.broadcast();
   late final _stats = StreamController<PlaybackStats>.broadcast(
     onListen: () => statsListeners++,
     onCancel: () => statsListeners--,
@@ -115,6 +116,10 @@ class FakePlaybackEngine implements PlaybackEngine {
   void emitTracks(PlaybackTracks tracks) => _tracks.add(tracks);
   void emitStats(PlaybackStats stats) => _stats.add(stats);
 
+  /// The rate the open container declares, as libmpv's `container-fps`
+  /// observation reports it once the file is loaded.
+  void emitVideoFrameRate(double fps) => _videoFrameRate.add(fps);
+
   @override
   Stream<Duration> get position => _position.stream;
 
@@ -147,6 +152,9 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   @override
   Stream<PlaybackStats> get stats => _stats.stream;
+
+  @override
+  Stream<double> get videoFrameRate => _videoFrameRate.stream;
 
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {

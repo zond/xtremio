@@ -52,6 +52,20 @@ abstract interface class PlaybackEngine {
   /// simply never emits.
   Stream<PlaybackStats> get stats;
 
+  /// The frame rate the open video declares (`container-fps`), re-emitted
+  /// whenever it changes -- which is once per file, as it is loaded.
+  /// Nothing is emitted for media that declares no rate, nor on a backend
+  /// without the property.
+  ///
+  /// The one consumer is the display: a 23.976 fps film presented on a
+  /// 59.94 Hz output lands on a 3:2 cadence, which is what "the picture
+  /// jumps" looks like, so the player asks the television for a refresh
+  /// rate that matches (`DisplayFrameRate`). That is a statement about the
+  /// video's own presentation, and it is the only thing a declared rate is
+  /// allowed to decide: nothing about a subtitle's timing may read this
+  /// (AGENTS.md, "Nothing re-times a subtitle but the viewer").
+  Stream<double> get videoFrameRate;
+
   /// Opens [url] and starts playing from [start].
   Future<void> open(Uri url, {Duration start = Duration.zero});
 
@@ -242,6 +256,7 @@ class MediaKitEngine implements PlaybackEngine {
     final native = _player.platform;
     if (native is NativePlayer) {
       _observeSelection(native).ignore();
+      _observeFrameRate(native).ignore();
     }
   }
 
@@ -308,6 +323,14 @@ class MediaKitEngine implements PlaybackEngine {
   final StreamController<PlaybackTracks> _tracks =
       StreamController<PlaybackTracks>.broadcast();
 
+  final StreamController<double> _videoFrameRate =
+      StreamController<double>.broadcast();
+
+  /// The last rate emitted, so an observation that repeats itself (mpv
+  /// answers the first one immediately, and a re-open of the same file
+  /// answers with the same number) does not ask the display twice.
+  double? _lastVideoFrameRate;
+
   late final List<StreamSubscription<void>> _trackSubscriptions;
   Tracks _lastTracks = const Tracks();
   Track _lastTrack = const Track();
@@ -371,6 +394,35 @@ class MediaKitEngine implements PlaybackEngine {
 
   @override
   Stream<PlaybackStats> get stats => _stats.stream;
+
+  @override
+  Stream<double> get videoFrameRate => _videoFrameRate.stream;
+
+  /// Follows mpv's `container-fps` so the display can be asked to present
+  /// the film at its own rate. Only the native (libmpv) backend exposes
+  /// properties.
+  ///
+  /// An observation is what this needs rather than a read: the rate is not
+  /// known when the player is built, and by the time it is, nobody is
+  /// looking. mpv answers a newly observed property with its current value
+  /// straight away, so registering after the file loaded still reports it,
+  /// and the same event carries the next file's rate when there is one.
+  Future<void> _observeFrameRate(NativePlayer native) async {
+    try {
+      await native.observeProperty('container-fps', (value) async {
+        final fps = double.tryParse(value.trim());
+        // A container that declares nothing answers with an empty string
+        // or a zero, and either is worse than not asking at all.
+        if (fps == null || !fps.isFinite || fps <= 0) return;
+        if (fps == _lastVideoFrameRate) return;
+        _lastVideoFrameRate = fps;
+        if (!_disposed && !_videoFrameRate.isClosed) _videoFrameRate.add(fps);
+      });
+    } catch (_) {
+      // Torn down before the player initialised, or a build of libmpv
+      // without the property: the display keeps whatever rate it is on.
+    }
+  }
 
   /// Follows mpv's `aid`/`sid` so the selection reflects what is really
   /// drawn, not only what went through media_kit's setters. Only the native
@@ -759,6 +811,7 @@ class MediaKitEngine implements PlaybackEngine {
     }
     await _tracks.close();
     await _stats.close();
+    await _videoFrameRate.close();
     try {
       await _player.stop();
     } finally {
