@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../widgets/download_badge.dart';
+import '../../widgets/focusable_tile.dart';
 
 /// What a title says about itself on a television: the logo, one line of
 /// facts, and enough of the description to know whether this is the film
@@ -116,12 +117,21 @@ class TvMetaHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          IconButton(
-            tooltip: isInLibrary ? removeTooltip : addTooltip,
-            isSelected: isInLibrary,
-            icon: const Icon(Icons.bookmark_border),
-            selectedIcon: const Icon(Icons.bookmark),
-            onPressed: onToggleLibrary,
+          // The same indicator every focusable thing on a television
+          // wears, rather than the circular tint Material gives a focused
+          // icon button: a tint of about a tenth over a darkened backdrop
+          // is the one cue a bright room takes away, and this is a control
+          // the remote can land on.
+          FocusHighlighted(
+            borderRadius: const BorderRadius.all(Radius.circular(24)),
+            builder: (context, node) => IconButton(
+              focusNode: node,
+              tooltip: isInLibrary ? removeTooltip : addTooltip,
+              isSelected: isInLibrary,
+              icon: const Icon(Icons.bookmark_border),
+              selectedIcon: const Icon(Icons.bookmark),
+              onPressed: onToggleLibrary,
+            ),
           ),
         ],
       ),

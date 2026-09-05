@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
@@ -8,6 +9,7 @@ import 'package:xtremio/features/details/tv_meta_header.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/tv_density.dart';
+import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../../support/fake_core_client.dart';
@@ -191,6 +193,34 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets('and the bookmark wears the ring when the remote is on it', (
+      tester,
+    ) async {
+      // Material gives a focused icon button a circular tint of about a
+      // tenth, which over a darkened backdrop on somebody else's panel is
+      // the one cue a bright room takes away. Every other focusable thing
+      // on a television wears the two-stroke ring; a control the remote
+      // can land on and nobody can find is worse than one that is not
+      // there.
+      await pump(tester, movieWith({}));
+      for (
+        var i = 0;
+        i < 8 && focusedTooltip() != TvMetaHeader.addTooltip;
+        i++
+      ) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      expect(focusedTooltip(), TvMetaHeader.addTooltip);
+
+      final rings = tester.widgetList<FocusRing>(
+        find.descendant(
+          of: find.byType(TvMetaHeader),
+          matching: find.byType(FocusRing),
+        ),
+      );
+      expect(rings.where((ring) => ring.focused), hasLength(1));
     });
   });
 
