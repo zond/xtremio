@@ -466,12 +466,13 @@ failed is recorded against nobody; and the embedded server and the local
 addon are never recorded against, on top of a protected addon never being
 labelled. See README, "Which addons are worth keeping".
 
-## Seven rules a real device taught us
+## Eleven rules a real device taught us
 
-Five of these were bugs on a real Chromecast with Google TV, the sixth was
-a red box on a 400 dp phone and the seventh has been written twice
-already; every one of them is easy to write again. Each has a test behind
-it, except where the rule itself says a test cannot reach it.
+Most of these were bugs on a real Chromecast with Google TV; one was a red
+box on a 400 dp phone, one has been written twice already, and the last
+four came out of living with the details screen on one. Every one of them
+is easy to write again. Each has a test behind it, except where the rule
+itself says a test cannot reach it.
 
 - **Nothing vetoes the OSD's fade on a focus.**
   `PlayerScreen._canAutoHide` lists what keeps the controls up -- a menu, a
@@ -493,7 +494,12 @@ it, except where the rule itself says a test cannot reach it.
   a ladder, most transient first. A rung only exists while it would visibly
   do something -- a bar that cannot fade (paused, buffering, a menu, the
   end of a film) is not one, and Back leaves instead of appearing to do
-  nothing.
+  nothing. **So a rung asks what is on screen, never a field that says
+  what should be.** The details screen draws its open row of sources for a
+  group that is still in the list, and keyed its rung to the label being
+  set instead: a label naming a rung the streams had stopped offering lost
+  the row and kept the rung, and the press that should have left the
+  screen did nothing at all.
 - **A button drawn inside a focusable thing is not a button.** On a
   television a tile, a row or a text field takes focus as a whole, so
   directional traversal has nothing inside it to move to, and the
@@ -525,7 +531,45 @@ it, except where the rule itself says a test cannot reach it.
   `SingleChildScrollView` over a `Row` (the season pills, the episode
   cards, both rows of source cards), and its test walks to the *last* item
   of a row with more items than fit. What that costs is paid down by bounding each image's decode
-  to the box it is drawn in, not by building fewer widgets.
+  to the box it is drawn in, not by building fewer widgets -- which is
+  affordable because each such row has a natural bound: a season, a
+  catalog page, the sources of one group. A list with no bound needs one
+  before it becomes a row.
+- **A sideways press at the end of a row stays in the row.** Directional
+  traversal takes the nearest node in the direction pressed and nothing
+  confines that to the row: right at the last source card landed on the
+  layout toggle in the header three rows up, off a press that reads as
+  "the next card", and the way back is a press down and a guess at which
+  row it lands in. So a row the remote walks swallows left at its first
+  focus stop and right at its last (`_Strip` in `tv_source_row.dart`;
+  `RootShell._onRailKey` does the same for the rail's up and down). Every
+  other key passes -- up and down are the way out and have to keep
+  working.
+- **Anything the remote can land on wears the app's own focus
+  indicator.** Material marks a focused button with a tint of about a
+  tenth, which over poster art or a darkened backdrop, on a panel in a
+  room this app knows nothing about, is exactly the cue that disappears --
+  the reason `FocusHighlight` draws three of them. A control with a focus
+  node and no ring is one the remote can reach and nobody can find, which
+  is the same class of fault as a button that is drawn and dead.
+  `FocusHighlighted` puts the ring on a control that owns its own node (a
+  chip, an `IconButton`) without touching traversal.
+- **An image holds its box before it has arrived, and a late failure is
+  the case that matters.** An `Image.network` given only a height occupies
+  exactly that from its first frame, so a shorter fallback moves
+  everything below it -- seconds after the screen settled, under a ring
+  the viewer is already using. The rule is not "handle the error": the
+  pending, the failed and the loaded image are all one size, whether by
+  `StackFit.expand` inside a fixed box (`TvBackdrop`, `EpisodeThumbnail`)
+  or by a floor under whatever stands in (`TvMetaHeader`).
+- **A sliver that comes and goes is keyed.** Focus lives in elements, and
+  an unkeyed list of slivers is matched by position and type: one
+  appearing above its neighbours re-parents them, tears their subtrees
+  down and disposes the node the remote was on, whereupon whatever
+  autofocuses answers the D-pad instead. The details screen's last-used
+  shortcut appears the first time a title is played, which is exactly when
+  the viewer is coming back from the player expecting the card they
+  left.
 - **A width shared between N things is clamped at zero.** Anything of the
   form `(width - gaps) / n` goes negative on a narrow screen with a large
   `n` -- thirty-odd season pills on a phone -- and a negative `minWidth` is

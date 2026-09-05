@@ -96,8 +96,13 @@ Rust engine for addons, catalogs, library, and playback state) and
 > leaves the brand ground. metahub names an image's size in its URL, so what
 > is asked for is the `medium` one rather than Cinemeta's small poster
 > stretched across the panel, and the decode is bounded to the panel's own
-> pixels. A series' episodes are a **row of cards** there rather than the
-> vertical list, under the season pills that were already a row: a remote
+> pixels. The logo's box is the same height whether the logo arrives, never
+> arrives or answers 404 a few seconds later: an image given only a height
+> holds that height from its first frame, and the name that stands in for
+> one that failed has to hold it too, or the header and every row under it
+> jump up under a focus ring somebody is using. A series' episodes are a
+> **row of cards** there rather than the vertical list, under the season
+> pills that were already a row: a remote
 > walks a row with two keys and a list with a hundred. A card carries what
 > its list row carried -- the still with the episode number on it, the
 > title, the air date, a check when it has been watched, a badge when it is
@@ -117,16 +122,24 @@ Rust engine for addons, catalogs, library, and playback state) and
 > whichever card is chosen a row of that group's sources. The group row stays
 > put with the chosen card marked, so another group is a sideways press away
 > rather than a press back and a press down; the order chips still order
-> inside one; the last-used shortcut is a card of its own above them and the
-> place the remote starts; and Back puts the open row away before it leaves
-> the screen, a rung on the same ladder the player comes down. Which group is
-> open is deliberately *not* the phone's `openStreamSections`: that is a
+> inside one; a press past either end of a row stays in the row, since the
+> nearest node to the right of the last card is not in the row at all but in
+> the header three rows up; the last-used shortcut is a card of its own above
+> them and the place the remote starts, and it appears the first time a title
+> is played without moving the remote off the card the viewer chose from; and
+> Back puts the open row away before it leaves the screen, a rung on the same
+> ladder the player comes down -- while there is a row to put away, which is
+> a group still carrying the open label rather than the label on its own.
+> Which group is open is deliberately *not* the phone's
+> `openStreamSections`: that is a
 > global set of resolutions kept across restarts, and this is one row at a
 > time that Back closes -- the same word for two different things. What the
 > addons did other than answer -- the ones that failed, the ones that had
 > nothing, and nobody having anything at all -- is the last card of that row,
 > counting on its own line so a viewer who never chooses it is still told,
-> and naming names in the row it opens. The
+> and naming them in the row it opens -- a card each, since a joined line
+> clips at the fourth name and a remote has no press that unfolds one, and
+> each card takes a press to that addon's own details. The
 > **player** plays torrents through the
 > embedded server and HTTP streams directly, with its own controls (seek
 > bar with the buffered range, play/pause, seek buttons, volume,
@@ -145,7 +158,9 @@ Rust engine for addons, catalogs, library, and playback state) and
 > copies it, redacted, to the clipboard. **Library** lists every added title over the engine's
 > `LibraryWithFilters` model (type and sort filters, cumulative paging,
 > long-press to remove, mark watched, rewind or mute notifications), and
-> the details header has a bookmark to add or remove a title. **Downloads**
+> the details header has a bookmark to add or remove a title, wearing on a
+> television the same focus ring everything else there wears rather than
+> Material's tint. **Downloads**
 > keeps a torrent stream on the device: the download button on a stream tile
 > pins the file through the embedded server and becomes a delete button once
 > the file is whole, so the tile that took a download is the tile that undoes
