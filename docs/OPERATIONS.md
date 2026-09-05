@@ -155,3 +155,17 @@ rather than a blank waiting for the next answer; numbers nobody was
 watching are dropped instead, so a stall long afterwards starts from the
 server. On a television the whole panel is set in a larger size, since it
 is read from a sofa.
+
+## Linux video is software-rendered (for now)
+
+Which is what the panel above will say on a Linux desktop, so this is why.
+`media_kit_video` 2.0.1 cannot share Flutter 3.38+'s EGL context (the
+embedder only makes it current on the raster thread — see
+[media-kit #1404](https://github.com/media-kit/media-kit/issues/1404)), so it
+falls back to software rendering on **both X11 and Wayland**. Playback works,
+but is CPU-rendered; `--profile`/`--release` builds are much smoother than
+debug. The fix is the Linux renderer redesign in
+[media-kit PR #1346](https://github.com/media-kit/media-kit/pull/1346), not
+yet released. **No code change is needed here**: once a `media_kit_video`
+release includes it, `flutter pub upgrade media_kit_video` enables hardware
+rendering automatically. Android (the primary target) is unaffected.
