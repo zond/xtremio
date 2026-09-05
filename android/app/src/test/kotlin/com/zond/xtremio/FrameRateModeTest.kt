@@ -48,7 +48,15 @@ class FrameRateModeTest {
             doubled.id as Int?,
             FrameRateMode.matching(23.976, sixtyHz, listOf(sixtyHz, doubled)),
         )
-        // ...and passed over for the rate the film actually is.
+        // ...and passed over for the rate the film actually is. The two are
+        // *exactly* as even -- 47.95199966430664 / 2 and 23.97599983215332
+        // are the same distance from 23.976 to the last bit of a Double --
+        // so this says nothing unless the list is in the order that would
+        // otherwise win, and the order is the display HAL's to choose.
+        assertEquals(
+            twentyFourish.id as Int?,
+            FrameRateMode.matching(23.976, sixtyHz, listOf(sixtyHz, doubled, twentyFourish)),
+        )
         assertEquals(
             twentyFourish.id as Int?,
             FrameRateMode.matching(23.976, sixtyHz, listOf(sixtyHz, twentyFourish, doubled)),

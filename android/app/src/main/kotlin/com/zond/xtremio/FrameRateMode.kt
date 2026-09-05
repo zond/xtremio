@@ -12,6 +12,14 @@ import kotlin.math.roundToInt
  * can be tested on the JVM (`FrameRateModeTest`). Everything else here --
  * the surface, the window, the display -- needs a device.
  */
+/**
+ * What one mode would make of the content: how far it is from showing every
+ * frame for the same length of time, and over how many refreshes each frame
+ * would be held. The second is what settles a tie between two modes that
+ * are equally even.
+ */
+private data class Cadence(val error: Double, val multiple: Int)
+
 data class FrameRateMode(
     val id: Int,
     val width: Int,
@@ -77,10 +85,18 @@ data class FrameRateMode(
          * A mode matches when its refresh rate is a whole multiple of the
          * content's -- 23.976 fps is even on 23.976 Hz and just as even on
          * 47.952 Hz, where every frame is shown exactly twice -- and the
-         * evenest of them wins, which is why the film's own rate is taken
-         * over a multiple of it and over a mode that is merely near. That
-         * is also what makes the reading legible: `dumpsys display` should
-         * name 23.976 while a 23.976 fps film plays.
+         * evenest of them wins, which is why a mode that is merely near
+         * loses to one that divides.
+         *
+         * Two modes can be exactly as even, and 23.976 against 47.952 is
+         * that case rather than a contrived one: both are stored as
+         * `Float`, and `47.95199966430664 / 2` and `23.97599983215332` are
+         * the same distance from 23.976 down to the last bit. The fewest
+         * refreshes per frame breaks it, so the film's own rate wins --
+         * the tie must not be settled by the order `getSupportedModes()`
+         * happens to return, which is the display HAL's and not ours.
+         * That is also what makes the reading legible: `dumpsys display`
+         * should name 23.976 while a 23.976 fps film plays.
          */
         fun matching(
             fps: Double,
@@ -91,24 +107,24 @@ data class FrameRateMode(
             val best =
                 modes
                     .filter { it.width == current.width && it.height == current.height }
-                    .mapNotNull { mode -> cadenceError(fps, mode)?.let { mode to it } }
-                    .minByOrNull { it.second }
+                    .mapNotNull { mode -> cadenceOf(fps, mode)?.let { mode to it } }
+                    .minWithOrNull(compareBy({ it.second.error }, { it.second.multiple }))
                     ?.first ?: return null
             return if (best.id == current.id) null else best.id
         }
 
         /**
-         * How far [mode] is from showing each of [fps] frames for the same
-         * number of refreshes, or null when it cannot: a rate below the
-         * content's own has no whole multiple to offer, and one past
-         * [MAX_CADENCE_ERROR] is the uneven cadence this exists to avoid.
+         * How [mode] would show [fps] frames a second, or null when it
+         * cannot: a rate below the content's own has no whole multiple to
+         * offer, and one past [MAX_CADENCE_ERROR] is the uneven cadence
+         * this exists to avoid.
          */
-        private fun cadenceError(fps: Double, mode: FrameRateMode): Double? {
+        private fun cadenceOf(fps: Double, mode: FrameRateMode): Cadence? {
             val rate = mode.refreshRate.toDouble()
             val multiple = (rate / fps).roundToInt()
             if (multiple < 1) return null
             val error = abs(rate / multiple - fps)
-            return if (error <= MAX_CADENCE_ERROR) error else null
+            return if (error <= MAX_CADENCE_ERROR) Cadence(error, multiple) else null
         }
     }
 }
