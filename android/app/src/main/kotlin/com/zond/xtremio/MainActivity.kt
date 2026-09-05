@@ -109,7 +109,11 @@ class MainActivity : FlutterActivity() {
      * Only ever called for a television: the Dart side asks the device
      * profile first, and a phone's panel has no business switching. A rate
      * that is not a rate is ignored rather than guessed at -- asking for
-     * one we do not know is worse than not asking.
+     * one we do not know is worse than not asking -- and so is one outside
+     * the band real content declares ([FrameRateMode.plausible]), which is
+     * the *only* guard the surface path has: `Surface.setFrameRate` takes
+     * whatever number it is handed and `CHANGE_FRAME_RATE_ALWAYS` lets it
+     * blank the picture to honour it.
      *
      * Two paths, and the Android version chooses:
      *
@@ -130,7 +134,7 @@ class MainActivity : FlutterActivity() {
      *   the mode path with everything older.
      */
     private fun matchFrameRate(fps: Double?) {
-        if (fps == null || !fps.isFinite() || fps <= 0) return
+        if (fps == null || !FrameRateMode.plausible(fps)) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val surface = contentSurface()
             if (surface != null) {

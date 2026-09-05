@@ -1,7 +1,9 @@
 package com.zond.xtremio
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -80,6 +82,29 @@ class FrameRateModeTest {
         assertNull(FrameRateMode.matching(0.0, sixtyHz, projector))
         assertNull(FrameRateMode.matching(-24.0, sixtyHz, projector))
         assertNull(FrameRateMode.matching(Double.NaN, sixtyHz, projector))
+    }
+
+    @Test
+    fun `a rate no content has is not believed`() {
+        // `container-fps` is a claim computed from the track's own timing,
+        // so a Matroska file whose `default_duration` says one millisecond
+        // reports 1000 fps. The floor is the same damage the other way: a
+        // container declaring 1 fps finds 50 Hz an exact whole multiple
+        // and would switch the panel for it.
+        assertFalse(FrameRateMode.plausible(1000.0))
+        assertFalse(FrameRateMode.plausible(1.0))
+        assertFalse(FrameRateMode.plausible(0.0))
+        assertFalse(FrameRateMode.plausible(-24.0))
+        assertFalse(FrameRateMode.plausible(Double.NaN))
+        assertFalse(FrameRateMode.plausible(Double.POSITIVE_INFINITY))
+        assertNull(FrameRateMode.matching(1000.0, sixtyHz, projector))
+        assertNull(FrameRateMode.matching(1.0, sixtyHz, projector))
+
+        // Everything real content declares is inside it, film at the
+        // bottom and NTSC-pulled 120 at the top.
+        for (rate in listOf(23.976, 24.0, 25.0, 29.97, 30.0, 50.0, 59.94, 119.88, 120.0)) {
+            assertTrue("$rate is a rate content really declares", FrameRateMode.plausible(rate))
+        }
     }
 
     @Test

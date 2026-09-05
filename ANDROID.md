@@ -239,6 +239,14 @@ observed off libmpv (`PlaybackEngine.videoFrameRate`), and it is asked for
 only on a television — a phone's panel has no business switching, and no
 other platform has the API. `MainActivity` answers with one of two paths:
 
+A rate outside the band real content declares (20–120 fps,
+`FrameRateMode.plausible`) is not asked for at all, on either path.
+`container-fps` is a claim computed from the track's own timing, not a
+measurement: a Matroska file whose `default_duration` reads one
+millisecond reports 1000 fps, and on API 31+ that would go straight to
+`Surface.setFrameRate` under `CHANGE_FRAME_RATE_ALWAYS` — a second of
+black picture to assert something the content is not.
+
 - **Android 12 (API 31) and up**: `Surface.setFrameRate` on Flutter's own
   surface, with `FRAME_RATE_COMPATIBILITY_FIXED_SOURCE` (what the content
   *is*, leaving the mode to the platform) and `CHANGE_FRAME_RATE_ALWAYS`
