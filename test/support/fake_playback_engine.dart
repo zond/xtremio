@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/shell/display_frame_rate.dart';
 
 /// [PlaybackEngine] for widget tests: records every call and lets the test
 /// feed position/playing/tracks/... events. No libmpv.
@@ -292,4 +293,20 @@ class FakeFullscreenController implements FullscreenController {
   Future<void> exit() async {
     exits++;
   }
+}
+
+/// Records what the display was asked to present at instead of speaking to
+/// the platform channel.
+class FakeDisplayFrameRate implements DisplayFrameRate {
+  /// Every rate asked for, in order.
+  final List<double> requested = [];
+
+  /// How many times the rate was given back.
+  int clears = 0;
+
+  @override
+  Future<void> request(double fps) async => requested.add(fps);
+
+  @override
+  Future<void> clear() async => clears++;
 }

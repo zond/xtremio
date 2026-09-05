@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/core.dart';
+import '../../shell/display_frame_rate.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
 import 'subtitle_match.dart';
@@ -174,7 +175,8 @@ class NativeFullscreenController implements FullscreenController {
 /// Supplies what the player screen needs from the outside: the
 /// [PlaybackEngineFactory] (absent, the screen builds a [MediaKitEngine]),
 /// the [FullscreenController], the [TorrentStatsClient] the start-up
-/// overlay polls the embedded server with (absent, the FFI one), and
+/// overlay polls the embedded server with (absent, the FFI one),
+/// [displayFrameRate] (absent, the `xtremio/device` channel) and
 /// [dhtStatus] (absent, `ServerClient().dhtStatus`). The subtitle style is
 /// not here: the screen derives it from the profile's settings in the `ctx`
 /// field.
@@ -185,6 +187,7 @@ class PlaybackScope extends InheritedWidget {
     this.fullscreen,
     this.torrentStats,
     this.subtitleMatch,
+    this.displayFrameRate,
     this.dhtStatus,
     required super.child,
   });
@@ -192,6 +195,10 @@ class PlaybackScope extends InheritedWidget {
   final PlaybackEngineFactory createEngine;
   final FullscreenController? fullscreen;
   final TorrentStatsClient? torrentStats;
+
+  /// What the film's own frame rate is asked of the display through, on a
+  /// television and nowhere else.
+  final DisplayFrameRate? displayFrameRate;
 
   /// What "Match to another subtitle" asks for a ratio and an offset.
   final SubtitleMatchClient? subtitleMatch;
@@ -218,6 +225,9 @@ class PlaybackScope extends InheritedWidget {
   static SubtitleMatchClient subtitleMatchOf(BuildContext context) =>
       _maybeOf(context)?.subtitleMatch ?? const RustSubtitleMatchClient();
 
+  static DisplayFrameRate displayFrameRateOf(BuildContext context) =>
+      _maybeOf(context)?.displayFrameRate ?? const ChannelDisplayFrameRate();
+
   static DhtStatus Function() dhtStatusOf(BuildContext context) =>
       _maybeOf(context)?.dhtStatus ?? (() => const ServerClient().dhtStatus);
 
@@ -227,6 +237,7 @@ class PlaybackScope extends InheritedWidget {
       fullscreen != oldWidget.fullscreen ||
       torrentStats != oldWidget.torrentStats ||
       subtitleMatch != oldWidget.subtitleMatch ||
+      displayFrameRate != oldWidget.displayFrameRate ||
       dhtStatus != oldWidget.dhtStatus;
 }
 

@@ -67,6 +67,10 @@ class PlayerHarness {
   FakePlaybackEngine get engine => engines.first;
   final FakeFullscreenController fullscreen = FakeFullscreenController();
 
+  /// What the screen asks the display to present at; nothing is ever asked
+  /// of it off a television.
+  final FakeDisplayFrameRate displayFrameRate = FakeDisplayFrameRate();
+
   /// What "Match to another subtitle" asks; answers nothing until a test
   /// sets [FakeSubtitleMatchClient.response].
   final FakeSubtitleMatchClient subtitleMatch = FakeSubtitleMatchClient();
@@ -129,6 +133,7 @@ class PlayerHarness {
         fullscreen: fullscreen,
         torrentStats: torrentStats,
         subtitleMatch: subtitleMatch,
+        displayFrameRate: displayFrameRate,
         dhtStatus: () {
           dhtStatusReads++;
           return dhtStatus;

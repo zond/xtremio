@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/display_frame_rate.dart';
 import '../../widgets/remote_press.dart';
 import '../cast/cast_client.dart';
 import '../cast/cast_compatibility.dart';
@@ -187,6 +188,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// [DeviceScope.isTv], read with the dependencies.
   bool _isTv = false;
+
+  /// What the display is asked to present the film at, read with the
+  /// dependencies. Only a television is ever asked (see
+  /// [_onVideoFrameRate]).
+  DisplayFrameRate? _displayFrameRate;
+
+  /// Whether this player is holding a frame rate on the display, so that
+  /// the release is made once and only by a player that made an ask -- and
+  /// so that nothing is said to the channel at all on a phone.
+  bool _frameRateAsked = false;
 
   /// A [_scheduleFocusCheck] callback is pending for the coming frame.
   bool _focusCheckScheduled = false;
@@ -592,6 +603,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     _fullscreen = PlaybackScope.fullscreenOf(context);
+    _displayFrameRate = PlaybackScope.displayFrameRateOf(context);
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
@@ -620,6 +632,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       engine.engineLog.listen(_onEngineLog),
       engine.volume.listen((v) => setState(() => _volume = v)),
       engine.tracks.listen(_onTracks),
+      engine.videoFrameRate.listen(_onVideoFrameRate),
     ]);
   }
 
@@ -1365,6 +1378,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
     _client?.dispatch(CoreActions.playerEnded());
+    // Nothing is being presented at the film's rate any more, and what is
+    // left on screen is the up-next card and the controls.
+    _releaseDisplayFrameRate();
     // `bingeWatching` off: the episode just ends; the Next button remains.
     if (_state?.nextVideo != null && _settings.bingeWatching) _startUpNext();
     _showControls();
@@ -1424,6 +1440,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // The bars read the selection and the track count directly.
     setState(() => _tracks.value = tracks);
     _maybeAutoPickSubtitles();
+  }
+
+  // --- The display's own frame rate ----------------------------------------
+
+  /// The engine has read what rate the container declares, which is once
+  /// per file: ask the display to present at it.
+  ///
+  /// A television only. On a phone the panel is the phone's and nothing
+  /// about a film is a reason to switch it, and on a desktop the platform
+  /// has no such API at all -- so the gate is here, where the device is
+  /// known, rather than in the channel.
+  ///
+  /// Nothing is asked when the rate is unknown, because nothing arrives:
+  /// the engine emits only a rate it read. Asking for a rate we are
+  /// guessing at is worse than not asking, since what a wrong guess buys
+  /// is a mode change and the same uneven cadence afterwards.
+  void _onVideoFrameRate(double fps) {
+    if (!_isTv) return;
+    _frameRateAsked = true;
+    _displayFrameRate?.request(fps).ignore();
+  }
+
+  /// Gives the display's rate back.
+  ///
+  /// Called from every path that ends this player's claim on it: the film
+  /// reaching its end, the viewer leaving, and [dispose]. The last is the
+  /// one that makes the list complete -- Back down the ladder, the Stop
+  /// key, the arrow on the bar and the hand-over to the next episode all
+  /// pop or replace this route, and no route leaves without being disposed
+  /// of -- and the two before it are there because a film that has ended
+  /// is no longer being presented, and because leaving should not wait for
+  /// a frame. [_frameRateAsked] makes the repeats free.
+  ///
+  /// Not called when playback merely pauses: a mode change costs a second
+  /// of black picture each way, and a pause is usually seconds long.
+  void _releaseDisplayFrameRate() {
+    if (!_frameRateAsked) return;
+    _frameRateAsked = false;
+    _displayFrameRate?.clear().ignore();
   }
 
   // --- Controls visibility -------------------------------------------------
@@ -2901,6 +2956,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// has to take them in order. The arrow is a control the viewer aimed
   /// at, and the layer it would put away first is the OSD it is drawn on.
   void _leavePlayer() {
+    _releaseDisplayFrameRate();
     final navigator = Navigator.of(context);
     if (navigator.canPop()) navigator.pop();
   }
@@ -3154,6 +3210,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // player out of fullscreen. Off a television the successor makes no
     // such claim, and the window leaves fullscreen as it always has.
     if (_fullscreenOn && !(_isTv && _handedOver)) _fullscreen?.exit().ignore();
+    // The rate goes back whatever else is true, hand-over included: the
+    // next episode's player asks for its own once its file reports one,
+    // which is well after this screen is gone. Unlike fullscreen, leaving
+    // it in force is the fault -- a display held at 24 Hz by a player that
+    // no longer exists judders every menu the viewer goes back to.
+    _releaseDisplayFrameRate();
     final engine = _engine;
     _engine = null;
     if (engine != null) _disposeAfterFrame(engine);
