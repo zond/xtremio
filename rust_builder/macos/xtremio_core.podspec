@@ -25,6 +25,22 @@ A new Flutter FFI plugin project.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
   s.swift_version = '5.0'
 
+  # `-force_load` below pulls in every object in the Rust static library,
+  # including the ones nothing calls, so this pod links against whatever the
+  # whole crate graph refers to rather than whatever the app reaches. Two
+  # system frameworks are only ever named from there, and without them the
+  # pod fails to link with "symbol(s) not found":
+  #
+  #   SystemConfiguration  the `system_configuration` crate, which hyper-util
+  #                        uses to read the system proxy settings for reqwest
+  #                        (_SCDynamicStoreCopyProxies, _kSCPropNetProxies*)
+  #   OpenDirectory        `sysinfo`'s user enumeration, reached through the
+  #                        streaming server (_ODQueryCreateWithNode, _kOD*)
+  #
+  # Cargo cannot declare these: they belong to a transitive dependency, and
+  # its own `#[link]` attributes are not what Xcode links the pod with.
+  s.frameworks = 'SystemConfiguration', 'OpenDirectory'
+
   s.script_phase = {
     :name => 'Build Rust library',
     # First argument is relative path to the `rust` folder, second is name of rust library
