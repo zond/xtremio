@@ -139,15 +139,31 @@ class TvMetaHeader extends StatelessWidget {
   }
 
   /// The logo, or the name when there is none and when the logo will not
-  /// load.
+  /// load, in a box [logoHeight] tall either way.
+  ///
+  /// The height is the whole point of the box. An [Image.network] given
+  /// only a height occupies exactly that from its first frame, before a
+  /// byte has arrived; the name that replaces it when the fetch fails is
+  /// about half as tall. Without a floor under it the header, the season
+  /// pills, the episode row and both rows of sources all jump up some
+  /// forty pixels the moment a slow metahub answers 404 -- seconds after
+  /// the screen settled, under a focus ring the viewer is already using.
+  /// A missing image may never disturb the layout, and a *late* missing
+  /// image is the case that rule is really about.
   Widget _title(BuildContext context) {
     final logo = meta.logo;
-    final name = Text(
-      meta.name,
-      style: Theme.of(context).textTheme.headlineMedium
-          ?.copyWith(fontWeight: FontWeight.w600),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
+    final name = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: logoHeight),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          meta.name,
+          style: Theme.of(context).textTheme.headlineMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
     );
     if (logo == null) return name;
     return Image.network(

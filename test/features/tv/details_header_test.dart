@@ -138,17 +138,58 @@ void main() {
     testWidgets('falls back to the name when the logo will not load', (
       tester,
     ) async {
+      // Nothing fetches in a test, so what the header settles on is the
+      // fallback itself.
       await pump(tester, movieWith({}));
 
-      final instead = logoImage(tester)!.errorBuilder!(
-        tester.element(find.byType(TvMetaHeader)),
-        'gone',
-        null,
-      );
+      expect(logoImage(tester), isNotNull);
       expect(
-        instead,
-        isA<Text>().having((text) => text.data, 'data', movieName),
+        find.descendant(
+          of: find.byType(TvMetaHeader),
+          matching: find.text(movieName),
+        ),
+        findsOneWidget,
       );
+    });
+
+    testWidgets('and the name it falls back to keeps the logo\'s height, so '
+        'nothing below it moves', (tester) async {
+      // An `Image.network` given a height alone occupies exactly that from
+      // its first frame, before a byte of it has arrived. A logo that 404s
+      // seconds later replaces that box with the name, and if the name is
+      // shorter the header, the pills, the episodes and both rows of
+      // sources all jump up under a focus ring the viewer is using.
+      await pump(tester, movieWith({}));
+
+      final header = tester.getTopLeft(find.byType(TvMetaHeader)).dy;
+      final facts = tester
+          .getTopLeft(
+            find.descendant(
+              of: find.byType(TvMetaHeader),
+              matching: find.text(
+                '1968 · 96 min · Horror, Thriller · IMDb 7.8',
+              ),
+            ),
+          )
+          .dy;
+      expect(facts - header, greaterThanOrEqualTo(TvMetaHeader.logoHeight));
+
+      // And a title that ships no logo at all is drawn the same way, so
+      // the header is one height whatever the addon sent.
+      await pump(tester, movieWith({'logo': null}));
+      final bare =
+          tester
+              .getTopLeft(
+                find.descendant(
+                  of: find.byType(TvMetaHeader),
+                  matching: find.text(
+                    '1968 · 96 min · Horror, Thriller · IMDb 7.8',
+                  ),
+                ),
+              )
+              .dy -
+          tester.getTopLeft(find.byType(TvMetaHeader)).dy;
+      expect(bare, facts - header);
     });
 
     testWidgets('says the facts once, on one line', (tester) async {
