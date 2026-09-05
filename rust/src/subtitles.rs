@@ -55,6 +55,14 @@ pub type Cue = (f64, f64);
 /// together are one lit interval once the bitmap is built, and a cue whose
 /// end precedes its start is dropped because it describes no interval at
 /// all. Sorted because the extent of the file is read off the ends.
+///
+/// **A cue past the file's [`horizon`] is dropped too**, and for the same
+/// reason: it parses, but it does not describe this recording. Everything
+/// downstream reads the *last* moment a file has text on screen -- it is
+/// how long the bitmap is, and it is the timeline the two files' densities
+/// and therefore [`above_chance`] are measured over -- so a single mistyped
+/// digit that parses is not one damaged cue's worth of damage, it is the
+/// whole measurement's.
 pub fn cue_spans(text: &str) -> Vec<Cue> {
     let mut cues: Vec<Cue> = text
         .lines()
@@ -66,7 +74,77 @@ pub fn cue_spans(text: &str) -> Vec<Cue> {
         })
         .collect();
     cues.sort_by(|left, right| left.0.total_cmp(&right.0));
+    let horizon = horizon(&cues);
+    cues.retain(|&(_, end)| end <= horizon);
     cues
+}
+
+/// How much of a file's tail may be damage rather than the file.
+///
+/// One in a hundred, and never fewer than one, because the cue that
+/// matters is usually the only one of its kind: a mistyped hour digit in
+/// the last line of a file. What this buys is that a file damaged more
+/// thoroughly than that is *bounded* rather than repaired -- past this
+/// share the outliers are the body, and no rule inside one file can say
+/// otherwise.
+const DAMAGED_TAIL: usize = 100;
+
+/// How far past its own body a cue may reach and still belong to the file:
+/// a tenth of the body again, or [`FURTHEST_PAST_THE_BODY`], whichever is
+/// the more.
+///
+/// Both terms, because a file's tail is not evenly spaced. The tenth is
+/// what keeps a long file's last cue -- and the flat term is what keeps a
+/// short one's, where the last line can be minutes after the one before it
+/// and a tenth of a short body is nothing.
+const PAST_THE_BODY: f64 = 0.1;
+const FURTHEST_PAST_THE_BODY: f64 = 600.0;
+
+/// The longest recording a subtitle file is taken to describe.
+///
+/// A stop rather than a judgement. The rule above is relative to the file's
+/// own body, so a file whose *body* is nonsense -- every stamp corrupt, a
+/// URL that answered with something that is not a subtitle at all -- has no
+/// body to be measured against, and [`Bitmap::of`] allocates one `f64` per
+/// bin of it: `1193046:00:00,000` parses to four billion seconds, which is
+/// a 34 GB allocation and an abort that [`crate::guard::guarded`] cannot
+/// catch, because Rust aborts on allocation failure rather than unwinding.
+/// Six hours is twice the longest cut of anything.
+const LONGEST_RECORDING: f64 = 6.0 * 3600.0;
+
+/// The moment past which a cue is not describing the same recording as the
+/// rest of the file, given `cues` sorted as [`cue_spans`] sorts them.
+///
+/// **One cue cannot decide how long a file is.** Taken at its word, the
+/// real line `02:10:18,160 --> 52:10:24,240` says its file covers fifty-two
+/// hours, and the damage that does is not confined to that cue: the file's
+/// density falls by the factor its timeline grew, the chance term
+/// [`above_chance`] divides by falls with it, and the score decays towards
+/// the raw Dice coefficient that this module exists to *not* threshold. It
+/// goes both ways. A junk cue an hour past a half-hour episode leaves an
+/// unrelated pairing scoring what two talkative files overlap by accident
+/// -- measured, 0.08 became 0.65 and was applied -- and a cue that is fifty
+/// hours *long* lights the whole invented timeline, which holds Dice under
+/// its own ceiling and refuses a pairing that is perfect.
+///
+/// So the body of the file is what its cues say without its outliers
+/// ([`DAMAGED_TAIL`]), and a cue reaching further past that than
+/// [`PAST_THE_BODY`] allows is dropped like one that ends before it starts.
+/// A healthy file loses nothing: its last cue is its own body's, so the
+/// horizon is beyond every cue in it.
+fn horizon(cues: &[Cue]) -> f64 {
+    let mut ends: Vec<f64> = cues.iter().map(|&(_, end)| end).collect();
+    ends.sort_by(f64::total_cmp);
+    let body = match ends
+        .len()
+        .checked_sub(1 + (ends.len() / DAMAGED_TAIL).max(1))
+    {
+        Some(index) => ends[index],
+        // Nothing but outliers to read a body off. The stop below is then
+        // the whole of the answer, which is what it is for.
+        None => f64::INFINITY,
+    };
+    (body + (PAST_THE_BODY * body).max(FURTHEST_PAST_THE_BODY)).min(LONGEST_RECORDING)
 }
 
 /// `HH:MM:SS,mmm` (SRT), `MM:SS.mmm` (WebVTT's short form) and every
@@ -216,6 +294,15 @@ const WIDEST_OFFSET: f64 = 600.0;
 /// and puts four fifths of its starts within a third of a second scored
 /// 0.33. Buying those back means scoring differently, not lowering this;
 /// see [`tests::chance_is_measured_from_both_densities`].
+///
+/// **The fixture's four worst pairings to apply are not that**, and are
+/// older than [`horizon`]. All four name one file, all four found the right
+/// transform (a median start error of a fifth of a second) and all four
+/// scored about *zero*, which is the signature of a file whose timeline one
+/// damaged cue had stretched rather than of Dice's ceiling. The parse no
+/// longer hands the search such a file, so re-recording the corpus should
+/// lose those rows; nothing above them moves, since the populations the
+/// threshold is set from are summarised by percentile.
 pub const CONVINCING: f64 = 0.45;
 
 /// How few cues make a file useless as evidence either way.
@@ -582,6 +669,42 @@ mod tests {
         (at * 1000.0).round() / 1000.0
     }
 
+    /// `cues` written out as the SRT file they would have come from, so a
+    /// test can put one through the parse the app really uses instead of
+    /// handing the search cues no file ever carried.
+    fn as_srt(cues: &[Cue]) -> String {
+        let stamp = |at: f64| {
+            let ms = (at * 1000.0).round() as u64;
+            format!(
+                "{:02}:{:02}:{:02},{:03}",
+                ms / 3_600_000,
+                ms / 60_000 % 60,
+                ms / 1000 % 60,
+                ms % 1000
+            )
+        };
+        cues.iter()
+            .enumerate()
+            .map(|(index, &(start, end))| {
+                format!(
+                    "{}\n{} --> {}\nA line\n\n",
+                    index + 1,
+                    stamp(start),
+                    stamp(end)
+                )
+            })
+            .collect()
+    }
+
+    /// `cues` with one line of the file mistyped, the way a real one is:
+    /// `02:10:18,160 --> 52:10:24,240` is a checked-in corpus file's last
+    /// cue, one hour digit away from `02:10:24,240`.
+    fn with_a_mistyped_end(cues: &[Cue], out_by: f64) -> Vec<Cue> {
+        let mut damaged = cues.to_vec();
+        damaged.last_mut().expect("a cue to damage").1 += out_by;
+        damaged
+    }
+
     /// `cues` as another file would carry them: the same moments through
     /// `ratio` and `offset`.
     fn retimed(cues: &[Cue], ratio: f64, offset: f64) -> Vec<Cue> {
@@ -763,6 +886,62 @@ mod tests {
         // means scoring a different way (an overlap coefficient does not
         // have the ceiling) rather than moving `CONVINCING`.
         assert!(!honest.is_convincing(), "{honest:?}");
+    }
+
+    #[test]
+    fn a_stray_cue_does_not_decide_how_long_a_file_is() {
+        let cues = synthetic_cues(400);
+        // A healthy file loses nothing: its last cue is its own body's.
+        assert_eq!(cue_spans(&as_srt(&cues)), cues);
+
+        // A cue an hour past the end of a twenty-minute file parses
+        // perfectly and describes something else.
+        let mut stray = cues.clone();
+        stray.push((3_600.0, 3_602.0));
+        assert_eq!(cue_spans(&as_srt(&stray)), cues);
+
+        // So does one mistyped hour digit on the last cue's end, which is
+        // the same damage written the other way round -- and it costs that
+        // cue and no other.
+        let damaged = with_a_mistyped_end(&cues, 2_400.0);
+        assert_eq!(cue_spans(&as_srt(&damaged)), cues[..cues.len() - 1]);
+
+        // A file with no body to read at all is stopped rather than
+        // measured: four billion seconds of timeline is a 34 GB allocation
+        // and an abort the FFI guard cannot catch.
+        assert!(cue_spans("00:00:00,000 --> 1193046:00:02,000\nx\n").is_empty());
+    }
+
+    #[test]
+    fn one_damaged_cue_does_not_decide_the_measurement() {
+        // Why the horizon is in the parse rather than left to the caller.
+        // Everything downstream reads the last moment a file has text on
+        // screen, so one cue that parses and is wrong moves the verdict
+        // both ways -- and the file it moves it for is a stranger's.
+        let playing = synthetic_cues(400);
+        let unrelated = synthetic_cues_from(0x9e37_79b9_7f4a_7c15, 400);
+        let reference = retimed(&playing, 1.0427, 2.5);
+
+        // Handed a stray cue an hour out, the search stops measuring
+        // anything: the timeline it computes chance over is three times the
+        // file, so chance falls by three and the score decays into the raw
+        // Dice coefficient of two talkative files.
+        let mut stray = playing.clone();
+        stray.push((3_600.0, 3_602.0));
+        let taken_at_its_word = solve(&stray, &unrelated);
+        assert!(taken_at_its_word.is_convincing(), "{taken_at_its_word:?}");
+        let measured = align(&cue_spans(&as_srt(&stray)), &unrelated).expect("align");
+        assert!(!measured.is_convincing(), "{measured:?}");
+
+        // And a mistyped end refuses a pairing that is perfect, because the
+        // cue lights the whole invented timeline and Dice cannot exceed the
+        // share of it the other file covers.
+        let damaged = with_a_mistyped_end(&playing, 2_400.0);
+        let taken_at_its_word = solve(&damaged, &reference);
+        assert!(!taken_at_its_word.is_convincing(), "{taken_at_its_word:?}");
+        let measured = align(&cue_spans(&as_srt(&damaged)), &reference).expect("align");
+        assert!(measured.is_convincing(), "{measured:?}");
+        assert!((measured.ratio - 1.0427).abs() < 1e-4, "{measured:?}");
     }
 
     #[test]
