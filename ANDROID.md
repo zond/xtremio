@@ -189,6 +189,35 @@ existing Flutter escape hatch out of ABI filtering entirely.
   remote-driven layout keys on. Any error on the channel means "a phone";
   no other platform calls it (desktop is never a TV).
 
+## Typing with a remote
+
+On Android TV the app window keeps input focus while the on-screen keyboard is
+up, so every D-pad press is delivered to Flutter and moves Flutter's focus:
+the keyboard can never move its own selection, which makes it decorative and
+sign-in impossible. The cause is `IME_FLAG_NO_FULLSCREEN`, which Flutter sets
+on every field it creates and which Dart cannot unset -- fullscreen
+("extract") mode is precisely the mode in which the keyboard takes window
+focus and owns the remote. So on a television the app hosts no text field at
+all. `TvTextField` (`lib/widgets/tv_text_field.dart`) draws the field's
+decoration around its current value and, on select, asks `MainActivity` over
+the `xtremio/device` channel for `TextEntryActivity` -- one plain `EditText`
+on a screen of its own, carrying none of those flags -- then takes back the
+string. Back cancels and nothing moves; Done returns the text, which is
+delivered to the field's `onChanged` and `onSubmitted` because confirming
+there is the remote's way of pressing Done. A password is masked, asks the
+keyboard to learn nothing from it (`IME_FLAG_NO_PERSONALIZED_LEARNING`), is
+kept out of autofill and runs behind `FLAG_SECURE`. Off a television
+`TvTextField` is the ordinary Flutter `TextField` every one of those places
+always had.
+
+A field that can be emptied takes an `onClear`, and the button that does it
+is the field's own, never part of the decoration: off a television it is the
+`suffixIcon` inside the box, as it has always been, and on one it sits
+*beside* the box. Inside, a remote could neither reach it (the field takes
+focus as a whole, so there is nothing to the right of the text to step to)
+nor press it (`RemotePress` is above every descendant and takes select for
+the typing screen), which is a button drawn where the remote cannot go.
+
 ## Where offline downloads go, and when they run
 
 - **The destination is set by the app, once.** The embedded server's own
@@ -422,10 +451,10 @@ Every keycode the app listens for, as `adb shell input keyevent <name>`:
 
 **Text fields on a television are not text fields.** Flutter hosts none of
 them there: select on a field opens `TextEntryActivity`, a screen of its own
-with one plain `EditText` the system keyboard can actually own (see README,
-*Typing with a remote*, for why -- `IME_FLAG_NO_FULLSCREEN` makes an in-app
-field undrivable by a remote). So a field is driven in two steps, and
-`input text` only reaches the second one:
+with one plain `EditText` the system keyboard can actually own (see ["Typing
+with a remote"](#typing-with-a-remote) above, for why --
+`IME_FLAG_NO_FULLSCREEN` makes an in-app field undrivable by a remote). So a
+field is driven in two steps, and `input text` only reaches the second one:
 
 ```bash
 adb shell input keyevent KEYCODE_DPAD_CENTER  # opens the typing screen
