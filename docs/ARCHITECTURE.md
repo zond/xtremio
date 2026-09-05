@@ -467,9 +467,11 @@ what every model field means. The shape of the thing is in the
   now, never judged -- the panel says what is in force because a
   subtitle that is right at this moment and wrong in ten minutes looks
   exactly like one that is right, and the number is the only thing that
-  says which. Above them
-  the panel offers **Match to another subtitle**, which measures the
-  drift instead of asking the viewer to find it by eye. Two subtitle
+  says which. Above them the
+  panel offers the two measurements, which find the drift instead of
+  asking the viewer to press until it is gone: **This is right**, which
+  marks the line on screen where it belongs (below), and **Match to
+  another subtitle**, whose own measurement is this: two subtitle
   files for one video are two clocks, so their disagreement is a line:
   the viewer picks a file they have seen keep time, and Rust fetches
   both, turns each into a bitmap of **when it has text on screen** and
@@ -554,17 +556,26 @@ what every model field means. The shape of the thing is in the
   knows which file that is; with no other file on offer the option is not
   drawn at all, and the sheet that asks is one row per language with the
   rest of a language behind a row of their own, because reaching a
-  *second* language is what opening it is usually for. **So the rate fix
-  a viewer has is the match, and only the match.** A language that
-  answers with one file, or with several that share the same bad timing,
-  has nothing to be measured against and nothing else will guess a
-  multiplier for it: the shift moves the whole file together and cannot
-  cancel a drift. The other way of measuring one, marks the viewer makes
-  by shifting until a line is right and saying so, is solved and tested
-  (`SubtitleCalibration` in
-  `lib/features/player/subtitle_calibration.dart`, two marks far apart
-  giving the line through both) but **not wired to any control** -- there
-  is no "This is right" on the panel yet. Reset goes back to untouched, 1.0 and 0.0,
+  *second* language is what opening it is usually for. **The other way of
+  measuring is the marks**, which is what a language that answers with
+  one file -- or with several sharing the same bad timing -- has instead,
+  since a match needs a second file to be right about. "This is right" on
+  the panel records where the line on screen belongs: the cue's own time
+  in the file, which is libmpv's `sub-start` and is its raw time there
+  (measured against a running player, not read out of the manual, and
+  written down at `MediaKitEngine.subtitleCueStart`), paired with the
+  video position of the press. One such pair moves the offset onto it;
+  two of them more than two minutes apart give the line through both, so
+  the rate comes with it; a mark within half a minute of an existing one
+  corrects that one rather than joining it, and the pair used is always
+  the two furthest apart (`SubtitleCalibration` in
+  `lib/features/player/subtitle_calibration.dart`). Which of the two
+  happened is on the panel, because the picture cannot say: an offset and
+  a rate both land the line in front of the viewer, and only one of them
+  still holds ten minutes later. The marks belong to the file that was
+  playing and go with it, since a point on one file's timeline pairing
+  with the next file's would be a lever arm across two of them; only what
+  they derive is kept. Reset goes back to untouched, 1.0 and 0.0,
   because with nothing else writing either property that is what "undo
   what I did" means. What the viewer fixes is **remembered, keyed on what caused
   it** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`, under the

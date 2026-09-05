@@ -192,23 +192,33 @@ and neither is true any more. Each rule below has a test; see
   to have a lever arm -- and never from a declared frame rate.** Do not
   re-derive a multiplier from a rate an addon or a container claims;
   that is the premise this whole section exists to refuse.
-- **One of the two mechanisms is built and one is not, and the
-  difference is not cosmetic.** What the viewer has is the match
-  (`subtitles_match`, below). `SubtitleCalibration`
-  (`lib/features/player/subtitle_calibration.dart`) solves the same line
-  from marks the viewer makes -- "this line belongs at this moment" --
-  and it is **not reachable from the sofa**: nothing in `lib/`
-  constructs a `SubtitleMark`, there is no "This is right" on the panel,
-  and nothing reads `sub-start`. It is a solver with its tests and no
-  consumer. So a language that answers with one file, or with several
-  that share the same bad timing, has no rate fix at all today, and no
-  document here or in README may say otherwise. Wiring it up means
-  answering the question its own header leaves open first: whether
-  mpv's `sub-start` reports a cue already moved by `sub-delay` and
-  `sub-speed` or its raw time in the file, **verified against the
-  running player** rather than against the manual -- the sign of
-  `sub-speed` was assumed from documentation once and had to be
-  confirmed on the owner's television.
+- **There are two mechanisms and both are the viewer's.** The match
+  measures this file against another they say is in sync
+  (`subtitles_match`, below); the marks measure it against the picture
+  in front of them -- "This is right" on the panel, a
+  `SubtitleMark` per press, solved by `SubtitleCalibration`
+  (`lib/features/player/subtitle_calibration.dart`). The marks are the
+  fix for a language that answers with one file, or with several sharing
+  the same bad timing, which is where a match has nothing to measure
+  against. A press pairs the cue's own time in the file with the video
+  position it was pressed at and never the shift in force, because the
+  second mark moves that shift itself; the marks belong to the file that
+  was playing and `_resetSubtitleTiming` throws them away with the rest
+  of it, and only what they derive is remembered.
+- **What `sub-start` answers was measured, not read.** The property
+  reports the cue's **raw time in the file**, moved by neither
+  `sub-delay` nor `sub-speed`, so a mark takes it as it stands. That was
+  settled against a running libmpv (0.41.0, the library media_kit loads
+  on Linux) rather than against the manual -- the sign of `sub-speed` was
+  taken from documentation once and had to be confirmed on the owner's
+  television -- with a real transform applied, since at speed 1.0 and
+  delay 0.0 the raw and the drawn time are the same number and prove
+  nothing. The measurement is written down at
+  `MediaKitEngine.subtitleCueStart`, which is the only place that reads
+  the property and so the one line to change if a shipped libmpv ever
+  disagrees. Read the drawn time instead and every mark mixes two frames
+  of reference: the solve is then confidently wrong, and looks right
+  until the far end of the episode.
 - **The panel shows the multiplier and cannot press it.** A subtitle
   that is right at this moment and wrong in ten minutes looks exactly
   like one that is right, so the number is the only thing on screen that
@@ -222,13 +232,12 @@ and neither is true any more. Each rule below has a test; see
   mis-cut release is out by seconds, an uncorrected PAL file is a
   hundred and fifteen seconds out by the end of an episode -- eleven
   hundred presses at a tenth each, which is where the strides come
-  from. They are what a second mark would need too, if the marks were
-  ever wired up; nothing makes one today and the strides do not wait on
-  that. The stride count belongs to the button and a
-  release, a cancel or a lost focus ends it, so **every tap is a tenth**
-  however large the correction before it was; and every stride is a
-  whole number of presses, so ten forward and ten back still land on
-  zero. This is still the only hold-to-repeat in the app.
+  from. A second mark is made out there too, and the strides are how the
+  picture gets close enough to judge it by. The stride count belongs to
+  the button and a release, a cancel or a lost focus ends it, so **every
+  tap is a tenth** however large the correction before it was; and every
+  stride is a whole number of presses, so ten forward and ten back still
+  land on zero. This is still the only hold-to-repeat in the app.
 - **Every path that changes what is shown recomputes both from
   scratch.** Another file, an embedded track, subtitles off, the next
   video, and the auto-pick restoring the tracks after the engine refused

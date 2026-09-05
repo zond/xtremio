@@ -42,11 +42,12 @@ timing -- is in the document each bullet links.
   reporting hwdec and the swarm, and an up-next countdown that hands over to
   the next episode.
 - **Subtitle timing that is nudged or measured, and then remembered.** Shift
-  the lines by hand from a panel that survives the controls fading, or have
-  the drift measured against another subtitle the viewer says is in sync --
-  which is where a stretch comes from, since nothing here presses a
-  multiplier and no declared frame rate decides one. What was fixed is stored
-  against the series and the release, so the next episode starts right
+  the lines by hand from a panel that survives the controls fading, mark a
+  line where it belongs and let two marks give the rate, or have the drift
+  measured against another subtitle the viewer says is in sync -- which is
+  where a stretch comes from, since nothing here presses a multiplier and no
+  declared frame rate decides one. What was fixed is stored against the
+  series and the release, so the next episode starts right
   ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 - **Android TV and Google TV as their own layout**, not a phone app on a big
   screen: D-pad traversal with a focus memory per tab, a focus ring built to
