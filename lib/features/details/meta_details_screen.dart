@@ -1305,8 +1305,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       // The shortcut is a card of its own above the groups, and the one
       // the remote starts on: it is the source the viewer is most likely
       // to want, which is why it is drawn at all.
+      //
+      // Keyed, and so is the row below it, because this one *appears*:
+      // the engine writes the last-used source down while the player is
+      // up, so the first thing a title is ever played from comes back to
+      // a sliver list one longer than it left. Unkeyed, the rows below
+      // would be matched against this card's adapter, torn down and
+      // rebuilt -- taking the focus node the remote was on with them, and
+      // then this card, freshly built and asking for focus, would answer
+      // the D-pad instead of the card the viewer left.
       if (lastUsedStream != null)
         SliverToBoxAdapter(
+          key: const ValueKey('tv-last-used'),
           child: TvSourceRow(
             defaultFocus: true,
             sources: [
@@ -1315,6 +1325,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           ),
         ),
       SliverToBoxAdapter(
+        key: const ValueKey('tv-source-rows'),
         child: TvSourceRows(
           groups: groups,
           openLabel: _openSourceGroup,

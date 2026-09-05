@@ -307,6 +307,32 @@ void main() {
     expect(find.byType(PlayerScreen), findsOneWidget);
   });
 
+  testWidgets('the last-used card appearing leaves the remote on the card '
+      'it was on', (tester) async {
+    // The engine writes the last-used source down while the player is up,
+    // so the first time a title is played the screen comes back to a
+    // sliver list one longer than it left -- and the card the viewer was
+    // on has to still be the card the D-pad answers, or coming out of the
+    // player moves the remote for no reason the viewer can see.
+    List<Map<String, dynamic>> streams() => [
+      group('alpha.example', [
+        torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
+        torrent(hash(2), 'Alpha 720p', '\u{1f464} 30 \u{1f4be} 900 MB'),
+      ]),
+    ];
+    final core = await mount(tester, movieWith(streams()));
+    await press(tester, LogicalKeyboardKey.select);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedLabel(tester), 'Alpha 720p');
+
+    core.setState(CoreField.metaDetails, withLastUsed(movieWith(streams())));
+    await tester.pumpAndSettle();
+
+    expect(find.text(kContinueWithLastSource), findsOneWidget);
+    expect(focusedLabel(tester), 'Alpha 720p');
+  });
+
   testWidgets('the D-pad reaches the last card of a group row far longer '
       'than fits', (tester) async {
     // Directional focus only considers widgets that have been built, so a
