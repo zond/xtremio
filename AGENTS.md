@@ -357,7 +357,7 @@ and neither is true any more. Each rule below has a test; see
   mapping the playing file onto one the viewer says is in sync
   (`rust/src/subtitles.rs`, `subtitles_match` over FFI;
   `SubtitleMatchClient` in `lib/features/player/subtitle_match.dart`).
-  Eight things hold it up, each with a test. **Both timestamps of every
+  Each thing that holds it up has a test. **Both timestamps of every
   cue are read**, and each file becomes a bitmap of when it has text on
   screen. Comparing cue *starts* is what this replaced, and it refused
   the owner's own Swedish Gilmore Girls file against an English one: a
@@ -367,7 +367,32 @@ and neither is true any more. Each rule below has a test; see
   does not mind -- a merged line covers both the lines it replaced --
   and the same representation is what a future version would correlate
   against the audio's own speech detection, which is the only real
-  ground truth. **The score is the overlap *above chance*, never the
+  ground truth. **One damaged cue does not decide how long a file
+  is.** Everything downstream reads the *last* moment a file has text on
+  screen: it is the length of the bitmap, and it is the timeline both
+  files' densities and so the chance term are measured over. So a stamp
+  that parses and is wrong is not one cue's worth of damage -- an
+  appended `01:00:00,000` on a twenty-minute file triples the timeline,
+  divides chance by three and decays the score into the raw Dice
+  coefficient this module exists to *not* threshold (measured, an
+  unrelated pair went from refused to convincing), and one mistyped hour
+  digit on a cue's *end* lights fifty hours of invented timeline and
+  refuses a pairing that is perfect. `cue_spans` therefore answers what
+  the file describes: a cue reaching further past the body of the file
+  than a tenth of it or ten minutes is dropped like one that ends before
+  it starts, with a six-hour stop under that for a file with no body to
+  read at all -- four billion seconds of timeline is a 34 GB allocation,
+  and Rust aborts rather than unwinding, so `guarded` never sees it. A
+  healthy file loses nothing. **What two cues share is on screen once.**
+  `Bitmap::of` takes the union of the cues over a bin and not their sum:
+  an SDH speaker label beside its line, a sign captioned over dialogue
+  and a song under both are one lit interval, and adding their shares up
+  counts a moment as many times as the file happens to write it -- the
+  tests' own file with every cue doubled read a density of 0.81 where it
+  is 0.66, and two cues covering three tenths of a bin between them
+  summed to six tenths and lit it, which is the opposite of the "at
+  least half" rule below. This is why nothing deduplicates and why the
+  parse sorts. **The score is the overlap *above chance*, never the
   overlap.** Subtitles are on screen two thirds of the time, so two
   unrelated files already overlap heavily; what is reported and
   thresholded is `(dice - chance) / (1 - chance)`, `chance` coming from
@@ -398,7 +423,11 @@ and neither is true any more. Each rule below has a test; see
   a partial track that recovers the ratio exactly and lands four fifths
   of its starts within a third of a second scored 0.33, under the
   mismatches' own best. Taking those means a different score, not a lower
-  number. **The score is the
+  number. The fixture's four worst pairings to apply are *not* that and
+  are older than the horizon above: all four name one file, all four
+  found the right transform and all four scored about zero, which is a
+  stretched timeline rather than a ceiling, so re-recording should lose
+  them. **The score is the
   answer either way, and a refusal says what was found**: the score
   *and* the transform. A fraction of cues is what sent the owner looking
   for a different reference when the reference was fine, and it is not

@@ -485,7 +485,27 @@ what every model field means. The shape of the thing is in the
   English start -- 89 % within a second, 97 % within a second and a
   half. A bitmap does not mind: a merged line overlaps both the lines it
   covers, and a line one file does not have costs its own bins rather
-  than a whole match. **What is scored is the overlap above chance,
+  than a whole match. **One damaged cue does not decide how long a file
+  is.** Everything downstream reads the last moment a file has text on
+  screen -- it is the length of the bitmap and the timeline both files'
+  densities, and so the chance term below, are measured over -- so a
+  stamp that parses and is wrong costs the whole measurement rather than
+  its own cue, in both directions: an appended `01:00:00,000` on a
+  twenty-minute file triples the timeline and decays the score into the
+  raw Dice coefficient of two talkative files, and one mistyped hour
+  digit on a cue's end (`02:10:18,160 --> 52:10:24,240`, from a real
+  file) lights fifty hours of invented timeline and refuses a pairing
+  that is perfect. So `cue_spans` drops a cue reaching further past the
+  body of the file than a tenth of it or ten minutes, and stops at six
+  hours for a file with no body to read at all -- four billion seconds
+  of timeline is a 34 GB allocation, which aborts rather than unwinding
+  and so never reaches the FFI guard. A healthy file loses nothing.
+  **What two cues share is on screen once**: the bitmap takes the union
+  of the cues over a bin, not their sum, because an SDH speaker label
+  beside its line and a sign captioned over dialogue are one lit
+  interval -- summing them counted a moment as many times as the file
+  wrote it and read a density of 0.81 where the file's is 0.66. **What
+  is scored is the overlap above chance,
   never the overlap.** Subtitles are on screen something like two thirds
   of an episode, so two files with nothing to do with each other already
   overlap heavily, and the number reported is
