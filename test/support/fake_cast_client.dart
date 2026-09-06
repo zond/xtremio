@@ -42,6 +42,12 @@ class FakeCastClient implements CastClient {
   /// Every `load`: the media and the position it was asked to start at.
   final List<(CastMedia, Duration)> loads = [];
 
+  /// How long a `load` takes to answer. Zero unless a test is about what
+  /// happens during it: a real receiver takes a round trip to accept the
+  /// media, and a session started mid-cast spends that round trip with the
+  /// listener's count already reset for it and its own wait not yet armed.
+  Duration loadDelay = Duration.zero;
+
   /// When set, `connect` records the device and then answers null.
   bool connectFails = false;
   final List<CastDevice> connectAttempts = [];
@@ -106,6 +112,7 @@ class FakeCastClient implements CastClient {
   @override
   Future<void> load(CastMedia media, {Duration start = Duration.zero}) async {
     loads.add((media, start));
+    if (loadDelay > Duration.zero) await Future<void>.delayed(loadDelay);
   }
 
   @override

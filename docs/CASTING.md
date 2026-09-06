@@ -112,7 +112,9 @@ which the client folds into `CastPlayerState.idle`; a check that disarmed on
 anything but buffering therefore disarmed on the one case it was written for,
 and the tests only passed because the fake emitted no status at all. So
 nothing incoming cancels the wait -- only the ways out of a session do
-(`_cancelCastFetch`). A stream fetched from the internet arms none of this:
+(`_cancelCastFetch`), and picking a second receiver is one of them: it
+zeroes the count for its own session, so the wait it replaces must not
+still be running to read that zero as an answer about the first. A stream fetched from the internet arms none of this:
 our listener is not the one it would be asking.
 
 **The listener lives exactly as long as a session**, and that is made hard to

@@ -516,7 +516,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// itself cancels it -- the receiver this exists to catch reports a
   /// healthy session and a player state the SDK cannot name, so its own
   /// account of itself is exactly what must not be listened to. Only the
-  /// ways out of a session cancel it.
+  /// ways out of a session cancel it, picking another receiver among them.
   Timer? _castFetchTimer;
 
   /// The last sample mpv gave for the open media, taken while the cast
@@ -2953,6 +2953,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _explainCast(compatibility.explanation, title: compatibility.title);
       return;
     }
+    // Whatever session is running now is about to be replaced, so its wait
+    // ends here rather than at its twenty seconds. Starting a cast zeroes
+    // the listener's count even when the listener is already up, and the
+    // load below is a round trip: a timer left armed for the last receiver
+    // would fire in the middle of that, read the new session's zero, and
+    // end a session that has had no chance to fetch anything. The next
+    // wait is armed after the load, by [_watchCastFetch].
+    _cancelCastFetch();
     // What comes back, not the row that was tapped: the platform is asked
     // where the receiver is as a session starts and never during discovery,
     // so the answer is the only one of the two that can carry an address.
@@ -3028,7 +3036,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Ends the wait. What it asks is about a session, so every way out of
   /// one comes through here -- Stop, a session that ended elsewhere, a
-  /// failed start, [dispose] -- and so does arming the next one.
+  /// failed start, another receiver picked in its place, [dispose] -- and
+  /// so does arming the next one.
   void _cancelCastFetch() {
     _castFetchTimer?.cancel();
     _castFetchTimer = null;

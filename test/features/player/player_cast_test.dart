@@ -17,6 +17,14 @@ const livingRoom = CastDevice(
   model: 'Chromecast',
 );
 
+/// A second receiver, for the switch mid-cast: the count the never-fetched
+/// check reads belongs to whichever session is running now.
+const kitchen = CastDevice(
+  id: 'device-2',
+  name: 'Kitchen Display',
+  model: 'Nest Hub',
+);
+
 /// The LAN address the server would answer with for a receiver: what a cast
 /// URL is rebuilt on.
 final lanBase = Uri.parse('http://192.168.1.20:39271/');
@@ -606,6 +614,60 @@ void main() {
       expect(cast.disconnects, 0);
       expect(lan.running, isTrue);
       expect(find.byType(CastRemotePanel), findsOneWidget);
+    });
+
+    testWidgets('the receiver picked mid-cast is the one asked about', (
+      tester,
+    ) async {
+      final lines = captureDiagnostics();
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom, kitchen]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+      // The first receiver is fetching happily, and its twenty seconds are
+      // running.
+      lan.requestsServed = 4;
+      // The second one takes a round trip to accept the media, as a real
+      // receiver does. That round trip is the window: the listener has been
+      // started again for this session, so its count is already zero, and
+      // this session's own wait is not armed until the load comes back.
+      cast.loadDelay = const Duration(seconds: 8);
+
+      await tester.pump(
+        PlayerScreen.castFetchTimeout - const Duration(seconds: 5),
+      );
+      await castTo(tester, kitchen);
+      // The listener never stopped -- it was started on top of itself --
+      // and that start is what put the count back to zero.
+      expect(lan.toggles, [true, true]);
+      expect(lan.requestsServed, 0);
+      expect(find.text('Casting to ${kitchen.name}'), findsOneWidget);
+
+      // Past where the first receiver's wait would have run out, with the
+      // second one still loading. That wait is over: it was about a session
+      // that has been replaced, and the zero it would read belongs to a
+      // session five seconds old that has not been handed the media yet.
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(find.text('Casting to ${kitchen.name}'), findsOneWidget);
+      expect(cast.disconnects, 0);
+
+      // The load lands and the second receiver's own twenty seconds start,
+      // which it spends never asking for anything: that is the session that
+      // gets ended, and the film comes back here.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump(PlayerScreen.castFetchTimeout);
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('${kitchen.name} never asked for the stream'),
+        findsOneWidget,
+      );
+      expect(lines, anyElement(contains('asked the LAN listener for nothing')));
+      expect(cast.disconnects, 1);
+      expect(lan.running, isFalse);
     });
 
     testWidgets('a stream off the internet is never accused', (tester) async {
