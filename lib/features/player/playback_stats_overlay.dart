@@ -154,13 +154,20 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// two islands the owner could not scan between. A number says the
   /// directory took.
   ///
+  /// `none` is now also the *deliberate* answer on a device with no room
+  /// to spare: the player declines a cache file on a volume already at the
+  /// line it holds for the server (`MpvDiskCacheLimit`). This row is the
+  /// only place that says which of the two happened, and it says it by
+  /// standing beside the free space on the storage report rather than by
+  /// claiming a cause it cannot know.
+  ///
   /// It is also the only row that shows the *other* end of it. The file is
   /// bounded (`MpvDiskCacheLimit`) and mpv writes it at whatever rate the
   /// link delivers rather than at the rate the film plays, so on a fast
   /// connection the cap can be reached early in a long film; from there
   /// the number stops climbing while playback goes on. A frozen number
-  /// beside a shrinking `ranges` row is that, or a volume with no room
-  /// left, and neither is visible anywhere else.
+  /// beside a shrinking `ranges` row is that, or the volume having come
+  /// down to the line, and neither is visible anywhere else.
   static String _fileCache(PlaybackStats s) {
     final bytes = s.fileCacheBytes;
     return bytes == null ? 'none' : DownloadView.humanSize(bytes);

@@ -216,12 +216,20 @@ class PlaybackStats {
   /// This is the reading the whole cache-directory change is proved by.
   /// Absent is the `Failed to create file cache` state the owner's
   /// Chromecast was in -- everything seekable held in the 32 MiB memory
-  /// cache, the two islands he could not scan between. A number is the
-  /// directory having taken. And a number that has *stopped climbing* is
-  /// the third state, which nothing else on this panel would show: either
-  /// `MpvDiskCacheLimit` has hit its cap and turned `cache-on-disk` off,
-  /// or mpv's writes are failing (a full volume), and from that point on
-  /// the window shortens back towards where it started.
+  /// cache, the two islands he could not scan between -- or a volume that
+  /// was already at [MpvDiskCacheLimit.leastFreeSpaceForCache] when the
+  /// media opened, which is the player declining a cache rather than
+  /// failing to make one. A number is the directory having taken. And a
+  /// number that has *stopped climbing* is the third state, which nothing
+  /// else on this panel would show: `MpvDiskCacheLimit` has turned
+  /// `cache-on-disk` off, because the file reached its cap or because the
+  /// volume came down to that line, and from that point on the window
+  /// shortens back towards where it started.
+  ///
+  /// The reading no longer freezes because mpv's *writes* are failing:
+  /// that was the case where the player filled the volume and
+  /// `demux_cache_write` put `file_size` back on every packet, and it is
+  /// what the free-space half of the limiter exists to prevent.
   final int? fileCacheBytes;
 
   /// The seekable ranges out of `demuxer-cache-state`, which mpv answers
@@ -256,7 +264,9 @@ class PlaybackStats {
   /// and without a working file cache, differ by the key's presence and
   /// nothing else. So an absent key is not a missing reading, it is the
   /// reading -- there is no file. This is also what `MpvDiskCacheLimit`
-  /// bounds the file by.
+  /// bounds the file by, and an absent key is what it reads as "nothing to
+  /// bound": with no cache file there is nothing to turn off, and the
+  /// volume's free space is then the server cleaner's business alone.
   static int? fileCacheBytesOf(String? state) {
     final bytes = _cacheState(state)?['file-cache-bytes'];
     return bytes is int ? bytes : null;
