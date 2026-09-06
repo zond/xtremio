@@ -315,18 +315,6 @@ class FakePlaybackEngine implements PlaybackEngine {
     );
   }
 
-  /// How many times the player was told to stop writing its read-ahead to
-  /// disk. Also `'stop-writing'` in [callLog], which is where a test reads
-  /// the *order* -- the whole of the fix for a player that was left is
-  /// that this comes before the teardown rather than out of it.
-  int stopWritingCalls = 0;
-
-  @override
-  Future<void> stopWritingToDisk() async {
-    stopWritingCalls++;
-    callLog?.add('stop-writing');
-  }
-
   @override
   Future<void> dispose() async {
     disposeAsked = true;

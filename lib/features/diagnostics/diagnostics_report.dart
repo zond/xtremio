@@ -1,5 +1,4 @@
 import '../../core/core.dart';
-import '../player/mpv_cache_holdings.dart';
 
 /// The app version, passed at build time with
 /// `--dart-define=XTREMIO_VERSION=$(grep ^version pubspec.yaml | cut -d' ' -f2)`.
@@ -136,7 +135,6 @@ String formatDiagnostics({
   required String osVersion,
   required DateTime at,
   ServerStorage? storage,
-  MpvCacheHoldings? players,
   DhtStatus? dht,
   String appVersion = kAppVersion,
   String gitCommit = kGitCommit,
@@ -155,14 +153,6 @@ String formatDiagnostics({
     // and a line nobody could read is `unknown` rather than absent.
     ...?storage?.reportLines,
     if (storage == null) ...ServerStorage.unknownReportLines,
-    // Under the free space, because it is the half of it that nothing else
-    // can see: mpv unlinks its cache file at creation, so those blocks are
-    // missing from `disk:` with no file anywhere to account for them and
-    // invisible to the walk behind `cache:`. On the evening this was added
-    // for, a volume drained at 32 Mbps with no player on screen and every
-    // line of the report was consistent with a device that was simply
-    // full.
-    if (players != null) players.reportLine,
     // Information, not a failure, and only worth a line when it is the one
     // state that explains a slow start: a DHT that never found a node this
     // session. A bootstrapped or disabled DHT (or one nobody could ask)

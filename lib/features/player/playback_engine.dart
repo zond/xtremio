@@ -8,18 +8,14 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../core/core.dart';
-import '../../src/rust/api/storage.dart' as rust_storage;
 import '../../shell/display_frame_rate.dart';
-import 'mpv_cache_holdings.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
 import 'subtitle_match.dart';
 import 'torrent_stats.dart';
 
-export 'mpv_cache_holdings.dart';
 export 'playback_stats.dart';
 export 'playback_tracks.dart';
 export 'torrent_stats.dart';
@@ -201,25 +197,12 @@ abstract interface class PlaybackEngine {
   /// them clear of its own controls.
   Widget buildVideo(BuildContext context, {double subtitleBottomPadding = 24});
 
-  /// Stops the player writing its read-ahead to disk, without stopping the
-  /// playback. libmpv's `cache-on-disk=no`; any other backend does
-  /// nothing.
+  /// Stops the playback and releases everything the backend holds for it.
   ///
-  /// This is what a screen on its way out calls, and it is separate from
-  /// [dispose] because the two are not the same size. A teardown stops
-  /// mpv, closes the fd and frees the whole cache file, and it can be slow
-  /// or fail: `Player.stop()` blocks and retries when the volume it is
-  /// writing to has no room left, which is exactly when it matters. This
-  /// is one property write, it costs nothing whatever else the player is
-  /// doing, and it ends the bleeding on its own -- so it goes first, and
-  /// no failure of the teardown behind it can undo it.
-  ///
-  /// What is already in the file stays where it is: those blocks come back
-  /// when the fd closes and not before ([MpvCacheHoldings] is what still
-  /// counts them). Stopping the growth is the whole of what this buys, and
-  /// on the evening it was written for that was ninety seconds and 928 MB.
-  Future<void> stopWritingToDisk();
-
+  /// It can be slow and it can fail -- `Player.stop()` waits on the mpv
+  /// core thread, which is the thread that has to answer for whatever the
+  /// playback was doing. [destroy] is the bound on that, and the caller
+  /// arms it rather than chaining it behind this.
   Future<void> dispose();
 
   /// Ends the playback from outside the teardown, freeing the demuxer and
@@ -333,64 +316,6 @@ class PlaybackScope extends InheritedWidget {
       dhtStatus != oldWidget.dhtStatus;
 }
 
-/// The folder mpv writes its cache file into, inside the app's own cache
-/// directory -- the same root the embedded server's cache lives under, one
-/// folder along.
-const String mpvCacheFolderName = 'mpv';
-
-/// Where mpv may write, `null` when the platform will not say.
-typedef MpvCacheDirectory = Future<String?> Function();
-
-/// Bytes still free on the volume a directory is on, `null` when that
-/// cannot be read.
-typedef MpvCacheFreeSpace = Future<int?> Function(String directory);
-
-/// `<app cache>/mpv`, which is what [MediaKitEngine] asks for unless a test
-/// hands in something else.
-///
-/// Android gives an app no writable temp path of its own, so mpv's default
-/// (its user cache directory) does not exist there and the demuxer's file
-/// cache cannot be created at all -- `Failed to create file cache` on every
-/// open, in the owner's own log. The app is already handed a cache
-/// directory by the platform (`main.dart` passes it to the core and to the
-/// embedded server); mpv gets a folder of its own beside theirs.
-///
-/// The folder itself is not created here: mpv `mp_mkdirp`s the path it is
-/// given before opening the cache file (`demux/cache.c`), which was
-/// confirmed by handing a running libmpv a directory two levels below
-/// anything that existed and finding both levels afterwards.
-Future<String?> platformMpvCacheDirectory() async {
-  try {
-    final cache = await getApplicationCacheDirectory();
-    return '${cache.path}/$mpvCacheFolderName';
-  } catch (_) {
-    // No cache directory from the platform: mpv keeps its own default,
-    // which is right on a desktop and missing on Android.
-    return null;
-  }
-}
-
-/// What `statvfs` says is left on the volume [directory] is on
-/// (`volume_free_bytes`, `df`'s Available column), `null` when the reading
-/// cannot be taken.
-///
-/// This is a control call over FFI rather than anything spoken to the
-/// embedded server: the player's cache is the app's own file, in the app's
-/// own cache directory, and a stream need never have gone near the server.
-///
-/// A failure is `null`, not zero. An unreadable volume must leave the cache
-/// exactly as it would have been, since reading it as full would take the
-/// file cache away from every device whose filesystem will not answer.
-Future<int?> platformMpvCacheFreeSpace(String directory) async {
-  try {
-    return await rust_storage.volumeFreeBytes(path: directory);
-  } catch (_) {
-    // No Rust library loaded (a test host), or a path the platform will
-    // not answer for.
-    return null;
-  }
-}
-
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever
 /// the URL serves is decoded on this device; the server never transcodes.
 ///
@@ -398,24 +323,8 @@ Future<int?> platformMpvCacheFreeSpace(String directory) async {
 /// creation: media_kit takes it as the video controller's configuration
 /// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
 class MediaKitEngine implements PlaybackEngine {
-  MediaKitEngine({
-    bool hardwareDecoding = true,
-    MpvCacheDirectory cacheDirectory = platformMpvCacheDirectory,
-    MpvCacheFreeSpace freeSpace = platformMpvCacheFreeSpace,
-    MpvCacheHoldings? holdings,
-  }) : _player = Player(),
-       _holdings = holdings ?? MpvCacheHoldings.shared {
-    _freeSpace = freeSpace;
-    // Asked once and remembered: the directory is both what mpv is told
-    // and what the free-space readings are taken through, and asking the
-    // platform again on every `open` and every five-second tick would be a
-    // channel round trip for an answer that cannot change. Only libmpv has
-    // properties to set or a cache file to bound, so any other backend
-    // still never reaches the platform channel.
-    _cacheDirectory = _player.platform is NativePlayer
-        ? cacheDirectory()
-        : Future<String?>.value(null);
-    _overrides = _applyOverrides(_player.platform, _cacheDirectory);
+  MediaKitEngine({bool hardwareDecoding = true}) : _player = Player() {
+    _overrides = _applyOverrides(_player.platform);
     _controller = VideoController(
       _player,
       configuration: configurationFor(hardwareDecoding: hardwareDecoding),
@@ -438,17 +347,6 @@ class MediaKitEngine implements PlaybackEngine {
   }
 
   final Player _player;
-  late final MpvCacheFreeSpace _freeSpace;
-
-  /// What every live player in this app holds on the volume, this one
-  /// included. Shared by default because there is one app; a test hands
-  /// over its own so two engines can be watched without the process's
-  /// other players in the sum.
-  final MpvCacheHoldings _holdings;
-
-  /// The directory mpv was given for its cache file, `null` where the
-  /// platform had none to give.
-  late final Future<String?> _cacheDirectory;
 
   late final VideoController _controller;
   bool _disposed = false;
@@ -473,11 +371,27 @@ class MediaKitEngine implements PlaybackEngine {
   /// swarm trips it and short enough that a connection that is really gone
   /// still ends up an error rather than a hang.
   ///
+  /// **`cache-on-disk=no` is the whole of the player's disk policy.**
+  /// media_kit 1.2.6 starts libmpv with `cache-on-disk=yes`
+  /// (`player/native/player/real.dart`), and what that buys is a cache file
+  /// mpv unlinks the moment it creates it: no name in the directory, so no
+  /// `du`, no `dumpsys diskstats` and no walk the server's own cleaner
+  /// performs can see it, and the blocks come back only when the fd closes.
+  /// On the owner's Chromecast one 90-second title held 928 MB that way
+  /// while three separate instruments reported the app was using 46 MB.
+  ///
+  /// There is one cache on this device now and it is the server's: named
+  /// files, a configured limit, a free-space floor, a cleaner that evicts,
+  /// and survival across a crash. Every stream reaches the player through
+  /// it ([proxiedThroughServer]), so a second copy in a file nobody can see
+  /// buys nothing that the first one does not already do better. It is set
+  /// here, once per player and never again, because it is a property of
+  /// this app rather than of any one media -- there is no condition under
+  /// which it comes back on, and nothing left that would turn it off.
+  ///
   /// `force-seekable` is not here: it is a claim about the stream being
   /// opened rather than about the player, so [forcesSeekable] decides it
-  /// per `open`; nor is `cache-on-disk`, which [open] sets because
-  /// [MpvDiskCacheLimit] can have turned it off for the media before this
-  /// one.
+  /// per `open`.
   ///
   /// **`video-sync=display-resample` is not here because it is not a
   /// property of this player.** It is set per playback, against the rate
@@ -528,44 +442,9 @@ class MediaKitEngine implements PlaybackEngine {
   /// OSD, and if display sync does not start, or the count is no better
   /// than 2779, this comes out again rather than being defended on the
   /// theory.
-  static const Map<String, String> mpvOverrides = {'network-timeout': '300'};
-
-  /// [mpvOverrides] plus what the demuxer's file cache needs, for a
-  /// [cacheDirectory] of `null` (nothing is added) or a directory mpv may
-  /// write in.
-  ///
-  /// `demuxer-cache-dir` is where mpv puts that file. Without it the cache
-  /// cannot be created on Android at all, and the seekable window is
-  /// whatever fits in the memory cache -- media_kit starts libmpv with
-  /// `demuxer-max-bytes` and `demuxer-max-back-bytes` at 32 MiB each
-  /// (`PlayerConfiguration.bufferSize`), which on the owner's 2.3 Mbps film
-  /// was the two islands, 1465-1601s and 516-551s, that he could not scan
-  /// between. With the file cache those byte limits apply to packet
-  /// *metadata* instead of to the payload: two minutes of a test stream
-  /// weighed 818 KB of metadata against 21 MB of payload on a running
-  /// libmpv, and mpv's own manual puts the metadata at some 50 MB an hour,
-  /// so the same 32 MiB holds half an hour of film rather than ninety
-  /// seconds of it.
-  ///
-  /// `demuxer-cache-unlink-files=immediate` is mpv's own default and is set
-  /// here because it is what answers for the file afterwards: mpv unlinks
-  /// the cache file as soon as it has created it, so it never has a name in
-  /// the directory, and the space goes back to the filesystem when the fd
-  /// closes -- at the next `loadfile`, when the player is disposed, and
-  /// when the app is killed or crashes. Nothing of ours has to sweep up,
-  /// and a default that changed under us would leave files behind.
-  ///
-  /// Both were measured against a running libmpv (0.41.0 on Linux) rather
-  /// than read off the manual, and both names were checked against the
-  /// build media_kit ships for Android, `mpv v0.36.0-549-g78d43740f5`,
-  /// where `demuxer-cache-dir` is the option and the older `cache-dir` is
-  /// only a deprecated alias.
-  static Map<String, String> overridesFor(String? cacheDirectory) => {
-    ...mpvOverrides,
-    if (cacheDirectory != null) ...{
-      'demuxer-cache-dir': cacheDirectory,
-      'demuxer-cache-unlink-files': 'immediate',
-    },
+  static const Map<String, String> mpvOverrides = {
+    'network-timeout': '300',
+    'cache-on-disk': 'no',
   };
 
   /// What starts mpv's display sync on a display refreshing at [hz]
@@ -682,34 +561,14 @@ class MediaKitEngine implements PlaybackEngine {
     return isLoopbackHost(url.host);
   }
 
-  /// Sets [overridesFor] on the native backend. Only libmpv has
+  /// Sets [mpvOverrides] on the native backend. Only libmpv has
   /// properties; any other backend keeps its own behaviour, and a player
   /// torn down before it initialised is not an error worth surfacing.
-  ///
-  /// The directory is the constructor's one reading of it, which is `null`
-  /// for anything that is not libmpv, so a fake engine never reaches the
-  /// platform channel.
-  static Future<void> _applyOverrides(
-    PlatformPlayer? platform,
-    Future<String?> cacheDirectory,
-  ) async {
+  static Future<void> _applyOverrides(PlatformPlayer? platform) async {
     if (platform is! NativePlayer) return;
-    for (final MapEntry(:key, :value) in overridesFor(
-      await cacheDirectory,
-    ).entries) {
+    for (final MapEntry(:key, :value) in mpvOverrides.entries) {
       await _write(platform, key, value);
     }
-  }
-
-  /// What is still free on the volume mpv's cache file is on, `null` when
-  /// there is no directory or the reading cannot be taken.
-  ///
-  /// Both budgets the app keeps on a device are measured against this one
-  /// number -- see [MpvDiskCacheLimit].
-  Future<int?> _cacheVolumeFreeBytes() async {
-    final directory = await _cacheDirectory;
-    if (directory == null || _disposed) return null;
-    return _freeSpace(directory);
   }
 
   /// One mpv property on this player's backend, if it has one.
@@ -749,12 +608,6 @@ class MediaKitEngine implements PlaybackEngine {
       );
   Timer? _statsTimer;
   bool _sampling = false;
-
-  /// The timer that keeps mpv's cache file to
-  /// [MpvDiskCacheLimit.defaultLimitBytes], and the limiter it drives. One
-  /// pair per `open`, because the file is one per `loadfile`.
-  Timer? _diskCacheTimer;
-  MpvDiskCacheLimit? _diskCacheLimit;
 
   final StreamController<PlaybackTracks> _tracks =
       StreamController<PlaybackTracks>.broadcast();
@@ -1015,50 +868,6 @@ class MediaKitEngine implements PlaybackEngine {
     _statsTimer = null;
   }
 
-  /// Starts watching the size of mpv's cache file for the media just
-  /// opened. The previous media's file is already gone -- mpv deletes it
-  /// with the demuxer that made it -- so each `open` starts a fresh count,
-  /// and the app-wide holding this player carries is reset to nothing with
-  /// it rather than left at the outgoing file's last reading.
-  void _watchDiskCache() {
-    _stopWatchingDiskCache();
-    if (_player.platform is! NativePlayer || _disposed) return;
-    _holdings.hold(this, 0);
-    final limit = MpvDiskCacheLimit(
-      cacheState: () => _property('demuxer-cache-state'),
-      freeBytes: _cacheVolumeFreeBytes,
-      stopWritingToDisk: () => _setProperty('cache-on-disk', 'no'),
-      holdings: _holdings,
-      owner: this,
-    );
-    _diskCacheLimit = limit;
-    _diskCacheTimer = Timer.periodic(MpvDiskCacheLimit.interval, (_) {
-      if (!_disposed) limit.check().ignore();
-    });
-  }
-
-  void _stopWatchingDiskCache() {
-    _diskCacheTimer?.cancel();
-    _diskCacheTimer = null;
-    // The timer is not the whole of it: a reading already awaiting libmpv
-    // outlives its cancellation, so the limiter is told it no longer
-    // speaks for the playback ([MpvDiskCacheLimit.stop]).
-    _diskCacheLimit?.stop();
-    _diskCacheLimit = null;
-  }
-
-  /// One mpv property as a string, `null` off libmpv or when the player
-  /// cannot answer.
-  Future<String?> _property(String name) async {
-    final platform = _player.platform;
-    if (platform is! NativePlayer) return null;
-    try {
-      return await platform.getProperty(name);
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _sampleStats(NativePlayer native) async {
     // One sample at a time; `getProperty` awaits the player's own
     // initialisation, so a slow start must not pile requests up.
@@ -1081,62 +890,16 @@ class MediaKitEngine implements PlaybackEngine {
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     _externalSubtitleUrls.clear();
-    // What the outgoing media still has in its own cache file, taken while
-    // its limiter is still here to answer: those blocks are released by the
-    // `loadfile` below, but they are counted as occupied by the free-space
-    // reading this method takes before it -- see
-    // [MpvDiskCacheLimit.hasRoomForCache].
-    final heldByOutgoingCache = _diskCacheLimit?.fileCacheBytes ?? 0;
-    // Then, before anything here writes `cache-on-disk`: the limiter
-    // belongs to the media being replaced, and one of its readings landing
-    // after the write below would turn the disk cache off for the media
-    // this call is opening.
-    _stopWatchingDiskCache();
+    // `cache-on-disk=no` is already in force and stays in force: it is set
+    // once per player ([mpvOverrides]) and nothing here or anywhere else
+    // writes it again. Awaiting [_overrides] is what puts it in front of
+    // the first `loadfile` rather than a moment after it.
     await _overrides;
     // Before the `loadfile`, and before every one of them: mpv reads
     // `force-seekable` once, when it builds the demuxer, so it has to be
     // set for the stream about to be opened and not for the last one.
     await _setProperty('force-seekable', forcesSeekable(url) ? 'yes' : 'no');
-    // The same holds for the file cache, and awaiting [_overrides] above is
-    // what puts `demuxer-cache-dir` in front of the first `loadfile`. mpv
-    // creates the cache while it builds the demuxer and reads the directory
-    // then; the demuxer's own option cache does not watch that option, so a
-    // directory arriving later is not picked up at all. Handing a running
-    // libmpv the directory a second after `loadfile` reproduced the owner's
-    // `Failed to create file cache` and left `file-cache-bytes` absent for
-    // the rest of the stream. `cache-on-disk` is media_kit's own default
-    // (1.2.6 sets it once at start-up), but mpv reads it per *packet* out
-    // of options the demuxer thread refreshes every cycle, so
-    // [MpvDiskCacheLimit] can turn it off part way through a media -- and
-    // this is where the next one gets its file cache back, but only where
-    // there is room for one. [MpvDiskCacheLimit] turns the cache off
-    // when the volume comes down to the floor, and asking before the first
-    // packet rather than five seconds into it is the difference between
-    // never starting a second writer on a full device and starting one and
-    // taking it away.
-    final room = MpvDiskCacheLimit.hasRoomForCache(
-      await _cacheVolumeFreeBytes(),
-      heldByOutgoingCache: heldByOutgoingCache,
-      // What the app's *other* players are holding right now. The volume's
-      // free space already counts their blocks as gone, so this is not
-      // about the room -- it is about the cap, which is the app's and not
-      // this media's ([MpvCacheHoldings]). A player starting while the
-      // allowance is already spent elsewhere opens no file at all rather
-      // than a second one that would each be under the limit and together
-      // over it.
-      heldByOtherPlayers: _holdings.heldByOthers(this),
-    );
-    await _setProperty('cache-on-disk', room ? 'yes' : 'no');
     await _player.open(Media(url.toString(), start: start));
-    if (room) {
-      _watchDiskCache();
-    } else {
-      // Nothing to watch and nothing to declare: a media playing out of the
-      // memory cache holds no blocks on the volume, and the outgoing file
-      // this player was still counted as holding went with the `loadfile`
-      // above. An entry of zero would go on being counted as a file open.
-      _holdings.release(this);
-    }
   }
 
   @override
@@ -1414,30 +1177,9 @@ class MediaKitEngine implements PlaybackEngine {
   /// `VideoOutput` down from `Player.dispose`, so there is nothing separate
   /// to dispose on the `VideoController`).
   @override
-  Future<void> stopWritingToDisk() async {
-    // The limiter goes first and for good: the file it was measuring
-    // cannot grow past this, so a reading still awaiting libmpv could only
-    // come back and write `cache-on-disk=no` onto whatever this player
-    // opens next ([MpvDiskCacheLimit.stop]). What it last reported to
-    // [MpvCacheHoldings] stays there -- those blocks are held until the fd
-    // closes, which is [dispose]'s business and not this call's.
-    _diskCacheTimer?.cancel();
-    _diskCacheTimer = null;
-    _diskCacheLimit?.stop();
-    await _setProperty('cache-on-disk', 'no');
-  }
-
-  @override
   Future<void> dispose() async {
     _disposed = true;
     _stopStats();
-    _stopWatchingDiskCache();
-    // The blocks go back to the filesystem when `Player.dispose` below
-    // closes the fd, and the app stops claiming them here rather than
-    // there: a teardown that hangs or throws must not leave this player in
-    // the sum for the rest of the session, holding an allowance against
-    // the players that are still running.
-    _holdings.release(this);
     for (final subscription in _trackSubscriptions) {
       await subscription.cancel();
     }
@@ -1517,14 +1259,9 @@ class MediaKitEngine implements PlaybackEngine {
   Future<void> destroy() async {
     if (_destroyAsked) return;
     _destroyAsked = true;
-    // Nothing this player reports is worth anything now, and what it was
-    // holding on the volume comes back with the demuxer, so the app stops
-    // claiming it here as well as in [dispose] -- a teardown that never
-    // ran never released it.
+    // Nothing this player reports is worth anything now.
     _disposed = true;
     _stopStats();
-    _stopWatchingDiskCache();
-    _holdings.release(this);
     final native = _player.platform;
     if (native is! NativePlayer || native.disposed) return;
     final ctx = native.ctx;
@@ -1543,357 +1280,6 @@ class MediaKitEngine implements PlaybackEngine {
     } finally {
       calloc.free(command);
       calloc.free(args);
-    }
-  }
-}
-
-/// Keeps what mpv writes to disk for one media under a size a television
-/// can spare.
-///
-/// mpv's cache file is append-only and nothing in mpv bounds it: the byte
-/// limits (`demuxer-max-bytes`, `demuxer-max-back-bytes`) apply to packet
-/// metadata once the payload is on disk, and space the player prunes is
-/// never reused, so the file grows with every byte demuxed until the media
-/// is closed. Measured against a running libmpv 0.41.0 with both limits at
-/// media_kit's 32 MiB: playing a 139 MiB stream through left a 139 MiB
-/// cache file, four times the whole memory budget. Left alone, the owner's
-/// two-hour 2.3 Mbps film would put about 2 GB in the cache of a 2 GB
-/// television that also stores torrent data, and a 4K remux would put tens
-/// of gigabytes there. That is how you fill someone's device.
-///
-/// So the bound is ours to keep, and there are two of them, because there
-/// are two writers on the device and one filesystem under them.
-///
-/// **Two caches, one filesystem, one number to check.** The embedded server
-/// holds [serverFreeSpaceFloorBytes] of the volume back from its own
-/// torrent cache: its cleaner caps the cache at
-/// `min(cacheSize, occupied + available - floor)`, and below that line
-/// `ensure_download_disk_ready` has already given up on the disk and
-/// degraded a request to memory-only (`server/src/cache_cleaner.rs`, the
-/// rev `rust/Cargo.toml` pins). mpv is the second writer, and its cache
-/// file is not in that sum: it is unlinked at creation, so no directory
-/// walk can find it. It is in the *free-space* reading, though -- the
-/// blocks are held until the fd closes, and `f_bavail` counts them
-/// throughout (`crate::storage::free_bytes`, and the test that drives it).
-/// So the server's cleaner already sees the player coming and evicts to
-/// keep its floor; what was missing is the other half, the player seeing
-/// the server. [check] reads the same free space the cleaner does and
-/// stops writing when it reaches the floor.
-///
-/// The number a reader can check against `df` is therefore the floor
-/// itself: **the two caches share one allowance, everything above
-/// [serverFreeSpaceFloorBytes], rather than each taking a budget on top of
-/// the other.** Under it, the torrent cache is capped by the operator's
-/// `cacheSize` or by the device, whichever is smaller, and mpv's cache
-/// takes at most [defaultLimitBytes] *of that same allowance*.
-///
-/// **It is where the caches are held, not a line the app cannot cross**,
-/// and saying otherwise would be citing this comment against the field log
-/// that produced it. Two of the app's writers go through it and neither is
-/// a cache. The film itself is written by librqbit, which the server's
-/// cleaner can evict behind but cannot throttle: on the owner's Chromecast
-/// Available went to nothing, not to 512 MiB, and the fatal ENOSPC that
-/// followed is what the server's recovery pass exists to survive. An
-/// offline download is the other, admitted once when the pin is accepted
-/// against a margin of its own -- `enginefs::PIN_FREE_SPACE_MARGIN`,
-/// 500 MiB, twelve short of this number -- into a directory the cleaner
-/// never walks, so one pin can settle the volume below the line by design
-/// and several accepted together can take it to zero.
-///
-/// The player stops a little sooner than the floor
-/// ([leastFreeSpaceForCache]), and a device with 523 MB free -- the
-/// owner's, mid-film, against a 1.4 GB film -- gets no player cache at all.
-/// That is the right answer rather than a cautious one: what it has room
-/// for there is a cache smaller than the memory one it would replace.
-///
-/// [check] asks mpv what the file weighs and
-/// turns `cache-on-disk` off once it is over [limitBytes]; from there the
-/// media plays on out of the memory cache, which is what every playback
-/// does today. What is already in the file stays seekable -- mpv reads
-/// those packets back through the fd it still holds -- until the metadata
-/// budget prunes them. The switch was measured the same way: a file capped
-/// at 16 MiB stopped growing on the tick it crossed, stayed at that size
-/// through the next four minutes of media, and playback did not falter.
-///
-/// **Nothing removes the file, because nothing has to.**
-/// `demuxer-cache-unlink-files=immediate` (`MediaKitEngine.overridesFor`)
-/// has mpv unlink it the moment it is created, so it never has a name in
-/// the directory and the space returns to the filesystem when the fd
-/// closes: at the next `loadfile`, when the player is disposed, and when
-/// the app is killed or crashes. Confirmed by listing the directory during
-/// playback while mpv reported 145 MB in the file, and finding it empty.
-class MpvDiskCacheLimit {
-  MpvDiskCacheLimit({
-    required this.cacheState,
-    required this.freeBytes,
-    required this.stopWritingToDisk,
-    MpvCacheHoldings? holdings,
-    Object? owner,
-    this.limitBytes = defaultLimitBytes,
-    this.floorBytes = leastFreeSpaceForCache,
-  }) : holdings = holdings ?? MpvCacheHoldings(),
-       owner = owner ?? Object();
-
-  /// 512 MiB, on a device whose whole storage is 8 GB and whose torrent
-  /// data shares it. It is 512 MiB of *bytes demuxed*, and that is not the
-  /// same clock as playback.
-  ///
-  /// With the file cache carrying the payload, media_kit's 32 MiB
-  /// `demuxer-max-bytes` bounds packet metadata instead -- some 26 bytes of
-  /// budget per megabyte of film, on the pair of readings in
-  /// `player_cache_test.dart` -- so mpv reads tens of minutes ahead, and it
-  /// reads at whatever rate the link delivers rather than at the film's
-  /// 2.3 Mbps. On a link that keeps up, 512 MiB of a 2.3 Mbps film is
-  /// therefore demuxed within the first few minutes of a two-hour one, not
-  /// half way through it. What that costs is the far end of the film: from
-  /// the cap on, new packets are held in memory at full payload size again
-  /// and the window ahead shortens back towards the ninety seconds the
-  /// readings started at. The `file` row on the stats panel is what says
-  /// which side of that a reading was taken on -- a number that has stopped
-  /// climbing.
-  ///
-  /// **This number alone does not know how much room there is**, which is
-  /// what [floorBytes] is for. On a volume with less than this free, mpv
-  /// fills it and its writes start failing; `demux_cache_write` then leaves
-  /// the packet in memory and puts `file_size` back where it was, so the
-  /// reading freezes below the cap, a limiter watching only the file size
-  /// never fires, and mpv retries on every packet for the rest of the film.
-  /// Nothing is left behind afterwards -- the file is unlinked at creation
-  /// -- but the volume is full while it plays.
-  static const int defaultLimitBytes = 512 * 1024 * 1024;
-
-  /// Free space on the volume that this app never takes, whichever of its
-  /// two caches is asking: 512 MiB.
-  ///
-  /// Not a number invented here. It is the embedded server's
-  /// `CACHE_FREE_SPACE_FLOOR` (`server/src/cache_cleaner.rs` at the rev
-  /// `rust/Cargo.toml` pins), which is in turn the margin
-  /// `ensure_download_disk_ready` has always refused to stream to disk
-  /// without -- below it the server has already decided the disk is
-  /// unusable and degraded the request to memory-only. A player that wrote
-  /// through that line would be filling the space the server is holding
-  /// open so that streaming can carry on at all, which is the one thing
-  /// worth protecting on a full device: the film, not the read-ahead.
-  ///
-  /// It is written out here rather than read over FFI because it is not the
-  /// server's to answer -- the constant is private to the server crate, and
-  /// a player asking a server it may never talk to for the size of its own
-  /// budget would be a worse dependency than a number with the source of
-  /// truth named beside it. If the server's floor moves, this moves with
-  /// it, and the pin is what says which one is in force.
-  static const int serverFreeSpaceFloorBytes = 512 * 1024 * 1024;
-
-  /// What mpv keeps in memory when it has no cache file: 32 MiB.
-  ///
-  /// media_kit 1.2.6 starts libmpv with `demuxer-max-bytes` and
-  /// `demuxer-max-back-bytes` both at `PlayerConfiguration.bufferSize`,
-  /// which defaults to `32 * 1024 * 1024`
-  /// (`player/platform_player.dart`, `player/native/player/real.dart`).
-  /// Read out of the package the app builds against, not off its README.
-  static const int mediaKitMemoryCacheBytes = 32 * 1024 * 1024;
-
-  /// The free space a volume must still have before the player will write a
-  /// cache file into it at all, and the line [check] stops at: the server's
-  /// floor, plus the memory cache the file exists to beat.
-  ///
-  /// The margin is there because a cache file smaller than
-  /// [mediaKitMemoryCacheBytes] is not worth having -- it is the budget the
-  /// file cache replaces, so a file that can only reach a few megabytes
-  /// before the volume hits the floor buys nothing and costs a device that
-  /// is nearly full. It doubles as the slack a five-second poll needs:
-  /// mpv writes at whatever rate the link delivers, so a limiter that only
-  /// stopped *at* the floor would already be through it by the tick that
-  /// noticed. Neither reason makes it a guarantee at any bitrate -- a
-  /// 100 Mbps link writes more than this between ticks -- and what holds
-  /// the floor against everything else is the server's own cleaner, which
-  /// evicts its torrent cache when the free space it reads (this same
-  /// reading, mpv's unlinked file included) comes down to it.
-  static const int leastFreeSpaceForCache =
-      serverFreeSpaceFloorBytes + mediaKitMemoryCacheBytes;
-
-  /// How often [MediaKitEngine] asks. The file grows at the bitrate of the
-  /// media, so five seconds overshoots by a couple of megabytes on a
-  /// television stream and by forty on a 60 Mbps remux -- both small
-  /// against the limit, and one property read is cheap.
-  static const Duration interval = Duration(seconds: 5);
-
-  /// mpv's `demuxer-cache-state`, as [MediaKitEngine] reads it.
-  final Future<String?> Function() cacheState;
-
-  /// What is still free on the volume the cache file is on, `null` when the
-  /// reading cannot be taken. `null` leaves the cache alone: an unreadable
-  /// volume is not a full one.
-  final Future<int?> Function() freeBytes;
-
-  /// Sets `cache-on-disk` to `no` on a demuxer that is already running.
-  ///
-  /// **That mpv honours it there was doubted, and then measured.** The
-  /// write is gated per packet on the live option -- `if (in->cache &&
-  /// in->opts->disk_cache)` in `demux/demux.c` -- and the demuxer thread
-  /// refreshes those options from its config cache at the top of every
-  /// work cycle (`m_config_cache_update(in->opts_cache)` in
-  /// `thread_work`), so a property write reaches it within one cycle.
-  /// Against a running libmpv on a stream throttled to 2 MB/s,
-  /// `file-cache-bytes` froze within one 250 ms sample of the write and
-  /// stayed frozen for thirteen seconds while the demuxer went on reading
-  /// hard -- `cache-end` 59 s to 108 s, the payload going into memory
-  /// instead -- and an `ls` of the cache directory taken from outside the
-  /// process agreed byte for byte. Setting the option back to `yes`
-  /// resumed the writing on the very next sample. The readings are in
-  /// `player_cache_test.dart`, which is where to look before doubting it
-  /// again.
-  ///
-  /// **It freezes the file; it never shrinks it.** What was already
-  /// written stayed allocated for the whole thirteen seconds and came back
-  /// only when the demuxer went away. So this is a bound on growth and
-  /// never a way to get space back: those blocks are the teardown's
-  /// business, and nothing short of one returns them.
-  final Future<void> Function() stopWritingToDisk;
-
-  /// Where [check] reports what it read, and where it asks what the app as
-  /// a whole is holding.
-  ///
-  /// [limitBytes] is checked against that total rather than against this
-  /// media's file, which is the difference between a cap on a playback and
-  /// a cap on the device: two players each under 512 MiB put 928 MB on the
-  /// owner's Chromecast, and neither limiter was wrong about its own
-  /// media. A limiter built without one gets a holdings of its own and is
-  /// therefore alone in it, which is what a limiter built on its own
-  /// actually is.
-  final MpvCacheHoldings holdings;
-
-  /// Who [holdings] files this limiter's reading under: the player, which
-  /// outlives the limiter across a `loadfile`, so the entry is replaced
-  /// rather than added to.
-  final Object owner;
-
-  /// The most the cache file may weigh.
-  final int limitBytes;
-
-  /// The free space the volume must keep, [leastFreeSpaceForCache] unless a
-  /// test says otherwise.
-  final int floorBytes;
-
-  bool _reached = false;
-  bool _checking = false;
-  bool _stopped = false;
-  int _fileCacheBytes = 0;
-
-  /// What this limiter last saw in the cache file, and so what the volume
-  /// gets back when the media it belongs to is replaced.
-  ///
-  /// 0 when it never read one: a media shorter than one [interval], or one
-  /// that was opened with `cache-on-disk=no` and has no file at all. Both
-  /// under-state what is coming back, which errs towards refusing the next
-  /// media a cache file rather than starting one on a volume that has no
-  /// room for it.
-  int get fileCacheBytes => _fileCacheBytes;
-
-  /// Whether the limit has been hit for this media, after which nothing is
-  /// asked again: the file cannot shrink, so the answer cannot change.
-  bool get reached => _reached;
-
-  /// Ends this limiter for good: it belongs to one media, and the media it
-  /// was measuring is gone.
-  ///
-  /// Cancelling the timer that drives it is not enough on its own. [check]
-  /// awaits an `mpv_get_property_string` in the middle, so a reading that
-  /// began before the next `loadfile` can come back after it -- carrying
-  /// the *previous* file's size -- and write `cache-on-disk=no` onto the
-  /// media that has just been opened. That media then plays its whole
-  /// length with no disk cache and its own limiter, seeing no file at all,
-  /// never turns one back on: the fix silently does not apply to the next
-  /// episode. So [check] asks again after every await whether this limiter
-  /// still speaks for the playback.
-  void stop() => _stopped = true;
-
-  /// Whether a volume with [free] bytes left has room to start a cache file
-  /// at all, which is what [MediaKitEngine.open] asks before it turns
-  /// `cache-on-disk` on for a media.
-  ///
-  /// `null` -- a reading nobody could take -- is room: an unreadable volume
-  /// must leave the cache exactly as it would have been, or every device
-  /// whose filesystem will not answer loses the fix.
-  ///
-  /// [heldByOutgoingCache] is what the media being *replaced* still has in
-  /// its own cache file at the moment of the reading ([fileCacheBytes]).
-  /// The question is asked before the `loadfile` because that is where the
-  /// answer is wanted -- before the new media's first packet rather than
-  /// five seconds into it -- and the same `loadfile` is what destroys the
-  /// old demuxer, closes the fd and hands those blocks back. Until it runs
-  /// they are allocated, and `f_bavail` counts them (which is the whole
-  /// premise of measuring both budgets this way), so a reading taken there
-  /// is short by exactly this much.
-  ///
-  /// Asking early is ours, not mpv's. `cache-on-disk` is honoured at
-  /// runtime in both directions ([stopWritingToDisk]), so an answer
-  /// arriving after the `loadfile` would land too -- having first let the
-  /// media begin without a file, which is the whole of what is being
-  /// decided here.
-  ///
-  /// Left out, it refuses the next media a cache file on the strength of
-  /// space the next media is about to be given -- and on an evening's
-  /// binge that is every episode after the first. Episode one's file grows
-  /// until the volume comes down to the floor and [check] stops it there;
-  /// episode two then reads the floor, gets no file, and plays its whole
-  /// length on [mediaKitMemoryCacheBytes] while the volume sits back at a
-  /// gigabyte free. Nothing recovers from that within the media: [check]
-  /// returns early with no file to measure, so only the next `open` can
-  /// turn one back on.
-  ///
-  /// During playback the equivalent is 0, which is the default: the file
-  /// being written now is not about to give its blocks back.
-  ///
-  /// [heldByOtherPlayers] is the app's own cap asked in advance, and it is
-  /// a different question from the room: those blocks are already out of
-  /// [free], so a volume can have plenty left and still owe the whole
-  /// allowance to a player that is already running
-  /// ([MpvCacheHoldings.heldByOthers]). Starting a second file there is
-  /// how 512 MiB became 928 MB. Unlike the free space, this is a number
-  /// the app always has, so there is no "unreadable means room" for it.
-  static bool hasRoomForCache(
-    int? free, {
-    int floorBytes = leastFreeSpaceForCache,
-    int limitBytes = defaultLimitBytes,
-    int heldByOutgoingCache = 0,
-    int heldByOtherPlayers = 0,
-  }) =>
-      heldByOtherPlayers < limitBytes &&
-      (free == null || free + heldByOutgoingCache > floorBytes);
-
-  /// One reading. Turns the disk cache off if the file is over
-  /// [limitBytes], or if the volume has come down to [floorBytes].
-  ///
-  /// The two are asked in that order and the free space only when there is
-  /// a file: with no disk cache there is nothing to turn off, and the
-  /// volume's free space is then somebody else's business.
-  Future<void> check() async {
-    // One at a time: `getProperty` awaits the player's own initialisation,
-    // so a slow start must not pile readings up.
-    if (_stopped || _reached || _checking) return;
-    _checking = true;
-    try {
-      final bytes = PlaybackStats.fileCacheBytesOf(await cacheState());
-      if (_stopped || bytes == null) return;
-      _fileCacheBytes = bytes;
-      // Against the app's total, not against this file: the reading is
-      // filed with everything else alive and the answer comes back
-      // summed. With one player the two are the same number, which is why
-      // the readings this was measured against still read the same.
-      if (holdings.hold(owner, bytes) <= limitBytes &&
-          hasRoomForCache(await freeBytes(), floorBytes: floorBytes)) {
-        return;
-      }
-      // Asked again after the await: a reading that began for the media
-      // being replaced must not write onto the one that replaced it.
-      if (_stopped) return;
-      _reached = true;
-      await stopWritingToDisk();
-    } catch (_) {
-      // A player torn down mid-reading is not an error worth surfacing;
-      // the next tick, if there is one, asks again.
-    } finally {
-      _checking = false;
     }
   }
 }

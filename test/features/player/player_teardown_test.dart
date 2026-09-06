@@ -13,28 +13,25 @@ import '../../support/player_harness.dart';
 /// On the owner's Chromecast one RD/HTTP title played for ninety seconds
 /// and was backed out of. 158 MB came back at the press and the volume
 /// then kept draining at a steady ~32 Mbps with no player on screen, until
-/// a force-stop returned 928 MB in one piece. Blocks that only come back
-/// when the process dies are held by a file with no directory entry, and
-/// `demuxer-cache-unlink-files=immediate` is the only thing this app
-/// unlinks -- so an mpv outlived the screen that owned it, and something
-/// else that had been holding the disk alongside it died on the press.
+/// a force-stop returned 928 MB in one piece: an mpv had outlived the
+/// screen that owned it, and was still filling a cache file with no
+/// directory entry.
 ///
 /// The screen always asked. What it never did was check the answer: the
 /// teardown was deferred by two frames and then `.ignore()`d, so a `stop()`
 /// that hung or threw was never heard from again, and neither the log nor
 /// the test suite could tell a release that finished from one that never
-/// did. The hand-over is the other half of the same evening -- it opens the
-/// next episode's player before the outgoing one has been told to stop
-/// writing, so two demuxers hold one volume and each limiter believes it
-/// is alone.
+/// did.
 ///
-/// So the order is the fix, and it is what is pinned here: the disk writing
-/// stops on the frame the screen goes, ahead of a teardown that may be slow
-/// or may never come; the teardown behind it is awaited and answered for;
-/// and a deadline that was never chained to it kills the player outright
-/// when it does not come back. Knowing was never the point on its own --
-/// a player nobody can stop keeps the volume until the process dies, and
-/// only something that owes the teardown nothing can get in front of that.
+/// **The cache file is gone and the bug is not.** The player keeps nothing
+/// on disk now, so a wedged one costs memory, a socket and the server
+/// engine that socket keeps live -- and a live engine is exactly what the
+/// server's cleaner may not evict behind. That is smaller than a gigabyte
+/// of somebody's television and it is still a player nobody can stop, which
+/// is what this file pins: the teardown is awaited and answered for, and a
+/// deadline that was never chained to it kills the player outright when it
+/// does not come back. Only something that owes the teardown nothing can
+/// get in front of a teardown that is stuck.
 void main() {
   /// The player pushed onto a route, which is how the app opens it and
   /// what [PlayerHarness.pump] on its own is not: mounted as the root
@@ -82,14 +79,14 @@ void main() {
     expect(engine.disposed, isTrue);
   });
 
-  testWidgets('the disk writing stops on the frame the screen goes, not with '
-      'the teardown', (tester) async {
-    // The ordering, which is the whole of the first half of the fix. The
-    // teardown is deferred two frames on purpose -- the raster thread may
-    // still be drawing a frame that references the video texture -- and it
-    // can then block for as long as mpv is blocked, which on a full volume
-    // is indefinitely. Every second of that is more of the volume, so what
-    // must not wait for it is the one property write that ends the growth.
+  testWidgets('the teardown waits two frames, and the deadline does not', (
+    tester,
+  ) async {
+    // The teardown is deferred on purpose -- the raster thread may still be
+    // drawing a frame that references the video texture -- and it can then
+    // block for as long as mpv is blocked. The deadline is armed in front
+    // of those two frames rather than after them, so a screen whose frames
+    // never come is still covered.
     //
     // Unmounted directly rather than through a route: what is being timed
     // is the two frames between the screen going and the teardown starting,
@@ -101,16 +98,15 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
 
-    expect(engine.stopWritingCalls, 1, reason: 'the bleeding stops at once');
     expect(
       engine.disposeAsked,
       isFalse,
-      reason: 'while the teardown has not even been asked for yet',
+      reason: 'the teardown has not even been asked for yet',
     );
 
     await tester.pumpAndSettle();
 
-    expect(harness.calls, ['stop-writing', 'dispose']);
+    expect(harness.calls, ['dispose']);
     expect(engine.disposed, isTrue);
   });
 
@@ -150,7 +146,6 @@ void main() {
     expect(find.byType(PlayerScreen), findsNothing);
     expect(engine.disposeAsked, isTrue, reason: 'the screen did ask');
     expect(engine.disposed, isFalse, reason: 'and mpv never answered');
-    expect(engine.stopWritingCalls, 1, reason: 'but it stopped writing');
     expect(engine.destroyed, isTrue, reason: 'and then it was killed');
     expect(
       engine.destroyCalls,
@@ -274,19 +269,16 @@ void main() {
     expect(engine.destroyed, isTrue);
   });
 
-  testWidgets('a hand-over stops the outgoing player writing before the next '
-      'one opens', (tester) async {
-    // The second mechanism, and the one the 158 MB blip fits. A
-    // `pushReplacement` keeps this screen alive until the transition ends,
-    // so its `dispose` is a third of a second away and the successor has
-    // already opened its own stream by then: two demuxers, one volume, and
-    // a per-media limiter on each that cannot see the other. The outgoing
-    // one is reading ahead for a media the viewer has left, which buys
-    // nothing at any price.
-    //
-    // Only the writing is stopped here, not the player: the outgoing
-    // screen is still on screen for the length of the transition, and
-    // freeing its video texture under the raster thread is what the
+  testWidgets('a hand-over keeps the outgoing player until its screen goes', (
+    tester,
+  ) async {
+    // A `pushReplacement` keeps this screen alive until the transition
+    // ends, so its `dispose` is a third of a second away and the successor
+    // has already opened its own stream by then: two players at once, for
+    // as long as the transition. What each of them is holding is now
+    // memory and a connection to the server rather than a cache file on
+    // the volume, and the outgoing one is released the moment its screen
+    // really goes -- freeing its video texture any earlier is what the
     // deferred teardown exists to avoid.
     useWideViewport(tester);
     final harness = PlayerHarness();
@@ -312,11 +304,6 @@ void main() {
 
     expect(harness.engines, hasLength(2), reason: 'a new player took over');
     expect(harness.engines.last.opened, isNotEmpty, reason: 'and it is open');
-    expect(
-      harness.engines.first.stopWritingCalls,
-      1,
-      reason: 'the outgoing player must not still be filling the disk',
-    );
     expect(
       harness.engines.first.disposed,
       isFalse,

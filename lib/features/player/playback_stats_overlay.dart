@@ -140,10 +140,6 @@ class PlaybackStatsOverlay extends StatelessWidget {
         '${s.width != null && s.height != null ? ' ${s.width}x${s.height}' : ''}',
     'bitrate  ${formatBitrate(s.videoBitrate)}',
     'cache    ${_cache(s)}',
-    // Only where mpv answered the cache state: the row is the proof that
-    // the cache directory took, and on anything that is not libmpv it
-    // would be a claim about a file nobody looked for.
-    if (s.cacheStateRead) 'file     ${_fileCache(s)}',
     // Only when mpv answered: on a backend that has no such properties
     // the rows would be three dashes claiming something was measured.
     if (s.seekable != null || s.partiallySeekable != null)
@@ -166,33 +162,6 @@ class PlaybackStatsOverlay extends StatelessWidget {
     final hz = s.displayFps;
     return '${_flag(s.displaySyncActive)} · display '
         '${hz == null ? '-' : '${hz.toStringAsFixed(3)} Hz'}';
-  }
-
-  /// What mpv's own cache file weighs, and `none` when there is no file.
-  ///
-  /// `none` is the fault this row exists for: on Android mpv has nowhere
-  /// to write unless it is given a directory, and without the file cache
-  /// everything seekable is what fits in the 32 MiB memory cache -- the
-  /// two islands the owner could not scan between. A number says the
-  /// directory took.
-  ///
-  /// `none` is now also the *deliberate* answer on a device with no room
-  /// to spare: the player declines a cache file on a volume already at the
-  /// line it holds for the server (`MpvDiskCacheLimit`). This row is the
-  /// only place that says which of the two happened, and it says it by
-  /// standing beside the free space on the storage report rather than by
-  /// claiming a cause it cannot know.
-  ///
-  /// It is also the only row that shows the *other* end of it. The file is
-  /// bounded (`MpvDiskCacheLimit`) and mpv writes it at whatever rate the
-  /// link delivers rather than at the rate the film plays, so on a fast
-  /// connection the cap can be reached early in a long film; from there
-  /// the number stops climbing while playback goes on. A frozen number
-  /// beside a shrinking `ranges` row is that, or the volume having come
-  /// down to the line, and neither is visible anywhere else.
-  static String _fileCache(PlaybackStats s) {
-    final bytes = s.fileCacheBytes;
-    return bytes == null ? 'none' : DownloadView.humanSize(bytes);
   }
 
   /// A yes/no mpv answered, or a dash for one it did not.

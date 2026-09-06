@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_report.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
-import 'package:xtremio/features/player/mpv_cache_holdings.dart';
 
 import '../support/diagnostics_capture.dart';
 import '../support/fake_diagnostics_client.dart';
@@ -327,50 +326,6 @@ void main() {
       // about it either -- absence, not an `unknown` line, since most
       // sessions never have anything DHT-related worth reporting.
       expect(text, isNot(contains('dht:')));
-    });
-
-    group('the player cache line', () {
-      DiagnosticsSnapshot snapshot() =>
-          const DiagnosticsSnapshot(coreVersion: '0.1.0', logLines: []);
-
-      String reportWith(MpvCacheHoldings? players) => formatDiagnostics(
-        snapshot: snapshot(),
-        platform: 'android',
-        osVersion: 'Android 14',
-        at: DateTime.utc(2026),
-        players: players,
-      );
-
-      test('names what no other line in the report can see', () {
-        // The evening this exists for: 928 MB of the owner's Chromecast
-        // held by a file with no directory entry, so `cache:` walked past
-        // it and `disk:` counted it as space that had simply gone. Both
-        // lines were true and neither could have found it.
-        final players = MpvCacheHoldings()
-          ..hold(Object(), 642 * 1000 * 1000)
-          ..hold(Object(), 286 * 1000 * 1000);
-
-        expect(
-          reportWith(players),
-          contains('players: 928 MB in 2 open cache files'),
-        );
-        expect(
-          reportWith(MpvCacheHoldings()..hold(Object(), 480 * 1000 * 1000)),
-          contains('players: 480 MB in 1 open cache file'),
-        );
-      });
-
-      test('says so when there is nothing, rather than going quiet', () {
-        // Unlike the DHT line, which is only worth writing when it explains
-        // something. "No player is holding anything" is the answer that
-        // sends a reader somewhere else, and an absent line would only say
-        // that this build did not ask.
-        expect(reportWith(MpvCacheHoldings()), contains('players: no cache'));
-      });
-
-      test('is absent only where nobody offered one', () {
-        expect(reportWith(null), isNot(contains('players:')));
-      });
     });
 
     group('the DHT line', () {
