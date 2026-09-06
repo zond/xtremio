@@ -1002,8 +1002,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // for a new buffer window, a next episode or a stream the core
     // resolved differently can each change what this answers -- and what
     // the teardown needs to know is whether *anything* was ever proxied
-    // under this token, not what the last URL happened to be.
-    _proxiedStream |= isProxiedByServer(proxied);
+    // under this token, not what the last URL happened to be. The server
+    // has to be ours for that to mean anything: with none there is nothing
+    // to wrap, and a target host that happens to serve its own `/proxy`
+    // path would otherwise read as one of ours.
+    _proxiedStream |= _serverBase != null && isProxiedByServer(proxied);
     return proxied;
   }
 
@@ -3722,10 +3725,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// player that has stopped reading altogether observes the close when it
   /// next reads, or never.
   ///
-  /// Synchronous, unawaited and unlogged in the ordinary case: it is a map
-  /// scan on the Rust side, a teardown has nothing to do with its answer,
-  /// and zero is a perfectly normal one (the stream may have finished on
-  /// its own).
+  /// Synchronous and unawaited: it is a map scan on the Rust side, and a
+  /// teardown has nothing to do with its answer. The answer is written
+  /// down when it is not zero, and that line is the point -- the evening
+  /// this whole path was built for produced a player that outlived its
+  /// screen by ninety seconds and a log that said nothing at all about it,
+  /// so "this player left and took its stream with it" is exactly the
+  /// sentence a report was missing. Zero is ordinary (the stream may have
+  /// finished on its own, or the server may be gone) and is worth no
+  /// line.
   void _closeProxiedStreams() {
     if (!_proxiedStream) return;
     final closed = _proxyStreams?.closeProxyStreams(_proxyToken) ?? 0;
