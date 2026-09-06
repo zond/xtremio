@@ -369,31 +369,44 @@ class MediaKitEngine implements PlaybackEngine {
   /// [MpvDiskCacheLimit] can have turned it off for the media before this
   /// one.
   ///
-  /// **`video-sync=display-resample` is not here, and it would do nothing
-  /// if it were.** A 23.976 fps film on a 59.94 Hz output is laid on a
-  /// 2.5:1 cadence -- two refreshes for one frame, three for the next --
-  /// and mpv's own answer to a mismatched rate is to lock the video to the
-  /// display and resample the audio by the difference. Every display-sync
-  /// mode needs to know what the display's refresh rate is, and on Android
-  /// nothing tells libmpv: media_kit runs it with `vo=gpu` and
-  /// `gpu-context=android` (`android_video_controller/real.dart`), and in
-  /// the build it ships for Android (`mpv v0.36.0-549-g78d43740f5`) that
-  /// context answers `VO_NOTIMPL` to every request,
-  /// `VOCTRL_GET_DISPLAY_FPS` included
+  /// **`video-sync=display-resample` is not here, and on its own it would
+  /// do nothing -- but not for the reason it is tempting to give.** A
+  /// 23.976 fps film on a 59.94 Hz output is laid on a 2.5:1 cadence -- two
+  /// refreshes for one frame, three for the next -- and mpv's own answer to
+  /// a mismatched rate is to lock the video to the display and resample the
+  /// audio by the difference. Every display-sync mode needs the display's
+  /// refresh rate, and mpv cannot *measure* it here: media_kit runs it with
+  /// `vo=gpu` and `gpu-context=android`
+  /// (`android_video_controller/real.dart`), and in the build it ships for
+  /// Android (`mpv v0.36.0-549-g78d43740f5`) that context answers
+  /// `VO_NOTIMPL` to every request, `VOCTRL_GET_DISPLAY_FPS` included
   /// (`video/out/opengl/context_android.c`), with `vo_gpu` handing the
   /// request straight to it. So the reported rate stays 0,
   /// `vo_get_vsync_interval` answers -1 (`video/out/vo.c`) and
   /// `handle_display_sync_frame` returns before it sets
-  /// `display-sync-active` (`player/video.c`): playback stays on the
-  /// default `video-sync=audio` whatever this map says. mpv's own estimate
-  /// cannot start it either -- vsync samples are collected only from
-  /// frames that are already display-synced, so there is nothing to
-  /// bootstrap from. That was read out of mpv's source at the commit this
-  /// build names rather than off the manual, and the option would leave
-  /// something that reads like the fix standing beside a drop count it did
-  /// not move. **The cadence is the display's to fix here**: the player
-  /// asks the panel for the film's own rate instead (`DisplayFrameRate`,
-  /// ANDROID.md).
+  /// `display-sync-active` (`player/video.c`). mpv's own estimate cannot
+  /// start it either -- vsync samples are collected only from frames that
+  /// are already display-synced, so there is nothing to bootstrap from.
+  ///
+  /// **It can still be told, though, and saying otherwise would be wrong.**
+  /// `update_display_fps` takes `override-display-fps` *ahead* of the
+  /// reported rate and only falls back to it (`video/out/vo.c`), and
+  /// `override-display-fps` is in the option table of the very
+  /// `libmpv.so` media_kit ships -- read out of the binary, not off the
+  /// manual. A non-zero rate there is enough: `vsync <= 0` is the only
+  /// display-rate gate in `handle_display_sync_frame`. The app is not short
+  /// of the number, either; `MainActivity` already reads
+  /// `display.mode.refreshRate` for the frame-rate ask.
+  ///
+  /// So the honest reason this option is not set is that **nobody has
+  /// measured display-resample driven off an assumed rate on this VO**, and
+  /// the design that raised it says to revert on a worse drop count rather
+  /// than defend it -- which needs a reading nobody can take from here. The
+  /// player takes the other road meanwhile, and it removes the cadence
+  /// rather than resampling around it: **the cadence is the display's to
+  /// fix**, so the panel is asked for the film's own rate
+  /// (`DisplayFrameRate`, ANDROID.md). If that ask is ever refused on a set
+  /// that will not switch, this is the option to measure next.
   static const Map<String, String> mpvOverrides = {'network-timeout': '300'};
 
   /// [mpvOverrides] plus what the demuxer's file cache needs, for a
