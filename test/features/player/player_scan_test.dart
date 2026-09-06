@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/seek_bar.dart';
+import 'package:xtremio/features/player/seek_hold.dart';
 
 import '../../support/player_harness.dart';
 
@@ -135,5 +136,100 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(seeks, [const Duration(minutes: 1, seconds: 10)]);
+  });
+
+  group('a held seek key accelerates, and only a held one', () {
+    /// A press and a repeat of one of the two keys a hold can be on.
+    KeyEvent down(LogicalKeyboardKey key) => KeyDownEvent(
+      physicalKey: key == LogicalKeyboardKey.arrowLeft
+          ? PhysicalKeyboardKey.arrowLeft
+          : PhysicalKeyboardKey.arrowRight,
+      logicalKey: key,
+      timeStamp: Duration.zero,
+    );
+    KeyEvent repeat(LogicalKeyboardKey key) => KeyRepeatEvent(
+      physicalKey: key == LogicalKeyboardKey.arrowLeft
+          ? PhysicalKeyboardKey.arrowLeft
+          : PhysicalKeyboardKey.arrowRight,
+      logicalKey: key,
+      timeStamp: Duration.zero,
+    );
+
+    test('a tap is one step, however long the hold before it was', () {
+      // The same rule the subtitle shift keeps: the stride belongs to
+      // the hold, so the viewer's own step is always a press away.
+      final hold = SeekHold();
+      const step = Duration(seconds: 10);
+      const key = LogicalKeyboardKey.arrowRight;
+      expect(hold.stepFor(down(key), step), step);
+      for (var i = 0; i < 40; i++) {
+        hold.stepFor(repeat(key), step);
+      }
+      expect(hold.stepFor(down(key), step), step);
+    });
+
+    test('holding it moves further, in whole steps of the viewer\'s own', () {
+      final hold = SeekHold();
+      const step = Duration(seconds: 30);
+      const key = LogicalKeyboardKey.arrowRight;
+      Duration fire(int times) {
+        var last = hold.stepFor(down(key), step);
+        for (var i = 0; i < times; i++) {
+          last = hold.stepFor(repeat(key), step);
+        }
+        return last;
+      }
+
+      expect(fire(SeekHold.singleStepFires - 1), step);
+      expect(fire(SeekHold.singleStepFires), step * 2);
+      expect(
+        fire(SeekHold.singleStepFires + SeekHold.doubleStepFires - 1),
+        step * 2,
+      );
+      expect(
+        fire(SeekHold.singleStepFires + SeekHold.doubleStepFires),
+        step * 5,
+      );
+    });
+
+    test('turning round mid-hold starts again', () {
+      // Left and right are different keys and the press that reverses
+      // direction is a fresh one -- overshooting at five steps a press
+      // and having to come back at five is not a way to land anywhere.
+      final hold = SeekHold();
+      const step = Duration(seconds: 10);
+      hold.stepFor(down(LogicalKeyboardKey.arrowRight), step);
+      for (var i = 0; i < 30; i++) {
+        hold.stepFor(repeat(LogicalKeyboardKey.arrowRight), step);
+      }
+      expect(hold.stepFor(down(LogicalKeyboardKey.arrowLeft), step), step);
+    });
+
+    testWidgets('a held arrow scans further the longer it is held', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final harness = PlayerHarness();
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 96));
+      harness.engine.emitPosition(const Duration(seconds: 65));
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      for (var i = 0; i < SeekHold.singleStepFires; i++) {
+        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+      }
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      final scans = harness.engine.scans;
+      expect(scans.first, const Duration(seconds: 10));
+      expect(scans.last, const Duration(seconds: 20));
+      // Nothing else takes the key: every press is a step, and a
+      // release ends the hold rather than seeking again.
+      expect(scans, hasLength(SeekHold.singleStepFires + 1));
+      expect(harness.engine.seeks, isEmpty);
+    });
   });
 }

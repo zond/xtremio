@@ -6,6 +6,7 @@ import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/seek_bar.dart';
+import 'package:xtremio/features/player/seek_hold.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
 
@@ -457,6 +458,27 @@ void main() {
       ]);
       expect(focusIn<SeekBar>(), isTrue, reason: 'focus stays on the bar');
     });
+    testWidgets('holding right on the seek bar scans further', (tester) async {
+      // The bar is where the remote scans from, so the acceleration has
+      // to be here too; it keeps its own count, because the presses are
+      // its own.
+      final harness = await pumpOnTv(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<SeekBar>(), isTrue);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      for (var i = 0; i < SeekHold.singleStepFires; i++) {
+        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+      }
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+
+      expect(harness.engine.scans.first, const Duration(seconds: 10));
+      expect(harness.engine.scans.last, const Duration(seconds: 20));
+      expect(focusIn<SeekBar>(), isTrue, reason: 'focus stays on the bar');
+    });
+
     testWidgets('the centre key plays and pauses from the seek bar', (
       tester,
     ) async {

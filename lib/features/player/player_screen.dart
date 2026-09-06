@@ -22,6 +22,7 @@ import 'language_names.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
+import 'seek_hold.dart';
 import 'subtitle_calibration.dart';
 import 'subtitle_groups.dart';
 import 'subtitle_match.dart';
@@ -718,6 +719,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // The seek labels follow the settings too.
     setState(() {});
   }
+
+  /// The acceleration of a held seek key. The player's own, because the
+  /// keys it answers are the ones the video has; the seek bar keeps a
+  /// second one for the presses it takes while it holds focus.
+  final SeekHold _seekHold = SeekHold();
 
   /// The arrow-key / button seek step (`seekTimeDuration`).
   Duration get _seekStep => Duration(milliseconds: _settings.seekTimeDuration);
@@ -3290,11 +3296,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case LogicalKeyboardKey.arrowLeft:
       case LogicalKeyboardKey.keyJ:
       case LogicalKeyboardKey.mediaRewind:
-        _seekBy(-_seekStep);
+        _seekBy(-_seekHold.stepFor(event, _seekStep));
       case LogicalKeyboardKey.arrowRight:
       case LogicalKeyboardKey.keyL:
       case LogicalKeyboardKey.mediaFastForward:
-        _seekBy(_seekStep);
+        _seekBy(_seekHold.stepFor(event, _seekStep));
       case LogicalKeyboardKey.arrowUp:
         _setVolume(_volume + 5);
       case LogicalKeyboardKey.arrowDown:

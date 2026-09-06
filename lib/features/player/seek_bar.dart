@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'seek_hold.dart';
 import 'time_format.dart';
 
 /// The seek bar: buffered range, progress and a thumb over a thin track.
@@ -70,6 +71,11 @@ class _SeekBarState extends State<SeekBar> {
   bool _hover = false;
   bool _focused = false;
 
+  /// How far a held left or right has got. The bar's own, because the
+  /// presses are: the player has a second one for the keys it answers
+  /// while the video has the remote.
+  final SeekHold _hold = SeekHold();
+
   bool get _enabled => widget.duration > Duration.zero;
 
   double _fraction(Duration value) {
@@ -88,8 +94,9 @@ class _SeekBarState extends State<SeekBar> {
       (local.dx / width).clamp(0.0, 1.0);
 
   /// Left and right seek by [SeekBar.seekStep] while the bar holds focus,
-  /// on the press and on every repeat of a held key. Everything else (up,
-  /// down, select) belongs to whoever is above us.
+  /// on the press and on every repeat of a held key -- further with each
+  /// repeat, which is [SeekHold]'s business rather than this widget's.
+  /// Everything else (up, down, select) belongs to whoever is above us.
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (!_enabled || event is KeyUpEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
@@ -97,9 +104,8 @@ class _SeekBarState extends State<SeekBar> {
         key != LogicalKeyboardKey.arrowRight) {
       return KeyEventResult.ignored;
     }
-    final step = key == LogicalKeyboardKey.arrowLeft
-        ? -widget.seekStep
-        : widget.seekStep;
+    final held = _hold.stepFor(event, widget.seekStep);
+    final step = key == LogicalKeyboardKey.arrowLeft ? -held : held;
     final onStep = widget.onStep;
     if (onStep != null) {
       onStep(step);
