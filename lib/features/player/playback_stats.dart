@@ -247,11 +247,16 @@ class PlaybackStats {
   /// `file-cache-bytes` out of a `demuxer-cache-state` answer, `null` when
   /// there is no disk cache.
   ///
-  /// mpv puts the key in the map only while a cache file exists: the
-  /// property is built with `-1` for "no cache" (`demux.c`) and
-  /// `player/command.c` leaves a `-1` out of the node it hands back. So an
-  /// absent key is not a missing reading, it is the reading -- there is no
-  /// file. This is also what `MpvDiskCacheLimit` bounds the file by.
+  /// mpv puts the key in the map only while a cache file exists. `demux.c`
+  /// answers `-1` for "no cache" (read in the source; the reading is
+  /// `in->cache ? demux_cache_get_size(in->cache) : -1`) and whatever
+  /// builds the node property leaves a `-1` out of it -- that last step was
+  /// not read but measured: the pair of recorded `demuxer-cache-state`
+  /// answers in `player_cache_test.dart`, taken off a running libmpv with
+  /// and without a working file cache, differ by the key's presence and
+  /// nothing else. So an absent key is not a missing reading, it is the
+  /// reading -- there is no file. This is also what `MpvDiskCacheLimit`
+  /// bounds the file by.
   static int? fileCacheBytesOf(String? state) {
     final bytes = _cacheState(state)?['file-cache-bytes'];
     return bytes is int ? bytes : null;
