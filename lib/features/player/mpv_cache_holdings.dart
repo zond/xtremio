@@ -1,3 +1,5 @@
+import '../../core/core.dart';
+
 /// What this app's live players are holding on the volume, all of them at
 /// once.
 ///
@@ -24,8 +26,8 @@
 /// its cache file the moment it creates it, so no directory walk can find
 /// those blocks and the free-space reading is the only other place they
 /// appear -- as space that is simply gone, with nothing to say who has it.
-/// This is the app saying so, and the only number in the process that
-/// knows.
+/// This is the app saying so, which is why the diagnostics header carries
+/// it ([reportLine]) beside the `disk:` line it explains.
 ///
 /// A player is one entry from the `loadfile` that gives it a cache file
 /// until the teardown that closes the fd, because that is exactly how long
@@ -62,4 +64,17 @@ class MpvCacheHoldings {
 
   /// Forgets [player]: its fd is closed, or it never had a file.
   void release(Object player) => _held.remove(player);
+
+  /// The line the diagnostics header carries, next to the free space it is
+  /// the invisible half of.
+  ///
+  /// Written even when it is nothing, because "no player is holding
+  /// anything" is the answer that sends a reader looking somewhere else,
+  /// and an absent line says only that this build did not ask.
+  String get reportLine {
+    final files = openFiles;
+    if (files == 0) return 'players: no cache file open';
+    return 'players: ${DownloadView.humanSize(heldBytes)} in $files open '
+        'cache ${files == 1 ? 'file' : 'files'}';
+  }
 }

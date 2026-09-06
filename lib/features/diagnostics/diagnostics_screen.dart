@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
+import '../player/mpv_cache_holdings.dart';
 import 'diagnostics_report.dart';
 
 /// What the app can say about itself when something went wrong on a device
@@ -104,6 +105,9 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         platform: widget.client.platform,
         osVersion: osVersion,
         storage: storage,
+        // Not asked for over a channel and not walked for: the players
+        // report what they hold as they read it, so this is a field read.
+        players: MpvCacheHoldings.shared,
         dht: dht,
         at: widget.now(),
       );
