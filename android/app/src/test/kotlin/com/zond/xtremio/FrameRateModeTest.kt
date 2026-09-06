@@ -119,4 +119,41 @@ class FrameRateModeTest {
     fun `a display slower than the content has no multiple to offer`() {
         assertNull(FrameRateMode.matching(60.0, twentyFourish, listOf(twentyFourish, twentyFour)))
     }
+
+    @Test
+    fun `a box that says nothing gets the mode named for it`() {
+        // The owner's: `settings get secure match_content_frame_rate` is
+        // null, which the platform reads as seamless switches only, and
+        // 59.94 Hz to 23.976 Hz is never seamless -- so the surface vote
+        // went nowhere and the window has to name the mode itself.
+        assertEquals(
+            FrameRateAsk.SURFACE_THEN_MODE,
+            FrameRateMode.askFor(FrameRateMode.MATCH_CONTENT_SEAMLESS_ONLY),
+        )
+        // A box that will not answer is the same case: nothing says the
+        // vote took, and the mode ask is what a television app does.
+        assertEquals(
+            FrameRateAsk.SURFACE_THEN_MODE,
+            FrameRateMode.askFor(FrameRateMode.MATCH_CONTENT_UNKNOWN),
+        )
+    }
+
+    @Test
+    fun `a box that honours the vote is asked once`() {
+        assertEquals(
+            FrameRateAsk.SURFACE,
+            FrameRateMode.askFor(FrameRateMode.MATCH_CONTENT_ALWAYS),
+        )
+    }
+
+    @Test
+    fun `a viewer who turned matching off is asked for nothing`() {
+        // Not politeness: that setting is `SWITCHING_TYPE_NONE`, where the
+        // platform flattens an app's mode request too, so the fallback
+        // would blank the picture for nothing even if it were allowed.
+        assertEquals(
+            FrameRateAsk.NOTHING,
+            FrameRateMode.askFor(FrameRateMode.MATCH_CONTENT_NEVER),
+        )
+    }
 }

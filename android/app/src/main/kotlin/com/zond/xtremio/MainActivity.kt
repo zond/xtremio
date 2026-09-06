@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
 import android.view.Display
@@ -123,19 +124,33 @@ class MainActivity : FlutterActivity() {
      *   `CHANGE_FRAME_RATE_ALWAYS` is what permits a change the panel
      *   cannot make invisibly: 59.94 Hz to 23.976 Hz retrains the HDMI
      *   link and blanks the picture for about a second, and every useful
-     *   switch on a television is of that kind. The device's own "Match
-     *   content frame rate" setting can still refuse one, which is the
-     *   viewer's call and not ours to override.
+     *   switch on a television is of that kind.
      * - **Android 11 (API 30) and below** name a mode outright through the
      *   window's `preferredDisplayModeId` ([FrameRateMode.matching] picks
      *   which). API 30 has a two-argument `setFrameRate`, but it predates
      *   `CHANGE_FRAME_RATE_ALWAYS` and so only ever switches seamlessly --
      *   which is exactly the switch a television cannot do -- so it takes
      *   the mode path with everything older.
+     *
+     * **The newer path is a vote, and a vote can be dropped in silence**,
+     * which is what the owner's box did: `setFrameRate` returns nothing,
+     * and with "Match content frame rate" unset the platform honours a
+     * seamless switch only -- which 59.94 Hz to 23.976 Hz never is. So
+     * what that setting says decides whether the older path follows the
+     * vote ([FrameRateMode.askFor] holds the reasoning, and the reading
+     * behind it), and a box that has frame rate matching turned off is
+     * asked for nothing at all. With no surface to vote on there is no
+     * vote to follow, and the mode is named whatever the setting says.
      */
     private fun matchFrameRate(fps: Double?) {
         if (fps == null || !FrameRateMode.plausible(fps)) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val displays = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+            val ask = FrameRateMode.askFor(
+                displays?.matchContentFrameRateUserPreference
+                    ?: FrameRateMode.MATCH_CONTENT_UNKNOWN,
+            )
+            if (ask == FrameRateAsk.NOTHING) return
             val surface = contentSurface()
             if (surface != null) {
                 surface.setFrameRate(
@@ -143,7 +158,7 @@ class MainActivity : FlutterActivity() {
                     Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
                     Surface.CHANGE_FRAME_RATE_ALWAYS,
                 )
-                return
+                if (ask == FrameRateAsk.SURFACE) return
             }
         }
         preferMode(matchingModeId(fps) ?: return)

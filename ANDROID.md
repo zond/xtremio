@@ -267,10 +267,7 @@ black picture to assert something the content is not.
   *is*, leaving the mode to the platform) and `CHANGE_FRAME_RATE_ALWAYS`
   (a change the panel cannot make invisibly is allowed — 59.94 Hz to
   23.976 Hz retrains the HDMI link and blanks the picture for about a
-  second, and every useful switch on a television is of that kind). The
-  device's own **Match content frame rate** setting can still refuse a
-  non-seamless switch; that is the viewer's call, and if a box is set to
-  "Seamless only" nothing here can or should override it.
+  second, and every useful switch on a television is of that kind).
 - **Android 11 (API 30) and below**: the window's `preferredDisplayModeId`,
   naming a mode outright. `FrameRateMode.matching` picks which — the mode
   of the current resolution whose refresh rate is the evenest whole
@@ -278,6 +275,31 @@ black picture to assert something the content is not.
   `setFrameRate`, but it predates `CHANGE_FRAME_RATE_ALWAYS` and so only
   ever switches seamlessly, which is the switch a television cannot do, so
   it takes the mode path with everything older.
+
+**A vote can be dropped in silence, so the older path follows it.**
+`Surface.setFrameRate` returns nothing, and on the owner's box the ask was
+going nowhere: `settings get secure match_content_frame_rate` reads null,
+which is not "no" — with the setting unset AOSP runs at
+`SWITCHING_TYPE_WITHIN_GROUPS`, reported as
+`MATCH_CONTENT_FRAMERATE_SEAMLESS_ONLY`, and 59.94 Hz to 23.976 Hz is
+never seamless. The reading said as much: `FrameRateOverrides=none`,
+`frameRateOverrideConfig=Disabled`, `mActiveModeId=1089` (59.94 Hz) with a
+23.976 fps film on screen. So on API 31+ the setting is read first
+(`DisplayManager.getMatchContentFrameRateUserPreference`, mapped by
+`FrameRateMode.askFor`) and it decides what happens after the vote:
+
+- **Seamless only, or a box that will not say**: vote, then name the mode
+  as well. `preferredDisplayModeId` is an app request for a base mode, and
+  `DisplayModeDirector` flattens those only when mode switching is off
+  altogether (`SWITCHING_TYPE_NONE`) — so under seamless-only the mode a
+  window asks for is the mode the display takes. It is what television
+  video apps did before Android 12.
+- **Always**: the vote alone. This box honours a non-seamless switch, and
+  naming a mode too is a second way of saying the same thing.
+- **Never**: nothing is asked for, on either path. That setting is
+  `SWITCHING_TYPE_NONE`, where an app's mode request is flattened as well,
+  so the fallback would blank the picture for nothing even if the viewer
+  had not just said no.
 
 **The ask is made again whenever it can have lapsed.** It is not once per
 file: on API 31+ it is a vote on the surface Flutter draws into, and that
@@ -302,8 +324,9 @@ the app being killed outright: a surface vote dies with the surface and a
 window attribute with the window, so there is nothing left behind.
 
 **Verifying it on a device.** `FrameRateMode` is the piece with no Android
-in it and has a JVM test (`./gradlew :app:testDebugUnitTest`); the surface,
-the window and the display need a real panel:
+in it — the mode choosing and what to make of the match-content setting —
+and has a JVM test (`./gradlew :app:testDebugUnitTest`); the surface, the
+window and the display need a real panel:
 
 ```bash
 adb shell dumpsys display | grep -E 'mActiveModeId|mBaseDisplayInfo'  # while playing
