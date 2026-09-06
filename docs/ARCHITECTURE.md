@@ -321,6 +321,24 @@ what every model field means. The shape of the thing is in the
   `StreamUrls` is snake_case on the wire, unlike the rest of the model.
   `PlaybackEngine` (`lib/features/player/`) is the thin interface over
   media_kit; widget tests swap in a fake through `PlaybackScope`.
+- **mpv is given a cache directory, and what it writes there is bounded.**
+  Android hands an app no writable temp path, so mpv's default cache
+  directory does not exist and its demuxer file cache is never created
+  (`Failed to create file cache` on every open). The engine points
+  `demuxer-cache-dir` at `<app cache>/mpv`, beside the folders the core and
+  the server already have, with the other mpv overrides -- before the first
+  `loadfile`, because mpv reads that option when it builds the demuxer and
+  never looks again. With the file cache working the demuxer's byte limits
+  (32 MiB each, media_kit's `bufferSize`) bound packet *metadata* rather
+  than the payload, so the seekable window is half an hour of film rather
+  than the ninety seconds and two islands the readings showed. The file
+  itself is append-only and mpv bounds it by nothing, so
+  `MpvDiskCacheLimit` does: every five seconds it reads `file-cache-bytes`
+  out of `demuxer-cache-state` and turns `cache-on-disk` off past 512 MiB,
+  after which the media plays on out of the memory cache. Nothing deletes
+  the file, because `demuxer-cache-unlink-files=immediate` has mpv unlink
+  it as it creates it -- the space comes back when the fd closes, including
+  after a crash.
 - **The player UI is ours, driven by the engine and the core.**
   `PlayerScreen` switches media_kit's built-in controls off
   (`controls: NoVideoControls`) and draws its own dark-M3 overlay: a top

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -335,8 +336,9 @@ class MediaKitEngine implements PlaybackEngine {
   ///
   /// `force-seekable` is not here: it is a claim about the stream being
   /// opened rather than about the player, so [forcesSeekable] decides it
-  /// per `open`; nor is `cache-on-disk`, which [open] sets for the same
-  /// reason `force-seekable` is set there.
+  /// per `open`; nor is `cache-on-disk`, which [open] sets because
+  /// [MpvDiskCacheLimit] can have turned it off for the media before this
+  /// one.
   static const Map<String, String> mpvOverrides = {'network-timeout': '300'};
 
   /// [mpvOverrides] plus what the demuxer's file cache needs, for a
@@ -350,8 +352,11 @@ class MediaKitEngine implements PlaybackEngine {
   /// (`PlayerConfiguration.bufferSize`), which on the owner's 2.3 Mbps film
   /// was the two islands, 1465-1601s and 516-551s, that he could not scan
   /// between. With the file cache those byte limits apply to packet
-  /// *metadata* instead of to the payload, which is about a tenth of the
-  /// size, so the same 32 MiB indexes something like half an hour of film.
+  /// *metadata* instead of to the payload: two minutes of a test stream
+  /// weighed 818 KB of metadata against 21 MB of payload on a running
+  /// libmpv, and mpv's own manual puts the metadata at some 50 MB an hour,
+  /// so the same 32 MiB holds half an hour of film rather than ninety
+  /// seconds of it.
   ///
   /// `demuxer-cache-unlink-files=immediate` is mpv's own default and is set
   /// here because it is what answers for the file afterwards: mpv unlinks
@@ -473,6 +478,11 @@ class MediaKitEngine implements PlaybackEngine {
       );
   Timer? _statsTimer;
   bool _sampling = false;
+
+  /// The timer that keeps mpv's cache file to
+  /// [MpvDiskCacheLimit.defaultLimitBytes]. One per `open`, because the
+  /// file is one per `loadfile`.
+  Timer? _diskCacheTimer;
 
   final StreamController<PlaybackTracks> _tracks =
       StreamController<PlaybackTracks>.broadcast();
@@ -707,6 +717,38 @@ class MediaKitEngine implements PlaybackEngine {
     _statsTimer = null;
   }
 
+  /// Starts watching the size of mpv's cache file for the media just
+  /// opened. The previous media's file is already gone -- mpv deletes it
+  /// with the demuxer that made it -- so each `open` starts a fresh count.
+  void _watchDiskCache() {
+    _stopWatchingDiskCache();
+    if (_player.platform is! NativePlayer || _disposed) return;
+    final limit = MpvDiskCacheLimit(
+      cacheState: () => _property('demuxer-cache-state'),
+      stopWritingToDisk: () => _setProperty('cache-on-disk', 'no'),
+    );
+    _diskCacheTimer = Timer.periodic(MpvDiskCacheLimit.interval, (_) {
+      if (!_disposed) limit.check().ignore();
+    });
+  }
+
+  void _stopWatchingDiskCache() {
+    _diskCacheTimer?.cancel();
+    _diskCacheTimer = null;
+  }
+
+  /// One mpv property as a string, `null` off libmpv or when the player
+  /// cannot answer.
+  Future<String?> _property(String name) async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return null;
+    try {
+      return await platform.getProperty(name);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _sampleStats(NativePlayer native) async {
     // One sample at a time; `getProperty` awaits the player's own
     // initialisation, so a slow start must not pile requests up.
@@ -742,10 +784,12 @@ class MediaKitEngine implements PlaybackEngine {
     // libmpv the directory a second after `loadfile` reproduced the owner's
     // `Failed to create file cache` and left `file-cache-bytes` absent for
     // the rest of the stream. `cache-on-disk` is media_kit's own default
-    // (1.2.6 sets it once at start-up) but mpv reads it per demuxer too, so
-    // it is set here rather than left to a dependency's default.
+    // (1.2.6 sets it once at start-up) but mpv reads it per demuxer, and
+    // [MpvDiskCacheLimit] turns it off when the file grows too large, so
+    // this is where the next media gets its file cache back.
     await _setProperty('cache-on-disk', 'yes');
     await _player.open(Media(url.toString(), start: start));
+    _watchDiskCache();
   }
 
   @override
@@ -975,6 +1019,7 @@ class MediaKitEngine implements PlaybackEngine {
   Future<void> dispose() async {
     _disposed = true;
     _stopStats();
+    _stopWatchingDiskCache();
     for (final subscription in _trackSubscriptions) {
       await subscription.cancel();
     }
@@ -986,6 +1031,115 @@ class MediaKitEngine implements PlaybackEngine {
     } finally {
       await _player.dispose();
     }
+  }
+}
+
+/// Keeps what mpv writes to disk for one media under a size a television
+/// can spare.
+///
+/// mpv's cache file is append-only and nothing in mpv bounds it: the byte
+/// limits (`demuxer-max-bytes`, `demuxer-max-back-bytes`) apply to packet
+/// metadata once the payload is on disk, and space the player prunes is
+/// never reused, so the file grows with every byte demuxed until the media
+/// is closed. Measured against a running libmpv 0.41.0 with both limits at
+/// media_kit's 32 MiB: playing a 139 MiB stream through left a 139 MiB
+/// cache file, four times the whole memory budget. Left alone, the owner's
+/// two-hour 2.3 Mbps film would put about 2 GB in the cache of a 2 GB
+/// television that also stores torrent data, and a 4K remux would put tens
+/// of gigabytes there. That is how you fill someone's device.
+///
+/// So the bound is ours to keep. [check] asks mpv what the file weighs and
+/// turns `cache-on-disk` off once it is over [limitBytes]; from there the
+/// media plays on out of the memory cache, which is what every playback
+/// does today. What is already in the file stays seekable -- mpv reads
+/// those packets back through the fd it still holds -- until the metadata
+/// budget prunes them. The switch was measured the same way: a file capped
+/// at 16 MiB stopped growing on the tick it crossed, stayed at that size
+/// through the next four minutes of media, and playback did not falter.
+///
+/// **Nothing removes the file, because nothing has to.**
+/// `demuxer-cache-unlink-files=immediate` (`MediaKitEngine.overridesFor`)
+/// has mpv unlink it the moment it is created, so it never has a name in
+/// the directory and the space returns to the filesystem when the fd
+/// closes: at the next `loadfile`, when the player is disposed, and when
+/// the app is killed or crashes. Confirmed by listing the directory during
+/// playback while mpv reported 145 MB in the file, and finding it empty.
+class MpvDiskCacheLimit {
+  MpvDiskCacheLimit({
+    required this.cacheState,
+    required this.stopWritingToDisk,
+    this.limitBytes = defaultLimitBytes,
+  });
+
+  /// 512 MiB, which is half an hour of the 2.3 Mbps film the readings came
+  /// from -- about as much as the 32 MiB of metadata media_kit's buffer
+  /// size affords can index of it anyway, so at that bitrate the limit
+  /// costs nothing and the seekable window is the one mpv can hold. Above
+  /// it the file fills first and the window shortens, which is the right
+  /// way round on a device whose whole storage is 8 GB and whose torrent
+  /// data shares it.
+  static const int defaultLimitBytes = 512 * 1024 * 1024;
+
+  /// How often [MediaKitEngine] asks. The file grows at the bitrate of the
+  /// media, so five seconds overshoots by a couple of megabytes on a
+  /// television stream and by forty on a 60 Mbps remux -- both small
+  /// against the limit, and one property read is cheap.
+  static const Duration interval = Duration(seconds: 5);
+
+  /// mpv's `demuxer-cache-state`, as [MediaKitEngine] reads it.
+  final Future<String?> Function() cacheState;
+
+  /// Sets `cache-on-disk` to `no`.
+  final Future<void> Function() stopWritingToDisk;
+
+  /// The most the cache file may weigh.
+  final int limitBytes;
+
+  bool _reached = false;
+  bool _checking = false;
+
+  /// Whether the limit has been hit for this media, after which nothing is
+  /// asked again: the file cannot shrink, so the answer cannot change.
+  bool get reached => _reached;
+
+  /// One reading. Turns the disk cache off if the file is over
+  /// [limitBytes].
+  Future<void> check() async {
+    // One at a time: `getProperty` awaits the player's own initialisation,
+    // so a slow start must not pile readings up.
+    if (_reached || _checking) return;
+    _checking = true;
+    try {
+      final bytes = fileCacheBytes(await cacheState());
+      if (bytes == null || bytes <= limitBytes) return;
+      _reached = true;
+      await stopWritingToDisk();
+    } catch (_) {
+      // A player torn down mid-reading is not an error worth surfacing;
+      // the next tick, if there is one, asks again.
+    } finally {
+      _checking = false;
+    }
+  }
+
+  /// What mpv says its cache file weighs, out of `demuxer-cache-state`.
+  ///
+  /// `null` when there is no file: mpv writes `file-cache-bytes` into that
+  /// map only while a disk cache exists (`demux.c` leaves the key out for a
+  /// `-1`), so its absence is exactly the state this whole mechanism is
+  /// there to end -- and its presence is the reading that says the cache
+  /// directory took.
+  static int? fileCacheBytes(String? state) {
+    if (state == null) return null;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(state);
+    } catch (_) {
+      return null;
+    }
+    if (decoded is! Map) return null;
+    final bytes = decoded['file-cache-bytes'];
+    return bytes is int ? bytes : null;
   }
 }
 
