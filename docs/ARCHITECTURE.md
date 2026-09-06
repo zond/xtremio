@@ -925,8 +925,9 @@ what every model field means. The shape of the thing is in the
   interface whose netmask the kernel never reported is not subnet-matched
   at all -- that says in the log which address it gave a receiver and when
   a request arrives, and that counts what it has been asked for, so a
-  receiver which never fetched can be told from one which fetched and
-  could not play, the count belonging to the session that asks about it:
+  receiver which never fetched can be told from one which reached this
+  device -- which is all the count knows about it -- the count belonging to
+  the session that asks about it:
   start and stop both reset it, so a second receiver picked mid-cast does
   not inherit the first one's). To
   bump: change the rev, `cargo update -p <crate>`, run

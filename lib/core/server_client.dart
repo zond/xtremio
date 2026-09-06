@@ -36,9 +36,13 @@ abstract interface class LanMediaControl {
   /// has the stream starts from zero rather than inheriting its count.
   ///
   /// What it separates is a receiver that never fetched the stream from one
-  /// that fetched it and could not play it -- which look identical from the
-  /// sofa, and identical to the sender too: a receiver handed an address it
-  /// cannot route to hangs on the connect and reports nothing at all.
+  /// that did -- which look identical from the sofa, and identical to the
+  /// sender too: a receiver handed an address it cannot route to hangs on
+  /// the connect and reports nothing at all. Above zero says the receiver
+  /// reached this device and nothing further: a cold torrent twenty seconds
+  /// in has fetched and is still warming up, so the count cannot tell a
+  /// receiver that is filling a buffer from one that cannot decode what it
+  /// fetched.
   int get lanMediaRequestsServed;
 
   /// The base URL to give a receiver at [peerIp], so a media URL built on it

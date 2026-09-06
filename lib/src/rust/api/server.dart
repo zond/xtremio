@@ -167,12 +167,15 @@ bool serverLanMediaRunning() =>
 /// whatever the last one ran up.
 ///
 /// What it is for is telling a receiver that never fetched the stream from
-/// one that fetched it and could not play it. Those look identical from the
-/// sofa (both are a splash screen that never becomes a film) and identical
-/// to the sender, because a receiver told an address it cannot route to
-/// hangs on the connect rather than reporting an error. Zero well after a
-/// load means the address was wrong; non-zero means the network was fine and
-/// the media was not.
+/// one that did. Those look identical from the sofa (both are a splash
+/// screen that never becomes a film) and identical to the sender, because a
+/// receiver told an address it cannot route to hangs on the connect rather
+/// than reporting an error. Zero well after a load means the address was
+/// wrong; non-zero means the receiver reached this device, and that is the
+/// whole of it -- whether one that reached us is filling a buffer or cannot
+/// decode what it fetched is not something this number knows, since a cold
+/// torrent twenty seconds in has necessarily made requests and is
+/// necessarily still warming up.
 ///
 /// Signed, because `u64` crosses FRB as a Dart `BigInt` and this is a number
 /// the player compares against zero on a timer; `i64` crosses as a plain
