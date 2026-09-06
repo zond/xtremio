@@ -40,10 +40,15 @@ import 'dart:io';
 ///   ended up on: a recorded profile says `11470` and the server takes
 ///   whatever it can bind, so the port is no part of the test. Proxying it
 ///   would be the server fetching from itself.
-/// - A URL already on [serverBase]. A configured remote streaming server
-///   serves its own torrents, and its `/proxy` is for the hosts it is not.
-/// - Everything, when [serverBase] is null. No server means no proxy, and a
-///   stream that plays direct is better than one that does not play.
+/// - A URL already on [serverBase]. The loopback case again, said in terms
+///   of the server we were handed rather than of the address family: a
+///   stream this server is already serving is not one to give back to it.
+/// - Everything, when [serverBase] is null -- a build that started no
+///   embedded server. No server means no proxy, and a stream that plays
+///   direct is better than one that does not play. Note that a viewer who
+///   configured a streaming server elsewhere is *not* this case: the
+///   embedded server keeps running and keeps being named, so those streams
+///   are proxied like anybody else's.
 ///
 /// The shape is the one stremio-core builds and the server parses: the
 /// target's origin percent-encoded into a `d=` path segment, the target's

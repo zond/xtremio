@@ -224,11 +224,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// state does. A first `open` that missed it would be the one playback
   /// of the session that went direct.
   ///
-  /// Null when this build runs no embedded server, which includes a
-  /// streaming server the viewer configured elsewhere. Proxying through
-  /// that one would send the stream over the internet twice for a cache
-  /// that is not on this device, so it is left alone and the stream plays
-  /// direct, exactly as it always did.
+  /// **It names the embedded server and nothing else, whatever the viewer
+  /// configured.** Choosing a streaming server somewhere else rewrites
+  /// `streamingServerUrl`, not this: the embedded one keeps running and
+  /// keeps being reported here, so on such a build a remote host's stream
+  /// is proxied through the embedded server exactly as on any other. That
+  /// is the right way round -- the whole point of the hop is that the one
+  /// server this device can bound, sweep and answer for is in the path,
+  /// and the bytes still cross the network only once -- but it is the
+  /// opposite of what this comment used to claim, and the opposite of what
+  /// happens to a torrent on that configured server: a torrent has an info
+  /// hash, so [_mediaUrl] sends it straight there with `buffer=` and no
+  /// proxy at all.
+  ///
+  /// Null when this build started no embedded server. Nothing the app
+  /// ships gets there -- `CoreClient.init` always asks for one, and one
+  /// that will not start fails the boot rather than carrying on without it
+  /// -- so it stands for a build with none, and everything here keeps
+  /// working when it is null: the stream plays direct, as every build did
+  /// before the proxy.
   Uri? _serverBase;
 
   /// The settings map of the last `UpdateSettings` sent, until the next

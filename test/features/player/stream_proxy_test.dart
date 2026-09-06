@@ -162,11 +162,16 @@ void main() {
       );
     });
 
-    test('a stream on a configured remote streaming server', () {
-      final remote = Uri.parse('https://server.example.com/');
+    test('a stream already on the server we would proxy through', () {
+      // The same refusal as the loopback one above, reached by the other
+      // rule: whatever base URL we are handed, a stream already on it is
+      // one that server is serving, not one to hand back to it. In this
+      // app the two rules always agree, because the base URL is always the
+      // loopback embedded server.
+      final base = Uri.parse('https://server.example.com/');
       final url = Uri.parse('https://server.example.com/abc123/0');
 
-      expect(proxiedThroughServer(url, serverBase: remote), url);
+      expect(proxiedThroughServer(url, serverBase: base), url);
     });
 
     test('an offline file, and a magnet the core has not resolved', () {
@@ -257,11 +262,12 @@ void main() {
     testWidgets('plays direct when this build runs no server of its own', (
       tester,
     ) async {
-      // A viewer pointed at a streaming server somewhere else, or an
-      // embedded one that never came up. Proxying through a server that is
-      // not on this device would fetch the film over the internet twice for
-      // a cache no cleaner here can see, so the stream goes straight out --
-      // which is what every build did before this.
+      // A build that started no embedded server at all -- which is not
+      // what choosing a streaming server elsewhere does, since that leaves
+      // the embedded one running and `CoreInitInfo.serverBaseUrl` naming
+      // it, and those streams go through the proxy like anybody else's.
+      // With nothing to proxy through the stream goes straight out, which
+      // is what every build did before this.
       useWideViewport(tester);
       const remote = 'https://rd.example/dl/tok/film.mkv';
       final harness = PlayerHarness(
