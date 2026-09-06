@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/diagnostics_capture.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
+import '../../support/tv.dart';
 
 /// Leaving a player has to stop it, and the order it does that in is the
 /// whole of what this file pins.
@@ -175,6 +177,59 @@ void main() {
       engine.videoBuilds,
       greaterThan(builtWhenLeft),
       reason: 'and the screen rebuilt around it while it waited',
+    );
+
+    wedged.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerScreen), findsNothing);
+  });
+
+  testWidgets('on a television the remote is handed back before the wait', (
+    tester,
+  ) async {
+    // The screen stays up while the player stops, and the control bar goes
+    // at the same moment: everything on it aims at an engine that is being
+    // released, and media_kit throws on a player that has been. Hiding the
+    // bar and handing the remote back to the video are one act here as
+    // everywhere else -- a ring left on something undrawn is a press that
+    // reaches a stopping player, which is the same fault as a button that
+    // is drawn and dead.
+    useScreen(tester, tvSize);
+    final wedged = Completer<void>();
+    final harness = PlayerHarness(
+      device: tv,
+      configureEngine: (engine) => engine.disposeGate = wedged,
+    );
+    await harness.pump(
+      tester,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute<void>(builder: (_) => harness.screen())),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusIn<PlayerBottomBar>(), isTrue, reason: 'the remote is on it');
+
+    // Stop, which has no ladder to come down first.
+    await press(tester, LogicalKeyboardKey.mediaStop);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PlayerScreen), findsOneWidget, reason: 'still waiting');
+    expect(video, findsOneWidget, reason: 'and still drawing');
+    expect(controlsOpacity(tester), 0, reason: 'but offering nothing');
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'player',
+      reason: 'and the remote is back on the video',
     );
 
     wedged.complete();

@@ -3472,6 +3472,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _leave([PlayerScreenResult? result]) async {
     if (_leaving) return;
     setState(() => _leaving = true);
+    // The control bar leaves the frame with this ([build]), so nothing may
+    // be left focused on it: hiding the bar and handing the remote back to
+    // the video are one act, and a leave is no exception. The timer that
+    // would have done it has nothing left to hide.
+    _controlsTimer?.cancel();
+    _controlsTimer = null;
+    if (_controlFocused) _focusNode.requestFocus();
     // From the press, not from the pop: the display is not presenting a
     // film any more the moment the viewer says so.
     _releaseDisplayFrameRate();
