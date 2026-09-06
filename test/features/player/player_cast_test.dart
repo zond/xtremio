@@ -526,6 +526,41 @@ void main() {
       expect(lan.toggles, [true, false]);
       expect(lan.running, isFalse);
     });
+
+    testWidgets('a second receiver with no route ends the cast it replaced', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom, kitchen]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.playing,
+          position: Duration(minutes: 7),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The second receiver is on a network this device cannot reach, so
+      // there is no address to give it -- and the first receiver's session
+      // is already gone by then, ended to make room for one that cannot
+      // start.
+      lan.baseUrl = null;
+      await castTo(tester, kitchen);
+
+      expect(find.textContaining('cannot reach this device'), findsOneWidget);
+      expect(cast.loads, hasLength(1));
+      // Nothing is casting: the screen is the player again, the listener is
+      // down, and the film is back where the first receiver had got to.
+      expect(find.byType(CastRemotePanel), findsNothing);
+      expect(lan.running, isFalse);
+      expect(lan.toggles, [true, true, false]);
+      expect(harness.engine.seeks, [const Duration(minutes: 7)]);
+      expect(harness.engine.playCalls, 1);
+    });
   });
 
   group('a receiver that never fetches', () {

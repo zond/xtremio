@@ -66,7 +66,9 @@ deliberately without `/proxy` and `/ftp` (`rust/src/server.rs`,
 handed over as it is; the receiver has a connection of its own, and no listener
 is started for it. If no local interface can reach the receiver, the app says
 the device is unreachable rather than casting a URL that could never be
-fetched.
+fetched -- and if that receiver was picked while another one had the
+stream, the film comes back to this device, because starting the new
+session is what ended the old one.
 
 **Which address of this device it is given** depends on where the receiver
 is, and Android is asked: `MainActivity.castDeviceAddress` reads the address

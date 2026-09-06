@@ -2932,7 +2932,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Nothing is loaded until every step has answered: the stream has to be
   /// one a receiver could play at all, the session has to start, and a URL
   /// the receiver can actually fetch has to exist. A failure at any point
-  /// leaves nothing behind -- no session, no LAN listener -- and says what
+  /// leaves nothing behind -- no session, no LAN listener, and no remains
+  /// of the session this one was picked in place of -- and says what
   /// happened.
   Future<void> _startCast(CastDevice device) async {
     final cast = _cast;
@@ -2978,6 +2979,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       await _endLanMedia();
       await cast.disconnect();
+      // That disconnect ended whatever session was running, which on a
+      // switch away from a live one is the session this screen is still
+      // showing. It is ended here rather than left to the client's own
+      // report of it: the report does come, and is what has been clearing
+      // this, but the screen would otherwise go on presenting a cast this
+      // very method has just torn down -- with its wait disarmed and its
+      // listener closed -- for as long as the platform takes to say so. A
+      // no-op when nothing was casting, which is every other way in here.
+      await _stopCast(disconnect: false);
       await _explainCast(
         '${device.name} cannot reach this device over the network, so there '
         'is no address to give it. Casting a loopback URL it could never '
