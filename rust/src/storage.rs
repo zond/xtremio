@@ -187,23 +187,29 @@ impl EntryMetadata for std::fs::DirEntry {
 /// Available column, root's reserve excluded -- which is the same call and
 /// the same crate the embedded server's cache cleaner caps itself with
 /// (`server/src/cache_cleaner.rs`, `CACHE_FREE_SPACE_FLOOR`). Deliberately
-/// the same one: two answers to "how much room is left" that came from
-/// different places would drift, and the whole point of the floor is that
-/// both writers on a device measure it the same way.
+/// the same one: a report puts this number next to the floor the cleaner
+/// is enforcing, and two answers to "how much room is left" taken from
+/// different places would drift apart on the one screen that exists to
+/// explain a device with no room left.
 ///
-/// **This sees a cache file that nothing can walk to.** mpv unlinks its
-/// demuxer cache the moment it creates it
-/// (`demuxer-cache-unlink-files=immediate`), so the file has no name in any
-/// directory -- but its blocks are still allocated until the fd closes, and
-/// `f_bavail` counts them. Measured here rather than assumed: writing
-/// 256 MiB through an unlinked fd moved `f_frsize * f_bavail` by 268439552
-/// bytes and closing the fd put every one of them back. So a directory walk
-/// is blind to the player's cache and a free-space reading is not, which is
-/// why this is the reading both budgets are kept against.
+/// **It answers a different question from a directory walk.**
+/// [`directory_size`] adds up named files; this counts allocated blocks,
+/// so a file that was unlinked while some process still holds it open has
+/// blocks here and no name there. Measured rather than assumed
+/// (`free_space_counts_a_file_no_directory_can_see`), because it used to
+/// be the whole point: mpv unlinked its demuxer cache the instant it
+/// created it (`demuxer-cache-unlink-files=immediate`), and 256 MiB
+/// written through such an fd moved `f_frsize * f_bavail` by 268439552
+/// bytes, every one of which came back when the fd closed. **That writer
+/// is gone.** The player keeps no disk cache at all now, so there is one
+/// budget on this device -- the server's cache against `cacheSize` -- and
+/// a gap between the two readings is somebody else's deleted-but-open
+/// file rather than ours. Which is still worth knowing when a report's
+/// two numbers disagree, and is why the measurement stays.
 ///
-/// `None`, never 0, on failure: a volume nobody could measure is not a full
-/// one, and a caller that treated it as full would refuse a disk cache on
-/// every device whose filesystem will not answer.
+/// `None`, never 0, on failure: a volume nobody could measure is not a
+/// full one, and a report that showed it as full would accuse a device
+/// whose filesystem simply will not answer.
 pub fn free_bytes(path: &Path) -> Option<u64> {
     // Ask about the deepest ancestor that exists: a directory nobody has
     // created yet still sits on a volume.
@@ -264,11 +270,14 @@ mod tests {
         assert_eq!(cache_limit_bytes(Some(-1.0)), None);
     }
 
-    /// The claim the two cache budgets on one device rest on: mpv's
-    /// demuxer cache is unlinked the instant it is created, so no directory
-    /// walk can see it, but the blocks are held until the fd closes and
-    /// `f_bavail` counts them the whole time. Driven here rather than read
-    /// off a manual, with the same `open`/`unlink`/write order mpv uses.
+    /// Why a free-space reading and a directory walk can disagree at all:
+    /// a file unlinked the instant it is created is invisible to any walk,
+    /// but its blocks are held until the fd closes and `f_bavail` counts
+    /// them the whole time. Driven here rather than read off a manual,
+    /// with the `open`/`unlink`/write order mpv used when it was the one
+    /// doing this -- it no longer is, and the property outlives it: the
+    /// two numbers in a storage report are not measuring the same thing,
+    /// and this is the shape of the difference.
     ///
     /// The tolerance is half of what is written, in both directions,
     /// because the volume is shared with whatever else the machine is
