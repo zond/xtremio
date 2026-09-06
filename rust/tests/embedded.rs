@@ -232,17 +232,17 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     // dead connection.
     let origin_requests = Arc::new(Mutex::new(Vec::new()));
     let (origin, origin_task) = endless_origin(Arc::clone(&origin_requests))?;
-    let proxied = |token: &str| {
+    let proxied = |token: &str, path: &str| {
         format!(
-            "{url}proxy/d=http%3A%2F%2F127.0.0.1%3A{}&p={token}/film.mp4",
+            "{url}proxy/d=http%3A%2F%2F127.0.0.1%3A{}&p={token}/{path}",
             origin.port()
         )
     };
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
         .build()?;
-    let mut one = client.get(proxied("player-1")).send().await?;
-    let mut two = client.get(proxied("player-2")).send().await?;
+    let mut one = client.get(proxied("player-1", "film.mp4")).send().await?;
+    let mut two = client.get(proxied("player-2", "film.mp4")).send().await?;
     assert_eq!(one.status(), StatusCode::OK);
     assert_eq!(two.status(), StatusCode::OK);
     // Both have their first bytes and are now parked on an origin that will
@@ -282,6 +282,36 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         "the first close should not have touched the other player"
     );
     assert!(two.chunk().await.is_err(), "and now player two ends too");
+
+    // What the app's own URL builder produces, byte for byte, reaching the
+    // origin unchanged. This is the shape `lib/core/stream_proxy.dart`
+    // writes -- the origin escaped into `d=`, the token beside it, then the
+    // target's path and query exactly as they arrived -- and the escapes in
+    // it are the ones that do not survive being decoded: `%2F` would become
+    // a path separator, `%3D` would end a signature, `%23` would begin a
+    // fragment and take the rest of the URL with it, and the `?d=1` would
+    // once have been read as the target URL itself. Asserted here rather
+    // than only in the Dart tests because it is the *pinned server* that
+    // has to keep them, and a pin bump is exactly when that stops being
+    // true quietly.
+    let mut awkward = client
+        .get(proxied(
+            "player-3",
+            "a%2Fb/sig%3Dx/film%20name%231.mkv?d=1&t=2",
+        ))
+        .send()
+        .await?;
+    assert_eq!(awkward.status(), StatusCode::OK);
+    assert!(awkward.chunk().await?.is_some());
+    assert_eq!(
+        origin_requests
+            .lock()
+            .expect("origin log")
+            .last()
+            .map(String::as_str),
+        Some("GET /a%2Fb/sig%3Dx/film%20name%231.mkv?d=1&t=2 HTTP/1.1")
+    );
+    assert_eq!(server_close_proxy_streams("player-3".to_owned())?, 1);
     origin_task.abort();
 
     // Idempotent: a second start returns the same URL without restarting.
