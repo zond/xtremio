@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
+import '../../support/diagnostics_capture.dart';
 import '../../support/player_harness.dart';
 
 /// Leaving a player has to stop it.
@@ -16,18 +19,19 @@ import '../../support/player_harness.dart';
 /// unlinks -- so an mpv outlived the screen that owned it, and something
 /// else that had been holding the disk alongside it died on the press.
 ///
-/// The screen always asked for a teardown. What it could not do is make one
-/// arrive: the release is deferred by two frames on purpose -- the raster
-/// thread may still be drawing a frame that references the video texture --
-/// and it then awaits mpv's own `stop()`, which blocks and retries for as
-/// long as the volume it is writing to has no room left. So the release is
-/// slowest exactly when a player still filling the disk costs the most. The
-/// hand-over is the same evening from the other side: it opens the next
-/// episode's player before the outgoing one has been told anything, so two
-/// demuxers hold one volume and each limiter believes it is alone.
+/// The screen always asked. What it never did was check the answer: the
+/// teardown was deferred by two frames and then `.ignore()`d, so a `stop()`
+/// that hung or threw was never heard from again, and neither the log nor
+/// the test suite could tell a release that finished from one that never
+/// did. The hand-over is the other half of the same evening -- it opens the
+/// next episode's player before the outgoing one has been told to stop
+/// writing, so two demuxers hold one volume and each limiter believes it
+/// is alone.
 ///
-/// What must not wait on any of that is the one property write that ends
-/// the growth. The order is the fix, and the order is what is pinned here.
+/// So the order is the fix, and it is what is pinned here: the disk writing
+/// stops on the frame the screen goes, ahead of a teardown that may be slow
+/// or may never come, and the teardown behind it is awaited, bounded and
+/// answered for.
 void main() {
   /// The player pushed onto a route, which is how the app opens it and
   /// what [PlayerHarness.pump] on its own is not: mounted as the root
@@ -50,6 +54,14 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
   }
+
+  /// Everything the app said about the player that was not the routine
+  /// `info` line: what a report would have carried out of that evening.
+  List<String> complaints(List<String> lines) => [
+    for (final line in lines)
+      if (line.startsWith('warn player') || line.startsWith('error player'))
+        line,
+  ];
 
   testWidgets('leaving the player releases an engine that answers', (
     tester,
@@ -97,6 +109,71 @@ void main() {
 
     expect(harness.calls, ['stop-writing', 'dispose']);
     expect(engine.disposed, isTrue);
+  });
+
+  testWidgets('a teardown that never comes back is not left unsaid', (
+    tester,
+  ) async {
+    // `MediaKitEngine.dispose` awaits `_player.stop()` before it releases
+    // the player, and mpv writing to a volume with no room left blocks and
+    // retries -- so the stop is slowest to return exactly when a player
+    // that will not die costs the most. The gate is that stop.
+    final lines = captureDiagnostics();
+    final wedged = Completer<void>();
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.disposeGate = wedged,
+    );
+    addTearDown(wedged.complete);
+    await pumpPushed(tester, harness);
+    final engine = harness.engine;
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    // Two minutes: longer than any bound worth putting on a stop, and the
+    // span the measurement actually covers.
+    await tester.pump(const Duration(minutes: 2));
+    await tester.pumpAndSettle();
+
+    // The viewer is back on the details screen and the demuxer is still
+    // open. Nothing here can make libmpv answer; what it can do is know --
+    // and, first, make sure the thing that would not die is at least no
+    // longer writing.
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(engine.disposeAsked, isTrue, reason: 'the screen did ask');
+    expect(engine.disposed, isFalse, reason: 'and mpv never answered');
+    expect(engine.stopWritingCalls, 1, reason: 'but it stopped writing');
+
+    // Where the ninety seconds used to go: no line, no bound, nothing a
+    // copied report could have shown.
+    expect(
+      complaints(lines),
+      isNotEmpty,
+      reason: 'a player that would not die is what diagnostics are for',
+    );
+  });
+
+  testWidgets('a teardown that throws is not swallowed', (tester) async {
+    // The same hole from the other side. A throw out of `dispose` never
+    // reached `FlutterError.onError` either: `.ignore()` ate it before the
+    // zone saw it, so `tester.takeException()` is null and the run was
+    // green whatever happened. It still is -- an unhandled error is the
+    // wrong shape for "the player would not stop" -- so the log is the
+    // only place this can show, and it has to show there.
+    final lines = captureDiagnostics();
+    final harness = PlayerHarness(
+      configureEngine: (engine) =>
+          engine.disposeError = StateError('mpv refused to stop'),
+    );
+    await pumpPushed(tester, harness);
+    final engine = harness.engine;
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(engine.disposeAsked, isTrue);
+    expect(engine.disposed, isFalse);
+    expect(tester.takeException(), isNull, reason: 'not a crash, a report');
+    expect(complaints(lines), isNotEmpty);
   });
 
   testWidgets('a hand-over stops the outgoing player writing before the next '

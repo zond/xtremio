@@ -89,7 +89,21 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// teardown finishing are two moments, and the whole of what a player
   /// left behind costs happens between them.
   bool disposeAsked = false;
+
+  /// Whether `dispose` has *finished*. A real teardown stops libmpv before
+  /// it releases the player, so until this is true the demuxer is still
+  /// open and still filling its cache file.
   bool disposed = false;
+
+  /// Holds the teardown open until the test completes it -- what
+  /// `Player.stop()` does when mpv is blocked writing to a volume with no
+  /// room left, which is exactly when it matters that the player die.
+  /// Nothing completes it by itself, so a test that never does is asking
+  /// "what happens when the teardown does not come back".
+  Completer<void>? disposeGate;
+
+  /// When set, `dispose` records the call and then fails with it.
+  Object? disposeError;
 
   /// Every `setDisplayRefreshRate` call, in order, nulls included -- a
   /// null is the player giving display sync back, which is as much a call
@@ -317,6 +331,8 @@ class FakePlaybackEngine implements PlaybackEngine {
   Future<void> dispose() async {
     disposeAsked = true;
     callLog?.add('dispose');
+    await disposeGate?.future;
+    if (disposeError != null) throw disposeError!;
     disposed = true;
   }
 }

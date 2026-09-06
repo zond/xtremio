@@ -3650,15 +3650,53 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// the last one that showed the texture. [SchedulerBinding.endOfFrame]
   /// schedules a frame when none is pending, so this also works when called
   /// outside a frame.
+  /// **The release is awaited and answered for**, which is the other half.
+  /// It used to be `.ignore()`d, and a discarded future is a teardown
+  /// nobody can tell from one that never happened: on the owner's
+  /// Chromecast a player kept its demuxer for at least ninety seconds
+  /// after the screen was gone, downloading at 32 Mbps into a cache file
+  /// with no name, and the log for that evening carried not one line about
+  /// it. [teardownBound] is how long it is given before the app says so.
+  /// Nothing here can make libmpv answer; what it can do is stop being the
+  /// reason nobody knew.
   static void _disposeAfterFrame(PlaybackEngine engine) {
     Future<void> release() async {
       await SchedulerBinding.instance.endOfFrame;
       await SchedulerBinding.instance.endOfFrame;
-      await engine.dispose();
+      // The bound is on the teardown alone and not on the two frames in
+      // front of it: a screen that goes without the engine producing
+      // another frame has not started a teardown to time.
+      await engine.dispose().timeout(teardownBound);
     }
 
-    release().ignore();
+    unawaited(
+      release().catchError((Object error) {
+        if (error is TimeoutException) {
+          // A warning rather than an error: the future is abandoned, not
+          // cancelled, so a slow stop that lands a second later has still
+          // landed. What makes it worth a line either way is that until it
+          // does, this player is still holding the disk.
+          DiagnosticsLog.warn(
+            'player',
+            'the player did not stop within ${teardownBound.inSeconds}s of '
+                'leaving; it may still be holding its cache file',
+          );
+        } else {
+          DiagnosticsLog.error('player', 'releasing the player failed: $error');
+        }
+      }),
+    );
   }
+
+  /// How long [_disposeAfterFrame] gives a release before it writes a line
+  /// about it.
+  ///
+  /// Generous on purpose. A teardown stops libmpv and closes a file, and on
+  /// a device whose volume is full those writes block and retry, so a stop
+  /// that takes a few seconds is slow rather than broken. What this number
+  /// is for is the other case -- the one that never comes back at all --
+  /// and ten seconds separates them without waiting on either.
+  static const Duration teardownBound = Duration(seconds: 10);
 
   // --- Build ---------------------------------------------------------------
 
