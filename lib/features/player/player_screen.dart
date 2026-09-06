@@ -142,6 +142,16 @@ class PlayerScreen extends StatefulWidget {
   static const Duration seekCheckDelay = Duration(seconds: 2);
   static const Duration seekTolerance = Duration(seconds: 5);
 
+  /// How long a receiver may sit on a load before this screen asks what
+  /// the LAN listener has actually been asked for.
+  ///
+  /// A receiver handed an address it cannot reach never says so: the
+  /// connect hangs, and the splash screen it is on is the same one a slow
+  /// start looks like. Long enough that a torrent still filling its window
+  /// is not accused of anything, short enough that nobody is left watching
+  /// a splash screen wondering.
+  static const Duration castFetchTimeout = Duration(seconds: 20);
+
   /// How long the controls stay up without input while playing.
   static const Duration controlsTimeout = Duration(seconds: 3);
 
@@ -497,6 +507,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// an off. A stream the receiver fetches straight from its own host needs
   /// no listener at all, and must not leave one running.
   bool _lanMediaOn = false;
+
+  /// Runs [castFetchTimeout] after a load, and only while the receiver is
+  /// fetching from *our* listener: what it checks is that listener's count
+  /// ([_castFetchCheck]). Cancelled the moment the receiver reports
+  /// anything but buffering, and by every way out of a session.
+  Timer? _castFetchTimer;
 
   /// The last sample mpv gave for the open media, taken while the cast
   /// sheet is up: the one place the compatibility check can hear what the
@@ -2857,6 +2873,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// notice which device the pixels were on.
   void _onCastStatus(CastStatus status) {
     if (!mounted) return;
+    // Anything but buffering answers the question the wait was asking, and
+    // a receiver that starts, stalls and starts again is not a receiver
+    // that cannot reach us.
+    if (status.state != CastPlayerState.buffering) {
+      _castFetchTimer?.cancel();
+      _castFetchTimer = null;
+    }
     setState(() => _castStatus = status);
     if (!_casting || _opened == null) return;
     final duration = status.duration;
@@ -2987,6 +3010,64 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
       start: position,
     );
+    _watchCastFetch();
+  }
+
+  /// Starts the wait that asks, once, whether the receiver ever came back
+  /// for the stream ([_castFetchCheck]).
+  ///
+  /// Only for a stream served off this device: a receiver fetching from a
+  /// host on the internet owes our listener nothing, and its count would
+  /// stay at zero however well the cast was going.
+  void _watchCastFetch() {
+    _castFetchTimer?.cancel();
+    if (!_lanMediaOn) return;
+    _castFetchTimer = Timer(
+      PlayerScreen.castFetchTimeout,
+      () => unawaited(_castFetchCheck()),
+    );
+  }
+
+  /// What to say about a receiver that is still buffering long after it was
+  /// given the stream, which the listener's count decides.
+  ///
+  /// Nothing has reached the listener: the address it was given is one it
+  /// cannot route to. There is nothing to wait for -- a hanging connect
+  /// never fails on its own -- so the session ends the way Stop ends it and
+  /// the film comes back to this device, with the reason said out loud.
+  ///
+  /// Something has: the receiver found this device and could not play what
+  /// it found, which is a different sentence and not one to end a session
+  /// over. It may yet recover, and if it does not, Stop is right there.
+  Future<void> _castFetchCheck() async {
+    _castFetchTimer = null;
+    if (!mounted || !_casting) return;
+    if (_castStatus.state != CastPlayerState.buffering) return;
+    final served = _lanMedia?.lanMediaRequestsServed ?? 0;
+    final device = _castingTo;
+    if (served > 0) {
+      DiagnosticsLog.warn(
+        'player',
+        'receiver still buffering after $served request(s) to the listener',
+      );
+      await _explainCast(
+        '${device?.name ?? 'The receiver'} fetched the stream from this '
+        'device and has not started playing it, so the address it was given '
+        'is one it can reach and whatever is wrong is with the file itself. '
+        'Stop ends the session and brings the film back here.',
+      );
+      return;
+    }
+    DiagnosticsLog.warn(
+      'player',
+      'receiver asked the LAN listener for nothing; ending the session',
+    );
+    await _stopCast();
+    await _explainCast(
+      '${device?.name ?? 'The receiver'} never asked for the stream, so it '
+      'could not reach this device at the address it was given. The film is '
+      'back on this screen.',
+    );
   }
 
   /// The URL to give [device] for the stream this player has open, or null
@@ -3027,6 +3108,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// elsewhere) and there is nothing left to end.
   Future<void> _stopCast({bool disconnect = true}) async {
     if (!_casting) return;
+    _castFetchTimer?.cancel();
+    _castFetchTimer = null;
     final position = _castStatus.position;
     _castingTo = null;
     if (mounted) setState(() {});
@@ -3397,6 +3480,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // subscriptions below are cancelled first, so nothing reports back into
     // a disposed screen while this runs.
     _cast?.stopDiscovery().ignore();
+    _castFetchTimer?.cancel();
     if (_casting || _lanMediaOn) unawaited(_teardownCast());
     _cancelOpenRetry();
     _statsHoverTimer?.cancel();

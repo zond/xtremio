@@ -68,6 +68,37 @@ is started for it. If no local interface can reach the receiver, the app says
 the device is unreachable rather than casting a URL that could never be
 fetched.
 
+**Which address of this device it is given** depends on where the receiver
+is, and Android is asked: `MainActivity.castDeviceAddress` reads the address
+off the MediaRouter route the Cast SDK discovered -- `flutter_chrome_cast`
+drops it on the way to Dart -- and `GoogleCastClient` asks for it as the
+session starts, once per cast rather than once per receiver on every route
+change. The server then names the interface on that receiver's subnet. With
+no address to go on (iOS, a route gone stale) it ranks its own interfaces
+instead: a private address on an ordinary interface ahead of anything on a
+tunnel or a cellular link. That ranking is a guess, and losing the guess is a
+Chromecast that sits on its splash screen forever -- which is what made the
+address worth asking Android for.
+
+**What was handed over is written down.** The player logs the URL and the
+address it was chosen for, and logs the refusal when there was no address to
+give; both land in Diagnostics with everything else the player records. It is
+the only account there is: the receiver reports nothing useful, and the
+server's own log says only that its listener started and stopped.
+
+**A receiver that never fetches** is not left looking like one that is merely
+slow. `PlayerScreen.castFetchTimeout` after a load -- twenty seconds -- a
+receiver still buffering is asked about through the listener's count of what
+it has been asked for (`server_lan_media_requests_served`, reset on every
+start, so it is per session). Nothing at all: the address was one the receiver
+could not route to, and nothing will happen, because a connect to an
+unroutable host hangs instead of failing. The session ends the way Stop ends
+it, the film comes back to this device, and the dialog says why. Something:
+the receiver reached this device and could not play what it found, which is
+about the media and not the network, so the session is left alone -- it may
+recover -- and the dialog says that instead. A stream fetched from the
+internet arms none of this: our listener is not the one it would be asking.
+
 **The listener lives exactly as long as a session**, and that is made hard to
 get wrong rather than merely intended: it is closed when the session ends, when
 the session ends from the television or another phone, when a start fails, on
@@ -97,6 +128,8 @@ touch the plugin; `rust/tests/lan_media.rs` drives the listener itself.
 
 **Not verified against a real Chromecast** — there is no receiver on this
 machine. What is verified: the LAN listener over real HTTP (it serves media
-routes, answers `/proxy` and `/heartbeat` with 404, and is gone after a stop
-and after a shutdown), the Android manifest merge, and every decision the app
-makes around a fake sender.
+routes, answers `/proxy` and `/heartbeat` with 404, counts every request that
+reaches it, and is gone after a stop and after a shutdown), the Android
+manifest merge, and every decision the app makes around a fake sender --
+including which address the server is asked for and what is said about a
+receiver that never comes back for the stream.

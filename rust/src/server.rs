@@ -397,6 +397,18 @@ pub fn lan_media_running() -> bool {
     with_handle(|handle| Ok(handle.lan_media_running())).unwrap_or(false)
 }
 
+/// How many requests the LAN media listener has been asked for since it last
+/// started, per cast session rather than per process. Zero when no listener
+/// and no server are running -- both mean nothing has been asked of us.
+///
+/// It answers the one question nothing else can: whether the receiver ever
+/// came back for the stream. A receiver handed an address it cannot route to
+/// never reports an error (the connect hangs), so from the outside it looks
+/// exactly like one that is buffering.
+pub fn lan_media_requests_served() -> u64 {
+    with_handle(|handle| Ok(handle.lan_media_requests_served())).unwrap_or(0)
+}
+
 /// The base URL to hand a receiver at `peer`, e.g.
 /// `http://192.168.1.20:39271/`: the host is the local interface that shares
 /// `peer`'s subnet, so a media URL built on it is one that receiver can

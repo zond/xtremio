@@ -157,6 +157,10 @@ class FakeLanMediaControl implements LanMediaControl {
   /// The peers a base URL was asked for.
   final List<String?> baseUrlRequests = [];
 
+  /// What the listener has been asked for: zero is a receiver that never
+  /// came back for the stream.
+  int requestsServed = 0;
+
   @override
   Future<String?> setLanMedia({required bool enabled}) async {
     toggles.add(enabled);
@@ -170,6 +174,9 @@ class FakeLanMediaControl implements LanMediaControl {
 
   @override
   bool get lanMediaRunning => running;
+
+  @override
+  int get lanMediaRequestsServed => running ? requestsServed : 0;
 
   @override
   Future<Uri?> lanMediaBaseUrl({String? peerIp}) async {

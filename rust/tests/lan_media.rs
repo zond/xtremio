@@ -10,8 +10,8 @@ use std::net::SocketAddr;
 
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
-    server_lan_media_base_url, server_lan_media_running, server_set_lan_media, server_settings,
-    server_start, server_stop, ServerConfig,
+    server_lan_media_base_url, server_lan_media_requests_served, server_lan_media_running,
+    server_set_lan_media, server_settings, server_start, server_stop, ServerConfig,
 };
 
 fn config(root: &std::path::Path) -> ServerConfig {
@@ -57,6 +57,11 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
         !server_lan_media_running()?,
         "nothing on the LAN with no server at all"
     );
+    assert_eq!(
+        server_lan_media_requests_served()?,
+        0,
+        "a server that does not exist was asked for something"
+    );
 
     tokio::task::spawn_blocking({
         let cfg = config(tmp.path());
@@ -86,6 +91,11 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
         .expect("an address after a start");
     assert!(server_lan_media_running()?);
     assert!(lan_media_allowed().await?);
+    assert_eq!(
+        server_lan_media_requests_served()?,
+        0,
+        "a session began having already been asked for something"
+    );
     let socket = loopback(&addr)?;
 
     // Media routes only. `/heartbeat` is a control route and is not mounted
@@ -99,6 +109,18 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
     assert_eq!(
         status_of(socket, "/proxy/d/http/example.com/a.mp4").await?,
         StatusCode::NOT_FOUND
+    );
+
+    // Both of those were counted, refusals and all. The count is not about
+    // what was served: it is the answer to "did the receiver reach this
+    // device at all", which a receiver told an unroutable address never
+    // does -- it hangs on the connect and reports nothing. Greater rather
+    // than equal because this listener is bound to every interface, and
+    // whatever else is on the LAN is welcome to knock.
+    let served = server_lan_media_requests_served()?;
+    assert!(
+        served >= 2,
+        "the two requests above went uncounted ({served})"
     );
 
     // The URL a receiver is handed names an interface that can reach it.
@@ -124,8 +146,9 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
         None,
         "a peer that is not an IP address has no URL"
     );
-    // No peer at all -- what the Cast SDK leaves us with, since it reports no
-    // receiver address: the host's best-effort interface, never loopback.
+    // No peer at all -- what iOS leaves us with, since the Cast SDK reports
+    // no receiver address there and only the Android half now reads one off
+    // the route: the host's best-ranked interface, never loopback.
     let best_effort = tokio::task::spawn_blocking(|| server_lan_media_base_url(None))
         .await??
         .expect("a base URL with no peer named");
@@ -159,6 +182,11 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
     let addr = tokio::task::spawn_blocking(|| server_set_lan_media(true))
         .await??
         .expect("an address after a restart");
+    assert_eq!(
+        server_lan_media_requests_served()?,
+        0,
+        "the last session's count was handed to this one"
+    );
     let socket = loopback(&addr)?;
     assert!(server_lan_media_running()?);
     tokio::task::spawn_blocking(server_stop).await??;

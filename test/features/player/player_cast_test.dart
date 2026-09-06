@@ -520,6 +520,118 @@ void main() {
     });
   });
 
+  group('a receiver that never fetches', () {
+    testWidgets('is stopped, explained, and brought back to this device', (
+      tester,
+    ) async {
+      final lines = captureDiagnostics();
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      // The listener runs and nothing ever reaches it: the address the
+      // receiver was given is one it cannot route to, and a hanging
+      // connect is not an error anybody is ever told about.
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      harness.engine.emitPosition(const Duration(minutes: 4));
+      await pumpEvents(tester);
+      await castTo(tester, livingRoom);
+      expect(find.byType(CastRemotePanel), findsOneWidget);
+
+      await tester.pump(PlayerScreen.castFetchTimeout);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('never asked for the stream'), findsOneWidget);
+      expect(lines, anyElement(contains('asked the LAN listener for nothing')));
+      // The session is over and the film is back here, at the position the
+      // receiver was given it at.
+      expect(cast.disconnects, 1);
+      expect(lan.toggles, [true, false]);
+      expect(harness.engine.seeks, [const Duration(minutes: 4)]);
+      expect(harness.engine.playCalls, 1);
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CastRemotePanel), findsNothing);
+    });
+
+    testWidgets('one that did fetch is told apart, and left alone', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()
+        ..baseUrl = lanBase
+        ..requestsServed = 3;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+
+      await tester.pump(PlayerScreen.castFetchTimeout);
+      await tester.pumpAndSettle();
+
+      // It reached this device, so the network is not what to talk about --
+      // and a session that may yet recover is nobody's to end but the
+      // viewer's.
+      expect(find.textContaining('fetched the stream'), findsOneWidget);
+      expect(cast.disconnects, 0);
+      expect(lan.running, isTrue);
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CastRemotePanel), findsOneWidget);
+    });
+
+    testWidgets('a receiver that is playing is asked nothing', (tester) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.playing,
+          position: Duration(minutes: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(PlayerScreen.castFetchTimeout);
+      await tester.pumpAndSettle();
+
+      // The count is still zero -- the fake listener was never asked for
+      // anything -- and it is never consulted, because a receiver that is
+      // playing has answered the only question it was going to be asked.
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.disconnects, 0);
+      expect(find.byType(CastRemotePanel), findsOneWidget);
+    });
+
+    testWidgets('a stream off the internet is never accused', (tester) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      // An addon's own HTTPS URL: the receiver fetches it from its host and
+      // owes this device's listener nothing, so a count of zero says
+      // nothing at all about how the cast is going.
+      final fixture = playerWithFilename('clip.mp4');
+      final content =
+          (fixture['stream'] as Map<String, dynamic>)['content'] as List;
+      (content[0] as Map<String, dynamic>)['streaming_url'] =
+          'https://cdn.example.com/clip.mp4';
+      final harness = castHarness(cast: cast, lanMedia: lan, player: fixture);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+      expect(cast.loads, hasLength(1));
+      expect(lan.toggles, isEmpty);
+
+      await tester.pump(PlayerScreen.castFetchTimeout);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(cast.disconnects, 0);
+    });
+  });
+
   group('while a receiver has the stream', () {
     testWidgets('the remote controls drive the receiver', (tester) async {
       useWideViewport(tester);

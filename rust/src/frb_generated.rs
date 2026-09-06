@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 437388966;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 461925263;
 
 // Section: executor
 
@@ -970,6 +970,37 @@ fn wire__crate__api__server__server_lan_media_base_url_impl(
         },
     )
 }
+fn wire__crate__api__server__server_lan_media_requests_served_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "server_lan_media_requests_served",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::server::server_lan_media_requests_served()?;
+                    std::result::Result::Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
 fn wire__crate__api__server__server_lan_media_running_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1605,23 +1636,23 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        29 => {
+        30 => {
             wire__crate__api__server__server_set_lan_media_impl(port, ptr, rust_vec_len, data_len)
         }
-        30 => wire__crate__api__server__server_settings_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__server__server_start_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__server__server_stop_impl(port, ptr, rust_vec_len, data_len),
-        33 => {
+        31 => wire__crate__api__server__server_settings_impl(port, ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__server__server_start_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__server__server_stop_impl(port, ptr, rust_vec_len, data_len),
+        34 => {
             wire__crate__api__server__server_storage_report_impl(port, ptr, rust_vec_len, data_len)
         }
-        34 => {
+        35 => {
             wire__crate__api__server__server_torrent_stats_impl(port, ptr, rust_vec_len, data_len)
         }
-        35 => {
+        36 => {
             wire__crate__api__server__server_update_settings_impl(port, ptr, rust_vec_len, data_len)
         }
-        36 => wire__crate__api__subtitles__subtitles_match_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__storage__volume_free_bytes_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__subtitles__subtitles_match_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__storage__volume_free_bytes_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1641,7 +1672,12 @@ fn pde_ffi_dispatcher_sync_impl(
         12 => wire__crate__api__diagnostics__diagnostics_snapshot_impl(ptr, rust_vec_len, data_len),
         23 => wire__crate__api__server__server_base_url_impl(ptr, rust_vec_len, data_len),
         26 => wire__crate__api__server__server_dht_status_impl(ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__server__server_lan_media_running_impl(ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__server__server_lan_media_requests_served_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        29 => wire__crate__api__server__server_lan_media_running_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

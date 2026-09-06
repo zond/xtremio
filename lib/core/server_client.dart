@@ -30,6 +30,16 @@ abstract interface class LanMediaControl {
   /// both mean nothing of ours is on the LAN.
   bool get lanMediaRunning;
 
+  /// How many requests the listener has been asked for since it started;
+  /// zero when nothing is listening. Per cast session, since a start resets
+  /// it.
+  ///
+  /// What it separates is a receiver that never fetched the stream from one
+  /// that fetched it and could not play it -- which look identical from the
+  /// sofa, and identical to the sender too: a receiver handed an address it
+  /// cannot route to hangs on the connect and reports nothing at all.
+  int get lanMediaRequestsServed;
+
   /// The base URL to give a receiver at [peerIp], so a media URL built on it
   /// names an interface that receiver can connect back to. [peerIp] null
   /// when the receiver's address is not known, which answers the server's
@@ -180,6 +190,9 @@ class ServerClient implements LanMediaControl, ServerCacheControl {
 
   @override
   bool get lanMediaRunning => rust.serverLanMediaRunning();
+
+  @override
+  int get lanMediaRequestsServed => rust.serverLanMediaRequestsServed();
 
   @override
   Future<Uri?> lanMediaBaseUrl({String? peerIp}) async {

@@ -208,6 +208,30 @@ pub fn server_lan_media_running() -> anyhow::Result<bool> {
     guarded_ok(crate::server::lan_media_running)
 }
 
+/// How many requests the LAN media listener has been asked for since it last
+/// started -- per cast session, since starting the listener resets it. Zero
+/// when nothing is listening.
+///
+/// What it is for is telling a receiver that never fetched the stream from
+/// one that fetched it and could not play it. Those look identical from the
+/// sofa (both are a splash screen that never becomes a film) and identical
+/// to the sender, because a receiver told an address it cannot route to
+/// hangs on the connect rather than reporting an error. Zero well after a
+/// load means the address was wrong; non-zero means the network was fine and
+/// the media was not.
+///
+/// Signed, because `u64` crosses FRB as a Dart `BigInt` and this is a number
+/// the player compares against zero on a timer; `i64` crosses as a plain
+/// `int`. A session that served more than nine quintillion requests reads as
+/// `i64::MAX`, which says the same thing about the network as the true
+/// figure would.
+///
+/// One relaxed atomic load, so it is synchronous and cheap enough to poll.
+#[frb(sync)]
+pub fn server_lan_media_requests_served() -> anyhow::Result<i64> {
+    guarded_ok(|| i64::try_from(crate::server::lan_media_requests_served()).unwrap_or(i64::MAX))
+}
+
 /// The base URL to give a receiver at `peer_ip` (`"http://192.168.1.20:39271/"`),
 /// so a media URL built on it names an interface that receiver can connect
 /// back to -- the one sharing the receiver's subnet, since the first
