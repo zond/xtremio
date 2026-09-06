@@ -586,12 +586,13 @@ void main() {
       final lines = captureDiagnostics();
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
-      final lan = FakeLanMediaControl()
-        ..baseUrl = lanBase
-        ..requestsServed = 3;
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
       final harness = castHarness(cast: cast, lanMedia: lan);
       await harness.pump(tester);
       await castTo(tester, livingRoom);
+      // Said after the session started, because that is when a receiver's
+      // requests arrive and because starting one zeroes the count.
+      lan.requestsServed = 3;
 
       // Still buffering, and reporting nothing else -- which is exactly
       // what a cold torrent twenty seconds in looks like. It has reached

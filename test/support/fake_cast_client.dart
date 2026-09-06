@@ -159,11 +159,22 @@ class FakeLanMediaControl implements LanMediaControl {
 
   /// What the listener has been asked for: zero is a receiver that never
   /// came back for the stream.
+  ///
+  /// Every `setLanMedia` puts it back to zero, exactly as the server's own
+  /// counter does -- the count belongs to a cast session and not to the
+  /// listener, so a second receiver picked while the first still has the
+  /// stream starts from nothing even though the listener never stopped.
+  /// The whole never-fetched check rests on that, so a test says what a
+  /// receiver fetched *after* starting the session it fetched during, and
+  /// taking the reset away is something a test can now see.
   int requestsServed = 0;
 
   @override
   Future<String?> setLanMedia({required bool enabled}) async {
     toggles.add(enabled);
+    // Above the failure below because the server resets above its own: a
+    // start that cannot bind has still ended the last session's count.
+    requestsServed = 0;
     if (enabled && startError != null) {
       running = false;
       throw startError!;
