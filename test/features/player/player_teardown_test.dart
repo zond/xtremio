@@ -30,8 +30,11 @@ import '../../support/player_harness.dart';
 ///
 /// So the order is the fix, and it is what is pinned here: the disk writing
 /// stops on the frame the screen goes, ahead of a teardown that may be slow
-/// or may never come, and the teardown behind it is awaited, bounded and
-/// answered for.
+/// or may never come; the teardown behind it is awaited and answered for;
+/// and a deadline that was never chained to it kills the player outright
+/// when it does not come back. Knowing was never the point on its own --
+/// a player nobody can stop keeps the volume until the process dies, and
+/// only something that owes the teardown nothing can get in front of that.
 void main() {
   /// The player pushed onto a route, which is how the app opens it and
   /// what [PlayerHarness.pump] on its own is not: mounted as the root
@@ -111,13 +114,21 @@ void main() {
     expect(engine.disposed, isTrue);
   });
 
-  testWidgets('a teardown that never comes back is not left unsaid', (
-    tester,
-  ) async {
+  testWidgets('a teardown that never comes back ends with the player '
+      'destroyed anyway', (tester) async {
     // `MediaKitEngine.dispose` awaits `_player.stop()` before it releases
     // the player, and mpv writing to a volume with no room left blocks and
     // retries -- so the stop is slowest to return exactly when a player
     // that will not die costs the most. The gate is that stop.
+    //
+    // This used to end at the log line, which was the whole of what the
+    // app could do and not enough: a line does not give the volume its
+    // blocks back, and on the evening this comes from nothing did but
+    // killing the process ninety seconds later. So the deadline kills the
+    // player itself, and it is a plain timer rather than anything hung off
+    // the release -- everything chained behind a wedged teardown is
+    // unreachable in precisely the case it is for, which is why media_kit's
+    // own `mpv_terminate_destroy` never ran either.
     final lines = captureDiagnostics();
     final wedged = Completer<void>();
     final harness = PlayerHarness(
@@ -134,31 +145,113 @@ void main() {
     await tester.pump(const Duration(minutes: 2));
     await tester.pumpAndSettle();
 
-    // The viewer is back on the details screen and the demuxer is still
-    // open. Nothing here can make libmpv answer; what it can do is know --
-    // and, first, make sure the thing that would not die is at least no
-    // longer writing.
+    // The viewer is back on the details screen, the stop has still not
+    // answered -- and the player is gone regardless.
     expect(find.byType(PlayerScreen), findsNothing);
     expect(engine.disposeAsked, isTrue, reason: 'the screen did ask');
     expect(engine.disposed, isFalse, reason: 'and mpv never answered');
     expect(engine.stopWritingCalls, 1, reason: 'but it stopped writing');
+    expect(engine.destroyed, isTrue, reason: 'and then it was killed');
+    expect(
+      engine.destroyCalls,
+      1,
+      reason:
+          'once: a deadline that re-armed would be sending a `quit` to '
+          'a handle media_kit may have freed in the meantime',
+    );
 
     // Where the ninety seconds used to go: no line, no bound, nothing a
-    // copied report could have shown.
+    // copied report could have shown. The line has to say the player was
+    // killed rather than that it was slow, because those want different
+    // things looked at next.
     expect(
       complaints(lines),
       isNotEmpty,
       reason: 'a player that would not die is what diagnostics are for',
     );
+    expect(complaints(lines).single, contains('destroying it'));
   });
 
-  testWidgets('a teardown that throws is not swallowed', (tester) async {
+  testWidgets('a teardown that answers in time is never destroyed', (
+    tester,
+  ) async {
+    // The other side of the deadline, and the one that must not be noisy:
+    // an ordinary teardown that takes a moment -- a stop and a file being
+    // closed on a device whose volume is nearly full -- is slow rather
+    // than broken, and killing it would be taking the texture out from
+    // under a release that was going to arrive.
+    final lines = captureDiagnostics();
+    final slow = Completer<void>();
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.disposeGate = slow,
+    );
+    await pumpPushed(tester, harness);
+    final engine = harness.engine;
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await tester.pump(PlayerScreen.teardownBound - const Duration(seconds: 1));
+    slow.complete();
+    await tester.pumpAndSettle();
+    // Well past the deadline, which is the point: it was disarmed, not
+    // merely not reached yet.
+    await tester.pump(const Duration(minutes: 2));
+    await tester.pumpAndSettle();
+
+    expect(engine.disposed, isTrue);
+    expect(engine.destroyCalls, 0, reason: 'nothing had to be killed');
+    expect(complaints(lines), isEmpty, reason: 'and nothing to report');
+  });
+
+  testWidgets('a player that stops after it was killed says so', (
+    tester,
+  ) async {
+    // The distinction a report is read for. "Slow" and "would not die" want
+    // different things looked at next -- a full volume against a wedged
+    // libmpv -- and until the release lands there is nothing to tell them
+    // apart with, so the line that separates them can only be written when
+    // it does.
+    final lines = captureDiagnostics();
+    final wedged = Completer<void>();
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.disposeGate = wedged,
+    );
+    await pumpPushed(tester, harness);
+    final engine = harness.engine;
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 2));
+    expect(engine.destroyed, isTrue);
+
+    wedged.complete();
+    await tester.pumpAndSettle();
+
+    expect(engine.disposed, isTrue, reason: 'it got there in the end');
+    expect(
+      lines,
+      contains(
+        'info player the player stopped after it was '
+        'destroyed',
+      ),
+    );
+  });
+
+  testWidgets('a teardown that throws is not swallowed, and the player is '
+      'still killed', (tester) async {
     // The same hole from the other side. A throw out of `dispose` never
     // reached `FlutterError.onError` either: `.ignore()` ate it before the
     // zone saw it, so `tester.takeException()` is null and the run was
     // green whatever happened. It still is -- an unhandled error is the
-    // wrong shape for "the player would not stop" -- so the log is the
-    // only place this can show, and it has to show there.
+    // wrong shape for "the player would not stop" -- so the log is where
+    // this shows.
+    //
+    // And the deadline is deliberately not disarmed by a throw: a teardown
+    // that threw is a teardown that did not finish, and the player may be
+    // alive and still writing. What keeps that safe is the engine's own
+    // guard -- `MediaKitEngine.destroy` reads the handle at the moment it
+    // fires and asks media_kit whether it has already released it, which
+    // is a fact about libmpv that no test on this side of it can reach.
     final lines = captureDiagnostics();
     final harness = PlayerHarness(
       configureEngine: (engine) =>
@@ -174,6 +267,11 @@ void main() {
     expect(engine.disposed, isFalse);
     expect(tester.takeException(), isNull, reason: 'not a crash, a report');
     expect(complaints(lines), isNotEmpty);
+
+    await tester.pump(const Duration(minutes: 2));
+    await tester.pumpAndSettle();
+
+    expect(engine.destroyed, isTrue);
   });
 
   testWidgets('a hand-over stops the outgoing player writing before the next '

@@ -163,6 +163,18 @@ class PlayerScreen extends StatefulWidget {
   /// the volume slider is dropped (hardware keys on phones).
   static const double wideBreakpoint = 720;
 
+  /// How long a release is given before the screen says so and kills the
+  /// player itself.
+  ///
+  /// Generous on purpose. A teardown stops libmpv and closes a file, and on
+  /// a device whose volume is full those writes block and retry, so a stop
+  /// that takes a few seconds is slow rather than broken. What this number
+  /// is for is the other case -- the one that never comes back at all --
+  /// and ten seconds separates them without waiting on either. It only has
+  /// to be longer than an ordinary teardown: mpv's own forceful abort, once
+  /// the `quit` behind this has reached it, is two seconds.
+  static const Duration teardownBound = Duration(seconds: 10);
+
   /// Where subtitles sit above the bottom of the picture at rest, as a
   /// fraction of the player's height.
   ///
@@ -3650,53 +3662,75 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// the last one that showed the texture. [SchedulerBinding.endOfFrame]
   /// schedules a frame when none is pending, so this also works when called
   /// outside a frame.
-  /// **The release is awaited and answered for**, which is the other half.
-  /// It used to be `.ignore()`d, and a discarded future is a teardown
-  /// nobody can tell from one that never happened: on the owner's
-  /// Chromecast a player kept its demuxer for at least ninety seconds
-  /// after the screen was gone, downloading at 32 Mbps into a cache file
-  /// with no name, and the log for that evening carried not one line about
-  /// it. [teardownBound] is how long it is given before the app says so.
-  /// Nothing here can make libmpv answer; what it can do is stop being the
-  /// reason nobody knew.
+  ///
+  /// **The release is awaited, answered for, and behind a deadline that
+  /// does not depend on it**, which is the other half. It used to be
+  /// `.ignore()`d, and a discarded future is a teardown nobody can tell
+  /// from one that never happened: on the owner's Chromecast a player kept
+  /// its demuxer for at least ninety seconds after the screen was gone,
+  /// downloading at 32 Mbps into a cache file with no name, and the log for
+  /// that evening carried not one line about it -- and nothing ever freed
+  /// those blocks but killing the process.
   static void _disposeAfterFrame(PlaybackEngine engine) {
+    // Armed here, before the two frames and outside the release, and that
+    // is the whole of it. mpv's forceful abort exists, but every road to
+    // it runs through the teardown -- media_kit schedules its
+    // `mpv_terminate_destroy` as the last statement of a chain that begins
+    // with the `stop()` that hangs -- so a fallback chained behind
+    // `release()` is unreachable in exactly the case it is for. A timer
+    // owes the teardown nothing. Arming it in front of the two frames
+    // rather than after them costs a fraction of a second of a ten-second
+    // bound and covers the case where those frames never come: an engine
+    // producing no more frames still holds its cache file.
+    var killed = false;
+    final fallback = Timer(PlayerScreen.teardownBound, () {
+      killed = true;
+      DiagnosticsLog.warn(
+        'player',
+        'the player did not stop within '
+            '${PlayerScreen.teardownBound.inSeconds}s of '
+            'leaving; destroying it to get its cache file back',
+      );
+      unawaited(
+        engine.destroy().catchError((Object error) {
+          DiagnosticsLog.error(
+            'player',
+            'destroying the player failed: $error',
+          );
+        }),
+      );
+    });
     Future<void> release() async {
       await SchedulerBinding.instance.endOfFrame;
       await SchedulerBinding.instance.endOfFrame;
-      // The bound is on the teardown alone and not on the two frames in
-      // front of it: a screen that goes without the engine producing
-      // another frame has not started a teardown to time.
-      await engine.dispose().timeout(teardownBound);
+      await engine.dispose();
     }
 
     unawaited(
-      release().catchError((Object error) {
-        if (error is TimeoutException) {
-          // A warning rather than an error: the future is abandoned, not
-          // cancelled, so a slow stop that lands a second later has still
-          // landed. What makes it worth a line either way is that until it
-          // does, this player is still holding the disk.
-          DiagnosticsLog.warn(
-            'player',
-            'the player did not stop within ${teardownBound.inSeconds}s of '
-                'leaving; it may still be holding its cache file',
-          );
-        } else {
+      release().then(
+        (_) {
+          fallback.cancel();
+          // Only a teardown that *finished* disarms it, so this is the one
+          // place that can say a slow player got there in the end -- the
+          // report otherwise cannot tell that from the one that never did.
+          if (killed) {
+            DiagnosticsLog.info(
+              'player',
+              'the player stopped after it was destroyed',
+            );
+          }
+        },
+        onError: (Object error) {
+          // The fallback is deliberately left armed: a teardown that threw
+          // is a teardown that did not finish, and the player may be alive
+          // and still writing. Sending it a `quit` it does not need costs
+          // nothing, and [PlaybackEngine.destroy] is what makes sure the
+          // one it cannot survive is never sent.
           DiagnosticsLog.error('player', 'releasing the player failed: $error');
-        }
-      }),
+        },
+      ),
     );
   }
-
-  /// How long [_disposeAfterFrame] gives a release before it writes a line
-  /// about it.
-  ///
-  /// Generous on purpose. A teardown stops libmpv and closes a file, and on
-  /// a device whose volume is full those writes block and retry, so a stop
-  /// that takes a few seconds is slow rather than broken. What this number
-  /// is for is the other case -- the one that never comes back at all --
-  /// and ten seconds separates them without waiting on either.
-  static const Duration teardownBound = Duration(seconds: 10);
 
   // --- Build ---------------------------------------------------------------
 

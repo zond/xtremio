@@ -1,6 +1,10 @@
 import 'dart:async';
+// Only the names the forceful [MediaKitEngine.destroy] needs: `dart:ffi`
+// also declares a `Size`, and this file draws widgets.
+import 'dart:ffi' show AllocatorAlloc, Int8, Pointer, PointerPointer, nullptr;
 import 'dart:io';
 
+import 'package:ffi/ffi.dart' show StringUtf8Pointer, calloc;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
@@ -218,6 +222,24 @@ abstract interface class PlaybackEngine {
   Future<void> stopWritingToDisk();
 
   Future<void> dispose();
+
+  /// Ends the playback from outside the teardown, freeing the demuxer and
+  /// the blocks its cache file holds, and leaves this engine unusable.
+  ///
+  /// This is the fallback for a [dispose] that has not come back. It is
+  /// armed independently of it and never chained behind it, because being
+  /// unreachable from a wedged teardown is the whole fault: on the owner's
+  /// Chromecast a player kept its demuxer for at least ninety seconds
+  /// after the screen was gone, at 32 Mbps into a file with no directory
+  /// entry, and the only thing that ever freed it was killing the process.
+  ///
+  /// It answers at once and asks nothing of the player: whatever a
+  /// teardown is blocked on, this is not blocked on it too. Calling it
+  /// twice, or on a player that has already gone, does nothing -- the
+  /// caller is by definition one that has lost track of what the player is
+  /// doing, so the implementation and not the caller is what has to be
+  /// sure.
+  Future<void> destroy();
 }
 
 typedef PlaybackEngineFactory = PlaybackEngine Function();
@@ -1420,6 +1442,101 @@ class MediaKitEngine implements PlaybackEngine {
       await _player.stop();
     } finally {
       await _player.dispose();
+    }
+  }
+
+  /// Whether [destroy] has already gone out. Once per engine: what follows
+  /// it is mpv's own shutdown, and asking twice adds nothing to that.
+  bool _destroyAsked = false;
+
+  /// libmpv's `quit`, sent asynchronously on the live handle -- and not
+  /// `mpv_terminate_destroy`, which was the obvious thing to reach for and
+  /// is the thing that hangs. Both halves of that were measured.
+  ///
+  /// **Why not the destroy.** `mpv_terminate_destroy` is
+  /// `mp_destroy_client`, which takes the client out of the core's list
+  /// and then destroys the condition variable and the mutexes the handle
+  /// is made of (`player/client.c`). Any other thread inside an `mpv_*`
+  /// call on that handle is parked on that very condvar, and there is no
+  /// longer anybody who can wake it: with a thread in `mpv_wait_event` --
+  /// which is exactly where media_kit's event loop sits -- the destroy
+  /// never returned at all, both threads on one condvar, glibc's
+  /// `pthread_cond_destroy` waiting out a waiter that cannot be woken.
+  /// The deadlock is the lucky outcome; the same race an instant later is
+  /// that waiter reading a freed `ctx`, which is the "causes direct crash"
+  /// in media_kit's own comment beside the `quit` it sends instead.
+  /// libmpv states the contract itself: since `mpv_destroy` is called on
+  /// the way, it is not safe to call other functions concurrently on the
+  /// same context.
+  ///
+  /// What has to be gone first is that event loop, and
+  /// `Initializer(mpv).dispose(ctx)` is what detaches it -- clearing the
+  /// wakeup callback before closing the `NativeCallable` libmpv would
+  /// otherwise call into, or waking the mainloop isolate and killing it
+  /// two seconds later. media_kit runs precisely that immediately before
+  /// scheduling its own `mpv_terminate_destroy` five seconds on, which is
+  /// why `dispose()` may destroy and its hot-restart sweeper may not. But
+  /// it runs it *after* `stop()`, and a `stop()` that will not come back
+  /// is the case this method exists for: the one path where destroying is
+  /// prepared for is the path that is stuck.
+  ///
+  /// **Why the quit.** `mpv_command_async` is `reserve_reply` plus
+  /// `mp_dispatch_enqueue` and nothing else -- no core lock, no waiter,
+  /// nothing freed -- so it is safe with the event loop still attached and
+  /// it returns immediately, which is what a fallback for a wedged player
+  /// has to do. It parses the arguments into the core's own copy before
+  /// enqueueing, so the buffers below can go back at once. And what it
+  /// sets off inside mpv is the shutdown, which is where mpv's own
+  /// forceful abort lives: `abort_async` after two seconds of waiting on
+  /// outstanding work. That bound is the thing this fallback was after,
+  /// and `quit` is the way to it that does not require the preparation
+  /// nobody has done. Measured with the event loop attached throughout and
+  /// the handle never destroyed: the call returned in microseconds, the
+  /// demuxer was gone within the second, and the cache directory emptied
+  /// -- the blocks back on the volume, which was the whole complaint.
+  ///
+  /// What this does not do is free the `mpv_handle` and the core object
+  /// behind it: they leak until the process ends. That is bounded, it is
+  /// invisible on the volume, and it leaves media_kit's `dispose()` -- the
+  /// one place the preparation above is actually done -- as the only thing
+  /// that ever destroys the handle, so a teardown that lands late still
+  /// lands correctly rather than onto a pointer this method freed.
+  ///
+  /// The handle is read here and not captured when the fallback was armed,
+  /// and `NativePlayer.disposed` is asked with it. media_kit sets that flag
+  /// before it schedules its destroy, so a teardown that finished while
+  /// this was on its way sends nothing at all -- a `quit` on freed memory
+  /// is the same crash by the other road.
+  @override
+  Future<void> destroy() async {
+    if (_destroyAsked) return;
+    _destroyAsked = true;
+    // Nothing this player reports is worth anything now, and what it was
+    // holding on the volume comes back with the demuxer, so the app stops
+    // claiming it here as well as in [dispose] -- a teardown that never
+    // ran never released it.
+    _disposed = true;
+    _stopStats();
+    _stopWatchingDiskCache();
+    _holdings.release(this);
+    final native = _player.platform;
+    if (native is! NativePlayer || native.disposed) return;
+    final ctx = native.ctx;
+    if (ctx == nullptr) return;
+    final command = 'quit'.toNativeUtf8();
+    // Two: the command and the NULL that ends the list.
+    final args = calloc<Pointer<Int8>>(2);
+    try {
+      args[0] = command.cast();
+      args[1] = nullptr;
+      native.mpv.mpv_command_async(ctx, 0, args);
+    } catch (_) {
+      // A libmpv without the symbol, or a handle that went between the
+      // checks above and here. There is nothing further to try, and a
+      // player nobody could kill is already what the caller is reporting.
+    } finally {
+      calloc.free(command);
+      calloc.free(args);
     }
   }
 }

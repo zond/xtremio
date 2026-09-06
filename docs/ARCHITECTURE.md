@@ -368,6 +368,26 @@ what every model field means. The shape of the thing is in the
   offline download is admitted against a margin of its own,
   `PIN_FREE_SPACE_MARGIN`, 500 MiB, into a directory the cleaner never
   walks.
+- **A player that is left has to actually stop, and something has to make
+  sure.** Leaving the screen does three things in order, and the order is
+  the design: `cache-on-disk=no` goes out synchronously, so the growth
+  ends on the press whatever happens next (mpv honours the option per
+  packet, measured -- `MpvDiskCacheLimit.stopWritingToDisk`); the teardown
+  itself is deferred two frames, so the raster thread is not holding the
+  video texture when media_kit frees it; and a plain timer, armed in front
+  of both and chained to neither, gives that teardown
+  `PlayerScreen.teardownBound` before it says so in the diagnostics and
+  kills the player itself. The independence is the whole of the third
+  part: mpv's own forceful abort exists, but every road to it runs through
+  the teardown -- media_kit schedules `mpv_terminate_destroy` as the last
+  statement of a chain that begins with the `stop()` that hangs -- so on
+  the owner's Chromecast a wedged stop meant an mpv that outlived its
+  screen by ninety seconds at 32 Mbps and gave its blocks back only to a
+  force-stop. What the timer sends is `quit`, asynchronously, on
+  media_kit's own handle (`PlaybackEngine.destroy`), and never
+  `mpv_terminate_destroy`: destroying a handle whose event loop is still
+  attached deadlocks or crashes, and the one place that detaches it first
+  is the teardown that is stuck.
 - **A scan is a different question from a seek, and mpv is asked
   differently.** mpv's seek is exact -- it lands on the keyframe before
   the target and decodes forward, invisibly, to the moment asked for --

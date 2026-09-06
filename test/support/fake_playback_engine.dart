@@ -335,6 +335,22 @@ class FakePlaybackEngine implements PlaybackEngine {
     if (disposeError != null) throw disposeError!;
     disposed = true;
   }
+
+  /// How many times the player was killed rather than asked. Real mpv is
+  /// sent `quit` on its own handle and the demuxer goes with it, so this
+  /// is what "the volume got its blocks back" looks like from a test.
+  int destroyCalls = 0;
+
+  /// Whether the fallback ever had to be used. Deliberately not
+  /// [disposed]: a destroyed player is one whose teardown never finished,
+  /// and telling those two apart is what a report needs.
+  bool get destroyed => destroyCalls > 0;
+
+  @override
+  Future<void> destroy() async {
+    destroyCalls++;
+    callLog?.add('destroy');
+  }
 }
 
 /// Records fullscreen transitions instead of touching the window.
