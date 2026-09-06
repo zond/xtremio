@@ -333,9 +333,15 @@ what every model field means. The shape of the thing is in the
   than from `profile.settings.streamingServerUrl`, which arrives with a
   `ctx` pull that can land later. Left alone: a loopback URL (already the
   server, whatever port it bound), a `file://` offline copy, and everything
-  when this build runs no embedded server -- proxying through a streaming
-  server on somebody else's machine would send the film over the internet
-  twice for a cache nothing here can see. `force-seekable` excludes
+  when this build runs no embedded server -- which is not what configuring
+  a streaming server elsewhere does. That rewrites
+  `profile.settings.streamingServerUrl` only: the embedded server keeps
+  running and keeps being named by `CoreInitInfo`, so a remote host's
+  stream is proxied through it on such a build like any other, and the
+  bytes still cross the network once. The torrent such a server is
+  actually for is the opposite case -- it has an info hash, so it goes
+  straight there with `buffer=` and never near the proxy. `force-seekable`
+  excludes
   `/proxy` for the same reason it always excluded a remote host: the
   promise that a seek will wait rather than be refused is about the
   *server's own* torrent reader, and the route relays a host we know
@@ -378,6 +384,20 @@ what every model field means. The shape of the thing is in the
   torrent the file is on disk anyway and that seek is local. Making the
   proxied half local too is the next stage, and it belongs on the server's
   side of the hop rather than in the player's heap.
+- **A player that is left ends its own reads first.** Each player screen
+  mints a token (`player-1`, `player-2`, ...), writes it into the `/proxy`
+  URLs it hands the engine as `p=`, and on the way out calls
+  `server_close_proxy_streams` with it (`ProxyStreamControl`, over FFI like
+  every other control call): the server ends every stream carrying that
+  token, the read fails at once, and the teardown below is not left waiting
+  on `network-timeout` -- five minutes, and deliberately so, since a thin
+  swarm is not a dead connection. The token is a name and not a credential:
+  the route is on the loopback control API behind the bearer token, never
+  on the LAN media listener, and the token is stripped before the origin is
+  asked for anything. **It ends a blocked read and nothing else** -- a
+  demuxer wedged on the Flutter texture or the audio device is not polling
+  that stream, which is why the deadline below still exists. A torrent is
+  never proxied, so its teardown has nothing to close.
 - **A player that is left has to actually stop, and something has to make
   sure.** Leaving the screen defers the teardown two frames, so the raster
   thread is not holding the video texture when media_kit frees it, and arms
