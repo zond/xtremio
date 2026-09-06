@@ -20,19 +20,31 @@ void main() {
   final server = Uri.parse('http://127.0.0.1:39661/');
 
   /// The target URL a `/proxy` URL was built for, read back the way the
-  /// server reads it: the `d=` segment percent-decoded, then whatever path
-  /// and query follow it, exactly as they were written.
+  /// server reads it (`server/src/routes/proxy.rs`): everything up to the
+  /// first `/` is a `&`-joined parameter segment whose `d=` is the origin,
+  /// percent-decoded once; whatever path and query follow it are the
+  /// target's own, byte for byte as they were written.
+  ///
+  /// Deliberately a re-implementation of the server's parse rather than a
+  /// call to `Uri`: `Uri.pathSegments` and `Uri.queryParameters` both
+  /// decode, and a test that decoded could not tell an escape that
+  /// survived from one that did not.
   String targetOf(Uri proxied) {
-    const marker = '/proxy/d=';
+    const marker = '/proxy/';
     final written = proxied.toString();
     final start = written.indexOf(marker);
     expect(start, isNonNegative, reason: 'not a proxy URL: $written');
-    final origin = start + marker.length;
-    var end = origin;
+    final segment = start + marker.length;
+    var end = segment;
     while (end < written.length && written[end] != '/' && written[end] != '?') {
       end++;
     }
-    return '${Uri.decodeComponent(written.substring(origin, end))}'
+    final params = written.substring(segment, end).split('&');
+    final origin = params.firstWhere(
+      (param) => param.startsWith('d='),
+      orElse: () => fail('no d= in the proxy segment of $written'),
+    );
+    return '${Uri.decodeComponent(origin.substring(2))}'
         '${written.substring(end)}';
   }
 
@@ -81,6 +93,46 @@ void main() {
       );
 
       expect(targetOf(proxied), 'https://cdn.example/my%20film.mkv');
+    });
+
+    test('keeps the escapes that do not round-trip by accident', () {
+      // `%20` above survives being decoded and re-encoded, so on its own it
+      // proves nothing: a space is a space either way. These three do not.
+      // `%2F` decoded is a path separator, `%3F` decoded starts a query and
+      // `%23` decoded starts a fragment that takes the rest of the URL with
+      // it -- which is what a debrid link's base64 signature and a file
+      // named with a `#` actually run into.
+      for (final path in ['a%2Fb/film.mkv', 'a%3Fb.mkv', 'a%23b.mkv']) {
+        final proxied = proxiedThroughServer(
+          Uri.parse('https://cdn.example/$path'),
+          serverBase: server,
+        );
+
+        expect(targetOf(proxied), 'https://cdn.example/$path');
+      }
+    });
+
+    test('is not taken apart by a target that has a d of its own', () {
+      // The server used to read the *request's* `d` query parameter before
+      // looking at the path, so a target carrying one answered 400 -- and a
+      // `d` that happened to parse as a URL was fetched instead of the
+      // target. The parameter belongs to the target and travels with its
+      // query; nothing here escapes it away.
+      final proxied = proxiedThroughServer(
+        Uri.parse('https://cdn.example/film.mkv?d=1&t=2'),
+        serverBase: server,
+      );
+
+      expect(targetOf(proxied), 'https://cdn.example/film.mkv?d=1&t=2');
+    });
+
+    test('drops the fragment, which no server was ever sent', () {
+      final proxied = proxiedThroughServer(
+        Uri.parse('https://cdn.example/film.mkv#t=90'),
+        serverBase: server,
+      );
+
+      expect(targetOf(proxied), 'https://cdn.example/film.mkv');
     });
 
     test('keeps a non-default port and a userinfo-free authority', () {

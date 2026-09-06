@@ -53,6 +53,27 @@ import 'dart:io';
 /// probing and to anyone reading a log, where an encoded blob shows
 /// neither.
 ///
+/// **The escapes are the whole of it, and both ends have to keep them.**
+/// A debrid link signs a base64 blob into a path segment and a live-TV
+/// addon names a file with a `#` in it, so an escape decoded anywhere
+/// along the way is a 403 or a 404 rather than a slow stream. This half
+/// writes the path out exactly as it arrived (below); the other half is
+/// the server reading the target's path off the request URI rather than
+/// off axum's wildcard capture, which is percent-*decoded* -- until it
+/// did, `%2F` reached the origin as a path separator, `%3F` began a query
+/// and everything from a `%23` on was gone (`proxy_handler`, measured end
+/// to end). The `d=` segment survives the same trip: the server parses it
+/// with `form_urlencoded`, which reads a bare `+` as a space, and
+/// [Uri.encodeComponent] escapes `+` along with everything else that is
+/// not unreserved.
+///
+/// The target's own query rides on the outside, as this request's query,
+/// and it may name anything it likes -- including a `d` of its own. That
+/// used to be read as the whole target URL (a `400`, or a fetch of the
+/// wrong host when the value happened to parse as one); the server now
+/// decides the format from the shape of the path, which the target's
+/// query cannot reach.
+///
 /// A fragment is dropped, because a fragment was never part of what a
 /// server is asked for: nobody sends one over the wire.
 Uri proxiedThroughServer(Uri url, {required Uri? serverBase}) {
