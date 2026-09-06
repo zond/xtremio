@@ -17,9 +17,15 @@ class FakeProxyStreams implements ProxyStreamControl {
   /// answer for a player whose stream had already finished.
   int liveStreams = 1;
 
+  /// Thrown instead of answering, when set. The real call is a synchronous
+  /// FFI hop and a panic in the core crosses it as an exception, which a
+  /// teardown must survive: it is on the way to releasing the player.
+  Object? failure;
+
   @override
   int closeProxyStreams(String token) {
     closed.add(token);
+    if (failure case final failure?) throw failure;
     return liveStreams;
   }
 }

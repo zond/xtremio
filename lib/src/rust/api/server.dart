@@ -147,15 +147,25 @@ String serverDhtStatus() =>
 /// playlist it rewrites), and they all end together. A player that is not
 /// being proxied has none, and answers 0.
 ///
-/// **What it ends is a blocked read.** The body yields an error, hyper
-/// drops the connection, and the demuxer sees its source fail now rather
-/// than after `network-timeout`. A demuxer wedged somewhere else -- on the
+/// **What it ends is the read and the token.** The body yields an error,
+/// hyper drops the connection, and the demuxer sees its source fail now
+/// rather than after `network-timeout`. Alone that would not end the
+/// stream -- ffmpeg reconnects through the URL it already has, token and
+/// all -- so the server retires the token at the same time and answers
+/// `410 Gone` to anything bearing it afterwards. The order the server
+/// documents is quit-then-close, because a demuxer that has already been
+/// cancelled never reaches its reconnect; the refusal is what covers a
+/// close that arrives first. A demuxer wedged somewhere else -- on the
 /// Flutter texture, on the audio device -- is not waiting on this read and
 /// is untouched by it.
 ///
-/// Never errors: 0 covers a finished player, an unproxied one and a server
-/// that is not running alike, all of which mean there is nothing of this
-/// player left to close.
+/// 0 covers a finished player, an unproxied one and a server that is not
+/// running alike, all of which mean there is nothing of this player left
+/// to close. It is not, however, infallible: like every function here it
+/// is wrapped in the panic guard, so a panic in the core crosses as an
+/// `Err` and reaches Dart as a thrown exception. The caller is a
+/// `dispose`, and it catches -- an unhandled throw there would skip the
+/// release of the player itself.
 ///
 /// Synchronous, and deliberately so: it is a map scan with no I/O, and it
 /// is called from a teardown, where waiting for a place in the FRB worker

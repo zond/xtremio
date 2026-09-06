@@ -3665,10 +3665,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // so this is a no-op there rather than a clear that would land after
     // the successor's own ask.
     _releaseDisplayFrameRate();
-    _closeProxiedStreams();
+    // The release is armed *before* the streams are closed, and that order
+    // is the point: [_closeProxiedStreams] reaches FFI, FFI can throw, and
+    // a throw here would abort `dispose` before the engine was ever handed
+    // to [_disposeAfterFrame] -- no release, no fallback timer, and a
+    // player left holding its packet memory, its socket and the engine
+    // that socket pins. Which is the leak the close was added to prevent.
     final engine = _engine;
     _engine = null;
     if (engine != null) _disposeAfterFrame(engine);
+    _closeProxiedStreams();
     // The listener goes first, and the order is the whole of it: the
     // flush below writes a preference, which notifies synchronously, and
     // a notification answered from here is a `setState` on an element
@@ -3704,8 +3710,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.dispose();
   }
 
-  /// Ends the server's reads for this player, before the teardown that is
-  /// about to wait on them.
+  /// Ends the server's reads for this player, and retires the name they
+  /// were opened under.
   ///
   /// The engine's release is two frames away and can then block for as long
   /// as mpv is blocked, and what mpv is most often blocked *on* is a read
@@ -3713,9 +3719,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// minutes on purpose -- a thin swarm legitimately takes minutes to hand
   /// over the next piece, and a shorter bound would end healthy playbacks --
   /// so waiting for it is waiting for a player nobody wants any more. This
-  /// makes the read fail now instead: the server drops the connection, the
-  /// demuxer's source breaks, and the core thread gets to the `stop` it was
-  /// never going to reach.
+  /// makes the read fail now instead.
+  ///
+  /// **Breaking the read is only half of it, and on its own it is not even
+  /// the useful half.** ffmpeg runs with `reconnect=1`, so a body that
+  /// stops mid-file is re-fetched through the URL it already has, token and
+  /// all: measured against real libmpv, three closes on one live reader
+  /// produced three fresh fetches from the origin. What ends the stream is
+  /// that the server *retires the token* at the same time and answers `410
+  /// Gone` to anything that arrives bearing it afterwards. The order the
+  /// server documents is quit-then-close, because a demuxer that has
+  /// already been cancelled never reaches its reconnect at all -- but the
+  /// quit here is two frames away when this runs, so the close may well
+  /// land first, and the refusal is what makes that harmless rather than a
+  /// reconnect provoked on the way out.
   ///
   /// **It is a socket and nothing more.** A demuxer wedged somewhere other
   /// than a read -- handing a frame to the Flutter texture, waiting on the
@@ -3734,9 +3751,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// sentence a report was missing. Zero is ordinary (the stream may have
   /// finished on its own, or the server may be gone) and is worth no
   /// line.
+  ///
+  /// **Nothing it does may escape.** It reaches FFI, and FFI throws -- if
+  /// the core panicked, if the bridge is not up. A throw crossing this
+  /// would abort the rest of `dispose`, and the caller has already been
+  /// arranged so that the engine's release is armed before this runs; the
+  /// catch is the second half of the same promise. A close that failed is
+  /// a report worth a line and nothing more: the server times the stream
+  /// out eventually, and the player is being released either way.
   void _closeProxiedStreams() {
     if (!_proxiedStream) return;
-    final closed = _proxyStreams?.closeProxyStreams(_proxyToken) ?? 0;
+    final int closed;
+    try {
+      closed = _proxyStreams?.closeProxyStreams(_proxyToken) ?? 0;
+    } catch (error) {
+      DiagnosticsLog.error(
+        'player',
+        'could not end the proxied streams for the player being left: $error',
+      );
+      return;
+    }
     if (closed > 0) {
       DiagnosticsLog.info(
         'player',

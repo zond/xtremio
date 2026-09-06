@@ -74,14 +74,30 @@ abstract interface class ProxyStreamControl {
   /// Zero is an ordinary answer: the player may have finished, or never
   /// have been proxied, or there may be no server running. None of those
   /// is a failure, and none of them is a reason for a teardown to stop --
-  /// which is why this neither throws nor waits.
+  /// which is why this does not wait.
   ///
-  /// **It ends a blocked read, and only that.** The body fails, the
-  /// connection is dropped, and the demuxer sees its source break now
+  /// It can still **throw**, and a caller on a teardown path has to say
+  /// what happens when it does. The implementation is a synchronous FFI
+  /// call, so a panic in the core or a bridge that is not up arrives here
+  /// as an exception; there is no answer to give in that case and nothing
+  /// useful to do about it beyond writing it down. It used to say it never
+  /// throws, and the one caller believed it: the call sat at the top of a
+  /// `dispose` and a throw would have skipped the release of the player
+  /// itself.
+  ///
+  /// **It ends the read *and the token*.** The body fails and the
+  /// connection is dropped, so the demuxer sees its source break now
   /// instead of after `network-timeout` -- which stays generous on
   /// purpose, because a slow swarm must not be mistaken for a dead
-  /// connection. A demuxer wedged anywhere else -- on the Flutter texture,
-  /// on the audio device -- is not waiting on this read and is untouched.
+  /// connection. On its own that is not the end of the stream: ffmpeg
+  /// reconnects through the URL it already has, token and all, and simply
+  /// carries on. So the server retires the token at the same time and
+  /// answers `410 Gone` to anything that comes back with it. Its
+  /// documented order is quit-then-close -- a cancelled demuxer never
+  /// reaches its reconnect -- and the refusal is what covers a close that
+  /// gets there first. A demuxer wedged anywhere else -- on the Flutter
+  /// texture, on the audio device -- is not waiting on this read and is
+  /// untouched.
   int closeProxyStreams(String token);
 }
 
@@ -233,7 +249,9 @@ class ServerClient
   /// Synchronous, like the reads above and for a sharper reason: it is a
   /// map scan with no I/O, and it is called from a teardown, where queuing
   /// behind a blocking call already on the FRB worker pool would hand back
-  /// exactly the delay it exists to remove.
+  /// exactly the delay it exists to remove. Synchronous also means a
+  /// failure arrives as a throw rather than a rejected future, which is
+  /// why the caller catches.
   @override
   int closeProxyStreams(String token) =>
       rust.serverCloseProxyStreams(token: token);

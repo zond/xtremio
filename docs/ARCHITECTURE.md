@@ -394,10 +394,19 @@ what every model field means. The shape of the thing is in the
   swarm is not a dead connection. The token is a name and not a credential:
   the route is on the loopback control API behind the bearer token, never
   on the LAN media listener, and the token is stripped before the origin is
-  asked for anything. **It ends a blocked read and nothing else** -- a
-  demuxer wedged on the Flutter texture or the audio device is not polling
-  that stream, which is why the deadline below still exists. A torrent is
-  never proxied, so its teardown has nothing to close.
+  asked for anything. **It ends the read and the token** -- breaking the
+  read alone would only be a stutter, since ffmpeg runs with `reconnect=1`
+  and re-fetches through the URL it already has, so the server retires the
+  token too and answers `410 Gone` to anything that comes back with it.
+  The order the server documents is quit-then-close, since a cancelled
+  demuxer never reaches its reconnect; here the quit is two frames away
+  when the close is sent, so the refusal is what covers the race. It ends
+  a read and nothing else besides -- a demuxer wedged on the Flutter
+  texture or the audio device is not polling that stream, which is why the
+  deadline below still exists. The call is made *after* the release is
+  armed and its throw is caught, because it reaches FFI and an exception
+  crossing a `dispose` would skip the release of the player itself. A
+  torrent is never proxied, so its teardown has nothing to close.
 - **A player that is left has to actually stop, and something has to make
   sure.** Leaving the screen defers the teardown two frames, so the raster
   thread is not holding the video texture when media_kit frees it, and arms

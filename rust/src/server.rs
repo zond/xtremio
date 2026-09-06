@@ -353,6 +353,11 @@ pub fn dht_status() -> DhtStatus {
 /// `network-timeout`, which is deliberately generous because a slow swarm
 /// must not be mistaken for a dead connection.
 ///
+/// It also retires the token on the server, which is the half that makes
+/// it stick: ffmpeg reconnects through the URL it already has, so a broken
+/// read alone is a stutter rather than an end, and a later request bearing
+/// the same token is answered `410 Gone`.
+///
 /// Zero is an ordinary answer -- the player may have finished already, or
 /// never have been proxied -- and so is zero from a server that is not
 /// running: nothing of ours is streaming either way, which is what the

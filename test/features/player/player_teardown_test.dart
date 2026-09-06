@@ -379,8 +379,9 @@ void main() {
     ) async {
       // The read is what the teardown is about to wait on, and
       // `network-timeout` is five minutes because a thin swarm is not a
-      // dead connection. So the close goes in front of the release rather
-      // than after it.
+      // dead connection. So leaving asks the server to end it -- and to
+      // retire the token, which is what stops ffmpeg reconnecting straight
+      // through the same URL.
       final harness = PlayerHarness(
         player: remoteStreamFixture('https://rd.example/dl/tok/film.mkv'),
       );
@@ -408,6 +409,36 @@ void main() {
 
       expect(harness.engine.disposed, isTrue);
       expect(harness.proxyStreams.closed, isEmpty);
+    });
+
+    testWidgets('a close that throws still releases the player', (
+      tester,
+    ) async {
+      // The call reaches FFI, and FFI throws -- a panic in the core, a
+      // bridge that is not up. It used to run at the top of `dispose`, so
+      // a throw took the rest of the method with it: no `dispose` of the
+      // engine, no fallback timer, and a player left holding its packet
+      // memory, its socket and the engine that socket pins. Which is the
+      // leak the close was added to prevent.
+      final harness = PlayerHarness(
+        player: remoteStreamFixture('https://rd.example/dl/tok/film.mkv'),
+      );
+      await pumpPushed(tester, harness);
+      harness.proxyStreams.failure = StateError('the bridge is not up');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(
+        harness.proxyStreams.closed,
+        hasLength(1),
+        reason: 'the close was attempted',
+      );
+      expect(
+        harness.engine.disposed,
+        isTrue,
+        reason: 'and the player was released anyway',
+      );
     });
 
     testWidgets('a hand-over ends the outgoing player and not its successor', (
