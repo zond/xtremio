@@ -1189,13 +1189,37 @@ class MpvDiskCacheLimit {
     this.limitBytes = defaultLimitBytes,
   });
 
-  /// 512 MiB, which is half an hour of the 2.3 Mbps film the readings came
-  /// from -- about as much as the 32 MiB of metadata media_kit's buffer
-  /// size affords can index of it anyway, so at that bitrate the limit
-  /// costs nothing and the seekable window is the one mpv can hold. Above
-  /// it the file fills first and the window shortens, which is the right
-  /// way round on a device whose whole storage is 8 GB and whose torrent
-  /// data shares it.
+  /// 512 MiB, on a device whose whole storage is 8 GB and whose torrent
+  /// data shares it. It is 512 MiB of *bytes demuxed*, and that is not the
+  /// same clock as playback.
+  ///
+  /// With the file cache carrying the payload, media_kit's 32 MiB
+  /// `demuxer-max-bytes` bounds packet metadata instead -- some 26 bytes of
+  /// budget per megabyte of film, on the pair of readings in
+  /// `player_cache_test.dart` -- so mpv reads tens of minutes ahead, and it
+  /// reads at whatever rate the link delivers rather than at the film's
+  /// 2.3 Mbps. On a link that keeps up, 512 MiB of a 2.3 Mbps film is
+  /// therefore demuxed within the first few minutes of a two-hour one, not
+  /// half way through it. What that costs is the far end of the film: from
+  /// the cap on, new packets are held in memory at full payload size again
+  /// and the window ahead shortens back towards the ninety seconds the
+  /// readings started at. The `file` row on the stats panel is what says
+  /// which side of that a reading was taken on -- a number that has stopped
+  /// climbing.
+  ///
+  /// **What this number does not know is how much room there actually is.**
+  /// It is a constant, and the player has no way to ask: free space per
+  /// volume exists in the app (`server_storage_report`) but only as a
+  /// question for the embedded server, and this stream need never have gone
+  /// near the server. On a volume with less than this free, mpv fills it
+  /// and its writes start failing; `demux_cache_write` then leaves the
+  /// packet in memory and puts `file_size` back where it was, so the
+  /// reading freezes below the cap, this limiter never fires, and mpv
+  /// retries on every packet for the rest of the film. Nothing is left
+  /// behind afterwards -- the file is unlinked at creation -- but the
+  /// volume is full while it plays. The honest bound would be the smaller
+  /// of this and what the volume has; giving the player a free-space
+  /// reading of its own is the change that would buy it.
   static const int defaultLimitBytes = 512 * 1024 * 1024;
 
   /// How often [MediaKitEngine] asks. The file grows at the bitrate of the

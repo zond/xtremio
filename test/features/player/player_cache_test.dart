@@ -186,8 +186,9 @@ void main() {
       // Not asserted exactly, only that it is on the right side of both
       // walls: far more than the 64 MiB of memory cache it replaces, and
       // well under a gigabyte on a box whose whole storage is 8 GB and
-      // whose torrent data shares it. At the 2.3 Mbps of the readings this
-      // window is about half an hour of film.
+      // whose torrent data shares it. It counts bytes demuxed, not minutes
+      // played -- mpv reads ahead at the link's rate, so this much of the
+      // 2.3 Mbps film is written early rather than half way through.
       expect(
         MpvDiskCacheLimit.defaultLimitBytes,
         greaterThan(128 * 1024 * 1024),
