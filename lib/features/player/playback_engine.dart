@@ -536,9 +536,10 @@ class MediaKitEngine implements PlaybackEngine {
   bool _sampling = false;
 
   /// The timer that keeps mpv's cache file to
-  /// [MpvDiskCacheLimit.defaultLimitBytes]. One per `open`, because the
-  /// file is one per `loadfile`.
+  /// [MpvDiskCacheLimit.defaultLimitBytes], and the limiter it drives. One
+  /// pair per `open`, because the file is one per `loadfile`.
   Timer? _diskCacheTimer;
+  MpvDiskCacheLimit? _diskCacheLimit;
 
   final StreamController<PlaybackTracks> _tracks =
       StreamController<PlaybackTracks>.broadcast();
@@ -783,6 +784,7 @@ class MediaKitEngine implements PlaybackEngine {
       cacheState: () => _property('demuxer-cache-state'),
       stopWritingToDisk: () => _setProperty('cache-on-disk', 'no'),
     );
+    _diskCacheLimit = limit;
     _diskCacheTimer = Timer.periodic(MpvDiskCacheLimit.interval, (_) {
       if (!_disposed) limit.check().ignore();
     });
@@ -791,6 +793,11 @@ class MediaKitEngine implements PlaybackEngine {
   void _stopWatchingDiskCache() {
     _diskCacheTimer?.cancel();
     _diskCacheTimer = null;
+    // The timer is not the whole of it: a reading already awaiting libmpv
+    // outlives its cancellation, so the limiter is told it no longer
+    // speaks for the playback ([MpvDiskCacheLimit.stop]).
+    _diskCacheLimit?.stop();
+    _diskCacheLimit = null;
   }
 
   /// One mpv property as a string, `null` off libmpv or when the player
@@ -827,6 +834,11 @@ class MediaKitEngine implements PlaybackEngine {
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     _externalSubtitleUrls.clear();
+    // First, before anything here writes `cache-on-disk`: the limiter
+    // belongs to the media being replaced, and one of its readings landing
+    // after the write below would turn the disk cache off for the media
+    // this call is opening.
+    _stopWatchingDiskCache();
     await _overrides;
     // Before the `loadfile`, and before every one of them: mpv reads
     // `force-seekable` once, when it builds the demuxer, so it has to be
@@ -1204,21 +1216,36 @@ class MpvDiskCacheLimit {
 
   bool _reached = false;
   bool _checking = false;
+  bool _stopped = false;
 
   /// Whether the limit has been hit for this media, after which nothing is
   /// asked again: the file cannot shrink, so the answer cannot change.
   bool get reached => _reached;
+
+  /// Ends this limiter for good: it belongs to one media, and the media it
+  /// was measuring is gone.
+  ///
+  /// Cancelling the timer that drives it is not enough on its own. [check]
+  /// awaits an `mpv_get_property_string` in the middle, so a reading that
+  /// began before the next `loadfile` can come back after it -- carrying
+  /// the *previous* file's size -- and write `cache-on-disk=no` onto the
+  /// media that has just been opened. That media then plays its whole
+  /// length with no disk cache and its own limiter, seeing no file at all,
+  /// never turns one back on: the fix silently does not apply to the next
+  /// episode. So [check] asks again after every await whether this limiter
+  /// still speaks for the playback.
+  void stop() => _stopped = true;
 
   /// One reading. Turns the disk cache off if the file is over
   /// [limitBytes].
   Future<void> check() async {
     // One at a time: `getProperty` awaits the player's own initialisation,
     // so a slow start must not pile readings up.
-    if (_reached || _checking) return;
+    if (_stopped || _reached || _checking) return;
     _checking = true;
     try {
       final bytes = fileCacheBytes(await cacheState());
-      if (bytes == null || bytes <= limitBytes) return;
+      if (_stopped || bytes == null || bytes <= limitBytes) return;
       _reached = true;
       await stopWritingToDisk();
     } catch (_) {

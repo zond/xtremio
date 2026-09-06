@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 
@@ -127,6 +129,45 @@ void main() {
 
       expect(stopped, hasLength(1));
     });
+
+    test('a limiter that has been stopped leaves the playback alone', () async {
+      // It belongs to one media. The player stops it before the next
+      // `loadfile`, and a tick that fires between the two must not answer
+      // for a file that is already gone.
+      final (limit, stopped) = limiterOver([stateOf(1001)]);
+
+      limit.stop();
+      await limit.check();
+
+      expect(stopped, isEmpty);
+      expect(limit.reached, isFalse);
+    });
+
+    test(
+      'a reading still in flight when it is stopped writes nothing',
+      () async {
+        // The real window: `check` awaits an `mpv_get_property_string` in the
+        // middle, so a reading begun for the previous media can come back
+        // after `open` has set `cache-on-disk=yes` for the next one. Writing
+        // then would leave the media just opened with no disk cache for its
+        // whole length, and its own limiter -- seeing no file -- would never
+        // turn one back on.
+        final answer = Completer<String>();
+        final stopped = <void>[];
+        final limit = MpvDiskCacheLimit(
+          cacheState: () => answer.future,
+          stopWritingToDisk: () async => stopped.add(null),
+          limitBytes: 1000,
+        );
+
+        final checking = limit.check();
+        limit.stop();
+        answer.complete(stateOf(1001));
+        await checking;
+
+        expect(stopped, isEmpty);
+      },
+    );
 
     test('never fires while there is no file to bound', () async {
       // Nothing on disk (a desktop mpv that could not make one either, or a
