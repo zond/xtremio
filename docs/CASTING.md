@@ -75,8 +75,11 @@ drops it on the way to Dart -- and `GoogleCastClient` asks for it as the
 session starts, once per cast rather than once per receiver on every route
 change. The server then names the interface on that receiver's subnet. With
 no address to go on (iOS, a route gone stale) it ranks its own interfaces
-instead: a private address on an ordinary interface ahead of anything on a
-tunnel or a cellular link. That ranking is a guess, and losing the guess is a
+instead: a private address on an ordinary interface ahead of anything on one
+a receiver cannot be behind at all -- a tunnel, a cellular link, an Android
+tether, a container or VM bridge, each of which carries a private address on
+an ordinary-looking name and would otherwise tie with the real LAN
+interface. That ranking is a guess, and losing the guess is a
 Chromecast that sits on its splash screen forever -- which is what made the
 address worth asking Android for.
 
@@ -89,8 +92,9 @@ server's own log says only that its listener started and stopped.
 **A receiver that never fetches** is not left looking like one that is merely
 slow. `PlayerScreen.castFetchTimeout` after a load -- twenty seconds -- a
 receiver still buffering is asked about through the listener's count of what
-it has been asked for (`server_lan_media_requests_served`, reset on every
-start, so it is per session). Nothing at all: the address was one the receiver
+it has been asked for (`server_lan_media_requests_served`, reset by every
+start and every stop, so it is the session's own even when a second receiver
+is picked while the first still has the stream). Nothing at all: the address was one the receiver
 could not route to, and nothing will happen, because a connect to an
 unroutable host hangs instead of failing. The session ends the way Stop ends
 it, the film comes back to this device, and the dialog says why. Something:
