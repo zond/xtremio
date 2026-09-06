@@ -865,7 +865,7 @@ what every model field means. The shape of the thing is in the
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`4dceb21`: generated
+  features, `zond/stream-server` at a fixed rev (`2fd64da`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
   counts, the buffer profiles behind `?buffer=`, cache usage and
@@ -876,8 +876,14 @@ what every model field means. The shape of the thing is in the
   counted as a name DNS failed on, the piece-aligned start-up window that
   follows the reader plus the `pieceLength` it is measured in,
   `inFlightPiece`, the byte progress of the one piece the reader is
-  sitting on, and
-  `ServerHandle::dht_status` for the diagnostics screen). To bump: change the rev, `cargo update -p <crate>`, run
+  sitting on,
+  `ServerHandle::dht_status` for the diagnostics screen, a cache cap that
+  is the smaller of `cacheSize` and what `statvfs` says the volume can
+  give above a 512 MiB free-space floor -- so a television with no
+  `cacheSize` set is capped by its own disk rather than by `u64::MAX` --
+  and an ENOSPC that stops a torrent being classified as a full disk and
+  answered with an eviction pass and a restart instead of a dead
+  playback). To bump: change the rev, `cargo update -p <crate>`, run
   `cargo test`, re-record any fixture whose shape moved, move the
   `[patch]` key along if the source URL changed (it names the URL being
   patched, and a stale key silently patches nothing), and re-copy
