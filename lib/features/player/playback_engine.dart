@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../core/core.dart';
 import '../../shell/display_frame_rate.dart';
@@ -242,6 +243,39 @@ class PlaybackScope extends InheritedWidget {
       dhtStatus != oldWidget.dhtStatus;
 }
 
+/// The folder mpv writes its cache file into, inside the app's own cache
+/// directory -- the same root the embedded server's cache lives under, one
+/// folder along.
+const String mpvCacheFolderName = 'mpv';
+
+/// Where mpv may write, `null` when the platform will not say.
+typedef MpvCacheDirectory = Future<String?> Function();
+
+/// `<app cache>/mpv`, which is what [MediaKitEngine] asks for unless a test
+/// hands in something else.
+///
+/// Android gives an app no writable temp path of its own, so mpv's default
+/// (its user cache directory) does not exist there and the demuxer's file
+/// cache cannot be created at all -- `Failed to create file cache` on every
+/// open, in the owner's own log. The app is already handed a cache
+/// directory by the platform (`main.dart` passes it to the core and to the
+/// embedded server); mpv gets a folder of its own beside theirs.
+///
+/// The folder itself is not created here: mpv `mp_mkdirp`s the path it is
+/// given before opening the cache file (`demux/cache.c`), which was
+/// confirmed by handing a running libmpv a directory two levels below
+/// anything that existed and finding both levels afterwards.
+Future<String?> platformMpvCacheDirectory() async {
+  try {
+    final cache = await getApplicationCacheDirectory();
+    return '${cache.path}/$mpvCacheFolderName';
+  } catch (_) {
+    // No cache directory from the platform: mpv keeps its own default,
+    // which is right on a desktop and missing on Android.
+    return null;
+  }
+}
+
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever
 /// the URL serves is decoded on this device; the server never transcodes.
 ///
@@ -249,8 +283,11 @@ class PlaybackScope extends InheritedWidget {
 /// creation: media_kit takes it as the video controller's configuration
 /// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
 class MediaKitEngine implements PlaybackEngine {
-  MediaKitEngine({bool hardwareDecoding = true}) : _player = Player() {
-    _overrides = _applyOverrides(_player.platform);
+  MediaKitEngine({
+    bool hardwareDecoding = true,
+    MpvCacheDirectory cacheDirectory = platformMpvCacheDirectory,
+  }) : _player = Player() {
+    _overrides = _applyOverrides(_player.platform, cacheDirectory);
     _controller = VideoController(
       _player,
       configuration: configurationFor(hardwareDecoding: hardwareDecoding),
@@ -298,8 +335,44 @@ class MediaKitEngine implements PlaybackEngine {
   ///
   /// `force-seekable` is not here: it is a claim about the stream being
   /// opened rather than about the player, so [forcesSeekable] decides it
-  /// per `open`.
+  /// per `open`; nor is `cache-on-disk`, which [open] sets for the same
+  /// reason `force-seekable` is set there.
   static const Map<String, String> mpvOverrides = {'network-timeout': '300'};
+
+  /// [mpvOverrides] plus what the demuxer's file cache needs, for a
+  /// [cacheDirectory] of `null` (nothing is added) or a directory mpv may
+  /// write in.
+  ///
+  /// `demuxer-cache-dir` is where mpv puts that file. Without it the cache
+  /// cannot be created on Android at all, and the seekable window is
+  /// whatever fits in the memory cache -- media_kit starts libmpv with
+  /// `demuxer-max-bytes` and `demuxer-max-back-bytes` at 32 MiB each
+  /// (`PlayerConfiguration.bufferSize`), which on the owner's 2.3 Mbps film
+  /// was the two islands, 1465-1601s and 516-551s, that he could not scan
+  /// between. With the file cache those byte limits apply to packet
+  /// *metadata* instead of to the payload, which is about a tenth of the
+  /// size, so the same 32 MiB indexes something like half an hour of film.
+  ///
+  /// `demuxer-cache-unlink-files=immediate` is mpv's own default and is set
+  /// here because it is what answers for the file afterwards: mpv unlinks
+  /// the cache file as soon as it has created it, so it never has a name in
+  /// the directory, and the space goes back to the filesystem when the fd
+  /// closes -- at the next `loadfile`, when the player is disposed, and
+  /// when the app is killed or crashes. Nothing of ours has to sweep up,
+  /// and a default that changed under us would leave files behind.
+  ///
+  /// Both were measured against a running libmpv (0.41.0 on Linux) rather
+  /// than read off the manual, and both names were checked against the
+  /// build media_kit ships for Android, `mpv v0.36.0-549-g78d43740f5`,
+  /// where `demuxer-cache-dir` is the option and the older `cache-dir` is
+  /// only a deprecated alias.
+  static Map<String, String> overridesFor(String? cacheDirectory) => {
+    ...mpvOverrides,
+    if (cacheDirectory != null) ...{
+      'demuxer-cache-dir': cacheDirectory,
+      'demuxer-cache-unlink-files': 'immediate',
+    },
+  };
 
   /// Whether to tell mpv that [url] can be seeked in whatever the demuxer
   /// concluded (`force-seekable`), which is decided per stream because it
@@ -345,12 +418,20 @@ class MediaKitEngine implements PlaybackEngine {
     return InternetAddress.tryParse(host)?.isLoopback ?? false;
   }
 
-  /// Sets [mpvOverrides] on the native backend. Only libmpv has
+  /// Sets [overridesFor] on the native backend. Only libmpv has
   /// properties; any other backend keeps its own behaviour, and a player
   /// torn down before it initialised is not an error worth surfacing.
-  static Future<void> _applyOverrides(PlatformPlayer? platform) async {
+  ///
+  /// The directory is asked for only once there is a backend to give it to,
+  /// so a fake engine never reaches the platform channel.
+  static Future<void> _applyOverrides(
+    PlatformPlayer? platform,
+    MpvCacheDirectory cacheDirectory,
+  ) async {
     if (platform is! NativePlayer) return;
-    for (final MapEntry(:key, :value) in mpvOverrides.entries) {
+    for (final MapEntry(:key, :value) in overridesFor(
+      await cacheDirectory(),
+    ).entries) {
       await _write(platform, key, value);
     }
   }
@@ -653,6 +734,17 @@ class MediaKitEngine implements PlaybackEngine {
     // `force-seekable` once, when it builds the demuxer, so it has to be
     // set for the stream about to be opened and not for the last one.
     await _setProperty('force-seekable', forcesSeekable(url) ? 'yes' : 'no');
+    // The same holds for the file cache, and awaiting [_overrides] above is
+    // what puts `demuxer-cache-dir` in front of the first `loadfile`. mpv
+    // creates the cache while it builds the demuxer and reads the directory
+    // then; the demuxer's own option cache does not watch that option, so a
+    // directory arriving later is not picked up at all. Handing a running
+    // libmpv the directory a second after `loadfile` reproduced the owner's
+    // `Failed to create file cache` and left `file-cache-bytes` absent for
+    // the rest of the stream. `cache-on-disk` is media_kit's own default
+    // (1.2.6 sets it once at start-up) but mpv reads it per demuxer too, so
+    // it is set here rather than left to a dependency's default.
+    await _setProperty('cache-on-disk', 'yes');
     await _player.open(Media(url.toString(), start: start));
   }
 
