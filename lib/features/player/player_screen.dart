@@ -2861,6 +2861,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // would clear the ask the successor had just made. Nothing is left
     // holding a rate either way, because the release comes first.
     _releaseDisplayFrameRate();
+    // And for the same reason, in the same place: this screen's `dispose`
+    // does not run until the transition finishes, so between here and
+    // there two demuxers are filling two cache files on one volume, each
+    // under its own limit and together over the app's. The outgoing one is
+    // filling it for a media the viewer has already left, which buys
+    // nothing at any price. Only the growth is stopped -- what it has
+    // already written comes back when its fd closes, a moment later
+    // ([PlaybackEngine.stopWritingToDisk]).
+    _engine?.stopWritingToDisk().ignore();
     final streamRequest = state.streamRequest ?? widget.streamRequest;
     final subtitlesPath = state.subtitlesPath ?? widget.subtitlesPath;
     navigator.pushReplacement(
@@ -3579,7 +3588,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _releaseDisplayFrameRate();
     final engine = _engine;
     _engine = null;
-    if (engine != null) _disposeAfterFrame(engine);
+    if (engine != null) {
+      // Before the teardown, and not part of it: the teardown is deferred
+      // by two frames and can then hang for as long as mpv is blocked
+      // writing to a full volume, and every second of that is more of the
+      // volume ([PlaybackEngine.stopWritingToDisk]). This is one property
+      // write, issued here where the screen is certainly going, so the
+      // bleeding stops on the press whatever becomes of the release behind
+      // it. A hand-over has already made the call, and a second one costs
+      // a property write nobody reads.
+      engine.stopWritingToDisk().ignore();
+      _disposeAfterFrame(engine);
+    }
     // The listener goes first, and the order is the whole of it: the
     // flush below writes a preference, which notifies synchronously, and
     // a notification answered from here is a `setState` on an element

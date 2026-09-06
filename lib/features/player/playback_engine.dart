@@ -198,6 +198,25 @@ abstract interface class PlaybackEngine {
   /// them clear of its own controls.
   Widget buildVideo(BuildContext context, {double subtitleBottomPadding = 24});
 
+  /// Stops the player writing its read-ahead to disk, without stopping the
+  /// playback. libmpv's `cache-on-disk=no`; any other backend does
+  /// nothing.
+  ///
+  /// This is what a screen on its way out calls, and it is separate from
+  /// [dispose] because the two are not the same size. A teardown stops
+  /// mpv, closes the fd and frees the whole cache file, and it can be slow
+  /// or fail: `Player.stop()` blocks and retries when the volume it is
+  /// writing to has no room left, which is exactly when it matters. This
+  /// is one property write, it costs nothing whatever else the player is
+  /// doing, and it ends the bleeding on its own -- so it goes first, and
+  /// no failure of the teardown behind it can undo it.
+  ///
+  /// What is already in the file stays where it is: those blocks come back
+  /// when the fd closes and not before ([MpvCacheHoldings] is what still
+  /// counts them). Stopping the growth is the whole of what this buys, and
+  /// on the evening it was written for that was ninety seconds and 928 MB.
+  Future<void> stopWritingToDisk();
+
   Future<void> dispose();
 }
 
@@ -1365,6 +1384,20 @@ class MediaKitEngine implements PlaybackEngine {
   /// `Player.dispose` unregisters it (media_kit tears the native
   /// `VideoOutput` down from `Player.dispose`, so there is nothing separate
   /// to dispose on the `VideoController`).
+  @override
+  Future<void> stopWritingToDisk() async {
+    // The limiter goes first and for good: the file it was measuring
+    // cannot grow past this, so a reading still awaiting libmpv could only
+    // come back and write `cache-on-disk=no` onto whatever this player
+    // opens next ([MpvDiskCacheLimit.stop]). What it last reported to
+    // [MpvCacheHoldings] stays there -- those blocks are held until the fd
+    // closes, which is [dispose]'s business and not this call's.
+    _diskCacheTimer?.cancel();
+    _diskCacheTimer = null;
+    _diskCacheLimit?.stop();
+    await _setProperty('cache-on-disk', 'no');
+  }
+
   @override
   Future<void> dispose() async {
     _disposed = true;

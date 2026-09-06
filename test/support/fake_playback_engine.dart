@@ -83,6 +83,12 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   SubtitleStyle? subtitleStyle;
   double? lastSubtitleBottomPadding;
+
+  /// Whether `dispose` has been *asked for*, which is a different question
+  /// from [disposed]: the teardown a screen starts on its way out and the
+  /// teardown finishing are two moments, and the whole of what a player
+  /// left behind costs happens between them.
+  bool disposeAsked = false;
   bool disposed = false;
 
   /// Every `setDisplayRefreshRate` call, in order, nulls included -- a
@@ -90,7 +96,8 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// as setting one is.
   final List<double?> displayRefreshRates = [];
 
-  /// When set, `open` also appends `'open'` here: a log shared with other
+  /// When set, the calls a test may need to see in order are appended here
+  /// -- `'open'`, `'stop-writing'`, `'dispose'`: a log shared with other
   /// fakes, for tests about the order of calls across them.
   List<String>? callLog;
 
@@ -294,8 +301,22 @@ class FakePlaybackEngine implements PlaybackEngine {
     );
   }
 
+  /// How many times the player was told to stop writing its read-ahead to
+  /// disk. Also `'stop-writing'` in [callLog], which is where a test reads
+  /// the *order* -- the whole of the fix for a player that was left is
+  /// that this comes before the teardown rather than out of it.
+  int stopWritingCalls = 0;
+
+  @override
+  Future<void> stopWritingToDisk() async {
+    stopWritingCalls++;
+    callLog?.add('stop-writing');
+  }
+
   @override
   Future<void> dispose() async {
+    disposeAsked = true;
+    callLog?.add('dispose');
     disposed = true;
   }
 }
