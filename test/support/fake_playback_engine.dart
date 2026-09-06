@@ -30,6 +30,13 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// Every `open` call: the URL and the requested start position.
   final List<(Uri, Duration)> opened = [];
   final List<Duration> seeks = [];
+
+  /// Every `scanBy` call, in order: the step a scan asked mpv for, which
+  /// is a different question from a [seeks] entry and so a different
+  /// list. A test that wants "where did the viewer end up" reads the
+  /// position; one that wants "was this a scan or an exact seek" reads
+  /// which list grew.
+  final List<Duration> scans = [];
   int playCalls = 0;
   int pauseCalls = 0;
   int playOrPauseCalls = 0;
@@ -167,6 +174,11 @@ class FakePlaybackEngine implements PlaybackEngine {
   @override
   Future<void> seek(Duration position) async {
     seeks.add(position);
+  }
+
+  @override
+  Future<void> scanBy(Duration delta) async {
+    scans.add(delta);
   }
 
   @override

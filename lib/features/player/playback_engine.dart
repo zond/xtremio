@@ -73,7 +73,37 @@ abstract interface class PlaybackEngine {
   /// Opens [url] and starts playing from [start].
   Future<void> open(Uri url, {Duration start = Duration.zero});
 
+  /// Seeks to [position] exactly, decoding forward from the keyframe
+  /// before it if that is what landing there takes.
   Future<void> seek(Duration position);
+
+  /// Moves [delta] from wherever playback is, landing on a keyframe: the
+  /// step a viewer scanning through the film asks for.
+  ///
+  /// It is a different question from [seek], not a cheaper way of asking
+  /// the same one. An exact seek lands on the requested moment by
+  /// decoding forward from the keyframe before it, invisibly, and on a
+  /// 32-bit Amlogic television box with `hwdec=mediacodec-copy` that
+  /// decode is what a press of the seek key costs. A scan does not need
+  /// the moment -- a second or two either way is invisible while the
+  /// picture is moving -- so it takes the keyframe and lands at once,
+  /// which is what every television player does and what the owner
+  /// noticed for himself: with the cache empty, mpv had nothing to seek
+  /// within, fell back to a keyframe seek, and "the seeking becomes
+  /// smooth".
+  ///
+  /// **Relative, and that is the whole of why this is not a [seek] with a
+  /// flag on it.** A keyframe seek to an absolute target lands on the
+  /// keyframe *before* it, so a forward step shorter than the distance
+  /// between keyframes lands behind where it started: x264's default
+  /// `keyint` of 250 frames is 10.4 s at 23.976 fps, against a
+  /// `seekTimeDuration` of 10 s, and a viewer pressing forward would
+  /// watch the film sit still. Asked as a relative move, mpv rounds the
+  /// other way -- to the first keyframe at or past the target, and back
+  /// past it going backwards -- so a press always moves at least what it
+  /// asked for, in the direction it asked for.
+  Future<void> scanBy(Duration delta);
+
   Future<void> play();
   Future<void> pause();
   Future<void> playOrPause();
@@ -820,6 +850,57 @@ class MediaKitEngine implements PlaybackEngine {
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
+
+  /// The mpv command a [scanBy] of [delta] is.
+  ///
+  /// Written out here because media_kit has no relative seek and throws
+  /// `mpv_command`'s return code away (it logs it and returns), so a
+  /// misspelled flag would be a press that seeks nowhere, in silence.
+  /// Measured against the libmpv this host has (0.41.0): `relative` and
+  /// `keyframes` answer `success`, and a `relative+keyframe` a letter
+  /// short answers `MPV_ERROR_INVALID_PARAMETER`. Both words are in the
+  /// build media_kit ships for Android
+  /// (`mpv v0.36.0-549-g78d43740f5`) as well.
+  ///
+  /// Seconds with four decimals, which is how media_kit writes its own
+  /// absolute seek.
+  static List<String> scanCommand(Duration delta) => [
+    'seek',
+    (delta.inMilliseconds / 1000).toStringAsFixed(4),
+    'relative+keyframes',
+  ];
+
+  /// The `keyframes` flag is what makes this a scan, and it has to be on
+  /// the command: media_kit starts libmpv with `hr-seek=yes`
+  /// (`player/native/player/real.dart`, the properties it sets for every
+  /// platform), which asks mpv for a precise seek wherever one is
+  /// possible -- relative seeks included, where mpv's own default would
+  /// have taken the keyframe. An explicit flag overrides the option, and
+  /// that was measured rather than read: with `hr-seek=yes` set first, a
+  /// bare `seek 10 relative` took 18.7 ms and landed on 315.000 of a
+  /// 10 s-keyframe file, and `seek 10 relative+keyframes` took 3.7 ms and
+  /// landed on 320.
+  ///
+  /// A burst of these is mpv's own business and not ours: 20 relative
+  /// seeks handed to libmpv back to back were merged into 3 actual seeks
+  /// landing at the sum of all 20 (`queue_seek` adds a relative seek to
+  /// the one already queued), so a held key already scans as fast as the
+  /// core can serve it without this having to coalesce anything.
+  ///
+  /// Off libmpv there is nothing to flag, and a scan is an ordinary seek
+  /// from where playback is. So it is once media_kit has decided the
+  /// media is over: `Player.play` seeks back to zero when its own
+  /// `completed` is still set, and only its `seek` clears that, so a
+  /// viewer scanning back from the end of a film and pressing play would
+  /// otherwise be taken to the beginning of it.
+  @override
+  Future<void> scanBy(Duration delta) {
+    final native = _player.platform;
+    if (native is! NativePlayer || _player.state.completed) {
+      return _player.seek(_player.state.position + delta);
+    }
+    return native.command(scanCommand(delta));
+  }
 
   @override
   Future<void> play() => _player.play();
