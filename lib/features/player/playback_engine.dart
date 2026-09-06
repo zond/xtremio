@@ -2,7 +2,6 @@ import 'dart:async';
 // Only the names the forceful [MediaKitEngine.destroy] needs: `dart:ffi`
 // also declares a `Size`, and this file draws widgets.
 import 'dart:ffi' show AllocatorAlloc, Int8, Pointer, PointerPointer, nullptr;
-import 'dart:io';
 
 import 'package:ffi/ffi.dart' show StringUtf8Pointer, calloc;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
@@ -669,11 +668,18 @@ class MediaKitEngine implements PlaybackEngine {
   /// side), and the stats OSD's `partially` and `ranges` rows are what
   /// tell the two apart -- `seekable` is our own answer here, not the
   /// demuxer's.
+  ///
+  /// **A `/proxy` URL is on the server and is still not the server's
+  /// stream.** Every remote stream now arrives at the loopback address
+  /// ([proxiedThroughServer]), which is exactly the address this method
+  /// used to read as "our torrent reader, which waits rather than refuses".
+  /// It is not: the route relays a host we know nothing about, so the claim
+  /// that could be made about the addon's own URL is the claim to make
+  /// about the proxy of it -- and that claim was no.
   static bool forcesSeekable(Uri url) {
     if (!url.isScheme('http') && !url.isScheme('https')) return false;
-    final host = url.host;
-    if (host == 'localhost') return true;
-    return InternetAddress.tryParse(host)?.isLoopback ?? false;
+    if (isProxiedByServer(url)) return false;
+    return isLoopbackHost(url.host);
   }
 
   /// Sets [overridesFor] on the native backend. Only libmpv has

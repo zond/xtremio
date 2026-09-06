@@ -35,4 +35,5 @@ export 'state/server_storage.dart';
 export 'state/stream.dart';
 export 'state/stream_hints.dart';
 export 'stream_order.dart';
+export 'stream_proxy.dart';
 export 'subtitle_sync.dart';

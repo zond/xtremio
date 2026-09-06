@@ -33,8 +33,12 @@ class PlayerHarness {
     this.cast,
     this.lanMedia,
     this.prefs,
+    Uri? serverBaseUrl,
     DhtStatus? dhtStatus,
-  }) : dhtStatus = dhtStatus ?? _dhtDisabled,
+    bool embeddedServer = true,
+  }) : serverBaseUrl =
+           serverBaseUrl ?? (embeddedServer ? recordedServerBaseUrl : null),
+       dhtStatus = dhtStatus ?? _dhtDisabled,
        fixture = player ?? loadPlayerFixture() {
     core = FakeCoreClient(
       state: {
@@ -46,6 +50,17 @@ class PlayerHarness {
 
   final Map<String, dynamic> fixture;
   late final FakeCoreClient core;
+
+  /// The embedded server the app was started with, as `CoreInitInfo`
+  /// reports it -- the address the player fetches a remote stream through
+  /// (`proxiedThroughServer`). It is the recorded fixtures' own server so
+  /// the torrent URLs in them are, correctly, already on it; null stands
+  /// for a build with no embedded server, where nothing is proxied.
+  final Uri? serverBaseUrl;
+
+  /// The port the recorded player fixture's stream URLs are on: the
+  /// ephemeral port the embedded server had bound when they were taken.
+  static final Uri recordedServerBaseUrl = Uri.parse('http://127.0.0.1:39661');
 
   /// What [PlaybackScope.dhtStatusOf] answers -- disabled (nothing shown
   /// anywhere) unless a test asks for a specific state.
@@ -123,6 +138,10 @@ class PlayerHarness {
   Widget build({Widget? home}) {
     final app = CoreScope(
       client: core,
+      initInfo: CoreInitInfo(
+        serverBaseUrl: serverBaseUrl,
+        schemaVersion: core.initInfo.schemaVersion,
+      ),
       child: PlaybackScope(
         createEngine: () {
           final engine = FakePlaybackEngine()..callLog = calls;

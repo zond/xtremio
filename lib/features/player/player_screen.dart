@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show InternetAddress, Platform;
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/gestures.dart';
@@ -212,6 +212,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// The `ctx` field, for `profile.settings`.
   CoreFieldNotifier? _ctx;
+
+  /// The embedded server's base URL, which is what a stream on anybody
+  /// else's host is fetched through ([proxiedThroughServer]).
+  ///
+  /// From `CoreInitInfo`, read off the scope when this screen is wired,
+  /// because it has to be known before the first `open` and it is: the
+  /// server was started and its port settled before the core was built,
+  /// while `profile.settings.streamingServerUrl` -- which names the same
+  /// server -- arrives with a `ctx` pull that may land after the player
+  /// state does. A first `open` that missed it would be the one playback
+  /// of the session that went direct.
+  ///
+  /// Null when this build runs no embedded server, which includes a
+  /// streaming server the viewer configured elsewhere. Proxying through
+  /// that one would send the stream over the internet twice for a cache
+  /// that is not on this device, so it is left alone and the stream plays
+  /// direct, exactly as it always did.
+  Uri? _serverBase;
 
   /// The settings map of the last `UpdateSettings` sent, until the next
   /// `ctx` pull: what [_settings] answers and what the next write builds
@@ -669,6 +687,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_client != null) return;
     final client = CoreScope.of(context);
     _client = client;
+    _serverBase = CoreScope.initInfoOf(context)?.serverBaseUrl;
     _player = CoreFieldNotifier(client, CoreField.player)
       ..addListener(_onPlayerState);
     _ctx = CoreFieldNotifier(client, CoreField.ctx)..addListener(_onCtx);
@@ -917,17 +936,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  /// [url] as the engine should fetch it: the core's stream URL with
-  /// `buffer=` added when it is a torrent served by the streaming server.
+  /// [url] as the engine should fetch it, which is always a URL on our own
+  /// server: the core's stream URL with `buffer=` added when it is a
+  /// torrent the server is already serving, and the same stream wrapped in
+  /// the server's `/proxy` route when it is anybody else's host.
   ///
-  /// Only then. A `url` stream is an addon's own host, which knows nothing
-  /// about the parameter, and an offline `file://` URL has no server at the
-  /// other end at all; adding a query to either would be noise at best.
+  /// `buffer=` goes on the torrent alone. A remote host knows nothing about
+  /// the parameter, and an offline `file://` URL has no server at the other
+  /// end at all; adding a query to either would be noise at best.
+  ///
+  /// The proxy is the other half of having one cache instead of two
+  /// ([proxiedThroughServer]). The player keeps nothing on disk now, so a
+  /// stream it fetched itself would be the one kind of playback with no
+  /// local copy anywhere -- and that was the kind that filled the owner's
+  /// television.
   Uri _mediaUrl(Uri url) {
     if (!url.isScheme('http') && !url.isScheme('https')) return url;
     final stream = _state?.selectedStream ?? _state?.convertedStream;
-    if (stream?.infoHash == null) return url;
-    return withBufferAhead(url, _bufferAhead);
+    if (stream?.infoHash != null) return withBufferAhead(url, _bufferAhead);
+    return proxiedThroughServer(url, serverBase: _serverBase);
   }
 
   /// The viewer changed the buffer for this playback.
@@ -3171,7 +3198,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// this device needs the server's LAN media listener, which is therefore
   /// the only case that starts one.
   Future<Uri?> _castUrl(Uri local, CastDevice device) async {
-    if (!_isLoopback(local.host)) return local;
+    if (!isLoopbackHost(local.host)) return local;
     final lan = _lanMedia;
     if (lan == null) return null;
     try {
@@ -3189,10 +3216,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       port: base.hasPort ? base.port : null,
     );
   }
-
-  static bool _isLoopback(String host) =>
-      host == 'localhost' ||
-      (InternetAddress.tryParse(host)?.isLoopback ?? false);
 
   /// Ends the session and brings playback back to this device, at the point
   /// the receiver had reached.
