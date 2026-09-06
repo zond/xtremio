@@ -339,6 +339,28 @@ what every model field means. The shape of the thing is in the
   the file, because `demuxer-cache-unlink-files=immediate` has mpv unlink
   it as it creates it -- the space comes back when the fd closes, including
   after a crash.
+- **A scan is a different question from a seek, and mpv is asked
+  differently.** mpv's seek is exact -- it lands on the keyframe before
+  the target and decodes forward, invisibly, to the moment asked for --
+  and media_kit makes that certain by starting libmpv with `hr-seek=yes`.
+  On a 32-bit Amlogic box decoding through `mediacodec-copy` that decode
+  is the beat every press of a seek key costs, which is how the owner
+  came to notice that "when the cache goes to 0s, the seeking becomes
+  smooth": with nothing to seek within, mpv fell back to a keyframe seek.
+  So every press that says *further on* -- the seek keys, a remote's
+  transport keys, the buttons either side of play, a double tap, and the
+  seek bar's left and right while it holds focus -- goes to
+  `PlaybackEngine.scanBy`, which is `seek <n> relative+keyframes`.
+  Relative is the point rather than a detail: a keyframe seek to an
+  absolute target lands on the keyframe *before* it, so a forward step
+  shorter than the gap between keyframes goes backwards, and x264's
+  default keyint is 10.4 s at 23.976 fps against a 10 s step. A press
+  that names a moment instead -- a tap or a drag on the bar -- is seeked
+  to exactly, and so is Shift + arrow, the *short* step, which at three
+  seconds is shorter than a keyframe gap. A held key accelerates rather
+  than the step growing (`SeekHold`): ten presses at the viewer's own
+  `seekTimeDuration`, fifteen at twice it, five times it thereafter, and
+  a fresh press always starts again at one.
 - **The player UI is ours, driven by the engine and the core.**
   `PlayerScreen` switches media_kit's built-in controls off
   (`controls: NoVideoControls`) and draws its own dark-M3 overlay: a top
@@ -362,8 +384,9 @@ what every model field means. The shape of the thing is in the
   again, so the lift is *pushed* into it
   (`VideoState.setSubtitleViewPadding`, one call per change) rather than
   configured -- configuring it moves nothing after the first frame. Keyboard:
-  Space/K play-pause, ←/→ or J/L ± the seek step (10 s by default),
-  Shift+←/→ ± the short seek step (3 s), ↑/↓ volume, M mute, F
+  Space/K play-pause, ←/→ or J/L ± the seek step (10 s by default, and
+  further with each repeat of a held key),
+  Shift+←/→ ± the short seek step (3 s, and exact), ↑/↓ volume, M mute, F
   fullscreen, Esc leaves fullscreen first when `escExitFullscreen` is on
   and the player otherwise, S subtitles, Shift+S subtitle timing, A
   audio, N next episode, Shift+I stats. Everything is a stream or method on
