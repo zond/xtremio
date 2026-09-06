@@ -59,6 +59,32 @@ abstract interface class LanMediaControl {
   Future<Uri?> lanMediaBaseUrl({String? peerIp});
 }
 
+/// Ending the proxied streams one player is reading, which is what leaving
+/// a player asks for.
+///
+/// Behind an interface so the player's widget tests can leave a screen
+/// without reaching FFI, and so they can say which token was closed.
+abstract interface class ProxyStreamControl {
+  /// Ends every proxied stream carrying [token] -- the name this app
+  /// minted for one player and wrote into the `/proxy` URL that player
+  /// fetches -- and answers how many streams that was. An HLS player has
+  /// several, because the server carries the token into every line of
+  /// every playlist it rewrites, and they all end together.
+  ///
+  /// Zero is an ordinary answer: the player may have finished, or never
+  /// have been proxied, or there may be no server running. None of those
+  /// is a failure, and none of them is a reason for a teardown to stop --
+  /// which is why this neither throws nor waits.
+  ///
+  /// **It ends a blocked read, and only that.** The body fails, the
+  /// connection is dropped, and the demuxer sees its source break now
+  /// instead of after `network-timeout` -- which stays generous on
+  /// purpose, because a slow swarm must not be mistaken for a dead
+  /// connection. A demuxer wedged anywhere else -- on the Flutter texture,
+  /// on the audio device -- is not waiting on this read and is untouched.
+  int closeProxyStreams(String token);
+}
+
 /// What the storage screen needs from the server: the cache's usage
 /// against its limit, and the one way there is to ask it to reclaim some.
 ///
@@ -85,7 +111,8 @@ abstract interface class ServerCacheControl {
 /// HTTP routes run: the Dart side never speaks HTTP to the server (those
 /// routes want a bearer token only the Rust side knows); the player fetches
 /// media from the open stream routes.
-class ServerClient implements LanMediaControl, ServerCacheControl {
+class ServerClient
+    implements LanMediaControl, ServerCacheControl, ProxyStreamControl {
   const ServerClient();
 
   /// Starts the server (idempotent) and returns its base URL.
@@ -199,6 +226,17 @@ class ServerClient implements LanMediaControl, ServerCacheControl {
 
   @override
   int get lanMediaRequestsServed => rust.serverLanMediaRequestsServed();
+
+  /// Ends every proxied stream carrying [token]
+  /// (`ServerHandle::close_proxy_streams`) and answers how many that was.
+  ///
+  /// Synchronous, like the reads above and for a sharper reason: it is a
+  /// map scan with no I/O, and it is called from a teardown, where queuing
+  /// behind a blocking call already on the FRB worker pool would hand back
+  /// exactly the delay it exists to remove.
+  @override
+  int closeProxyStreams(String token) =>
+      rust.serverCloseProxyStreams(token: token);
 
   @override
   Future<Uri?> lanMediaBaseUrl({String? peerIp}) async {

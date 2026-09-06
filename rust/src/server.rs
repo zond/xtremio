@@ -343,6 +343,28 @@ pub fn dht_status() -> DhtStatus {
     with_handle(|handle| Ok(handle.dht_status())).unwrap_or_default()
 }
 
+/// Ends every proxied stream carrying `token` and answers how many that
+/// was (`ServerHandle::close_proxy_streams`).
+///
+/// The token is a name the app minted for one player and put in the
+/// `/proxy` URL that player fetches, so this closes that player's reads
+/// and nobody else's. What it buys is that tearing a player down is an
+/// action rather than a wait: the read fails at once instead of after
+/// `network-timeout`, which is deliberately generous because a slow swarm
+/// must not be mistaken for a dead connection.
+///
+/// Zero is an ordinary answer -- the player may have finished already, or
+/// never have been proxied -- and so is zero from a server that is not
+/// running: nothing of ours is streaming either way, which is what the
+/// caller wanted to be true. No error, because a teardown has nothing to
+/// do with one.
+///
+/// Cheap: a scan of the live-stream map and a `oneshot` send per hit, no
+/// runtime hop and no I/O.
+pub fn close_proxy_streams(token: &str) -> usize {
+    with_handle(|handle| Ok(handle.close_proxy_streams(token))).unwrap_or(0)
+}
+
 /// Starts or stops the LAN media listener -- the server's second HTTP
 /// listener, which serves media bytes to the local network and mounts no
 /// control route at all (deliberately not `/proxy` and not `/ftp`) -- and

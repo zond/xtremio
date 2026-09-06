@@ -245,6 +245,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// before the proxy.
   Uri? _serverBase;
 
+  /// This player's name for its own proxied streams, written into the
+  /// `/proxy` URLs it fetches (`p=`) and the only thing that says which of
+  /// the server's live streams are this screen's ([_closeProxiedStreams]).
+  ///
+  /// A name, not a credential: the call that acts on it is on the server's
+  /// bearer-protected loopback control API, and the token never leaves this
+  /// device -- the server strips it before asking the origin for anything.
+  /// So a counter is enough, and it is what makes a test's expectation
+  /// readable. Unique within the process is the whole requirement, and
+  /// nothing outlives the process: a stream from before a restart that is
+  /// somehow still open is one this app would rather close than inherit.
+  late final String _proxyToken = 'player-${++_proxyTokenSeq}';
+  static int _proxyTokenSeq = 0;
+
+  /// How this screen ends those streams on the way out, from
+  /// [PlaybackScope].
+  ProxyStreamControl? _proxyStreams;
+
+  /// Whether any URL this player was given actually went through the
+  /// proxy. A torrent does not (it is already on the server, and gets
+  /// `buffer=` instead), and neither does an offline file, so those
+  /// teardowns have nothing to close and do not ask.
+  bool _proxiedStream = false;
+
   /// The settings map of the last `UpdateSettings` sent, until the next
   /// `ctx` pull: what [_settings] answers and what the next write builds
   /// on, so two chips in a row do not send the pre-first-change map.
@@ -720,6 +744,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
+    _proxyStreams = PlaybackScope.proxyStreamsOf(context);
     // A television has no window to be one part of: the video fills the
     // screen from the moment the player opens, with the system bars out of
     // the way, until the player is left ([dispose] leaves fullscreen,
@@ -968,7 +993,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!url.isScheme('http') && !url.isScheme('https')) return url;
     final stream = _state?.selectedStream ?? _state?.convertedStream;
     if (stream?.infoHash != null) return withBufferAhead(url, _bufferAhead);
-    return proxiedThroughServer(url, serverBase: _serverBase);
+    final proxied = proxiedThroughServer(
+      url,
+      serverBase: _serverBase,
+      playerToken: _proxyToken,
+    );
+    // Recorded rather than inferred from the URL later, because a re-open
+    // for a new buffer window, a next episode or a stream the core
+    // resolved differently can each change what this answers -- and what
+    // the teardown needs to know is whether *anything* was ever proxied
+    // under this token, not what the last URL happened to be.
+    _proxiedStream |= isProxiedByServer(proxied);
+    return proxied;
   }
 
   /// The viewer changed the buffer for this playback.
@@ -3626,6 +3662,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // so this is a no-op there rather than a clear that would land after
     // the successor's own ask.
     _releaseDisplayFrameRate();
+    _closeProxiedStreams();
     final engine = _engine;
     _engine = null;
     if (engine != null) _disposeAfterFrame(engine);
@@ -3662,6 +3699,43 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _topBarFocus.dispose();
     _playNextFocus.dispose();
     super.dispose();
+  }
+
+  /// Ends the server's reads for this player, before the teardown that is
+  /// about to wait on them.
+  ///
+  /// The engine's release is two frames away and can then block for as long
+  /// as mpv is blocked, and what mpv is most often blocked *on* is a read
+  /// from a stream that has stopped arriving. `network-timeout` is five
+  /// minutes on purpose -- a thin swarm legitimately takes minutes to hand
+  /// over the next piece, and a shorter bound would end healthy playbacks --
+  /// so waiting for it is waiting for a player nobody wants any more. This
+  /// makes the read fail now instead: the server drops the connection, the
+  /// demuxer's source breaks, and the core thread gets to the `stop` it was
+  /// never going to reach.
+  ///
+  /// **It is a socket and nothing more.** A demuxer wedged somewhere other
+  /// than a read -- handing a frame to the Flutter texture, waiting on the
+  /// audio device -- is not polling this stream and is untouched by
+  /// closing it; that player still costs the ten-second deadline and the
+  /// `destroy` at the end of it, which is why both are still here. And a
+  /// player that has stopped reading altogether observes the close when it
+  /// next reads, or never.
+  ///
+  /// Synchronous, unawaited and unlogged in the ordinary case: it is a map
+  /// scan on the Rust side, a teardown has nothing to do with its answer,
+  /// and zero is a perfectly normal one (the stream may have finished on
+  /// its own).
+  void _closeProxiedStreams() {
+    if (!_proxiedStream) return;
+    final closed = _proxyStreams?.closeProxyStreams(_proxyToken) ?? 0;
+    if (closed > 0) {
+      DiagnosticsLog.info(
+        'player',
+        'ended $closed proxied stream${closed == 1 ? '' : 's'} for the '
+            'player being left',
+      );
+    }
   }
 
   /// Releases [engine] two frames from now instead of synchronously here.

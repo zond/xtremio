@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/diagnostics_capture.dart';
+import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// Leaving a player has to stop it.
@@ -344,5 +345,103 @@ void main() {
 
     await tester.pumpAndSettle();
     expect(harness.engines.first.disposed, isTrue);
+  });
+
+  group('a stream the server is holding open is ended, not waited out', () {
+    /// The recorded torrent fixture rewritten into an addon's own HTTP
+    /// stream, which is the kind that goes through `/proxy` -- a torrent is
+    /// already on the server and never does.
+    Map<String, dynamic> remoteStreamFixture(String url) {
+      final fixture = loadPlayerFixture();
+      final stream = <String, dynamic>{'url': url, 'name': 'Direct'};
+      (fixture['selected'] as Map<String, dynamic>)['stream'] = stream;
+      fixture['stream'] = {
+        'type': 'Ready',
+        'content': [
+          {'stream': stream, 'streaming_url': url},
+          stream,
+        ],
+      };
+      return fixture;
+    }
+
+    /// The `p=` this player put in the URL it was given, read back out of
+    /// it: the token and the URL have to be the same one, and reading it
+    /// off the URL is the only way a test can say so.
+    String tokenOf(Uri opened) {
+      final match = RegExp(r'&p=([^&/?]+)').firstMatch(opened.toString());
+      expect(match, isNotNull, reason: 'no player token in $opened');
+      return Uri.decodeComponent(match!.group(1)!);
+    }
+
+    testWidgets('leaving closes the streams this player was reading', (
+      tester,
+    ) async {
+      // The read is what the teardown is about to wait on, and
+      // `network-timeout` is five minutes because a thin swarm is not a
+      // dead connection. So the close goes in front of the release rather
+      // than after it.
+      final harness = PlayerHarness(
+        player: remoteStreamFixture('https://rd.example/dl/tok/film.mkv'),
+      );
+      await pumpPushed(tester, harness);
+      final token = tokenOf(harness.engine.opened.single.$1);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(harness.proxyStreams.closed, [token]);
+    });
+
+    testWidgets('a torrent has nothing to close, and is not asked', (
+      tester,
+    ) async {
+      // It is already a URL on the server's own reader, so no `/proxy`
+      // stream was ever opened under this player's name. Asking anyway
+      // would be harmless and would still be a claim about a stream that
+      // does not exist.
+      final harness = PlayerHarness();
+      await pumpPushed(tester, harness);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(harness.engine.disposed, isTrue);
+      expect(harness.proxyStreams.closed, isEmpty);
+    });
+
+    testWidgets('a hand-over ends the outgoing player and not its successor', (
+      tester,
+    ) async {
+      // Two players are alive at once for the length of the transition and
+      // both are reading through the proxy, which is exactly the case a
+      // token exists for: the server cannot tell them apart, and the app
+      // can.
+      final harness = PlayerHarness(
+        player: remoteStreamFixture('https://rd.example/dl/tok/e1.mkv'),
+      );
+      harness.fixture['nextVideo'] = const {
+        'id': 'tt0063350:1:2',
+        'title': 'The Cellar',
+        'season': 1,
+        'episode': 2,
+      };
+      harness.fixture['nextStream'] = const {
+        'url': 'https://rd.example/dl/tok/e2.mkv',
+        'name': 'Direct',
+      };
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 20));
+      await pumpEvents(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaTrackNext);
+      await tester.pumpAndSettle();
+
+      expect(harness.engines, hasLength(2));
+      final leaving = tokenOf(harness.engines.first.opened.single.$1);
+      final successor = tokenOf(harness.engines.last.opened.single.$1);
+      expect(successor, isNot(leaving), reason: 'a token is per player');
+      expect(harness.proxyStreams.closed, [leaving]);
+    });
   });
 }

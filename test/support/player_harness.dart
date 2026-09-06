@@ -11,6 +11,7 @@ import 'package:xtremio/shell/tv_density.dart';
 
 import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
+import 'fake_proxy_streams.dart';
 import 'fake_subtitle_match_client.dart';
 import 'fake_torrent_stats_client.dart';
 import 'fixtures.dart';
@@ -90,6 +91,11 @@ class PlayerHarness {
   /// sets [FakeSubtitleMatchClient.response].
   final FakeSubtitleMatchClient subtitleMatch = FakeSubtitleMatchClient();
 
+  /// What leaving the screen closes its proxied streams through. Always
+  /// present, so no player test reaches FFI on its way out, and so a test
+  /// can read back which token was closed.
+  final FakeProxyStreams proxyStreams = FakeProxyStreams();
+
   /// What the start-up overlay polls; answers nothing (`null`) until a test
   /// sets [FakeTorrentStatsClient.response].
   late final FakeTorrentStatsClient torrentStats = FakeTorrentStatsClient()
@@ -157,6 +163,7 @@ class PlayerHarness {
           dhtStatusReads++;
           return dhtStatus;
         },
+        proxyStreams: proxyStreams,
         child: MaterialApp(
           // As `XtremioApp` builds it: the television's text scale and
           // overscan band reach the player through the navigator.

@@ -266,9 +266,10 @@ class NativeFullscreenController implements FullscreenController {
 /// the [FullscreenController], the [TorrentStatsClient] the start-up
 /// overlay polls the embedded server with (absent, the FFI one),
 /// [displayFrameRate] (absent, the `xtremio/device` channel) and
-/// [dhtStatus] (absent, `ServerClient().dhtStatus`). The subtitle style is
-/// not here: the screen derives it from the profile's settings in the `ctx`
-/// field.
+/// [dhtStatus] (absent, `ServerClient().dhtStatus`) and [proxyStreams], the
+/// way a player ends the streams it is reading on its way out (absent, the
+/// FFI one). The subtitle style is not here: the screen derives it from the
+/// profile's settings in the `ctx` field.
 class PlaybackScope extends InheritedWidget {
   const PlaybackScope({
     super.key,
@@ -278,6 +279,7 @@ class PlaybackScope extends InheritedWidget {
     this.subtitleMatch,
     this.displayFrameRate,
     this.dhtStatus,
+    this.proxyStreams,
     required super.child,
   });
 
@@ -298,6 +300,13 @@ class PlaybackScope extends InheritedWidget {
   /// asks: cheap and synchronous, read once when torrent polling starts,
   /// never on a timer of its own.
   final DhtStatus Function()? dhtStatus;
+
+  /// How the screen ends the proxied streams its player is reading when it
+  /// goes -- the other half of the token it puts in the URL. An interface
+  /// rather than a function because a test wants to see which token was
+  /// closed, and because every player test would otherwise reach FFI on
+  /// its way out.
+  final ProxyStreamControl? proxyStreams;
 
   static PlaybackScope? _maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlaybackScope>();
@@ -320,6 +329,9 @@ class PlaybackScope extends InheritedWidget {
   static DhtStatus Function() dhtStatusOf(BuildContext context) =>
       _maybeOf(context)?.dhtStatus ?? (() => const ServerClient().dhtStatus);
 
+  static ProxyStreamControl proxyStreamsOf(BuildContext context) =>
+      _maybeOf(context)?.proxyStreams ?? const ServerClient();
+
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
@@ -327,7 +339,8 @@ class PlaybackScope extends InheritedWidget {
       torrentStats != oldWidget.torrentStats ||
       subtitleMatch != oldWidget.subtitleMatch ||
       displayFrameRate != oldWidget.displayFrameRate ||
-      dhtStatus != oldWidget.dhtStatus;
+      dhtStatus != oldWidget.dhtStatus ||
+      proxyStreams != oldWidget.proxyStreams;
 }
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever

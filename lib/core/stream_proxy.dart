@@ -13,6 +13,16 @@ import 'dart:io';
 /// [serverBase] when it points anywhere else, and unchanged when it is
 /// already the server's own.
 ///
+/// [playerToken] is the name the caller minted for the player this URL is
+/// for. It rides in the parameter segment as `p=`, beside `d=`, which
+/// makes it a *proxy* parameter: the server strips it and never sends it
+/// to the origin, and it carries the token into every line of any playlist
+/// it rewrites, so an HLS player's segment fetches are marked with it too.
+/// It is what `ProxyStreamControl.closeProxyStreams` addresses -- a name
+/// rather than a credential, since the call that uses it is on the
+/// server's bearer-protected loopback control API and never on the LAN.
+/// Null leaves the URL unmarked, and such a stream can only be waited out.
+///
 /// **What the extra hop is for.** The server is the one writer on this
 /// device the app can see, bound, sweep and answer for; a stream the player
 /// fetched itself was a second one, with no name on disk and no limit. So
@@ -81,7 +91,11 @@ import 'dart:io';
 ///
 /// A fragment is dropped, because a fragment was never part of what a
 /// server is asked for: nobody sends one over the wire.
-Uri proxiedThroughServer(Uri url, {required Uri? serverBase}) {
+Uri proxiedThroughServer(
+  Uri url, {
+  required Uri? serverBase,
+  String? playerToken,
+}) {
   if (serverBase == null) return url;
   if (!url.isScheme('http') && !url.isScheme('https')) return url;
   if (isLoopbackHost(url.host)) return url;
@@ -101,7 +115,13 @@ Uri proxiedThroughServer(Uri url, {required Uri? serverBase}) {
 
   final base = serverBase.toString();
   final prefix = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
-  return Uri.parse('$prefix/proxy/d=${Uri.encodeComponent(origin)}$rest');
+  // `&`-joined, and read by the server with `form_urlencoded` -- the same
+  // shape `h=` and `r=` use, and the reason both halves are escaped as
+  // components rather than written out.
+  final token = playerToken == null || playerToken.isEmpty
+      ? ''
+      : '&p=${Uri.encodeComponent(playerToken)}';
+  return Uri.parse('$prefix/proxy/d=${Uri.encodeComponent(origin)}$token$rest');
 }
 
 /// Whether [url] is one this app's server is serving through its `/proxy`

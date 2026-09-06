@@ -4,11 +4,13 @@
 //! The server is a process-wide singleton, so every scenario lives in one
 //! test function to keep them from interfering.
 
+use std::sync::{Arc, Mutex};
+
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
-    server_base_url, server_cache_usage, server_clean_cache_now, server_dht_status,
-    server_settings, server_start, server_stop, server_storage_report, server_torrent_stats,
-    server_update_settings, ServerConfig,
+    server_base_url, server_cache_usage, server_clean_cache_now, server_close_proxy_streams,
+    server_dht_status, server_settings, server_start, server_stop, server_storage_report,
+    server_torrent_stats, server_update_settings, ServerConfig,
 };
 
 /// A well-known public-domain torrent (Night of the Living Dead), never
@@ -40,6 +42,57 @@ async fn heartbeat_status(base_url: &str) -> anyhow::Result<StatusCode> {
         .send()
         .await?
         .status())
+}
+
+/// An origin that answers every request with a body it never finishes:
+/// headers, a first few kilobytes, then silence forever. That is what a
+/// stream a player is holding open looks like from this side, and the only
+/// thing a close can be observed against -- an origin that ended would end
+/// the stream by itself and prove nothing.
+///
+/// Every request line it was sent is recorded, so a test can also say what
+/// did *not* reach it.
+fn endless_origin(
+    requests: Arc<Mutex<Vec<String>>>,
+) -> std::io::Result<(std::net::SocketAddr, tokio::task::JoinHandle<()>)> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let addr = listener.local_addr()?;
+    let listener = tokio::net::TcpListener::from_std(listener)?;
+    let task = tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let requests = Arc::clone(&requests);
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut head = Vec::new();
+                let mut byte = [0u8; 1];
+                while !head.ends_with(b"\r\n\r\n") {
+                    match socket.read(&mut byte).await {
+                        Ok(0) | Err(_) => return,
+                        Ok(_) => head.push(byte[0]),
+                    }
+                }
+                let text = String::from_utf8_lossy(&head).into_owned();
+                let line = text.lines().next().unwrap_or_default().to_owned();
+                requests.lock().expect("origin log").push(line);
+                // A `Content-Length` far larger than what is written, so
+                // hyper keeps asking the body for more and the read stays
+                // parked instead of completing.
+                let response = "HTTP/1.1 200 OK\r\n\
+                                Content-Type: video/mp4\r\n\
+                                Content-Length: 1048576\r\n\
+                                \r\n";
+                if socket.write_all(response.as_bytes()).await.is_err()
+                    || socket.write_all(&[0u8; 4096]).await.is_err()
+                    || socket.flush().await.is_err()
+                {
+                    return;
+                }
+                std::future::pending::<()>().await;
+            });
+        }
+    });
+    Ok((addr, task))
 }
 
 #[tokio::test]
@@ -168,6 +221,68 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         json(&tokio::task::spawn_blocking(server_settings).await??)["btMaxConnections"],
         77
     );
+
+    // A player's stream, ended from here instead of waited out.
+    //
+    // The app mints a token per player, puts it in the `/proxy` URL that
+    // player fetches (`p=`, a proxy parameter that never travels to the
+    // origin), and closes by it on teardown -- so a player that is on its
+    // way out stops reading now rather than after `network-timeout`, which
+    // is deliberately long enough that a slow swarm is not mistaken for a
+    // dead connection.
+    let origin_requests = Arc::new(Mutex::new(Vec::new()));
+    let (origin, origin_task) = endless_origin(Arc::clone(&origin_requests))?;
+    let proxied = |token: &str| {
+        format!(
+            "{url}proxy/d=http%3A%2F%2F127.0.0.1%3A{}&p={token}/film.mp4",
+            origin.port()
+        )
+    };
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .build()?;
+    let mut one = client.get(proxied("player-1")).send().await?;
+    let mut two = client.get(proxied("player-2")).send().await?;
+    assert_eq!(one.status(), StatusCode::OK);
+    assert_eq!(two.status(), StatusCode::OK);
+    // Both have their first bytes and are now parked on an origin that will
+    // never speak again, which is the state a wedged player is in.
+    assert!(one.chunk().await?.is_some(), "player one got no bytes");
+    assert!(two.chunk().await?.is_some(), "player two got no bytes");
+    // The token is ours and stops here: the origin was asked for the path
+    // and nothing else.
+    let asked = origin_requests.lock().expect("origin log").clone();
+    assert_eq!(asked.len(), 2, "{asked:?}");
+    for line in &asked {
+        assert_eq!(line, "GET /film.mp4 HTTP/1.1", "{asked:?}");
+    }
+
+    assert_eq!(server_close_proxy_streams("player-1".to_owned())?, 1);
+    // The read fails rather than ending cleanly: a body that stopped
+    // politely is what the end of a film looks like, and that is the one
+    // thing this must not be mistaken for.
+    assert!(
+        one.chunk().await.is_err(),
+        "player one's read should have failed at once"
+    );
+    // Closing twice is harmless, and nobody else's stream was touched.
+    assert_eq!(
+        server_close_proxy_streams("player-1".to_owned())?,
+        0,
+        "nothing left to close"
+    );
+    assert_eq!(server_close_proxy_streams("unknown-player".to_owned())?, 0);
+    // Player two is still live -- had the first close taken it too, it
+    // would have left the registry and this would answer 0. Its own read is
+    // deliberately not polled: the origin is silent, so a chunk that is
+    // *supposed* to be there is a hang and not an assertion.
+    assert_eq!(
+        server_close_proxy_streams("player-2".to_owned())?,
+        1,
+        "the first close should not have touched the other player"
+    );
+    assert!(two.chunk().await.is_err(), "and now player two ends too");
+    origin_task.abort();
 
     // Idempotent: a second start returns the same URL without restarting.
     let again = tokio::task::spawn_blocking({

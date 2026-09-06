@@ -138,6 +138,32 @@ Future<String> serverCleanCacheNow() =>
 String serverDhtStatus() =>
     RustLib.instance.api.crateApiServerServerDhtStatus();
 
+/// Ends every proxied stream carrying `token` -- the name the app minted
+/// for the player being torn down and put in the `/proxy` URL that player
+/// fetches -- and answers how many streams that was.
+///
+/// An HLS player has several at once (a playlist and its segments all
+/// carry the token, because the server writes it into every line of every
+/// playlist it rewrites), and they all end together. A player that is not
+/// being proxied has none, and answers 0.
+///
+/// **What it ends is a blocked read.** The body yields an error, hyper
+/// drops the connection, and the demuxer sees its source fail now rather
+/// than after `network-timeout`. A demuxer wedged somewhere else -- on the
+/// Flutter texture, on the audio device -- is not waiting on this read and
+/// is untouched by it.
+///
+/// Never errors: 0 covers a finished player, an unproxied one and a server
+/// that is not running alike, all of which mean there is nothing of this
+/// player left to close.
+///
+/// Synchronous, and deliberately so: it is a map scan with no I/O, and it
+/// is called from a teardown, where waiting for a place in the FRB worker
+/// pool behind a blocking call (a stats poll, a cache walk) would give
+/// back exactly the delay it exists to remove.
+PlatformInt64 serverCloseProxyStreams({required String token}) =>
+    RustLib.instance.api.crateApiServerServerCloseProxyStreams(token: token);
+
 /// Starts or stops the server's LAN media listener and answers the address
 /// it is bound to afterwards (`"0.0.0.0:39271"`), or null after a stop.
 ///

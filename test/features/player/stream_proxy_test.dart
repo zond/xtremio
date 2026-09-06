@@ -126,6 +126,46 @@ void main() {
       expect(targetOf(proxied), 'https://cdn.example/film.mkv?d=1&t=2');
     });
 
+    test("carries the player's token, and only in the proxy's own half", () {
+      // `p=` joins `d=` in the parameter segment, which is the half the
+      // server keeps: it is what `closeProxyStreams` addresses, and it
+      // never travels to the origin. Asserted from both sides -- the token
+      // is in the URL, and the target read back out of it is untouched.
+      final proxied = proxiedThroughServer(
+        Uri.parse('https://rd.example/dl/tok/film.mkv?e=1699'),
+        serverBase: server,
+        playerToken: 'player-7',
+      );
+
+      expect(proxied.toString(), contains('&p=player-7/'));
+      expect(targetOf(proxied), 'https://rd.example/dl/tok/film.mkv?e=1699');
+    });
+
+    test('escapes a token that would otherwise end the segment', () {
+      // The segment is `&`-joined and read with `form_urlencoded`, so a
+      // token holding `&`, `=` or a `/` would silently become another
+      // parameter or the start of the path. Nothing in this app mints one
+      // like that; the escaping is what makes that a choice rather than a
+      // constraint.
+      final proxied = proxiedThroughServer(
+        Uri.parse('https://rd.example/film.mkv'),
+        serverBase: server,
+        playerToken: 'a&b=c/d',
+      );
+
+      expect(proxied.toString(), contains('&p=a%26b%3Dc%2Fd/film.mkv'));
+      expect(targetOf(proxied), 'https://rd.example/film.mkv');
+    });
+
+    test('is unmarked when no token was minted', () {
+      final proxied = proxiedThroughServer(
+        Uri.parse('https://rd.example/film.mkv'),
+        serverBase: server,
+      );
+
+      expect(proxied.toString(), isNot(contains('p=')));
+    });
+
     test('drops the fragment, which no server was ever sent', () {
       final proxied = proxiedThroughServer(
         Uri.parse('https://cdn.example/film.mkv#t=90'),
