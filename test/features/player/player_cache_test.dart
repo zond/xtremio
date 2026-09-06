@@ -49,6 +49,20 @@ void main() {
     expect(MediaKitEngine.mpvOverrides['network-timeout'], '300');
   });
 
+  test('what it keeps instead is 32 MiB of memory, each way', () {
+    // media_kit 1.2.6 puts `PlayerConfiguration.bufferSize` on both
+    // `demuxer-max-bytes` and `demuxer-max-back-bytes`, so this is the
+    // window ahead and the window behind, and the player's ceiling is twice
+    // it. Written out rather than inherited: it is the only buffer the
+    // player has now, and the only buffer should not be a dependency's
+    // default.
+    expect(MediaKitEngine.memoryCacheBytes, 32 * 1024 * 1024);
+    expect(
+      MediaKitEngine.playerConfiguration.bufferSize,
+      MediaKitEngine.memoryCacheBytes,
+    );
+  });
+
   /// What a running libmpv did once the memory cache filled and there was
   /// nowhere else to put the payload -- which is every playback now.
   ///
@@ -79,7 +93,7 @@ void main() {
     // film -- and everything past it comes from the server, which is where
     // this design puts the read-ahead on purpose.
     final filled = afterTheMemoryCacheFills.last;
-    expect(filled.$3, greaterThan(32 * 1024 * 1024));
+    expect(filled.$3, greaterThan(MediaKitEngine.memoryCacheBytes));
     expect(filled.$4, lessThan(2000000 ~/ 50));
     // And before it filled, the link was running at the full throttle: the
     // collapse is the cache filling up, not the server slowing down.

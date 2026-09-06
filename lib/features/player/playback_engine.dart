@@ -323,7 +323,8 @@ class PlaybackScope extends InheritedWidget {
 /// creation: media_kit takes it as the video controller's configuration
 /// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
 class MediaKitEngine implements PlaybackEngine {
-  MediaKitEngine({bool hardwareDecoding = true}) : _player = Player() {
+  MediaKitEngine({bool hardwareDecoding = true})
+    : _player = Player(configuration: playerConfiguration) {
     _overrides = _applyOverrides(_player.platform);
     _controller = VideoController(
       _player,
@@ -588,6 +589,52 @@ class MediaKitEngine implements PlaybackEngine {
       // still playback.
     }
   }
+
+  /// What mpv keeps in memory for one playback: 32 MiB of packets ahead of
+  /// the play head and 32 MiB behind it, media_kit's own default written
+  /// out rather than inherited.
+  ///
+  /// `PlayerConfiguration.bufferSize` is set on both `demuxer-max-bytes`
+  /// and `demuxer-max-back-bytes` (media_kit 1.2.6,
+  /// `player/native/player/real.dart`), so the number is per side and the
+  /// player's ceiling is twice it.
+  ///
+  /// **It was reconsidered when the disk cache went, and deliberately left
+  /// where it is.** With `cache-on-disk=no` this is the whole of what the
+  /// player holds: about two minutes ahead of a 2.3 Mbps film and nine
+  /// seconds of a 30 Mbps remux, and everything past that comes from the
+  /// server on demand. Raising it is the obvious answer and the wrong one
+  /// here, for three reasons that all point the same way.
+  ///
+  /// The room is not there. The owner's television has 2 GB of RAM for the
+  /// whole system, this app measured 245 MB PSS with a player up, and the
+  /// embedded server and its torrent engine live in that same process --
+  /// so a doubling is another 64 MiB of resident memory on the device with
+  /// the least of it, taken from the engine that is feeding the playback.
+  ///
+  /// The cushion is not supposed to be here. This is the design that moved
+  /// the read-ahead into the server's cache, where it is bounded, named,
+  /// swept and survives a crash. Growing the player's memory instead is the
+  /// two-cache thinking that was just removed, one storey up: it would buy
+  /// the same window at a worse price, in the one place nothing can reclaim
+  /// it from.
+  ///
+  /// And the number is not the bottleneck yet. `/proxy` relays without
+  /// caching today (`server/tests/proxy.rs`), so the honest next move if
+  /// two minutes proves too thin is to make the server's side of the hop
+  /// keep what it fetched -- which helps a re-watch, a backward seek and a
+  /// second player, none of which a bigger heap here helps at all.
+  ///
+  /// It is written out rather than inherited because it is now the player's
+  /// only buffer, and the only buffer should not be somebody else's
+  /// default: a media_kit release that changed `bufferSize` would change
+  /// what a television holds, silently.
+  static const int memoryCacheBytes = 32 * 1024 * 1024;
+
+  /// media_kit's own defaults with [memoryCacheBytes] named.
+  static const PlayerConfiguration playerConfiguration = PlayerConfiguration(
+    bufferSize: memoryCacheBytes,
+  );
 
   /// The controller configuration for a `hardwareDecoding` setting:
   /// media_kit's default (GPU decode and render) when on, software
