@@ -186,8 +186,11 @@ existing Flutter escape hatch out of ABI filtering entirely.
   What it does answer is `castDeviceAddress`, on the `xtremio/device`
   channel below: the receiver's own IPv4 address, read off the MediaRouter
   route the Cast SDK discovered (`CastDevice.getFromBundle(route.extras)`,
-  then `getIpAddress()` — the method older accounts call
-  `getInet4Address()`). `flutter_chrome_cast` drops that field on the way
+  then `getIpAddress()`, which answers an `Inet4Address` — the
+  `getInet4Address()` older accounts name is gone from play-services-cast
+  21.5.0, and `getIpAddress()` is itself `@Deprecated` there, so an SDK bump
+  is where this moves to the `@NonNull` `getInetAddress()` and narrows the
+  answer to v4 for itself). `flutter_chrome_cast` drops that field on the way
   to Dart, and without it the embedded server has no idea which of this
   device's interfaces a Chromecast could reach: it would rank them and
   hope, and on a phone with mobile data up the wrong guess is a receiver

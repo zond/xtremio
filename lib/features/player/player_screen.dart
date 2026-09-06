@@ -2953,9 +2953,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _explainCast(compatibility.explanation, title: compatibility.title);
       return;
     }
-    // The session's receiver, not the row that was tapped: the address is
-    // asked of the platform as the session starts, so this is the one that
-    // knows where the receiver is.
+    // What comes back, not the row that was tapped: the platform is asked
+    // where the receiver is as a session starts and never during discovery,
+    // so the answer is the only one of the two that can carry an address.
     final receiver = await cast.connect(device);
     if (receiver == null) {
       await _explainCast('Could not start a session with ${device.name}.');

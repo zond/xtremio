@@ -257,12 +257,21 @@ class MainActivity : FlutterActivity() {
      * interface that receiver can actually connect back to, instead of
      * ranking its own interfaces and hoping.
      *
-     * `getIpAddress()` is what the Cast SDK calls the IPv4 address a
-     * receiver announced over mDNS these days; `getInet4Address()` is the
-     * name every older account of this gives, and it is gone from
-     * play-services-cast 21. The sibling `getInetAddress()` is *not* the
-     * one to take: it may answer an IPv6 address, and the server places a
-     * peer on one of its own IPv4 subnets.
+     * `getIpAddress()` is the one read here because it answers an
+     * `Inet4Address` and the server places a peer on one of its own IPv4
+     * subnets. It is `@Nullable`, and it is null exactly when the receiver
+     * announced no IPv4 address (`hasIPv4Address()` is what it asks), which
+     * is a receiver there is nothing useful to say about anyway.
+     * `getInet4Address()`, the name every older account of this gives, is
+     * gone from play-services-cast 21.5.0 altogether.
+     *
+     * `getIpAddress()` is itself `@Deprecated` in 21.5.0, where the sibling
+     * `getInetAddress()` is `@NonNull` and is not -- so the next SDK bump
+     * is where this may have to move to that one and do the narrowing
+     * itself, since it answers whatever the receiver announced and that can
+     * be an `Inet6Address`. All of which was read off the resolved
+     * artifact's own bytecode rather than off an account of it, this
+     * comment having said the opposite before.
      *
      * **Nothing here throws, and there is no test to make sure of it**, so
      * it is written to have nothing to throw: every step is null-safe, and

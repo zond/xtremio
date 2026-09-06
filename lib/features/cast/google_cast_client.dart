@@ -47,9 +47,9 @@ class GoogleCastClient implements CastClient {
   bool _initialised = false;
 
   /// Where each receiver is, as far as Android has said, keyed by Cast
-  /// device id. Filled by [connect] and never emptied: a receiver that
-  /// moves gets a new address on the next cast, and one that has gone is a
-  /// row nobody looks up again.
+  /// device id. [connect] is what fills a row, and what empties one it
+  /// could not fill: a receiver the platform says nothing about this time
+  /// has to have no address at all rather than the one it had last time.
   final Map<String, String> _addresses = {};
   final StreamController<CastStatus> _status =
       StreamController<CastStatus>.broadcast();
@@ -225,9 +225,17 @@ class GoogleCastClient implements CastClient {
   /// no such lookup, an old build has no such channel method, and a route
   /// can go stale between discovering it and casting to it. The server then
   /// ranks its own interfaces, which is what it did for every platform
-  /// before this.
+  /// before this -- which is why the row is forgotten before it is asked
+  /// for. Only ever writing would let a silence reuse the address of the
+  /// last cast to this receiver, so the ranking a silence is documented to
+  /// fall back to would never be reached at all, and a receiver moved to
+  /// another part of the network would be handed an interface chosen for
+  /// where it used to be. There is no test for this and there cannot be
+  /// one here: everything below the first line is the platform's, and
+  /// `isSupported` is false wherever the tests run.
   Future<void> _rememberAddress(String id) async {
     if (!Platform.isAndroid) return;
+    _addresses.remove(id);
     try {
       final address = await deviceChannel.invokeMethod<String>(
         'castDeviceAddress',
