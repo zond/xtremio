@@ -9,6 +9,8 @@ import android.content.res.Configuration
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Display
 import android.view.Surface
 import android.view.SurfaceView
@@ -18,6 +20,7 @@ import androidx.mediarouter.media.MediaRouter
 import com.google.android.gms.cast.CastDevice
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
@@ -35,6 +38,13 @@ class MainActivity : FlutterActivity() {
      * down first -- the engine that asked is going with it.
      */
     private var textEntry: MethodChannel.Result? = null
+
+    /**
+     * What is telling Dart the rate this display is really refreshing at,
+     * alive for as long as the engine is. Held so its `DisplayListener` can
+     * be unregistered with the activity rather than outliving it.
+     */
+    private var displayRefreshRates: DisplayRefreshRates? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before the Flutter engine starts Dart: RustLib.init() may
@@ -95,6 +105,13 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // What the display is really refreshing at, which is a different
+        // question from the rate asked for above and answered by a stream
+        // rather than a call (lib/shell/display_frame_rate.dart).
+        displayRefreshRates = DisplayRefreshRates().also {
+            EventChannel(flutterEngine.dartExecutor.binaryMessenger, DISPLAY_CHANNEL)
+                .setStreamHandler(it)
+        }
         // The downloads notification (lib/features/downloads/downloads_service.dart).
         // A tap that launched the app is kept here rather than delivered:
         // Dart installs its handler a moment later, and a call made before
@@ -154,9 +171,8 @@ class MainActivity : FlutterActivity() {
     private fun matchFrameRate(fps: Double?) {
         if (fps == null || !FrameRateMode.plausible(fps)) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val displays = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
             val ask = FrameRateMode.askFor(
-                displays?.matchContentFrameRateUserPreference
+                displayManager()?.matchContentFrameRateUserPreference
                     ?: FrameRateMode.MATCH_CONTENT_UNKNOWN,
             )
             if (ask == FrameRateAsk.NOTHING) return
@@ -194,6 +210,84 @@ class MainActivity : FlutterActivity() {
         }
         preferMode(0)
     }
+
+    /**
+     * Tells Dart what this display is **really** refreshing at, once when it
+     * is subscribed to and again whenever it changes.
+     *
+     * libmpv cannot measure this for itself here -- media_kit runs it with
+     * `vo=gpu` and `gpu-context=android`, which answers `VO_NOTIMPL` to
+     * `VOCTRL_GET_DISPLAY_FPS`, so the reported rate stays 0 and display
+     * sync never starts (`MediaKitEngine.mpvOverrides` holds the reading).
+     * It can be told, and this is where the number comes from.
+     *
+     * **It has to be what the display is doing, not what [matchFrameRate]
+     * asked for.** Both paths above are asynchronous and neither reports
+     * back: `Surface.setFrameRate` is a vote that returns nothing and can
+     * be dropped in silence, `preferredDisplayModeId` is a window attribute
+     * the platform acts on when it gets to it, and a set can land on a
+     * neighbouring mode or refuse to move at all. Handing mpv a rate the
+     * display never took would replace one wrong cadence with another and
+     * hide it behind a `display-sync-active` reading `yes`. So the ask is
+     * made, and then what actually happened is reported --
+     * `DisplayManager.DisplayListener.onDisplayChanged` is the callback a
+     * mode change arrives on.
+     *
+     * `Display.getRefreshRate()` and not `getMode().getRefreshRate()`,
+     * which is what [asFrameRateMode] reads for the mode choosing. The
+     * mode's rate is the panel's physical one; since Android 12 a frame
+     * rate override can present an app at a divisor of it without changing
+     * the mode at all, and `getRefreshRate()` is the one that accounts for
+     * that -- the rate *this app's* frames are shown at, which is the
+     * question mpv is asking. On the box this was measured on the two agree
+     * (`FrameRateOverrides=none`, `frameRateOverrideConfig=Disabled`).
+     *
+     * The listener is registered only while Dart is subscribed, and the
+     * first value is pushed at subscription because a display already on
+     * the right mode fires no event and the rate would otherwise never
+     * arrive at all.
+     */
+    private inner class DisplayRefreshRates :
+        EventChannel.StreamHandler,
+        DisplayManager.DisplayListener {
+        private var sink: EventChannel.EventSink? = null
+
+        override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+            sink = events
+            displayManager()?.registerDisplayListener(this, Handler(Looper.getMainLooper()))
+            emit()
+        }
+
+        override fun onCancel(arguments: Any?) = detach()
+
+        /** Lets the display go, whether Dart cancelled or the activity did. */
+        fun detach() {
+            displayManager()?.unregisterDisplayListener(this)
+            sink = null
+        }
+
+        override fun onDisplayAdded(displayId: Int) = Unit
+
+        override fun onDisplayRemoved(displayId: Int) = Unit
+
+        override fun onDisplayChanged(displayId: Int) {
+            // Every display's changes arrive here; only the one this
+            // activity is on says anything about the picture being watched.
+            if (displayId == activityDisplay()?.displayId) emit()
+        }
+
+        private fun emit() {
+            val rate = activityDisplay()?.refreshRate?.toDouble() ?: return
+            // A rate that is not a rate is not reported: Dart would have to
+            // refuse it anyway, and mpv reads a zero as "no display rate"
+            // and silently goes back to timing against the audio clock.
+            if (!rate.isFinite() || rate <= 0.0) return
+            sink?.success(rate)
+        }
+    }
+
+    private fun displayManager(): DisplayManager? =
+        getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
 
     /** The mode to ask this display for, or null for nothing to ask. */
     private fun matchingModeId(fps: Double): Int? {
@@ -348,6 +442,8 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         downloads?.detach()
         downloads = null
+        displayRefreshRates?.detach()
+        displayRefreshRates = null
         textEntry = null
         super.onDestroy()
     }
@@ -370,6 +466,7 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val DEVICE_CHANNEL = "xtremio/device"
+        const val DISPLAY_CHANNEL = "xtremio/display"
         const val REQUEST_TEXT_ENTRY = 4712
     }
 }

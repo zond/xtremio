@@ -308,8 +308,10 @@ class FakeFullscreenController implements FullscreenController {
 }
 
 /// Records what the display was asked to present at instead of speaking to
-/// the platform channel.
+/// the platform channel, and lets a test say what the display then did.
 class FakeDisplayFrameRate implements DisplayFrameRate {
+  final _refreshRate = StreamController<double>.broadcast();
+
   /// Every rate asked for, in order.
   final List<double> requested = [];
 
@@ -321,4 +323,13 @@ class FakeDisplayFrameRate implements DisplayFrameRate {
 
   @override
   Future<void> clear() async => clears++;
+
+  @override
+  Stream<double> get refreshRate => _refreshRate.stream;
+
+  /// The display reporting what it settled on -- which is not necessarily
+  /// what [request] asked for, and is the point of the two being separate.
+  void reportRefreshRate(double hz) => _refreshRate.add(hz);
+
+  Future<void> dispose() => _refreshRate.close();
 }
