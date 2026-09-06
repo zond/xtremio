@@ -521,42 +521,69 @@ void main() {
   });
 
   group('a receiver that never fetches', () {
-    testWidgets('is stopped, explained, and brought back to this device', (
+    // What the receiver says about itself, which this check must take no
+    // notice of at all. The receiver the whole feature exists for reports a
+    // healthy session and `Unknown player state:` in its own log, which
+    // `GoogleCastClient` folds into [CastPlayerState.idle] -- so a check
+    // that disarmed on anything but buffering disarmed on the one case it
+    // was written for. Silence is on the list because it is what a fake
+    // that emits nothing reports, and so is the only case the old tests
+    // ever reached.
+    for (final reported in <CastPlayerState?>[
+      null,
+      ...CastPlayerState.values,
+    ]) {
+      testWidgets(
+        'is stopped and explained, reporting ${reported?.name ?? 'nothing'}',
+        (tester) async {
+          final lines = captureDiagnostics();
+          useWideViewport(tester);
+          final cast = FakeCastClient(devices: const [livingRoom]);
+          // The listener runs and nothing ever reaches it: the address the
+          // receiver was given is one it cannot route to, and a hanging
+          // connect is not an error anybody is ever told about.
+          final lan = FakeLanMediaControl()..baseUrl = lanBase;
+          final harness = castHarness(cast: cast, lanMedia: lan);
+          await harness.pump(tester);
+          harness.engine.emitPosition(const Duration(minutes: 4));
+          await pumpEvents(tester);
+          await castTo(tester, livingRoom);
+          expect(find.byType(CastRemotePanel), findsOneWidget);
+
+          if (reported != null) {
+            cast.emitStatus(
+              CastStatus(state: reported, position: const Duration(minutes: 4)),
+            );
+            await tester.pumpAndSettle();
+          }
+          await tester.pump(PlayerScreen.castFetchTimeout);
+          await tester.pumpAndSettle();
+
+          expect(
+            find.textContaining('never asked for the stream'),
+            findsOneWidget,
+          );
+          expect(
+            lines,
+            anyElement(contains('asked the LAN listener for nothing')),
+          );
+          // The session is over and the film is back here, at the position
+          // the receiver was given it at.
+          expect(cast.disconnects, 1);
+          expect(lan.toggles, [true, false]);
+          expect(harness.engine.seeks, [const Duration(minutes: 4)]);
+          expect(harness.engine.playCalls, 1);
+          await tester.tap(find.text('OK'));
+          await tester.pumpAndSettle();
+          expect(find.byType(CastRemotePanel), findsNothing);
+        },
+      );
+    }
+
+    testWidgets('one that did fetch is left alone, and told nothing', (
       tester,
     ) async {
       final lines = captureDiagnostics();
-      useWideViewport(tester);
-      final cast = FakeCastClient(devices: const [livingRoom]);
-      // The listener runs and nothing ever reaches it: the address the
-      // receiver was given is one it cannot route to, and a hanging
-      // connect is not an error anybody is ever told about.
-      final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      final harness = castHarness(cast: cast, lanMedia: lan);
-      await harness.pump(tester);
-      harness.engine.emitPosition(const Duration(minutes: 4));
-      await pumpEvents(tester);
-      await castTo(tester, livingRoom);
-      expect(find.byType(CastRemotePanel), findsOneWidget);
-
-      await tester.pump(PlayerScreen.castFetchTimeout);
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('never asked for the stream'), findsOneWidget);
-      expect(lines, anyElement(contains('asked the LAN listener for nothing')));
-      // The session is over and the film is back here, at the position the
-      // receiver was given it at.
-      expect(cast.disconnects, 1);
-      expect(lan.toggles, [true, false]);
-      expect(harness.engine.seeks, [const Duration(minutes: 4)]);
-      expect(harness.engine.playCalls, 1);
-      await tester.tap(find.text('OK'));
-      await tester.pumpAndSettle();
-      expect(find.byType(CastRemotePanel), findsNothing);
-    });
-
-    testWidgets('one that did fetch is told apart, and left alone', (
-      tester,
-    ) async {
       useWideViewport(tester);
       final cast = FakeCastClient(devices: const [livingRoom]);
       final lan = FakeLanMediaControl()
@@ -566,43 +593,17 @@ void main() {
       await harness.pump(tester);
       await castTo(tester, livingRoom);
 
+      // Still buffering, and reporting nothing else -- which is exactly
+      // what a cold torrent twenty seconds in looks like. It has reached
+      // this device, so the network is not what to talk about, and nothing
+      // that can be known at this point is worth a dialog blaming the file.
       await tester.pump(PlayerScreen.castFetchTimeout);
       await tester.pumpAndSettle();
 
-      // It reached this device, so the network is not what to talk about --
-      // and a session that may yet recover is nobody's to end but the
-      // viewer's.
-      expect(find.textContaining('fetched the stream'), findsOneWidget);
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(lines, anyElement(contains('asked the LAN listener for 3')));
       expect(cast.disconnects, 0);
       expect(lan.running, isTrue);
-      await tester.tap(find.text('OK'));
-      await tester.pumpAndSettle();
-      expect(find.byType(CastRemotePanel), findsOneWidget);
-    });
-
-    testWidgets('a receiver that is playing is asked nothing', (tester) async {
-      useWideViewport(tester);
-      final cast = FakeCastClient(devices: const [livingRoom]);
-      final lan = FakeLanMediaControl()..baseUrl = lanBase;
-      final harness = castHarness(cast: cast, lanMedia: lan);
-      await harness.pump(tester);
-      await castTo(tester, livingRoom);
-
-      cast.emitStatus(
-        const CastStatus(
-          state: CastPlayerState.playing,
-          position: Duration(minutes: 1),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.pump(PlayerScreen.castFetchTimeout);
-      await tester.pumpAndSettle();
-
-      // The count is still zero -- the fake listener was never asked for
-      // anything -- and it is never consulted, because a receiver that is
-      // playing has answered the only question it was going to be asked.
-      expect(find.byType(CastRefusedDialog), findsNothing);
-      expect(cast.disconnects, 0);
       expect(find.byType(CastRemotePanel), findsOneWidget);
     });
 

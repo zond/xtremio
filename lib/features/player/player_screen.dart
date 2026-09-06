@@ -147,9 +147,11 @@ class PlayerScreen extends StatefulWidget {
   ///
   /// A receiver handed an address it cannot reach never says so: the
   /// connect hangs, and the splash screen it is on is the same one a slow
-  /// start looks like. Long enough that a torrent still filling its window
-  /// is not accused of anything, short enough that nobody is left watching
-  /// a splash screen wondering.
+  /// start looks like. What the wait allows for is a receiver that is on
+  /// its way but unhurried -- the load, the redirect and the first range
+  /// request take a moment between them -- and not for telling a stall
+  /// from a failure, which the count does whenever it is read. Short
+  /// enough that nobody is left watching a splash screen wondering.
   static const Duration castFetchTimeout = Duration(seconds: 20);
 
   /// How long the controls stay up without input while playing.
@@ -508,10 +510,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// no listener at all, and must not leave one running.
   bool _lanMediaOn = false;
 
-  /// Runs [castFetchTimeout] after a load, and only while the receiver is
-  /// fetching from *our* listener: what it checks is that listener's count
-  /// ([_castFetchCheck]). Cancelled the moment the receiver reports
-  /// anything but buffering, and by every way out of a session.
+  /// Runs [castFetchTimeout] after a load served off this device, and asks
+  /// the one question that listener's count can answer: did the receiver
+  /// ever reach us ([_castFetchCheck]). Nothing a receiver says about
+  /// itself cancels it -- the receiver this exists to catch reports a
+  /// healthy session and a player state the SDK cannot name, so its own
+  /// account of itself is exactly what must not be listened to. Only the
+  /// ways out of a session cancel it.
   Timer? _castFetchTimer;
 
   /// The last sample mpv gave for the open media, taken while the cast
@@ -2873,13 +2878,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// notice which device the pixels were on.
   void _onCastStatus(CastStatus status) {
     if (!mounted) return;
-    // Anything but buffering answers the question the wait was asking, and
-    // a receiver that starts, stalls and starts again is not a receiver
-    // that cannot reach us.
-    if (status.state != CastPlayerState.buffering) {
-      _castFetchTimer?.cancel();
-      _castFetchTimer = null;
-    }
     setState(() => _castStatus = status);
     if (!_casting || _opened == null) return;
     final duration = status.duration;
@@ -3020,7 +3018,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// host on the internet owes our listener nothing, and its count would
   /// stay at zero however well the cast was going.
   void _watchCastFetch() {
-    _castFetchTimer?.cancel();
+    _cancelCastFetch();
     if (!_lanMediaOn) return;
     _castFetchTimer = Timer(
       PlayerScreen.castFetchTimeout,
@@ -3028,36 +3026,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  /// What to say about a receiver that is still buffering long after it was
-  /// given the stream, which the listener's count decides.
+  /// Ends the wait. What it asks is about a session, so every way out of
+  /// one comes through here -- Stop, a session that ended elsewhere, a
+  /// failed start, [dispose] -- and so does arming the next one.
+  void _cancelCastFetch() {
+    _castFetchTimer?.cancel();
+    _castFetchTimer = null;
+  }
+
+  /// Whether the receiver ever reached this device, which is the whole of
+  /// what the listener's count says and the whole of what this asks.
   ///
-  /// Nothing has reached the listener: the address it was given is one it
-  /// cannot route to. There is nothing to wait for -- a hanging connect
-  /// never fails on its own -- so the session ends the way Stop ends it and
-  /// the film comes back to this device, with the reason said out loud.
+  /// Nothing has reached it: the address it was given is one it cannot
+  /// route to. There is nothing to wait for -- a hanging connect never
+  /// fails on its own -- so the session ends the way Stop ends it and the
+  /// film comes back to this device, with the reason said out loud.
   ///
-  /// Something has: the receiver found this device and could not play what
-  /// it found, which is a different sentence and not one to end a session
-  /// over. It may yet recover, and if it does not, Stop is right there.
+  /// Something has, and the viewer hears nothing at all. Whether a receiver
+  /// that found us is buffering slowly or cannot decode what it fetched is
+  /// not something twenty seconds can tell -- a cold torrent has made
+  /// requests by then and is still filling its window -- and a modal
+  /// blaming the file for a wait that is going fine is worse than silence.
+  /// The log gets it; Stop is where it always was.
   Future<void> _castFetchCheck() async {
     _castFetchTimer = null;
     if (!mounted || !_casting) return;
-    if (_castStatus.state != CastPlayerState.buffering) return;
     final served = _lanMedia?.lanMediaRequestsServed ?? 0;
-    final device = _castingTo;
     if (served > 0) {
-      DiagnosticsLog.warn(
+      DiagnosticsLog.info(
         'player',
-        'receiver still buffering after $served request(s) to the listener',
-      );
-      await _explainCast(
-        '${device?.name ?? 'The receiver'} fetched the stream from this '
-        'device and has not started playing it, so the address it was given '
-        'is one it can reach and whatever is wrong is with the file itself. '
-        'Stop ends the session and brings the film back here.',
+        'receiver has asked the LAN listener for $served request(s)',
       );
       return;
     }
+    final device = _castingTo;
     DiagnosticsLog.warn(
       'player',
       'receiver asked the LAN listener for nothing; ending the session',
@@ -3108,8 +3110,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// elsewhere) and there is nothing left to end.
   Future<void> _stopCast({bool disconnect = true}) async {
     if (!_casting) return;
-    _castFetchTimer?.cancel();
-    _castFetchTimer = null;
+    _cancelCastFetch();
     final position = _castStatus.position;
     _castingTo = null;
     if (mounted) setState(() {});
@@ -3126,6 +3127,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// way out of one comes through here: Stop, a session that ended
   /// elsewhere, a failed start, and [dispose].
   Future<void> _endLanMedia() async {
+    _cancelCastFetch();
     if (!_lanMediaOn) return;
     _lanMediaOn = false;
     try {
@@ -3480,7 +3482,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // subscriptions below are cancelled first, so nothing reports back into
     // a disposed screen while this runs.
     _cast?.stopDiscovery().ignore();
-    _castFetchTimer?.cancel();
+    _cancelCastFetch();
     if (_casting || _lanMediaOn) unawaited(_teardownCast());
     _cancelOpenRetry();
     _statsHoverTimer?.cancel();

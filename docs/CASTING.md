@@ -90,18 +90,30 @@ the only account there is: the receiver reports nothing useful, and the
 server's own log says only that its listener started and stopped.
 
 **A receiver that never fetches** is not left looking like one that is merely
-slow. `PlayerScreen.castFetchTimeout` after a load -- twenty seconds -- a
-receiver still buffering is asked about through the listener's count of what
-it has been asked for (`server_lan_media_requests_served`, reset by every
+slow. `PlayerScreen.castFetchTimeout` after a load -- twenty seconds -- one
+question is asked, and the listener's count of what it has been asked for is
+the whole of the answer (`server_lan_media_requests_served`, reset by every
 start and every stop, so it is the session's own even when a second receiver
-is picked while the first still has the stream). Nothing at all: the address was one the receiver
-could not route to, and nothing will happen, because a connect to an
-unroutable host hangs instead of failing. The session ends the way Stop ends
-it, the film comes back to this device, and the dialog says why. Something:
-the receiver reached this device and could not play what it found, which is
-about the media and not the network, so the session is left alone -- it may
-recover -- and the dialog says that instead. A stream fetched from the
-internet arms none of this: our listener is not the one it would be asking.
+is picked while the first still has the stream). Nothing at all: the address
+was one the receiver could not route to, and nothing will happen, because a
+connect to an unroutable host hangs instead of failing. The session ends the
+way Stop ends it, the film comes back to this device, and the dialog says
+why. Something: it reached this device, the viewer is told nothing, and the
+count goes in the log. Whether such a receiver is filling a buffer or cannot
+decode what it fetched is not something twenty seconds can tell -- a cold
+torrent has made requests by then and is still warming up -- so a dialog
+blaming the file would be wrong as often as it was right, and Stop is where
+it always was.
+
+**What the receiver says about itself is never consulted here**, and that is
+the point rather than an omission. The receiver this check exists for reports
+a healthy session and `media_control_handler.cc(59) Unknown player state:`,
+which the client folds into `CastPlayerState.idle`; a check that disarmed on
+anything but buffering therefore disarmed on the one case it was written for,
+and the tests only passed because the fake emitted no status at all. So
+nothing incoming cancels the wait -- only the ways out of a session do
+(`_cancelCastFetch`). A stream fetched from the internet arms none of this:
+our listener is not the one it would be asking.
 
 **The listener lives exactly as long as a session**, and that is made hard to
 get wrong rather than merely intended: it is closed when the session ends, when
