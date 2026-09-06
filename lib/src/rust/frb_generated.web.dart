@@ -13,7 +13,6 @@ import 'api/downloads.dart';
 import 'api/hello.dart';
 import 'api/prefs.dart';
 import 'api/server.dart';
-import 'api/storage.dart';
 import 'api/subtitles.dart';
 
 import 'dart:async';
