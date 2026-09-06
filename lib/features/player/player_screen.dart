@@ -3684,7 +3684,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // owes the teardown nothing. Arming it in front of the two frames
     // rather than after them costs a fraction of a second of a ten-second
     // bound and covers the case where those frames never come: an engine
-    // producing no more frames still holds its cache file.
+    // producing no more frames is still holding everything a live one
+    // holds -- its packet memory, its socket, and the server engine that
+    // socket keeps live and the cleaner may not evict behind.
     var killed = false;
     final fallback = Timer(PlayerScreen.teardownBound, () {
       killed = true;
@@ -3692,7 +3694,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'player',
         'the player did not stop within '
             '${PlayerScreen.teardownBound.inSeconds}s of '
-            'leaving; destroying it to get its cache file back',
+            'leaving; destroying it to get its memory and its socket back',
       );
       unawaited(
         engine.destroy().catchError((Object error) {

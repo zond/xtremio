@@ -92,7 +92,8 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   /// Whether `dispose` has *finished*. A real teardown stops libmpv before
   /// it releases the player, so until this is true the demuxer is still
-  /// open and still filling its cache file.
+  /// open: still filling its packet buffer, and still reading from the
+  /// server.
   bool disposed = false;
 
   /// Holds the teardown open until the test completes it -- what
