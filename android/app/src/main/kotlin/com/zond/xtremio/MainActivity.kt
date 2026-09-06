@@ -14,6 +14,8 @@ import android.view.Surface
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import androidx.mediarouter.media.MediaRouter
+import com.google.android.gms.cast.CastDevice
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -64,6 +66,13 @@ class MainActivity : FlutterActivity() {
                             "model" to Build.MODEL,
                             "manufacturer" to Build.MANUFACTURER,
                         ),
+                    )
+                    // Where a receiver actually is, which is what lets the
+                    // embedded server name an interface that receiver can
+                    // connect back to
+                    // (lib/features/cast/google_cast_client.dart).
+                    "castDeviceAddress" -> result.success(
+                        castDeviceAddress(call.argument<String>("id")),
                     )
                     // A string typed on a screen of the platform's own,
                     // which is the only way a remote can type at all
@@ -233,6 +242,46 @@ class MainActivity : FlutterActivity() {
             surfaceViewIn(view.getChildAt(index))?.let { return it }
         }
         return null
+    }
+
+    /**
+     * The IPv4 address the receiver with Cast device id [id] announced over
+     * mDNS, or null when Android does not know one.
+     *
+     * `flutter_chrome_cast` maps a `CastDevice` to Dart without its address
+     * (`GoogleCastClient` has the same note), but the route the Cast SDK
+     * discovered still carries the device, so the address is read off that
+     * -- matching on `CastDevice.getFromBundle(route.extras)?.deviceId`,
+     * which is the lookup the plugin's own `selectRoute` does. Knowing
+     * where the receiver is is what lets the embedded server name a local
+     * interface that receiver can actually connect back to, instead of
+     * ranking its own interfaces and hoping.
+     *
+     * `getIpAddress()` is what the Cast SDK calls the IPv4 address a
+     * receiver announced over mDNS these days; `getInet4Address()` is the
+     * name every older account of this gives, and it is gone from
+     * play-services-cast 21. The sibling `getInetAddress()` is *not* the
+     * one to take: it may answer an IPv6 address, and the server places a
+     * peer on one of its own IPv4 subnets.
+     *
+     * **Nothing here throws, and there is no test to make sure of it**, so
+     * it is written to have nothing to throw: every step is null-safe, and
+     * the one call that can raise at all (`MediaRouter.getInstance` insists
+     * on the main thread) is caught. A null answer is the answer this call
+     * never having existed gives, which is what makes it safe to add.
+     */
+    private fun castDeviceAddress(id: String?): String? {
+        if (id.isNullOrEmpty()) return null
+        return try {
+            MediaRouter.getInstance(this).routes
+                .firstNotNullOfOrNull { route ->
+                    CastDevice.getFromBundle(route.extras)?.takeIf { it.deviceId == id }
+                }
+                ?.ipAddress
+                ?.hostAddress
+        } catch (error: IllegalStateException) {
+            null
+        }
     }
 
     /**

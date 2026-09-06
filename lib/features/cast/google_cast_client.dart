@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_chrome_cast/cast_context.dart';
 import 'package:flutter_chrome_cast/discovery.dart';
 import 'package:flutter_chrome_cast/entities.dart';
@@ -37,9 +38,19 @@ class GoogleCastClient implements CastClient {
   static const String _defaultApplicationId =
       GoogleCastDiscoveryCriteria.kDefaultApplicationId;
 
+  /// The channel `MainActivity` answers `castDeviceAddress` on -- the same
+  /// one `DeviceProfile.detect` asks about the device this app runs on.
+  static const MethodChannel deviceChannel = MethodChannel('xtremio/device');
+
   final String applicationId;
 
   bool _initialised = false;
+
+  /// Where each receiver is, as far as Android has said, keyed by Cast
+  /// device id. Filled by [connect] and never emptied: a receiver that
+  /// moves gets a new address on the next cast, and one that has gone is a
+  /// row nobody looks up again.
+  final Map<String, String> _addresses = {};
   final StreamController<CastStatus> _status =
       StreamController<CastStatus>.broadcast();
   final List<StreamSubscription<void>> _subscriptions = [];
@@ -139,14 +150,18 @@ class GoogleCastClient implements CastClient {
       ? _devicesOf(GoogleCastDiscoveryManager.instance.devices)
       : const [];
 
-  static List<CastDevice> _devicesOf(List<GoogleCastDevice> devices) => [
-    for (final device in devices)
-      CastDevice(
-        id: device.deviceID,
-        name: device.friendlyName,
-        model: device.modelName,
-      ),
+  List<CastDevice> _devicesOf(List<GoogleCastDevice> devices) => [
+    for (final device in devices) _castDevice(device),
   ];
+
+  /// One of the SDK's devices as the app knows it, carrying whatever the
+  /// platform has said about where it is ([_rememberAddress]).
+  CastDevice _castDevice(GoogleCastDevice device) => CastDevice(
+    id: device.deviceID,
+    name: device.friendlyName,
+    model: device.modelName,
+    address: _addresses[device.deviceID],
+  );
 
   @override
   Future<void> startDiscovery() async {
@@ -171,28 +186,59 @@ class GoogleCastClient implements CastClient {
       ? _deviceOf(GoogleCastSessionManager.instance.currentSession)
       : null;
 
-  static CastDevice? _deviceOf(GoogleCastSession? session) {
+  CastDevice? _deviceOf(GoogleCastSession? session) {
     final device = session?.device;
     if (device == null) return null;
     if (session?.connectionState != GoogleCastConnectState.connected) {
       return null;
     }
-    return CastDevice(
-      id: device.deviceID,
-      name: device.friendlyName,
-      model: device.modelName,
-    );
+    return _castDevice(device);
   }
 
   @override
-  Future<bool> connect(CastDevice device) async {
+  Future<CastDevice?> connect(CastDevice device) async {
     await _ensureInitialised();
-    if (!_initialised) return false;
+    if (!_initialised) return null;
     final found = GoogleCastDiscoveryManager.instance.devices
         .where((candidate) => candidate.deviceID == device.id)
         .firstOrNull;
-    if (found == null) return false;
-    return GoogleCastSessionManager.instance.startSessionWithDevice(found);
+    if (found == null) return null;
+    // Asked for here rather than during discovery: a channel round trip
+    // per receiver on every route change buys nothing, and the one moment
+    // the address is wanted is this one. It is also asked *before* the
+    // session starts, because starting one is an answer that arrives long
+    // after the call returns and the URL is wanted well before that.
+    await _rememberAddress(device.id);
+    final started = await GoogleCastSessionManager.instance
+        .startSessionWithDevice(found);
+    return started ? _castDevice(found) : null;
+  }
+
+  /// Asks Android where the receiver with [id] is and remembers the answer.
+  ///
+  /// The Cast SDK knows -- a MediaRouter route's extras carry the
+  /// `CastDevice` and the address it announced over mDNS -- but the
+  /// plugin's own `CastDeviceExtensions.toMap()` drops it, so
+  /// `MainActivity.castDeviceAddress` reads it off the route instead.
+  ///
+  /// A silence is the answer this call never having existed gives: iOS has
+  /// no such lookup, an old build has no such channel method, and a route
+  /// can go stale between discovering it and casting to it. The server then
+  /// ranks its own interfaces, which is what it did for every platform
+  /// before this.
+  Future<void> _rememberAddress(String id) async {
+    if (!Platform.isAndroid) return;
+    try {
+      final address = await deviceChannel.invokeMethod<String>(
+        'castDeviceAddress',
+        {'id': id},
+      );
+      if (address != null && address.isNotEmpty) _addresses[id] = address;
+    } on PlatformException catch (error) {
+      if (kDebugMode) debugPrint('cast device address unavailable: $error');
+    } on MissingPluginException catch (error) {
+      if (kDebugMode) debugPrint('cast device address unavailable: $error');
+    }
   }
 
   @override

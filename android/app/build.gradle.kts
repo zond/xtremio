@@ -43,6 +43,14 @@ dependencies {
     // core in transitively, but transitively is not on our compile
     // classpath, so it is asked for by name.
     implementation("androidx.core:core-ktx:1.17.0")
+    // CastDevice, and the MediaRouter route it rides on: where a receiver's
+    // own IP is, which MainActivity.castDeviceAddress reads off the route
+    // the Cast SDK discovered. flutter_chrome_cast's
+    // play-services-cast-framework:21.5.0 already resolves exactly this
+    // (mediarouter with it), but as `implementation` of its own module, so
+    // naming it here adds nothing to the APK -- it only reaches our own
+    // compile classpath.
+    implementation("com.google.android.gms:play-services-cast:21.5.0")
     // Plain JVM tests, for the Kotlin that has no Android in it.
     testImplementation("junit:junit:4.13.2")
 }

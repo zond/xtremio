@@ -6,8 +6,16 @@ import 'package:xtremio/features/cast/cast_client.dart';
 /// [CastClient] for widget tests: records every call and lets the test say
 /// what receivers exist and what they report. No Cast SDK, no network.
 class FakeCastClient implements CastClient {
-  FakeCastClient({this.isSupported = true, List<CastDevice> devices = const []})
-    : _devices = [...devices];
+  FakeCastClient({
+    this.isSupported = true,
+    List<CastDevice> devices = const [],
+    this.addresses = const {},
+  }) : _devices = [...devices];
+
+  /// Where each receiver is, keyed by device id, as the platform would
+  /// answer it. The real client only asks when a session starts, so a
+  /// device in the list carries no address until [connect] hands one back.
+  final Map<String, String> addresses;
 
   @override
   bool isSupported;
@@ -34,7 +42,7 @@ class FakeCastClient implements CastClient {
   /// Every `load`: the media and the position it was asked to start at.
   final List<(CastMedia, Duration)> loads = [];
 
-  /// When set, `connect` records the device and then answers false.
+  /// When set, `connect` records the device and then answers null.
   bool connectFails = false;
   final List<CastDevice> connectAttempts = [];
 
@@ -74,12 +82,18 @@ class FakeCastClient implements CastClient {
   CastDevice? get connectedDevice => _connected;
 
   @override
-  Future<bool> connect(CastDevice device) async {
+  Future<CastDevice?> connect(CastDevice device) async {
     connectAttempts.add(device);
-    if (connectFails) return false;
-    _connected = device;
-    _sessionController.add(device);
-    return true;
+    if (connectFails) return null;
+    final receiver = CastDevice(
+      id: device.id,
+      name: device.name,
+      model: device.model,
+      address: addresses[device.id] ?? device.address,
+    );
+    _connected = receiver;
+    _sessionController.add(receiver);
+    return receiver;
   }
 
   @override

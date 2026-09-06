@@ -395,6 +395,63 @@ void main() {
       expect(lan.toggles, isEmpty);
     });
 
+    testWidgets('the receiver\'s own address is what the server is asked', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      // Android knows where the receiver is, and says so as the session
+      // starts. That address is the whole point of the exercise: it is
+      // what lets the server name the interface on the receiver's subnet
+      // rather than rank its own and hope.
+      final cast = FakeCastClient(
+        devices: const [livingRoom],
+        addresses: const {'device-1': '192.168.1.44'},
+      );
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(lan.baseUrlRequests, ['192.168.1.44']);
+      expect(cast.loads, hasLength(1));
+    });
+
+    testWidgets('a platform that says nothing asks with nothing', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      // iOS, or a route that has gone stale: the server is asked all the
+      // same, and answers with its best-ranked interface.
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(lan.baseUrlRequests, [null]);
+      expect(cast.loads, hasLength(1));
+    });
+
+    testWidgets('a session that will not start is said so and nothing else', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom])
+        ..connectFails = true;
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(find.textContaining('Could not start a session'), findsOneWidget);
+      expect(cast.loads, isEmpty);
+      // Nothing was put on the LAN for a session that never began.
+      expect(lan.toggles, isEmpty);
+    });
+
     testWidgets('a receiver with no route to this device is not cast to', (
       tester,
     ) async {

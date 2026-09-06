@@ -8,10 +8,12 @@ import '../../core/core.dart';
 /// [id] is the Cast SDK's own device id, which is what a session is started
 /// with and what tells two receivers apart; nothing else here is identity.
 ///
-/// [address] is the receiver's IP when the platform reports one. The Cast
-/// SDK does not, so it is null in practice; it exists because it is what the
-/// server wants in order to name the *right* local interface in a media URL,
-/// and a platform that starts reporting it should not need a new seam.
+/// [address] is the receiver's IP when the platform reports one, which is
+/// what the server wants in order to name the *right* local interface in a
+/// media URL. Android reports it: the Cast SDK's route carries the device
+/// and the address it announced over mDNS, which `MainActivity` reads and
+/// [CastClient.connect] asks for. iOS still does not, and a null leaves the
+/// server ranking its own interfaces instead.
 @immutable
 final class CastDevice {
   const CastDevice({
@@ -159,8 +161,15 @@ abstract interface class CastClient {
   /// The connected receiver, without waiting for an event.
   CastDevice? get connectedDevice;
 
-  /// Connects to [device]. False when the session could not be started.
-  Future<bool> connect(CastDevice device);
+  /// Connects to [device] and answers the receiver the session is with, or
+  /// null when it could not be started.
+  ///
+  /// The answer is the device again rather than a bool because this is
+  /// where a platform is asked where the receiver *is*: one lookup as a
+  /// cast starts, instead of one per receiver on every route change, so
+  /// [CastDevice.address] is filled in on the answer and not on the entry
+  /// in the device list this was called with.
+  Future<CastDevice?> connect(CastDevice device);
 
   /// Ends the session. The receiver stops playing.
   Future<void> disconnect();
@@ -212,7 +221,7 @@ class UnsupportedCastClient implements CastClient {
   CastDevice? get connectedDevice => null;
 
   @override
-  Future<bool> connect(CastDevice device) async => false;
+  Future<CastDevice?> connect(CastDevice device) async => null;
 
   @override
   Future<void> disconnect() async {}

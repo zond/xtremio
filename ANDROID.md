@@ -160,8 +160,8 @@ existing Flutter escape hatch out of ABI filtering entirely.
   adb shell am start -a android.intent.action.VIEW \
     -d "stremio://v3-cinemeta.strem.io/manifest.json"
   ```
-- **Google Cast entries.** Three, all in the `<application>` block, and no
-  Gradle changes at all — everything else the Cast SDK needs (mediarouter,
+- **Google Cast entries.** Three, all in the `<application>` block, and one
+  line of Gradle — everything else the Cast SDK needs (mediarouter,
   `play-services-cast-framework`, its own `MediaIntentReceiver` and
   `ReconnectionService`, the plain `FOREGROUND_SERVICE` permission) merges in
   from `flutter_chrome_cast`'s own manifest:
@@ -176,12 +176,24 @@ existing Flutter escape hatch out of ABI filtering entirely.
   - `com.google.android.gms.cast.framework.media.MediaNotificationService`,
     which lives in Play services; declaring it is what lets the SDK start it.
 
-  `MainActivity` is **unchanged**: the app drives sessions through the
+  `MainActivity` hosts no Cast UI: the app drives sessions through the
   session manager rather than the SDK's own `MediaRouteButton` dialog, so
   there is no AppCompat host requirement. (`flutter_chrome_cast`'s own
   example uses a plain `FlutterActivity` too.) The merge was verified with
   `./gradlew :app:processReleaseManifest`; casting itself was not — there is
   no Chromecast on this machine.
+
+  What it does answer is `castDeviceAddress`, on the `xtremio/device`
+  channel below: the receiver's own IPv4 address, read off the MediaRouter
+  route the Cast SDK discovered (`CastDevice.getFromBundle(route.extras)`,
+  then `getIpAddress()` — the method older accounts call
+  `getInet4Address()`). `flutter_chrome_cast` drops that field on the way
+  to Dart, and without it the embedded server has no idea which of this
+  device's interfaces a Chromecast could reach: it would rank them and
+  hope, and on a phone with mobile data up the wrong guess is a receiver
+  that sits on the splash screen forever. That is the one line of Gradle —
+  `play-services-cast`, the version the plugin already resolves, named so
+  `CastDevice` reaches our compile classpath as well as the APK.
 - **`xtremio/device` channel.** `DeviceProfile.detect()`
   (`lib/shell/device_profile.dart`) runs once in `main()` before `runApp`
   and asks `MainActivity` for `{isTv, hasTouch}`: `isTv` is
@@ -189,7 +201,9 @@ existing Flutter escape hatch out of ABI filtering entirely.
   `android.software.leanback` feature, `hasTouch` is `FEATURE_TOUCHSCREEN`.
   The answer goes down the widget tree as `DeviceScope`, which is what the
   remote-driven layout keys on. Any error on the channel means "a phone";
-  no other platform calls it (desktop is never a TV).
+  no other platform calls it (desktop is never a TV). The same channel
+  carries `os` (the Diagnostics header's device line), `editText` (below),
+  the frame-rate calls (below) and `castDeviceAddress` (above).
 
 ## Typing with a remote
 

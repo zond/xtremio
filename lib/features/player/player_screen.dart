@@ -2932,11 +2932,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _explainCast(compatibility.explanation, title: compatibility.title);
       return;
     }
-    if (!await cast.connect(device)) {
+    // The session's receiver, not the row that was tapped: the address is
+    // asked of the platform as the session starts, so this is the one that
+    // knows where the receiver is.
+    final receiver = await cast.connect(device);
+    if (receiver == null) {
       await _explainCast('Could not start a session with ${device.name}.');
       return;
     }
-    final url = await _castUrl(local, device);
+    final url = await _castUrl(local, receiver);
     if (url == null) {
       await _endLanMedia();
       await cast.disconnect();
