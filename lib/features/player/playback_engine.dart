@@ -1271,6 +1271,24 @@ class MediaKitEngine implements PlaybackEngine {
   /// it is mpv's own shutdown, and asking twice adds nothing to that.
   bool _destroyAsked = false;
 
+  /// The `reply_userdata` the quit is sent under, so that the reply mpv
+  /// sends back for it belongs to nobody else.
+  ///
+  /// It used to be zero, and zero is a live id on the other side of the
+  /// handle: media_kit's `_asyncRequestNumber` starts at zero and hands it
+  /// to the first async call an engine makes, so the reply to our quit is
+  /// an id media_kit is keeping a completer under. Nothing came of it --
+  /// request zero is always a `set_property` during `_create` and so sits
+  /// in a different map from the command replies -- but every exit printed
+  /// `Received MPV_EVENT_COMMAND_REPLY with unregistered ID 0` from
+  /// media_kit's own event loop, which is a line in every log that means
+  /// nothing, and a collision that only the map it landed in kept benign.
+  ///
+  /// That counter only ever steps by one per async call, so any number
+  /// past what a session of them could reach belongs to us alone. This one
+  /// also reads as itself in a libmpv log.
+  static const int _quitReplyId = 0xD1E00000000;
+
   /// libmpv's `quit`, sent asynchronously on the live handle -- and not
   /// `mpv_terminate_destroy`, which was the obvious thing to reach for and
   /// is the thing that hangs. Both halves of that were measured.
@@ -1376,7 +1394,7 @@ class MediaKitEngine implements PlaybackEngine {
     try {
       args[0] = command.cast();
       args[1] = nullptr;
-      sent = native.mpv.mpv_command_async(ctx, 0, args);
+      sent = native.mpv.mpv_command_async(ctx, _quitReplyId, args);
     } catch (error) {
       // A libmpv without the symbol, or a handle that went between the
       // checks above and here. There is nothing further to try -- but the
