@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -1244,7 +1243,7 @@ class MpvDiskCacheLimit {
     if (_stopped || _reached || _checking) return;
     _checking = true;
     try {
-      final bytes = fileCacheBytes(await cacheState());
+      final bytes = PlaybackStats.fileCacheBytesOf(await cacheState());
       if (_stopped || bytes == null || bytes <= limitBytes) return;
       _reached = true;
       await stopWritingToDisk();
@@ -1254,26 +1253,6 @@ class MpvDiskCacheLimit {
     } finally {
       _checking = false;
     }
-  }
-
-  /// What mpv says its cache file weighs, out of `demuxer-cache-state`.
-  ///
-  /// `null` when there is no file: mpv writes `file-cache-bytes` into that
-  /// map only while a disk cache exists (`demux.c` leaves the key out for a
-  /// `-1`), so its absence is exactly the state this whole mechanism is
-  /// there to end -- and its presence is the reading that says the cache
-  /// directory took.
-  static int? fileCacheBytes(String? state) {
-    if (state == null) return null;
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(state);
-    } catch (_) {
-      return null;
-    }
-    if (decoded is! Map) return null;
-    final bytes = decoded['file-cache-bytes'];
-    return bytes is int ? bytes : null;
   }
 }
 

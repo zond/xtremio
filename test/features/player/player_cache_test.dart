@@ -69,16 +69,16 @@ void main() {
 
   group('the size of the file mpv is writing', () {
     test('is read out of the cache state', () {
-      expect(MpvDiskCacheLimit.fileCacheBytes(withFileCache), 19435901);
+      expect(PlaybackStats.fileCacheBytesOf(withFileCache), 19435901);
     });
 
     test('is absent when there is no file, which is the fault itself', () {
       // mpv leaves the key out of the map when it has no disk cache, so an
       // absent reading is the `Failed to create file cache` state and a
       // present one is the proof the directory took.
-      expect(MpvDiskCacheLimit.fileCacheBytes(withoutFileCache), isNull);
-      expect(MpvDiskCacheLimit.fileCacheBytes(null), isNull);
-      expect(MpvDiskCacheLimit.fileCacheBytes('not json'), isNull);
+      expect(PlaybackStats.fileCacheBytesOf(withoutFileCache), isNull);
+      expect(PlaybackStats.fileCacheBytesOf(null), isNull);
+      expect(PlaybackStats.fileCacheBytesOf('not json'), isNull);
     });
   });
 

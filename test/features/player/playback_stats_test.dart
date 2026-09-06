@@ -127,6 +127,36 @@ void main() {
     );
   });
 
+  test('says what mpv is writing to its cache file, and when there is '
+      'none', () {
+    // The reading the cache-directory change is proved by, and the only
+    // place the app shows it. `none` is the owner's `Failed to create file
+    // cache` state -- the seekable window then being whatever fits in the
+    // 32 MiB memory cache, the two islands he could not scan between.
+    final writing = PlaybackStats.fromMpv({
+      'demuxer-cache-state':
+          '{"seekable-ranges":[],"file-cache-bytes":340787200}',
+    });
+    expect(writing.fileCacheBytes, 340787200);
+    expect(PlaybackStatsOverlay.describe(writing), contains('file     341 MB'));
+
+    // mpv answered, and answered that there is no cache file: the key is
+    // left out of the map for a `-1`, so its absence is the reading.
+    final nothing = PlaybackStats.fromMpv({
+      'demuxer-cache-state': '{"seekable-ranges":[]}',
+    });
+    expect(nothing.fileCacheBytes, isNull);
+    expect(PlaybackStatsOverlay.describe(nothing), contains('file     none'));
+
+    // Nothing asked mpv at all -- another backend, or a fake filling the
+    // fields in directly. A `none` there would be a measurement nobody
+    // made, so there is no row.
+    expect(
+      PlaybackStatsOverlay.describe(const PlaybackStats(hwdec: 'no')),
+      isNot(anyElement(startsWith('file'))),
+    );
+  });
+
   test('a seekable we asked for is not reported as one mpv concluded', () {
     // The player sets `force-seekable` on the embedded server's own
     // streams, and mpv then answers `seekable yes` whatever the demuxer

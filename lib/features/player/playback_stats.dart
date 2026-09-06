@@ -50,6 +50,8 @@ class PlaybackStats {
     this.partiallySeekable,
     this.seekableForced,
     this.seekableRanges,
+    this.cacheStateRead = false,
+    this.fileCacheBytes,
   });
 
   /// The mpv properties [fromMpv] reads, in one place so the engine polls
@@ -120,6 +122,8 @@ class PlaybackStats {
       partiallySeekable: flag('partially-seekable'),
       seekableForced: flag('force-seekable'),
       seekableRanges: _ranges(text('demuxer-cache-state')),
+      cacheStateRead: _cacheState(text('demuxer-cache-state')) != null,
+      fileCacheBytes: fileCacheBytesOf(text('demuxer-cache-state')),
     );
   }
 
@@ -200,19 +204,33 @@ class PlaybackStats {
   /// while every seek works normally.
   final List<SeekableRange>? seekableRanges;
 
+  /// Whether mpv answered `demuxer-cache-state` at all, which is what
+  /// separates "there is no cache file" from "nothing was asked". Only an
+  /// engine that reads the property sets it; a fake filling the fields
+  /// directly leaves it false and the panel draws no file row for it.
+  final bool cacheStateRead;
+
+  /// What mpv's own cache file weighs, out of `demuxer-cache-state`'s
+  /// `file-cache-bytes`; `null` when there is no such file.
+  ///
+  /// This is the reading the whole cache-directory change is proved by.
+  /// Absent is the `Failed to create file cache` state the owner's
+  /// Chromecast was in -- everything seekable held in the 32 MiB memory
+  /// cache, the two islands he could not scan between. A number is the
+  /// directory having taken. And a number that has *stopped climbing* is
+  /// the third state, which nothing else on this panel would show: either
+  /// `MpvDiskCacheLimit` has hit its cap and turned `cache-on-disk` off,
+  /// or mpv's writes are failing (a full volume), and from that point on
+  /// the window shortens back towards where it started.
+  final int? fileCacheBytes;
+
   /// The seekable ranges out of `demuxer-cache-state`, which mpv answers
   /// as JSON (a node property converted to a string). Anything that does
   /// not parse, or an answer without the key, is no answer at all: the
   /// panel then omits the row rather than claiming there are none.
   static List<SeekableRange>? _ranges(String? state) {
-    if (state == null) return null;
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(state);
-    } catch (_) {
-      return null;
-    }
-    if (decoded is! Map) return null;
+    final decoded = _cacheState(state);
+    if (decoded == null) return null;
     final ranges = decoded['seekable-ranges'];
     if (ranges is! List) return null;
     final parsed = <SeekableRange>[];
@@ -224,6 +242,32 @@ class PlaybackStats {
       parsed.add(SeekableRange(start, end));
     }
     return parsed;
+  }
+
+  /// `file-cache-bytes` out of a `demuxer-cache-state` answer, `null` when
+  /// there is no disk cache.
+  ///
+  /// mpv puts the key in the map only while a cache file exists: the
+  /// property is built with `-1` for "no cache" (`demux.c`) and
+  /// `player/command.c` leaves a `-1` out of the node it hands back. So an
+  /// absent key is not a missing reading, it is the reading -- there is no
+  /// file. This is also what `MpvDiskCacheLimit` bounds the file by.
+  static int? fileCacheBytesOf(String? state) {
+    final bytes = _cacheState(state)?['file-cache-bytes'];
+    return bytes is int ? bytes : null;
+  }
+
+  /// `demuxer-cache-state` decoded, `null` when mpv did not answer or the
+  /// answer was not a JSON object.
+  static Map<Object?, Object?>? _cacheState(String? state) {
+    if (state == null) return null;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(state);
+    } catch (_) {
+      return null;
+    }
+    return decoded is Map ? decoded : null;
   }
 
   static Duration? _seconds(Object? value) {
@@ -259,7 +303,9 @@ class PlaybackStats {
       other.seekable == seekable &&
       other.partiallySeekable == partiallySeekable &&
       other.seekableForced == seekableForced &&
-      listEquals(other.seekableRanges, seekableRanges);
+      listEquals(other.seekableRanges, seekableRanges) &&
+      other.cacheStateRead == cacheStateRead &&
+      other.fileCacheBytes == fileCacheBytes;
 
   @override
   int get hashCode => Object.hash(
@@ -280,6 +326,8 @@ class PlaybackStats {
     partiallySeekable,
     seekableForced,
     seekableRanges == null ? null : Object.hashAll(seekableRanges!),
+    cacheStateRead,
+    fileCacheBytes,
   );
 
   @override
@@ -290,5 +338,5 @@ class PlaybackStats {
       '${width}x$height, bitrate: $videoBitrate, cache: $cacheDuration, '
       'pausedForCache: $pausedForCache, buffering: $cacheBufferingState, '
       'seekable: $seekable, partiallySeekable: $partiallySeekable, '
-      'ranges: $seekableRanges)';
+      'ranges: $seekableRanges, fileCache: $fileCacheBytes)';
 }
