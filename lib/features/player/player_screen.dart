@@ -4,7 +4,6 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
@@ -163,17 +162,33 @@ class PlayerScreen extends StatefulWidget {
   /// the volume slider is dropped (hardware keys on phones).
   static const double wideBreakpoint = 720;
 
-  /// How long a release is given before the screen says so and kills the
-  /// player itself.
+  /// How long the screen waits for the player to stop before it leaves
+  /// anyway -- and how long the teardown gets before it is written down as
+  /// one that did not come back.
   ///
-  /// Generous on purpose. A teardown stops libmpv and closes a file, and on
-  /// a device whose volume is full those writes block and retry, so a stop
-  /// that takes a few seconds is slow rather than broken. What this number
-  /// is for is the other case -- the one that never comes back at all --
-  /// and ten seconds separates them without waiting on either. It only has
-  /// to be longer than an ordinary teardown: mpv's own forceful abort, once
-  /// the `quit` behind this has reached it, is two seconds.
-  static const Duration teardownBound = Duration(seconds: 10);
+  /// **It bounds the viewer's wait, not a kill.** It used to be a deadline
+  /// with something behind it, and there is nothing behind it: the `quit`
+  /// is the kill and it has already gone out before this starts running.
+  /// So all that expiring means is that the screen stops waiting; the
+  /// teardown carries on in the background and still says how it ended.
+  ///
+  /// Two seconds because that is a wait, and a wait is what it is now.
+  /// Every teardown ever measured here answered in well under half of one
+  /// -- 145 ms against a socket wedged for good, 430 ms at the worst of
+  /// seven runs on Linux, 230 ms on the Chromecast -- so this is roughly
+  /// five times the slowest thing it will ordinarily see, and short enough
+  /// that a player which has genuinely stopped answering does not hold a
+  /// black screen while the viewer waits on it.
+  ///
+  /// **It is kept because it is the only instrument that would tell us the
+  /// unexplained failure came back.** On the owner's Chromecast a player
+  /// kept downloading at 32 Mbps for at least ninety seconds after its
+  /// screen was left, and nothing but killing the process ended it. Every
+  /// mechanism since measured resolves in a fraction of a second, so
+  /// something happened there that is still not accounted for. Guarding
+  /// against an observed failure we cannot explain is prudence; keeping
+  /// the guard once we can explain it would be superstition.
+  static const Duration teardownBound = Duration(seconds: 2);
 
   /// Where subtitles sit above the bottom of the picture at rest, as a
   /// fraction of the player's height.
@@ -275,6 +290,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Map<String, dynamic>? _pendingSettings;
   late final AppLifecycleListener _lifecycle;
   PlaybackEngine? _engine;
+
+  /// The teardown of [_engine], from the moment it was started. Held so it
+  /// is started once and no more: [_leave] awaits it and [dispose] falls
+  /// back to it unwatched, and a screen can go through both.
+  Future<void>? _teardown;
+
+  /// Whether the player is on its way out: the teardown has begun and the
+  /// screen is only still here so that mpv has something to hand its last
+  /// frames to.
+  ///
+  /// It is what keeps the picture up across the wait, and it is why the
+  /// controls come down at the same moment (see [build]) -- everything on
+  /// the bar aims at an engine that is stopping, and media_kit throws on a
+  /// player that has been released.
+  bool _leaving = false;
   FullscreenController? _fullscreen;
   SubtitleStyle _subtitleStyle = const SubtitleStyle();
   final List<StreamSubscription<void>> _subscriptions = [];
@@ -2892,6 +2922,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // the countdown must not keep ticking.
     _dismissUpNext();
     if (state == null || next == null || _handedOver || _advancing) return;
+    if (_leaving) return;
     _advancing = true;
     _client?.dispatch(CoreActions.playerNextVideo());
     final navigator = Navigator.of(context);
@@ -2941,7 +2972,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     Map<String, dynamic>? stream,
   ) {
     if (stream == null) {
-      navigator.pop(PlayerScreenResult(selectVideoId: next.id));
+      // A leave like any other, and it takes the same road out: this
+      // player is over, and the screen it goes back to would rather have
+      // its answer a fraction of a second late than have mpv still
+      // reading behind it.
+      unawaited(_leave(PlayerScreenResult(selectVideoId: next.id)));
       return;
     }
     _handedOver = true;
@@ -3371,8 +3406,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           (_upNextSecondsLeft != null || (_controlsVisible && _canAutoHide)));
 
   /// One rung down the ladder [_backDismisses] describes, most transient
-  /// first. Only ever called for a Back that [PopScope] held back, so the
-  /// pop itself is the last rung and is not handled here.
+  /// first. Only called while there is a rung to take: the last one is
+  /// leaving the player, and [build]'s `PopScope` sends that to
+  /// [_leavePlayer] instead, because a pop the framework makes for us
+  /// would take the route out from under a player that is still reading.
   void _popBack() {
     if (_timingShown) {
       _hideSubtitleTiming();
@@ -3392,14 +3429,71 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// The ladder belongs to Back, which is one key for every layer and so
   /// has to take them in order. The arrow is a control the viewer aimed
   /// at, and the layer it would put away first is the OSD it is drawn on.
-  void _leavePlayer() {
+  void _leavePlayer() => unawaited(_leave());
+
+  /// Stops the player, waits for it, and only then leaves the screen.
+  ///
+  /// The order is the whole of it, and it is the reverse of what this
+  /// screen used to do. The `quit` goes out first, because it is the kill
+  /// and because it is what makes the `stop` inside the teardown come back
+  /// promptly instead of waiting out a five-minute `network-timeout`. Then
+  /// the teardown is awaited *with the video still in the tree and the
+  /// audio device still open* -- media_kit releases both from inside it,
+  /// after the stop, so the sinks are alive and being drained for exactly
+  /// as long as mpv might still be handing them something. Only then does
+  /// the screen go.
+  ///
+  /// It used to be the other way round -- leave at once, release two
+  /// frames later through a future nobody held, quit only on a deadline --
+  /// which is what [PlayerScreen.teardownBound] and [PlaybackEngine.quit]
+  /// are each written against from their own side.
+  ///
+  /// **The wait yields; it never blocks.** An `await` leaves Flutter free
+  /// to go on producing frames, which is what keeps something draining the
+  /// video sink. A blocking join here would deadlock in precisely the case
+  /// worth waiting for -- mpv waiting on the sink, the sink waiting on us
+  /// -- and that is not hypothetical: it is what the community Android
+  /// client does, `pthread_join` and then `mpv_terminate_destroy` inline
+  /// on the UI thread, and an ANR is what it gets for it.
+  ///
+  /// **Keeping the sinks alive means keeping them consuming**, not merely
+  /// undestroyed, which is why the wait happens here rather than from
+  /// [dispose]: a screen that has already gone has nothing drawing the
+  /// texture. Measured on both platforms, mpv's video output does not in
+  /// fact block when nothing consumes -- eight seconds with the `Video`
+  /// widget out of the tree advanced playback normally on Linux and on the
+  /// Chromecast -- so this is the ordering that is safe by construction
+  /// rather than by measurement, and it costs nothing.
+  ///
+  /// The wait is bounded and the pop is not conditional on it: a player
+  /// that will not stop keeps the viewer for [PlayerScreen.teardownBound]
+  /// and no longer, and finishes -- or does not -- in the background,
+  /// where the teardown itself says which.
+  Future<void> _leave([PlayerScreenResult? result]) async {
+    if (_leaving) return;
+    setState(() => _leaving = true);
+    // From the press, not from the pop: the display is not presenting a
+    // film any more the moment the viewer says so.
     _releaseDisplayFrameRate();
     final navigator = Navigator.of(context);
-    if (navigator.canPop()) navigator.pop();
+    // Nothing is logged here when the bound expires. The teardown times
+    // itself, because it outlives this wait and because a hand-over runs
+    // it with no screen waiting on it at all.
+    await _endPlayback().timeout(PlayerScreen.teardownBound, onTimeout: () {});
+    // Gone under us while we waited -- a hand-over, or the route
+    // dismantled from above. There is no screen of ours left to leave.
+    if (!mounted) return;
+    if (navigator.canPop()) navigator.pop(result);
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
+    // The screen is only still here to hold the picture up while the
+    // player stops. Nothing it offers is aimed at anything any more, and
+    // media_kit throws on a player it has released, so a late press is
+    // swallowed rather than passed on -- Back included, since leaving is
+    // what is already happening.
+    if (_leaving) return KeyEventResult.handled;
     // Back belongs to the route, not to this handler: Android delivers it
     // as a key first and pops only if nothing took it, and [PopScope] is
     // what answers. Above `_showControls` below, because the OSD flashing
@@ -3665,16 +3759,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // so this is a no-op there rather than a clear that would land after
     // the successor's own ask.
     _releaseDisplayFrameRate();
-    // The release is armed *before* the streams are closed, and that order
-    // is the point: [_closeProxiedStreams] reaches FFI, FFI can throw, and
-    // a throw here would abort `dispose` before the engine was ever handed
-    // to [_disposeAfterFrame] -- no release, no fallback timer, and a
-    // player left holding its packet memory, its socket and the engine
-    // that socket pins. Which is the leak the close was added to prevent.
-    final engine = _engine;
-    _engine = null;
-    if (engine != null) _disposeAfterFrame(engine);
-    _closeProxiedStreams();
+    // Ordinarily a teardown that has already finished: [_leave] runs it
+    // before the pop, with the video still on screen, and what comes back
+    // here is a future that completed a frame ago. What is left for this
+    // line is the screen that went *without* a leave -- the hand-over's
+    // `pushReplacement`, a route dismantled from above, the app being
+    // taken down -- where there is nothing left to await from and the
+    // engine would otherwise be left holding its packet memory, its
+    // socket and the server engine that socket pins.
+    //
+    // Unwatched, because nothing here can wait; answered for, because a
+    // discarded future is a teardown nobody can tell from one that never
+    // happened, and an evening of exactly that is where the ninety
+    // seconds went.
+    unawaited(_endPlayback());
     // The listener goes first, and the order is the whole of it: the
     // flush below writes a preference, which notifies synchronously, and
     // a notification answered from here is a `setState` on an element
@@ -3713,13 +3811,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Ends the server's reads for this player, and retires the name they
   /// were opened under.
   ///
-  /// The engine's release is two frames away and can then block for as long
-  /// as mpv is blocked, and what mpv is most often blocked *on* is a read
-  /// from a stream that has stopped arriving. `network-timeout` is five
-  /// minutes on purpose -- a thin swarm legitimately takes minutes to hand
-  /// over the next piece, and a shorter bound would end healthy playbacks --
-  /// so waiting for it is waiting for a player nobody wants any more. This
-  /// makes the read fail now instead.
+  /// The engine's release is about to be waited on and can block for as
+  /// long as mpv is blocked, and what mpv is most often blocked *on* is a
+  /// read from a stream that has stopped arriving. `network-timeout` is
+  /// five minutes on purpose -- a thin swarm legitimately takes minutes to
+  /// hand over the next piece, and a shorter bound would end healthy
+  /// playbacks -- so waiting for it is waiting for a player nobody wants
+  /// any more. This makes the read fail now instead.
   ///
   /// **Breaking the read is only half of it, and on its own it is not even
   /// the useful half.** ffmpeg runs with `reconnect=1`, so a body that
@@ -3729,18 +3827,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// that the server *retires the token* at the same time and answers `410
   /// Gone` to anything that arrives bearing it afterwards. The order the
   /// server documents is quit-then-close, because a demuxer that has
-  /// already been cancelled never reaches its reconnect at all -- but the
-  /// quit here is two frames away when this runs, so the close may well
-  /// land first, and the refusal is what makes that harmless rather than a
-  /// reconnect provoked on the way out.
+  /// already been cancelled never reaches its reconnect at all -- and that
+  /// is now the order this runs in, since [_endPlayback] sends the quit
+  /// before it gets here. The refusal is what covers the case where mpv
+  /// had not reached the quit yet: a reconnect provoked on the way out
+  /// meets a `410` rather than a fresh body.
   ///
   /// **It is a socket and nothing more.** A demuxer wedged somewhere other
   /// than a read -- handing a frame to the Flutter texture, waiting on the
   /// audio device -- is not polling this stream and is untouched by
-  /// closing it; that player still costs the ten-second deadline and the
-  /// `destroy` at the end of it, which is why both are still here. And a
-  /// player that has stopped reading altogether observes the close when it
-  /// next reads, or never.
+  /// closing it. What covers that player is the quit ahead of this and the
+  /// bound behind it. And a player that has stopped reading altogether
+  /// observes the close when it next reads, or never.
   ///
   /// Synchronous and unawaited: it is a map scan on the Rust side, and a
   /// teardown has nothing to do with its answer. The answer is written
@@ -3754,11 +3852,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ///
   /// **Nothing it does may escape.** It reaches FFI, and FFI throws -- if
   /// the core panicked, if the bridge is not up. A throw crossing this
-  /// would abort the rest of `dispose`, and the caller has already been
-  /// arranged so that the engine's release is armed before this runs; the
-  /// catch is the second half of the same promise. A close that failed is
-  /// a report worth a line and nothing more: the server times the stream
-  /// out eventually, and the player is being released either way.
+  /// would take the release that follows it down as well, leaving a player
+  /// holding everything the close was added to free. A close that failed
+  /// is a report worth a line and nothing more: the server times the
+  /// stream out eventually, and the player is being released either way.
   void _closeProxiedStreams() {
     if (!_proxiedStream) return;
     final int closed;
@@ -3780,91 +3877,78 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  /// Releases [engine] two frames from now instead of synchronously here.
+  /// Ends this player: the `quit`, then the streams it was reading, then
+  /// the release -- and answers for how long the whole of it took.
   ///
-  /// This `dispose` runs while the frame that unmounts the video surface is
-  /// being built, and the raster thread may still be drawing the previous
-  /// frame, which references the video texture. media_kit unregisters and
-  /// frees that texture from the platform thread as soon as `Player.dispose`
-  /// reaches it, so disposing right away can free the texture under the
-  /// raster thread (a SIGSEGV inside the engine on Linux, seen with
-  /// media_kit's software-rendered texture).
+  /// Run once per screen and shared: [_leave] awaits what this returns
+  /// with the video still on screen, and [dispose] falls back to it
+  /// unwatched for the screens that never had a leave. Both can happen to
+  /// one screen -- a leave that gave up at the bound is disposed while its
+  /// teardown is still out -- so the future is kept rather than the work
+  /// repeated. Sending a second `quit` would be harmless (the engine
+  /// refuses it) and disposing a released media_kit `Player` twice is an
+  /// `AssertionError`.
   ///
-  /// The engine's layer-tree pipeline holds at most two frames, so once the
-  /// UI thread has produced a second frame the raster thread has finished
-  /// the last one that showed the texture. [SchedulerBinding.endOfFrame]
-  /// schedules a frame when none is pending, so this also works when called
-  /// outside a frame.
+  /// **The quit is dispatched before anything is awaited.** It is the
+  /// first statement, it is an enqueue on mpv's dispatch queue and nothing
+  /// else, and it is what everything after it depends on being fast.
   ///
-  /// **The release is awaited, answered for, and behind a deadline that
-  /// does not depend on it**, which is the other half. It used to be
-  /// `.ignore()`d, and a discarded future is a teardown nobody can tell
-  /// from one that never happened: on the owner's Chromecast a player kept
-  /// its demuxer for at least ninety seconds after the screen was gone,
-  /// downloading at 32 Mbps into a cache file with no name, and the log for
-  /// that evening carried not one line about it -- and nothing ever freed
-  /// those blocks but killing the process.
-  static void _disposeAfterFrame(PlaybackEngine engine) {
-    // Armed here, before the two frames and outside the release, and that
-    // is the whole of it. mpv's forceful abort exists, but every road to
-    // it runs through the teardown -- media_kit schedules its
-    // `mpv_terminate_destroy` as the last statement of a chain that begins
-    // with the `stop()` that hangs -- so a fallback chained behind
-    // `release()` is unreachable in exactly the case it is for. A timer
-    // owes the teardown nothing. Arming it in front of the two frames
-    // rather than after them costs a fraction of a second of a ten-second
-    // bound and covers the case where those frames never come: an engine
-    // producing no more frames is still holding everything a live one
-    // holds -- its packet memory, its socket, and the server engine that
-    // socket keeps live and the cleaner may not evict behind.
-    var killed = false;
-    final fallback = Timer(PlayerScreen.teardownBound, () {
-      killed = true;
+  /// Neither half may throw out of here. The quit throws when libmpv
+  /// refused the command outright, which means the player is still
+  /// running and is worth a line. The release throws when mpv refused to
+  /// stop, which is worth a line and must not skip the rest -- the streams
+  /// are closed before it for exactly that reason, and there is nothing
+  /// after it to skip.
+  Future<void> _endPlayback() => _teardown ??= _runTeardown();
+
+  /// The body of [_endPlayback], separate only so that the memo above it
+  /// stays a single line.
+  Future<void> _runTeardown() async {
+    final engine = _engine;
+    final started = DateTime.now();
+    // The instrument, and the only one there is. Nothing is escalated to
+    // when it fires -- the quit two lines below is the kill, and it will
+    // have gone out long since -- so all it does is write down that a
+    // player which should have stopped in a fraction of a second has not.
+    // Armed here rather than by the waiting screen because it has to cover
+    // the hand-over too, where no screen is waiting to notice.
+    var overdue = false;
+    final bound = Timer(PlayerScreen.teardownBound, () {
+      overdue = true;
       DiagnosticsLog.warn(
         'player',
-        'the player did not stop within '
-            '${PlayerScreen.teardownBound.inSeconds}s of '
-            'leaving; destroying it to get its memory and its socket back',
-      );
-      unawaited(
-        engine.destroy().catchError((Object error) {
-          DiagnosticsLog.error(
-            'player',
-            'destroying the player failed: $error',
-          );
-        }),
+        'the player has not stopped ${PlayerScreen.teardownBound.inSeconds}s '
+            'after it was left; it is still holding its memory and its socket',
       );
     });
-    Future<void> release() async {
-      await SchedulerBinding.instance.endOfFrame;
-      await SchedulerBinding.instance.endOfFrame;
-      await engine.dispose();
+    try {
+      try {
+        await engine?.quit();
+      } catch (error) {
+        DiagnosticsLog.error(
+          'player',
+          'the player refused the quit on the way out: $error',
+        );
+      }
+      _closeProxiedStreams();
+      try {
+        await engine?.dispose();
+      } catch (error) {
+        DiagnosticsLog.error('player', 'releasing the player failed: $error');
+      }
+    } finally {
+      bound.cancel();
+      // Only a teardown that came back at all can say it was late, which
+      // is the distinction a report is read for: "slow" and "never
+      // stopped" want different things looked at next.
+      if (overdue) {
+        final took = DateTime.now().difference(started);
+        DiagnosticsLog.info(
+          'player',
+          'the player stopped ${took.inSeconds}s after it was left',
+        );
+      }
     }
-
-    unawaited(
-      release().then(
-        (_) {
-          fallback.cancel();
-          // Only a teardown that *finished* disarms it, so this is the one
-          // place that can say a slow player got there in the end -- the
-          // report otherwise cannot tell that from the one that never did.
-          if (killed) {
-            DiagnosticsLog.info(
-              'player',
-              'the player stopped after it was destroyed',
-            );
-          }
-        },
-        onError: (Object error) {
-          // The fallback is deliberately left armed: a teardown that threw
-          // is a teardown that did not finish, and the player may be alive
-          // and still writing. Sending it a `quit` it does not need costs
-          // nothing, and [PlaybackEngine.destroy] is what makes sure the
-          // one it cannot survive is never sent.
-          DiagnosticsLog.error('player', 'releasing the player failed: $error');
-        },
-      ),
-    );
   }
 
   // --- Build ---------------------------------------------------------------
@@ -3874,25 +3958,41 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final state = _state;
     final engine = _engine;
     final casting = _casting;
+    // The picture is the only thing this screen still draws once the
+    // player is stopping: it is what mpv hands its last frames to, and it
+    // is the whole reason the screen is still here (see [_leave]).
+    // Everything else would be a control aimed at an engine on its way
+    // out, and media_kit throws on a player it has released.
+    final leaving = _leaving;
     // While a receiver has the stream there is no video here, nothing is
     // buffering here and no torrent is starting up for this screen: every
     // overlay about local playback is about a player that is paused.
-    final startup = _startupOverlayShown && !casting;
-    final status = startup || casting ? null : _statusText(state);
+    final startup = _startupOverlayShown && !casting && !leaving;
+    final status = startup || casting || leaving ? null : _statusText(state);
     final stall = status != null && _stallOverlayShown(state);
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= PlayerScreen.wideBreakpoint;
-    final shown = _controlsShown;
+    final shown = _controlsShown && !leaving;
     final nextVideo = state?.nextVideo;
-    final upNext = _upNextSecondsLeft;
+    final upNext = leaving ? null : _upNextSecondsLeft;
     final hasVideo = engine != null && _opened != null && !casting;
     final seekStep = _seekStep;
     if (_isTv) _scheduleFocusCheck();
     if (hasVideo) _measureControlBarAfterFrame();
+    // Never poppable by the framework, so that every way out of the
+    // player runs the teardown before the screen goes: Back and Escape
+    // both arrive here rather than taking the route out from under a
+    // player that is still reading. The ladder comes first -- Back is one
+    // key for every layer -- and [_leave] is its last rung.
     return PopScope(
-      canPop: !_backDismisses,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _popBack();
+        if (didPop) return;
+        if (_backDismisses) {
+          _popBack();
+          return;
+        }
+        _leavePlayer();
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -3905,225 +4005,232 @@ class _PlayerScreenState extends State<PlayerScreen> {
             onEnter: (_) => _onPointerMoved(),
             onHover: (_) => _onPointerMoved(),
             onExit: (_) => _onPointerLeft(),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _onVideoTap,
-                  onDoubleTapDown: (details) =>
-                      _onVideoDoubleTap(details, width),
-                  onDoubleTap: () {},
-                  child: hasVideo
-                      ? engine.buildVideo(
-                          context,
-                          subtitleBottomPadding: _subtitleBottomPadding(
-                            controlsShown: shown,
-                          ),
-                        )
-                      : const SizedBox.expand(),
-                ),
-                // Above the tap-to-show-controls surface rather than inside
-                // it: its buttons are the only thing on screen while a
-                // receiver has the stream, and they must not have to win an
-                // arena against the video's double-tap-to-seek first.
-                if (casting)
-                  SafeArea(
-                    child: CastRemotePanel(
-                      deviceName: _castingTo!.name,
-                      title: state?.title ?? '',
-                      status: _castStatus,
-                      onPlayPause: _togglePlay,
-                      onSeek: _seekTo,
-                      onStop: () => unawaited(_stopCast()),
-                      playPauseFocusNode: _isTv ? _playPauseFocus : null,
-                    ),
+            // Nothing on a stopping player is aimed at, however it is
+            // reached: the bar and the up-next card are already out of the
+            // tree above, and this covers the video's own taps.
+            child: IgnorePointer(
+              ignoring: leaving,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _onVideoTap,
+                    onDoubleTapDown: (details) =>
+                        _onVideoDoubleTap(details, width),
+                    onDoubleTap: () {},
+                    child: hasVideo
+                        ? engine.buildVideo(
+                            context,
+                            subtitleBottomPadding: _subtitleBottomPadding(
+                              controlsShown: shown,
+                            ),
+                          )
+                        : const SizedBox.expand(),
                   ),
-                if (hasVideo && _statsVisible)
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 12, top: 64),
-                      child: Align(
-                        alignment: Alignment.topLeft,
-                        child: PlaybackStatsOverlay(
-                          stats: engine.stats,
-                          source: _opened,
-                          isTorrent: _torrentStatsRequest != null,
-                          torrent: _torrentStats,
+                  // Above the tap-to-show-controls surface rather than inside
+                  // it: its buttons are the only thing on screen while a
+                  // receiver has the stream, and they must not have to win an
+                  // arena against the video's double-tap-to-seek first.
+                  if (casting)
+                    SafeArea(
+                      child: CastRemotePanel(
+                        deviceName: _castingTo!.name,
+                        title: state?.title ?? '',
+                        status: _castStatus,
+                        onPlayPause: _togglePlay,
+                        onSeek: _seekTo,
+                        onStop: () => unawaited(_stopCast()),
+                        playPauseFocusNode: _isTv ? _playPauseFocus : null,
+                      ),
+                    ),
+                  if (hasVideo && _statsVisible)
+                    SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12, top: 64),
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: PlaybackStatsOverlay(
+                            stats: engine.stats,
+                            source: _opened,
+                            isTorrent: _torrentStatsRequest != null,
+                            torrent: _torrentStats,
+                            dht: _dhtStatus,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (startup)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: TorrentStartupOverlay(
+                          stats: _torrentStats,
+                          hasTrackers:
+                              _torrentStatsRequest?.trackers.isNotEmpty ?? true,
                           dht: _dhtStatus,
                         ),
                       ),
                     ),
-                  ),
-                if (startup)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: TorrentStartupOverlay(
-                        stats: _torrentStats,
-                        hasTrackers:
-                            _torrentStatsRequest?.trackers.isNotEmpty ?? true,
-                        dht: _dhtStatus,
-                      ),
-                    ),
-                  ),
-                if (status != null)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: stall
-                          ? TorrentStallOverlay(stats: _torrentStats)
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (_engineError == null &&
-                                    state?.unplayableReason == null)
-                                  const CircularProgressIndicator()
-                                else
-                                  const Icon(Icons.error_outline, size: 48),
-                                const SizedBox(height: 12),
-                                Text(status, textAlign: TextAlign.center),
-                              ],
-                            ),
-                    ),
-                  ),
-                AnimatedOpacity(
-                  opacity: shown ? 1 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: IgnorePointer(
-                    ignoring: !shown,
-                    child: SafeArea(
-                      child: _controlsFocus(
-                        Column(
-                          children: [
-                            PlayerTopBar(
-                              title: state?.title ?? '',
-                              onBack: _leavePlayer,
-                              subtitlesOn:
-                                  _tracks.value.activeSubtitleId != null,
-                              onSubtitles: _openSubtitleMenu,
-                              onAudio: _tracks.value.audio.length > 1
-                                  ? _openAudioMenu
-                                  : null,
-                              statsOn: _statsPinned ?? false,
-                              onStats: _toggleStatsPinned,
-                              onSettings: _openSettings,
-                              onNext: nextVideo == null || casting
-                                  ? null
-                                  : _playNext,
-                              onCast: _castAvailable ? _openCastSheet : null,
-                              castOn: casting,
-                              firstFocusNode: _topBarFocus,
-                            ),
-                            Expanded(
-                              child:
-                                  !wide &&
-                                      hasVideo &&
-                                      status == null &&
-                                      !startup
-                                  ? Center(
-                                      child: PlayerCenterControls(
-                                        playing: _playing,
-                                        seekStep: seekStep,
-                                        onPlayPause: _togglePlay,
-                                        onSeekBack: () => _seekBy(-seekStep),
-                                        onSeekForward: () => _seekBy(seekStep),
-                                      ),
-                                    )
-                                  : const SizedBox.expand(),
-                            ),
-                            if (hasVideo)
-                              PlayerBottomBar(
-                                key: _bottomBarKey,
-                                wide: wide,
-                                playing: _playing,
-                                seekStep: seekStep,
-                                position: _position,
-                                buffered: _buffer,
-                                duration: _duration,
-                                showRemaining: _showRemaining,
-                                volume: _volume,
-                                fullscreen: _fullscreenOn,
-                                onPlayPause: _togglePlay,
-                                onSeekBack: () => _seekBy(-seekStep),
-                                onSeekForward: () => _seekBy(seekStep),
-                                onSeek: _seekTo,
-                                onStep: _seekBy,
-                                onScrubStart: () {
-                                  _scrubbing = true;
-                                  _controlsTimer?.cancel();
-                                },
-                                onScrubEnd: () {
-                                  _scrubbing = false;
-                                  _restartControlsTimer();
-                                },
-                                onToggleTimeDisplay: () => setState(
-                                  () => _showRemaining = !_showRemaining,
-                                ),
-                                onVolume: _setVolume,
-                                onMute: _toggleMute,
-                                onFullscreen: _toggleFullscreen,
-                                playPauseFocusNode: _playPauseFocus,
-                                seekBarFocusNode: _seekBarFocus,
+                  if (status != null)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: stall
+                            ? TorrentStallOverlay(stats: _torrentStats)
+                            : Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_engineError == null &&
+                                      state?.unplayableReason == null)
+                                    const CircularProgressIndicator()
+                                  else
+                                    const Icon(Icons.error_outline, size: 48),
+                                  const SizedBox(height: 12),
+                                  Text(status, textAlign: TextAlign.center),
+                                ],
                               ),
-                          ],
-                        ),
                       ),
                     ),
-                  ),
-                ),
-                // Outside the bar's [AnimatedOpacity] on purpose: this
-                // is the layer that must still be there when the OSD has
-                // faded, which is the whole of what it is for. Top right,
-                // opposite the stats panel and clear of the subtitles it
-                // is being used to judge.
-                if (_timingShown)
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 12, top: 64),
-                      child: Align(
-                        alignment: Alignment.topRight,
-                        child: FocusScope(
-                          node: _timingScope,
-                          child: SubtitleTimingOverlay(
-                            timing: _timing,
-                            firstFocusNode: _timingFocus,
-                            // Null with nothing else on offer, which is
-                            // what leaves the whole option undrawn.
-                            onMatch: _hasOtherSubtitleFile(state)
-                                ? () => unawaited(_openSubtitleMatch())
-                                : null,
-                            matching: _matchingSubtitle,
-                            matchNote: _subtitleMatchNote,
-                            onMark: () => unawaited(_markSubtitleTiming()),
-                            markNote: _markNote,
-                            onShift: (step) =>
-                                _adjustTiming(_timing.shiftedBy(step)),
-                            onReset: _undoSubtitleTiming,
-                            onClose: _hideSubtitleTiming,
+                  AnimatedOpacity(
+                    opacity: shown ? 1 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: IgnorePointer(
+                      ignoring: !shown,
+                      child: SafeArea(
+                        child: _controlsFocus(
+                          Column(
+                            children: [
+                              PlayerTopBar(
+                                title: state?.title ?? '',
+                                onBack: _leavePlayer,
+                                subtitlesOn:
+                                    _tracks.value.activeSubtitleId != null,
+                                onSubtitles: _openSubtitleMenu,
+                                onAudio: _tracks.value.audio.length > 1
+                                    ? _openAudioMenu
+                                    : null,
+                                statsOn: _statsPinned ?? false,
+                                onStats: _toggleStatsPinned,
+                                onSettings: _openSettings,
+                                onNext: nextVideo == null || casting
+                                    ? null
+                                    : _playNext,
+                                onCast: _castAvailable ? _openCastSheet : null,
+                                castOn: casting,
+                                firstFocusNode: _topBarFocus,
+                              ),
+                              Expanded(
+                                child:
+                                    !wide &&
+                                        hasVideo &&
+                                        status == null &&
+                                        !startup
+                                    ? Center(
+                                        child: PlayerCenterControls(
+                                          playing: _playing,
+                                          seekStep: seekStep,
+                                          onPlayPause: _togglePlay,
+                                          onSeekBack: () => _seekBy(-seekStep),
+                                          onSeekForward: () =>
+                                              _seekBy(seekStep),
+                                        ),
+                                      )
+                                    : const SizedBox.expand(),
+                              ),
+                              if (hasVideo)
+                                PlayerBottomBar(
+                                  key: _bottomBarKey,
+                                  wide: wide,
+                                  playing: _playing,
+                                  seekStep: seekStep,
+                                  position: _position,
+                                  buffered: _buffer,
+                                  duration: _duration,
+                                  showRemaining: _showRemaining,
+                                  volume: _volume,
+                                  fullscreen: _fullscreenOn,
+                                  onPlayPause: _togglePlay,
+                                  onSeekBack: () => _seekBy(-seekStep),
+                                  onSeekForward: () => _seekBy(seekStep),
+                                  onSeek: _seekTo,
+                                  onStep: _seekBy,
+                                  onScrubStart: () {
+                                    _scrubbing = true;
+                                    _controlsTimer?.cancel();
+                                  },
+                                  onScrubEnd: () {
+                                    _scrubbing = false;
+                                    _restartControlsTimer();
+                                  },
+                                  onToggleTimeDisplay: () => setState(
+                                    () => _showRemaining = !_showRemaining,
+                                  ),
+                                  onVolume: _setVolume,
+                                  onMute: _toggleMute,
+                                  onFullscreen: _toggleFullscreen,
+                                  playPauseFocusNode: _playPauseFocus,
+                                  seekBarFocusNode: _seekBarFocus,
+                                ),
+                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
-                if (upNext != null && upNext > 0 && nextVideo != null)
-                  Positioned(
-                    right: 16,
-                    bottom: hasVideo ? 112 : 16,
-                    child: SafeArea(
-                      child: _upNextFocus(
-                        UpNextCard(
-                          label: nextVideo.seasonEpisodeLabel,
-                          title: nextVideo.title,
-                          secondsLeft: upNext,
-                          onPlay: _playNext,
-                          onDismiss: _dismissUpNext,
-                          playFocusNode: _playNextFocus,
+                  // Outside the bar's [AnimatedOpacity] on purpose: this
+                  // is the layer that must still be there when the OSD has
+                  // faded, which is the whole of what it is for. Top right,
+                  // opposite the stats panel and clear of the subtitles it
+                  // is being used to judge.
+                  if (_timingShown)
+                    SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 12, top: 64),
+                        child: Align(
+                          alignment: Alignment.topRight,
+                          child: FocusScope(
+                            node: _timingScope,
+                            child: SubtitleTimingOverlay(
+                              timing: _timing,
+                              firstFocusNode: _timingFocus,
+                              // Null with nothing else on offer, which is
+                              // what leaves the whole option undrawn.
+                              onMatch: _hasOtherSubtitleFile(state)
+                                  ? () => unawaited(_openSubtitleMatch())
+                                  : null,
+                              matching: _matchingSubtitle,
+                              matchNote: _subtitleMatchNote,
+                              onMark: () => unawaited(_markSubtitleTiming()),
+                              markNote: _markNote,
+                              onShift: (step) =>
+                                  _adjustTiming(_timing.shiftedBy(step)),
+                              onReset: _undoSubtitleTiming,
+                              onClose: _hideSubtitleTiming,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                  if (upNext != null && upNext > 0 && nextVideo != null)
+                    Positioned(
+                      right: 16,
+                      bottom: hasVideo ? 112 : 16,
+                      child: SafeArea(
+                        child: _upNextFocus(
+                          UpNextCard(
+                            label: nextVideo.seasonEpisodeLabel,
+                            title: nextVideo.title,
+                            secondsLeft: upNext,
+                            onPlay: _playNext,
+                            onDismiss: _dismissUpNext,
+                            playFocusNode: _playNextFocus,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

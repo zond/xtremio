@@ -9,7 +9,8 @@ import '../../support/diagnostics_capture.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
-/// Leaving a player has to stop it.
+/// Leaving a player has to stop it, and the order it does that in is the
+/// whole of what this file pins.
 ///
 /// On the owner's Chromecast one RD/HTTP title played for ninety seconds
 /// and was backed out of. 158 MB came back at the press and the volume
@@ -18,21 +19,19 @@ import '../../support/player_harness.dart';
 /// screen that owned it, and was still filling a cache file with no
 /// directory entry.
 ///
-/// The screen always asked. What it never did was check the answer: the
-/// teardown was deferred by two frames and then `.ignore()`d, so a `stop()`
-/// that hung or threw was never heard from again, and neither the log nor
-/// the test suite could tell a release that finished from one that never
-/// did.
+/// The screen used to have it backwards. It left at once, released the
+/// engine two frames later through a future nobody held, and sent the
+/// `quit` -- the one thing that actually ends the read -- only if a
+/// ten-second deadline expired. So the fast fix was withheld until the
+/// slow path had failed, and the video texture and the audio device were
+/// let go by whatever media_kit did in the background, at no defined
+/// moment relative to mpv being gone.
 ///
-/// **The cache file is gone and the bug is not.** The player keeps nothing
-/// on disk now, so a wedged one costs memory, a socket and the server
-/// engine that socket keeps live -- and a live engine is exactly what the
-/// server's cleaner may not evict behind. That is smaller than a gigabyte
-/// of somebody's television and it is still a player nobody can stop, which
-/// is what this file pins: the teardown is awaited and answered for, and a
-/// deadline that was never chained to it kills the player outright when it
-/// does not come back. Only something that owes the teardown nothing can
-/// get in front of a teardown that is stuck.
+/// It is the other way round now: `quit` first, then wait for the teardown
+/// with the picture still on screen and the sinks still being drained,
+/// then leave. Outcomes alone cannot tell that apart from what it replaced
+/// -- both end with a released engine and no screen -- so what is asserted
+/// here is the order.
 void main() {
   /// The player pushed onto a route, which is how the app opens it and
   /// what [PlayerHarness.pump] on its own is not: mounted as the root
@@ -64,68 +63,136 @@ void main() {
         line,
   ];
 
-  testWidgets('leaving the player releases an engine that answers', (
+  /// What the fake engine draws, so a test can ask whether the video sink
+  /// is still in the tree.
+  final video = find.text('video surface');
+
+  testWidgets('leaving sends the quit before it waits for anything', (
     tester,
   ) async {
-    // The half that always held, and the control for everything below:
-    // with an engine that comes back, the deferred teardown does reach it.
-    final harness = PlayerHarness();
+    // The inversion, at its narrowest. `quit` is the kill and it is what
+    // makes the `stop` inside media_kit's own teardown come back promptly
+    // instead of waiting out a five-minute `network-timeout`, so it goes
+    // out at the press -- not on a deadline, and not behind the teardown
+    // it is there to unstick.
+    final wedged = Completer<void>();
+    final harness = PlayerHarness(
+      // Proxied, so that the close has something to close and takes its
+      // place in the log between the two.
+      player: remoteStreamFixture('https://rd.example/dl/tok/film.mkv'),
+      configureEngine: (engine) => engine.disposeGate = wedged,
+    );
     await pumpPushed(tester, harness);
-    final engine = harness.engine;
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-
-    expect(find.byType(PlayerScreen), findsNothing);
-    expect(engine.disposed, isTrue);
-  });
-
-  testWidgets('the teardown waits two frames, and the deadline does not', (
-    tester,
-  ) async {
-    // The teardown is deferred on purpose -- the raster thread may still be
-    // drawing a frame that references the video texture -- and it can then
-    // block for as long as mpv is blocked. The deadline is armed in front
-    // of those two frames rather than after them, so a screen whose frames
-    // never come is still covered.
-    //
-    // Unmounted directly rather than through a route: what is being timed
-    // is the two frames between the screen going and the teardown starting,
-    // and a pop's transition would hide them.
-    final harness = PlayerHarness();
-    await harness.pump(tester);
     final engine = harness.engine;
     harness.calls.clear();
 
-    await tester.pumpWidget(const SizedBox());
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
 
+    expect(engine.quitCalls, 1, reason: 'the read is already ending');
     expect(
-      engine.disposeAsked,
-      isFalse,
-      reason: 'the teardown has not even been asked for yet',
+      harness.calls,
+      ['quit', 'close-streams', 'dispose'],
+      reason:
+          'and in that order: the server documents quit-then-close, '
+          'because a demuxer that has already been cancelled never '
+          'reaches its reconnect',
     );
 
+    wedged.complete();
     await tester.pumpAndSettle();
-
-    expect(harness.calls, ['dispose']);
-    expect(engine.disposed, isTrue);
   });
 
-  testWidgets('a teardown that never comes back ends with the player '
-      'destroyed anyway', (tester) async {
-    // `MediaKitEngine.dispose` awaits `_player.stop()` before it releases
-    // the player, and mpv writing to a volume with no room left blocks and
-    // retries -- so the stop is slowest to return exactly when a player
-    // that will not die costs the most. The gate is that stop.
+  testWidgets('the picture stays up until the teardown returns, and the '
+      'screen goes only after it', (tester) async {
+    // media_kit releases the video texture and the audio device from
+    // inside `Player.dispose`, after its `stop()`. So the sinks are alive
+    // for exactly as long as mpv might still be handing them something --
+    // provided the widget that draws them is still there, which is what
+    // waiting here rather than from `State.dispose` buys.
     //
-    // This used to end at the log line, which was the whole of what the
-    // app could do and not enough: a line does not give the volume its
-    // blocks back, and on the evening this comes from nothing did but
-    // killing the process ninety seconds later. So the deadline kills the
-    // player itself, and it is a plain timer rather than anything hung off
-    // the release -- everything chained behind a wedged teardown is
-    // unreachable in precisely the case it is for, which is why media_kit's
-    // own `mpv_terminate_destroy` never ran either.
+    // Both halves matter and only the order tells them apart: a screen
+    // that left first would also end with a released engine.
+    final wedged = Completer<void>();
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.disposeGate = wedged,
+    );
+    await pumpPushed(tester, harness);
+    final engine = harness.engine;
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    // Settled, not one frame: a screen that popped and let its exit
+    // transition run would still be on screen a frame after the press, and
+    // that is exactly the mistake being ruled out here.
+    await tester.pumpAndSettle();
+
+    expect(engine.disposeAsked, isTrue, reason: 'the teardown is running');
+    expect(engine.disposed, isFalse, reason: 'and has not come back');
+    expect(find.byType(PlayerScreen), findsOneWidget, reason: 'still here');
+    expect(video, findsOneWidget, reason: 'and still drawing the texture');
+
+    wedged.complete();
+    await tester.pumpAndSettle();
+
+    expect(engine.disposed, isTrue);
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(video, findsNothing, reason: 'released only now');
+  });
+
+  testWidgets('the screen goes on working while the player stops', (
+    tester,
+  ) async {
+    // The wait must yield, never block. A blocking join would deadlock in
+    // precisely the case worth waiting for -- mpv waiting on the video
+    // sink, the sink waiting on us -- which is what the community Android
+    // client does, `pthread_join` and then `mpv_terminate_destroy` inline
+    // on the UI thread, and an ANR is what it gets for it.
+    //
+    // No test on this side can reach that: a wait that really blocked
+    // would hang the run rather than fail it, and Dart has no way to
+    // express one here in the first place. What this pins is the shape
+    // that keeps it out -- an `await` in an ordinary async method, with
+    // the screen still taking events off the engine and still rebuilding
+    // the video surface for them while mpv has not come back. Keeping the
+    // sink alive means keeping it consuming, and a tree that has stopped
+    // being rebuilt is not consuming anything.
+    final wedged = Completer<void>();
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine.disposeGate = wedged,
+    );
+    await pumpPushed(tester, harness);
+    final engine = harness.engine;
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    final builtWhenLeft = engine.videoBuilds;
+
+    engine.emitBuffering(true);
+    await pumpEvents(tester);
+
+    expect(engine.disposed, isFalse, reason: 'still stopping');
+    expect(
+      engine.videoBuilds,
+      greaterThan(builtWhenLeft),
+      reason: 'and the screen rebuilt around it while it waited',
+    );
+
+    wedged.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(PlayerScreen), findsNothing);
+  });
+
+  testWidgets('a teardown that never comes back keeps the viewer for the '
+      'bound and no longer', (tester) async {
+    // `MediaKitEngine.dispose` awaits `_player.stop()`, and a stop is
+    // answered by the mpv core thread -- the thread that has to answer for
+    // whatever the playback was doing. Every teardown ever measured here
+    // came back in a fraction of a second, and the one that did not is the
+    // one this bound exists for.
+    //
+    // Nothing is escalated to when it expires, because there is nothing
+    // stronger than the `quit` that already went out. All it does is stop
+    // the viewer waiting.
     final lines = captureDiagnostics();
     final wedged = Completer<void>();
     final harness = PlayerHarness(
@@ -137,108 +204,34 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    // Two minutes: longer than any bound worth putting on a stop, and the
-    // span the measurement actually covers.
-    await tester.pump(const Duration(minutes: 2));
+    expect(find.byType(PlayerScreen), findsOneWidget, reason: 'still waiting');
+
+    await tester.pump(PlayerScreen.teardownBound);
     await tester.pumpAndSettle();
 
-    // The viewer is back on the details screen, the stop has still not
-    // answered -- and the player is gone regardless.
+    // The viewer is back on the details screen and the stop has still not
+    // answered.
     expect(find.byType(PlayerScreen), findsNothing);
-    expect(engine.disposeAsked, isTrue, reason: 'the screen did ask');
+    expect(engine.quitCalls, 1, reason: 'it was asked to stop at the press');
+    expect(engine.disposeAsked, isTrue, reason: 'and the teardown ran');
     expect(engine.disposed, isFalse, reason: 'and mpv never answered');
-    expect(engine.destroyed, isTrue, reason: 'and then it was killed');
-    expect(
-      engine.destroyCalls,
-      1,
-      reason:
-          'once: a deadline that re-armed would be sending a `quit` to '
-          'a handle media_kit may have freed in the meantime',
-    );
 
     // Where the ninety seconds used to go: no line, no bound, nothing a
-    // copied report could have shown. The line has to say the player was
-    // killed rather than that it was slow, because those want different
-    // things looked at next.
+    // copied report could have shown. This is the only instrument that
+    // would say the unexplained failure had come back.
     expect(
       complaints(lines),
       isNotEmpty,
-      reason: 'a player that would not die is what diagnostics are for',
+      reason: 'a player that would not stop is what diagnostics are for',
     );
-    expect(complaints(lines).single, contains('destroying it'));
+    expect(complaints(lines).single, contains('has not stopped'));
   });
 
-  testWidgets('a kill libmpv refused is reported as a kill that failed', (
-    tester,
-  ) async {
-    // The line was always written before the answer came back, and the
-    // answer was thrown away: `mpv_command_async` returns
-    // `MPV_ERROR_INVALID_PARAMETER`, `MPV_ERROR_UNINITIALIZED` or
-    // `MPV_ERROR_EVENT_QUEUE_FULL` without enqueueing anything, and a
-    // report that said "destroying it" and then went quiet was describing
-    // a player that is still running as one that was killed. Those want
-    // very different things looked at next.
-    final lines = captureDiagnostics();
-    final wedged = Completer<void>();
-    final harness = PlayerHarness(
-      configureEngine: (engine) => engine
-        ..disposeGate = wedged
-        ..destroyError = StateError('libmpv refused the quit'),
-    );
-    addTearDown(wedged.complete);
-    await pumpPushed(tester, harness);
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(minutes: 2));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull, reason: 'not a crash, a report');
-    expect(
-      complaints(lines),
-      contains(contains('destroying the player failed')),
-    );
-  });
-
-  testWidgets('a teardown that answers in time is never destroyed', (
-    tester,
-  ) async {
-    // The other side of the deadline, and the one that must not be noisy:
-    // an ordinary teardown that takes a moment -- a stop and a file being
-    // closed on a device whose volume is nearly full -- is slow rather
-    // than broken, and killing it would be taking the texture out from
-    // under a release that was going to arrive.
-    final lines = captureDiagnostics();
-    final slow = Completer<void>();
-    final harness = PlayerHarness(
-      configureEngine: (engine) => engine.disposeGate = slow,
-    );
-    await pumpPushed(tester, harness);
-    final engine = harness.engine;
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    await tester.pump(PlayerScreen.teardownBound - const Duration(seconds: 1));
-    slow.complete();
-    await tester.pumpAndSettle();
-    // Well past the deadline, which is the point: it was disarmed, not
-    // merely not reached yet.
-    await tester.pump(const Duration(minutes: 2));
-    await tester.pumpAndSettle();
-
-    expect(engine.disposed, isTrue);
-    expect(engine.destroyCalls, 0, reason: 'nothing had to be killed');
-    expect(complaints(lines), isEmpty, reason: 'and nothing to report');
-  });
-
-  testWidgets('a player that stops after it was killed says so', (
-    tester,
-  ) async {
-    // The distinction a report is read for. "Slow" and "would not die" want
-    // different things looked at next -- a full volume against a wedged
-    // libmpv -- and until the release lands there is nothing to tell them
-    // apart with, so the line that separates them can only be written when
-    // it does.
+  testWidgets('a player that stops after the bound says so', (tester) async {
+    // The distinction a report is read for. "Slow" and "never stopped"
+    // want different things looked at next, and until the teardown lands
+    // there is nothing to tell them apart with, so the line that separates
+    // them can only be written when it does.
     final lines = captureDiagnostics();
     final wedged = Completer<void>();
     final harness = PlayerHarness(
@@ -250,71 +243,117 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     await tester.pump(const Duration(minutes: 2));
-    expect(engine.destroyed, isTrue);
 
     wedged.complete();
     await tester.pumpAndSettle();
 
     expect(engine.disposed, isTrue, reason: 'it got there in the end');
-    expect(
-      lines,
-      contains(
-        'info player the player stopped after it was '
-        'destroyed',
-      ),
-    );
+    expect(lines, contains(startsWith('info player the player stopped ')));
   });
 
-  testWidgets('a teardown that throws is not swallowed, and the player is '
-      'still killed', (tester) async {
-    // The same hole from the other side. A throw out of `dispose` never
-    // reached `FlutterError.onError` either: `.ignore()` ate it before the
-    // zone saw it, so `tester.takeException()` is null and the run was
-    // green whatever happened. It still is -- an unhandled error is the
-    // wrong shape for "the player would not stop" -- so the log is where
-    // this shows.
-    //
-    // And the deadline is deliberately not disarmed by a throw: a teardown
-    // that threw is a teardown that did not finish, and the player may be
-    // alive and still writing. What keeps that safe is the engine's own
-    // guard -- `MediaKitEngine.destroy` reads the handle at the moment it
-    // fires and asks media_kit whether it has already released it, which
-    // is a fact about libmpv that no test on this side of it can reach.
+  testWidgets('a teardown that answers in time says nothing at all', (
+    tester,
+  ) async {
+    // The other side of the bound, and the one that must not be noisy: an
+    // ordinary teardown takes a fraction of a second, and a report full of
+    // lines about players that stopped normally is a report nobody reads.
     final lines = captureDiagnostics();
-    final harness = PlayerHarness(
-      configureEngine: (engine) =>
-          engine.disposeError = StateError('mpv refused to stop'),
-    );
+    final harness = PlayerHarness();
     await pumpPushed(tester, harness);
     final engine = harness.engine;
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-
-    expect(engine.disposeAsked, isTrue);
-    expect(engine.disposed, isFalse);
-    expect(tester.takeException(), isNull, reason: 'not a crash, a report');
-    expect(complaints(lines), isNotEmpty);
-
+    // Well past the bound, which is the point: the timer was cancelled,
+    // not merely not reached yet.
     await tester.pump(const Duration(minutes: 2));
     await tester.pumpAndSettle();
 
-    expect(engine.destroyed, isTrue);
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(engine.disposed, isTrue);
+    expect(complaints(lines), isEmpty, reason: 'nothing to complain of');
+    expect(
+      lines,
+      isNot(contains(startsWith('info player the player stopped'))),
+      reason: 'and nothing to say about how long it took',
+    );
   });
 
-  testWidgets('a hand-over keeps the outgoing player until its screen goes', (
+  testWidgets('a quit libmpv refused is reported, and the teardown runs '
+      'anyway', (tester) async {
+    // `mpv_command_async` answers `MPV_ERROR_INVALID_PARAMETER`,
+    // `MPV_ERROR_UNINITIALIZED` or `MPV_ERROR_EVENT_QUEUE_FULL` without
+    // enqueueing anything, and a screen that went quiet about it would be
+    // leaving a player that is still running. The teardown behind it is
+    // the only other thing there is, so it still runs -- and it is now the
+    // slow one, since nothing cancelled the read.
+    final lines = captureDiagnostics();
+    final harness = PlayerHarness(
+      configureEngine: (engine) =>
+          engine.quitError = StateError('libmpv refused the quit'),
+    );
+    await pumpPushed(tester, harness);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull, reason: 'not a crash, a report');
+    expect(complaints(lines), contains(contains('refused the quit')));
+    expect(harness.engine.disposed, isTrue, reason: 'released regardless');
+    expect(find.byType(PlayerScreen), findsNothing);
+  });
+
+  testWidgets('a teardown that throws is not swallowed, and the streams are '
+      'closed anyway', (tester) async {
+    // A throw out of `dispose` never reached `FlutterError.onError`
+    // either: the future was `.ignore()`d before the zone saw it, so
+    // `tester.takeException()` was null and the run was green whatever
+    // happened. It still is -- an unhandled error is the wrong shape for
+    // "the player would not stop" -- so the log is where this shows.
+    //
+    // And the streams are closed *before* the release for exactly this
+    // reason: a throw there must not take down the one call that gets the
+    // socket back.
+    final lines = captureDiagnostics();
+    final harness = PlayerHarness(
+      player: remoteStreamFixture('https://rd.example/dl/tok/film.mkv'),
+      configureEngine: (engine) =>
+          engine.disposeError = StateError('mpv refused to stop'),
+    );
+    await pumpPushed(tester, harness);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    expect(harness.engine.disposeAsked, isTrue);
+    expect(harness.engine.disposed, isFalse);
+    expect(tester.takeException(), isNull, reason: 'not a crash, a report');
+    expect(complaints(lines), contains(contains('releasing the player')));
+    expect(harness.proxyStreams.closed, hasLength(1));
+    expect(find.byType(PlayerScreen), findsNothing, reason: 'and it leaves');
+  });
+
+  testWidgets('a hand-over does not wait for the player it is replacing', (
     tester,
   ) async {
     // A `pushReplacement` keeps this screen alive until the transition
     // ends, so its `dispose` is a third of a second away and the successor
     // has already opened its own stream by then: two players at once, for
-    // as long as the transition. What each of them is holding is now
-    // memory and a connection to the server rather than a cache file on
-    // the volume, and the outgoing one is released the moment its screen
-    // really goes -- freeing its video texture any earlier is what the
-    // deferred teardown exists to avoid.
+    // as long as the transition. The outgoing one is torn down when its
+    // screen really goes, unwatched -- there is nothing left to await
+    // from, and the incoming player must not be held up by a teardown that
+    // may not come back.
     useWideViewport(tester);
-    final harness = PlayerHarness();
+    // Only the outgoing player's teardown is wedged: what is being shown
+    // is that the successor does not care.
+    final wedged = Completer<void>();
+    var outgoing = true;
+    final harness = PlayerHarness(
+      configureEngine: (engine) {
+        if (outgoing) engine.disposeGate = wedged;
+        outgoing = false;
+      },
+    );
     harness.fixture['nextVideo'] = const {
       'id': 'tt0063350:1:2',
       'title': 'The Cellar',
@@ -344,27 +383,24 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    expect(harness.engines.first.disposed, isTrue);
+    expect(harness.engines.first.quitCalls, 1, reason: 'the outgoing one');
+    expect(harness.engines.last.quitCalls, 0, reason: 'and not the new one');
+    expect(
+      harness.engines.first.disposed,
+      isFalse,
+      reason: 'whose teardown has not come back',
+    );
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    expect(video, findsOneWidget, reason: 'and the new player is playing');
+
+    // Past the bound, so the outgoing player's own timer has had its say
+    // and there is nothing left running behind this test.
+    await tester.pump(PlayerScreen.teardownBound);
+    wedged.complete();
+    await tester.pumpAndSettle();
   });
 
   group('a stream the server is holding open is ended, not waited out', () {
-    /// The recorded torrent fixture rewritten into an addon's own HTTP
-    /// stream, which is the kind that goes through `/proxy` -- a torrent is
-    /// already on the server and never does.
-    Map<String, dynamic> remoteStreamFixture(String url) {
-      final fixture = loadPlayerFixture();
-      final stream = <String, dynamic>{'url': url, 'name': 'Direct'};
-      (fixture['selected'] as Map<String, dynamic>)['stream'] = stream;
-      fixture['stream'] = {
-        'type': 'Ready',
-        'content': [
-          {'stream': stream, 'streaming_url': url},
-          stream,
-        ],
-      };
-      return fixture;
-    }
-
     /// The `p=` this player put in the URL it was given, read back out of
     /// it: the token and the URL have to be the same one, and reading it
     /// off the URL is the only way a test can say so.
@@ -415,9 +451,8 @@ void main() {
       tester,
     ) async {
       // The call reaches FFI, and FFI throws -- a panic in the core, a
-      // bridge that is not up. It used to run at the top of `dispose`, so
-      // a throw took the rest of the method with it: no `dispose` of the
-      // engine, no fallback timer, and a player left holding its packet
+      // bridge that is not up. A throw crossing it would take the release
+      // that follows it down as well, leaving a player holding its packet
       // memory, its socket and the engine that socket pins. Which is the
       // leak the close was added to prevent.
       final harness = PlayerHarness(
@@ -475,4 +510,21 @@ void main() {
       expect(harness.proxyStreams.closed, [leaving]);
     });
   });
+}
+
+/// The recorded torrent fixture rewritten into an addon's own HTTP stream,
+/// which is the kind that goes through `/proxy` -- a torrent is already on
+/// the server and never does.
+Map<String, dynamic> remoteStreamFixture(String url) {
+  final fixture = loadPlayerFixture();
+  final stream = <String, dynamic>{'url': url, 'name': 'Direct'};
+  (fixture['selected'] as Map<String, dynamic>)['stream'] = stream;
+  fixture['stream'] = {
+    'type': 'Ready',
+    'content': [
+      {'stream': stream, 'streaming_url': url},
+      stream,
+    ],
+  };
+  return fixture;
 }

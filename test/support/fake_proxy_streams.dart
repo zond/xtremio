@@ -22,8 +22,15 @@ class FakeProxyStreams implements ProxyStreamControl {
   /// teardown must survive: it is on the way to releasing the player.
   Object? failure;
 
+  /// Where `'close-streams'` is recorded, when a test is watching the
+  /// order of a teardown's calls across the fakes rather than just their
+  /// effects. The server documents quit-then-close, and this is the only
+  /// way to say the app honours it.
+  List<String>? callLog;
+
   @override
   int closeProxyStreams(String token) {
+    callLog?.add('close-streams');
     closed.add(token);
     if (failure case final failure?) throw failure;
     return liveStreams;

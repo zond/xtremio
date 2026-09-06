@@ -399,41 +399,58 @@ what every model field means. The shape of the thing is in the
   and re-fetches through the URL it already has, so the server retires the
   token too and answers `410 Gone` to anything that comes back with it.
   The order the server documents is quit-then-close, since a cancelled
-  demuxer never reaches its reconnect; here the quit is two frames away
-  when the close is sent, so the refusal is what covers the race. It ends
-  a read and nothing else besides -- a demuxer wedged on the Flutter
-  texture or the audio device is not polling that stream, which is why the
-  deadline below still exists. The call is made *after* the release is
-  armed and its throw is caught, because it reaches FFI and an exception
-  crossing a `dispose` would skip the release of the player itself. A
-  torrent is never proxied, so its teardown has nothing to close.
-- **A player that is left has to actually stop, and something has to make
-  sure.** Leaving the screen defers the teardown two frames, so the raster
-  thread is not holding the video texture when media_kit frees it, and arms
-  a plain timer in front of those frames and chained to neither: it gives
-  the teardown `PlayerScreen.teardownBound` before it says so in the
-  diagnostics and kills the player itself. The independence is the whole of
-  it -- mpv's own forceful abort exists, but every road to it runs through
-  the teardown, since media_kit schedules `mpv_terminate_destroy` as the
-  last statement of a chain that begins with the `stop()` that hangs, so on
-  the owner's Chromecast a wedged stop meant an mpv that outlived its
-  screen by ninety seconds at 32 Mbps and gave its blocks back only to a
-  force-stop. What the timer sends is `quit`, asynchronously, on
-  media_kit's own handle (`PlaybackEngine.destroy`), and never
-  `mpv_terminate_destroy`: destroying a handle whose event loop is still
-  attached deadlocks or crashes, and the one place that detaches it first
-  is the teardown that is stuck. **The fallback is not unblocked, and the
-  code says so now.** The `quit` is enqueued on `mpctx->dispatch`, the
-  core's own queue, which is the queue the wedged `stop` is waiting on --
-  media_kit sends that through `mpv_command_async` too and awaits a reply
-  only the core thread can send. So it wins a core thread that has not
-  reached the command yet, which is the case that was measured, and does
-  nothing for one stuck inside it. What bounds that case is the change
-  above: a player that keeps no disk cache costs memory, a socket and the
-  server engine that socket keeps live, rather than a gigabyte of a 4 GB
-  television. `mpv_command_async`'s refusal is thrown rather than
+  demuxer never reaches its reconnect, and that is the order the teardown
+  below runs in; the token's refusal covers the case where mpv had not
+  reached the quit yet. It ends a read and nothing else besides -- a
+  demuxer wedged on the Flutter texture or the audio device is not polling
+  that stream, which is why the bound below still exists. The call sits
+  between the quit and the release with its throw caught, because it
+  reaches FFI and an exception crossing it would take the release with it.
+  A torrent is never proxied, so its teardown has nothing to close.
+- **A player is stopped before its screen leaves, not after.** Every way
+  out of the player funnels through `PlayerScreen._leave`, and it goes in
+  one order: send `quit`, close the proxied streams, `await` the teardown
+  with the video still in the tree and the audio device still open, then
+  pop. The `quit` goes first because it is the kill and because it is what
+  makes the `stop()` inside media_kit's `Player.dispose` come back
+  promptly; the wait comes before the pop because media_kit releases the
+  video texture and the audio device from *inside* that teardown, after
+  the stop, so waiting with the screen up is what keeps the sinks
+  attached and consuming until mpv has no more use for them. It used to be
+  the reverse -- leave at once, release the engine two frames later
+  through a future nobody held, and send the `quit` only if a ten-second
+  deadline expired -- which withheld the one fast fix until the slow path
+  had failed. Measured against real libmpv: the quit returns in
+  microseconds, a teardown behind one comes back in 92-230 ms even against
+  a socket wedged for good, and mpv's core thread goes on answering
+  commands throughout, because `quit` starts the shutdown rather than
+  ending the core.
+- **`quit` is the kill, and there is nothing stronger to escalate to.**
+  `PlaybackEngine.quit` sends it asynchronously on media_kit's own handle,
+  never `mpv_terminate_destroy`: destroying a handle whose event loop is
+  still attached deadlocks or crashes, which is why media_kit schedules its
+  own five seconds after the teardown. Sending it *first* is what makes
+  mpv's dispatch queue work in our favour -- the `stop` media_kit issues is
+  on that same queue, so a core thread that reaches the queue at all
+  reaches the quit ahead of it. A core thread already stuck elsewhere
+  swallows both, and nothing in the process can reach it; what bounds that
+  case is that a player keeping no disk cache costs memory, a socket and
+  the server engine that socket keeps live, rather than a gigabyte of a
+  4 GB television. `mpv_command_async`'s refusal is thrown rather than
   discarded, so a report never says a player was killed when the command
   was never enqueued.
+- **`PlayerScreen.teardownBound` bounds the viewer's wait, and is the only
+  instrument for a failure still unexplained.** Nothing is escalated to
+  when it expires -- the quit went out at the press -- so the screen simply
+  stops waiting after two seconds, the teardown carries on in the
+  background, and a line says a player which should have stopped in a
+  fraction of a second has not (with a second line when a late one lands,
+  since "slow" and "never stopped" want different things looked at next).
+  It is kept because on the owner's Chromecast a player once kept
+  downloading at 32 Mbps for at least ninety seconds after its screen was
+  left and only a force-stop ended it, and every mechanism since measured
+  resolves in a fraction of a second: something happened there that is
+  still not accounted for.
 - **A scan is a different question from a seek, and mpv is asked
   differently.** mpv's seek is exact -- it lands on the keyframe before
   the target and decodes forward, invisibly, to the moment asked for --

@@ -94,14 +94,16 @@ class PlayerHarness {
   /// What leaving the screen closes its proxied streams through. Always
   /// present, so no player test reaches FFI on its way out, and so a test
   /// can read back which token was closed.
-  final FakeProxyStreams proxyStreams = FakeProxyStreams();
+  late final FakeProxyStreams proxyStreams = FakeProxyStreams()
+    ..callLog = calls;
 
   /// What the start-up overlay polls; answers nothing (`null`) until a test
   /// sets [FakeTorrentStatsClient.response].
   late final FakeTorrentStatsClient torrentStats = FakeTorrentStatsClient()
     ..callLog = calls;
 
-  /// Engine opens (`'open'`) and stats fetches (`'stats'`), in the order
+  /// Engine opens (`'open'`), stats fetches (`'stats'`) and the teardown's
+  /// own calls (`'quit'`, `'close-streams'`, `'dispose'`), in the order
   /// they happened.
   final List<String> calls = [];
 

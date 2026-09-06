@@ -112,8 +112,8 @@ class FakePlaybackEngine implements PlaybackEngine {
   final List<double?> displayRefreshRates = [];
 
   /// When set, the calls a test may need to see in order are appended here
-  /// -- `'open'`, `'stop-writing'`, `'dispose'`: a log shared with other
-  /// fakes, for tests about the order of calls across them.
+  /// -- `'open'`, `'quit'`, `'dispose'`: a log shared with other fakes,
+  /// for tests about the order of calls across them.
   List<String>? callLog;
 
   void emitPosition(Duration position) => _position.add(position);
@@ -307,8 +307,15 @@ class FakePlaybackEngine implements PlaybackEngine {
     subtitleStyle = style;
   }
 
+  /// How many times the screen has asked for the video surface. What it
+  /// answers is whether the tree is still being rebuilt around a sink that
+  /// is still attached -- which is a different question from whether the
+  /// widget merely still exists.
+  int videoBuilds = 0;
+
   @override
   Widget buildVideo(BuildContext context, {double subtitleBottomPadding = 24}) {
+    videoBuilds++;
     lastSubtitleBottomPadding = subtitleBottomPadding;
     return const ColoredBox(
       color: Color(0xFF000000),
@@ -325,26 +332,25 @@ class FakePlaybackEngine implements PlaybackEngine {
     disposed = true;
   }
 
-  /// How many times the player was killed rather than asked. Real mpv is
-  /// sent `quit` on its own handle and the demuxer goes with it, so this
-  /// is what "the volume got its blocks back" looks like from a test.
-  int destroyCalls = 0;
+  /// How many times the player was sent the kill. Real mpv is sent `quit`
+  /// on its own handle and the demuxer goes with it, so this is what "the
+  /// read ended and the socket came back" looks like from a test.
+  ///
+  /// Deliberately not the same question as [disposeAsked]: the quit goes
+  /// out first and the teardown behind it may take as long as it likes, so
+  /// which of the two a test is asking about matters.
+  int quitCalls = 0;
 
-  /// Whether the fallback ever had to be used. Deliberately not
-  /// [disposed]: a destroyed player is one whose teardown never finished,
-  /// and telling those two apart is what a report needs.
-  bool get destroyed => destroyCalls > 0;
-
-  /// What [destroy] throws instead of answering, which is what a real
-  /// engine does when libmpv refuses the `quit`: the command is never
-  /// enqueued and the player is still running.
-  Object? destroyError;
+  /// What [quit] throws instead of answering, which is what a real engine
+  /// does when libmpv refuses the command: nothing was ever enqueued and
+  /// the player is still running.
+  Object? quitError;
 
   @override
-  Future<void> destroy() async {
-    destroyCalls++;
-    callLog?.add('destroy');
-    if (destroyError != null) throw destroyError!;
+  Future<void> quit() async {
+    quitCalls++;
+    callLog?.add('quit');
+    if (quitError != null) throw quitError!;
   }
 }
 

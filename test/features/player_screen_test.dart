@@ -158,12 +158,13 @@ void main() {
         findsOneWidget,
       );
 
-      // Leaving unloads the field at once but releases the engine only two
-      // frames later, after the raster thread is done with the video texture.
+      // Unmounted rather than left: a screen taken down from above never
+      // reaches [PlayerScreen._leave], so its teardown runs unwatched out
+      // of `dispose` -- the quit first, then the release. What the leaving
+      // path does instead is player_teardown_test's whole subject.
       await tester.pumpWidget(const SizedBox());
-      expect(engine.disposed, isFalse);
       await tester.pump();
-      await tester.pump();
+      expect(engine.quitCalls, 1);
       expect(engine.disposed, isTrue);
       expect(
         core.dispatched.last.action,

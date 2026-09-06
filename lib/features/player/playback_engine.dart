@@ -1,6 +1,6 @@
 import 'dart:async';
-// Only the names the forceful [MediaKitEngine.destroy] needs: `dart:ffi`
-// also declares a `Size`, and this file draws widgets.
+// Only the names [MediaKitEngine.quit] needs: `dart:ffi` also declares a
+// `Size`, and this file draws widgets.
 import 'dart:ffi' show AllocatorAlloc, Int8, Pointer, PointerPointer, nullptr;
 
 import 'package:ffi/ffi.dart' show StringUtf8Pointer, calloc;
@@ -197,45 +197,65 @@ abstract interface class PlaybackEngine {
   /// them clear of its own controls.
   Widget buildVideo(BuildContext context, {double subtitleBottomPadding = 24});
 
-  /// Stops the playback and releases everything the backend holds for it.
+  /// Stops the playback and releases everything the backend holds for it,
+  /// the video texture and the audio device among them.
   ///
   /// It can be slow and it can fail -- `Player.stop()` waits on the mpv
   /// core thread, which is the thread that has to answer for whatever the
-  /// playback was doing. [destroy] is the bound on that, and the caller
-  /// arms it rather than chaining it behind this.
+  /// playback was doing -- so [quit] goes first. That is what gets the
+  /// core thread out of whatever the playback had it doing and on to the
+  /// stop, and with it sent this comes back in a fraction of a second.
+  ///
+  /// **Awaited with the sinks still attached, because the release of them
+  /// happens inside here.** There is no separate sink to let go of
+  /// afterwards and none to withhold: media_kit tears the native video
+  /// output down from `Player.dispose`, after its `stop()`, which is
+  /// exactly the order wanted. What the caller owes is to keep drawing the
+  /// video and to keep the audio device open until this returns.
   Future<void> dispose();
 
-  /// Ends the playback from outside the teardown, freeing the demuxer and
-  /// the connection it is reading through, and leaves this engine unusable.
+  /// Ends the playback outright -- libmpv's own `quit` -- freeing the
+  /// demuxer and the connection it is reading through, and leaves this
+  /// engine unusable.
   ///
-  /// This is the fallback for a [dispose] that has not come back. It is
-  /// armed independently of it and never chained behind it, because being
-  /// unreachable from a wedged teardown is the whole fault: on the owner's
-  /// Chromecast a player kept its demuxer for at least ninety seconds
-  /// after the screen was gone, at 32 Mbps into a file with no directory
-  /// entry, and the only thing that ever freed it was killing the process.
+  /// **This is the kill, and it is sent the moment the player is left**,
+  /// ahead of [dispose] rather than behind it on a deadline. There is
+  /// nothing stronger to escalate to: `mpv_terminate_destroy` deadlocks
+  /// against an attached event loop, which is why media_kit schedules its
+  /// own five seconds after the teardown it belongs to (the whole of that
+  /// is at [MediaKitEngine.quit]). So withholding the only kill there is
+  /// until the slow path has failed buys nothing, and costs the demuxer,
+  /// the socket and the server engine that socket keeps live for as long
+  /// as the slow path takes. That is what this used to be for, and what it
+  /// is no longer.
+  ///
+  /// **It does not spoil the teardown behind it, which was measured before
+  /// it was relied on.** `quit` does not end mpv's core thread: the
+  /// shutdown broadcasts and then loops, draining the core's dispatch
+  /// queue until the last client is destroyed, and media_kit destroys its
+  /// client five seconds late. So the `stop` inside [dispose] is
+  /// dispatched and answered exactly as it would be on a live core.
+  /// Against real libmpv, three seconds after a quit -- demuxer gone,
+  /// socket returned -- `dispose` still came back in single-digit
+  /// milliseconds, and nothing threw in any run.
   ///
   /// **What it covers, and what it does not.** It returns at once, so a
   /// caller is never blocked by it -- but "the call returns" and "the
   /// player dies" are two different claims, and only the first one is
-  /// unconditional. [MediaKitEngine.destroy] enqueues a `quit` on the mpv
-  /// core's own dispatch queue, which is the queue the wedged `stop` is
-  /// waiting on, and the core thread is the only thread that can act on
-  /// either. So this covers a teardown wedged on the Dart side -- a future
-  /// that never completes, an await that never returns -- and a core
-  /// thread that is genuinely stuck swallows the `quit` along with
-  /// everything else. Nothing in this process can reach that thread; what
-  /// bounds it is that a player with no disk cache costs memory and a
-  /// socket rather than a volume.
+  /// unconditional. [MediaKitEngine.quit] enqueues on the mpv core's own
+  /// dispatch queue, and the core thread is the only thread that can act
+  /// on it. A core thread that is genuinely stuck swallows this along with
+  /// everything else, and nothing in this process can reach that thread.
+  /// What bounds that case is that a player with no disk cache costs
+  /// memory and a socket rather than a volume.
   ///
   /// Throws when the backend refused to accept the command, so a caller
   /// that logs a kill is logging one that was at least asked for.
   ///
   /// Calling it twice, or on a player that has already gone, does nothing
-  /// -- the caller is by definition one that has lost track of what the
-  /// player is doing, so the implementation and not the caller is what has
-  /// to be sure.
-  Future<void> destroy();
+  /// -- a caller may well have lost track of what the player is doing, so
+  /// the implementation and not the caller is what has to be sure.
+  Future<void> quit();
 }
 
 typedef PlaybackEngineFactory = PlaybackEngine Function();
@@ -1246,10 +1266,18 @@ class MediaKitEngine implements PlaybackEngine {
   }
 
   /// Stops playback before releasing the player. Once stopped, libmpv posts
-  /// no more frames to the video texture, so the texture is idle by the time
-  /// `Player.dispose` unregisters it (media_kit tears the native
-  /// `VideoOutput` down from `Player.dispose`, so there is nothing separate
-  /// to dispose on the `VideoController`).
+  /// no more frames to the video texture, so the texture is idle by the
+  /// time `Player.dispose` unregisters it.
+  ///
+  /// **Nothing here disposes [_controller], and that is deliberate.**
+  /// media_kit tears the native `VideoOutput` down from inside
+  /// `Player.dispose`: the `VideoController` constructor adds its own
+  /// release callback to the player, and `NativePlayer.dispose` runs those
+  /// callbacks out of `super.dispose()` -- after `stop()`, before the
+  /// event loop is detached. So "stop, wait for it, then let the texture
+  /// and the audio device go" is an order media_kit already enforces, and
+  /// the only ways to break it from this side are to release the
+  /// controller ourselves or to call this twice, which throws.
   @override
   Future<void> dispose() async {
     _disposed = true;
@@ -1267,9 +1295,9 @@ class MediaKitEngine implements PlaybackEngine {
     }
   }
 
-  /// Whether [destroy] has already gone out. Once per engine: what follows
+  /// Whether the quit has already gone out. Once per engine: what follows
   /// it is mpv's own shutdown, and asking twice adds nothing to that.
-  bool _destroyAsked = false;
+  bool _quitAsked = false;
 
   /// The `reply_userdata` the quit is sent under, so that the reply mpv
   /// sends back for it belongs to nobody else.
@@ -1316,21 +1344,21 @@ class MediaKitEngine implements PlaybackEngine {
   /// two seconds later. media_kit runs precisely that immediately before
   /// scheduling its own `mpv_terminate_destroy` five seconds on, which is
   /// why `dispose()` may destroy and its hot-restart sweeper may not. But
-  /// it runs it *after* `stop()`, and a `stop()` that will not come back
-  /// is the case this method exists for: the one path where destroying is
-  /// prepared for is the path that is stuck.
+  /// it runs it *after* `stop()`, and this goes out *before* the stop
+  /// does: the one path where destroying is prepared for is the path that
+  /// has not begun yet.
   ///
   /// **Why the quit.** `mpv_command_async` is `reserve_reply` plus
   /// `mp_dispatch_enqueue` and nothing else -- no core lock, no waiter,
   /// nothing freed -- so it is safe with the event loop still attached and
-  /// it returns immediately, which is what a fallback for a wedged player
-  /// has to do. It parses the arguments into the core's own copy before
+  /// it returns immediately, which is what something sent on the way out
+  /// of a screen has to do. It parses the arguments into the core's own copy before
   /// enqueueing, so the buffers below can go back at once. And what it
   /// sets off inside mpv is the shutdown, which is where mpv's own
   /// forceful abort lives: `abort_async` after two seconds of waiting on
-  /// outstanding work. That bound is the thing this fallback was after,
-  /// and `quit` is the way to it that does not require the preparation
-  /// nobody has done. Measured with the event loop attached throughout and
+  /// outstanding work. That bound is the thing this was after, and `quit`
+  /// is the way to it that does not require the preparation nobody has
+  /// done. Measured with the event loop attached throughout and
   /// the handle never destroyed: the call returned in microseconds, the
   /// demuxer was gone within the second, and the cache directory emptied
   /// -- the blocks back on the volume, which was the whole complaint.
@@ -1343,12 +1371,13 @@ class MediaKitEngine implements PlaybackEngine {
   /// 1.2.6 with `async: true` issues `stop` through `mpv_command_async`
   /// as well and awaits the reply event (`_command` in
   /// `player/native/player/real.dart`), which only the core thread can
-  /// send. So a `stop` that has not come back is either a core thread that
-  /// has not reached the command yet -- in which case the `quit` behind it
-  /// will be reached too, which is the case this fallback wins -- or a core
-  /// thread that is stuck inside it, in which case the `quit` waits behind
-  /// it forever. The measured recovery above is the first case; nothing in
-  /// this process can do anything about the second.
+  /// send. Sending this *first* is what turns that queue from a hazard
+  /// into an ordering: a core thread that reaches the queue at all reaches
+  /// the quit before the stop, and the stop it then reaches is one against
+  /// a demuxer that has already been cancelled. What is left over is a
+  /// core thread stuck somewhere else entirely, and everything queued
+  /// behind that waits forever. The measured recovery above is the first
+  /// case; nothing in this process can do anything about the second.
   ///
   /// That is the strongest single argument for the player keeping no disk
   /// cache: a stuck core thread now costs 64 MiB of packet memory, a
@@ -1377,9 +1406,9 @@ class MediaKitEngine implements PlaybackEngine {
   /// this was on its way sends nothing at all -- a `quit` on freed memory
   /// is the same crash by the other road.
   @override
-  Future<void> destroy() async {
-    if (_destroyAsked) return;
-    _destroyAsked = true;
+  Future<void> quit() async {
+    if (_quitAsked) return;
+    _quitAsked = true;
     // Nothing this player reports is worth anything now.
     _disposed = true;
     _stopStats();
