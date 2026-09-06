@@ -74,10 +74,10 @@ what every model field means. The shape of the thing is in the
   collapsed on purpose rather than "unset"), `streamsOrder` (what order the
   streams inside one of those sections are in), `bufferAhead` (how far
   ahead playback buffers, below), `focusEmphasis` (Settings ->
-  Interface -> "Focus highlight", offered on a television only: `standard`
-  is the two-stroke ring with its zoom and shadow, `bold` thickens the ring
-  and dims everything the remote is not on, for a bright room a display
-  cannot fight; an unreadable or absent value is `standard`) and
+  Interface -> "Bold focus", a switch offered on a television only:
+  `standard` is the two-stroke ring with its zoom and shadow, `bold`
+  thickens the ring and dims everything the remote is not on, for a bright
+  room a display cannot fight; an unreadable or absent value is `standard`) and
   `subtitleSync` (the subtitle timings the viewer has fixed by hand, most
   recent first, bounded by recency -- see Subtitles). Nothing
   secret goes in it.

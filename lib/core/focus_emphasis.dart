@@ -24,13 +24,12 @@ enum FocusEmphasis {
   /// What the setting is stored as (`AppPrefs.focusEmphasisKey`).
   String get stored => name;
 
-  /// The choice in plain words.
-  String get label => switch (this) {
-    FocusEmphasis.standard => 'Standard',
-    FocusEmphasis.bold => 'Bold',
-  };
-
   /// One line on what it does, on the tile rather than in a help page.
+  ///
+  /// The setting is a switch labelled for [bold], so [bold]'s line is the
+  /// one the tile draws -- a switch's subtitle says what turning it on
+  /// buys, not which of two states it is in. [standard]'s is the other half
+  /// of the pair and is what the ring does when it is off.
   String get description => switch (this) {
     FocusEmphasis.standard =>
       'Outlines what is focused in black and white, and zooms it a little.',

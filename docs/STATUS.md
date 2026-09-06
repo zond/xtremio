@@ -213,9 +213,9 @@ width and gives each tab its own focus memory, tiles mark focus with a
 two-stroke ring (near-black outside, near-white inside, four logical
 pixels: one colour cannot read over unknown poster art in a room that is
 not dark), a 5 % zoom and a shadow, lift their own caption to full
-strength and scroll themselves into view — Settings → Interface →
-"Focus highlight" offers Bold, which thickens that ring and dims
-everything the remote is not on, for a projector in a bright room — the
+strength and scroll themselves into view — Settings → Interface → "Bold
+focus" is one switch that thickens that ring and dims everything the
+remote is not on, for a projector in a bright room — the
 D-pad walks rows and columns (a held centre key is a long press, the
 context-menu key opens the same menu a long press does), the player takes
 the remote's centre and media keys, is immersive-fullscreen the whole

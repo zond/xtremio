@@ -294,8 +294,10 @@ void main() {
     });
   });
 
-  group('focus highlight', () {
+  group('bold focus', () {
     const tv = DeviceProfile(isTv: true, hasTouch: false);
+
+    Finder theSwitch() => find.byKey(settingKey(AppPrefs.focusEmphasisKey));
 
     testWidgets('a television is offered Bold, and it goes to the '
         'preferences', (tester) async {
@@ -304,12 +306,17 @@ void main() {
       final core = await pumpSettings(tester, prefs: prefs, device: tv);
 
       expect(prefs.focusEmphasis, FocusEmphasis.standard);
-      // What each choice does is on the tile, not in a help page.
-      expect(find.text(FocusEmphasis.standard.description), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
+      // What turning it on buys is on the tile, not in a help page.
+      expect(find.text(FocusEmphasis.bold.description), findsOneWidget);
 
-      await pick(tester, AppPrefs.focusEmphasisKey, FocusEmphasis.bold.label);
+      // One press, where the dropdown this replaced cost a press to open,
+      // a walk to the value and a press to choose.
+      await tester.tap(theSwitch());
+      await tester.pumpAndSettle();
 
       expect(prefs.focusEmphasis, FocusEmphasis.bold);
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isTrue);
       expect(core.dispatched, isEmpty, reason: '${core.dispatched}');
       // The room does not change on a restart: a fresh AppPrefs over the
       // same file.
@@ -318,13 +325,39 @@ void main() {
       expect(restarted.focusEmphasis, FocusEmphasis.bold);
     });
 
+    testWidgets('a choice made before the switch existed survives it', (
+      tester,
+    ) async {
+      // The stored key and both stored spellings are unchanged, so a
+      // preferences file written by the dropdown build comes back as the
+      // switch turned on -- and turning it off writes the other spelling
+      // rather than removing the key.
+      final stored = FakePrefsClient({
+        AppPrefs.focusEmphasisKey: FocusEmphasis.bold.stored,
+      });
+      final prefs = AppPrefs(client: stored);
+      await prefs.load();
+      await pumpSettings(tester, prefs: prefs, device: tv);
+
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isTrue);
+
+      await tester.tap(theSwitch());
+      await tester.pumpAndSettle();
+
+      expect(prefs.focusEmphasis, FocusEmphasis.standard);
+      expect(
+        stored.stored[AppPrefs.focusEmphasisKey],
+        FocusEmphasis.standard.stored,
+      );
+    });
+
     testWidgets('a phone is not offered it at all', (tester) async {
       // The indicator is only drawn on a television; off one, focus
       // follows a pointer or Tab.
       await pumpSettings(tester, prefs: AppPrefs.inMemory());
 
-      expect(find.byKey(settingKey(AppPrefs.focusEmphasisKey)), findsNothing);
-      expect(find.text('Focus highlight'), findsNothing);
+      expect(theSwitch(), findsNothing);
+      expect(find.text('Bold focus'), findsNothing);
     });
   });
 

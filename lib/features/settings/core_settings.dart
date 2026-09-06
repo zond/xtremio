@@ -176,8 +176,8 @@ class BufferAheadSection extends StatelessWidget {
   }
 }
 
-/// Settings → Interface → "Focus highlight": how strongly the thing the
-/// remote is on is marked (see [FocusEmphasis]).
+/// Settings → Interface → "Bold focus": how strongly the thing the remote
+/// is on is marked (see [FocusEmphasis]).
 ///
 /// The app's own preference rather than a `profile.settings` field, for the
 /// same reason "Buffer ahead" is: it is about this device's room and
@@ -185,6 +185,18 @@ class BufferAheadSection extends StatelessWidget {
 /// that is where the indicator is drawn at all, and where the viewer is
 /// three metres away from a projector screen; off one, focus follows a
 /// pointer or Tab and Material's own highlight does the job.
+///
+/// **A switch, not a dropdown.** [FocusEmphasis] has exactly two values, so
+/// a menu is a control too many: it costs a press to open, a walk to the
+/// value and a press to choose where a switch costs one press, and on a
+/// television a dropdown is the shape that once trapped the D-pad in the
+/// streaming-server settings. It is labelled for what turning it on does
+/// rather than for the axis it sits on, and it is a [SwitchListTile] like
+/// "Binge watching" above rather than a shape of its own.
+///
+/// **The enum is still what is stored and what the ring reads**, both
+/// values and the same key, so somebody who chose Bold before this keeps
+/// it and nothing about the drawing changes.
 class FocusEmphasisSection extends StatelessWidget {
   const FocusEmphasisSection({super.key, required this.prefs});
 
@@ -193,28 +205,19 @@ class FocusEmphasisSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!DeviceScope.isTv(context)) return const SizedBox.shrink();
-    return ListTile(
-      leading: const Icon(Icons.highlight_alt_outlined),
-      title: const Text('Focus highlight'),
-      subtitle: Text(prefs.focusEmphasis.description),
-      trailing: DropdownButton<FocusEmphasis>(
-        // The same key shape a `profile.settings` control gets, so a test
-        // finds this one the same way.
-        key: settingKey(AppPrefs.focusEmphasisKey),
-        value: prefs.focusEmphasis,
-        underline: const SizedBox.shrink(),
-        items: [
-          for (final choice in FocusEmphasis.values)
-            DropdownMenuItem<FocusEmphasis>(
-              value: choice,
-              child: Text(choice.label),
-            ),
-        ],
-        onChanged: (selected) {
-          if (selected != null && selected != prefs.focusEmphasis) {
-            prefs.setFocusEmphasis(selected);
-          }
-        },
+    return SwitchListTile(
+      // The same key shape a `profile.settings` control gets, so a test
+      // finds this one the same way.
+      key: settingKey(AppPrefs.focusEmphasisKey),
+      secondary: const Icon(Icons.highlight_alt_outlined),
+      title: const Text('Bold focus'),
+      // What it does is on the tile rather than in a help page, and it is
+      // the description of the value being turned on -- the subtitle says
+      // what the switch buys, not what the setting currently is.
+      subtitle: Text(FocusEmphasis.bold.description),
+      value: prefs.focusEmphasis == FocusEmphasis.bold,
+      onChanged: (on) => prefs.setFocusEmphasis(
+        on ? FocusEmphasis.bold : FocusEmphasis.standard,
       ),
     );
   }
