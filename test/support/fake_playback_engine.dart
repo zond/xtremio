@@ -334,10 +334,16 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// and telling those two apart is what a report needs.
   bool get destroyed => destroyCalls > 0;
 
+  /// What [destroy] throws instead of answering, which is what a real
+  /// engine does when libmpv refuses the `quit`: the command is never
+  /// enqueued and the player is still running.
+  Object? destroyError;
+
   @override
   Future<void> destroy() async {
     destroyCalls++;
     callLog?.add('destroy');
+    if (destroyError != null) throw destroyError!;
   }
 }
 

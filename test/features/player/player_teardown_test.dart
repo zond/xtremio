@@ -167,6 +167,38 @@ void main() {
     expect(complaints(lines).single, contains('destroying it'));
   });
 
+  testWidgets('a kill libmpv refused is reported as a kill that failed', (
+    tester,
+  ) async {
+    // The line was always written before the answer came back, and the
+    // answer was thrown away: `mpv_command_async` returns
+    // `MPV_ERROR_INVALID_PARAMETER`, `MPV_ERROR_UNINITIALIZED` or
+    // `MPV_ERROR_EVENT_QUEUE_FULL` without enqueueing anything, and a
+    // report that said "destroying it" and then went quiet was describing
+    // a player that is still running as one that was killed. Those want
+    // very different things looked at next.
+    final lines = captureDiagnostics();
+    final wedged = Completer<void>();
+    final harness = PlayerHarness(
+      configureEngine: (engine) => engine
+        ..disposeGate = wedged
+        ..destroyError = StateError('libmpv refused the quit'),
+    );
+    addTearDown(wedged.complete);
+    await pumpPushed(tester, harness);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 2));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull, reason: 'not a crash, a report');
+    expect(
+      complaints(lines),
+      contains(contains('destroying the player failed')),
+    );
+  });
+
   testWidgets('a teardown that answers in time is never destroyed', (
     tester,
   ) async {

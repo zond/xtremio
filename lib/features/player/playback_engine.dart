@@ -206,7 +206,7 @@ abstract interface class PlaybackEngine {
   Future<void> dispose();
 
   /// Ends the playback from outside the teardown, freeing the demuxer and
-  /// the blocks its cache file holds, and leaves this engine unusable.
+  /// the connection it is reading through, and leaves this engine unusable.
   ///
   /// This is the fallback for a [dispose] that has not come back. It is
   /// armed independently of it and never chained behind it, because being
@@ -215,12 +215,26 @@ abstract interface class PlaybackEngine {
   /// after the screen was gone, at 32 Mbps into a file with no directory
   /// entry, and the only thing that ever freed it was killing the process.
   ///
-  /// It answers at once and asks nothing of the player: whatever a
-  /// teardown is blocked on, this is not blocked on it too. Calling it
-  /// twice, or on a player that has already gone, does nothing -- the
-  /// caller is by definition one that has lost track of what the player is
-  /// doing, so the implementation and not the caller is what has to be
-  /// sure.
+  /// **What it covers, and what it does not.** It returns at once, so a
+  /// caller is never blocked by it -- but "the call returns" and "the
+  /// player dies" are two different claims, and only the first one is
+  /// unconditional. [MediaKitEngine.destroy] enqueues a `quit` on the mpv
+  /// core's own dispatch queue, which is the queue the wedged `stop` is
+  /// waiting on, and the core thread is the only thread that can act on
+  /// either. So this covers a teardown wedged on the Dart side -- a future
+  /// that never completes, an await that never returns -- and a core
+  /// thread that is genuinely stuck swallows the `quit` along with
+  /// everything else. Nothing in this process can reach that thread; what
+  /// bounds it is that a player with no disk cache costs memory and a
+  /// socket rather than a volume.
+  ///
+  /// Throws when the backend refused to accept the command, so a caller
+  /// that logs a kill is logging one that was at least asked for.
+  ///
+  /// Calling it twice, or on a player that has already gone, does nothing
+  /// -- the caller is by definition one that has lost track of what the
+  /// player is doing, so the implementation and not the caller is what has
+  /// to be sure.
   Future<void> destroy();
 }
 
@@ -1290,6 +1304,35 @@ class MediaKitEngine implements PlaybackEngine {
   /// demuxer was gone within the second, and the cache directory emptied
   /// -- the blocks back on the volume, which was the whole complaint.
   ///
+  /// **What it is not: a way past a stuck core thread.** This comment used
+  /// to claim that whatever a teardown is blocked on, the quit is not
+  /// blocked on it too, and that is false. `mp_dispatch_enqueue` puts the
+  /// command on `mpctx->dispatch` -- the core's own queue, drained by the
+  /// core thread -- and the wedged `stop` is on that same queue: media_kit
+  /// 1.2.6 with `async: true` issues `stop` through `mpv_command_async`
+  /// as well and awaits the reply event (`_command` in
+  /// `player/native/player/real.dart`), which only the core thread can
+  /// send. So a `stop` that has not come back is either a core thread that
+  /// has not reached the command yet -- in which case the `quit` behind it
+  /// will be reached too, which is the case this fallback wins -- or a core
+  /// thread that is stuck inside it, in which case the `quit` waits behind
+  /// it forever. The measured recovery above is the first case; nothing in
+  /// this process can do anything about the second.
+  ///
+  /// That is the strongest single argument for the player keeping no disk
+  /// cache: a stuck core thread now costs 64 MiB of packet memory, a
+  /// socket, and the server engine that socket keeps live, instead of a
+  /// gigabyte of a 4 GB television that only a force-stop returns.
+  ///
+  /// **The return code is not thrown away.** `run_async` answers
+  /// `MPV_ERROR_INVALID_PARAMETER` for a command it could not parse,
+  /// `MPV_ERROR_UNINITIALIZED` for a core that never came up, and
+  /// `MPV_ERROR_EVENT_QUEUE_FULL` when `reserve_reply` has no room -- and
+  /// in every one of those the command was never enqueued at all. A
+  /// caller that logged "destroying it" and heard nothing further would be
+  /// reporting a kill that did not happen, so a refusal is thrown and the
+  /// caller's own error path says so.
+  ///
   /// What this does not do is free the `mpv_handle` and the core object
   /// behind it: they leak until the process ends. That is bounded, it is
   /// invisible on the volume, and it leaves media_kit's `dispose()` -- the
@@ -1316,17 +1359,28 @@ class MediaKitEngine implements PlaybackEngine {
     final command = 'quit'.toNativeUtf8();
     // Two: the command and the NULL that ends the list.
     final args = calloc<Pointer<Int8>>(2);
+    final int sent;
     try {
       args[0] = command.cast();
       args[1] = nullptr;
-      native.mpv.mpv_command_async(ctx, 0, args);
-    } catch (_) {
+      sent = native.mpv.mpv_command_async(ctx, 0, args);
+    } catch (error) {
       // A libmpv without the symbol, or a handle that went between the
-      // checks above and here. There is nothing further to try, and a
-      // player nobody could kill is already what the caller is reporting.
+      // checks above and here. There is nothing further to try -- but the
+      // caller is about to write a line about a player it believes it
+      // killed, so it hears this rather than not.
+      throw StateError('the player could not be sent a quit: $error');
     } finally {
       calloc.free(command);
       calloc.free(args);
+    }
+    // Freed first, thrown second: the buffers are ours whatever libmpv
+    // said, and the answer is about the command rather than about them.
+    if (sent < 0) {
+      throw StateError(
+        'libmpv refused the quit (mpv error $sent); the player is still '
+        'running',
+      );
     }
   }
 }
