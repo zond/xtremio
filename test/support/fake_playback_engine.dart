@@ -85,6 +85,11 @@ class FakePlaybackEngine implements PlaybackEngine {
   double? lastSubtitleBottomPadding;
   bool disposed = false;
 
+  /// Every `setDisplayRefreshRate` call, in order, nulls included -- a
+  /// null is the player giving display sync back, which is as much a call
+  /// as setting one is.
+  final List<double?> displayRefreshRates = [];
+
   /// When set, `open` also appends `'open'` here: a log shared with other
   /// fakes, for tests about the order of calls across them.
   List<String>? callLog;
@@ -270,6 +275,10 @@ class FakePlaybackEngine implements PlaybackEngine {
     cueStartReads++;
     return cueStart;
   }
+
+  @override
+  Future<void> setDisplayRefreshRate(double? hz) async =>
+      displayRefreshRates.add(hz);
 
   @override
   Future<void> setSubtitleStyle(SubtitleStyle style) async {

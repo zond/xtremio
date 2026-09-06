@@ -232,6 +232,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// kept only in the event is a rate that can be lost for good.
   double? _containerFrameRate;
 
+  /// What the display last said it is *really* refreshing at, which is a
+  /// different number from [_containerFrameRate] and arrives from the
+  /// other direction. Remembered for the same reason: it is reported when
+  /// it changes, so a display already on the right mode reports once and
+  /// then never again, and the ask can be made after that.
+  double? _displayRefreshRate;
+
   /// A [_scheduleFocusCheck] callback is pending for the coming frame.
   bool _focusCheckScheduled = false;
 
@@ -663,7 +670,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
 
     _fullscreen = PlaybackScope.fullscreenOf(context);
-    _displayFrameRate = PlaybackScope.displayFrameRateOf(context);
+    final displayFrameRate = PlaybackScope.displayFrameRateOf(context);
+    _displayFrameRate = displayFrameRate;
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
@@ -693,6 +701,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       engine.volume.listen((v) => setState(() => _volume = v)),
       engine.tracks.listen(_onTracks),
       engine.videoFrameRate.listen(_onVideoFrameRate),
+      displayFrameRate.refreshRate.listen(_onDisplayRefreshRate),
     ]);
   }
 
@@ -1565,6 +1574,44 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!_isTv || fps == null || _engineError != null) return;
     _frameRateAsked = true;
     _displayFrameRate?.request(fps).ignore();
+    // The display may already be on the rate being asked for, in which
+    // case nothing changes and nothing is reported: what it last said is
+    // then the whole of what will ever be said, and this is where it
+    // reaches mpv.
+    _applyDisplaySync();
+  }
+
+  /// The display has reported what it is really refreshing at -- at
+  /// subscription, and again whenever it changes, which is how the rate
+  /// that a mode switch settled on arrives.
+  void _onDisplayRefreshRate(double hz) {
+    _displayRefreshRate = hz;
+    // Only while this player is holding a rate on the display. The first
+    // reading arrives as soon as the display is listened to, which is
+    // before any film has said what rate it is, and a screen nobody is
+    // presenting on has nothing for mpv to sync to.
+    if (_frameRateAsked) _applyDisplaySync();
+  }
+
+  /// Tells the engine what the screen is doing, so mpv can time frames
+  /// against it instead of against the audio clock
+  /// (`MediaKitEngine.displaySyncProperties`).
+  ///
+  /// Tied to the ask rather than to the playback, and deliberately: while
+  /// this player holds a rate on the display it knows what the display is
+  /// for, and the moment it gives that back the number describes a mode
+  /// nobody is in any more. So the same list of paths that clears the ask
+  /// clears this, by going through [_releaseDisplayFrameRate], and there
+  /// is no second list to keep in step.
+  ///
+  /// So every caller is a path on which this player holds a rate or has
+  /// just stopped holding one, and nothing is said at all on a phone or a
+  /// desktop, where nothing asks: [_frameRateAsked] is only ever true on a
+  /// television, and the engine refuses the override off Android anyway.
+  void _applyDisplaySync() {
+    _engine
+        ?.setDisplayRefreshRate(_frameRateAsked ? _displayRefreshRate : null)
+        .ignore();
   }
 
   /// Gives the display's rate back.
@@ -1585,6 +1632,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!_frameRateAsked) return;
     _frameRateAsked = false;
     _displayFrameRate?.clear().ignore();
+    // And the override with it. A rate mpv is still resampling to after
+    // the platform has taken the mode back is the stale claim this pair
+    // exists to avoid.
+    _applyDisplaySync();
   }
 
   // --- Controls visibility -------------------------------------------------

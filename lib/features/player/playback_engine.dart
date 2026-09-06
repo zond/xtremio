@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -69,6 +70,22 @@ abstract interface class PlaybackEngine {
   /// allowed to decide: nothing about a subtitle's timing may read this
   /// (AGENTS.md, "Nothing re-times a subtitle but the viewer").
   Stream<double> get videoFrameRate;
+
+  /// Tells the engine what the display is **really** refreshing at, in
+  /// hertz, so it can time frames against the screen instead of against
+  /// the audio clock; `null` gives that claim back.
+  ///
+  /// The other half of the story above. Asking the television for the
+  /// film's own rate removes the cadence; this is what makes mpv aware of
+  /// the rate it landed on, which on Android it cannot measure for itself
+  /// -- see [MediaKitEngine.displaySyncProperties] for the reading that
+  /// justifies it and for why it is Android's alone. The caller owns the
+  /// lifetime: it is set while a rate is being held on the display and
+  /// cleared the moment it is given back, because an override outliving
+  /// the mode it described is worse than none.
+  ///
+  /// Only libmpv has the properties; any other backend does nothing here.
+  Future<void> setDisplayRefreshRate(double? hz);
 
   /// Opens [url] and starts playing from [start].
   Future<void> open(Uri url, {Duration start = Duration.zero});
@@ -412,14 +429,20 @@ class MediaKitEngine implements PlaybackEngine {
   /// [MpvDiskCacheLimit] can have turned it off for the media before this
   /// one.
   ///
-  /// **`video-sync=display-resample` is not here, and on its own it would
-  /// do nothing -- but not for the reason it is tempting to give.** A
-  /// 23.976 fps film on a 59.94 Hz output is laid on a 2.5:1 cadence -- two
-  /// refreshes for one frame, three for the next -- and mpv's own answer to
-  /// a mismatched rate is to lock the video to the display and resample the
-  /// audio by the difference. Every display-sync mode needs the display's
-  /// refresh rate, and mpv cannot *measure* it here: media_kit runs it with
-  /// `vo=gpu` and `gpu-context=android`
+  /// **`video-sync=display-resample` is not here because it is not a
+  /// property of this player.** It is set per playback, against the rate
+  /// the display turned out to be on, and taken off again the moment
+  /// nothing is being presented -- [displaySyncProperties] and
+  /// [setDisplayRefreshRate] are where it lives. What belongs here is why
+  /// it is set at all, because that is a fact about this VO rather than
+  /// about any one film.
+  ///
+  /// A 23.976 fps film on a 59.94 Hz output is laid on a 2.5:1 cadence --
+  /// two refreshes for one frame, three for the next -- and mpv's own
+  /// answer to a mismatched rate is to lock the video to the display and
+  /// resample the audio by the difference. Every display-sync mode needs
+  /// the display's refresh rate, and mpv cannot *measure* it here:
+  /// media_kit runs it with `vo=gpu` and `gpu-context=android`
   /// (`android_video_controller/real.dart`), and in the build it ships for
   /// Android (`mpv v0.36.0-549-g78d43740f5`) that context answers
   /// `VO_NOTIMPL` to every request, `VOCTRL_GET_DISPLAY_FPS` included
@@ -431,25 +454,30 @@ class MediaKitEngine implements PlaybackEngine {
   /// start it either -- vsync samples are collected only from frames that
   /// are already display-synced, so there is nothing to bootstrap from.
   ///
-  /// **It can still be told, though, and saying otherwise would be wrong.**
-  /// `update_display_fps` takes `override-display-fps` *ahead* of the
-  /// reported rate and only falls back to it (`video/out/vo.c`), and
-  /// `override-display-fps` is in the option table of the very
-  /// `libmpv.so` media_kit ships -- read out of the binary, not off the
-  /// manual. A non-zero rate there is enough: `vsync <= 0` is the only
-  /// display-rate gate in `handle_display_sync_frame`. The app is not short
-  /// of the number, either; `MainActivity` already reads
-  /// `display.mode.refreshRate` for the frame-rate ask.
+  /// **The measurement this comment used to say was missing has been
+  /// taken, and it is worse than it feared.** What this file argued for
+  /// instead was the other road -- ask the panel for the film's own rate
+  /// (`DisplayFrameRate`, ANDROID.md) and there is no cadence left to
+  /// resample around -- and that ask was *not* refused. On the owner's
+  /// Chromecast the projector arrived at 23.976 Hz for a 23.976 fps H.264
+  /// film and stayed there (`mActiveSfDisplayMode` id 1418,
+  /// `mActiveRenderFrameRate=23.976025`, SurfaceFlinger
+  /// `activeMode=23.98 Hz`), and the stats OSD read `23.98 out / 23.98
+  /// container` with **2779 frames dropped at the video output and 0 at
+  /// the decoder**: roughly one frame in five, decoded on time and thrown
+  /// away at presentation. Matching the rate is what exposed it -- at
+  /// 59.94 the 3:2 cadence had somewhere to hide the misses. Removing the
+  /// cadence was necessary and is not sufficient; mpv is still timing
+  /// every frame against the audio clock with no idea when the screen
+  /// refreshes, and that is what the option fixes.
   ///
-  /// So the honest reason this option is not set is that **nobody has
-  /// measured display-resample driven off an assumed rate on this VO**, and
-  /// the design that raised it says to revert on a worse drop count rather
-  /// than defend it -- which needs a reading nobody can take from here. The
-  /// player takes the other road meanwhile, and it removes the cadence
-  /// rather than resampling around it: **the cadence is the display's to
-  /// fix**, so the panel is asked for the film's own rate
-  /// (`DisplayFrameRate`, ANDROID.md). If that ask is ever refused on a set
-  /// that will not switch, this is the option to measure next.
+  /// So the pair is set now, on the rate the display is measured to be on
+  /// rather than the one it was asked for, and only on Android. The
+  /// standard it is kept on is the same one that would have refused it:
+  /// `display-sync-active` and the vo drop count are both on the stats
+  /// OSD, and if display sync does not start, or the count is no better
+  /// than 2779, this comes out again rather than being defended on the
+  /// theory.
   static const Map<String, String> mpvOverrides = {'network-timeout': '300'};
 
   /// [mpvOverrides] plus what the demuxer's file cache needs, for a
@@ -488,6 +516,69 @@ class MediaKitEngine implements PlaybackEngine {
       'demuxer-cache-dir': cacheDirectory,
       'demuxer-cache-unlink-files': 'immediate',
     },
+  };
+
+  /// What starts mpv's display sync on a display refreshing at [hz]
+  /// frames a second, and an empty map where there is nothing to say.
+  ///
+  /// **Two properties, and neither is any use alone.**
+  /// `override-display-fps` is what `update_display_fps` takes *ahead* of
+  /// the rate the VO reports (`video/out/vo.c`), and a non-zero value
+  /// there is the only display-rate gate in `handle_display_sync_frame`;
+  /// `video-sync` is what asks for display sync at all, and its default
+  /// (`audio`) times every frame against the audio clock however well the
+  /// display has been described. Both names were read out of the very
+  /// `libmpv.so` media_kit ships for Android
+  /// (`mpv v0.36.0-549-g78d43740f5`), along with `display-sync-active` and
+  /// `display-fps`, which are how the stats OSD says whether this took
+  /// ([PlaybackStats]). The rate goes on first: display-resample asked for
+  /// while the override is still 0 is display sync with no display rate,
+  /// which is the state this whole thing exists to leave.
+  ///
+  /// **[hz] is a measurement, never the rate that was asked for.** The ask
+  /// (`DisplayFrameRate`) is a vote on the surface on Android 12 and up
+  /// and a window attribute below it; neither reports back, both are
+  /// asynchronous, and a set can land on a neighbouring mode or move the
+  /// display nowhere at all. A rate we asked for and did not get is
+  /// exactly the wrong number to hand mpv -- it swaps one wrong cadence
+  /// for another and hides it behind a `display-sync-active` reading yes
+  /// -- so the number comes from the display itself, afterwards
+  /// (`DisplayFrameRate.refreshRate`, `MainActivity.DisplayRefreshRates`),
+  /// and again whenever it changes.
+  ///
+  /// **Android only, and that is not a hedge.** Everywhere else mpv's VO
+  /// measures the rate itself and is right about it, so an override there
+  /// replaces a true number with one of ours -- which is the whole of what
+  /// this does. The Android VO is the one that answers `VO_NOTIMPL` (see
+  /// [mpvOverrides]) and so the one with nothing to lose.
+  ///
+  /// Empty rather than [displaySyncOff] for a rate that is not a rate:
+  /// with nothing measured there is nothing to claim, and a player that
+  /// never turned display sync on has nothing to give back either.
+  static Map<String, String> displaySyncProperties(
+    double? hz, {
+    TargetPlatform? platform,
+  }) {
+    if ((platform ?? defaultTargetPlatform) != TargetPlatform.android) {
+      return const {};
+    }
+    if (hz == null || !hz.isFinite || hz <= 0) return const {};
+    return {'override-display-fps': '$hz', 'video-sync': 'display-resample'};
+  }
+
+  /// What gives display sync back, written by whichever player turned it
+  /// on once it stops presenting.
+  ///
+  /// A zero `override-display-fps` is what mpv reads as "no display rate",
+  /// which is where this started, and `audio` is mpv's own `video-sync`
+  /// default. Both come off, and that matters more than the setting did:
+  /// an override describes the mode one film was shown in, and one left
+  /// standing over the next film -- or over a display the viewer has since
+  /// changed, or one the platform put back when the ask was cleared -- is
+  /// a worse lie than no override at all, because it looks measured.
+  static const Map<String, String> displaySyncOff = {
+    'override-display-fps': '0',
+    'video-sync': 'audio',
   };
 
   /// Whether to tell mpv that [url] can be seeked in whatever the demuxer
@@ -619,6 +710,13 @@ class MediaKitEngine implements PlaybackEngine {
   /// answers with the same number) does not ask the display twice.
   double? _lastVideoFrameRate;
 
+  /// Whether display sync is on for this player, so the reset is written
+  /// only by a player that turned it on. Without it a television whose
+  /// display never reported a rate -- and every desktop, where nothing is
+  /// ever set -- would write [displaySyncOff] over mpv's own defaults on
+  /// the way out, which is a claim about a player nobody measured.
+  bool _displaySynced = false;
+
   late final List<StreamSubscription<void>> _trackSubscriptions;
   Tracks _lastTracks = const Tracks();
   Track _lastTrack = const Track();
@@ -709,6 +807,25 @@ class MediaKitEngine implements PlaybackEngine {
     } catch (_) {
       // Torn down before the player initialised, or a build of libmpv
       // without the property: the display keeps whatever rate it is on.
+    }
+  }
+
+  /// Puts [displaySyncProperties] on the player, or [displaySyncOff] back
+  /// when there is no rate left to sync to.
+  ///
+  /// Whoever holds a rate on the display owns this: `PlayerScreen` sets it
+  /// as the display reports what it settled on and clears it on every path
+  /// that gives the rate back, which is the same list that clears the ask
+  /// itself. Nothing here reads the film's own rate -- what mpv is being
+  /// told is what the *screen* is doing.
+  @override
+  Future<void> setDisplayRefreshRate(double? hz) async {
+    final start = displaySyncProperties(hz);
+    if (start.isEmpty && !_displaySynced) return;
+    _displaySynced = start.isNotEmpty;
+    for (final MapEntry(:key, :value)
+        in (start.isEmpty ? displaySyncOff : start).entries) {
+      await _setProperty(key, value);
     }
   }
 
