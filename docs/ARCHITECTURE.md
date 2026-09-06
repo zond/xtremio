@@ -894,7 +894,7 @@ what every model field means. The shape of the thing is in the
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`dbf9694`: generated
+  features, `zond/stream-server` at a fixed rev (`78d91cb`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
   counts, the buffer profiles behind `?buffer=`, cache usage and
@@ -919,10 +919,16 @@ what every model field means. The shape of the thing is in the
   once instead of every fifteen seconds for the life of the process, a LAN
   media listener that ranks its interfaces rather than naming whichever
   non-loopback one `getifaddrs` happened to list first -- a phone's
-  cellular address as readily as its Wi-Fi one -- that says in the log
-  which address it gave a receiver and when a request arrives, and that
-  counts what it has been asked for, so a receiver which never fetched can
-  be told from one which fetched and could not play). To
+  cellular address as readily as its Wi-Fi one, and a container or VM
+  bridge as readily as either, since what the ranking demotes is every
+  interface a receiver on a home network cannot be behind, and an
+  interface whose netmask the kernel never reported is not subnet-matched
+  at all -- that says in the log which address it gave a receiver and when
+  a request arrives, and that counts what it has been asked for, so a
+  receiver which never fetched can be told from one which fetched and
+  could not play, the count belonging to the session that asks about it:
+  start and stop both reset it, so a second receiver picked mid-cast does
+  not inherit the first one's). To
   bump: change the rev, `cargo update -p <crate>`, run
   `cargo test`, re-record any fixture whose shape moved, move the
   `[patch]` key along if the source URL changed (it names the URL being

@@ -31,8 +31,9 @@ abstract interface class LanMediaControl {
   bool get lanMediaRunning;
 
   /// How many requests the listener has been asked for since it started;
-  /// zero when nothing is listening. Per cast session, since a start resets
-  /// it.
+  /// zero when nothing is listening. Per cast session, since a start and a
+  /// stop both reset it -- a second receiver picked while the first still
+  /// has the stream starts from zero rather than inheriting its count.
   ///
   /// What it separates is a receiver that never fetched the stream from one
   /// that fetched it and could not play it -- which look identical from the
@@ -44,7 +45,8 @@ abstract interface class LanMediaControl {
   /// names an interface that receiver can connect back to. [peerIp] null
   /// when the receiver's address is not known, which answers the server's
   /// best-ranked interface -- a private address on an ordinary interface
-  /// ahead of anything on a tunnel or a cellular link -- rather than the
+  /// ahead of anything on one a receiver cannot be behind at all: a tunnel,
+  /// a cellular link, a tether, a container or VM bridge -- rather than the
   /// address it happened to enumerate first.
   ///
   /// Null when the listener is not running or the host has nothing but

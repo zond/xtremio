@@ -162,8 +162,9 @@ bool serverLanMediaRunning() =>
     RustLib.instance.api.crateApiServerServerLanMediaRunning();
 
 /// How many requests the LAN media listener has been asked for since it last
-/// started -- per cast session, since starting the listener resets it. Zero
-/// when nothing is listening.
+/// started -- per cast session, since a start and a stop both reset it. Zero
+/// when nothing is listening, and zero for the next receiver rather than
+/// whatever the last one ran up.
 ///
 /// What it is for is telling a receiver that never fetched the stream from
 /// one that fetched it and could not play it. Those look identical from the
@@ -191,10 +192,11 @@ PlatformInt64 serverLanMediaRequestsServed() =>
 /// `peer_ip` is null when the receiver's address is not known. The answer is
 /// then the best-ranked interface the server can offer for a peer it cannot
 /// place on any subnet -- a private address on an ordinary interface ahead
-/// of anything on a tunnel or a cellular link -- which is a guess, and a
-/// guess a receiver on a home network can usually act on. It is a parameter,
-/// and not simply left out, because a receiver whose address *is* known
-/// deserves the answer that is not a guess at all.
+/// of anything on one a receiver cannot be behind at all: a tunnel, a
+/// cellular link, a tether, a container or VM bridge -- which is a guess, and
+/// a guess a receiver on a home network can usually act on. It is a
+/// parameter, and not simply left out, because a receiver whose address *is*
+/// known deserves the answer that is not a guess at all.
 ///
 /// Null when the listener is not running, when `peer_ip` is given but is not
 /// an IP address, or when the host has nothing but loopback -- all of which
