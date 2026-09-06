@@ -2942,6 +2942,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     final url = await _castUrl(local, receiver);
     if (url == null) {
+      DiagnosticsLog.warn(
+        'player',
+        'no address to give a receiver at '
+            '${receiver.address ?? 'an address it did not report'}',
+      );
       await _endLanMedia();
       await cast.disconnect();
       await _explainCast(
@@ -2965,6 +2970,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
         duration: _duration > Duration.zero ? _duration : null,
       );
     });
+    // The one line that was missing while a Chromecast sat on a splash
+    // screen: what we handed it, and which receiver we picked that address
+    // for. The receiver's name is not in it -- it is as often a person's
+    // as a room's, and the address is what the report is about.
+    DiagnosticsLog.info(
+      'player',
+      'casting ${DiagnosticsLog.url(url)} to a receiver at '
+          '${receiver.address ?? 'an address it did not report'}',
+    );
     await cast.load(
       CastMedia(
         url: url,

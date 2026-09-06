@@ -5,6 +5,7 @@ import 'package:xtremio/features/cast/cast_widgets.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
+import '../../support/diagnostics_capture.dart';
 import '../../support/fake_cast_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
@@ -450,6 +451,52 @@ void main() {
       expect(cast.loads, isEmpty);
       // Nothing was put on the LAN for a session that never began.
       expect(lan.toggles, isEmpty);
+    });
+
+    testWidgets('what the receiver was handed is in the report', (
+      tester,
+    ) async {
+      final lines = captureDiagnostics();
+      useWideViewport(tester);
+      final cast = FakeCastClient(
+        devices: const [livingRoom],
+        addresses: const {'device-1': '192.168.1.44'},
+      );
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+
+      await castTo(tester, livingRoom);
+
+      // A cast that goes nowhere leaves nothing else behind to read, so
+      // the URL and the peer it was chosen for are the whole of the
+      // evidence -- and the receiver's name is deliberately not in it.
+      expect(
+        lines,
+        anyElement(
+          allOf(
+            contains('casting http://192.168.1.20:39271/'),
+            contains('192.168.1.44'),
+            isNot(contains('Living Room')),
+          ),
+        ),
+      );
+    });
+
+    testWidgets('a receiver there is no address for says so in the report', (
+      tester,
+    ) async {
+      final lines = captureDiagnostics();
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      // The listener runs and the server still has nothing to offer.
+      final harness = castHarness(cast: cast, lanMedia: FakeLanMediaControl());
+      await harness.pump(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(lines, anyElement(contains('no address to give a receiver')));
+      expect(lines, isNot(anyElement(contains('casting http'))));
     });
 
     testWidgets('a receiver with no route to this device is not cast to', (
