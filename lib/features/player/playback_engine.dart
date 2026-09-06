@@ -1077,10 +1077,11 @@ class MediaKitEngine implements PlaybackEngine {
     // libmpv the directory a second after `loadfile` reproduced the owner's
     // `Failed to create file cache` and left `file-cache-bytes` absent for
     // the rest of the stream. `cache-on-disk` is media_kit's own default
-    // (1.2.6 sets it once at start-up) but mpv reads it per demuxer, and
-    // [MpvDiskCacheLimit] turns it off when the file grows too large, so
-    // this is where the next media gets its file cache back -- but only
-    // where there is room for one. [MpvDiskCacheLimit] turns the cache off
+    // (1.2.6 sets it once at start-up), but mpv reads it per *packet* out
+    // of options the demuxer thread refreshes every cycle, so
+    // [MpvDiskCacheLimit] can turn it off part way through a media -- and
+    // this is where the next one gets its file cache back, but only where
+    // there is room for one. [MpvDiskCacheLimit] turns the cache off
     // when the volume comes down to the floor, and asking before the first
     // packet rather than five seconds into it is the difference between
     // never starting a second writer on a full device and starting one and
@@ -1601,7 +1602,29 @@ class MpvDiskCacheLimit {
   /// volume is not a full one.
   final Future<int?> Function() freeBytes;
 
-  /// Sets `cache-on-disk` to `no`.
+  /// Sets `cache-on-disk` to `no` on a demuxer that is already running.
+  ///
+  /// **That mpv honours it there was doubted, and then measured.** The
+  /// write is gated per packet on the live option -- `if (in->cache &&
+  /// in->opts->disk_cache)` in `demux/demux.c` -- and the demuxer thread
+  /// refreshes those options from its config cache at the top of every
+  /// work cycle (`m_config_cache_update(in->opts_cache)` in
+  /// `thread_work`), so a property write reaches it within one cycle.
+  /// Against a running libmpv on a stream throttled to 2 MB/s,
+  /// `file-cache-bytes` froze within one 250 ms sample of the write and
+  /// stayed frozen for thirteen seconds while the demuxer went on reading
+  /// hard -- `cache-end` 59 s to 108 s, the payload going into memory
+  /// instead -- and an `ls` of the cache directory taken from outside the
+  /// process agreed byte for byte. Setting the option back to `yes`
+  /// resumed the writing on the very next sample. The readings are in
+  /// `player_cache_test.dart`, which is where to look before doubting it
+  /// again.
+  ///
+  /// **It freezes the file; it never shrinks it.** What was already
+  /// written stayed allocated for the whole thirteen seconds and came back
+  /// only when the demuxer went away. So this is a bound on growth and
+  /// never a way to get space back: those blocks are the teardown's
+  /// business, and nothing short of one returns them.
   final Future<void> Function() stopWritingToDisk;
 
   /// Where [check] reports what it read, and where it asks what the app as
@@ -1671,12 +1694,19 @@ class MpvDiskCacheLimit {
   ///
   /// [heldByOutgoingCache] is what the media being *replaced* still has in
   /// its own cache file at the moment of the reading ([fileCacheBytes]).
-  /// mpv reads `cache-on-disk` when it builds the demuxer, so the question
-  /// has to be asked before the `loadfile` -- and that same `loadfile` is
-  /// what destroys the old demuxer, closes the fd and hands those blocks
-  /// back. Until it runs they are allocated, and `f_bavail` counts them
-  /// (which is the whole premise of measuring both budgets this way), so a
-  /// reading taken there is short by exactly this much.
+  /// The question is asked before the `loadfile` because that is where the
+  /// answer is wanted -- before the new media's first packet rather than
+  /// five seconds into it -- and the same `loadfile` is what destroys the
+  /// old demuxer, closes the fd and hands those blocks back. Until it runs
+  /// they are allocated, and `f_bavail` counts them (which is the whole
+  /// premise of measuring both budgets this way), so a reading taken there
+  /// is short by exactly this much.
+  ///
+  /// Asking early is ours, not mpv's. `cache-on-disk` is honoured at
+  /// runtime in both directions ([stopWritingToDisk]), so an answer
+  /// arriving after the `loadfile` would land too -- having first let the
+  /// media begin without a file, which is the whole of what is being
+  /// decided here.
   ///
   /// Left out, it refuses the next media a cache file on the strength of
   /// space the next media is about to be given -- and on an evening's

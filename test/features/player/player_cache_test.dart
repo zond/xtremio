@@ -82,6 +82,115 @@ void main() {
     });
   });
 
+  /// What a running libmpv did when `cache-on-disk` was set to `no` part
+  /// way through a stream, and then back to `yes`.
+  ///
+  /// The doubt this settles was written into this app's own comments: that
+  /// mpv reads the option once, when it builds the demuxer, in which case
+  /// turning it off on a player being left is decoration and
+  /// [MpvDiskCacheLimit] cannot limit the media it is watching. It reads
+  /// it per packet, out of options the demuxer thread refreshes every
+  /// cycle ([MpvDiskCacheLimit.stopWritingToDisk] names the two lines of
+  /// `demux/demux.c`), and this is what that looks like from outside.
+  ///
+  /// libmpv 0.41.0 over a 155 MB Matroska served from localhost through a
+  /// 2,000,000 B/s throttle, so the demuxer is input-bound and the file
+  /// climbs at a readable rate; `demuxer-cache-state` polled every 250 ms,
+  /// with the cache file `stat`ed from outside the process as ground truth
+  /// (it agreed byte for byte). Seconds since the open, the file, what the
+  /// memory cache held, and how far ahead the demuxer had read.
+  const List<(double, int, int, double)> aroundTheSwitch = [
+    (14.52, 29113962, 1123376, 56.27),
+    // `cache-on-disk=no` at 15.02
+    (15.27, 30102820, 1707120, 59.20),
+    (20.28, 30102820, 12449600, 78.47),
+    (25.29, 30102820, 23240784, 97.87),
+    (27.29, 30102820, 27548352, 105.57),
+    // `cache-on-disk=yes` at 28.04
+    (29.04, 32123609, 29264160, 112.43),
+    (34.06, 42151449, 29652992, 131.90),
+    (39.07, 52179769, 30035968, 151.17),
+  ];
+
+  /// The same switch in media_kit's real shape -- both byte limits at its
+  /// 32 MiB and `demuxer-cache-unlink-files=immediate` -- carried far
+  /// enough past the write to see what happens once the memory cache is
+  /// full. Seconds, the file, the memory cache, and `raw-input-rate`.
+  const List<(double, int, int, int)> afterTheMemoryCacheFills = [
+    // `cache-on-disk=no` at 15.02
+    (20.28, 30102820, 12449600, 2000114),
+    (30.29, 30102820, 34029568, 2000049),
+    (31.30, 30102820, 34195232, 1588497),
+    (33.30, 30102820, 34231696, 597759),
+    (35.30, 30102820, 34267424, 18038),
+    (44.32, 30102820, 34446240, 18471),
+  ];
+
+  group('what mpv does with cache-on-disk mid-stream', () {
+    /// The samples taken while the option was `no`.
+    final off = aroundTheSwitch.sublist(1, 5);
+
+    test('a running demuxer stops writing the moment it is told to', () {
+      // Within one 250 ms sample of the write, and for the thirteen
+      // seconds it was left off. This is the whole of what lets a limiter
+      // bound a media it is already half way through, and what lets a
+      // screen on its way out end the growth without waiting for a
+      // teardown.
+      expect(off.map((sample) => sample.$2).toSet(), {30102820});
+    });
+
+    test('while the demuxer goes on reading as hard as ever', () {
+      // The reading that separates "the option took" from "the player
+      // stalled": the read-ahead ran on from 59 s to 105 s of the film
+      // across those same samples, and the payload that had been going to
+      // disk went into memory instead.
+      expect(off.first.$4, lessThan(off.last.$4 - 40));
+      expect(off.first.$3, lessThan(off.last.$3));
+    });
+
+    test('and starts again the moment it is told to', () {
+      // Both directions, which is what makes it an option mpv reads rather
+      // than a demuxer it configured once: the next sample after
+      // `cache-on-disk=yes` was already growing.
+      final resumed = aroundTheSwitch.sublist(5);
+      expect(resumed.first.$2, greaterThan(30102820));
+      expect(resumed.last.$2, greaterThan(resumed.first.$2));
+    });
+
+    test('but it never gives a byte back', () {
+      // The file froze; it did not shrink. Those 30 MB stayed allocated
+      // for the whole thirteen seconds and came back only when the demuxer
+      // went away. So the limiter is a bound on growth and never a way to
+      // recover space, and a player that will not die is holding its file
+      // whatever the option says.
+      for (var i = 1; i < aroundTheSwitch.length; i++) {
+        expect(
+          aroundTheSwitch[i].$2,
+          greaterThanOrEqualTo(aroundTheSwitch[i - 1].$2),
+        );
+      }
+    });
+
+    test('and once the memory cache is full it stops downloading too', () {
+      // What the option buys a player that has been left. With nowhere to
+      // put the payload, the demuxer fills media_kit's 32 MiB and then
+      // reads at about one per cent of the link: 2,000,000 B/s down to
+      // 18,000 within a second of the memory cache filling, sixteen
+      // seconds after the write on a 2 MB/s stream and about eight on the
+      // owner's 32 Mbps one. That is the 32 Mbps drain the Chromecast
+      // measured, and this is what ends it.
+      final filled = afterTheMemoryCacheFills.last;
+      expect(
+        filled.$3,
+        greaterThan(MpvDiskCacheLimit.mediaKitMemoryCacheBytes),
+      );
+      expect(filled.$4, lessThan(2000000 ~/ 50));
+      // And before it filled, the link was running at the full throttle:
+      // the collapse is the cache filling up, not the server slowing down.
+      expect(afterTheMemoryCacheFills.first.$4, greaterThan(2000000 - 1000));
+    });
+  });
+
   group('the limit on what mpv writes', () {
     /// A limiter answering [readings] in turn, one reading per
     /// [MpvDiskCacheLimit.check], holding the last once they run out, on a
@@ -265,11 +374,11 @@ void main() {
     test('the outgoing media\'s own cache file is not room the next one '
         'lacks', () async {
       // Binge watching, which is what makes this the ordinary case rather
-      // than an edge. mpv reads `cache-on-disk` when it builds the demuxer,
-      // so `open` has to ask before the `loadfile` -- and the `loadfile` is
-      // what closes the outgoing file's fd and gives its blocks back. Asked
-      // without them, the reading is the floor and episode two is refused a
-      // cache file on the strength of space it is about to be handed.
+      // than an edge. `open` asks before the `loadfile` because that is
+      // where the answer is wanted, and the `loadfile` is what closes the
+      // outgoing file's fd and gives its blocks back. Asked without them,
+      // the reading is the floor and episode two is refused a cache file
+      // on the strength of space it is about to be handed.
       final limit = MpvDiskCacheLimit(
         cacheState: () async => stateOf(480 * 1024 * 1024),
         freeBytes: () async => MpvDiskCacheLimit.leastFreeSpaceForCache,
