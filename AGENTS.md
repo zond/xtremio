@@ -95,6 +95,15 @@ in one of two ways: stremio-core's `StreamingServer` model through
 `downloads_apply_default_dir`, `downloads_events`). A new need goes in one of those, as a Rust function
 returning JSON, not as a `dart:io` `HttpClient` call.
 
+`rust/src/api/storage.rs` (`volume_free_bytes`) is the one FFI call in that
+shape that is *not* about the server: it is one `statvfs` for one path, it
+answers with the server stopped, and the path it is asked about is the
+player's own cache directory. It is over FFI for the same reason the rest
+is -- the app does not walk directories or ask the platform for filesystem
+figures itself -- rather than because the server owns the answer. Anything
+genuinely about the server's storage still goes through
+`server_storage_report`.
+
 ## The downloads registry
 
 `rust/src/downloads.rs` owns what is kept offline; the server owns the pin
