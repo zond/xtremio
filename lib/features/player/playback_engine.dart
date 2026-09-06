@@ -902,7 +902,13 @@ class MediaKitEngine implements PlaybackEngine {
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     _externalSubtitleUrls.clear();
-    // First, before anything here writes `cache-on-disk`: the limiter
+    // What the outgoing media still has in its own cache file, taken while
+    // its limiter is still here to answer: those blocks are released by the
+    // `loadfile` below, but they are counted as occupied by the free-space
+    // reading this method takes before it -- see
+    // [MpvDiskCacheLimit.hasRoomForCache].
+    final heldByOutgoingCache = _diskCacheLimit?.fileCacheBytes ?? 0;
+    // Then, before anything here writes `cache-on-disk`: the limiter
     // belongs to the media being replaced, and one of its readings landing
     // after the write below would turn the disk cache off for the media
     // this call is opening.
@@ -930,7 +936,10 @@ class MediaKitEngine implements PlaybackEngine {
     // taking it away.
     await _setProperty(
       'cache-on-disk',
-      MpvDiskCacheLimit.hasRoomForCache(await _cacheVolumeFreeBytes())
+      MpvDiskCacheLimit.hasRoomForCache(
+            await _cacheVolumeFreeBytes(),
+            heldByOutgoingCache: heldByOutgoingCache,
+          )
           ? 'yes'
           : 'no',
     );
@@ -1409,6 +1418,17 @@ class MpvDiskCacheLimit {
   bool _reached = false;
   bool _checking = false;
   bool _stopped = false;
+  int _fileCacheBytes = 0;
+
+  /// What this limiter last saw in the cache file, and so what the volume
+  /// gets back when the media it belongs to is replaced.
+  ///
+  /// 0 when it never read one: a media shorter than one [interval], or one
+  /// that was opened with `cache-on-disk=no` and has no file at all. Both
+  /// under-state what is coming back, which errs towards refusing the next
+  /// media a cache file rather than starting one on a volume that has no
+  /// room for it.
+  int get fileCacheBytes => _fileCacheBytes;
 
   /// Whether the limit has been hit for this media, after which nothing is
   /// asked again: the file cannot shrink, so the answer cannot change.
@@ -1435,10 +1455,33 @@ class MpvDiskCacheLimit {
   /// `null` -- a reading nobody could take -- is room: an unreadable volume
   /// must leave the cache exactly as it would have been, or every device
   /// whose filesystem will not answer loses the fix.
+  ///
+  /// [heldByOutgoingCache] is what the media being *replaced* still has in
+  /// its own cache file at the moment of the reading ([fileCacheBytes]).
+  /// mpv reads `cache-on-disk` when it builds the demuxer, so the question
+  /// has to be asked before the `loadfile` -- and that same `loadfile` is
+  /// what destroys the old demuxer, closes the fd and hands those blocks
+  /// back. Until it runs they are allocated, and `f_bavail` counts them
+  /// (which is the whole premise of measuring both budgets this way), so a
+  /// reading taken there is short by exactly this much.
+  ///
+  /// Left out, it refuses the next media a cache file on the strength of
+  /// space the next media is about to be given -- and on an evening's
+  /// binge that is every episode after the first. Episode one's file grows
+  /// until the volume comes down to the floor and [check] stops it there;
+  /// episode two then reads the floor, gets no file, and plays its whole
+  /// length on [mediaKitMemoryCacheBytes] while the volume sits back at a
+  /// gigabyte free. Nothing recovers from that within the media: [check]
+  /// returns early with no file to measure, so only the next `open` can
+  /// turn one back on.
+  ///
+  /// During playback the equivalent is 0, which is the default: the file
+  /// being written now is not about to give its blocks back.
   static bool hasRoomForCache(
     int? free, {
     int floorBytes = leastFreeSpaceForCache,
-  }) => free == null || free > floorBytes;
+    int heldByOutgoingCache = 0,
+  }) => free == null || free + heldByOutgoingCache > floorBytes;
 
   /// One reading. Turns the disk cache off if the file is over
   /// [limitBytes], or if the volume has come down to [floorBytes].
@@ -1454,6 +1497,7 @@ class MpvDiskCacheLimit {
     try {
       final bytes = PlaybackStats.fileCacheBytesOf(await cacheState());
       if (_stopped || bytes == null) return;
+      _fileCacheBytes = bytes;
       if (bytes <= limitBytes &&
           hasRoomForCache(await freeBytes(), floorBytes: floorBytes)) {
         return;

@@ -262,6 +262,64 @@ void main() {
       );
     });
 
+    test('the outgoing media\'s own cache file is not room the next one '
+        'lacks', () async {
+      // Binge watching, which is what makes this the ordinary case rather
+      // than an edge. mpv reads `cache-on-disk` when it builds the demuxer,
+      // so `open` has to ask before the `loadfile` -- and the `loadfile` is
+      // what closes the outgoing file's fd and gives its blocks back. Asked
+      // without them, the reading is the floor and episode two is refused a
+      // cache file on the strength of space it is about to be handed.
+      final limit = MpvDiskCacheLimit(
+        cacheState: () async => stateOf(480 * 1024 * 1024),
+        freeBytes: () async => MpvDiskCacheLimit.leastFreeSpaceForCache,
+        stopWritingToDisk: () async {},
+      );
+      await limit.check();
+
+      // What episode one's file weighs is what comes back, and the limiter
+      // is what knows it.
+      expect(limit.fileCacheBytes, 480 * 1024 * 1024);
+
+      // The reading `open` takes while those blocks are still allocated.
+      const int freeWhileItIsStillHeld =
+          MpvDiskCacheLimit.leastFreeSpaceForCache;
+      expect(
+        MpvDiskCacheLimit.hasRoomForCache(freeWhileItIsStillHeld),
+        isFalse,
+        reason: 'the reading on its own says the volume is at the line',
+      );
+      expect(
+        MpvDiskCacheLimit.hasRoomForCache(
+          freeWhileItIsStillHeld,
+          heldByOutgoingCache: limit.fileCacheBytes,
+        ),
+        isTrue,
+        reason: 'and it is at the line only because of what is leaving',
+      );
+    });
+
+    test('a volume that is genuinely full is still refused', () {
+      // The Chromecast again, with a media that never got a cache file at
+      // all: nothing is coming back, so nothing changes. A limiter that
+      // read no file answers 0, which is what keeps this true.
+      expect(
+        MpvDiskCacheLimit.hasRoomForCache(
+          523 * 1024 * 1024,
+          heldByOutgoingCache: 0,
+        ),
+        isFalse,
+      );
+      expect(
+        MpvDiskCacheLimit(
+          cacheState: () async => null,
+          freeBytes: () async => null,
+          stopWritingToDisk: () async {},
+        ).fileCacheBytes,
+        0,
+      );
+    });
+
     test('a cache too small to beat the memory one is not worth having', () {
       // Exactly at the server's floor plus the memory budget the file cache
       // replaces: room for a file, but not for a file that buys anything.
