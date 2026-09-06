@@ -894,7 +894,7 @@ what every model field means. The shape of the thing is in the
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`2fd64da`: generated
+  features, `zond/stream-server` at a fixed rev (`d2e9bc6`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
   counts, the buffer profiles behind `?buffer=`, cache usage and
@@ -911,8 +911,13 @@ what every model field means. The shape of the thing is in the
   give above a 512 MiB free-space floor -- so a television with no
   `cacheSize` set is capped by its own disk rather than by `u64::MAX` --
   and an ENOSPC that stops a torrent being classified as a full disk and
-  answered with an eviction pass and a restart instead of a dead
-  playback). To bump: change the rev, `cargo update -p <crate>`, run
+  answered with an eviction pass and a restart instead of a dead playback
+  -- with that pass allowed to evict a file larger than the whole cap when
+  the device rather than `cacheSize` is what set it, counting what the
+  30-day rule freed as room made, reporting a cap of 0 as a cap rather than
+  as no cap at all, and saying a disk with nothing left to evict is stuck
+  once instead of every fifteen seconds for the life of the process). To
+  bump: change the rev, `cargo update -p <crate>`, run
   `cargo test`, re-record any fixture whose shape moved, move the
   `[patch]` key along if the source URL changed (it names the URL being
   patched, and a stale key silently patches nothing), and re-copy
