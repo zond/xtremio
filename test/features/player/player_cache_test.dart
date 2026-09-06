@@ -84,8 +84,12 @@ void main() {
 
   group('the limit on what mpv writes', () {
     /// A limiter answering [readings] in turn, one reading per
-    /// [MpvDiskCacheLimit.check], holding the last once they run out.
-    (MpvDiskCacheLimit, List<void>) limiterOver(List<String?> readings) {
+    /// [MpvDiskCacheLimit.check], holding the last once they run out, on a
+    /// volume with [free] bytes left above a floor of 100.
+    (MpvDiskCacheLimit, List<void>) limiterOver(
+      List<String?> readings, {
+      int? free = 10000,
+    }) {
       final stopped = <void>[];
       var reading = 0;
       final limit = MpvDiskCacheLimit(
@@ -93,8 +97,10 @@ void main() {
             readings[reading < readings.length
                 ? reading++
                 : readings.length - 1],
+        freeBytes: () async => free,
         stopWritingToDisk: () async => stopped.add(null),
         limitBytes: 1000,
+        floorBytes: 100,
       );
       return (limit, stopped);
     }
@@ -156,8 +162,10 @@ void main() {
         final stopped = <void>[];
         final limit = MpvDiskCacheLimit(
           cacheState: () => answer.future,
+          freeBytes: () async => 10000,
           stopWritingToDisk: () async => stopped.add(null),
           limitBytes: 1000,
+          floorBytes: 100,
         );
 
         final checking = limit.check();
@@ -182,6 +190,138 @@ void main() {
       expect(limit.reached, isFalse);
     });
 
+    test('stops mpv writing once the volume is down to the floor', () async {
+      // The file is well under its own limit; the volume is not. Something
+      // else is writing -- the embedded server's torrent cache is the whole
+      // reason there is a floor -- and mpv going on would take the space
+      // the server holds open so that streaming can carry on at all.
+      final (limit, stopped) = limiterOver([stateOf(500)], free: 100);
+
+      await limit.check();
+
+      expect(stopped, hasLength(1));
+      expect(limit.reached, isTrue);
+    });
+
+    test('leaves a volume that still has room above the floor alone', () async {
+      final (limit, stopped) = limiterOver([stateOf(500)], free: 101);
+
+      await limit.check();
+
+      expect(stopped, isEmpty);
+      expect(limit.reached, isFalse);
+    });
+
+    test('a volume nobody can measure is not a full one', () async {
+      // An unreadable reading must leave the cache exactly as it would have
+      // been. Read as zero it would take the file cache away from every
+      // device whose filesystem will not answer -- which is the fix itself,
+      // withdrawn for a fault that is not a full disk.
+      final (limit, stopped) = limiterOver([stateOf(500)], free: null);
+
+      await limit.check();
+
+      expect(stopped, isEmpty);
+      expect(limit.reached, isFalse);
+    });
+
+    test('a full volume with no file to bound is left to the server', () async {
+      // mpv has no disk cache (a desktop that could not make one, or an
+      // `open` that already refused it): there is nothing to turn off, and
+      // the free space is then the server cleaner's business alone.
+      final (limit, stopped) = limiterOver([withoutFileCache], free: 0);
+
+      await limit.check();
+
+      expect(stopped, isEmpty);
+      expect(limit.reached, isFalse);
+    });
+  });
+
+  group('whether a media gets a cache file at all', () {
+    // What `MediaKitEngine.open` asks before it turns `cache-on-disk` on.
+    // Five seconds is a couple of megabytes of a television stream and
+    // forty of a remux, and on a device this close to full those are the
+    // megabytes that matter, so the question is asked before the first
+    // packet rather than on the first tick.
+    test('a volume at the line gets none', () {
+      expect(
+        MpvDiskCacheLimit.hasRoomForCache(
+          MpvDiskCacheLimit.leastFreeSpaceForCache,
+        ),
+        isFalse,
+      );
+    });
+
+    test('a volume above the line gets one', () {
+      expect(
+        MpvDiskCacheLimit.hasRoomForCache(
+          MpvDiskCacheLimit.leastFreeSpaceForCache + 1,
+        ),
+        isTrue,
+      );
+    });
+
+    test('a cache too small to beat the memory one is not worth having', () {
+      // Exactly at the server's floor plus the memory budget the file cache
+      // replaces: room for a file, but not for a file that buys anything.
+      expect(
+        MpvDiskCacheLimit.leastFreeSpaceForCache,
+        MpvDiskCacheLimit.serverFreeSpaceFloorBytes +
+            MpvDiskCacheLimit.mediaKitMemoryCacheBytes,
+      );
+      // media_kit 1.2.6's `PlayerConfiguration.bufferSize`, which it sets
+      // on both `demuxer-max-bytes` and `demuxer-max-back-bytes`.
+      expect(MpvDiskCacheLimit.mediaKitMemoryCacheBytes, 32 * 1024 * 1024);
+    });
+
+    test('a volume nobody can measure gets one', () {
+      expect(MpvDiskCacheLimit.hasRoomForCache(null), isTrue);
+    });
+
+    test('the device that found this gets none', () {
+      // The owner's Chromecast, mid-film: 4.0G total, 3.4G used, 523M
+      // available, and the file being streamed is 1.4 GB. A player cache of
+      // half a gigabyte is the second writer that volume has no room for --
+      // and the 11 MB it does have above the server's floor is less than
+      // the memory cache a file would be traded for.
+      const int availableOnTheChromecast = 523 * 1024 * 1024;
+
+      expect(
+        MpvDiskCacheLimit.hasRoomForCache(availableOnTheChromecast),
+        isFalse,
+      );
+    });
+  });
+
+  group('the two budgets on one device', () {
+    test('the player never writes into the floor the server holds', () {
+      // The one number a reader can check against `df`: Available on the
+      // app's volume never goes below this because of anything the app
+      // writes. The server's cleaner caps its torrent cache at
+      // `occupied + available - floor`; the player stops at the same line.
+      // They have to be the same number, and the server's is the source of
+      // truth (`CACHE_FREE_SPACE_FLOOR`, `server/src/cache_cleaner.rs` at
+      // the pinned rev).
+      expect(MpvDiskCacheLimit.serverFreeSpaceFloorBytes, 512 * 1024 * 1024);
+    });
+
+    test('the player\'s own budget fits inside the allowance, not on top of '
+        'it', () {
+      // The two are equal today, which is the case worth pinning: on a
+      // volume with exactly one budget's worth of room above the floor, the
+      // player may take all of it and the server is then capped at nothing
+      // rather than at another 512 MiB. A player limit larger than the
+      // floor would mean a device could be a whole budget short of the
+      // number above before either limiter noticed.
+      expect(
+        MpvDiskCacheLimit.defaultLimitBytes,
+        lessThanOrEqualTo(MpvDiskCacheLimit.serverFreeSpaceFloorBytes),
+      );
+    });
+  });
+
+  group('the size of mpv\'s own budget', () {
     test('the size it holds to is one a television can spare', () {
       // Not asserted exactly, only that it is on the right side of both
       // walls: far more than the 64 MiB of memory cache it replaces, and

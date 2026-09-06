@@ -339,6 +339,29 @@ what every model field means. The shape of the thing is in the
   the file, because `demuxer-cache-unlink-files=immediate` has mpv unlink
   it as it creates it -- the space comes back when the fd closes, including
   after a crash.
+- **Two caches, one filesystem, and one number to check against `df`.** The
+  device has two independent writers on it: the embedded server's torrent
+  cache and mpv's demuxer cache, in two folders of one volume. The server's
+  cleaner caps its own at `min(cacheSize, occupied + available - 512 MiB)`,
+  holding that much free -- `CACHE_FREE_SPACE_FLOOR`, which is also the
+  margin below which `ensure_download_disk_ready` gives up on the disk and
+  degrades a request to memory-only. **Neither budget is computed as though
+  it were the only writer.** The server sees the player without being told:
+  mpv's cache file is unlinked at creation, so no directory walk can find
+  it, but its blocks are held until the fd closes and `f_bavail` counts
+  them the whole time (driven as a test, not read off a manual --
+  `crate::storage::free_bytes`). The player sees the server through the
+  same reading, `volume_free_bytes` over FFI, which is the same
+  `fs4::available_space` -- `df`'s Available column -- the cleaner uses, so
+  the two cannot drift. `MediaKitEngine.open` refuses `cache-on-disk`
+  altogether on a volume already at the line, and the five-second tick
+  turns it off when the volume comes down to it. The player's line sits one
+  memory cache (32 MiB, media_kit's `bufferSize`) above the server's floor,
+  because a cache file that small is worth less than the memory budget it
+  replaces. **So: Available never goes below 512 MiB because of anything
+  this app writes**, both caches live under that allowance rather than on
+  top of it, and the owner's Chromecast -- 523 MB free against a 1.4 GB
+  film -- gets no player cache at all.
 - **A scan is a different question from a seek, and mpv is asked
   differently.** mpv's seek is exact -- it lands on the keyframe before
   the target and decodes forward, invisibly, to the moment asked for --
