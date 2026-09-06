@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
 import '../../support/player_harness.dart';
@@ -18,6 +19,18 @@ import '../../support/tv.dart';
 void main() {
   /// The rate libmpv reports for the owner's film (`container-fps`).
   const filmRate = 23.976025;
+
+  test('mpv is not asked to sync the video to the display', () {
+    // The other way to answer a 2.5:1 cadence is mpv's own
+    // `video-sync=display-resample`, and on this backend it is inert: the
+    // Android video output answers `VO_NOTIMPL` to
+    // `VOCTRL_GET_DISPLAY_FPS`, and with no display rate mpv gives up on
+    // display sync before it starts (`MediaKitEngine.mpvOverrides` carries
+    // the reading). An option that looks like the fix and changes nothing
+    // makes the drop count on a device unreadable, so this is the guard on
+    // it going in without a reading behind it.
+    expect(MediaKitEngine.mpvOverrides.containsKey('video-sync'), isFalse);
+  });
 
   testWidgets('the display is asked for the rate the container declares', (
     tester,

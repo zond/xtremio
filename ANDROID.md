@@ -232,6 +232,21 @@ panel was on `mActiveModeId=1074` (59.94 Hz) while its own list offered
 1920x1080 at 23.976 (1082) and at 24.0 (1083), because nothing here had
 ever asked for a rate.
 
+**mpv cannot answer this one from its own side.** Its own fix for a
+mismatched rate is `--video-sync=display-resample`, which locks the video to
+the display and resamples the audio by the difference -- and every one of
+its display-sync modes needs to know the display's refresh rate. On Android
+nothing tells libmpv what it is: media_kit runs it with `vo=gpu` and
+`gpu-context=android`, and in the build it ships (`mpv
+v0.36.0-549-g78d43740f5`) that context answers `VO_NOTIMPL` to every
+request, `VOCTRL_GET_DISPLAY_FPS` included. With no rate reported,
+`vo_get_vsync_interval` answers -1 and `handle_display_sync_frame` returns
+before it sets `display-sync-active`, so playback stays on the default
+`video-sync=audio`; mpv's own estimate cannot start it either, because it
+samples vsyncs only from frames that are already display-synced. The option
+would change a line of code and not the picture, which is why
+`MediaKitEngine.mpvOverrides` says so rather than carrying it.
+
 So while a film is playing the player asks for one, and gives it back when
 it stops. `DisplayFrameRate` (`lib/shell/display_frame_rate.dart`) is the
 Dart half, on the `xtremio/device` channel; the rate is the container's,
