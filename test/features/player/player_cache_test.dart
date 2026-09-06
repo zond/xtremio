@@ -386,6 +386,97 @@ void main() {
     });
   });
 
+  group('what the app\'s players hold together', () {
+    /// A limiter for [owner] reading a file of [bytes], over [holdings],
+    /// with a cap of 1000 on a volume that is not the question.
+    (MpvDiskCacheLimit, List<void>) playerHolding(
+      MpvCacheHoldings holdings,
+      Object owner,
+      int bytes,
+    ) {
+      final stopped = <void>[];
+      return (
+        MpvDiskCacheLimit(
+          cacheState: () async => stateOf(bytes),
+          freeBytes: () async => 10000,
+          stopWritingToDisk: () async => stopped.add(null),
+          holdings: holdings,
+          owner: owner,
+          limitBytes: 1000,
+          floorBytes: 100,
+        ),
+        stopped,
+      );
+    }
+
+    test('the cap is on the sum, not on each player\'s own file', () async {
+      // How 512 MiB became 928 MB. A hand-over runs two demuxers at once
+      // and each limiter is right about its own media throughout, so a cap
+      // that is only ever asked one media at a time never fires -- while
+      // the device fills up at the sum of them.
+      final holdings = MpvCacheHoldings();
+      final first = Object();
+      final second = Object();
+      final (one, stoppedOne) = playerHolding(holdings, first, 600);
+      final (two, stoppedTwo) = playerHolding(holdings, second, 600);
+
+      await one.check();
+      expect(stoppedOne, isEmpty, reason: '600 of 1000, and alone in it');
+      expect(holdings.heldBytes, 600);
+
+      await two.check();
+      expect(holdings.heldBytes, 1200, reason: 'one number, both players');
+      expect(
+        stoppedTwo,
+        hasLength(1),
+        reason: 'the second file is what takes the app over its own cap',
+      );
+    });
+
+    test('a player is not counted against itself, and a released one is not '
+        'counted at all', () async {
+      final holdings = MpvCacheHoldings();
+      final first = Object();
+      final second = Object();
+      final (one, _) = playerHolding(holdings, first, 600);
+      final (two, _) = playerHolding(holdings, second, 300);
+      await one.check();
+      await two.check();
+
+      // What `MediaKitEngine.open` asks: the file it is about to be given
+      // is not among the reasons to refuse it one.
+      expect(holdings.heldByOthers(first), 300);
+      expect(holdings.heldByOthers(second), 600);
+      expect(holdings.openFiles, 2);
+
+      // A teardown that closed the fd, or one that failed to: either way
+      // the app stops claiming an allowance for a player that is gone.
+      holdings.release(first);
+      expect(holdings.heldBytes, 300);
+      expect(holdings.openFiles, 1);
+    });
+
+    test('a new media is refused a cache file the app cannot fund', () {
+      // The volume has room and the answer is still no: those blocks are
+      // already out of the free reading, so plenty free means only that
+      // somebody else is holding the allowance rather than that there is
+      // one to give.
+      expect(
+        MpvDiskCacheLimit.hasRoomForCache(
+          10 * 1024 * 1024 * 1024,
+          heldByOtherPlayers: MpvDiskCacheLimit.defaultLimitBytes,
+        ),
+        isFalse,
+      );
+      // And with nothing else holding anything, nothing changes: this is
+      // the state every single-player session is in.
+      expect(
+        MpvDiskCacheLimit.hasRoomForCache(10 * 1024 * 1024 * 1024),
+        isTrue,
+      );
+    });
+  });
+
   group('the size of mpv\'s own budget', () {
     test('the size it holds to is one a television can spare', () {
       // Not asserted exactly, only that it is on the right side of both

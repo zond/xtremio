@@ -10,11 +10,13 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/core.dart';
 import '../../src/rust/api/storage.dart' as rust_storage;
 import '../../shell/display_frame_rate.dart';
+import 'mpv_cache_holdings.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
 import 'subtitle_match.dart';
 import 'torrent_stats.dart';
 
+export 'mpv_cache_holdings.dart';
 export 'playback_stats.dart';
 export 'playback_tracks.dart';
 export 'torrent_stats.dart';
@@ -360,7 +362,9 @@ class MediaKitEngine implements PlaybackEngine {
     bool hardwareDecoding = true,
     MpvCacheDirectory cacheDirectory = platformMpvCacheDirectory,
     MpvCacheFreeSpace freeSpace = platformMpvCacheFreeSpace,
-  }) : _player = Player() {
+    MpvCacheHoldings? holdings,
+  }) : _player = Player(),
+       _holdings = holdings ?? MpvCacheHoldings.shared {
     _freeSpace = freeSpace;
     // Asked once and remembered: the directory is both what mpv is told
     // and what the free-space readings are taken through, and asking the
@@ -395,6 +399,12 @@ class MediaKitEngine implements PlaybackEngine {
 
   final Player _player;
   late final MpvCacheFreeSpace _freeSpace;
+
+  /// What every live player in this app holds on the volume, this one
+  /// included. Shared by default because there is one app; a test hands
+  /// over its own so two engines can be watched without the process's
+  /// other players in the sum.
+  final MpvCacheHoldings _holdings;
 
   /// The directory mpv was given for its cache file, `null` where the
   /// platform had none to give.
@@ -960,14 +970,19 @@ class MediaKitEngine implements PlaybackEngine {
 
   /// Starts watching the size of mpv's cache file for the media just
   /// opened. The previous media's file is already gone -- mpv deletes it
-  /// with the demuxer that made it -- so each `open` starts a fresh count.
+  /// with the demuxer that made it -- so each `open` starts a fresh count,
+  /// and the app-wide holding this player carries is reset to nothing with
+  /// it rather than left at the outgoing file's last reading.
   void _watchDiskCache() {
     _stopWatchingDiskCache();
     if (_player.platform is! NativePlayer || _disposed) return;
+    _holdings.hold(this, 0);
     final limit = MpvDiskCacheLimit(
       cacheState: () => _property('demuxer-cache-state'),
       freeBytes: _cacheVolumeFreeBytes,
       stopWritingToDisk: () => _setProperty('cache-on-disk', 'no'),
+      holdings: _holdings,
+      owner: this,
     );
     _diskCacheLimit = limit;
     _diskCacheTimer = Timer.periodic(MpvDiskCacheLimit.interval, (_) {
@@ -1051,17 +1066,29 @@ class MediaKitEngine implements PlaybackEngine {
     // packet rather than five seconds into it is the difference between
     // never starting a second writer on a full device and starting one and
     // taking it away.
-    await _setProperty(
-      'cache-on-disk',
-      MpvDiskCacheLimit.hasRoomForCache(
-            await _cacheVolumeFreeBytes(),
-            heldByOutgoingCache: heldByOutgoingCache,
-          )
-          ? 'yes'
-          : 'no',
+    final room = MpvDiskCacheLimit.hasRoomForCache(
+      await _cacheVolumeFreeBytes(),
+      heldByOutgoingCache: heldByOutgoingCache,
+      // What the app's *other* players are holding right now. The volume's
+      // free space already counts their blocks as gone, so this is not
+      // about the room -- it is about the cap, which is the app's and not
+      // this media's ([MpvCacheHoldings]). A player starting while the
+      // allowance is already spent elsewhere opens no file at all rather
+      // than a second one that would each be under the limit and together
+      // over it.
+      heldByOtherPlayers: _holdings.heldByOthers(this),
     );
+    await _setProperty('cache-on-disk', room ? 'yes' : 'no');
     await _player.open(Media(url.toString(), start: start));
-    _watchDiskCache();
+    if (room) {
+      _watchDiskCache();
+    } else {
+      // Nothing to watch and nothing to declare: a media playing out of the
+      // memory cache holds no blocks on the volume, and the outgoing file
+      // this player was still counted as holding went with the `loadfile`
+      // above. An entry of zero would go on being counted as a file open.
+      _holdings.release(this);
+    }
   }
 
   @override
@@ -1343,6 +1370,12 @@ class MediaKitEngine implements PlaybackEngine {
     _disposed = true;
     _stopStats();
     _stopWatchingDiskCache();
+    // The blocks go back to the filesystem when `Player.dispose` below
+    // closes the fd, and the app stops claiming them here rather than
+    // there: a teardown that hangs or throws must not leave this player in
+    // the sum for the rest of the session, holding an allowance against
+    // the players that are still running.
+    _holdings.release(this);
     for (final subscription in _trackSubscriptions) {
       await subscription.cancel();
     }
@@ -1437,9 +1470,12 @@ class MpvDiskCacheLimit {
     required this.cacheState,
     required this.freeBytes,
     required this.stopWritingToDisk,
+    MpvCacheHoldings? holdings,
+    Object? owner,
     this.limitBytes = defaultLimitBytes,
     this.floorBytes = leastFreeSpaceForCache,
-  });
+  }) : holdings = holdings ?? MpvCacheHoldings(),
+       owner = owner ?? Object();
 
   /// 512 MiB, on a device whose whole storage is 8 GB and whose torrent
   /// data shares it. It is 512 MiB of *bytes demuxed*, and that is not the
@@ -1535,6 +1571,23 @@ class MpvDiskCacheLimit {
   /// Sets `cache-on-disk` to `no`.
   final Future<void> Function() stopWritingToDisk;
 
+  /// Where [check] reports what it read, and where it asks what the app as
+  /// a whole is holding.
+  ///
+  /// [limitBytes] is checked against that total rather than against this
+  /// media's file, which is the difference between a cap on a playback and
+  /// a cap on the device: two players each under 512 MiB put 928 MB on the
+  /// owner's Chromecast, and neither limiter was wrong about its own
+  /// media. A limiter built without one gets a holdings of its own and is
+  /// therefore alone in it, which is what a limiter built on its own
+  /// actually is.
+  final MpvCacheHoldings holdings;
+
+  /// Who [holdings] files this limiter's reading under: the player, which
+  /// outlives the limiter across a `loadfile`, so the entry is replaced
+  /// rather than added to.
+  final Object owner;
+
   /// The most the cache file may weigh.
   final int limitBytes;
 
@@ -1604,11 +1657,23 @@ class MpvDiskCacheLimit {
   ///
   /// During playback the equivalent is 0, which is the default: the file
   /// being written now is not about to give its blocks back.
+  ///
+  /// [heldByOtherPlayers] is the app's own cap asked in advance, and it is
+  /// a different question from the room: those blocks are already out of
+  /// [free], so a volume can have plenty left and still owe the whole
+  /// allowance to a player that is already running
+  /// ([MpvCacheHoldings.heldByOthers]). Starting a second file there is
+  /// how 512 MiB became 928 MB. Unlike the free space, this is a number
+  /// the app always has, so there is no "unreadable means room" for it.
   static bool hasRoomForCache(
     int? free, {
     int floorBytes = leastFreeSpaceForCache,
+    int limitBytes = defaultLimitBytes,
     int heldByOutgoingCache = 0,
-  }) => free == null || free + heldByOutgoingCache > floorBytes;
+    int heldByOtherPlayers = 0,
+  }) =>
+      heldByOtherPlayers < limitBytes &&
+      (free == null || free + heldByOutgoingCache > floorBytes);
 
   /// One reading. Turns the disk cache off if the file is over
   /// [limitBytes], or if the volume has come down to [floorBytes].
@@ -1625,7 +1690,11 @@ class MpvDiskCacheLimit {
       final bytes = PlaybackStats.fileCacheBytesOf(await cacheState());
       if (_stopped || bytes == null) return;
       _fileCacheBytes = bytes;
-      if (bytes <= limitBytes &&
+      // Against the app's total, not against this file: the reading is
+      // filed with everything else alive and the answer comes back
+      // summed. With one player the two are the same number, which is why
+      // the readings this was measured against still read the same.
+      if (holdings.hold(owner, bytes) <= limitBytes &&
           hasRoomForCache(await freeBytes(), floorBytes: floorBytes)) {
         return;
       }
