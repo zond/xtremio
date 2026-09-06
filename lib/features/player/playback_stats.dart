@@ -37,6 +37,8 @@ class PlaybackStats {
     this.containerFps,
     this.droppedFrames,
     this.decoderDroppedFrames,
+    this.displaySyncActive,
+    this.displayFps,
     this.hwdec,
     this.videoCodec,
     this.audioCodec,
@@ -61,6 +63,8 @@ class PlaybackStats {
     'container-fps',
     'frame-drop-count',
     'decoder-frame-drop-count',
+    'display-sync-active',
+    'display-fps',
     'hwdec-current',
     'video-codec',
     'audio-codec-name',
@@ -107,6 +111,8 @@ class PlaybackStats {
       containerFps: number('container-fps'),
       droppedFrames: integer('frame-drop-count'),
       decoderDroppedFrames: integer('decoder-frame-drop-count'),
+      displaySyncActive: flag('display-sync-active'),
+      displayFps: number('display-fps'),
       hwdec: text('hwdec-current'),
       videoCodec: text('video-codec'),
       audioCodec: text('audio-codec-name'),
@@ -139,6 +145,28 @@ class PlaybackStats {
 
   /// Frames the decoder dropped (`decoder-frame-drop-count`).
   final int? decoderDroppedFrames;
+
+  /// Whether mpv is timing frames against the display rather than against
+  /// the audio clock (`display-sync-active`), and what rate it believes
+  /// the display has (`display-fps`, which answers with
+  /// `override-display-fps` when one is set).
+  ///
+  /// **These two are here to keep the drop counts above honest, and the
+  /// pair is the whole point.** On Android mpv cannot measure the display
+  /// at all -- its VO answers `VO_NOTIMPL` -- so display sync silently
+  /// never starts, and the app now hands it the rate instead
+  /// (`MediaKitEngine.displaySyncProperties`). A change that either takes
+  /// or does nothing, with no way to tell which from the sofa, is a change
+  /// that gets defended on the theory rather than measured; these are what
+  /// let one screencap of this panel say "sync is on, the rate is 23.976,
+  /// and the vo count has stopped climbing" -- or say the opposite, which
+  /// is the instruction to take the override back out.
+  ///
+  /// Null on any backend without the properties, which is what keeps the
+  /// row off the panel entirely rather than drawing a dash that reads as a
+  /// measured no.
+  final bool? displaySyncActive;
+  final double? displayFps;
 
   /// The hardware decoder in use (`hwdec-current`): an API name such as
   /// `vaapi`, or `no` when decoding in software; `null` when unknown.
@@ -306,6 +334,8 @@ class PlaybackStats {
       other.containerFps == containerFps &&
       other.droppedFrames == droppedFrames &&
       other.decoderDroppedFrames == decoderDroppedFrames &&
+      other.displaySyncActive == displaySyncActive &&
+      other.displayFps == displayFps &&
       other.hwdec == hwdec &&
       other.videoCodec == videoCodec &&
       other.audioCodec == audioCodec &&
@@ -322,12 +352,16 @@ class PlaybackStats {
       other.cacheStateRead == cacheStateRead &&
       other.fileCacheBytes == fileCacheBytes;
 
+  /// [Object.hashAll] rather than [Object.hash]: the field count went past
+  /// the twenty positional arguments that one takes.
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     outputFps,
     containerFps,
     droppedFrames,
     decoderDroppedFrames,
+    displaySyncActive,
+    displayFps,
     hwdec,
     videoCodec,
     audioCodec,
@@ -343,12 +377,13 @@ class PlaybackStats {
     seekableRanges == null ? null : Object.hashAll(seekableRanges!),
     cacheStateRead,
     fileCacheBytes,
-  );
+  ]);
 
   @override
   String toString() =>
       'PlaybackStats(fps: $outputFps/$containerFps, dropped: $droppedFrames'
-      '/$decoderDroppedFrames, hwdec: $hwdec, codec: $videoCodec'
+      '/$decoderDroppedFrames, displaySync: $displaySyncActive'
+      '@$displayFps, hwdec: $hwdec, codec: $videoCodec'
       '/$audioCodec, '
       '${width}x$height, bitrate: $videoBitrate, cache: $cacheDuration, '
       'pausedForCache: $pausedForCache, buffering: $cacheBufferingState, '

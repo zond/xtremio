@@ -12,6 +12,8 @@ void main() {
       'container-fps': '23.976025',
       'frame-drop-count': '3',
       'decoder-frame-drop-count': '0',
+      'display-sync-active': 'yes',
+      'display-fps': '23.976025',
       'hwdec-current': 'vaapi',
       'video-codec': 'hevc (Main 10)',
       'video-params/w': '3840',
@@ -25,6 +27,8 @@ void main() {
     expect(stats.containerFps, closeTo(23.976, 0.001));
     expect(stats.droppedFrames, 3);
     expect(stats.decoderDroppedFrames, 0);
+    expect(stats.displaySyncActive, isTrue);
+    expect(stats.displayFps, closeTo(23.976, 0.001));
     expect(stats.hwdec, 'vaapi');
     expect(stats.isSoftwareDecoding, isFalse);
     expect(stats.videoCodec, 'hevc (Main 10)');
@@ -93,6 +97,46 @@ void main() {
     expect(
       PlaybackStatsOverlay.describe(const PlaybackStats()),
       everyElement(contains('-')),
+    );
+  });
+
+  test('says whether display sync started, right under the drop counts', () {
+    // The row the whole display-sync change is judged by. On Android mpv
+    // cannot measure the display and is told the rate instead
+    // (`MediaKitEngine.displaySyncProperties`); an override that does not
+    // take leaves playback on the audio clock and the vo count climbing,
+    // and nothing else on this panel can tell that apart from an override
+    // that took and did not help.
+    final lines = PlaybackStatsOverlay.describe(
+      const PlaybackStats(
+        droppedFrames: 2779,
+        decoderDroppedFrames: 0,
+        displaySyncActive: true,
+        displayFps: 23.976025,
+      ),
+    );
+    expect(
+      lines,
+      containsAllInOrder(const [
+        'dropped  2779 vo / 0 decoder',
+        'sync     yes · display 23.976 Hz',
+      ]),
+    );
+
+    // A no is as much a reading as a yes, and it is the one that says to
+    // take the override back out.
+    expect(
+      PlaybackStatsOverlay.describe(
+        const PlaybackStats(displaySyncActive: false, displayFps: 59.94),
+      ),
+      contains('sync     no · display 59.940 Hz'),
+    );
+
+    // But an engine with no such properties draws no row: a dash there
+    // would read as a measured no on a backend nobody asked.
+    expect(
+      PlaybackStatsOverlay.describe(const PlaybackStats(hwdec: 'no')),
+      isNot(contains(startsWith('sync '))),
     );
   });
 

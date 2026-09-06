@@ -130,6 +130,11 @@ class PlaybackStatsOverlay extends StatelessWidget {
     'fps      ${_fps(s.outputFps)} out / ${_fps(s.containerFps)} container',
     'dropped  ${s.droppedFrames ?? '-'} vo'
         '${s.decoderDroppedFrames == null ? '' : ' / ${s.decoderDroppedFrames} decoder'}',
+    // Directly under the drop counts, because it is the line that says
+    // whether they mean anything. Only where mpv answered: on a backend
+    // with no such properties the row would report a no that nobody asked.
+    if (s.displaySyncActive != null || s.displayFps != null)
+      'sync     ${_displaySync(s)}',
     'hwdec    ${_hwdec(s)}',
     'video    ${s.videoCodec ?? '-'}'
         '${s.width != null && s.height != null ? ' ${s.width}x${s.height}' : ''}',
@@ -145,6 +150,23 @@ class PlaybackStatsOverlay extends StatelessWidget {
       'seekable ${_seekable(s)} · partially ${_flag(s.partiallySeekable)}',
     if (s.seekableRanges case final ranges?) 'ranges   ${_ranges(ranges)}',
   ];
+
+  /// Whether mpv is timing frames against the screen, and at what rate it
+  /// thinks the screen refreshes.
+  ///
+  /// The row the vo drop count above is read against. On Android mpv
+  /// cannot measure the display, so the app tells it
+  /// (`MediaKitEngine.displaySyncProperties`); a `no` here says the
+  /// override did not take and the drops belong to the old fault, and a
+  /// `yes` beside a count that has stopped climbing is the whole of the
+  /// evidence that it did. The rate is mpv's own belief rather than the
+  /// number handed to it, which is why it is worth showing next to the
+  /// flag: the two disagreeing is a set that went nowhere.
+  static String _displaySync(PlaybackStats s) {
+    final hz = s.displayFps;
+    return '${_flag(s.displaySyncActive)} · display '
+        '${hz == null ? '-' : '${hz.toStringAsFixed(3)} Hz'}';
+  }
 
   /// What mpv's own cache file weighs, and `none` when there is no file.
   ///
