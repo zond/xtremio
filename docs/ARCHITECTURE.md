@@ -321,73 +321,90 @@ what every model field means. The shape of the thing is in the
   `StreamUrls` is snake_case on the wire, unlike the rest of the model.
   `PlaybackEngine` (`lib/features/player/`) is the thin interface over
   media_kit; widget tests swap in a fake through `PlaybackScope`.
-- **mpv is given a cache directory, and what it writes there is bounded.**
-  Android hands an app no writable temp path, so mpv's default cache
-  directory does not exist and its demuxer file cache is never created
-  (`Failed to create file cache` on every open). The engine points
-  `demuxer-cache-dir` at `<app cache>/mpv`, beside the folders the core and
-  the server already have, with the other mpv overrides -- before the first
-  `loadfile`, because mpv reads that option when it builds the demuxer and
-  never looks again. With the file cache working the demuxer's byte limits
-  (32 MiB each, media_kit's `bufferSize`) bound packet *metadata* rather
-  than the payload, so the seekable window is half an hour of film rather
-  than the ninety seconds and two islands the readings showed. The file
-  itself is append-only and mpv bounds it by nothing, so
-  `MpvDiskCacheLimit` does: every five seconds it reads `file-cache-bytes`
-  out of `demuxer-cache-state` and turns `cache-on-disk` off past 512 MiB,
-  after which the media plays on out of the memory cache. Nothing deletes
-  the file, because `demuxer-cache-unlink-files=immediate` has mpv unlink
-  it as it creates it -- the space comes back when the fd closes, including
-  after a crash.
-- **Two caches, one filesystem, and one number to check against `df`.** The
-  device has two independent writers on it: the embedded server's torrent
-  cache and mpv's demuxer cache, in two folders of one volume. The server's
-  cleaner caps its own at `min(cacheSize, occupied + available - 512 MiB)`,
-  holding that much free -- `CACHE_FREE_SPACE_FLOOR`, which is also the
-  margin below which `ensure_download_disk_ready` gives up on the disk and
-  degrades a request to memory-only. **Neither budget is computed as though
-  it were the only writer.** The server sees the player without being told:
-  mpv's cache file is unlinked at creation, so no directory walk can find
-  it, but its blocks are held until the fd closes and `f_bavail` counts
-  them the whole time (driven as a test, not read off a manual --
-  `crate::storage::free_bytes`). The player sees the server through the
-  same reading, `volume_free_bytes` over FFI, which is the same
-  `fs4::available_space` -- `df`'s Available column -- the cleaner uses, so
-  the two cannot drift. `MediaKitEngine.open` refuses `cache-on-disk`
-  altogether on a volume already at the line, and the five-second tick
-  turns it off when the volume comes down to it. The player's line sits one
-  memory cache (32 MiB, media_kit's `bufferSize`) above the server's floor,
-  because a cache file that small is worth less than the memory budget it
-  replaces. **So: both caches share one allowance -- everything above
-  512 MiB -- rather than each taking a budget on top of the other**, and the
-  owner's Chromecast, 523 MB free against a 1.4 GB film, gets no player
-  cache at all. It is where the *caches* are held and not a line the app
-  cannot cross: the cleaner deletes, it does not throttle, so librqbit
-  writes the film itself straight through the floor to ENOSPC between
-  passes -- which is what the server's recovery pass is for -- and an
-  offline download is admitted against a margin of its own,
-  `PIN_FREE_SPACE_MARGIN`, 500 MiB, into a directory the cleaner never
-  walks.
+- **Every stream reaches the player as a URL on our own server.** A torrent
+  already is one; a stream on anybody else's host -- a debrid link, an
+  addon's own HTTP URL -- is wrapped in the embedded server's `/proxy`
+  route before it is handed to mpv (`lib/core/stream_proxy.dart`). The
+  shape is the one stremio-core builds and the server parses: the target's
+  origin percent-encoded into a `d=` path segment, its own path and query
+  after it, so a signed link keeps its signature and the file name stays
+  where ffmpeg's probing and a log reader can see it. The address comes
+  from `CoreInitInfo`, which is settled before the first `open`, rather
+  than from `profile.settings.streamingServerUrl`, which arrives with a
+  `ctx` pull that can land later. Left alone: a loopback URL (already the
+  server, whatever port it bound), a `file://` offline copy, and everything
+  when this build runs no embedded server -- proxying through a streaming
+  server on somebody else's machine would send the film over the internet
+  twice for a cache nothing here can see. `force-seekable` excludes
+  `/proxy` for the same reason it always excluded a remote host: the
+  promise that a seek will wait rather than be refused is about the
+  *server's own* torrent reader, and the route relays a host we know
+  nothing about.
+- **There is one cache on the device and it is the server's.** The player
+  is started with `cache-on-disk=no`, once per player, for every stream,
+  and nothing ever writes that property again. media_kit's own default is
+  `yes`, and what that buys is a file mpv unlinks the moment it creates
+  it: no name in the directory, so no `du`, no `dumpsys diskstats` and no
+  walk the server's cleaner performs can find it, and the blocks come back
+  only when the fd closes. On the owner's Chromecast one 90-second title
+  held 928 MB that way while three separate instruments reported the app
+  was using 46 MB. The server's cache is everything that is not -- named
+  files, a configured limit (`min(cacheSize, occupied + available -
+  512 MiB)`, the `CACHE_FREE_SPACE_FLOOR` below which
+  `ensure_download_disk_ready` has already given up on the disk), a
+  cleaner that evicts, and survival across a crash -- and now that every
+  stream goes through it, it is the only local copy there is. There is no
+  shared budget to keep any more, because there is nothing to share it
+  with.
+- **What the player still holds is memory, and it is deliberately small.**
+  `MediaKitEngine.memoryCacheBytes` is 32 MiB, written out rather than
+  inherited from media_kit's `bufferSize`, and media_kit sets it on both
+  `demuxer-max-bytes` and `demuxer-max-back-bytes` -- so the ceiling is
+  twice it: about two minutes ahead of a 2.3 Mbps film and 32 MiB behind
+  the play head. Measured, mpv fills that and then reads at what playback
+  consumes (2 MB/s down to 18 KB/s within a second of the cache filling),
+  so a player with no disk is not a player downloading without bound. It
+  was reconsidered when the disk cache went and left where it is: the
+  television has 2 GB of RAM for the whole system and the app measured
+  245 MB PSS with a player up, the embedded server and its torrent engine
+  share that process, and the cushion this design wants is the server's
+  rather than a bigger heap here.
+- **What the proxy does not do yet.** `/proxy` relays: it opens the target
+  with reqwest and streams the answer back, caching nothing and fetching
+  twice what is asked for twice (pinned in `server/tests/proxy.rs` in the
+  stream-server tree). `Range` is forwarded and the origin's `206`,
+  `Content-Range` and `Accept-Ranges` come back untouched, so a backward
+  seek past the memory cache works -- by asking the origin again. For a
+  torrent the file is on disk anyway and that seek is local. Making the
+  proxied half local too is the next stage, and it belongs on the server's
+  side of the hop rather than in the player's heap.
 - **A player that is left has to actually stop, and something has to make
-  sure.** Leaving the screen does three things in order, and the order is
-  the design: `cache-on-disk=no` goes out synchronously, so the growth
-  ends on the press whatever happens next (mpv honours the option per
-  packet, measured -- `MpvDiskCacheLimit.stopWritingToDisk`); the teardown
-  itself is deferred two frames, so the raster thread is not holding the
-  video texture when media_kit frees it; and a plain timer, armed in front
-  of both and chained to neither, gives that teardown
-  `PlayerScreen.teardownBound` before it says so in the diagnostics and
-  kills the player itself. The independence is the whole of the third
-  part: mpv's own forceful abort exists, but every road to it runs through
-  the teardown -- media_kit schedules `mpv_terminate_destroy` as the last
-  statement of a chain that begins with the `stop()` that hangs -- so on
+  sure.** Leaving the screen defers the teardown two frames, so the raster
+  thread is not holding the video texture when media_kit frees it, and arms
+  a plain timer in front of those frames and chained to neither: it gives
+  the teardown `PlayerScreen.teardownBound` before it says so in the
+  diagnostics and kills the player itself. The independence is the whole of
+  it -- mpv's own forceful abort exists, but every road to it runs through
+  the teardown, since media_kit schedules `mpv_terminate_destroy` as the
+  last statement of a chain that begins with the `stop()` that hangs, so on
   the owner's Chromecast a wedged stop meant an mpv that outlived its
   screen by ninety seconds at 32 Mbps and gave its blocks back only to a
   force-stop. What the timer sends is `quit`, asynchronously, on
   media_kit's own handle (`PlaybackEngine.destroy`), and never
   `mpv_terminate_destroy`: destroying a handle whose event loop is still
   attached deadlocks or crashes, and the one place that detaches it first
-  is the teardown that is stuck.
+  is the teardown that is stuck. **The fallback is not unblocked, and the
+  code says so now.** The `quit` is enqueued on `mpctx->dispatch`, the
+  core's own queue, which is the queue the wedged `stop` is waiting on --
+  media_kit sends that through `mpv_command_async` too and awaits a reply
+  only the core thread can send. So it wins a core thread that has not
+  reached the command yet, which is the case that was measured, and does
+  nothing for one stuck inside it. What bounds that case is the change
+  above: a player that keeps no disk cache costs memory, a socket and the
+  server engine that socket keeps live, rather than a gigabyte of a 4 GB
+  television. `mpv_command_async`'s refusal is thrown rather than
+  discarded, so a report never says a player was killed when the command
+  was never enqueued.
 - **A scan is a different question from a seek, and mpv is asked
   differently.** mpv's seek is exact -- it lands on the keyframe before
   the target and decodes forward, invisibly, to the moment asked for --
