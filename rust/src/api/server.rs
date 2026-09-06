@@ -109,9 +109,17 @@ pub fn server_storage_report() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::storage::report()?).map_err(Into::into))
 }
 
-/// What the server's cache currently occupies against its `cacheSize`
-/// limit, as JSON (`CacheUsage`: `totalBytes`, `limitBytes` -- null only
-/// when the cache is truly unlimited -- `protectedBytes`, `protectedFiles`).
+/// What the server's cache currently occupies against the limit its cleaner
+/// will enforce, as JSON (`CacheUsage`: `totalBytes`, `limitBytes`,
+/// `protectedBytes`, `protectedFiles`).
+///
+/// `limitBytes` is the smaller of the `cacheSize` setting and what the
+/// volume can give while keeping the server's 512 MiB free-space floor
+/// clear, so it is a number even with no `cacheSize` set, it is derived
+/// from free space and so moves when anything else on the device writes,
+/// and it is null only when neither caps anything. It is a different
+/// question from `server_storage_report`'s `cacheLimitBytes`, which is the
+/// setting itself.
 /// `protectedBytes`/`protectedFiles` are what a live engine or a pinned
 /// download is holding right now, which a clean pass can never take: when
 /// they equal `totalBytes` and the cache is still over `limitBytes`,
@@ -129,7 +137,11 @@ pub fn server_cache_usage() -> anyhow::Result<String> {
 
 /// Runs one eviction pass on the server's cache right now and answers what
 /// it did, as JSON (`EvictionReport`: `total`, `protected`,
-/// `protectedFiles`, `freed`, `deleted`, `limit`).
+/// `protectedFiles`, `freed`, `deleted`, `limit`). `freed`/`deleted` count
+/// both eviction rules, the 30-day sweep and the size cap; `limit` is the
+/// cap this pass enforced, on the same terms as `server_cache_usage`'s
+/// `limitBytes` -- null for no cap, and 0 for a volume with no room to
+/// give, which is a cap and not the absence of one.
 ///
 /// This is the exact function the server's own scheduled sweep calls, so it
 /// respects exactly the same protections: nothing a live engine is writing

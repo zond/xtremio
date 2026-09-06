@@ -79,7 +79,14 @@ class ServerStorage {
   /// What is under it, offline downloads excluded (they are not cache).
   final int cacheUsedBytes;
 
-  /// The `cacheSize` setting, or null for no limit.
+  /// The `cacheSize` setting, or null when nobody set one.
+  ///
+  /// The *setting*, not the limit the cleaner enforces: with no
+  /// `cacheSize` the server still caps the cache at what the volume can
+  /// give above its free-space floor, and [CacheUsage.limitBytes] is that
+  /// number. So a null here means "unconfigured", never "unbounded", and
+  /// the storage screen can rightly call a cache over its limit while this
+  /// line says no size was chosen.
   final int? cacheLimitBytes;
 
   /// False when part of the tree could not be read, which makes
@@ -93,20 +100,28 @@ class ServerStorage {
   /// otherwise: a second identical line explains nothing.
   final StorageVolume? downloadsVolume;
 
-  /// Whether the cache is bigger than the limit it is supposed to be held
-  /// to -- a cleaner that is reclaiming nothing, which fills the device.
+  /// Whether the cache is bigger than the size that was configured for it.
+  /// Says nothing about the device's own cap, which binds whether or not a
+  /// `cacheSize` was ever set -- see [cacheLimitBytes].
   bool get overLimit {
     final limit = cacheLimitBytes;
     return limit != null && cacheUsedBytes > limit;
   }
 
-  /// `17.0 GB of 10.0 GB limit`, or `17.0 GB, no limit set`.
+  /// `17.0 GB of 10.0 GB limit`, or `17.0 GB, no cacheSize set`.
+  ///
+  /// Named after the setting rather than after "a limit", because there is
+  /// always a limit: with no `cacheSize` the device's free space is what
+  /// caps the cache, and a line reading `no limit set` beside a storage
+  /// screen saying the cache is over its limit had the app contradicting
+  /// itself. The volume's own line is directly under this one, which is
+  /// where the room actually is.
   String get cacheLabel {
     final used = DownloadView.humanSize(cacheUsedBytes);
     final limit = cacheLimitBytes;
     final prefix = cacheComplete ? used : 'at least $used';
     return limit == null
-        ? '$prefix, no limit set'
+        ? '$prefix, no cacheSize set'
         : '$prefix of ${DownloadView.humanSize(limit)} limit';
   }
 
@@ -164,8 +179,23 @@ class CacheUsage {
   /// Occupancy of the cache right now.
   final int totalBytes;
 
-  /// The `cacheSize` setting in the same accounting. Null only when the
-  /// cache is truly unlimited, matching the setting's own null.
+  /// The limit the server's cleaner will actually enforce, in the same
+  /// accounting: the smaller of the `cacheSize` setting and what the
+  /// volume can give while keeping its free-space floor
+  /// (`CACHE_FREE_SPACE_FLOOR`, 512 MiB) clear -- so on a device with no
+  /// `cacheSize` set this is still a number, and the number is the
+  /// device's.
+  ///
+  /// Null only when neither caps anything: `cacheSize` unset *and* the
+  /// volume's free space unreadable. That makes it a different question
+  /// from [ServerStorage.cacheLimitBytes], which is the setting itself and
+  /// is null whenever nobody chose one -- the header line and this screen
+  /// are answering "what is enforced" and "what was configured", and on a
+  /// small device those disagree.
+  ///
+  /// It also moves on its own: it is derived from free space, so anything
+  /// else writing to the volume changes it between two reads with nothing
+  /// having happened to the cache.
   final int? limitBytes;
 
   /// How much of [totalBytes] a clean pass may never touch: a live engine
@@ -175,7 +205,8 @@ class CacheUsage {
   /// How many files that is.
   final int protectedFiles;
 
-  /// Whether the cache is bigger than its configured limit.
+  /// Whether the cache is bigger than the limit that will be enforced --
+  /// which on a device with no `cacheSize` set is the device's own.
   bool get overLimit {
     final limit = limitBytes;
     return limit != null && totalBytes > limit;
@@ -215,7 +246,7 @@ class EvictionReport {
     protectedFiles: (json['protectedFiles'] as num?)?.toInt() ?? 0,
     freed: (json['freed'] as num?)?.toInt() ?? 0,
     deleted: (json['deleted'] as num?)?.toInt() ?? 0,
-    limit: (json['limit'] as num?)?.toInt() ?? 0,
+    limit: (json['limit'] as num?)?.toInt(),
   );
 
   /// Occupancy of the cache once this pass finished.
@@ -234,13 +265,23 @@ class EvictionReport {
   /// How many files that took.
   final int deleted;
 
-  /// The limit this run was given; `0` means "no limit" -- unlike
-  /// [CacheUsage.limitBytes] this is never null, matching the server's own
-  /// `EvictionReport::shortfall_message`.
-  final int limit;
+  /// The limit this run enforced, on the same terms as
+  /// [CacheUsage.limitBytes]: null only when nothing capped the cache at
+  /// all.
+  ///
+  /// It was an `int` with 0 for "no limit" while the only limit was the
+  /// `cacheSize` setting, which nobody sets to nothing. The device-derived
+  /// cap reaches 0 on its own -- any volume whose occupancy plus free space
+  /// is under the server's floor gets exactly that -- and a cap of 0 is the
+  /// tightest there is, so reading it as "unlimited" said the opposite of
+  /// the truth on the device that most needed the answer.
+  final int? limit;
 
   /// Whether the run ended still over the limit. Not a failure: what is
   /// left belongs to a live stream or a kept download, named by
   /// [protected]/[protectedFiles].
-  bool get stillOverLimit => limit != 0 && total > limit;
+  bool get stillOverLimit {
+    final limit = this.limit;
+    return limit != null && total > limit;
+  }
 }
