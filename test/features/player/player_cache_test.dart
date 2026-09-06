@@ -353,14 +353,21 @@ void main() {
   });
 
   group('the two budgets on one device', () {
-    test('the player never writes into the floor the server holds', () {
-      // The one number a reader can check against `df`: Available on the
-      // app's volume never goes below this because of anything the app
-      // writes. The server's cleaner caps its torrent cache at
-      // `occupied + available - floor`; the player stops at the same line.
-      // They have to be the same number, and the server's is the source of
-      // truth (`CACHE_FREE_SPACE_FLOOR`, `server/src/cache_cleaner.rs` at
-      // the pinned rev).
+    test('the player stops at the same line the server\'s cleaner does', () {
+      // The one number a reader can check against `df`, and what it means:
+      // the two caches share the room above it instead of each taking a
+      // budget on top of the other. The server's cleaner caps its torrent
+      // cache at `occupied + available - floor`; the player stops at the
+      // same line. They have to be the same number, and the server's is the
+      // source of truth (`CACHE_FREE_SPACE_FLOOR`,
+      // `server/src/cache_cleaner.rs` at the pinned rev).
+      //
+      // It is not a promise that Available never goes below it. The cleaner
+      // deletes and cannot throttle, so librqbit writes the film through
+      // the floor to ENOSPC between passes -- the failure this whole change
+      // came from -- and offline downloads are admitted against
+      // `PIN_FREE_SPACE_MARGIN` (500 MiB), a different constant, into a
+      // directory the cleaner never walks.
       expect(MpvDiskCacheLimit.serverFreeSpaceFloorBytes, 512 * 1024 * 1024);
     });
 

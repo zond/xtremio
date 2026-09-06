@@ -358,10 +358,16 @@ what every model field means. The shape of the thing is in the
   turns it off when the volume comes down to it. The player's line sits one
   memory cache (32 MiB, media_kit's `bufferSize`) above the server's floor,
   because a cache file that small is worth less than the memory budget it
-  replaces. **So: Available never goes below 512 MiB because of anything
-  this app writes**, both caches live under that allowance rather than on
-  top of it, and the owner's Chromecast -- 523 MB free against a 1.4 GB
-  film -- gets no player cache at all.
+  replaces. **So: both caches share one allowance -- everything above
+  512 MiB -- rather than each taking a budget on top of the other**, and the
+  owner's Chromecast, 523 MB free against a 1.4 GB film, gets no player
+  cache at all. It is where the *caches* are held and not a line the app
+  cannot cross: the cleaner deletes, it does not throttle, so librqbit
+  writes the film itself straight through the floor to ENOSPC between
+  passes -- which is what the server's recovery pass is for -- and an
+  offline download is admitted against a margin of its own,
+  `PIN_FREE_SPACE_MARGIN`, 500 MiB, into a directory the cleaner never
+  walks.
 - **A scan is a different question from a seek, and mpv is asked
   differently.** mpv's seek is exact -- it lands on the keyframe before
   the target and decodes forward, invisibly, to the moment asked for --

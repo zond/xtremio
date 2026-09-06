@@ -1274,14 +1274,24 @@ class MediaKitEngine implements PlaybackEngine {
 /// stops writing when it reaches the floor.
 ///
 /// The number a reader can check against `df` is therefore the floor
-/// itself: **Available on the app's volume never goes below
-/// [serverFreeSpaceFloorBytes] because of anything this app writes.** Under
-/// it, the torrent cache is capped by the operator's `cacheSize` or by the
-/// device, whichever is smaller, and mpv's cache takes at most
-/// [defaultLimitBytes] *of that same allowance* rather than another
-/// [defaultLimitBytes] on top of it -- so the most the app is willing to
-/// occupy on a device is everything above the floor, with both caches
-/// inside that and neither added to it.
+/// itself: **the two caches share one allowance, everything above
+/// [serverFreeSpaceFloorBytes], rather than each taking a budget on top of
+/// the other.** Under it, the torrent cache is capped by the operator's
+/// `cacheSize` or by the device, whichever is smaller, and mpv's cache
+/// takes at most [defaultLimitBytes] *of that same allowance*.
+///
+/// **It is where the caches are held, not a line the app cannot cross**,
+/// and saying otherwise would be citing this comment against the field log
+/// that produced it. Two of the app's writers go through it and neither is
+/// a cache. The film itself is written by librqbit, which the server's
+/// cleaner can evict behind but cannot throttle: on the owner's Chromecast
+/// Available went to nothing, not to 512 MiB, and the fatal ENOSPC that
+/// followed is what the server's recovery pass exists to survive. An
+/// offline download is the other, admitted once when the pin is accepted
+/// against a margin of its own -- `enginefs::PIN_FREE_SPACE_MARGIN`,
+/// 500 MiB, twelve short of this number -- into a directory the cleaner
+/// never walks, so one pin can settle the volume below the line by design
+/// and several accepted together can take it to zero.
 ///
 /// The player stops a little sooner than the floor
 /// ([leastFreeSpaceForCache]), and a device with 523 MB free -- the
