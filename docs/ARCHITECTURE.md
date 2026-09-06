@@ -894,7 +894,7 @@ what every model field means. The shape of the thing is in the
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`aa48f5b`: generated
+  features, `zond/stream-server` at a fixed rev (`dbf9694`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
   counts, the buffer profiles behind `?buffer=`, cache usage and
@@ -916,7 +916,13 @@ what every model field means. The shape of the thing is in the
   the device rather than `cacheSize` is what set it, counting what the
   30-day rule freed as room made, reporting a cap of 0 as a cap rather than
   as no cap at all, and saying a disk with nothing left to evict is stuck
-  once instead of every fifteen seconds for the life of the process). To
+  once instead of every fifteen seconds for the life of the process, a LAN
+  media listener that ranks its interfaces rather than naming whichever
+  non-loopback one `getifaddrs` happened to list first -- a phone's
+  cellular address as readily as its Wi-Fi one -- that says in the log
+  which address it gave a receiver and when a request arrives, and that
+  counts what it has been asked for, so a receiver which never fetched can
+  be told from one which fetched and could not play). To
   bump: change the rev, `cargo update -p <crate>`, run
   `cargo test`, re-record any fixture whose shape moved, move the
   `[patch]` key along if the source URL changed (it names the URL being

@@ -213,12 +213,13 @@ pub fn server_lan_media_running() -> anyhow::Result<bool> {
 /// back to -- the one sharing the receiver's subnet, since the first
 /// interface on a host with a VPN or a container bridge regularly is not.
 ///
-/// `peer_ip` is null when the receiver's address is not known. The Cast SDK
-/// does not report one, so in practice it usually is: the answer is then the
-/// first non-loopback interface, which is what the server falls back to for
-/// a peer it cannot place on any subnet, and is right on a device with one
-/// network. It is a parameter, and not simply left out, because a receiver
-/// whose address *is* known deserves the better answer.
+/// `peer_ip` is null when the receiver's address is not known. The answer is
+/// then the best-ranked interface the server can offer for a peer it cannot
+/// place on any subnet -- a private address on an ordinary interface ahead
+/// of anything on a tunnel or a cellular link -- which is a guess, and a
+/// guess a receiver on a home network can usually act on. It is a parameter,
+/// and not simply left out, because a receiver whose address *is* known
+/// deserves the answer that is not a guess at all.
 ///
 /// Null when the listener is not running, when `peer_ip` is given but is not
 /// an IP address, or when the host has nothing but loopback -- all of which

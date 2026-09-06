@@ -32,8 +32,10 @@ abstract interface class LanMediaControl {
 
   /// The base URL to give a receiver at [peerIp], so a media URL built on it
   /// names an interface that receiver can connect back to. [peerIp] null
-  /// when the receiver's address is not known -- the Cast SDK does not
-  /// report one -- which answers the host's first non-loopback interface.
+  /// when the receiver's address is not known, which answers the server's
+  /// best-ranked interface -- a private address on an ordinary interface
+  /// ahead of anything on a tunnel or a cellular link -- rather than the
+  /// address it happened to enumerate first.
   ///
   /// Null when the listener is not running or the host has nothing but
   /// loopback: the receiver is out of reach, and a loopback URL would not
