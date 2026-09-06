@@ -10,6 +10,7 @@ import 'api/downloads.dart';
 import 'api/hello.dart';
 import 'api/prefs.dart';
 import 'api/server.dart';
+import 'api/storage.dart';
 import 'api/subtitles.dart';
 
 import 'dart:async';
@@ -76,7 +77,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1760243863;
+  int get rustContentHash => 437388966;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -177,6 +178,8 @@ abstract class RustLibApi extends BaseApi {
     required String playingUrl,
     required String referenceUrl,
   });
+
+  Future<PlatformInt64?> crateApiStorageVolumeFreeBytes({required String path});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -1199,6 +1202,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         debugName: "subtitles_match",
         argNames: ["playingUrl", "referenceUrl"],
       );
+
+  @override
+  Future<PlatformInt64?> crateApiStorageVolumeFreeBytes({
+    required String path,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 37,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_i_64,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiStorageVolumeFreeBytesConstMeta,
+        argValues: [path],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiStorageVolumeFreeBytesConstMeta =>
+      const TaskConstMeta(debugName: "volume_free_bytes", argNames: ["path"]);
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw) {

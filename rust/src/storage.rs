@@ -42,7 +42,7 @@ impl Volume {
         let existing = existing_ancestor(path);
         Self {
             path: path.to_string_lossy().to_string(),
-            free_bytes: existing.and_then(|dir| fs4::available_space(dir).ok()),
+            free_bytes: free_bytes(path),
             total_bytes: existing.and_then(|dir| fs4::total_space(dir).ok()),
         }
     }
@@ -179,6 +179,37 @@ impl EntryMetadata for std::fs::DirEntry {
     }
 }
 
+/// Bytes the volume holding `path` will still give an unprivileged writer,
+/// or `None` when that cannot be read (the path is on nothing that exists,
+/// or the platform will not say).
+///
+/// `fs4::available_space` is `statvfs`'s `f_frsize * f_bavail` -- `df`'s
+/// Available column, root's reserve excluded -- which is the same call and
+/// the same crate the embedded server's cache cleaner caps itself with
+/// (`server/src/cache_cleaner.rs`, `CACHE_FREE_SPACE_FLOOR`). Deliberately
+/// the same one: two answers to "how much room is left" that came from
+/// different places would drift, and the whole point of the floor is that
+/// both writers on a device measure it the same way.
+///
+/// **This sees a cache file that nothing can walk to.** mpv unlinks its
+/// demuxer cache the moment it creates it
+/// (`demuxer-cache-unlink-files=immediate`), so the file has no name in any
+/// directory -- but its blocks are still allocated until the fd closes, and
+/// `f_bavail` counts them. Measured here rather than assumed: writing
+/// 256 MiB through an unlinked fd moved `f_frsize * f_bavail` by 268439552
+/// bytes and closing the fd put every one of them back. So a directory walk
+/// is blind to the player's cache and a free-space reading is not, which is
+/// why this is the reading both budgets are kept against.
+///
+/// `None`, never 0, on failure: a volume nobody could measure is not a full
+/// one, and a caller that treated it as full would refuse a disk cache on
+/// every device whose filesystem will not answer.
+pub fn free_bytes(path: &Path) -> Option<u64> {
+    // Ask about the deepest ancestor that exists: a directory nobody has
+    // created yet still sits on a volume.
+    existing_ancestor(path).and_then(|dir| fs4::available_space(dir).ok())
+}
+
 /// The deepest existing ancestor of `path`, itself included. A volume can
 /// be asked about through a directory that is on it; a path that is not
 /// there yet has to be asked about through its parent.
@@ -231,6 +262,52 @@ mod tests {
         assert_eq!(cache_limit_bytes(None), None);
         assert_eq!(cache_limit_bytes(Some(f64::NAN)), None);
         assert_eq!(cache_limit_bytes(Some(-1.0)), None);
+    }
+
+    /// The claim the two cache budgets on one device rest on: mpv's
+    /// demuxer cache is unlinked the instant it is created, so no directory
+    /// walk can see it, but the blocks are held until the fd closes and
+    /// `f_bavail` counts them the whole time. Driven here rather than read
+    /// off a manual, with the same `open`/`unlink`/write order mpv uses.
+    ///
+    /// The tolerance is half of what is written, in both directions,
+    /// because the volume is shared with whatever else the machine is
+    /// doing: only another process moving more than 16 MiB the *opposite*
+    /// way inside this test's few hundred milliseconds could break it.
+    #[cfg(unix)]
+    #[test]
+    fn free_space_counts_a_file_no_directory_can_see() {
+        const WRITTEN: u64 = 32 * 1024 * 1024;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("demuxer-cache");
+        let mut file = std::fs::File::create(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        assert!(!path.exists(), "the cache file has no name any more");
+
+        let before = free_bytes(root.path()).expect("a tempdir is on a volume");
+        std::io::Write::write_all(&mut file, &vec![0u8; WRITTEN as usize]).unwrap();
+        file.sync_all().unwrap();
+        let during = free_bytes(root.path()).unwrap();
+        assert!(
+            during + WRITTEN / 2 < before,
+            "an unlinked file still costs the volume: {before} -> {during}"
+        );
+
+        drop(file);
+        let after = free_bytes(root.path()).unwrap();
+        assert!(
+            after > during + WRITTEN / 2,
+            "closing the fd gives the blocks back: {during} -> {after}"
+        );
+    }
+
+    #[test]
+    fn a_path_on_no_volume_at_all_reads_as_unknown_rather_than_full() {
+        // Relative, and nothing of that name in the working directory: the
+        // ancestor walk runs out before it finds anything to ask about.
+        // Unreadable must not be reported as zero -- a caller would then
+        // refuse a cache on a device that has plenty of room.
+        assert_eq!(free_bytes(Path::new("xtremio-no-such-path-4c1f")), None);
     }
 
     #[test]

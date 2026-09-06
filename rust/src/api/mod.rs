@@ -5,4 +5,5 @@ pub mod downloads;
 pub mod hello;
 pub mod prefs;
 pub mod server;
+pub mod storage;
 pub mod subtitles;
