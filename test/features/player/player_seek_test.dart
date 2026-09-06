@@ -248,10 +248,10 @@ void main() {
       await tester.tap(find.byTooltip('Forward 10 seconds (→)'));
       await tester.pump();
     }
-    expect(harness.engine.seeks, [
-      const Duration(seconds: 75),
-      const Duration(seconds: 85),
-      const Duration(seconds: 95),
+    expect(harness.engine.scans, [
+      const Duration(seconds: 10),
+      const Duration(seconds: 10),
+      const Duration(seconds: 10),
     ]);
 
     harness.engine.emitPosition(const Duration(seconds: 66));

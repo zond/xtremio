@@ -103,12 +103,13 @@ void main() {
       await press(tester, LogicalKeyboardKey.mediaPlayPause);
       expect(engine.playOrPauseCalls, 1);
 
-      // The seek step is `seekTimeDuration` (10 s by default).
+      // The seek step is `seekTimeDuration` (10 s by default), and a
+      // remote's transport keys scan with it like the arrows do.
       await press(tester, LogicalKeyboardKey.mediaFastForward);
       await press(tester, LogicalKeyboardKey.mediaRewind);
-      expect(engine.seeks, [
-        const Duration(seconds: 75),
-        const Duration(seconds: 65),
+      expect(engine.scans, [
+        const Duration(seconds: 10),
+        const Duration(seconds: -10),
       ]);
     });
 
@@ -447,10 +448,12 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowRight);
       await press(tester, LogicalKeyboardKey.arrowRight);
       await press(tester, LogicalKeyboardKey.arrowLeft);
-      expect(harness.engine.seeks, [
-        const Duration(seconds: 75),
-        const Duration(seconds: 85),
-        const Duration(seconds: 75),
+      // Steps, so they reach the engine as the distance each press
+      // asked for; the bar itself is at 75 s.
+      expect(harness.engine.scans, [
+        const Duration(seconds: 10),
+        const Duration(seconds: 10),
+        const Duration(seconds: -10),
       ]);
       expect(focusIn<SeekBar>(), isTrue, reason: 'focus stays on the bar');
     });
@@ -471,6 +474,7 @@ void main() {
         isEmpty,
         reason: 'the centre key is no seek',
       );
+      expect(harness.engine.scans, isEmpty);
       expect(focusIn<SeekBar>(), isTrue, reason: 'focus stays on the bar');
     });
 

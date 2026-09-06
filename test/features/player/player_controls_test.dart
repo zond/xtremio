@@ -156,10 +156,11 @@ void main() {
     expect(find.byTooltip('Pause (Space)'), findsOneWidget);
     expect(find.byIcon(Icons.pause), findsOneWidget);
 
-    // +10 s: the engine seeks, the core gets a Seek, the time text follows.
+    // +10 s: the engine scans, the core gets a Seek at where that lands,
+    // and the time text follows.
     await tester.tap(find.byTooltip('Forward 10 seconds (→)'));
     await tester.pump();
-    expect(engine.seeks, [const Duration(seconds: 75)]);
+    expect(engine.scans, [const Duration(seconds: 10)]);
     expect(harness.lastPlayerArgs('Seek'), {
       'time': 75000,
       'duration': total.inMilliseconds,
@@ -175,7 +176,8 @@ void main() {
 
     await tester.tap(find.byTooltip('Back 10 seconds (←)'));
     await tester.pump();
-    expect(engine.seeks.last, const Duration(milliseconds: 65300));
+    expect(engine.scans.last, const Duration(seconds: -10));
+    expect(find.text('1:05 / 1:36:00'), findsOneWidget);
 
     // Tapping the time shows what is left.
     await tester.tap(find.text('1:05 / 1:36:00'));
@@ -264,16 +266,17 @@ void main() {
     await key(LogicalKeyboardKey.keyK);
     expect(engine.playOrPauseCalls, 2);
 
-    // Arrows move by seekTimeDuration (10 s by default); Shift + arrows by
-    // the *short* seekShortTimeDuration (3 s), as in stremio-core.
+    // Arrows move by seekTimeDuration (10 s by default) and scan; Shift +
+    // arrows move by the *short* seekShortTimeDuration (3 s), as in
+    // stremio-core, and are the precise seek.
     await key(LogicalKeyboardKey.arrowRight);
     await key(LogicalKeyboardKey.keyJ);
-    await key(LogicalKeyboardKey.arrowLeft, shift: true);
-    expect(engine.seeks, [
-      const Duration(minutes: 2, seconds: 10),
-      const Duration(minutes: 2),
-      const Duration(minutes: 1, seconds: 57),
+    expect(engine.scans, [
+      const Duration(seconds: 10),
+      const Duration(seconds: -10),
     ]);
+    await key(LogicalKeyboardKey.arrowLeft, shift: true);
+    expect(engine.seeks, [const Duration(minutes: 1, seconds: 57)]);
     // Never before the start.
     engine.emitPosition(const Duration(seconds: 1));
     await pumpEvents(tester);
@@ -323,7 +326,7 @@ void main() {
     expect(engine.playOrPauseCalls, 1);
     await tester.tap(find.byTooltip('Forward 10 seconds'));
     await tester.pump();
-    expect(engine.seeks, [const Duration(seconds: 40)]);
+    expect(engine.scans, [const Duration(seconds: 10)]);
 
     // Double-tapping the right third of the video skips ahead on touch.
     final right = Offset(380, tester.getCenter(find.text('video surface')).dy);
@@ -331,7 +334,7 @@ void main() {
     await tester.pump(kDoubleTapMinTime);
     await tester.tapAt(right);
     await tester.pumpAndSettle();
-    expect(engine.seeks.last, const Duration(seconds: 50));
+    expect(engine.scans.last, const Duration(seconds: 10));
 
     // While buffering the centre shows the status instead of the buttons.
     engine.emitBuffering(true);

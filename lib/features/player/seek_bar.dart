@@ -12,6 +12,8 @@ import 'time_format.dart';
 /// [focusable] makes it a stop for the D-pad (a television has no pointer
 /// to drag it with): it takes focus like a button, shows itself active
 /// while it holds focus, and left/right seek by [seekStep] each press.
+/// Those presses are a scan rather than a position the viewer named, so
+/// they go to [onStep] where there is one.
 class SeekBar extends StatefulWidget {
   const SeekBar({
     super.key,
@@ -19,6 +21,7 @@ class SeekBar extends StatefulWidget {
     required this.buffered,
     required this.duration,
     required this.onSeek,
+    this.onStep,
     this.onScrubStart,
     this.onScrubEnd,
     this.focusable = false,
@@ -30,6 +33,18 @@ class SeekBar extends StatefulWidget {
   final Duration buffered;
   final Duration duration;
   final ValueChanged<Duration> onSeek;
+
+  /// One left/right press while focused, as the distance it moves rather
+  /// than the position it lands on: signed, and [seekStep] long.
+  ///
+  /// A step is the viewer scanning -- the press says "further on", not
+  /// "this moment" -- and the two are answered differently, one landing
+  /// on a keyframe at once and the other decoding to the exact frame
+  /// asked for ([PlaybackEngine.scanBy]). A tap or a drag on the bar is
+  /// the other kind and stays with [onSeek], which is also where the
+  /// presses go for an owner that has no use for the distinction.
+  final ValueChanged<Duration>? onStep;
+
   final VoidCallback? onScrubStart;
   final VoidCallback? onScrubEnd;
 
@@ -85,7 +100,12 @@ class _SeekBarState extends State<SeekBar> {
     final step = key == LogicalKeyboardKey.arrowLeft
         ? -widget.seekStep
         : widget.seekStep;
-    widget.onSeek(widget.position + step);
+    final onStep = widget.onStep;
+    if (onStep != null) {
+      onStep(step);
+    } else {
+      widget.onSeek(widget.position + step);
+    }
     return KeyEventResult.handled;
   }
 

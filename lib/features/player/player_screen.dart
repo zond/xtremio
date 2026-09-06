@@ -1691,7 +1691,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _showControls();
   }
 
-  void _seekTo(Duration target) {
+  /// Puts the playback at [target] and tells everything that watches
+  /// where it went.
+  ///
+  /// [scanning] is the distance a *step* asked for, and it changes what
+  /// the engine is asked to do rather than where the bar goes: a step is
+  /// a scan and lands on a keyframe at once ([PlaybackEngine.scanBy]),
+  /// where a position the viewer named -- a tap on the bar, the start of
+  /// a film they are coming back to -- is seeked to exactly. The target
+  /// is still computed here, because the bar, the core and the check on
+  /// the seek all want a position and mpv's answer to a scan arrives on
+  /// the position stream a moment later.
+  void _seekTo(Duration target, {Duration? scanning}) {
     final from = _position.value;
     final upper = _duration > Duration.zero ? _duration : target;
     final clamped = target < Duration.zero
@@ -1706,7 +1717,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       setState(() => _castStatus = _castStatus.at(clamped));
       _cast?.seek(clamped).ignore();
     } else {
-      _engine?.seek(clamped);
+      // Relative, and so from where playback actually is rather than
+      // from the target this press computed: a run of presses under a
+      // held key adds up in libmpv the same way it adds up here, and
+      // the clamp above is mpv's own at both ends of the file.
+      if (scanning != null) {
+        _engine?.scanBy(scanning);
+      } else {
+        _engine?.seek(clamped);
+      }
       _watchSeek(from: from, to: clamped);
     }
     if (_opened != null && _duration > Duration.zero) {
@@ -1726,7 +1745,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _showControls();
   }
 
-  void _seekBy(Duration delta) => _seekTo(_position.value + delta);
+  /// A step of [delta]: the seek keys, the bar's own left and right, the
+  /// buttons either side of play, and a double tap on the video. All of
+  /// them are scanning.
+  void _seekBy(Duration delta) =>
+      _seekTo(_position.value + delta, scanning: delta);
 
   /// Writes down the one thing about a seek nobody watching can see: that
   /// it did not happen.
@@ -3236,8 +3259,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (shift &&
         (key == LogicalKeyboardKey.arrowLeft ||
             key == LogicalKeyboardKey.arrowRight)) {
-      _seekBy(
-        key == LogicalKeyboardKey.arrowLeft ? -_shortSeekStep : _shortSeekStep,
+      // The short step is the precise one and stays an exact seek. It is
+      // three seconds by default, which is shorter than the gap between
+      // one keyframe and the next on a great many releases, so a scan
+      // would answer a press for three seconds with a jump of ten -- and
+      // this is the key a viewer reaches for when the step is too coarse
+      // already.
+      _seekTo(
+        _position.value +
+            (key == LogicalKeyboardKey.arrowLeft
+                ? -_shortSeekStep
+                : _shortSeekStep),
       );
       return KeyEventResult.handled;
     }
@@ -3609,6 +3641,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 onSeekBack: () => _seekBy(-seekStep),
                                 onSeekForward: () => _seekBy(seekStep),
                                 onSeek: _seekTo,
+                                onStep: _seekBy,
                                 onScrubStart: () {
                                   _scrubbing = true;
                                   _controlsTimer?.cancel();

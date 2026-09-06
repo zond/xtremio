@@ -251,6 +251,7 @@ class PlayerBottomBar extends StatelessWidget {
     required this.onSeekBack,
     required this.onSeekForward,
     required this.onSeek,
+    required this.onStep,
     required this.onScrubStart,
     required this.onScrubEnd,
     required this.onToggleTimeDisplay,
@@ -278,6 +279,12 @@ class PlayerBottomBar extends StatelessWidget {
   final VoidCallback onSeekBack;
   final VoidCallback onSeekForward;
   final ValueChanged<Duration> onSeek;
+
+  /// One left/right press on the focused seek bar, as the signed
+  /// distance it moves. A scan step, where [onSeek] is a position the
+  /// viewer named; see [SeekBar.onStep].
+  final ValueChanged<Duration> onStep;
+
   final VoidCallback onScrubStart;
   final VoidCallback onScrubEnd;
   final VoidCallback onToggleTimeDisplay;
@@ -305,6 +312,7 @@ class PlayerBottomBar extends StatelessWidget {
           buffered: buffered,
           duration: duration,
           onSeek: onSeek,
+          onStep: onStep,
           onScrubStart: onScrubStart,
           onScrubEnd: onScrubEnd,
           focusable: isTv,

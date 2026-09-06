@@ -78,12 +78,14 @@ void main() {
     await tester.tap(find.byTooltip('Forward 30 seconds (→)'));
     await tester.pump();
     await key(tester, LogicalKeyboardKey.arrowLeft);
-    await key(tester, LogicalKeyboardKey.arrowRight, shift: true);
-    expect(engine.seeks, [
-      const Duration(minutes: 2, seconds: 30),
-      const Duration(minutes: 2),
-      const Duration(minutes: 2, seconds: 5),
+    // A step is a scan and is asked for as a distance; the short step is
+    // the precise one and is still a position.
+    expect(engine.scans, [
+      const Duration(seconds: 30),
+      const Duration(seconds: -30),
     ]);
+    await key(tester, LogicalKeyboardKey.arrowRight, shift: true);
+    expect(engine.seeks, [const Duration(minutes: 2, seconds: 5)]);
 
     // The labels follow a settings change while the player is open.
     harness.core.setState(CoreField.ctx, ctxWith({'seekTimeDuration': 15000}));
@@ -91,7 +93,7 @@ void main() {
     expect(find.byTooltip('Back 15 seconds (←)'), findsOneWidget);
     expect(find.byIcon(Icons.fast_rewind), findsOneWidget);
     await key(tester, LogicalKeyboardKey.keyL);
-    expect(engine.seeks.last, const Duration(minutes: 2, seconds: 20));
+    expect(engine.scans.last, const Duration(seconds: 15));
   });
 
   testWidgets('the up-next card counts down nextVideoNotificationDuration', (
