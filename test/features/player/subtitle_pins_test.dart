@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_tracks.dart';
+import 'package:xtremio/features/player/subtitle_groups.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/fake_prefs_client.dart';
@@ -47,6 +48,13 @@ void main() {
     ];
     return harness;
   }
+
+  /// One addon file, for the tests that build the menu's groups by hand
+  /// instead of driving the player.
+  SubtitleSource addonFile(String lang, String url) => SubtitleSource(
+    SubtitleInfo(<String, dynamic>{'lang': lang, 'url': url}),
+    addonBase: 'https://subs.example.org/manifest.json',
+  );
 
   /// Four languages, answered in an order that is nobody's alphabet.
   List<Map<String, dynamic>> fourLanguages() => [
@@ -266,6 +274,57 @@ void main() {
     expect(
       topOf(tester, 'Swedish'),
       lessThan(topOf(tester, 'From subtitle addons')),
+    );
+  });
+
+  testWidgets('the menu ranks the sheet it draws, and no caller can rank '
+      'less of it', (tester) async {
+    useWideViewport(tester);
+    // The probe that caught the note overclaiming. Handed the ranking of
+    // the addons' rows alone -- Swedish and Danish -- the menu drew "The
+    // 2 languages on offer here that you pick most often" with English,
+    // picked more often than either, three rows above as the video's own
+    // track. Nothing can hand a ranking down any more: the menu is given
+    // the counts and ranks what it has on offer, both sections of it.
+    final groups = groupSubtitlesByLanguage([
+      addonFile('swe', 'https://subs.example.org/sv.srt'),
+      addonFile('dan', 'https://subs.example.org/da.srt'),
+      addonFile('fre', 'https://subs.example.org/fr.srt'),
+    ], addonName: (_) => 'OpenSubtitles v3');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SubtitleMenu(
+            embedded: englishTrack.subtitle,
+            groups: groups,
+            picks: const SubtitlePickMemory(
+              shows: [],
+              languages: {'English': 41, 'Swedish': 30, 'Danish': 10},
+            ),
+            activeId: null,
+            loading: false,
+            onOff: () {},
+            onEmbedded: (_) {},
+            onExternal: (_) {},
+            onAdjustTiming: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text(SubtitleMenu.pinnedNote(1, inFile: 1)), findsOneWidget);
+    expect(find.text(SubtitleMenu.pinnedNote(2)), findsNothing);
+    // One slot went to the track above, one lifted Swedish, and Danish
+    // -- which the discarded ranking would have lifted -- is left in the
+    // alphabet where it belongs.
+    expect(find.text('Swedish'), findsOneWidget);
+    expect(
+      topOf(tester, 'Swedish'),
+      lessThan(topOf(tester, 'From subtitle addons')),
+    );
+    expect(
+      topOf(tester, 'From subtitle addons'),
+      lessThan(topOf(tester, 'Danish')),
     );
   });
 

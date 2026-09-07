@@ -586,7 +586,12 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   count, both are counted under one label
   (`subtitleLanguageLabel`), and the heading's note claims a comparison
   among the languages *on offer here* -- which was false the moment the
-  ranking left out a section the sheet draws three rows higher. A winner
+  ranking left out a section the sheet draws three
+  rows higher. So the menu is handed the counts and not a ranking
+  (`SubtitleMenu.picks`) and builds that union out of the two lists it
+  draws itself: a parameter taking a finished ranking is one a caller
+  can fill from less than the sheet, and the doc sentence asking them
+  not to was checked by nothing. A winner
   the file itself carries has no row down here to lift, so it takes its
   slot without one and the note says that in a sentence of its own
   (`SubtitleMenu.pinnedNote`, `shown` and `inFile`); a language the file
