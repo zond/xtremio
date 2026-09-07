@@ -129,6 +129,38 @@ void main() {
       });
     });
 
+    test('a download the server refused at boot puts nothing up, and its retry '
+        'does', () async {
+      client.registry = registryOf([
+        DownloadView({
+          'metaId': 'tt1',
+          'videoId': 'tt1',
+          'infoHash': 'abcdabcdabcdabcdabcd',
+          'fileIdx': 0,
+          'name': 'A Film',
+          'size': 0,
+          'downloaded': 0,
+          'state': 'error',
+          'error': 'the downloads volume is not available',
+        }),
+      ]);
+      final service = build();
+      await service.start();
+      await settle();
+      expect(serviceMethods(), isEmpty);
+      expect(service.isRunning, isFalse);
+
+      // Retry re-adds the entry; the first row the ticker pushes for it is
+      // queued again, and that is a download starting.
+      final retried = viewAt('tt1', 0, size: 0);
+      client.registry = registryOf([retried]);
+      client.emitProgress([rowOf(retried)]);
+      await settle();
+
+      expect(serviceMethods(), ['requestNotificationPermission', 'start']);
+      expect(service.isRunning, isTrue);
+    });
+
     test('a download that begins while the app runs starts it', () async {
       final service = build();
       await service.start();
@@ -334,6 +366,34 @@ void main() {
       expect(summary.percent, isNull);
       expect(summary.toNotification()['progress'], -1);
       expect(summary.text, '40 B so far');
+    });
+
+    test('an errored download is not something to hold it for either', () {
+      // What repin_unfinished_in leaves behind when the server refuses the
+      // pin at boot -- an unmounted downloads volume, a full disk: no
+      // engine, no peers, nothing the process could be kept alive for.
+      final refused = DownloadView({
+        'metaId': 'tt2',
+        'videoId': 'tt2',
+        'size': 0,
+        'downloaded': 0,
+        'state': 'error',
+        'error': 'the downloads volume is not available',
+      });
+      expect(
+        refused.isUnfinished,
+        isTrue,
+        reason: 'the ticker still counts it',
+      );
+
+      expect(DownloadsSummary.of(registryOf([refused])).isIdle, isTrue);
+      // Beside a download that is really on its way it is not counted, and
+      // its unknown length does not make the bar endless.
+      final summary = DownloadsSummary.of(
+        registryOf([viewAt('tt1', 40), refused]),
+      );
+      expect(summary.active, 1);
+      expect(summary.percent, 40);
     });
 
     test('a complete or paused download is not something to hold it for', () {

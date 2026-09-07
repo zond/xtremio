@@ -560,9 +560,16 @@ FFI and only Dart can act on either.
 **What decides when it runs.** `DownloadsForegroundService`
 (`lib/features/downloads/downloads_service.dart`), from the one
 `DownloadsClient` the app holds: the service goes up as soon as one entry
-is unfinished (neither complete nor paused, the same test
-`Entry::unfinished` makes in `rust/src/downloads.rs`) and comes down the
-moment none is. Playing or seeding is not a reason to hold it. The progress
+is on its way -- neither complete nor paused, and not in the error state
+either -- and comes down the moment none is. Playing or seeding is not a
+reason to hold it, and neither is an errored entry: that is a pin the
+server refused (a downloads volume that is not mounted, a full disk) or a
+torrent whose add failed, with no engine and no peers behind it, so a
+process kept alive for it would fetch nothing and the notification would
+say "Waiting to start" for ever. A retry re-adds it, and the row that
+follows is what brings the service up. (The Rust ticker's
+`Entry::unfinished` still counts an error, because the boot's re-pin
+shares the test; the service's question is narrower.) The progress
 feed only carries rows that *moved*, so a row for a key no listing has
 mentioned is read as "something was added" and answered with a fresh
 listing, and a removal — which has no event at all — is caught by

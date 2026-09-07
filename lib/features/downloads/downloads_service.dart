@@ -6,11 +6,22 @@ import 'package:flutter/services.dart';
 import '../../core/core.dart';
 
 /// What is being fetched right now, as the notification puts it: how many
-/// entries are unfinished and how far they have got between them.
+/// entries are on their way and how far they have got between them.
 ///
-/// Unfinished is the registry's own test ([DownloadView.isUnfinished]), so
-/// this counts exactly what the Rust ticker still polls for. A paused or
-/// complete download is not a reason to hold a service.
+/// On its way is narrower than the registry's own unfinished
+/// ([DownloadView.isUnfinished]): a paused or complete download is not a
+/// reason to hold a service, and neither is one in the error state. An
+/// errored entry is a pin the server refused (a full or missing downloads
+/// volume, the commonest case on a TV box) or a torrent whose add failed,
+/// and in both the server has nothing in flight for it -- no engine, no
+/// peers to wait for -- so a process kept alive for it fetches nothing.
+/// What it did fetch was a "Downloading 1 title · Waiting to start"
+/// notification that never went away, and on Android 15 a `dataSync`
+/// service that ran into its time limit for nothing. What puts it right is
+/// a retry, which re-adds the entry; the row that follows is what brings
+/// the service up. The Rust ticker still counts an error as unfinished
+/// (`Entry::unfinished`), because the boot's re-pin does and the two share
+/// the test; that is its question and not this one's.
 @immutable
 class DownloadsSummary {
   const DownloadsSummary({
@@ -39,7 +50,7 @@ class DownloadsSummary {
     var size = 0;
     var measured = true;
     for (final view in registry.items.values) {
-      if (!view.isUnfinished) continue;
+      if (!view.isUnfinished || view.state == DownloadState.error) continue;
       active++;
       downloaded += view.downloaded;
       size += view.size;
@@ -52,7 +63,7 @@ class DownloadsSummary {
     );
   }
 
-  /// How many downloads are unfinished.
+  /// How many downloads are on their way.
   final int active;
 
   /// Bytes on the device of them, and how many there are in all. [size] is
