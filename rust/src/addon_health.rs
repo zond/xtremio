@@ -595,8 +595,20 @@ pub fn load_in(app: &AppState) {
 /// Commits one sweep into `app` and writes the table out if a write is
 /// due. Answers whether the sweep was recorded (see [`Sweep::commit_into`]).
 pub fn commit_in(app: &AppState, sweep: Sweep) -> bool {
+    commit_in_at(app, sweep, Utc::now())
+}
+
+/// [`commit_in`] as of `now` rather than the wall clock: the instant the
+/// counts are aged to and the answers stamped with is a parameter here, as
+/// it already is for [`Table::record`] and [`Sweep::commit_into`] beneath.
+/// A test that records the same answer twice can then hold the clock still
+/// and see exactly two. Through the real clock the second answer lands a
+/// few microseconds after the first, and if a millisecond boundary falls
+/// between them the first count is aged by `0.5^(1ms / 14 days)` -- about
+/// `1 - 3e-10` -- before the second is added, so "two answers is 2.0" holds
+/// only when both happen to share a millisecond.
+pub fn commit_in_at(app: &AppState, sweep: Sweep, now: DateTime<Utc>) -> bool {
     let mut counted = app.addon_health.counted();
-    let now = Utc::now();
     app.addon_health.sweeps.fetch_add(1, Ordering::Relaxed);
     if !sweep.commit_into(&mut counted.table, now) {
         return false;

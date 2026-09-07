@@ -79,6 +79,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard};
 
+use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use stremio_core::models::common::{Loadable, ResourceError, ResourceLoadable};
 use stremio_core::types::addon::ResourceRequest;
@@ -380,7 +381,16 @@ pub fn sweeps(app: &AppState, model: &XtremioModel, fields: &[XtremioModelField]
 /// with the sweeps -- so the order is only ever observer, then table, then
 /// file.
 pub fn commit(app: &AppState, sweeps: Vec<Sweep>) -> usize {
+    commit_at(app, sweeps, Utc::now())
+}
+
+/// [`commit`] as of `now`. One instant for the whole batch, because the
+/// sweeps came out of one `NewState` and were settled by the time it was
+/// read; and a parameter rather than a read of the clock, so a test about
+/// counting can hold it still (see
+/// [`crate::addon_health::commit_in_at`]).
+pub fn commit_at(app: &AppState, sweeps: Vec<Sweep>, now: DateTime<Utc>) -> usize {
     sweeps.into_iter().fold(0, |recorded, sweep| {
-        recorded + usize::from(crate::addon_health::commit_in(app, sweep))
+        recorded + usize::from(crate::addon_health::commit_in_at(app, sweep, now))
     })
 }

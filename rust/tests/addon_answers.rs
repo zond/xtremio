@@ -5,6 +5,7 @@
 //! a model built by hand and an [`AppState`] of this test's own, so no
 //! network, no runtime and no process globals are involved.
 
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use stremio_core::models::catalogs_with_extra::{CatalogsWithExtra, Selected};
 use stremio_core::models::common::{Loadable, ResourceError, ResourceLoadable};
@@ -100,12 +101,23 @@ fn loading() -> Option<Loadable<Vec<MetaItemPreview>, ResourceError>> {
     Some(Loadable::Loading)
 }
 
+/// The one instant every answer in these tests is counted as of. Counts
+/// decay with wall-clock time, and a test that asks for exactly two answers
+/// must not be able to see the clock move between the two -- across a
+/// millisecond boundary the first would be aged by `1 - 3e-10` before the
+/// second was added, and `2.0` would not be `2.0`.
+fn now() -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339("2026-09-04T12:00:00Z")
+        .expect("parse")
+        .with_timezone(&Utc)
+}
+
 /// What the runtime pump does with a `NewState`: read the model, let it go,
 /// then count what it said. Two calls, because the second one writes to
 /// disk and the model's read lock must not be held while it does.
 fn observe_fields(app: &AppState, model: &XtremioModel, fields: &[XtremioModelField]) -> usize {
     let sweeps = xtremio_core::addon_observer::sweeps(app, model, fields);
-    xtremio_core::addon_observer::commit(app, sweeps)
+    xtremio_core::addon_observer::commit_at(app, sweeps, now())
 }
 
 fn observe(app: &AppState, model: &XtremioModel) -> usize {
