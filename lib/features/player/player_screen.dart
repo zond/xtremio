@@ -3027,10 +3027,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
               // list still get the same order, and the auto-pick's one
               // case that reads it (an enabled preference naming no
               // language takes the head of the whole list) is untouched.
+              //
+              // Everything the sheet offers is ranked together, the
+              // file's own tracks with the addons' languages: picking
+              // either raises the same count, so a ranking over the
+              // groups alone would let the menu call a language the
+              // commonest on offer with a language picked three times as
+              // often drawn a few rows above it. The alphabet goes first
+              // so a tie between two addon rows still comes out
+              // alphabetically, and a tie with a track in the file is
+              // spent on the row a viewer would otherwise have to find.
               pinnedLanguages:
-                  _prefs?.subtitlePicks.pinned(
-                    groups.map((group) => group.language),
-                  ) ??
+                  _prefs?.subtitlePicks.pinned([
+                    for (final group in groups) group.language,
+                    for (final track in tracks.subtitle)
+                      if (track.language case final code?
+                          when code.trim().isNotEmpty)
+                        subtitleLanguageLabel(code),
+                  ]) ??
                   const [],
               activeId: tracks.activeSubtitleId,
               loading: state?.subtitlesLoading ?? false,

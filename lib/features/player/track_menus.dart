@@ -53,18 +53,27 @@ class SubtitleMenu extends StatefulWidget {
   final ValueChanged<TrackInfo> onEmbedded;
   final ValueChanged<SubtitleInfo> onExternal;
 
-  /// The languages of [groups] to draw first, under a section of their
-  /// own: the ones this viewer picks most often
+  /// The languages this sheet offers that this viewer picks most often
   /// (`SubtitlePickMemory.pinned`), already in the order they belong in.
   ///
-  /// They are **lifted, not copied** -- each appears once, above, and not
-  /// again in the alphabet below, because two rows that apply the same
-  /// file are exactly what `_disambiguated` exists to prevent. The
-  /// section label is what explains where they went.
+  /// **Ranked over the whole sheet, [embedded] included.** A viewer does
+  /// not care whether a subtitle came from the video or from an addon,
+  /// both are counted under the one label (`subtitleLanguageLabel`), and
+  /// the note under the heading claims a comparison among the languages
+  /// *on offer here* -- so the caller ranks the union of the two lists,
+  /// not [groups] alone.
   ///
-  /// A language not in [groups] is ignored: a pin moves a row that
-  /// exists, and this menu never invents one for a language the addons
-  /// did not answer with.
+  /// A language of [groups] is **lifted, not copied** -- it appears once,
+  /// above, and not again in the alphabet below, because two rows that
+  /// apply the same file are exactly what `_disambiguated` exists to
+  /// prevent. A language this sheet offers only as a track in [embedded]
+  /// is not lifted at all: its row is drawn above this section already,
+  /// so there is nothing here to move, and [pinnedNote] is what says
+  /// where it went.
+  ///
+  /// A language the sheet does not offer at all is ignored: a pin moves a
+  /// row that exists, and this menu never invents one for a language
+  /// nothing answered with.
   final List<String> pinnedLanguages;
 
   /// Opens the panel that shifts and stretches what is playing. Offered
@@ -82,18 +91,35 @@ class SubtitleMenu extends StatefulWidget {
   /// What that heading's note says, which has to be true of one row as
   /// well as of two: a viewer with a single second language sees one.
   ///
-  /// **"on offer here" is the whole of what makes it true.** A pin is
-  /// only ever a row this episode actually offers, so the language this
-  /// viewer really picks most often can be missing from the answer
-  /// altogether -- and then a note calling the row above it their
-  /// commonest asserts the opposite of what the counts say. The
-  /// comparison [SubtitlePickMemory.pinned] makes is among the languages
-  /// on offer, and that is the comparison this sentence reports.
-  static String pinnedNote(int count) => count == 1
-      ? 'The language on offer here that you pick most often, lifted out '
-            'of the list below.'
-      : 'The $count languages on offer here that you pick most often, '
-            'lifted out of the list below.';
+  /// **"on offer here" is the whole of what makes it true, and "here" is
+  /// the whole sheet.** A pin is only ever a language this episode
+  /// actually offers, so the language this viewer really picks most often
+  /// can be missing from the answer altogether -- and then a note calling
+  /// the row above it their commonest asserts the opposite of what the
+  /// counts say. The comparison [SubtitlePickMemory.pinned] makes is
+  /// among the languages on offer, and that is the comparison this
+  /// sentence reports.
+  ///
+  /// The languages in the file are on offer here too, three rows up, so
+  /// they are in that comparison ([pinnedLanguages]) -- and one of them
+  /// can win a place without there being a row down here to lift.
+  /// [shown] is the rows lifted and [inFile] the winners already drawn as
+  /// tracks in the video: the count in the first sentence is both, which
+  /// is what the ranking really compared, and the second sentence is what
+  /// stops that count promising a row it did not move. Both are counted
+  /// from what this menu can see on offer, so a caller that ranked less
+  /// than the whole sheet leaves the note understating rather than
+  /// overclaiming.
+  static String pinnedNote(int shown, {int inFile = 0}) {
+    final total = shown + inFile;
+    final head = total == 1
+        ? 'The language on offer here that you pick most often'
+        : 'The $total languages on offer here that you pick most often';
+    if (inFile == 0) return '$head, lifted out of the list below.';
+    return '$head. ${inFile == 1 ? 'One is' : '$inFile are'} already in '
+        'this file, above; ${shown == 1 ? 'the other is' : 'the rest are'} '
+        'lifted out of the list below.';
+  }
 
   /// `title`, else the language, else a numbered fallback.
   static String embeddedLabel(TrackInfo track, int index) =>
@@ -169,6 +195,29 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
     );
   }
 
+  /// How many pinned languages this sheet offers only as a track in the
+  /// video, given the [lifted] rows: the winners of the ranking that the
+  /// section above already draws, so there is no row down here to move.
+  ///
+  /// Counted from the tracks themselves rather than taken on the
+  /// caller's word, so [SubtitleMenu.pinnedNote] only ever counts a
+  /// language this menu really has on offer.
+  int _pinnedInFile(List<SubtitleLanguageGroup> lifted) {
+    final labels = {
+      for (final track in widget.embedded)
+        if (track.language case final code? when code.trim().isNotEmpty)
+          subtitleLanguageLabel(code),
+    };
+    var count = 0;
+    for (final language in widget.pinnedLanguages) {
+      if (labels.contains(language) &&
+          !lifted.any((group) => group.language == language)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeId = widget.activeId;
@@ -211,7 +260,12 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
         ],
         if (pinned.isNotEmpty) ...[
           const _SectionLabel(SubtitleMenu.pinnedLabel),
-          _SectionNote(SubtitleMenu.pinnedNote(pinned.length)),
+          _SectionNote(
+            SubtitleMenu.pinnedNote(
+              pinned.length,
+              inFile: _pinnedInFile(pinned),
+            ),
+          ),
           for (final group in pinned) ..._languageRows(group, activeId),
         ],
         if (rest.isNotEmpty || widget.loading)

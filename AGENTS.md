@@ -581,7 +581,17 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   arriving into the alphabet. They are **lifted, not duplicated** -- one row each, and the
   heading explains where they went -- only ever languages this episode
   actually offers, and not at all when every language there is would be
-  pinned. It happens in the menu's own rendering, after
+  pinned. **What is ranked is everything the sheet offers, the tracks in
+  the file with the addons' languages**: picking either raises the same
+  count, both are counted under one label
+  (`subtitleLanguageLabel`), and the heading's note claims a comparison
+  among the languages *on offer here* -- which was false the moment the
+  ranking left out a section the sheet draws three rows higher. A winner
+  the file itself carries has no row down here to lift, so it takes its
+  slot without one and the note says that in a sentence of its own
+  (`SubtitleMenu.pinnedNote`, `shown` and `inFile`); a language the file
+  and an addon both offer is one language and takes one slot. It happens
+  in the menu's own rendering, after
   `groupSubtitlesByLanguage`, so both consumers of the ordered list still
   get the same order and the auto-pick's one case that reads it is
   untouched. Inside a

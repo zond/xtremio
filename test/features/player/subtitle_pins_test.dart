@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/player/playback_tracks.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/fake_prefs_client.dart';
@@ -55,6 +56,19 @@ void main() {
     upload('fr-1', 'fre', 'https://subs.example.org/fr.srt'),
   ];
 
+  /// The same answer with the English upload taken out, so English is on
+  /// offer only where the video itself carries it.
+  List<Map<String, dynamic>> withoutEnglish() => [
+    for (final item in fourLanguages())
+      if (item['lang'] != 'eng') item,
+  ];
+
+  /// One English subtitle track inside the video, which is what the
+  /// menu's "In this file" section is drawn from.
+  const englishTrack = PlaybackTracks(
+    subtitle: [TrackInfo(id: '3', language: 'eng')],
+  );
+
   /// Preferences whose only content is how often each language has been
   /// picked -- no show row, so nothing is preselected and the menu is the
   /// whole of what changes.
@@ -64,8 +78,13 @@ void main() {
     }),
   );
 
-  Future<void> openMenu(WidgetTester tester, PlayerHarness harness) async {
+  Future<void> openMenu(
+    WidgetTester tester,
+    PlayerHarness harness, {
+    PlaybackTracks? tracks,
+  }) async {
     await harness.pump(tester);
+    if (tracks != null) harness.engine.emitTracks(tracks);
     harness.engine.emitDuration(const Duration(minutes: 96));
     await pumpEvents(tester);
     await tester.tap(find.byTooltip('Subtitles (S)'));
@@ -178,6 +197,76 @@ void main() {
     // is allowed to say.
     expect(SubtitleMenu.pinnedNote(1), contains('on offer here'));
     expect(SubtitleMenu.pinnedNote(2), contains('on offer here'));
+  });
+
+  testWidgets('a language only the file offers still takes a pin, and the '
+      'note says where it went', (tester) async {
+    useWideViewport(tester);
+    // English is picked three times as often as anything else and no
+    // addon answered with it: this sheet offers it as the track inside
+    // the video, drawn above the pins. Ranking only the addons' rows
+    // lifted Swedish and Danish under a note calling them "the 2
+    // languages on offer here that you pick most often" -- with English
+    // on offer here, a few rows further up.
+    final prefs = counting({'English': 41, 'Swedish': 12, 'Danish': 4});
+    await prefs.load();
+
+    await openMenu(
+      tester,
+      harnessWith(withoutEnglish(), prefs: prefs),
+      tracks: englishTrack,
+    );
+
+    expect(find.text(SubtitleMenu.pinnedNote(1, inFile: 1)), findsOneWidget);
+    // Neither claim this menu could make about its rows alone: English
+    // is on offer here and is picked more often than either of them.
+    expect(find.text(SubtitleMenu.pinnedNote(2)), findsNothing);
+    expect(find.text(SubtitleMenu.pinnedNote(1)), findsNothing);
+    // The winner with no row to lift is the file's own track, above the
+    // heading, and the slot it holds is one Danish does not get.
+    expect(
+      topOf(tester, 'English'),
+      lessThan(topOf(tester, SubtitleMenu.pinnedLabel)),
+    );
+    expect(
+      topOf(tester, 'Swedish'),
+      lessThan(topOf(tester, 'From subtitle addons')),
+    );
+    expect(
+      topOf(tester, 'From subtitle addons'),
+      lessThan(topOf(tester, 'Danish')),
+    );
+  });
+
+  testWidgets('a language the file and the addons both offer is one pin', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // The file's English track and the English upload are one language
+    // to the viewer and to the counts, so English takes one of the two
+    // slots and Swedish takes the other.
+    final prefs = counting({'English': 41, 'Swedish': 12});
+    await prefs.load();
+
+    await openMenu(
+      tester,
+      harnessWith(fourLanguages(), prefs: prefs),
+      tracks: englishTrack,
+    );
+
+    expect(find.text(SubtitleMenu.pinnedNote(2)), findsOneWidget);
+    // Once in the file's own section and once lifted, and both above the
+    // alphabet: a language named twice that took both slots would leave
+    // Swedish down in it.
+    expect(find.text('English'), findsNWidgets(2));
+    expect(
+      tester.getTopLeft(find.text('English').last).dy,
+      lessThan(topOf(tester, 'From subtitle addons')),
+    );
+    expect(
+      topOf(tester, 'Swedish'),
+      lessThan(topOf(tester, 'From subtitle addons')),
+    );
   });
 
   testWidgets('nothing is pinned when there is nothing to lift it above', (

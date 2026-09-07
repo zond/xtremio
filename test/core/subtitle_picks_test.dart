@@ -156,6 +156,19 @@ void main() {
       expect(memory.pinned(['English', 'Thai']), ['English']);
     });
 
+    test('a language offered twice takes one slot', () {
+      // The menu hands over everything the sheet offers, so a language
+      // the video carries a track for *and* an addon answered with
+      // arrives twice. Two slots spent on one language would lift one
+      // row and leave the viewer's second language down in the alphabet.
+      final memory = counting({'English': 41, 'Swedish': 12});
+
+      expect(memory.pinned(['English', 'Swedish', 'English']), [
+        'English',
+        'Swedish',
+      ]);
+    });
+
     test('a language this episode does not offer is not pinned', () {
       // A pin is a row moved, never a row invented: the addons answered
       // with no Swedish here, and nothing about the memory may put a

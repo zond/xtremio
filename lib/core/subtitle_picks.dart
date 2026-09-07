@@ -196,19 +196,30 @@ final class SubtitlePickMemory {
   /// [pinThreshold] times.
   ///
   /// **Only languages this episode really offers.** A pin is a row moved,
-  /// never a row invented, so a language the addons did not answer with
-  /// cannot be pinned -- which is the same rule that stops the auto-pick
+  /// never a row invented, so a language nothing answered with cannot be
+  /// pinned -- which is the same rule that stops the auto-pick
   /// preselecting one.
   ///
-  /// [offered] is taken in the order the menu already has it, which is
-  /// alphabetical, and the sort is on (picks, that position) so ties come
-  /// out alphabetically and two rebuilds of one menu never disagree --
-  /// `List.sort` is not stable, so the position is part of the key rather
-  /// than left to it.
+  /// **[offered] is every language the sheet offers**, the tracks inside
+  /// the video as well as the addons' answers: a pick of either raises
+  /// the same count here (`subtitleLanguageLabel` is what both are stored
+  /// as), so a ranking that left the file's own tracks out would call a
+  /// language the commonest of what is on offer while a language picked
+  /// three times as often sat in the section above it. A language named
+  /// twice, because the file and an addon both have it, is one language
+  /// and takes one slot; the first mention is the one that counts.
+  ///
+  /// [offered] is taken in the order the caller has it -- the menu's
+  /// alphabet, then the file's own tracks -- and the sort is on (picks,
+  /// that position) so ties come out in that order and two rebuilds of
+  /// one menu never disagree -- `List.sort` is not stable, so the
+  /// position is part of the key rather than left to it.
   List<String> pinned(Iterable<String> offered) {
     final candidates = <(int, int, String)>[];
+    final seen = <String>{};
     var position = 0;
     for (final language in offered) {
+      if (!seen.add(language)) continue;
       final picks = languages[language] ?? 0;
       if (picks >= pinThreshold) candidates.add((picks, position, language));
       position++;
