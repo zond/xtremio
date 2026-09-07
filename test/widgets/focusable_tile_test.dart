@@ -583,4 +583,79 @@ void main() {
       expect(controller.offset, 0);
     });
   });
+
+  group('a row is marked without being moved', () {
+    /// Three buttons, each its own focus stop under its own [FocusMarked].
+    Widget rows() => Column(
+      children: [
+        for (var i = 0; i < 3; i++)
+          FocusMarked(
+            child: TextButton(onPressed: () {}, child: Text('row $i')),
+          ),
+      ],
+    );
+
+    testWidgets('the ring follows focus into a control that keeps its node', (
+      tester,
+    ) async {
+      await tester.pumpWidget(harness(rows()));
+      await tester.pumpAndSettle();
+      expect(ringOf(tester, 'row 0'), isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(ringOf(tester, 'row 0'), isTrue);
+
+      // And the watching node is skipped by traversal, so the walk is the
+      // one it would have been without it.
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(ringOf(tester, 'row 0'), isFalse);
+      expect(ringOf(tester, 'row 1'), isTrue);
+    });
+
+    testWidgets('nothing zooms and nothing is lifted', (tester) async {
+      await tester.pumpWidget(harness(rows()));
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+
+      expect(ringOf(tester, 'row 0'), isTrue);
+      expect(
+        find
+            .ancestor(
+              of: find.text('row 0'),
+              matching: find.byType(AnimatedScale),
+            )
+            .evaluate(),
+        isEmpty,
+        reason: 'a scaled row overlaps the rows it sits between',
+      );
+      expect(liftedOf(tester, 'row 0'), isFalse);
+    });
+
+    testWidgets('bold still dims the rows the remote is not on', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        harness(rows(), prefs: emphasis(FocusEmphasis.bold)),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+
+      expect(opacityOf(tester, 'row 0'), 1);
+      expect(opacityOf(tester, 'row 1'), FocusHighlight.dimmedOpacity);
+      expect(strokeWidths(tester, 'row 0'), [
+        FocusRing.boldWidth / 2,
+        FocusRing.boldWidth / 2,
+      ]);
+    });
+
+    testWidgets('off a TV it is its child and nothing else', (tester) async {
+      await tester.pumpWidget(harness(rows(), device: DeviceProfile.fallback));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FocusRing), findsNothing);
+      expect(find.text('row 0'), findsOneWidget);
+    });
+  });
 }

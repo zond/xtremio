@@ -184,9 +184,34 @@ class TileFocus extends InheritedWidget {
   bool updateShouldNotify(TileFocus oldWidget) => focused != oldWidget.focused;
 }
 
+/// How much of the focus indicator a surface family wears.
+///
+/// The ring is the part everything the remote can land on gets. The zoom
+/// and the shadow are the parts that only mean anything on something drawn
+/// as an object: a poster lifted a twentieth out of its row reads as picked
+/// up, from three metres, on a display that cannot deliver contrast. A
+/// settings row lifted the same amount reads as a mistake -- [AnimatedScale]
+/// is a paint transform, so nothing moves aside for it and the row overlaps
+/// the two it sits between, on every step of the walk down a list.
+///
+/// So the family decides once, where the widget is written, rather than
+/// every call site deciding again.
+enum FocusTreatment {
+  /// Something drawn as an object: a poster, an episode card, a source. The
+  /// ring, the zoom, the shadow, and in [FocusEmphasis.bold] the dimming of
+  /// everything that is not focused.
+  tile,
+
+  /// Something drawn as a line or a control in a row: a menu row, a rail
+  /// destination, a chip, a button on a panel. The ring and the dimming,
+  /// and neither the zoom nor the shadow, so its neighbours stay put.
+  row,
+}
+
 /// The whole focus indicator on a television: the two-stroke [FocusRing],
 /// a slight zoom and a shadow under what is focused, and -- in
-/// [FocusEmphasis.bold] -- everything that is *not* focused dimmed.
+/// [FocusEmphasis.bold] -- everything that is *not* focused dimmed. How
+/// much of that a surface gets is [treatment]'s to say.
 ///
 /// One colour cannot carry this on its own. The indicator is drawn over
 /// poster art, on a display the app knows nothing about; the owner's is a
@@ -203,11 +228,16 @@ class FocusHighlight extends StatelessWidget {
     required this.focused,
     required this.borderRadius,
     required this.child,
+    this.treatment = FocusTreatment.tile,
   });
 
   final bool focused;
   final BorderRadius borderRadius;
   final Widget child;
+
+  /// Which parts of the indicator this surface wears; see
+  /// [FocusTreatment].
+  final FocusTreatment treatment;
 
   /// How much bigger the focused thing is drawn. Enough to be read as a
   /// size difference from three metres away, small enough that a row of
@@ -251,6 +281,10 @@ class FocusHighlight extends StatelessWidget {
         child: content,
       );
     }
+    // A row keeps its neighbours where they are: no zoom, and so no
+    // shadow either, since a shadow under something that has not been
+    // lifted is a smudge.
+    if (treatment == FocusTreatment.row) return content;
     return AnimatedScale(
       scale: focused ? focusedScale : 1,
       duration: duration,
@@ -282,11 +316,16 @@ class FocusHighlighted extends StatefulWidget {
     super.key,
     required this.borderRadius,
     required this.builder,
+    this.treatment = FocusTreatment.tile,
   });
 
   /// Rounds the ring; a stadium-shaped control wants a radius of at least
   /// half its height (the radii are scaled down to fit, never up).
   final BorderRadius borderRadius;
+
+  /// Which parts of the indicator this control wears; see
+  /// [FocusTreatment].
+  final FocusTreatment treatment;
 
   final Widget Function(BuildContext context, FocusNode node) builder;
 
@@ -318,7 +357,72 @@ class _FocusHighlightedState extends State<FocusHighlighted> {
     return FocusHighlight(
       focused: _focused,
       borderRadius: widget.borderRadius,
+      treatment: widget.treatment,
       child: child,
+    );
+  }
+}
+
+/// The same indicator around a control that keeps its own focus node to
+/// itself -- a [ListTile], a [ChoiceChip], an [IconButton] built somewhere
+/// this code cannot reach a node into.
+///
+/// [FocusHighlighted] hands a node out for the control to take; most of
+/// Material's controls will not take one, and the ones that will are
+/// scattered across every screen. So this one watches instead: a [Focus]
+/// that cannot be focused and is skipped by traversal still reports
+/// `hasFocus` for everything below it, and traversal is exactly what it
+/// was -- the same trick [RemotePress] plays a layer up.
+///
+/// **Wrap one focus stop.** The ring follows the whole subtree, so a row
+/// of three buttons under one of these lights all three whenever any one
+/// of them is focused, which says "focus is somewhere in here" and is the
+/// fault this widget exists to fix rather than a smaller version of it.
+///
+/// Off a television it is its child and nothing else, like
+/// [FocusHighlighted]: focus there follows a pointer or Tab, and the
+/// theme's own floor (`FocusTheme`) is what marks it.
+class FocusMarked extends StatefulWidget {
+  const FocusMarked({
+    super.key,
+    required this.child,
+    this.treatment = FocusTreatment.row,
+    this.borderRadius = const BorderRadius.all(Radius.circular(8)),
+  });
+
+  final Widget child;
+
+  /// Defaults to [FocusTreatment.row]: what needs watching rather than
+  /// building is nearly always a line in a list or a control in a bar.
+  final FocusTreatment treatment;
+
+  final BorderRadius borderRadius;
+
+  @override
+  State<FocusMarked> createState() => _FocusMarkedState();
+}
+
+class _FocusMarkedState extends State<FocusMarked> {
+  bool _focused = false;
+
+  void _onFocusChange(bool focused) {
+    if (mounted && focused != _focused) setState(() => _focused = focused);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!DeviceScope.isTv(context)) return widget.child;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      includeSemantics: false,
+      onFocusChange: _onFocusChange,
+      child: FocusHighlight(
+        focused: _focused,
+        borderRadius: widget.borderRadius,
+        treatment: widget.treatment,
+        child: widget.child,
+      ),
     );
   }
 }
