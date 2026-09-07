@@ -51,10 +51,24 @@ what every model field means. The shape of the thing is in the
   HTTP, one JSON file per bucket under the app-support directory with
   temp-then-fsync-then-rename writes, and two lib-owned tokio runtimes
   (concurrent + a single-worker sequential one for ordered persistence).
+  Every HTTP body is read under a cap (`MOST_JSON_BYTES`, 32 MiB, ten times
+  the largest real answer measured; 4 MiB for a subtitle file) chunk by
+  chunk, so a compressed answer that inflates past it is abandoned rather
+  than buffered, and no error out of `fetch` or `fetch_text` carries the URL
+  (`without_url`), since an addon's can hold a debrid key. A bucket that
+  will not parse at boot is moved aside as `<key>.json.corrupt-<seconds>`
+  and read as empty; one the disk will not read refuses the boot
+  (`core_init` fails and the Dart boot screen shows why) instead of
+  starting an anonymous profile the first persist would write over the
+  real one.
 - **The app's own preferences are a file beside those buckets**
   (`rust/src/prefs.rs`, `<storage_dir>/xtremio_prefs.json`): a flat JSON
   object of client-side choices -- how a list is laid out, which view a
-  screen comes up in -- written with the same atomic write. They are
+  screen comes up in -- written with the same atomic write. A file that
+  will not parse is moved aside (`xtremio_prefs.json.corrupt-<seconds>`)
+  and reads as empty; one the disk will not read is an error to
+  `prefs_get_all` and refuses `prefs_set`, since a read-modify-write of one
+  key over a file that could not be read is the whole file gone. They are
   deliberately *not* stremio-core `Settings` fields (that struct is the
   engine's and is synced to the account; a field there means forking the
   core) and deliberately not a Dart preferences package (the directory is
@@ -243,7 +257,15 @@ what every model field means. The shape of the thing is in the
   `downloads.json.corrupt-<seconds>` before an empty one takes its place.
   At boot every entry that is not complete is pinned again, on a blocking
   thread, since a pin waits on magnet metadata and nothing on screen waits
-  on it. The UI reaches all of that through one `DownloadsClient`
+  on it. The row leads the server on the way in and follows it out: `add`
+  writes the row (naming, under `replaces`, the file it stops naming)
+  before `pin_download`, `remove` marks the row `pendingRemoval` before
+  `unpin_download` and drops it after, and the boot finishes whatever a
+  kill left half done -- so no pin exists that no row names, and no row
+  outlives its pin to be re-pinned. The file is parsed once and then
+  answered from memory while its mtime and length are what the last read or
+  write left; a tick is a `stat`, not a parse of every meta snapshot. The UI
+  reaches all of that through one `DownloadsClient`
   (`lib/core/downloads_client.dart`), which `XtremioApp` builds and
   disposes and a `DownloadsScope` hands down the tree -- one client,
   because the progress sink is one -- with `DownloadView`

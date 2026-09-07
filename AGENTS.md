@@ -126,6 +126,15 @@ and the bytes. Keep it that way:
   `cargo test --test downloads -- --ignored`, which is idempotent: the
   recorder fixes the tmp path and the timestamps because the Dart tests
   quote them, so keep it that way).
+- **The row leads the server in and follows it out.** `add` writes the
+  registry row before it asks the server for the pin (a pin no row names is
+  a torrent that downloads forever and nothing can reach), keeping the file
+  it stops naming under `replaces` until the new pin is in; `remove` marks
+  the row `pendingRemoval` before the unpin and drops it after (a row that
+  outlives its pin is a cancelled download the next boot restarts). Any
+  intent the server still has to act on is on disk before the server is
+  asked, and `repin_unfinished_in` finishes it at boot. Keep every new
+  server call on that side of its write.
 - **One client, one sink.** The Rust side keeps a single progress sink, so
   the app builds one `DownloadsClient` in `XtremioApp` and hands it down
   through `DownloadsScope`. A screen takes the client from the scope;
