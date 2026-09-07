@@ -269,15 +269,26 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
 ///
 /// **It offers a stop only where there is something for it to stop.** The
 /// light is drawn from bytes measured leaving the device and never from the
-/// setting (see [SharingLight]), so it is lit in one state the two stops
-/// have no answer for: "Share while idle" already off, with a torrent
-/// serving out its idle grace or a title kept offline going on being shared
-/// -- which the setting does not govern either way. A "Not now" would pause
-/// a setting that is off and "Stop sharing" would turn off a switch that is
-/// off, so with the switch off the dialog says that instead
-/// ([IdleSharing.alreadyOffTitle]) and offers neither. An offered action
-/// with nothing to do is the same defect as a button that is drawn and
-/// dead.
+/// setting (see [SharingLight]), so it is lit in two states a stop has no
+/// answer for, because things upload that neither stop governs: a torrent
+/// serving out its idle grace, and a title kept offline. With "Share while
+/// idle" already off both stops are dead -- a "Not now" would pause a
+/// setting that is off and "Stop sharing" would turn off a switch that is
+/// off -- so the dialog says that instead ([IdleSharing.alreadyOffTitle])
+/// and offers neither. With the switch on and a "Not now" already in force
+/// the pause row alone is dead: the policy takes no second pause, and a row
+/// that is drawn and does nothing when pressed is the same defect as a
+/// button drawn and dead. So the dialog says the pause is in force
+/// ([IdleSharing.pausedTitle]) and offers only the switch, which still
+/// does something because it is the longer of the two stops. The dismiss
+/// action says "Keep sharing" only where a stop was offered and declined;
+/// where nothing was, it says "Close", since nothing is being kept.
+///
+/// The pause is read from [IdleSharingPolicy.pausedForRun] and not inferred
+/// from the light, because the light says nothing about it: the server was
+/// told to stop, and the bytes the light measures are the grace and the
+/// pinned titles, exactly what a pause cannot reach. That is why a pause
+/// and a lit light are an ordinary pair rather than an edge.
 ///
 /// That the rows are chosen by what is running rather than always drawn is
 /// what this will be widened along: the light is coming to mean "Xtremio is
@@ -295,11 +306,13 @@ class SharingStopDialog extends StatelessWidget {
 
   final SharingActivity activity;
 
-  /// Keys a test presses, and the only names these rows answer to. The
-  /// stops are drawn only while the setting is on; [keepKey] is the way out
-  /// and is always there.
+  /// Keys a test presses, and the only names these rows answer to. A stop
+  /// is drawn only while it would do something -- both with the setting on
+  /// and no pause in force, the switch alone under a pause, neither with the
+  /// setting off; [keepKey] is the way out and is always there.
   static const Key notNowKey = Key('sharing-not-now');
   static const Key stopKey = Key('sharing-stop');
+  static const Key pausedKey = Key('sharing-paused');
   static const Key alreadyOffKey = Key('sharing-already-off');
   static const Key keepKey = Key('sharing-keep');
 
@@ -307,10 +320,26 @@ class SharingStopDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = SharingScope.read(context);
     final prefs = PrefsScope.maybeOf(context);
-    // The preference and not the policy's pause: a pause is already a state
-    // of a switch that is on, and while one is in force nothing is going
-    // out for the light to be lit by anyway.
+    // Both the preference and the policy's pause, because the light answers
+    // neither: it is lit by measured bytes, and a torrent's idle grace and a
+    // pinned title go on uploading with the switch off and under a pause
+    // alike. A pause is a state of a switch that is on (the policy holds
+    // that from both ends), so `paused` implies `sharing`.
     final sharing = prefs?.shareWhileIdle ?? false;
+    final paused = sharing && (scope?.policy.pausedForRun ?? false);
+    final stopRow = ListTile(
+      key: stopKey,
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.do_not_disturb_on_outlined),
+      title: const Text(IdleSharing.stopTitle),
+      subtitle: const Text(IdleSharing.stopDescription),
+      onTap: () {
+        // The same preference the settings switch writes, so the one
+        // policy sends it on and the server has one author either way.
+        prefs?.setShareWhileIdle(false);
+        Navigator.of(context).pop();
+      },
+    );
     return AlertDialog(
       title: const Text(SharingLight.label),
       content: Column(
@@ -319,7 +348,28 @@ class SharingStopDialog extends StatelessWidget {
         children: [
           Text(SharingLight.summary(activity)),
           const SizedBox(height: 12),
-          if (sharing) ...[
+          if (!sharing)
+            ListTile(
+              key: alreadyOffKey,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.do_not_disturb_on_outlined),
+              title: const Text(IdleSharing.alreadyOffTitle),
+              subtitle: const Text(IdleSharing.alreadyOffDescription),
+            )
+          else if (paused) ...[
+            // The pause is said rather than offered: `pauseUntilRestart`
+            // takes no second pause, so a "Not now" row here would be drawn
+            // and dead. The switch is the one stop left with something to
+            // do.
+            ListTile(
+              key: pausedKey,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.pause_circle_outline),
+              title: const Text(IdleSharing.pausedTitle),
+              subtitle: const Text(IdleSharing.pausedDescription),
+            ),
+            stopRow,
+          ] else ...[
             ListTile(
               key: notNowKey,
               contentPadding: EdgeInsets.zero,
@@ -331,36 +381,19 @@ class SharingStopDialog extends StatelessWidget {
                 Navigator.of(context).pop();
               },
             ),
-            ListTile(
-              key: stopKey,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.do_not_disturb_on_outlined),
-              title: const Text(IdleSharing.stopTitle),
-              subtitle: const Text(IdleSharing.stopDescription),
-              onTap: () {
-                // The same preference the settings switch writes, so the
-                // one policy sends it on and the server has one author
-                // either way.
-                prefs?.setShareWhileIdle(false);
-                Navigator.of(context).pop();
-              },
-            ),
-          ] else
-            ListTile(
-              key: alreadyOffKey,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.do_not_disturb_on_outlined),
-              title: const Text(IdleSharing.alreadyOffTitle),
-              subtitle: const Text(IdleSharing.alreadyOffDescription),
-            ),
+            stopRow,
+          ],
         ],
       ),
       actions: [
         TextButton(
           key: keepKey,
           onPressed: () => Navigator.of(context).pop(),
-          // Nothing is being kept where nothing is offered to stop.
-          child: Text(sharing ? 'Keep sharing' : 'Close'),
+          // "Keep sharing" only where leaving keeps a sharing this dialog
+          // offered to stop. With the switch off nothing is being kept, and
+          // under a pause the sharing has already been stopped -- what goes
+          // on is what neither stop reaches -- so leaving is only leaving.
+          child: Text(sharing && !paused ? 'Keep sharing' : 'Close'),
         ),
       ],
     );

@@ -186,11 +186,15 @@ what every model field means. The shape of the thing is in the
   traversal so it cannot swallow a press meant for a poster; pressing it
   offers the two stops above and a way out of neither — **but only the
   stops there are something to stop with.** Because the light answers
-  measured bytes and never the setting, it is lit with the setting already
-  off whenever something that setting does not govern is uploading: a
-  torrent serving out its idle grace, or a title kept offline. Both stops
-  are about that setting, so with the switch off the popup says that instead
-  and offers neither. Choosing the rows by what is running is the part of
+  measured bytes and never the setting, it is lit whenever something neither
+  stop governs is uploading — a torrent serving out its idle grace, or a
+  title kept offline — and that happens with the setting already off and
+  under a "Not now" alike. Both stops are about that setting, so with the
+  switch off the popup says that instead and offers neither; with a pause
+  in force the popup says so and offers only the switch, since the policy
+  takes no second pause and a "Not now" row there would be drawn and dead.
+  The popup reads the pause from `pausedForRun`, not from the light, which
+  cannot tell. Choosing the rows by what is running is the part of
   this that will be widened: the light is coming to mean "Xtremio is using
   your connection while you are not watching", which a background download
   does as much as a share does, and the popup will then have to name which

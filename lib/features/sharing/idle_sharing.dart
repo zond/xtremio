@@ -114,6 +114,20 @@ class IdleSharing {
       'one you are keeping offline is shared until you remove it. There is '
       'nothing left here to switch off.';
 
+  /// What the popup says while a "Not now" is in force and the light is
+  /// still lit, which it can be: the pause tells the server to stop, and
+  /// the same things that upload with the switch off go on uploading under
+  /// a pause -- the torrent takes its idle grace to stop, and a title kept
+  /// offline is not governed either way. The "Not now" row would then be a
+  /// row drawn and dead, since [IdleSharingPolicy.pauseUntilRestart] takes
+  /// no second pause, so the popup says the pause is in force and offers the
+  /// one stop that still does something: the switch, which is the longer of
+  /// the two.
+  static const String pausedTitle = 'Paused until you next start Xtremio';
+  static const String pausedDescription =
+      'What is still going out is a title taking a few seconds to stop, or '
+      'one you are keeping offline. The setting is still on.';
+
   /// What the settings tile adds while a "Not now" is in force. Without it
   /// the tile would show the switch on while nothing is being shared, which
   /// is the exact fault -- a tile describing something the app is not

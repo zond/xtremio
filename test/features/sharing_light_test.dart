@@ -373,6 +373,56 @@ void main() {
       expect(find.byType(SharingStopDialog), findsNothing);
     });
 
+    testWidgets('after a "Not now" it says so, and draws no row that would '
+        'do nothing', (tester) async {
+      // The reported shape: light lit, switch on, "Not now" taken. The
+      // server is told to stop, but the light answers measured bytes and
+      // not the server's belief -- the torrent serves out its idle grace, a
+      // pinned title keeps going -- so it stays lit, and the light is
+      // pressed again.
+      final s = await openPopup(tester);
+      await tester.tap(find.byKey(SharingStopDialog.notNowKey));
+      await tester.pumpAndSettle();
+      await s.policy.settled;
+      expect(s.policy.pausedForRun, isTrue);
+      await poll(tester);
+      expect(find.byKey(lightKey), findsOneWidget);
+
+      await tester.tap(find.byKey(lightKey));
+      await tester.pumpAndSettle();
+
+      // A second "Not now" is a row drawn and dead, since the policy takes
+      // no second pause: it is not drawn. What is drawn instead says the
+      // pause is in force, and the one stop left with something to do --
+      // the switch -- is still offered.
+      expect(find.byKey(SharingStopDialog.notNowKey), findsNothing);
+      expect(find.byKey(SharingStopDialog.pausedKey), findsOneWidget);
+      expect(find.text(IdleSharing.pausedTitle), findsOneWidget);
+      expect(find.byKey(SharingStopDialog.stopKey), findsOneWidget);
+      // Every row with a press on it changes something: the only pressable
+      // row is the switch.
+      final pressable = find.descendant(
+        of: find.byType(SharingStopDialog),
+        matching: find.byWidgetPredicate(
+          (w) => w is ListTile && w.onTap != null,
+        ),
+      );
+      expect(pressable, findsOneWidget);
+      expect(tester.widget<ListTile>(pressable).key, SharingStopDialog.stopKey);
+      // And the way out is a way out, not "Keep sharing": the sharing this
+      // dialog could have kept was already stopped by the pause.
+      expect(find.text('Keep sharing'), findsNothing);
+      expect(find.text('Close'), findsOneWidget);
+
+      // The stop it does offer does what it says from here as well.
+      await tester.tap(find.byKey(SharingStopDialog.stopKey));
+      await tester.pumpAndSettle();
+      await s.policy.settled;
+      expect(find.byType(SharingStopDialog), findsNothing);
+      expect(s.prefs.shareWhileIdle, isFalse);
+      expect(s.policy.pausedForRun, isFalse);
+    });
+
     testWidgets('"Stop sharing" writes the same preference the settings '
         'switch does', (tester) async {
       final s = await openPopup(tester);
