@@ -744,6 +744,59 @@ void main() {
     });
   });
 
+  /// To the background and back, through the transitions the framework
+  /// allows.
+  Future<void> sendApp(WidgetTester tester, List<AppLifecycleState> to) async {
+    for (final state in to) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+      await tester.pump();
+    }
+  }
+
+  testWidgets('a backgrounded app asks nothing while the torrent starts up', (
+    tester,
+  ) async {
+    // The mirror of the stats OSD's test for a loaded torrent. Hidden with
+    // the start-up card up, the twice-a-second poll used to go on into the
+    // background -- the sync that stops a loaded torrent's polling returns
+    // before the media has loaded.
+    final harness = PlayerHarness();
+    final stats = harness.torrentStats..response = null;
+    await tester.pumpWidget(harness.build());
+    await tester.pump();
+    await tester.pump();
+    await poll(tester);
+    await poll(tester);
+    final whileWatched = stats.requests.length;
+    expect(whileWatched, 4);
+
+    await sendApp(tester, [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+    ]);
+    await tester.pump(PlayerScreen.torrentStatsInterval * 10);
+    expect(stats.requests, hasLength(whileWatched));
+    // The card is still what is on screen, for when the screen is back.
+    expect(overlay, findsOneWidget);
+
+    // Back in front: the polling picks up where it left off, at the
+    // start-up cadence, and the card follows the server again.
+    await sendApp(tester, [
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]);
+    await poll(tester);
+    await poll(tester);
+    expect(stats.requests, hasLength(whileWatched + 4));
+    stats.response = const TorrentStats(
+      phase: TorrentPhase.checking,
+      checkedBytes: 250,
+      checkTotalBytes: 1000,
+    );
+    await poll(tester);
+    expect(overlayText('Checking existing data… 25%'), findsOneWidget);
+  });
+
   testWidgets('follows the server phases until the media loads', (
     tester,
   ) async {

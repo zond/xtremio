@@ -931,17 +931,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// The window was minimised, or the app went to the background: with
   /// `pauseOnMinimize` a playing video pauses, and either way the torrent
   /// polling stops -- a pinned stats panel nobody can see is no reason to
-  /// keep asking the server every few seconds.
+  /// keep asking the server every few seconds, and neither is a start-up
+  /// card nobody can see.
+  ///
+  /// The start-up poll is stopped here by hand because it is not
+  /// [_syncTorrentStats]'s to stop: that call keeps the cadence of a
+  /// *loaded* torrent's polling and returns before the media has loaded,
+  /// so the timer [_startTorrentStats] armed went on firing twice a second
+  /// into the background -- measured: twenty requests in five hidden
+  /// seconds -- while this comment said it did not.
   void _onAppHidden() {
     _appHidden = true;
     if (_settings.pauseOnMinimize && _playing && !_handedOver) {
       _engine?.pause();
     }
+    if (!_mediaLoaded) _pauseTorrentStats();
     _syncTorrentStats();
   }
 
   /// Back in front: whatever was left on screen -- a stall, an open stats
-  /// panel -- gets its numbers moving again.
+  /// panel, the start-up card -- gets its numbers moving again.
   void _onAppShown() {
     _appHidden = false;
     // The surface this app draws into is destroyed when it goes away and
@@ -949,6 +958,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // lives on the surface it was made against. So a claim we still think
     // we hold is one the platform has already forgotten.
     if (_frameRateAsked) _askDisplayFrameRate();
+    // A torrent still starting up: the card is back on screen, so its
+    // polling comes back with it. `_syncTorrentStats` leaves this alone
+    // until the media has loaded, and takes over from it then.
+    if (!_mediaLoaded && _torrentStatsRequest != null) _startStartupPolling();
     _syncTorrentStats();
   }
 
@@ -1423,12 +1436,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStatsRequest = request;
     final fallback = request.torrentLevel;
     _torrentStatsFallback = fallback == request ? null : fallback;
+    _startStartupPolling();
+    _refreshDhtStatus();
+  }
+
+  /// Arms the start-up cadence ([PlayerScreen.torrentStatsInterval]) for
+  /// the torrent [_startTorrentStats] set up, or leaves it running if it
+  /// already is. The first request goes out on the first tick, never at
+  /// once (see [_startTorrentStats]); the app coming back to the front
+  /// during start-up re-arms it here ([_onAppShown]).
+  void _startStartupPolling() {
+    if (_torrentStatsTimer != null &&
+        _torrentStatsCadence == PlayerScreen.torrentStatsInterval) {
+      return;
+    }
+    _torrentStatsTimer?.cancel();
     _torrentStatsCadence = PlayerScreen.torrentStatsInterval;
     _torrentStatsTimer = Timer.periodic(
       PlayerScreen.torrentStatsInterval,
       (_) => _pollTorrentStats(),
     );
-    _refreshDhtStatus();
   }
 
   /// Reads the DHT's status once: for the start-up card's one explanation
