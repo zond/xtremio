@@ -69,7 +69,11 @@ pub type EventSink = Box<dyn Fn(String) -> bool + Send + Sync>;
 /// The stremio-core half of [`AppState`]: the Runtime, where its events go
 /// and the ones with nowhere to go yet. Three locks rather than one because
 /// they are taken for unrelated reasons -- a dispatch reads the Runtime
-/// while the pump is delivering an event -- and never nested.
+/// while the pump is delivering an event. The one nesting is the sink
+/// swap, which holds `event_sink` while it drains `pending`
+/// ([`set_event_sink_in`]); nothing takes them the other way round --
+/// [`emit`] lets the sink guard go before it buffers -- so that order is
+/// the whole of the lock discipline here.
 #[derive(Default)]
 pub struct CoreState {
     runtime: RwLock<Option<Runtime<XtremioEnv, XtremioModel>>>,
@@ -154,6 +158,16 @@ pub fn set_event_sink(sink: EventSink) {
 }
 
 fn set_event_sink_in(app: &AppState, sink: EventSink) {
+    // The slot is held for the whole swap, replay included. An `emit` that
+    // races this call then parks on the read lock and delivers through the
+    // new sink afterwards, in order behind what was buffered. With the slot
+    // taken only at the end, that `emit` saw `None`, buffered *after* the
+    // drain, and its event sat in `pending` until the next subscribe -- on
+    // Android the next activity recreation, on a desktop never -- while a
+    // `NewState` for a field Dart had just pulled went undelivered. The
+    // replay is a few hundred port posts at most and the callback does not
+    // re-enter the core, so what parks parks briefly.
+    let mut slot = app.core.sink_mut();
     let pending: Vec<String> = app.core.pending().drain(..).collect();
     let mut open = true;
     for event in pending {
@@ -162,7 +176,7 @@ fn set_event_sink_in(app: &AppState, sink: EventSink) {
             break;
         }
     }
-    *app.core.sink_mut() = open.then_some(sink);
+    *slot = open.then_some(sink);
 }
 
 fn emit(app: &AppState, event: String) {
@@ -613,6 +627,63 @@ mod tests {
             app.core.pending().iter().collect::<Vec<_>>(),
             vec!["after-close"]
         );
+    }
+
+    /// An event emitted while a new sink is replaying the buffer is
+    /// delivered through that sink, behind the replay, rather than buffered
+    /// behind the drain and stranded until the next subscribe.
+    #[test]
+    fn an_event_during_the_replay_is_delivered_not_stranded() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Barrier;
+        use std::time::Duration;
+
+        let app = Arc::new(AppState::default());
+        emit(&app, "buffered".into());
+
+        let delivered = Arc::new(Mutex::new(Vec::<String>::new()));
+        let in_replay = Arc::new(Barrier::new(2));
+        let emitter_started = Arc::new(AtomicBool::new(false));
+        let sink: EventSink = {
+            let delivered = Arc::clone(&delivered);
+            let in_replay = Arc::clone(&in_replay);
+            let emitter_started = Arc::clone(&emitter_started);
+            Box::new(move |event: String| {
+                let replaying = event == "buffered";
+                delivered.lock().unwrap().push(event);
+                if replaying {
+                    // Hold the replay open until the other thread is at its
+                    // `emit`, and a moment longer so that call has reached
+                    // the lock. The wait only decides how sharp the test
+                    // is, never whether it passes: an `emit` that lands
+                    // after the swap is delivered either way, one that lands
+                    // inside it is what the assertions are about.
+                    in_replay.wait();
+                    while !emitter_started.load(Ordering::Acquire) {
+                        std::thread::yield_now();
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                true
+            })
+        };
+
+        let swap = {
+            let app = Arc::clone(&app);
+            std::thread::spawn(move || set_event_sink_in(&app, sink))
+        };
+        in_replay.wait();
+        emitter_started.store(true, Ordering::Release);
+        emit(&app, "live-during-replay".into());
+        swap.join().expect("the swap finishes");
+
+        assert_eq!(
+            *delivered.lock().unwrap(),
+            ["buffered", "live-during-replay"],
+            "the live event follows the replay through the new sink"
+        );
+        assert!(app.core.pending().is_empty(), "and nothing is stranded");
+        assert!(app.core.sink().is_some(), "with the sink installed");
     }
 
     /// The bytes of a bucket that will not parse are kept beside the key,
