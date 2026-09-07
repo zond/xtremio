@@ -116,8 +116,30 @@ pub fn storage_dir() -> Option<PathBuf> {
         .clone()
 }
 
-fn storage_path(key: &str) -> Option<PathBuf> {
+/// `<storage_dir>/<key>.json`, or `None` before the directory is set.
+pub(crate) fn storage_path(key: &str) -> Option<PathBuf> {
     storage_dir().map(|dir| dir.join(format!("{key}.json")))
+}
+
+/// Renames `path` to `<file name>.corrupt-<unix seconds>` beside itself and
+/// answers where it went.
+///
+/// For a file the app can read but not parse. Reading it as empty is the
+/// right answer for the session -- a bad byte must not stop the app -- but
+/// the next write then lands on the only copy of what was there, and for a
+/// stremio-core bucket that is a logged-in profile or a library nothing
+/// else holds. Moved aside, the bytes stay for a later build or a human,
+/// and the fresh file starts beside them. Shared by the buckets
+/// (`crate::core`), the downloads registry and the preferences file, so the
+/// three spell the name one way and a recovery can look for one pattern.
+pub(crate) fn move_aside(path: &Path) -> std::io::Result<PathBuf> {
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let aside = path.with_file_name(format!("{name}.corrupt-{}", Utc::now().timestamp()));
+    std::fs::rename(path, &aside)?;
+    Ok(aside)
 }
 
 /// Drives a future to completion on the sequential runtime. Only call from a

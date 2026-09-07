@@ -252,5 +252,108 @@ fn core_lifecycle() -> anyhow::Result<()> {
         "http://192.168.1.20:11470/"
     );
     core_shutdown()?;
+
+    // A bucket that will not parse -- a logged-in profile cut short by a
+    // crash mid-write on a filesystem without the rename guarantee, say --
+    // must not become the file the engine's next persist writes over: the
+    // session starts empty, but the bytes are moved aside first and are
+    // still there after that persist.
+    let tmp3 = tempfile::tempdir()?;
+    let core3 = tmp3.path().join("core");
+    std::fs::create_dir_all(&core3)?;
+    let corrupt_profile = br#"{"auth":{"key":"session-key","user":{"_id":"u1","email":"a@b"#;
+    let corrupt_library = br#"{"uid":"u1","items":[{"_id":"tt1","name":"A Film""#;
+    std::fs::write(core3.join("profile.json"), corrupt_profile)?;
+    std::fs::write(core3.join("library.json"), corrupt_library)?;
+    std::fs::write(
+        core3.join("schema_version.json"),
+        stremio_core::constants::SCHEMA_VERSION.to_string(),
+    )?;
+    core_init(config(tmp3.path()))?;
+    let ctx = state("ctx");
+    assert!(
+        ctx["profile"]["auth"].is_null(),
+        "the session starts anonymous: {ctx}"
+    );
+    let aside_of = |stem: &str| -> Vec<std::path::PathBuf> {
+        std::fs::read_dir(&core3)
+            .expect("read dir")
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(&format!("{stem}.json.corrupt-")))
+            })
+            .collect()
+    };
+    let profile_aside = aside_of("profile");
+    let library_aside = aside_of("library");
+    assert_eq!(profile_aside.len(), 1, "{profile_aside:?}");
+    assert_eq!(library_aside.len(), 1, "{library_aside:?}");
+    assert_eq!(std::fs::read(&profile_aside[0])?, corrupt_profile);
+    assert_eq!(std::fs::read(&library_aside[0])?, corrupt_library);
+    // The first persist: a settings edit rewrites profile.json. The fresh
+    // file is the anonymous profile, and the original is untouched beside it.
+    let mut settings = state("ctx")["profile"]["settings"].clone();
+    settings["bingeWatching"] =
+        serde_json::json!(!settings["bingeWatching"].as_bool().unwrap_or(false));
+    core_dispatch(
+        serde_json::json!({
+            "field": "ctx",
+            "action": {
+                "action": "Ctx",
+                "args": { "action": "UpdateSettings", "args": settings },
+            },
+        })
+        .to_string(),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let written = loop {
+        if let Ok(bytes) = std::fs::read(core3.join("profile.json")) {
+            break bytes;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the settings edit never persisted a profile"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let written: serde_json::Value = serde_json::from_slice(&written)?;
+    assert!(
+        written["auth"].is_null(),
+        "a fresh anonymous profile: {written}"
+    );
+    assert_eq!(
+        std::fs::read(&profile_aside[0])?,
+        corrupt_profile,
+        "and the original is still where it was moved"
+    );
+    core_shutdown()?;
+
+    // A bucket the disk will not *read* is a different thing from one that
+    // will not parse: nothing says the data is bad, so the boot is refused
+    // rather than started over on an empty profile, and the server it had
+    // started goes down with it.
+    let tmp4 = tempfile::tempdir()?;
+    let core4 = tmp4.path().join("core");
+    std::fs::create_dir_all(core4.join("profile.json"))?;
+    std::fs::write(
+        core4.join("schema_version.json"),
+        stremio_core::constants::SCHEMA_VERSION.to_string(),
+    )?;
+    let error = match core_init(config(tmp4.path())) {
+        Ok(_) => panic!("an unreadable bucket must refuse the boot"),
+        Err(error) => error,
+    };
+    // The chain, not the outermost context: which bucket refused is the
+    // part a person retrying the boot needs.
+    let chain = format!("{error:#}");
+    assert!(chain.contains("profile"), "{chain}");
+    assert!(!core_is_initialized()?);
+    assert_eq!(server_base_url()?, None, "the server is not left running");
+    assert!(
+        core4.join("profile.json").is_dir(),
+        "and nothing was moved aside or written"
+    );
     Ok(())
 }

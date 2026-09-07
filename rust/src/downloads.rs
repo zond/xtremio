@@ -631,9 +631,8 @@ fn load_locked() -> anyhow::Result<Registry> {
 /// instead of overwriting the one a human (or a later build) might still get
 /// something out of.
 fn move_aside(path: &std::path::Path, reason: &str) {
-    let aside = path.with_file_name(format!("{FILE_NAME}.corrupt-{}", Utc::now().timestamp()));
-    match std::fs::rename(path, &aside) {
-        Ok(()) => tracing::warn!(
+    match crate::env::move_aside(path) {
+        Ok(_) => tracing::warn!(
             reason,
             "downloads registry is unreadable; moved aside and starting empty"
         ),

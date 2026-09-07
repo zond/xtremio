@@ -189,21 +189,53 @@ fn buffer(app: &AppState, event: String) {
     pending.push_back(event);
 }
 
+/// Reads one persisted bucket.
+///
+/// A bucket that is not there is `None`, which is what a first start looks
+/// like. One that will not parse is `None` too, but the file is first
+/// renamed `<key>.json.corrupt-<seconds>` (`crate::env::move_aside`): the
+/// engine's first persist -- the first library change, the first settings
+/// edit -- writes a fresh bucket over the key, and that would be over the
+/// only copy of a logged-in profile or a library nothing else holds. Moved
+/// aside, the bytes stay for a later build or a human.
+///
+/// Anything else -- a read the disk refused, storage with no directory --
+/// is an error and `init` fails with it. It used to read as "empty" like a
+/// parse failure, which turned a transient `EIO` or a file-descriptor
+/// shortage under a busy swarm into a default profile that the first user
+/// action persisted for good, and the logged-in user into an anonymous one.
+/// A boot the app refuses can be retried; one that quietly starts over
+/// cannot be undone.
 fn hydrate<T: for<'de> Deserialize<'de> + Send + 'static>(
     key: &str,
-) -> impl std::future::Future<Output = Option<T>> {
+) -> impl std::future::Future<Output = anyhow::Result<Option<T>>> {
     let key = key.to_owned();
     async move {
         match XtremioEnv::get_storage::<T>(&key).await {
-            Ok(value) => value,
+            Ok(value) => Ok(value),
             Err(EnvError::Serde(message)) => {
-                tracing::warn!(key, %message, "persisted bucket unreadable; starting empty");
-                None
+                match env::storage_path(&key).map(|path| env::move_aside(&path)) {
+                    Some(Ok(_)) => tracing::warn!(
+                        key,
+                        %message,
+                        "persisted bucket unreadable; moved aside and starting empty"
+                    ),
+                    Some(Err(error)) => tracing::warn!(
+                        key,
+                        %message,
+                        %error,
+                        "persisted bucket unreadable and could not be moved aside; starting empty"
+                    ),
+                    None => {
+                        tracing::warn!(key, %message, "persisted bucket unreadable; starting empty")
+                    }
+                }
+                Ok(None)
             }
-            Err(error) => {
-                tracing::warn!(key, ?error, "persisted bucket unavailable; starting empty");
-                None
-            }
+            Err(error) => Err(anyhow::anyhow!(
+                "persisted bucket `{key}` could not be read: {}",
+                error.message()
+            )),
         }
     }
 }
@@ -296,19 +328,32 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
         );
     }
 
+    let hydrated = env::block_on(async {
+        futures::try_join!(
+            hydrate::<Profile>(PROFILE_STORAGE_KEY),
+            hydrate::<LibraryBucket>(LIBRARY_RECENT_STORAGE_KEY),
+            hydrate::<LibraryBucket>(LIBRARY_STORAGE_KEY),
+            hydrate::<StreamsBucket>(STREAMS_STORAGE_KEY),
+            hydrate::<ServerUrlsBucket>(STREAMING_SERVER_URLS_STORAGE_KEY),
+            hydrate::<NotificationsBucket>(NOTIFICATIONS_STORAGE_KEY),
+            hydrate::<SearchHistoryBucket>(SEARCH_HISTORY_STORAGE_KEY),
+            hydrate::<DismissedEventsBucket>(DISMISSED_EVENTS_STORAGE_KEY),
+        )
+    });
     let (profile, recent, library, streams, server_urls, notifications, search_history, dismissed) =
-        env::block_on(async {
-            futures::join!(
-                hydrate::<Profile>(PROFILE_STORAGE_KEY),
-                hydrate::<LibraryBucket>(LIBRARY_RECENT_STORAGE_KEY),
-                hydrate::<LibraryBucket>(LIBRARY_STORAGE_KEY),
-                hydrate::<StreamsBucket>(STREAMS_STORAGE_KEY),
-                hydrate::<ServerUrlsBucket>(STREAMING_SERVER_URLS_STORAGE_KEY),
-                hydrate::<NotificationsBucket>(NOTIFICATIONS_STORAGE_KEY),
-                hydrate::<SearchHistoryBucket>(SEARCH_HISTORY_STORAGE_KEY),
-                hydrate::<DismissedEventsBucket>(DISMISSED_EVENTS_STORAGE_KEY),
-            )
-        });
+        match hydrated {
+            Ok(buckets) => buckets,
+            Err(error) => {
+                // A boot the app refuses leaves the process as it found it:
+                // the server started above goes down again, so the retry
+                // Dart's boot screen invites starts from nothing rather than
+                // over a server no runtime owns.
+                if let Err(stop) = server::stop_in(&app) {
+                    tracing::warn!(%stop, "could not stop the embedded server after a refused boot");
+                }
+                return Err(error.context("read the persisted stremio-core buckets"));
+            }
+        };
 
     // Beside the buckets, and for the same reason: nothing is written out
     // before the stored record has been read, or this process's first
@@ -568,6 +613,66 @@ mod tests {
             app.core.pending().iter().collect::<Vec<_>>(),
             vec!["after-close"]
         );
+    }
+
+    /// The bytes of a bucket that will not parse are kept beside the key,
+    /// not under it: the engine's first persist writes a fresh file there,
+    /// and for a logged-in profile that was the only copy.
+    #[test]
+    fn an_unparseable_bucket_is_moved_aside_and_read_as_empty() {
+        crate::env::with_storage_dir(|dir| {
+            let file = dir.join(format!("{PROFILE_STORAGE_KEY}.json"));
+            let corrupt = br#"{"auth":{"key":"session-key","user":{"_id":"u1"#;
+            std::fs::write(&file, corrupt).expect("write");
+
+            let profile: Option<Profile> =
+                env::block_on(hydrate(PROFILE_STORAGE_KEY)).expect("a parse failure is not fatal");
+            assert!(profile.is_none(), "it reads as no profile");
+            assert!(
+                !file.exists(),
+                "and the unreadable file is out of the key's way"
+            );
+            let aside: Vec<PathBuf> = std::fs::read_dir(dir)
+                .expect("read dir")
+                .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("profile.json.corrupt-"))
+                })
+                .collect();
+            assert_eq!(aside.len(), 1, "{aside:?}");
+            assert_eq!(
+                std::fs::read(&aside[0]).expect("read aside"),
+                corrupt,
+                "byte for byte"
+            );
+        });
+    }
+
+    /// A read the disk refuses is not an empty bucket. Read as one it became
+    /// a default profile that the first user action persisted over the real
+    /// one; refused, the boot can be tried again.
+    #[test]
+    fn a_bucket_that_cannot_be_read_is_an_error_not_an_empty_one() {
+        crate::env::with_storage_dir(|dir| {
+            // A directory under the bucket's name: `read` fails on it on
+            // every platform, with an error that is not "not found".
+            std::fs::create_dir(dir.join(format!("{LIBRARY_STORAGE_KEY}.json"))).expect("mkdir");
+            let error = env::block_on(hydrate::<LibraryBucket>(LIBRARY_STORAGE_KEY))
+                .expect_err("an I/O failure surfaces");
+            assert!(error.to_string().contains(LIBRARY_STORAGE_KEY), "{error}");
+            assert!(
+                dir.join(format!("{LIBRARY_STORAGE_KEY}.json")).is_dir(),
+                "and nothing was moved or written"
+            );
+        });
+        crate::env::without_storage_dir(|| {
+            assert!(
+                env::block_on(hydrate::<Profile>(PROFILE_STORAGE_KEY)).is_err(),
+                "storage that is not there is not an empty profile either"
+            );
+        });
     }
 
     #[test]
