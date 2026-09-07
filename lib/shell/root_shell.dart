@@ -273,11 +273,31 @@ class _RootShellState extends State<RootShell> {
   ///
   /// Inside the television's overscan band, since the [SafeArea] that keeps
   /// that band clear is put on outside this. And a toolbar's height down
-  /// from the top, because the shell does not know what a screen puts in
-  /// its own app bar and one of them does put a button in exactly that
-  /// corner (the Library's "Sync now"): a light drawn over a control is a
-  /// control nobody can press, which is worse than a light sitting a little
-  /// lower than the corner it is named for.
+  /// from the top, which is the one thing the shell can decide for every
+  /// screen at once: a screen's own app bar is where it is likeliest to
+  /// have put a button in this corner (the Library's "Sync now"), and off a
+  /// television the light is a button itself -- it takes whatever press
+  /// lands on it -- so a light over that one would be a control nobody can
+  /// press.
+  ///
+  /// **Below that band it is over the screen's own content, and this is
+  /// what it costs.** The shell cannot know what a screen draws there, and
+  /// the Library draws its filter row immediately under the app bar: the
+  /// light clips the right-hand end of that row's last chip -- 15 x 40 px
+  /// of "Downloaded" at 1280x720 on a television, and as much of whichever
+  /// chip ends the row on a phone narrow enough for it to reach the edge.
+  /// So the claim is not that the corner is empty, which no fixed position
+  /// over somebody else's screen can promise. It is that **the light never
+  /// takes a press meant for something else**: nothing an app bar draws is
+  /// touched at all, and no control lower down has its middle under the
+  /// light, which is where a press is aimed and where `tap` lands. Both are
+  /// measured on all five screens, on a television and on a phone, by
+  /// `test/features/sharing_light_placement_test.dart`.
+  ///
+  /// A television has the easier half of that: the light takes no pointer
+  /// there at all -- it is reached from the rail and pressed with select --
+  /// so what it clips is pixels, and the chip stays where the D-pad finds
+  /// it.
   Widget _withLight(Widget content, {required bool isTv}) => Stack(
     children: [
       content,
