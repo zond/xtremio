@@ -81,6 +81,13 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// needs to choose when it resumes.
   Future<void>? cueStartPending;
 
+  /// The same for `pause`. Stopping local playback is the step a cast
+  /// start takes in the middle of handing the film over, and mpv answers
+  /// a `pause` only once its own command queue has got to it -- long
+  /// enough for the viewer to press Back while the film is still on this
+  /// device, which is what the continuation after it has to reckon with.
+  Future<void>? pausePending;
+
   /// When set, `setSubtitleTrack` and `setExternalSubtitle` record the call
   /// and then fail with it (mpv refusing the track).
   Object? subtitleError;
@@ -229,6 +236,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   @override
   Future<void> pause() async {
     pauseCalls++;
+    if (pausePending != null) await pausePending;
   }
 
   @override

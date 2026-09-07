@@ -146,6 +146,13 @@ void main() {
     final engine = scene.harness.engine;
     return {
       'players on screen': tester.widgetList(find.byType(PlayerScreen)).length,
+      // The one thing the screen is still *for* while it waits, and so
+      // the one entry here that a leave may not shrink: the teardown is
+      // awaited with the video in the tree so the sinks stay alive and
+      // draining while mpv stops ([PlayerScreen._leave]). A continuation
+      // that rebuilds the picture away takes the drain with it, and the
+      // teardown being waited for is what can then block.
+      'video surface': tester.widgetList(find.text('video surface')).length,
       'engines built': scene.harness.engines.length,
       'opens': engine.opened.length,
       'seeks': engine.seeks.length,
@@ -391,6 +398,50 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('cast-device-device-1')));
         await tester.pumpAndSettle();
         expect(cast.connectAttempts, hasLength(1), reason: 'the start is out');
+        expect(cast.loads, isEmpty, reason: 'and nothing has been handed over');
+        return (
+          harness: harness,
+          cast: cast,
+          lan: lan,
+          answer: answered.complete,
+        );
+      },
+    ),
+    (
+      what: "a cast start's pause",
+      reaches: 'the cast client and the tree the picture is in',
+      suspend: (tester, wedged) async {
+        // The step after the session and the URL: local playback stops
+        // before the receiver starts. mpv answers a `pause` when its
+        // command queue gets to it, and what came back then handed the
+        // receiver the film -- and, worse, wrote `_castingTo` from inside
+        // a `setState`, which takes the video out of the tree for the
+        // rest of the teardown wait and leaves nothing draining the sinks
+        // mpv is still being stopped through.
+        final answered = Completer<void>();
+        // A receiver accepting the media is its own round trip, and it is
+        // long enough for a frame: without it every step of the fall-through
+        // runs in one turn of the microtask queue and the picture the
+        // `setState` took away is back before anything is drawn. The
+        // measurement is about what is on screen *during* the load.
+        final cast = FakeCastClient(devices: const [livingRoom])
+          ..loadDelay = const Duration(milliseconds: 200);
+        final lan = FakeLanMediaControl()
+          ..baseUrl = Uri.parse('http://192.168.1.20:39271/');
+        final harness = PlayerHarness(
+          player: castableFixture(),
+          cast: cast,
+          lanMedia: lan,
+          configureEngine: (engine) => engine
+            ..pausePending = answered.future
+            ..disposeGate = wedged,
+        );
+        await harness.pumpPushed(tester);
+        await tester.tap(find.byKey(const ValueKey('cast')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('cast-device-device-1')));
+        await tester.pumpAndSettle();
+        expect(harness.engine.pauseCalls, 1, reason: 'the pause is out');
         expect(cast.loads, isEmpty, reason: 'and nothing has been handed over');
         return (
           harness: harness,

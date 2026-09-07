@@ -3254,6 +3254,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Local playback stops here, before the receiver starts: two copies of
     // the same film, a few seconds apart, is nobody's idea of casting.
     await _engine?.pause();
+    // Pausing is a round trip too, and the continuation after it is the
+    // one that must not be skipped: below is a `setState` that puts this
+    // screen into casting, and while a receiver has the stream [build]
+    // draws no video. On a screen that is leaving, that takes the picture
+    // out of the tree for the rest of the teardown wait -- the wait whose
+    // whole point is that the sinks stay alive and draining while mpv
+    // stops ([_leave]) -- and nothing rebuilds it, since the unwinding
+    // below clears `_castingTo` without a `setState`. Measured: the
+    // surface gone from the frame, and the film handed to the receiver on
+    // the way past.
+    if (!_stillOurs) {
+      await _teardownCast();
+      return;
+    }
     setState(() {
       _castingTo = device;
       _castEnded = false;
