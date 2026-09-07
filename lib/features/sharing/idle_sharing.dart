@@ -101,13 +101,13 @@ class IdleSharing {
 
   /// What the popup offers instead of those two when the light is lit with
   /// the setting already off, which is a state the light can honestly be
-  /// in: it is drawn from bytes measured leaving the device and never from
-  /// the setting, and a few things upload with the switch off -- a torrent
-  /// takes its idle grace to stop, and a title kept offline is not governed
-  /// by the switch either way (above). Neither stop has anything to do
-  /// then. One would pause a setting that is already off, and the other
-  /// would turn off a switch that is already off, so the popup says what is
-  /// going out and offers only the way out of itself.
+  /// in: it is drawn from bytes the server measured moving and never from
+  /// the setting, and a few things move bytes with the switch off -- a
+  /// torrent takes its idle grace to stop, and a title kept offline is not
+  /// governed by the switch either way (above). Neither stop has anything
+  /// to do then. One would pause a setting that is already off, and the
+  /// other would turn off a switch that is already off, so the popup says
+  /// so and offers only the way out of itself.
   static const String alreadyOffTitle = 'Sharing is already off';
   static const String alreadyOffDescription =
       'A title takes a few seconds to stop after the switch goes off, and '
@@ -116,16 +116,17 @@ class IdleSharing {
 
   /// What the popup says while a "Not now" is in force and the light is
   /// still lit, which it can be: the pause tells the server to stop, and
-  /// the same things that upload with the switch off go on uploading under
-  /// a pause -- the torrent takes its idle grace to stop, and a title kept
-  /// offline is not governed either way. The "Not now" row would then be a
-  /// row drawn and dead, since [IdleSharingPolicy.pauseUntilRestart] takes
-  /// no second pause, so the popup says the pause is in force and offers the
-  /// one stop that still does something: the switch, which is the longer of
-  /// the two.
+  /// the same things that move bytes with the switch off go on moving them
+  /// under a pause -- the torrent takes its idle grace to stop, and a title
+  /// kept offline is not governed either way. The "Not now" row would then
+  /// be a row drawn and dead, since [IdleSharingPolicy.pauseUntilRestart]
+  /// takes no second pause, so the popup says the pause is in force and
+  /// offers the one stop that still does something: the switch, which is
+  /// the longer of the two. "Moving" rather than "going out", since the
+  /// same row is drawn under a down arrow.
   static const String pausedTitle = 'Paused until you next start Xtremio';
   static const String pausedDescription =
-      'What is still going out is a title taking a few seconds to stop, or '
+      'What is still moving is a title taking a few seconds to stop, or '
       'one you are keeping offline. The setting is still on.';
 
   /// What the settings tile adds while a "Not now" is in force. Without it

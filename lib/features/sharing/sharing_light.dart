@@ -6,6 +6,7 @@ import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/remote_press.dart';
+import '../downloads/download_labels.dart';
 import 'idle_sharing.dart';
 import 'sharing_activity.dart';
 
@@ -157,12 +158,40 @@ class _SharingLightState extends State<SharingLight> {
     return KeyEventResult.handled;
   }
 
+  /// Opens the popup over the reading the light is lit by right now.
+  ///
+  /// While bytes are coming in, the offline downloads are listed first and
+  /// handed to the dialog, so that what it draws is decided before it is
+  /// drawn: a "Cancel" row is offered per download still on its way, and a
+  /// dialog that listed them after opening would change shape under the
+  /// viewer, or draw a row for a download that turns out not to exist. A
+  /// listing that fails is an empty list -- the popup then says no offline
+  /// download is in flight, which is all the app knows.
   Future<void> _open() async {
     final scope = SharingScope.read(context);
     if (scope == null) return;
+    final reading = scope.monitor.reading;
+    var downloads = const <DownloadView>[];
+    if (reading.downloading) {
+      final client = context
+          .getInheritedWidgetOfExactType<DownloadsScope>()
+          ?.client;
+      if (client != null) {
+        try {
+          downloads = [
+            for (final view in (await client.list()).newestFirst)
+              if (view.isUnfinished) view,
+          ];
+        } catch (_) {
+          downloads = const [];
+        }
+      }
+      if (!mounted) return;
+    }
     await showDialog<void>(
       context: context,
-      builder: (context) => SharingStopDialog(traffic: scope.monitor.reading),
+      builder: (context) =>
+          SharingStopDialog(traffic: reading, downloads: downloads),
     );
   }
 
@@ -285,84 +314,190 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
       : FadeTransition(opacity: _opacity, child: widget.child);
 }
 
-/// What pressing the light offers: the stops that apply to what is going
-/// out, and one way out of the dialog having taken none of them.
+/// What pressing the light offers: the stops that apply to what is moving,
+/// and one way out of the dialog having taken none of them.
 ///
-/// **It offers a stop only where there is something for it to stop.** The
-/// light is drawn from bytes measured leaving the device and never from the
-/// setting (see [SharingLight]), so it is lit in two states a stop has no
-/// answer for, because things upload that neither stop governs: a torrent
-/// serving out its idle grace, and a title kept offline. With "Share while
-/// idle" already off both stops are dead -- a "Not now" would pause a
-/// setting that is off and "Stop sharing" would turn off a switch that is
-/// off -- so the dialog says that instead ([IdleSharing.alreadyOffTitle])
-/// and offers neither. With the switch on and a "Not now" already in force
-/// the pause row alone is dead: the policy takes no second pause, and a row
-/// that is drawn and does nothing when pressed is the same defect as a
-/// button drawn and dead. So the dialog says the pause is in force
-/// ([IdleSharing.pausedTitle]) and offers only the switch, which still
-/// does something because it is the longer of the two stops. The dismiss
-/// action says "Keep sharing" only where a stop was offered and declined;
-/// where nothing was, it says "Close", since nothing is being kept.
+/// **It offers a stop only where there is something for it to stop, and
+/// every row with a press on it does something.** The light is drawn from
+/// the server's measured halves (see [SharingLight]), so the dialog is
+/// built from the same two halves and from what each one's stop governs:
 ///
-/// The pause is read from [IdleSharingPolicy.pausedForRun] and not inferred
-/// from the light, because the light says nothing about it: the server was
-/// told to stop, and the bytes the light measures are the grace and the
-/// pinned titles, exactly what a pause cannot reach. That is why a pause
-/// and a lit light are an ordinary pair rather than an edge.
+/// - **Bytes going out** are what "Share while idle" governs, so the
+///   sharing rows are drawn: "Not now" ([IdleSharingPolicy.pauseUntilRestart])
+///   and "Stop sharing" (the setting). Things upload that neither governs
+///   -- a torrent serving out its idle grace, a title kept offline -- so
+///   the light is honestly lit in two states where a stop has no answer.
+///   With the switch already off both rows would be dead (a pause of a
+///   setting that is off, a switch turned off that is off), so the dialog
+///   says that ([IdleSharing.alreadyOffTitle]) and offers neither; with a
+///   "Not now" already in force the pause row alone is dead, since the
+///   policy takes no second pause, so the dialog says the pause is in force
+///   ([IdleSharing.pausedTitle]) and offers only the switch. The pause is
+///   read from [IdleSharingPolicy.pausedForRun], not inferred from the
+///   light, which cannot tell.
+/// - **Bytes coming in** are either an offline download filling in or a
+///   title you watched finishing its own file. The first is governed by the
+///   downloads: one "Cancel" row per download still on its way
+///   ([downloads], listed by the light as it opened), each of which drops
+///   that download and its part-file through [DownloadsClient.remove] --
+///   what "Cancel all" on the downloads notification does, since there is
+///   no pause for a pinned file. With no offline download in flight the
+///   bytes are the second thing, and that is governed by "Share while idle"
+///   like the uploading is: a torrent nothing is streaming is paused when
+///   the setting is off, and a pause stops its downloading with its
+///   uploading. So the dialog says no download is in flight
+///   ([noDownloadTitle]) and draws the sharing rows, which are the stop
+///   that works.
+/// - **Both** draws both groups, each under a heading, so the viewer can
+///   tell which row is about which arrow.
 ///
-/// That the rows are chosen by what is running rather than always drawn is
-/// what this will be widened along: the light is coming to mean "Xtremio is
-/// using your connection while you are not watching", a background download
-/// lighting it as much as a share does, and the dialog will then have to
-/// name which of the two is going on and offer that one's stop.
-///
-/// The two stops are drawn as rows with a line each rather than as buttons,
-/// because they differ in exactly one thing -- how long they last -- and a
-/// pair of buttons labelled "Not now" and "Stop sharing" would leave that
-/// difference to be guessed at. The dialog's one action is its way out, and
-/// Back (or the barrier) is the same answer.
+/// The rows are drawn as list rows with a line each rather than as
+/// buttons, because two stops that differ in exactly one thing -- how long
+/// they last -- would leave that difference to be guessed at from a pair of
+/// button labels. The dialog's one action is its way out, "Close", which
+/// changes nothing; Back (or the barrier) is the same answer.
 class SharingStopDialog extends StatelessWidget {
-  const SharingStopDialog({super.key, required this.traffic});
+  const SharingStopDialog({
+    super.key,
+    required this.traffic,
+    this.downloads = const [],
+  });
 
   /// The reading the light was lit by when it was pressed.
   final BackgroundTraffic traffic;
 
+  /// The offline downloads still on their way when the light was pressed
+  /// ([DownloadView.isUnfinished]), newest first. Read only while
+  /// [traffic] says bytes are coming in; a "Cancel" row is drawn for each.
+  final List<DownloadView> downloads;
+
   /// Keys a test presses, and the only names these rows answer to. A stop
-  /// is drawn only while it would do something -- both with the setting on
-  /// and no pause in force, the switch alone under a pause, neither with the
-  /// setting off; [keepKey] is the way out and is always there.
+  /// is drawn only while it would do something; [closeKey] is the way out
+  /// and is always there.
   static const Key notNowKey = Key('sharing-not-now');
   static const Key stopKey = Key('sharing-stop');
   static const Key pausedKey = Key('sharing-paused');
   static const Key alreadyOffKey = Key('sharing-already-off');
-  static const Key keepKey = Key('sharing-keep');
+  static const Key noDownloadKey = Key('sharing-no-download');
+  static const Key closeKey = Key('sharing-close');
+
+  /// The "Cancel" row for the download under [key]
+  /// ([DownloadView.key]).
+  static Key cancelKey(String key) => Key('sharing-cancel-$key');
+
+  /// The headings over the two groups, drawn only when both are.
+  static const String uploadingHeading = 'Uploading';
+  static const String downloadingHeading = 'Downloading';
+
+  /// What the download group says when bytes are coming in and no offline
+  /// download is on its way: the only other thing the server downloads with
+  /// nothing playing is a title that was watched, finishing the file it was
+  /// streamed from, and that is under the sharing setting -- so the sharing
+  /// rows are drawn beside this and this says why.
+  static const String noDownloadTitle = 'No offline download is in flight';
+  static const String noDownloadDescription =
+      'What is arriving is a title you watched, finishing its own file. '
+      '"Share while idle" governs that as it governs the uploading.';
+
+  /// What the "Cancel" row costs, on the row: the download stops being kept
+  /// and its part-file goes, the same as the downloads notification's
+  /// "Cancel all". A download the server has not started yet has nothing to
+  /// delete, and the row says that instead of naming a size of nothing.
+  static String cancelDescription(DownloadView view) => view.downloaded > 0
+      ? 'Stops keeping it offline and deletes the ${view.downloadedLabel} '
+            'that has arrived so far.'
+      : 'Stops keeping it offline. Nothing has arrived yet.';
+
+  /// What is said when the removal itself failed, after the dialog has
+  /// closed; the download is then still listed and still downloading.
+  static const String cancelFailed = 'This download could not be cancelled.';
 
   @override
   Widget build(BuildContext context) {
     final scope = SharingScope.read(context);
     final prefs = PrefsScope.maybeOf(context);
+    final downloadsClient = DownloadsScope.maybeOf(context);
     // Both the preference and the policy's pause, because the light answers
     // neither: it is lit by measured bytes, and a torrent's idle grace and a
-    // pinned title go on uploading with the switch off and under a pause
+    // pinned title go on moving bytes with the switch off and under a pause
     // alike. A pause is a state of a switch that is on (the policy holds
     // that from both ends), so `paused` implies `sharing`.
     final sharing = prefs?.shareWhileIdle ?? false;
     final paused = sharing && (scope?.policy.pausedForRun ?? false);
-    final stopRow = ListTile(
-      key: stopKey,
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.do_not_disturb_on_outlined),
-      title: const Text(IdleSharing.stopTitle),
-      subtitle: const Text(IdleSharing.stopDescription),
-      onTap: () {
-        // The same preference the settings switch writes, so the one
-        // policy sends it on and the server has one author either way.
-        prefs?.setShareWhileIdle(false);
-        Navigator.of(context).pop();
-      },
-    );
+    // A "Cancel" row is only a row that does something with a client to
+    // press it on; without one the downloads are treated as not listed.
+    final cancellable = downloadsClient == null
+        ? const <DownloadView>[]
+        : downloads;
+    final uploading = traffic.uploading;
+    final downloading = traffic.downloading;
+    // The sharing rows govern the uploading, and the downloading too when
+    // no offline download accounts for it (see the class comment).
+    final showSharing = uploading || (downloading && cancellable.isEmpty);
+    final both = showSharing && downloading;
+
+    final sharingRows = <Widget>[
+      if (!sharing)
+        ListTile(
+          key: alreadyOffKey,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.do_not_disturb_on_outlined),
+          title: const Text(IdleSharing.alreadyOffTitle),
+          subtitle: const Text(IdleSharing.alreadyOffDescription),
+        )
+      else if (paused) ...[
+        // The pause is said rather than offered: `pauseUntilRestart` takes
+        // no second pause, so a "Not now" row here would be drawn and dead.
+        // The switch is the one stop left with something to do.
+        ListTile(
+          key: pausedKey,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.pause_circle_outline),
+          title: const Text(IdleSharing.pausedTitle),
+          subtitle: const Text(IdleSharing.pausedDescription),
+        ),
+        _stopRow(context, prefs),
+      ] else ...[
+        ListTile(
+          key: notNowKey,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.pause_circle_outline),
+          title: const Text(IdleSharing.pauseTitle),
+          subtitle: const Text(IdleSharing.pauseDescription),
+          onTap: () {
+            scope?.policy.pauseUntilRestart();
+            Navigator.of(context).pop();
+          },
+        ),
+        _stopRow(context, prefs),
+      ],
+    ];
+
+    final downloadRows = <Widget>[
+      if (cancellable.isEmpty)
+        const ListTile(
+          key: noDownloadKey,
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(SharingLight.downloadingIcon),
+          title: Text(noDownloadTitle),
+          subtitle: Text(noDownloadDescription),
+        )
+      else
+        for (final view in cancellable)
+          ListTile(
+            key: cancelKey(view.key),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.cancel_outlined),
+            title: Text('Cancel ${view.name}'),
+            subtitle: Text(cancelDescription(view)),
+            onTap: () => _cancel(context, downloadsClient!, view),
+          ),
+    ];
+
     return AlertDialog(
+      // Several downloads in flight make more rows than a short screen
+      // holds, and the way out is under them.
+      scrollable: true,
       title: Text(SharingLight.labelFor(traffic)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -370,54 +505,68 @@ class SharingStopDialog extends StatelessWidget {
         children: [
           const Text(SharingLight.summary),
           const SizedBox(height: 12),
-          if (!sharing)
-            ListTile(
-              key: alreadyOffKey,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.do_not_disturb_on_outlined),
-              title: const Text(IdleSharing.alreadyOffTitle),
-              subtitle: const Text(IdleSharing.alreadyOffDescription),
-            )
-          else if (paused) ...[
-            // The pause is said rather than offered: `pauseUntilRestart`
-            // takes no second pause, so a "Not now" row here would be drawn
-            // and dead. The switch is the one stop left with something to
-            // do.
-            ListTile(
-              key: pausedKey,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.pause_circle_outline),
-              title: const Text(IdleSharing.pausedTitle),
-              subtitle: const Text(IdleSharing.pausedDescription),
-            ),
-            stopRow,
+          // With no offline download to cancel, the statement about the
+          // downloading comes first and the sharing rows it points at
+          // follow; with both arrows lit each group has its heading.
+          if (downloading && cancellable.isEmpty && !uploading) ...[
+            ...downloadRows,
+            ...sharingRows,
           ] else ...[
-            ListTile(
-              key: notNowKey,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.pause_circle_outline),
-              title: const Text(IdleSharing.pauseTitle),
-              subtitle: const Text(IdleSharing.pauseDescription),
-              onTap: () {
-                scope?.policy.pauseUntilRestart();
-                Navigator.of(context).pop();
-              },
-            ),
-            stopRow,
+            if (both) _heading(context, uploadingHeading),
+            if (showSharing) ...sharingRows,
+            if (both) _heading(context, downloadingHeading),
+            if (downloading) ...downloadRows,
           ],
         ],
       ),
       actions: [
         TextButton(
-          key: keepKey,
+          key: closeKey,
           onPressed: () => Navigator.of(context).pop(),
-          // "Keep sharing" only where leaving keeps a sharing this dialog
-          // offered to stop. With the switch off nothing is being kept, and
-          // under a pause the sharing has already been stopped -- what goes
-          // on is what neither stop reaches -- so leaving is only leaving.
-          child: Text(sharing && !paused ? 'Keep sharing' : 'Close'),
+          child: const Text('Close'),
         ),
       ],
     );
+  }
+
+  /// "Stop sharing": the same preference the settings switch writes, so the
+  /// one policy sends it on and the server has one author either way.
+  Widget _stopRow(BuildContext context, AppPrefs? prefs) => ListTile(
+    key: stopKey,
+    contentPadding: EdgeInsets.zero,
+    leading: const Icon(Icons.do_not_disturb_on_outlined),
+    title: const Text(IdleSharing.stopTitle),
+    subtitle: const Text(IdleSharing.stopDescription),
+    onTap: () {
+      prefs?.setShareWhileIdle(false);
+      Navigator.of(context).pop();
+    },
+  );
+
+  Widget _heading(BuildContext context, String text) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+  );
+
+  /// Drops [view] and its part-file, the way the downloads notification's
+  /// "Cancel all" does, and says what happened where the shell can show it.
+  /// The dialog closes first: the removal is a round trip to the server,
+  /// and a row that stays on screen after it was pressed is a row that
+  /// looks like it did nothing.
+  Future<void> _cancel(
+    BuildContext context,
+    DownloadsClient client,
+    DownloadView view,
+  ) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    Navigator.of(context).pop();
+    String message;
+    try {
+      final result = await client.remove(view.key, deleteFiles: true);
+      message = downloadRemovedMessage(result, view);
+    } catch (_) {
+      message = cancelFailed;
+    }
+    messenger?.showSnackBar(SnackBar(content: Text(message)));
   }
 }

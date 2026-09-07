@@ -12,6 +12,7 @@ import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
 import '../support/fake_core_client.dart';
+import '../support/fake_downloads_client.dart';
 import '../support/fake_sharing.dart';
 import '../support/fixtures.dart';
 import '../support/tv.dart';
@@ -37,27 +38,62 @@ void main() {
     },
   );
 
-  /// The shell as the app mounts it, over one monitor and one policy.
+  /// The shell as the app mounts it, over one monitor, one policy and one
+  /// downloads client.
   Widget harness({
     required SharingActivityMonitor monitor,
     required IdleSharingPolicy policy,
     required AppPrefs prefs,
+    DownloadsClient? downloads,
     DeviceProfile device = phone,
     GlobalKey<NavigatorState>? navigator,
   }) => DeviceScope(
     profile: device,
     child: CoreScope(
       client: fakeCore(),
-      child: PrefsScope(
-        prefs: prefs,
-        child: SharingScope(
-          policy: policy,
-          monitor: monitor,
-          child: MaterialApp(navigatorKey: navigator, home: const RootShell()),
+      child: DownloadsScope(
+        client: downloads ?? FakeDownloadsClient(),
+        child: PrefsScope(
+          prefs: prefs,
+          child: SharingScope(
+            policy: policy,
+            monitor: monitor,
+            child: MaterialApp(
+              navigatorKey: navigator,
+              home: const RootShell(),
+            ),
+          ),
         ),
       ),
     ),
   );
+
+  /// A registry row as `downloads_list` answers it, in [state] with
+  /// [downloaded] of [size] bytes on disk.
+  DownloadView download(
+    String metaId,
+    String name, {
+    DownloadState state = DownloadState.downloading,
+    int downloaded = 120000000,
+    int size = 1500000000,
+  }) => DownloadView({
+    'metaId': metaId,
+    'videoId': metaId,
+    'type': 'movie',
+    'name': name,
+    'state': state.wireName,
+    'downloaded': downloaded,
+    'size': size,
+    'createdAt': '2026-09-0${metaId.length % 9 + 1}T10:00:00Z',
+  });
+
+  /// A downloads client holding [views].
+  FakeDownloadsClient downloadsOf(List<DownloadView> views) =>
+      FakeDownloadsClient(
+        registry: DownloadsRegistry(
+          items: {for (final view in views) view.key: view},
+        ),
+      );
 
   /// Everything one of these tests needs, wired the way the app wires it.
   ({
@@ -379,12 +415,22 @@ void main() {
         RecordingServerSettings settings,
       })
     >
-    openPopup(WidgetTester tester, {bool sharing = true}) async {
+    openPopup(
+      WidgetTester tester, {
+      bool sharing = true,
+      BackgroundTraffic? reading,
+      DownloadsClient? downloads,
+    }) async {
       final s = setUpSharing(tester);
       if (!sharing) await s.prefs.setShareWhileIdle(false);
-      seeding(s.server);
+      s.server.answer = reading ?? traffic(up: true);
       await tester.pumpWidget(
-        harness(monitor: s.monitor, policy: s.policy, prefs: s.prefs),
+        harness(
+          monitor: s.monitor,
+          policy: s.policy,
+          prefs: s.prefs,
+          downloads: downloads,
+        ),
       );
       await tester.pumpAndSettle();
       await poll(tester);
@@ -393,16 +439,30 @@ void main() {
       return s;
     }
 
-    testWidgets('offers both stops and a way out of neither', (tester) async {
+    /// Every row in the open popup that a press does something on.
+    Finder pressableRows() => find.descendant(
+      of: find.byType(SharingStopDialog),
+      matching: find.byWidgetPredicate((w) => w is ListTile && w.onTap != null),
+    );
+
+    testWidgets('while uploading, offers both sharing stops and a way out '
+        'of neither', (tester) async {
       await openPopup(tester);
 
+      expect(find.text('Uploading to other people'), findsOneWidget);
       expect(find.byKey(SharingStopDialog.notNowKey), findsOneWidget);
       expect(find.byKey(SharingStopDialog.stopKey), findsOneWidget);
-      expect(find.byKey(SharingStopDialog.keepKey), findsOneWidget);
+      expect(find.byKey(SharingStopDialog.closeKey), findsOneWidget);
       // What each one costs is on the row, not left to be guessed from a
       // pair of button labels.
       expect(find.text(IdleSharing.pauseDescription), findsOneWidget);
       expect(find.text(IdleSharing.stopDescription), findsOneWidget);
+      // Nothing about downloads: no bytes are coming in, so a download row
+      // would be a row about the wrong arrow.
+      expect(find.byKey(SharingStopDialog.noDownloadKey), findsNothing);
+      expect(find.text(SharingStopDialog.uploadingHeading), findsNothing);
+      expect(find.text(SharingStopDialog.downloadingHeading), findsNothing);
+      expect(pressableRows(), findsNWidgets(2));
     });
 
     testWidgets('offers no stop at all while the setting is already off', (
@@ -422,10 +482,10 @@ void main() {
       expect(find.text(IdleSharing.alreadyOffTitle), findsOneWidget);
       expect(find.text(IdleSharing.alreadyOffDescription), findsOneWidget);
 
-      // The way out is still there, and it does not say "Keep sharing",
-      // which is not what leaving this dialog does.
-      expect(find.text('Close'), findsOneWidget);
-      await tester.tap(find.byKey(SharingStopDialog.keepKey));
+      // The way out is still there, and there is no row a press would do
+      // nothing on.
+      expect(pressableRows(), findsNothing);
+      await tester.tap(find.byKey(SharingStopDialog.closeKey));
       await tester.pumpAndSettle();
       await s.policy.settled;
 
@@ -482,18 +542,9 @@ void main() {
       expect(find.byKey(SharingStopDialog.stopKey), findsOneWidget);
       // Every row with a press on it changes something: the only pressable
       // row is the switch.
-      final pressable = find.descendant(
-        of: find.byType(SharingStopDialog),
-        matching: find.byWidgetPredicate(
-          (w) => w is ListTile && w.onTap != null,
-        ),
-      );
+      final pressable = pressableRows();
       expect(pressable, findsOneWidget);
       expect(tester.widget<ListTile>(pressable).key, SharingStopDialog.stopKey);
-      // And the way out is a way out, not "Keep sharing": the sharing this
-      // dialog could have kept was already stopped by the pause.
-      expect(find.text('Keep sharing'), findsNothing);
-      expect(find.text('Close'), findsOneWidget);
 
       // The stop it does offer does what it says from here as well.
       await tester.tap(find.byKey(SharingStopDialog.stopKey));
@@ -522,7 +573,7 @@ void main() {
     testWidgets('dismissing does neither', (tester) async {
       final s = await openPopup(tester);
 
-      await tester.tap(find.byKey(SharingStopDialog.keepKey));
+      await tester.tap(find.byKey(SharingStopDialog.closeKey));
       await tester.pumpAndSettle();
       await s.policy.settled;
 
@@ -534,6 +585,199 @@ void main() {
       ]);
       // Still going out, so still lit.
       expect(find.byKey(lightKey), findsOneWidget);
+    });
+
+    testWidgets('while downloading, offers a Cancel per download on its way '
+        'and no sharing row', (tester) async {
+      final downloads = downloadsOf([
+        download('tt1', 'Alien'),
+        download('tt2', 'Aliens', state: DownloadState.queued, downloaded: 0),
+        download('tt3', 'Alien 3', state: DownloadState.complete),
+      ]);
+      final s = await openPopup(
+        tester,
+        reading: traffic(down: true),
+        downloads: downloads,
+      );
+
+      expect(find.text('Downloading'), findsOneWidget);
+      // One row per download still on its way; the finished one is not a
+      // download in flight and gets none.
+      expect(
+        find.byKey(SharingStopDialog.cancelKey('tt1:tt1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(SharingStopDialog.cancelKey('tt2:tt2')),
+        findsOneWidget,
+      );
+      expect(find.byKey(SharingStopDialog.cancelKey('tt3:tt3')), findsNothing);
+      expect(find.text('Cancel Alien'), findsOneWidget);
+      // What each costs is on the row: the part-file goes with it, and a
+      // download nothing has arrived for says so instead of naming 0 B.
+      expect(
+        find.text(
+          'Stops keeping it offline and deletes the 120 MB that has '
+          'arrived so far.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Stops keeping it offline. Nothing has arrived yet.'),
+        findsOneWidget,
+      );
+      // The sharing rows govern the other arrow and are not drawn here.
+      expect(find.byKey(SharingStopDialog.notNowKey), findsNothing);
+      expect(find.byKey(SharingStopDialog.stopKey), findsNothing);
+      expect(find.byKey(SharingStopDialog.noDownloadKey), findsNothing);
+      // And no heading: the one "Downloading" on screen is the title,
+      // asserted above, since a heading over a lone group says nothing.
+      expect(pressableRows(), findsNWidgets(2));
+
+      // Pressing one drops that download and its part-file -- what the
+      // notification's "Cancel all" does -- closes the popup, and says so.
+      await tester.tap(find.byKey(SharingStopDialog.cancelKey('tt1:tt1')));
+      await tester.pumpAndSettle();
+
+      expect(downloads.removed, [(key: 'tt1:tt1', deleteFiles: true)]);
+      expect(find.byType(SharingStopDialog), findsNothing);
+      expect(find.text('Deleted Alien.'), findsOneWidget);
+      // The setting was never touched: this stop was about the download.
+      expect(s.prefs.shareWhileIdle, isTrue);
+      expect(s.policy.pausedForRun, isFalse);
+    });
+
+    testWidgets('a cancel the server refuses is said, not swallowed', (
+      tester,
+    ) async {
+      final downloads = downloadsOf([download('tt1', 'Alien')])
+        ..removeError = StateError('server is not running');
+      await openPopup(
+        tester,
+        reading: traffic(down: true),
+        downloads: downloads,
+      );
+
+      await tester.tap(find.byKey(SharingStopDialog.cancelKey('tt1:tt1')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SharingStopDialog), findsNothing);
+      expect(find.text(SharingStopDialog.cancelFailed), findsOneWidget);
+    });
+
+    testWidgets('while downloading with no offline download in flight, says '
+        'so and offers the sharing stops, which govern it', (tester) async {
+      // The other thing the server downloads with nothing playing: a title
+      // that was watched, finishing the file it was streamed from. That
+      // torrent is paused when the setting is off, so the sharing rows are
+      // the stop that works, and the statement says why they are there.
+      final s = await openPopup(
+        tester,
+        reading: traffic(down: true),
+        downloads: downloadsOf([
+          download('tt3', 'Alien 3', state: DownloadState.complete),
+        ]),
+      );
+
+      expect(find.text('Downloading'), findsOneWidget);
+      expect(find.byKey(SharingStopDialog.noDownloadKey), findsOneWidget);
+      expect(
+        find.text(SharingStopDialog.noDownloadDescription),
+        findsOneWidget,
+      );
+      expect(find.byKey(SharingStopDialog.notNowKey), findsOneWidget);
+      expect(find.byKey(SharingStopDialog.stopKey), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is ListTile && w.key.toString().contains('sharing-cancel'),
+        ),
+        findsNothing,
+      );
+      expect(pressableRows(), findsNWidgets(2));
+
+      await tester.tap(find.byKey(SharingStopDialog.notNowKey));
+      await tester.pumpAndSettle();
+      await s.policy.settled;
+      expect(s.settings.patches.last, {IdleSharing.seedingEnabledKey: false});
+      expect(s.policy.pausedForRun, isTrue);
+    });
+
+    testWidgets('a downloads listing that fails reads as no download in '
+        'flight', (tester) async {
+      // All the app knows then is that bytes are coming in; it says that
+      // and offers the stops it can stand behind, rather than a Cancel for
+      // a download it could not see.
+      final downloads = downloadsOf([download('tt1', 'Alien')])
+        ..listError = StateError('server is not running');
+      await openPopup(
+        tester,
+        reading: traffic(down: true),
+        downloads: downloads,
+      );
+
+      expect(find.byKey(SharingStopDialog.noDownloadKey), findsOneWidget);
+      expect(find.byKey(SharingStopDialog.cancelKey('tt1:tt1')), findsNothing);
+      expect(find.byKey(SharingStopDialog.notNowKey), findsOneWidget);
+    });
+
+    testWidgets('while both, offers both groups under headings', (
+      tester,
+    ) async {
+      final downloads = downloadsOf([download('tt1', 'Alien')]);
+      final s = await openPopup(
+        tester,
+        reading: traffic(up: true, down: true),
+        downloads: downloads,
+      );
+
+      expect(find.text('Uploading and downloading'), findsOneWidget);
+      expect(find.text(SharingStopDialog.uploadingHeading), findsOneWidget);
+      expect(find.text(SharingStopDialog.downloadingHeading), findsOneWidget);
+      expect(find.byKey(SharingStopDialog.notNowKey), findsOneWidget);
+      expect(find.byKey(SharingStopDialog.stopKey), findsOneWidget);
+      expect(
+        find.byKey(SharingStopDialog.cancelKey('tt1:tt1')),
+        findsOneWidget,
+      );
+      expect(pressableRows(), findsNWidgets(3));
+      // The headings are in order: the up arrow's group above the down
+      // arrow's, as the label names them.
+      expect(
+        tester.getTopLeft(find.text(SharingStopDialog.uploadingHeading)).dy,
+        lessThan(
+          tester.getTopLeft(find.text(SharingStopDialog.downloadingHeading)).dy,
+        ),
+      );
+
+      // Each group's stop still does its own thing from here.
+      await tester.tap(find.byKey(SharingStopDialog.stopKey));
+      await tester.pumpAndSettle();
+      await s.policy.settled;
+      expect(s.prefs.shareWhileIdle, isFalse);
+      expect(downloads.removed, isEmpty);
+    });
+
+    testWidgets('while both with the setting off, the sharing group says so '
+        'and the download group is still a stop', (tester) async {
+      final downloads = downloadsOf([download('tt1', 'Alien')]);
+      await openPopup(
+        tester,
+        sharing: false,
+        reading: traffic(up: true, down: true),
+        downloads: downloads,
+      );
+
+      expect(find.byKey(SharingStopDialog.alreadyOffKey), findsOneWidget);
+      expect(
+        find.byKey(SharingStopDialog.cancelKey('tt1:tt1')),
+        findsOneWidget,
+      );
+      final pressable = pressableRows();
+      expect(pressable, findsOneWidget);
+      expect(
+        tester.widget<ListTile>(pressable).key,
+        SharingStopDialog.cancelKey('tt1:tt1'),
+      );
     });
   });
 
