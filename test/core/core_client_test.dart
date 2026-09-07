@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 
+import '../support/diagnostics_capture.dart';
 import '../support/rust_lib.dart';
 
 void main() {
@@ -71,12 +72,19 @@ void main() {
       expect(value!['selected'], isNull);
       expect(discover.lastError, isNull);
 
+      // A rejected action reaches the Runtime not at all, and almost every
+      // caller drops the future it was refused on: without this line the
+      // only trace is the unhandled-error hook's anonymous
+      // `dart: AnyhowException(...)`, which names no action. The name and
+      // nothing else -- action args carry credentials.
+      final lines = captureDiagnostics();
       await expectLater(
         client.dispatch(
           const CoreAction(field: CoreField.board, action: {'action': 'Nope'}),
         ),
         throwsA(predicate((e) => e.toString().contains('invalid action JSON'))),
       );
+      expect(lines, ['error core action rejected: board/Nope']);
 
       await client.shutdown();
       expect(client.isInitialized, isFalse);
@@ -124,12 +132,16 @@ void main() {
 
       // Settings has no serde defaults: a map with keys missing never reaches
       // the engine.
+      final lines = captureDiagnostics();
       await expectLater(
         client.dispatch(
           CoreActions.updateSettings({ProfileSettings.bingeWatchingKey: false}),
         ),
         throwsA(predicate((e) => e.toString().contains('invalid action JSON'))),
       );
+      // Named by its tags, and the walk stops before the settings map:
+      // a `Ctx` action's args are exactly what must never be written down.
+      expect(lines, ['error core action rejected: ctx/Ctx.UpdateSettings']);
       expect(
         ProfileState.fromCtx(await client.state(CoreField.ctx)).settings.json,
         {...before.json, 'subtitlesSize': 150},

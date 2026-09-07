@@ -6,6 +6,7 @@ import '../src/rust/api/core.dart' as rust;
 import '../src/rust/api/server.dart' as rust_server;
 import 'actions.dart';
 import 'core_events.dart';
+import 'diagnostics_log.dart';
 import 'fields.dart';
 import 'server_client.dart';
 
@@ -193,9 +194,28 @@ final class RustCoreClient implements CoreClient {
     );
   }
 
+  /// Sends [action] into the Runtime, and writes down the one thing a
+  /// rejection was otherwise invisible as.
+  ///
+  /// `core_dispatch` refuses an action serde cannot deserialize, and the
+  /// Runtime never sees it: no event, no state change, nothing on screen.
+  /// Almost every caller drops the future, so the only trace was the
+  /// unhandled-error hook's anonymous `dart: AnyhowException(...)` line --
+  /// which names neither the action nor the screen, and only exists at
+  /// all because `captureUnhandledErrors` is installed. This line names
+  /// what was thrown out. The throw is kept: the contract is unchanged
+  /// and a caller that does await still hears about it.
+  ///
+  /// [CoreAction.name] and nothing else -- action args carry credentials.
   @override
-  Future<void> dispatch(CoreAction action) =>
-      rust.coreDispatch(actionJson: jsonEncode(action.toJson()));
+  Future<void> dispatch(CoreAction action) async {
+    try {
+      await rust.coreDispatch(actionJson: jsonEncode(action.toJson()));
+    } catch (_) {
+      DiagnosticsLog.error('core', 'action rejected: ${action.name}');
+      rethrow;
+    }
+  }
 
   @override
   Future<Map<String, dynamic>> state(CoreField field) => _pulls.pull(field);

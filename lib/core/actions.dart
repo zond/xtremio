@@ -21,6 +21,26 @@ final class CoreAction {
 
   /// The envelope `core_dispatch` expects.
   Map<String, dynamic> toJson() => {'field': field?.wireName, 'action': action};
+
+  /// What this action *is*, in names alone: the model field and the tags
+  /// of the enums it is nested in, `player/Player.Seek`.
+  ///
+  /// Safe to write down, which is the whole point of it. An action's args
+  /// are not -- a `Ctx` action carries the password and the auth key
+  /// (`AGENTS.md`, "Never log auth material") -- so this reads the `serde`
+  /// tags and stops: two levels, which is as deep as a tag goes, and never
+  /// far enough to reach a credential, a manifest URL or a search query.
+  String get name {
+    final tags = <String>[];
+    Object? node = action;
+    for (var depth = 0; depth < 2; depth++) {
+      if (node is! Map<String, dynamic> || node['action'] is! String) break;
+      tags.add(node['action'] as String);
+      node = node['args'];
+    }
+    return '${field?.wireName ?? 'ctx+every field'}/'
+        '${tags.isEmpty ? 'unnamed' : tags.join('.')}';
+  }
 }
 
 Map<String, dynamic> _tagged(String action, [Object? args]) => {

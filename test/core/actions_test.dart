@@ -149,6 +149,46 @@ void main() {
     expect(explicit.action['args']['args']['guessStream'], isTrue);
   });
 
+  group('an action can be named without being read', () {
+    // What a rejected dispatch is written down as. The names are the
+    // `serde` tags and the walk stops at two of them, which is as deep as
+    // a tag goes -- and never deep enough to reach an arg.
+    test('the field and the tags it is nested in', () {
+      expect(
+        CoreActions.playerSeek(time: 0, duration: 5000, device: 'xtremio').name,
+        'player/Player.Seek',
+      );
+      expect(CoreActions.playerEnded().name, 'player/Player.Ended');
+      expect(CoreActions.loadBoard().name, 'board/Load');
+      expect(CoreActions.unload(CoreField.library).name, 'library/Unload');
+      expect(
+        CoreActions.updateSettings(const {}).name,
+        'ctx/Ctx.UpdateSettings',
+      );
+    });
+
+    test('a Ctx action names itself and says nothing else', () {
+      // The one rule this exists to keep: `Authenticate` carries the
+      // password, so the line a rejection writes must not reach it.
+      final name = CoreActions.login(
+        email: 'someone@example.com',
+        password: 'hunter2',
+      ).name;
+      expect(name, 'ctx/Ctx.Authenticate');
+      expect(name, isNot(contains('hunter2')));
+      expect(name, isNot(contains('example.com')));
+    });
+
+    test('an action with no field is named for what it reaches', () {
+      // `field: null` is the whole model, which stremio-core routes to
+      // `Ctx` and every field.
+      expect(
+        const CoreAction(field: null, action: {'action': 'Nope'}).name,
+        'ctx+every field/Nope',
+      );
+    });
+  });
+
   test('markVideoAsWatched carries the raw video and the flag as a tuple', () {
     final video = {'id': 'tt1:1:2', 'title': 'Two', 'season': 1, 'episode': 2};
     expect(CoreActions.markVideoAsWatched(video, watched: true).toJson(), {
