@@ -159,19 +159,25 @@ void main() {
     expect(find.text('English'), findsOneWidget);
   });
 
-  testWidgets('a language this episode does not offer is not pinned', (
-    tester,
-  ) async {
+  testWidgets('a language this episode does not offer is not pinned, and '
+      'the note does not claim it away', (tester) async {
     useWideViewport(tester);
-    // Picked forty times, and answered with here not at all. A pin is a
-    // row moved, never a row invented.
-    final prefs = counting({'Portuguese': 40, 'English': 41});
+    // Picked forty times, answered with here not at all -- and picked
+    // more often than the one row that is pinned. A pin is a row moved,
+    // never a row invented.
+    final prefs = counting({'Portuguese': 40, 'English': 12});
     await prefs.load();
 
     await openMenu(tester, harnessWith(fourLanguages(), prefs: prefs));
 
     expect(find.text('Portuguese'), findsNothing);
     expect(find.text(SubtitleMenu.pinnedNote(1)), findsOneWidget);
+    // The heading's note has to survive exactly this case: English is
+    // not the language this viewer picks most often, it is the one they
+    // pick most often *of the four on offer*, and that is all the note
+    // is allowed to say.
+    expect(SubtitleMenu.pinnedNote(1), contains('on offer here'));
+    expect(SubtitleMenu.pinnedNote(2), contains('on offer here'));
   });
 
   testWidgets('nothing is pinned when there is nothing to lift it above', (

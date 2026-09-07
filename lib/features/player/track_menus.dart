@@ -81,10 +81,19 @@ class SubtitleMenu extends StatefulWidget {
 
   /// What that heading's note says, which has to be true of one row as
   /// well as of two: a viewer with a single second language sees one.
+  ///
+  /// **"on offer here" is the whole of what makes it true.** A pin is
+  /// only ever a row this episode actually offers, so the language this
+  /// viewer really picks most often can be missing from the answer
+  /// altogether -- and then a note calling the row above it their
+  /// commonest asserts the opposite of what the counts say. The
+  /// comparison [SubtitlePickMemory.pinned] makes is among the languages
+  /// on offer, and that is the comparison this sentence reports.
   static String pinnedNote(int count) => count == 1
-      ? 'The language you pick most often, lifted out of the list below.'
-      : 'The $count languages you pick most often, lifted out of the '
-            'list below.';
+      ? 'The language on offer here that you pick most often, lifted out '
+            'of the list below.'
+      : 'The $count languages on offer here that you pick most often, '
+            'lifted out of the list below.';
 
   /// `title`, else the language, else a numbered fallback.
   static String embeddedLabel(TrackInfo track, int index) =>
