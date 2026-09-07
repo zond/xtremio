@@ -223,6 +223,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onSetting: write,
             ),
           ),
+          // The app's own preference again, so it is outside `_withSettings`
+          // like "Buffer ahead": what it feeds is the embedded server's
+          // `seedingEnabled`, not a `profile.settings` field, and the
+          // policy that sends it reads the preferences directly.
+          IdleSharingSection(prefs: _prefs),
           ValueListenableBuilder<Map<String, dynamic>?>(
             valueListenable: _server!,
             builder: (context, state, _) {

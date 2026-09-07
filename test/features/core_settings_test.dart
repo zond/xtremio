@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/core_settings.dart';
+import 'package:xtremio/features/sharing/idle_sharing.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
@@ -294,6 +295,72 @@ void main() {
     });
   });
 
+  group('share while idle', () {
+    const tv = DeviceProfile(isTv: true, hasTouch: false);
+
+    Finder theSwitch() => find.byKey(settingKey(AppPrefs.shareWhileIdleKey));
+
+    testWidgets('starts where the device puts it, and says what it does', (
+      tester,
+    ) async {
+      // Nothing has been chosen, so what the switch shows is the default,
+      // and the default is the device's: a box in a wall socket shares,
+      // and a phone does not.
+      await pumpSettings(tester, prefs: AppPrefs.inMemory(), device: tv);
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isTrue);
+
+      await pumpSettings(tester, prefs: AppPrefs.inMemory());
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
+
+      // And the rule the viewer never set is on the tile with the promise:
+      // "Share while idle" alone leaves them guessing whether the phone
+      // will be uploading on the train.
+      expect(find.text(IdleSharing.description), findsOneWidget);
+      expect(find.textContaining('metered'), findsOneWidget);
+    });
+
+    testWidgets('writes the choice to the preferences, not the core', (
+      tester,
+    ) async {
+      final stored = FakePrefsClient();
+      final prefs = AppPrefs(client: stored);
+      final core = await pumpSettings(tester, prefs: prefs, device: tv);
+
+      // A television turning it off is a decision, and it has to read back
+      // as one rather than falling through to the default that says on.
+      await tester.tap(theSwitch());
+      await tester.pumpAndSettle();
+
+      expect(prefs.shareWhileIdle, isFalse);
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
+      expect(core.dispatched, isEmpty, reason: '${core.dispatched}');
+      final restarted = AppPrefs(client: stored);
+      await restarted.load();
+      expect(restarted.shareWhileIdle, isFalse);
+    });
+
+    testWidgets('is offered on a phone too, where the default is off', (
+      tester,
+    ) async {
+      // Unlike Bold focus: the choice exists on every device, and only the
+      // default differs.
+      final prefs = AppPrefs(client: FakePrefsClient());
+      await pumpSettings(tester, prefs: prefs);
+
+      await tester.tap(theSwitch());
+      await tester.pumpAndSettle();
+
+      expect(prefs.shareWhileIdle, isTrue);
+    });
+
+    testWidgets('is offered before the settings have arrived', (tester) async {
+      // It does not come out of `ctx`, so it must not wait for it.
+      await pumpSettings(tester, ctx: const {}, prefs: AppPrefs.inMemory());
+
+      expect(theSwitch(), findsOneWidget);
+    });
+  });
+
   group('bold focus', () {
     const tv = DeviceProfile(isTv: true, hasTouch: false);
 
@@ -551,7 +618,11 @@ void main() {
     // UpdateSettings would be rejected by the engine.
     final core = await pumpSettings(tester, ctx: {});
     expect(find.text('Loading settings…'), findsWidgets);
-    expect(find.byType(SwitchListTile), findsNothing);
+    // Every switch over a `profile.settings` key is behind that pending
+    // tile. The one that is drawn is the app's own preference, which does
+    // not come out of `ctx` and must not wait for it.
+    expect(find.byType(SwitchListTile), findsOneWidget);
+    expect(find.byKey(settingKey(AppPrefs.shareWhileIdleKey)), findsOneWidget);
     expect(find.byType(RadioGroup<bool>), findsNothing);
     expect(core.dispatched, isEmpty);
 

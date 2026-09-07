@@ -8,6 +8,7 @@ import '../../widgets/tv_text_field.dart';
 import '../player/language_names.dart';
 import '../player/playback_engine.dart';
 import '../player/subtitle_color_chips.dart';
+import '../sharing/idle_sharing.dart';
 
 /// Settings → Player / Subtitles / Interface / Streaming server: the
 /// controls over `profile.settings`.
@@ -226,6 +227,53 @@ class FocusEmphasisSection extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Settings → Streaming server → "Share while idle": whether the embedded
+/// server may keep a title in the swarm after playback ends (see
+/// [IdleSharing], which holds the rule and both strings).
+///
+/// The app's own preference and not a `profile.settings` field, for the
+/// reason "Buffer ahead" and "Bold focus" are: it is about this device's
+/// connection and what powers it, not about the account -- and the same
+/// account on a television and on a phone wants opposite answers. A switch
+/// like those, labelled for what turning it on does.
+///
+/// **It is offered on every device**, unlike "Bold focus", because the
+/// choice exists everywhere; only the default differs, and the switch shows
+/// that default until somebody moves it ([AppPrefs.shareWhileIdle] is null
+/// until then, which is exactly what lets a television's stored *off*
+/// survive).
+///
+/// **The subtitle says what it does, including what it will not do.**
+/// "Share while idle" on its own leaves a viewer to work out whether their
+/// phone will be uploading on the train, and the answer to that is a rule
+/// they never set and cannot see. So the metered refusal is on the tile
+/// next to the promise.
+///
+/// It writes only the preference; what reaches the server is
+/// [IdleSharingPolicy]'s to send, since the connection has a say the switch
+/// does not. It is the *embedded* server either way -- with a remote server
+/// chosen, this still governs the one on this device, which is the one
+/// holding what this device fetched.
+class IdleSharingSection extends StatelessWidget {
+  const IdleSharingSection({super.key, required this.prefs});
+
+  final AppPrefs prefs;
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile(
+    // The same key shape a `profile.settings` control gets, so a test
+    // finds this one the same way.
+    key: settingKey(AppPrefs.shareWhileIdleKey),
+    secondary: const Icon(Icons.upload_outlined),
+    title: const Text(IdleSharing.title),
+    subtitle: const Text(IdleSharing.description),
+    value:
+        prefs.shareWhileIdle ??
+        IdleSharing.defaultFor(isTv: DeviceScope.isTv(context)),
+    onChanged: (on) => prefs.setShareWhileIdle(on),
+  );
 }
 
 /// Subtitles: size and colours, the same values the player's own settings
