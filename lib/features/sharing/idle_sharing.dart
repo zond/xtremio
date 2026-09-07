@@ -99,15 +99,31 @@ class IdleSharing {
   static const String stopDescription =
       'Turns this setting off for good, the same switch as in Settings.';
 
+  /// What the popup offers instead of those two when the light is lit with
+  /// the setting already off, which is a state the light can honestly be
+  /// in: it is drawn from bytes measured leaving the device and never from
+  /// the setting, and a few things upload with the switch off -- a torrent
+  /// takes its idle grace to stop, and a title kept offline is not governed
+  /// by the switch either way (above). Neither stop has anything to do
+  /// then. One would pause a setting that is already off, and the other
+  /// would turn off a switch that is already off, so the popup says what is
+  /// going out and offers only the way out of itself.
+  static const String alreadyOffTitle = 'Sharing is already off';
+  static const String alreadyOffDescription =
+      'A title takes a few seconds to stop after the switch goes off, and '
+      'one you are keeping offline is shared until you remove it. There is '
+      'nothing left here to switch off.';
+
   /// What the settings tile adds while a "Not now" is in force. Without it
   /// the tile would show the switch on while nothing is being shared, which
   /// is the exact fault -- a tile describing something the app is not
   /// doing -- that the rest of this class was rewritten to remove.
   ///
   /// It is only ever drawn under a switch that is *on*, and that is what
-  /// makes it true: a pause ends when the switch is turned off
-  /// ([IdleSharingPolicy]), so the resumption this promises is the one the
-  /// setting will still be asking for at the next start.
+  /// makes it true. [IdleSharingPolicy] holds that from both ends: a pause
+  /// ends when the switch is turned off, and one cannot begin while the
+  /// switch is off. So the resumption this promises is the one the setting
+  /// will still be asking for at the next start.
   static const String pausedNote = 'Paused until you next start Xtremio.';
 }
 
@@ -142,9 +158,11 @@ class IdleSharing {
 /// again. It is not a second author of `seedingEnabled` -- there is still
 /// exactly one -- and it is not a third state in the preference either,
 /// because it must not survive the process that granted it. Nor does it
-/// survive the switch moving: a pause is what a switch that is on looks
-/// like this run, and either press of the switch is a newer answer than
-/// the one the popup took.
+/// survive the switch moving, or begin without it: a pause is what a
+/// switch that is on looks like this run, either press of the switch is a
+/// newer answer than the one the popup took, and with the switch off there
+/// is no sharing for a pause to hold back and [pauseUntilRestart] takes
+/// none.
 ///
 /// **It notifies when that pause goes on or off**, and that is the only
 /// thing it says anything about: what the server was told is the server's
@@ -200,15 +218,27 @@ class IdleSharingPolicy extends ChangeNotifier {
   /// anything. Nothing persists it, so the next start of the app pushes the
   /// preference again and sharing resumes -- which is what the popup says
   /// it does, and the whole difference between this and the switch.
+  ///
+  /// **With the switch off it does nothing, and that is the invariant
+  /// rather than a guard.** A pause is a state of a switch that is on: it
+  /// holds back a sharing the setting still allows. With the setting off
+  /// there is no such sharing to hold back, and a pause recorded anyway
+  /// would have the settings tile promise a resumption at the next start
+  /// that the setting will not be asking for. The popup does not draw the
+  /// row while the switch is off, so nothing presses this then; it is
+  /// refused here as well because whether a pause can exist is this
+  /// object's to answer and not the order its callers press things in.
   void pauseUntilRestart() {
-    if (_paused || _stopped) return;
+    if (_paused || _stopped || !prefs.shareWhileIdle) return;
     _paused = true;
     _reconsider();
     notifyListeners();
   }
 
   /// A "Not now" is in force, which it can only be while the setting is
-  /// on. What reads it is the settings tile, which must not show a switch
+  /// on: [pauseUntilRestart] refuses one while the switch is off, and
+  /// [_reconsider] lifts one the moment the switch moves either way. What
+  /// reads it is the settings tile, which must not show a switch
   /// that is on over a run in which nothing is being shared -- and which
   /// is on screen when the popup that grants one is, so this notifies when
   /// it changes.

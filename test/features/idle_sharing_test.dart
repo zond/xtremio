@@ -206,6 +206,35 @@ void main() {
       },
     );
 
+    test('is refused while the switch is off, whatever presses it', () async {
+      // The other order to 'is over when the switch goes off': the switch
+      // is turned off first and the popup pressed second. There is no
+      // sharing left for a pause to hold back, and one taken anyway would
+      // have the settings tile promising a resumption at the next start
+      // under a switch that will still be off then. The popup does not
+      // draw the row in this state; this is the policy refusing it as
+      // well, because whether a pause can exist is the policy's answer.
+      final prefs = AppPrefs.inMemory();
+      final server = RecordingServerSettings();
+      final policy = started(prefs: prefs, server: server);
+      final announced = <bool>[];
+      policy.addListener(() => announced.add(policy.pausedForRun));
+      await prefs.setShareWhileIdle(false);
+      await settle(policy);
+
+      policy.pauseUntilRestart();
+      await settle(policy);
+
+      expect(policy.pausedForRun, isFalse);
+      expect(announced, isEmpty);
+      // And nothing is sent: the server was told false by the switch and
+      // the pause has nothing to add.
+      expect(server.patches, [
+        {IdleSharing.seedingEnabledKey: true},
+        {IdleSharing.seedingEnabledKey: false},
+      ]);
+    });
+
     test('is announced when it goes on and when it is lifted', () async {
       // The settings tile draws this pause and is on screen when the popup
       // that grants one is open, so a pause nobody is told about is a tile

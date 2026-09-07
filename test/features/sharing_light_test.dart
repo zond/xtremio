@@ -298,8 +298,9 @@ void main() {
         RecordingServerSettings settings,
       })
     >
-    openPopup(WidgetTester tester) async {
+    openPopup(WidgetTester tester, {bool sharing = true}) async {
       final s = setUpSharing(tester);
+      if (!sharing) await s.prefs.setShareWhileIdle(false);
       seeding(s.server);
       await tester.pumpWidget(
         harness(monitor: s.monitor, policy: s.policy, prefs: s.prefs),
@@ -321,6 +322,37 @@ void main() {
       // pair of button labels.
       expect(find.text(IdleSharing.pauseDescription), findsOneWidget);
       expect(find.text(IdleSharing.stopDescription), findsOneWidget);
+    });
+
+    testWidgets('offers no stop at all while the setting is already off', (
+      tester,
+    ) async {
+      // A state the light is honestly in, since it is drawn from bytes
+      // measured leaving the device and never from the setting: the switch
+      // is off and something the switch does not govern is still uploading
+      // -- a torrent serving out its idle grace, a title kept offline. Both
+      // stops are about that setting, so both would be actions with nothing
+      // to do: a "Not now" that pauses a setting already off, and a "Stop
+      // sharing" that turns off a switch already off.
+      final s = await openPopup(tester, sharing: false);
+
+      expect(find.byKey(SharingStopDialog.notNowKey), findsNothing);
+      expect(find.byKey(SharingStopDialog.stopKey), findsNothing);
+      expect(find.text(IdleSharing.alreadyOffTitle), findsOneWidget);
+      expect(find.text(IdleSharing.alreadyOffDescription), findsOneWidget);
+
+      // The way out is still there, and it does not say "Keep sharing",
+      // which is not what leaving this dialog does.
+      expect(find.text('Close'), findsOneWidget);
+      await tester.tap(find.byKey(SharingStopDialog.keepKey));
+      await tester.pumpAndSettle();
+      await s.policy.settled;
+
+      expect(find.byType(SharingStopDialog), findsNothing);
+      expect(s.policy.pausedForRun, isFalse);
+      expect(s.prefs.shareWhileIdle, isFalse);
+      // Still going out -- that is the whole state -- so still lit.
+      expect(find.byKey(lightKey), findsOneWidget);
     });
 
     testWidgets('"Not now" stops the server without writing the setting '
@@ -437,6 +469,35 @@ void main() {
         isTrue,
       );
       expect(find.textContaining(IdleSharing.pausedNote), findsOneWidget);
+    });
+
+    testWidgets('never says so under a switch that was off first', (
+      tester,
+    ) async {
+      // The other order to the test below: the switch off first, the
+      // "Not now" second. The popup does not draw that row in this state
+      // and the policy refuses the pause anyway, so the tile has nothing
+      // to say -- "Paused until you next start Xtremio." under a switch
+      // that is off promises a resumption that is never coming, whichever
+      // way round the two presses arrive.
+      final prefs = AppPrefs.inMemory();
+      await prefs.setShareWhileIdle(false);
+      final policy = startedPolicy(prefs);
+      await pumpTile(tester, policy: policy, prefs: prefs);
+
+      policy.pauseUntilRestart();
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(settingKey(AppPrefs.shareWhileIdleKey)),
+            )
+            .value,
+        isFalse,
+      );
+      expect(policy.pausedForRun, isFalse);
+      expect(find.textContaining(IdleSharing.pausedNote), findsNothing);
     });
 
     testWidgets('stops saying so once the switch is off', (tester) async {

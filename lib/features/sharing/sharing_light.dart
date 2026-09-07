@@ -264,28 +264,53 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
       : FadeTransition(opacity: _opacity, child: widget.child);
 }
 
-/// What pressing the light offers: two ways to stop and one way out of the
-/// dialog having done neither.
+/// What pressing the light offers: the stops that apply to what is going
+/// out, and one way out of the dialog having taken none of them.
+///
+/// **It offers a stop only where there is something for it to stop.** The
+/// light is drawn from bytes measured leaving the device and never from the
+/// setting (see [SharingLight]), so it is lit in one state the two stops
+/// have no answer for: "Share while idle" already off, with a torrent
+/// serving out its idle grace or a title kept offline going on being shared
+/// -- which the setting does not govern either way. A "Not now" would pause
+/// a setting that is off and "Stop sharing" would turn off a switch that is
+/// off, so with the switch off the dialog says that instead
+/// ([IdleSharing.alreadyOffTitle]) and offers neither. An offered action
+/// with nothing to do is the same defect as a button that is drawn and
+/// dead.
+///
+/// That the rows are chosen by what is running rather than always drawn is
+/// what this will be widened along: the light is coming to mean "Xtremio is
+/// using your connection while you are not watching", a background download
+/// lighting it as much as a share does, and the dialog will then have to
+/// name which of the two is going on and offer that one's stop.
 ///
 /// The two stops are drawn as rows with a line each rather than as buttons,
 /// because they differ in exactly one thing -- how long they last -- and a
 /// pair of buttons labelled "Not now" and "Stop sharing" would leave that
-/// difference to be guessed at. "Keep sharing" is the dialog's only action,
-/// and Back (or the barrier) is the same answer.
+/// difference to be guessed at. The dialog's one action is its way out, and
+/// Back (or the barrier) is the same answer.
 class SharingStopDialog extends StatelessWidget {
   const SharingStopDialog({super.key, required this.activity});
 
   final SharingActivity activity;
 
-  /// Keys a test presses, and the only names these rows answer to.
+  /// Keys a test presses, and the only names these rows answer to. The
+  /// stops are drawn only while the setting is on; [keepKey] is the way out
+  /// and is always there.
   static const Key notNowKey = Key('sharing-not-now');
   static const Key stopKey = Key('sharing-stop');
+  static const Key alreadyOffKey = Key('sharing-already-off');
   static const Key keepKey = Key('sharing-keep');
 
   @override
   Widget build(BuildContext context) {
     final scope = SharingScope.read(context);
     final prefs = PrefsScope.maybeOf(context);
+    // The preference and not the policy's pause: a pause is already a state
+    // of a switch that is on, and while one is in force nothing is going
+    // out for the light to be lit by anyway.
+    final sharing = prefs?.shareWhileIdle ?? false;
     return AlertDialog(
       title: const Text(SharingLight.label),
       content: Column(
@@ -294,37 +319,48 @@ class SharingStopDialog extends StatelessWidget {
         children: [
           Text(SharingLight.summary(activity)),
           const SizedBox(height: 12),
-          ListTile(
-            key: notNowKey,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.pause_circle_outline),
-            title: const Text(IdleSharing.pauseTitle),
-            subtitle: const Text(IdleSharing.pauseDescription),
-            onTap: () {
-              scope?.policy.pauseUntilRestart();
-              Navigator.of(context).pop();
-            },
-          ),
-          ListTile(
-            key: stopKey,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.do_not_disturb_on_outlined),
-            title: const Text(IdleSharing.stopTitle),
-            subtitle: const Text(IdleSharing.stopDescription),
-            onTap: () {
-              // The same preference the settings switch writes, so the one
-              // policy sends it on and the server has one author either way.
-              prefs?.setShareWhileIdle(false);
-              Navigator.of(context).pop();
-            },
-          ),
+          if (sharing) ...[
+            ListTile(
+              key: notNowKey,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.pause_circle_outline),
+              title: const Text(IdleSharing.pauseTitle),
+              subtitle: const Text(IdleSharing.pauseDescription),
+              onTap: () {
+                scope?.policy.pauseUntilRestart();
+                Navigator.of(context).pop();
+              },
+            ),
+            ListTile(
+              key: stopKey,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.do_not_disturb_on_outlined),
+              title: const Text(IdleSharing.stopTitle),
+              subtitle: const Text(IdleSharing.stopDescription),
+              onTap: () {
+                // The same preference the settings switch writes, so the
+                // one policy sends it on and the server has one author
+                // either way.
+                prefs?.setShareWhileIdle(false);
+                Navigator.of(context).pop();
+              },
+            ),
+          ] else
+            ListTile(
+              key: alreadyOffKey,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.do_not_disturb_on_outlined),
+              title: const Text(IdleSharing.alreadyOffTitle),
+              subtitle: const Text(IdleSharing.alreadyOffDescription),
+            ),
         ],
       ),
       actions: [
         TextButton(
           key: keepKey,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Keep sharing'),
+          // Nothing is being kept where nothing is offered to stop.
+          child: Text(sharing ? 'Keep sharing' : 'Close'),
         ),
       ],
     );

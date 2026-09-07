@@ -165,12 +165,13 @@ what every model field means. The shape of the thing is in the
   see the status light below. The policy pushes only changes, serialises its
   writes, and pushes the first as soon as the preferences have loaded; a
   "Not now" (`pauseUntilRestart`) holds its answer at false for the rest of
-  the run without writing anything down, and either press of the switch
-  lifts it — a pause is a state of a switch that is on, so the settings
-  tile's "Paused until you next start Xtremio." is never drawn under one
-  that is off, where the resumption it promises would never come. The
-  policy notifies when that pause goes on or off, which is how the tile
-  sees a "Not now" granted by a popup drawn over it.
+  the run without writing anything down. A pause is a state of a switch that
+  is on, and that is held from both ends: either press of the switch lifts
+  one, and `pauseUntilRestart` refuses one while the switch is off. So the
+  settings tile's "Paused until you next start Xtremio." is never drawn
+  under a switch that is off, where the resumption it promises would never
+  come. The policy notifies when that pause goes on or off, which is how the
+  tile sees a "Not now" granted by a popup drawn over it.
 - **The status light says what is happening, and it is the only thing that
   says it.** `SharingLight` (`lib/features/sharing/sharing_light.dart`) is
   drawn in the shell's top right corner while two things are true: the
@@ -183,7 +184,17 @@ what every model field means. The shape of the thing is in the
   Until then the light is never drawn. On a television the remote reaches it
   from the top of the rail with a press of up, and the node is skipped by
   traversal so it cannot swallow a press meant for a poster; pressing it
-  offers the two stops above and a way out of neither.
+  offers the two stops above and a way out of neither — **but only the
+  stops there are something to stop with.** Because the light answers
+  measured bytes and never the setting, it is lit with the setting already
+  off whenever something that setting does not govern is uploading: a
+  torrent serving out its idle grace, or a title kept offline. Both stops
+  are about that setting, so with the switch off the popup says that instead
+  and offers neither. Choosing the rows by what is running is the part of
+  this that will be widened: the light is coming to mean "Xtremio is using
+  your connection while you are not watching", which a background download
+  does as much as a share does, and the popup will then have to name which
+  of them it is and offer that one's stop.
 - **Offline downloads are a pin plus a registry.** The server keeps the
   chosen file of a torrent wanted and un-evictable
   (`ServerHandle::pin_download`, a validated `downloadsDir` setting,
