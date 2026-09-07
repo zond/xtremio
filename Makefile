@@ -32,8 +32,15 @@ DEVICE ?=
 
 .PHONY: apk apk-tv apk-split apk-debug linux macos ios run version
 
+# Version codes follow `apk-split`, which is what goes to Drive: Flutter's
+# per-ABI build adds 1000 for armeabi-v7a and 2000 for arm64-v8a to the build
+# number, so its APKs carry 1001 and 2001. A single-ABI build stamps 1 unless
+# told otherwise, and Android then refuses it as a downgrade over the Drive
+# build -- `adb install -d` does not lift that for a release app, and
+# uninstalling loses the login and settings. So these targets stamp the same
+# codes and the two kinds of build install over each other.
 apk:
-	flutter build apk --release --target-platform android-arm64 $(DEFINES) $(FLAGS)
+	flutter build apk --release --target-platform android-arm64 --build-number=2001 $(DEFINES) $(FLAGS)
 
 # A Chromecast with Google TV has a 64-bit chip and a 32-bit userspace
 # (`ro.product.cpu.abilist` is `armeabi-v7a,armeabi` on Android 14), so it
@@ -41,7 +48,7 @@ apk:
 # libclang, which armv7 uses to generate the aws-lc-sys bindings -- ANDROID.md,
 # "Prerequisites".
 apk-tv:
-	flutter build apk --release --target-platform android-arm $(DEFINES) $(FLAGS)
+	flutter build apk --release --target-platform android-arm --build-number=1001 $(DEFINES) $(FLAGS)
 
 apk-split:
 	flutter build apk --release --split-per-abi $(DEFINES) $(FLAGS)

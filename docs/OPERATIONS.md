@@ -109,7 +109,7 @@ the one line that says which build the rest of the report is about. A plain
 ```bash
 make apk          # release APK for a phone or a 64-bit TV box (arm64)
 make apk-tv       # release APK for a Chromecast with Google TV (armeabi-v7a)
-make apk-split    # release APKs per ABI
+make apk-split    # release APKs per ABI (what goes to Drive)
 make linux        # release Linux desktop bundle
 make run          # flutter run, stamped the same way
 make version      # what would be stamped
@@ -119,7 +119,10 @@ Each of those adds `XTREMIO_VERSION` (from `pubspec.yaml`) and
 `XTREMIO_GIT_COMMIT` (`git rev-parse --short HEAD`, suffixed `-dirty` when
 the tree was not clean, because a report from a modified build must not
 name a commit as if it were that commit), and takes the usual extra flags
-through `FLAGS=`. Building by hand instead is the same two defines:
+through `FLAGS=`. `apk` and `apk-tv` also stamp the version codes the split
+build ends up with (2001 for arm64, 1001 for armeabi-v7a), so a single-ABI
+build installs over a Drive build instead of being refused as a downgrade.
+Building by hand instead is the same two defines:
 
 ```bash
 flutter build apk --release \
