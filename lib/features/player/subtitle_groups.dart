@@ -351,11 +351,30 @@ enum _ReleaseFit {
 /// correction really is put back and not merely stored: a shift belongs
 /// to one release, and one measured against another is not this video's.
 ///
-/// The order *between* languages is untouched -- the menu's rows stay in
-/// the addons' answer order -- and so is the order inside each rank, so
-/// the addon that answered first still wins a tie. That matters more
-/// than it looks: the head of a language is the file its row applies and
-/// the file the auto-pick plays. Nothing is dropped or hidden.
+/// The languages themselves come out **alphabetically by the label the
+/// menu prints** ([_byLanguageLabel]), because a viewer hunting Swedish
+/// among the forty rows OpenSubtitles answers with is reading names, and
+/// the order they arrived in is a fact about which addon was quickest.
+///
+/// Nothing is pinned above the alphabet. There is no "off" row to pin --
+/// `SubtitleMenu` draws Off itself, above every language, and it stays
+/// first by being drawn there rather than by any order here -- and the
+/// language that is playing is deliberately *not* lifted: this list is
+/// ordered before anything is selected (the auto-pick reads it to make
+/// the selection), and a row that jumps to the top once it is picked
+/// takes back the one thing an alphabet is for, which is finding a
+/// language where the alphabet left it. The menu marks the row that is
+/// on instead. The auto-pick is unaffected either way, since it takes
+/// the first file of the language it was asked for; only a preference
+/// that names *no* language reads the head of the whole list, and the
+/// first language alphabetically is no more arbitrary than the first
+/// answered -- it is merely the same one every time.
+///
+/// The order *inside* a language is untouched, and so is the order
+/// inside each rank, so the addon that answered first still wins a tie.
+/// That matters more than it looks: the head of a language is the file
+/// its row applies and the file the auto-pick plays. Nothing is dropped
+/// or hidden.
 List<SubtitleSource> subtitlesByRelease(
   Iterable<SubtitleSource> sources, {
   required String? release,
@@ -375,6 +394,10 @@ List<SubtitleSource> subtitlesByRelease(
         })
         .add(source);
   }
+  // The rows, and only the rows: the keys are the lower-cased labels, so
+  // this is the order the menu reads out. What is *inside* a language is
+  // ranked below and must not be sorted at all.
+  order.sort(_byLanguageLabel);
   return [
     for (final key in order)
       // Bucketed rather than sorted: `List.sort` is not stable, and the
@@ -425,6 +448,102 @@ String _languageLabel(String lang) {
   return code.isEmpty ? 'Unknown' : languageName(code);
 }
 
+/// Orders two language rows by the name a viewer reads them under. Both
+/// sides are the lower-cased labels [subtitlesByRelease] keys on.
+///
+/// Compared on [_sortKey] rather than on the label itself, so an
+/// accented name lands where it is looked for. Distinct rows must never
+/// compare equal, because `List.sort` is not stable and two labels that
+/// fold alike -- one addon writing a language's own name for a code
+/// [languageName] does not know, another writing it without its accents
+/// -- would otherwise swap places from one build of the menu to the
+/// next; the label itself settles those, which also keeps the whole
+/// comparison a total order.
+int _byLanguageLabel(String a, String b) {
+  final folded = _sortKey(a).compareTo(_sortKey(b));
+  return folded != 0 ? folded : a.compareTo(b);
+}
+
+/// [label] with its accents dropped, which is the key it sorts under.
+///
+/// Dart ships no collator, and plain `compareTo` is code-unit order: it
+/// puts every accented letter after `z`, so a row a reader would look
+/// for between Estonian and Finnish lands under the bottom of the list
+/// instead. Every name [languageName] knows is ASCII already, so this
+/// exists for the codes it does not, which come back as whatever the
+/// addon wrote.
+///
+/// One letter for one letter, and nothing else: the expansions a real
+/// collation makes (`ss` for a sharp s, `ae` for an ash) depend on the
+/// language being sorted *for*, which nothing here knows, and are worth
+/// less than the accents are. A letter with no entry sorts as itself.
+String _sortKey(String label) {
+  final buffer = StringBuffer();
+  for (var i = 0; i < label.length; i++) {
+    final unit = label.codeUnitAt(i);
+    buffer.writeCharCode(_unaccented[unit] ?? unit);
+  }
+  return buffer.toString();
+}
+
+/// The accented Latin letters and the letter each one sorts as, read off
+/// the two strings below. Lower case only: what is compared is a
+/// lower-cased label.
+final Map<int, int> _unaccented = () {
+  // A letter that lost its partner does not go missing, it slides every
+  // letter after it onto the wrong plain one, which is a fold that
+  // works and answers nonsense.
+  assert(_accented.length == _plain.length, 'one plain letter per accent');
+  return {
+    for (var i = 0; i < _accented.length; i++)
+      _accented.codeUnitAt(i): _plain.codeUnitAt(i),
+  };
+}();
+
+/// Written as a pair of strings, a letter's accented forms to a line,
+/// rather than as a hundred map entries: they are data, and the two
+/// sides have to be read off against each other to be checked at all.
+const String _accented =
+    'àáâãäåāăą'
+    'çćĉċč'
+    'ďđð'
+    'èéêëēĕėęě'
+    'ĝğġģ'
+    'ĥħ'
+    'ìíîïĩīĭįı'
+    'ĵ'
+    'ķ'
+    'ĺļľŀł'
+    'ñńņň'
+    'òóôõöøōŏő'
+    'ŕŗř'
+    'śŝşš'
+    'ţťŧ'
+    'ùúûüũūŭůűų'
+    'ŵ'
+    'ýÿŷ'
+    'źżž';
+const String _plain =
+    'aaaaaaaaa'
+    'ccccc'
+    'ddd'
+    'eeeeeeeee'
+    'gggg'
+    'hh'
+    'iiiiiiiii'
+    'j'
+    'k'
+    'lllll'
+    'nnnn'
+    'ooooooooo'
+    'rrr'
+    'ssss'
+    'ttt'
+    'uuuuuuuuuu'
+    'w'
+    'yyy'
+    'zzz';
+
 /// Groups deduplicated subtitle files by language, one group per language
 /// in first-seen (merge) order.
 ///
@@ -435,8 +554,8 @@ String _languageLabel(String lang) {
 /// the addon's installed name; without it the manifest's host is used.
 ///
 /// The order the groups and their options come out in is the order
-/// [sources] arrived in, so the ranking is [subtitlesByRelease]'s to do
-/// first.
+/// [sources] arrived in, so the alphabet and the ranking are both
+/// [subtitlesByRelease]'s to do first.
 ///
 /// [release] is the name the player knows the video by, and every option
 /// is asked whether the addon says it was cut for it

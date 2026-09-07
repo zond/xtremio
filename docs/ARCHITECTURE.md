@@ -594,10 +594,15 @@ what every model field means. The shape of the thing is in the
   series (the correction goes back on when the file is applied, so it
   arrives fixed, and the rank asks the memory exactly what applying it
   will ask), then everything else in the order the addons answered.
-  Between languages nothing moves, and inside a rank the addon that
-  answered first still wins -- which matters, because the head of a
-  language is the file its row applies and the file the auto-pick plays.
-  Nothing is dropped or hidden. The video is named by the same
+  The language rows themselves are sorted on the name the menu prints,
+  alphabetically and with nothing pinned above it: Off is the menu's own
+  row above every language, and the language that is playing is not
+  lifted, since the list is ordered before anything is selected and a row
+  that jumps to the top once it is picked is no longer where the alphabet
+  left it. Inside a rank the addon that answered first still wins --
+  which matters, because the head of a language is the file its row
+  applies and the file the auto-pick plays. Nothing is dropped or
+  hidden. The video is named by the same
   `castFilename` a remembered shift is keyed on (the file the server says
   it opened, else the addon's claim); both sides are cut into lower-case
   runs of letters and digits, since release names are written with dots,

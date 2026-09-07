@@ -296,27 +296,50 @@ void main() {
     ]);
   });
 
-  test('the rows keep the addons order, and so does each rank', () {
-    // Languages stay in the order the addons answered in -- the ranking
-    // is inside a language, never across them -- so a Polish file cut
-    // for this release does not push the Polish row above the English
-    // one.
+  test('the rows are alphabetical, whichever addon answered first', () {
+    // Which addon was quickest is what the answer order says, and it is
+    // nothing a viewer scanning forty rows for one language can use.
     final sources = [
+      upload('https://subs/sv.srt', lang: 'swe'),
+      upload('https://subs/ar.srt', lang: 'ara'),
+      upload('https://subs/en.srt'),
+      upload('https://subs/de.srt', lang: 'ger'),
+    ];
+    const byName = [
+      'https://subs/ar.srt',
+      'https://subs/en.srt',
+      'https://subs/de.srt',
+      'https://subs/sv.srt',
+    ];
+    expect(offered(sources), byName);
+    // Sorted on the name the menu prints and not on the code, or German
+    // would be filed under G-E-R and Swedish between Spanish and Thai.
+    expect(offered(sources.reversed.toList()), byName);
+  });
+
+  test('a rank orders a language and never the rows', () {
+    // The Swedish file is the one cut for the release that is playing,
+    // and that still says nothing about where the Swedish row goes: it
+    // ranks the files of one language, and nothing is pinned above the
+    // alphabet -- not a release match, and not the language that is
+    // playing either, which is why nothing here is told what is on.
+    final sources = [
+      upload('https://subs/sv-dfn.srt', lang: 'swe', releaseGroup: 'DFN'),
       upload('https://subs/en-yts.srt', releaseGroup: 'YTS'),
-      upload('https://subs/pl-dfn.srt', lang: 'pol', releaseGroup: 'DFN'),
       upload('https://subs/en-dfn-1.srt', releaseGroup: 'DFN'),
       upload('https://subs/en-dfn-2.srt', releaseGroup: 'DFN'),
     ];
     expect(offered(sources, release: playing), [
-      // Both English matches are first, and the addon that answered
-      // first still wins the tie: ranking never reorders inside a rank.
+      // Inside English the ranking is untouched by the sort: both
+      // matches first, and the addon that answered first still wins the
+      // tie, because the head of a language is what its row applies.
       'https://subs/en-dfn-1.srt',
       'https://subs/en-dfn-2.srt',
       'https://subs/en-yts.srt',
-      'https://subs/pl-dfn.srt',
+      'https://subs/sv-dfn.srt',
     ]);
     // `pl` and `pol` are one row in the menu, so they are one language
-    // here as well.
+    // here as well -- one row, sorted once, under one name.
     expect(
       offered([
         upload('https://subs/pl-yts.srt', lang: 'pl', releaseGroup: 'YTS'),
@@ -324,6 +347,31 @@ void main() {
       ], release: playing),
       ['https://subs/pol-dfn.srt', 'https://subs/pl-yts.srt'],
     );
+  });
+
+  test('an accented name lands where a reader looks for it', () {
+    // A code the app has no name for comes back as whatever the addon
+    // wrote, accents and all, and code-unit order puts every accented
+    // letter after `z`: the bottom of the list, which is nowhere anyone
+    // looks for a word beginning with an I.
+    expect(
+      offered([
+        upload('https://subs/it.srt', lang: 'ita'),
+        upload('https://subs/is.srt', lang: 'Íslenska'),
+        upload('https://subs/isl.srt', lang: 'isl'),
+      ]),
+      ['https://subs/isl.srt', 'https://subs/is.srt', 'https://subs/it.srt'],
+    );
+    // Two names that differ only in an accent fold to the same key, and
+    // `List.sort` is not stable: without the tie-break they would swap
+    // places from one build of the menu to the next.
+    final alike = [
+      upload('https://subs/plain.srt', lang: 'Espanol'),
+      upload('https://subs/accent.srt', lang: 'Español'),
+    ];
+    const settled = ['https://subs/plain.srt', 'https://subs/accent.srt'];
+    expect(offered(alike), settled);
+    expect(offered(alike.reversed.toList()), settled);
   });
 
   test('the row says which file was cut for what is playing', () {

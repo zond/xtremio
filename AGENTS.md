@@ -525,9 +525,14 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   -- which is why it asks `SubtitleSyncMemory` exactly what
   `_resetSubtitleTiming` will ask it, and why a shift measured against
   another release does not rank: a rank must not promise a fix that
-  never comes. Between languages nothing moves and inside a rank the
-  addon that answered first still wins, because that is the file a
-  language row applies. Ordering by the rate is the thing not to put
+  never comes. **The rows are the alphabet's, not the ranking's**: they
+  come out sorted on the name the menu prints, and nothing is pinned
+  above it -- Off is `SubtitleMenu`'s own row, drawn above every
+  language, and the language that is playing is deliberately not lifted,
+  because the list is ordered before anything is selected and a row that
+  jumps once it is picked takes back the reason to sort at all. Inside a
+  rank the addon that answered first still wins, because that is the
+  file a language row applies. Ordering by the rate is the thing not to put
   back: it had to be taught that a claim beats no claim, and then that a
   mis-scaled `fpsMilli` beats neither, and the premise under all of it
   was still wrong.
