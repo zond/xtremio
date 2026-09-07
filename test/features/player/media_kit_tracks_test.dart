@@ -79,15 +79,16 @@ void main() {
   });
 
   test('hardwareDecoding maps to the controller\'s hardware acceleration', () {
-    expect(
-      MediaKitEngine.configurationFor(hardwareDecoding: true)
-          .enableHardwareAcceleration,
-      isTrue,
-    );
+    final hardware = MediaKitEngine.configurationFor(hardwareDecoding: true);
+    expect(hardware.enableHardwareAcceleration, isTrue);
+    // Direct mediacodec first, the copying variant as the fallback -- not
+    // media_kit's auto-safe, which on Android can only ever resolve to the
+    // copy. See configurationFor for the measurement behind it.
+    expect(hardware.hwdec, 'mediacodec,mediacodec-copy');
     final software = MediaKitEngine.configurationFor(hardwareDecoding: false);
     expect(software.enableHardwareAcceleration, isFalse);
+    expect(software.hwdec, 'no');
     // Nothing else strays from media_kit's defaults.
     expect(software.vo, const VideoControllerConfiguration().vo);
-    expect(software.hwdec, const VideoControllerConfiguration().hwdec);
   });
 }
