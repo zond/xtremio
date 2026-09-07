@@ -98,9 +98,16 @@ tempfile = "3"
 # nothing new is compiled.
 flate2 = "1"
 # Real .torrent fixtures for tests/downloads.rs (`librqbit::create_torrent`),
-# so the offline-downloads test needs no network and no peer: the same git pin
-# stream-server's enginefs uses, so nothing extra is compiled.
-librqbit = { git = "https://github.com/zond/rqbit", branch = "feat/configurable-stream-lookahead", default-features = false, features = [
+# so the offline-downloads test needs no network and no peer. Pinned by rev
+# on zond/rqbit, like stream-server's own enginefs pins it: cfd11fb9 is the
+# rev enginefs moves to next (stream-server master is at 5aeab776 as this is
+# written), so until the stream-server pin above follows, the graph carries
+# two librqbits -- the crate compiled twice, nothing else -- and one once it
+# does. It used to name `branch = "feat/configurable-stream-lookahead"`, a
+# branch that no longer exists (renamed `pinned`); the build only worked
+# because Cargo.lock held the orphaned sha, and the next `cargo update`
+# would have failed to find the branch.
+librqbit = { git = "https://github.com/zond/rqbit", rev = "cfd11fb9ff9e7802ffc1347cb5b90002e4691230", default-features = false, features = [
     "rust-tls",
     "http-api-client",
 ] }
