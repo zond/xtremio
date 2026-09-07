@@ -9,10 +9,16 @@ import 'package:xtremio/features/player/seek_bar.dart';
 import 'package:xtremio/features/player/seek_hold.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
+import 'package:xtremio/widgets/focusable_tile.dart';
 
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 import '../../support/tv.dart';
+
+/// Whether any [FocusHighlight] [ring] finds is drawn lit.
+bool lit(WidgetTester tester, Finder ring) => tester
+    .widgetList<FocusHighlight>(ring)
+    .any((highlight) => highlight.focused);
 
 /// The player driven by a remote: the D-pad's centre and the media keys.
 void main() {
@@ -436,6 +442,31 @@ void main() {
         harness.engine.externalSubtitles.single.$1,
         Uri.parse('https://subs5.strem.io/en/file/2'),
       );
+    });
+
+    testWidgets('the seek bar wears the ring while it holds focus', (
+      tester,
+    ) async {
+      // The bar is a bare [Focus] over a [CustomPaint]: no Material in
+      // it, so the theme floor has nothing to stroke or fill, and what it
+      // drew for itself -- a thicker track in the scheme's violet -- is
+      // the cue it also shows a hovering pointer. The ring is what says
+      // the remote is here.
+      await pumpOnTv(tester);
+      final ring = find.descendant(
+        of: find.byType(SeekBar),
+        matching: find.byType(FocusHighlight),
+      );
+      expect(lit(tester, ring), isFalse, reason: 'focus starts on the video');
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<SeekBar>(), isTrue);
+      expect(lit(tester, ring), isTrue);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<PlayerTopBar>(), isTrue);
+      expect(lit(tester, ring), isFalse, reason: 'the ring follows focus');
     });
 
     testWidgets('left and right seek while the seek bar has focus', (

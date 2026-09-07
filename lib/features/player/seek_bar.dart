@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../widgets/focusable_tile.dart';
 import 'seek_hold.dart';
 import 'time_format.dart';
 
@@ -11,10 +12,20 @@ import 'time_format.dart';
 /// libmpv with seeks. A plain tap seeks at once.
 ///
 /// [focusable] makes it a stop for the D-pad (a television has no pointer
-/// to drag it with): it takes focus like a button, shows itself active
-/// while it holds focus, and left/right seek by [seekStep] each press.
-/// Those presses are a scan rather than a position the viewer named, so
-/// they go to [onStep] where there is one.
+/// to drag it with): it takes focus, wears the app's own ring while it
+/// has it, and left/right seek by [seekStep] each press. Those presses
+/// are a scan rather than a position the viewer named, so they go to
+/// [onStep] where there is one.
+///
+/// The ring and not the thickening the bar already had: that is the cue a
+/// pointer gets for hovering, in the scheme's violet, which says "the
+/// pointer is here" at the one moment a remote has to be told something
+/// else -- and it is deaf to the Bold switch, being the bar's own
+/// invention rather than either mechanism the app marks focus with. So
+/// the bar wears a [FocusMarked] like every other control the floor
+/// cannot reach: it is a bare [Focus] over a [CustomPaint], with no
+/// Material anywhere in it for the floor to fill or stroke. It is drawn
+/// straight over the picture, which is what the ring is for.
 class SeekBar extends StatefulWidget {
   const SeekBar({
     super.key,
@@ -123,65 +134,69 @@ class _SeekBarState extends State<SeekBar> {
         final width = constraints.maxWidth;
         final drag = _drag;
         final progress = drag ?? _fraction(widget.position);
-        return Focus(
-          focusNode: widget.focusNode,
-          canRequestFocus: widget.focusable,
-          skipTraversal: !widget.focusable,
-          onKeyEvent: _onKeyEvent,
-          onFocusChange: (focused) => setState(() => _focused = focused),
-          child: MouseRegion(
-            cursor: _enabled
-                ? SystemMouseCursors.click
-                : SystemMouseCursors.basic,
-            onEnter: (_) => setState(() => _hover = true),
-            onExit: (_) => setState(() => _hover = false),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapUp: _enabled
-                  ? (details) => widget.onSeek(
-                      _at(_fractionAt(details.localPosition, width)),
-                    )
-                  : null,
-              onHorizontalDragStart: _enabled
-                  ? (details) {
-                      widget.onScrubStart?.call();
-                      setState(
+        return FocusMarked(
+          treatment: FocusTreatment.row,
+          child: Focus(
+            focusNode: widget.focusNode,
+            canRequestFocus: widget.focusable,
+            skipTraversal: !widget.focusable,
+            onKeyEvent: _onKeyEvent,
+            onFocusChange: (focused) => setState(() => _focused = focused),
+            child: MouseRegion(
+              cursor: _enabled
+                  ? SystemMouseCursors.click
+                  : SystemMouseCursors.basic,
+              onEnter: (_) => setState(() => _hover = true),
+              onExit: (_) => setState(() => _hover = false),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: _enabled
+                    ? (details) => widget.onSeek(
+                        _at(_fractionAt(details.localPosition, width)),
+                      )
+                    : null,
+                onHorizontalDragStart: _enabled
+                    ? (details) {
+                        widget.onScrubStart?.call();
+                        setState(
+                          () =>
+                              _drag = _fractionAt(details.localPosition, width),
+                        );
+                      }
+                    : null,
+                onHorizontalDragUpdate: _enabled
+                    ? (details) => setState(
                         () => _drag = _fractionAt(details.localPosition, width),
-                      );
-                    }
-                  : null,
-              onHorizontalDragUpdate: _enabled
-                  ? (details) => setState(
-                      () => _drag = _fractionAt(details.localPosition, width),
-                    )
-                  : null,
-              onHorizontalDragEnd: _enabled ? (_) => _endDrag() : null,
-              onHorizontalDragCancel: _enabled ? _endDrag : null,
-              child: SizedBox(
-                height: SeekBar.height,
-                width: double.infinity,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _SeekBarPainter(
-                          progress: progress,
-                          buffered: _fraction(widget.buffered),
-                          active: drag != null || _hover || _focused,
-                          color: scheme.primary,
-                          bufferColor: Colors.white.withValues(alpha: 0.45),
-                          trackColor: Colors.white.withValues(alpha: 0.25),
+                      )
+                    : null,
+                onHorizontalDragEnd: _enabled ? (_) => _endDrag() : null,
+                onHorizontalDragCancel: _enabled ? _endDrag : null,
+                child: SizedBox(
+                  height: SeekBar.height,
+                  width: double.infinity,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _SeekBarPainter(
+                            progress: progress,
+                            buffered: _fraction(widget.buffered),
+                            active: drag != null || _hover || _focused,
+                            color: scheme.primary,
+                            bufferColor: Colors.white.withValues(alpha: 0.45),
+                            trackColor: Colors.white.withValues(alpha: 0.25),
+                          ),
                         ),
                       ),
-                    ),
-                    if (drag != null)
-                      Positioned(
-                        left: (drag * width - 32).clamp(0.0, width - 64),
-                        bottom: SeekBar.height + 4,
-                        child: _TimeBubble(time: _at(drag)),
-                      ),
-                  ],
+                      if (drag != null)
+                        Positioned(
+                          left: (drag * width - 32).clamp(0.0, width - 64),
+                          bottom: SeekBar.height + 4,
+                          child: _TimeBubble(time: _at(drag)),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
