@@ -443,4 +443,61 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusIn<BoardScreen>(), isTrue);
   });
+
+  group("the rail wears the app's own ring", () {
+    /// Whether each of the rail's five destinations is ringed, in the
+    /// order they are drawn. One ring per destination: only one of
+    /// `icon`/`selectedIcon` is built at a time.
+    List<bool> railRings(WidgetTester tester) => tester
+        .widgetList<FocusRing>(
+          find.descendant(
+            of: find.byType(NavigationRail),
+            matching: find.byType(FocusRing),
+          ),
+        )
+        .map((ring) => ring.focused)
+        .toList();
+
+    testWidgets('and it follows the destination the remote is on', (
+      tester,
+    ) async {
+      useScreen(tester, const Size(1280, 720));
+      await tester.pumpWidget(harness(fakeCore()));
+      await tester.pumpAndSettle();
+      // Focus starts in the body, so nothing in the rail is ringed.
+      expect(railRings(tester), [false, false, false, false, false]);
+
+      await focusRailTop(tester);
+      expect(railRings(tester), [true, false, false, false, false]);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedRailLabel(tester), 'Discover');
+      expect(railRings(tester), [false, true, false, false, false]);
+
+      // And it goes out again when the remote leaves the rail entirely.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusIn<NavigationRail>(), isFalse);
+      expect(railRings(tester), [false, false, false, false, false]);
+    });
+
+    testWidgets('off a television the rail is left to Material', (
+      tester,
+    ) async {
+      useScreen(tester, const Size(1280, 720));
+      await tester.pumpWidget(
+        harness(fakeCore(), device: DeviceProfile.fallback),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find
+            .descendant(
+              of: find.byType(NavigationRail),
+              matching: find.byType(FocusRing),
+            )
+            .evaluate(),
+        isEmpty,
+      );
+    });
+  });
 }

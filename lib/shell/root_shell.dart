@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/focus_emphasis.dart';
 import '../features/board/board_screen.dart';
 import '../features/discover/discover_screen.dart';
 import '../features/library/library_screen.dart';
@@ -90,6 +91,37 @@ class _RootShellState extends State<RootShell> {
     skipTraversal: true,
   );
 
+  /// Which of the rail's destinations holds focus, or -1 for none (TV
+  /// only); see [_onFocusMoved] and [_railIcon].
+  int _railFocus = -1;
+
+  /// The Material indicator pill behind a rail destination's icon, which
+  /// is the box the focus ring is drawn on.
+  static const Size _indicatorSize = Size(56, 32);
+
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_onFocusMoved);
+  }
+
+  /// Focus moved: work out whether it landed on a rail destination, and on
+  /// which one.
+  ///
+  /// There is nothing narrower to listen to. [NavigationRail] hands out no
+  /// nodes to attach an `onFocusChange` to, and a move from one of its
+  /// destinations to the next changes no node the shell owns -- [_railNode]
+  /// has focus below it throughout, so it is never notified. Off a
+  /// television the rail is not under [_railNode] at all, so this settles
+  /// on -1 and never calls [setState].
+  void _onFocusMoved() {
+    final focused = FocusManager.instance.primaryFocus;
+    final index = focused == null
+        ? -1
+        : _railNode.traversalDescendants.toList().indexOf(focused);
+    if (index != _railFocus && mounted) setState(() => _railFocus = index);
+  }
+
   static const _destinations = <_Destination>[
     _Destination('Board', Icons.home_outlined, Icons.home, BoardScreen()),
     _Destination(
@@ -141,12 +173,42 @@ class _RootShellState extends State<RootShell> {
 
   @override
   void dispose() {
+    FocusManager.instance.removeListener(_onFocusMoved);
     for (final scope in _tabScopes) {
       scope.dispose();
     }
     _railNode.dispose();
     super.dispose();
   }
+
+  /// A rail destination's icon, wearing the app's own focus ring on a
+  /// television.
+  ///
+  /// The ring cannot be wrapped round a destination the way it is wrapped
+  /// round a tile, because the rail hands out no node to watch -- which is
+  /// the same fact that put [_railNode] above it. So it is drawn where the
+  /// shell already knows what is focused: [_railFocus] against [index].
+  ///
+  /// The ring, and not the whole indicator. A destination is drawn as two
+  /// pieces, an icon and a label under it, and only the icon has a box to
+  /// go round; dimming that half in [FocusEmphasis.bold] and leaving the
+  /// label bright would say less than dimming nothing does. What bold does
+  /// reach here is the ring's own width, and the theme floor's fill -- the
+  /// rail's ink takes no overlay of its own and so falls through to
+  /// `ThemeData.focusColor` like every other list row.
+  ///
+  /// The box is the Material indicator pill's, so the ring lands on the
+  /// pill the rail draws under a selected destination rather than hugging
+  /// the glyph.
+  Widget _railIcon(BuildContext context, int index, IconData icon) => FocusRing(
+    focused: index == _railFocus,
+    emphasis: FocusHighlight.emphasisOf(context),
+    borderRadius: BorderRadius.all(Radius.circular(_indicatorSize.height / 2)),
+    child: SizedBox.fromSize(
+      size: _indicatorSize,
+      child: Center(child: Icon(icon)),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -169,10 +231,12 @@ class _RootShellState extends State<RootShell> {
         onDestinationSelected: _select,
         labelType: NavigationRailLabelType.all,
         destinations: [
-          for (final d in _destinations)
+          for (final (i, d) in _destinations.indexed)
             NavigationRailDestination(
-              icon: Icon(d.icon),
-              selectedIcon: Icon(d.selectedIcon),
+              icon: isTv ? _railIcon(context, i, d.icon) : Icon(d.icon),
+              selectedIcon: isTv
+                  ? _railIcon(context, i, d.selectedIcon)
+                  : Icon(d.selectedIcon),
               label: Text(d.label),
             ),
         ],
