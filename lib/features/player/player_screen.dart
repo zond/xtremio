@@ -306,6 +306,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// player that has been released.
   bool _leaving = false;
 
+  /// Whether this screen is still the one that should act on the player:
+  /// built, and not on its way out. **What every continuation in this
+  /// class asks, and the reason `mounted` on its own is not enough any
+  /// more.**
+  ///
+  /// [_detach] ends everything that could *arrive* -- the subscriptions,
+  /// the listeners, the timers -- before the first `await` in [_leave],
+  /// and that is what makes a screen waiting for its teardown unreachable
+  /// by an event. It cannot reach what is already suspended: an `await`
+  /// that was in flight when the viewer left is neither a subscription
+  /// nor a timer, and it resumes into the middle of the wait.
+  ///
+  /// It resumes into a screen that is *more* alive than the one these
+  /// guards were written against. The player used to pop at the press and
+  /// release its engine two frames later, so `mounted` was false by the
+  /// time anything late came back and a `!mounted` return was the whole
+  /// of the check. Now the screen stays -- built, and holding an engine
+  /// that is being released -- for as long as mpv takes to stop, so
+  /// `mounted` is true for exactly the stretch it used to be false for,
+  /// and every one of those guards now passes precisely when it used to
+  /// fail. `mounted` answers whether there is a widget to call
+  /// [State.setState] on; it has never answered whether this screen is
+  /// still the one whose engine, core, cast session and route these are.
+  ///
+  /// Two of them cost the viewer something, both measured. A cast start
+  /// whose `connect` came back during the wait paused the engine, opened
+  /// the LAN listener and handed the receiver the film at 37 minutes:
+  /// Back was pressed, and the film started on the television. And a
+  /// hand-over whose registry answer came back during the wait
+  /// `pushReplacement`ed a second player over the screen still waiting
+  /// for its own teardown -- a second engine and a fresh open: Back was
+  /// pressed, and the next episode began.
+  ///
+  /// [_playNext] had the check already, because it was written after
+  /// there was something to check; the rest were not, which is why this
+  /// is one question with one name rather than a third `_leaving` test
+  /// somebody has to think of.
+  bool get _stillOurs => mounted && !_leaving;
+
   /// Whether [_detach] has run. Once per screen, from whichever of the two
   /// ways out reaches it first.
   bool _detached = false;
@@ -974,13 +1013,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
           // already put back. The file it was computed for goes back
           // first, because `loadfile` took that with it
           // ([_restoreExternalSubtitle]).
-          if (mounted && _opened == url) {
+          if (_stillOurs && _opened == url) {
             _restoreExternalSubtitle();
             _applySubtitleTiming();
           }
         })
         .catchError((Object error) {
-          if (!mounted || _opened != url) return;
+          if (!_stillOurs || _opened != url) return;
           DiagnosticsLog.error('player', 'open rejected: $error');
           _failPlayback('$error');
         });
@@ -1133,7 +1172,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (error) {
       thrown = error;
     }
-    if (!mounted) return;
+    // The registry took a round trip to answer and a refusal re-opens the
+    // stream ([_failBuffer]), so this is a way back onto the engine.
+    if (!_stillOurs) return;
     setState(() {
       _keeping = false;
       _publishBuffer();
@@ -1159,7 +1200,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// server will instead, which is the most that can be done without room
   /// on the disk.
   void _failBuffer(String reason) {
-    if (!mounted) return;
+    if (!_stillOurs) return;
     setState(() {
       _bufferOverride = BufferAhead.maximum;
       _keeping = false;
@@ -1176,7 +1217,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// stand-in such as the stream's label ("1080p") would only mislead the
   /// filename matching at OpenSubtitles.
   void _reportVideoParams(PlayerState state, Uri url) {
-    if (!mounted || _handedOver || _opened != url) return;
+    if (!_stillOurs || _handedOver || _opened != url) return;
     final segment = url.pathSegments.isEmpty ? null : url.pathSegments.last;
     final filename =
         state.convertedStream?.filename ??
@@ -2373,7 +2414,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (engine == null) return;
     final marked = _externalSubtitle?.url;
     final cueStart = await engine.subtitleCueStart();
-    if (!mounted || _externalSubtitle?.url != marked) return;
+    if (!_stillOurs || _externalSubtitle?.url != marked) return;
     if (cueStart == null) {
       // Between two lines, or subtitles off: there is nothing on screen
       // the viewer can have been pointing at, and a mark invented from
@@ -2448,7 +2489,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
     );
     final picked = reference;
-    if (picked != null) await _matchSubtitleTo(playing, picked);
+    if (picked != null && _stillOurs) await _matchSubtitleTo(playing, picked);
   }
 
   /// Measures [playing] against [reference] and applies the answer, or
@@ -2491,7 +2532,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // which this app neither logs nor puts on a screen.
       note = subtitleMatchFailureNote;
     }
-    if (!mounted) return;
+    if (!_stillOurs) return;
     // Two fetches take seconds, and the viewer can have changed the
     // subtitle in the meantime: a transform measured for a file that is
     // no longer on screen would ruin the one that replaced it, and its
@@ -2649,7 +2690,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             // Reverting is a change of what is on screen like any other,
             // so the multiplier comes back with it.
             if (_opened != url ||
-                !mounted ||
+                !_stillOurs ||
                 _tracks.value.activeSubtitleId != applying) {
               return;
             }
@@ -2732,7 +2773,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       constraints: const BoxConstraints(maxWidth: 560),
       builder: builder,
     );
-    if (!mounted) return;
+    if (!_stillOurs) return;
     setState(() => _menuOpen = false);
     if (opener != null &&
         opener.context != null &&
@@ -2799,7 +2840,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Once the sheet is really gone, not from inside it: [_showSheet]
     // puts the remote back on the button that opened it as it closes,
     // which would take it straight off the panel again.
-    if (adjustTiming && mounted) _showSubtitleTiming();
+    if (adjustTiming && _stillOurs) _showSubtitleTiming();
   }
 
   Future<void> _openAudioMenu() => _showSheet(
@@ -2960,9 +3001,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     VideoInfo next,
   ) async {
     final playback = await offlinePlaybackOf(downloads, metaId, next.id);
-    // Gone while the registry was answering: there is no route left to
-    // replace, and the screen that took ours over is not ours to steer.
-    if (!mounted) return;
+    // Gone, or leaving, while the registry was answering: there is no
+    // route left to replace, and a screen waiting for its own teardown
+    // must not put a second player over itself -- a second engine and a
+    // fresh open, from a press that asked to stop watching.
+    if (!_stillOurs) return;
     _handOver(
       navigator,
       state,
@@ -3122,10 +3165,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// leaves nothing behind -- no session, no LAN listener, and no remains
   /// of the session this one was picked in place of -- and says what
   /// happened.
+  ///
+  /// **Leaving the player is one of those endings.** Each step here is a
+  /// round trip, so the viewer can press Back inside any of them, and what
+  /// comes back then would pause the engine being released, open a
+  /// listener on the network and hand a receiver the film -- measured, off
+  /// a `connect` that took two seconds. So every continuation asks
+  /// [_stillOurs], and the one that says no unwinds whatever this call has
+  /// started ([_teardownCast]) rather than merely returning: a session and
+  /// a socket are exactly what must not outlive the screen, and until the
+  /// last line here nothing else knows they exist.
   Future<void> _startCast(CastDevice device) async {
     final cast = _cast;
     final local = _opened;
-    if (cast == null || local == null || !mounted) return;
+    if (cast == null || local == null || !_stillOurs) return;
     final state = _state;
     final compatibility = CastCompatibility.of(
       url: local,
@@ -3157,6 +3210,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _explainCast('Could not start a session with ${device.name}.');
       return;
     }
+    // Starting a session is a round trip to the platform and then to the
+    // receiver, and the viewer can leave the player during it. Every step
+    // below acts -- on the engine, on the LAN listener, on the receiver --
+    // so a leave stops here, and takes the session this call has just
+    // started with it: it is the one thing that must not outlive the
+    // screen, and nothing else knows about it yet.
+    if (!_stillOurs) {
+      await _teardownCast();
+      return;
+    }
     final url = await _castUrl(local, receiver);
     if (url == null) {
       DiagnosticsLog.warn(
@@ -3182,7 +3245,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       return;
     }
-    if (!mounted) return;
+    // The LAN listener is up by now, so this takes that with it too.
+    if (!_stillOurs) {
+      await _teardownCast();
+      return;
+    }
     final position = _position.value;
     // Local playback stops here, before the receiver starts: two copies of
     // the same film, a few seconds apart, is nobody's idea of casting.
@@ -3213,6 +3280,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
       start: position,
     );
+    // A receiver accepting the media is another round trip. Left during
+    // it, the wait below would be a timer armed after [_detach] ran, and
+    // the receiver would be left playing a stream off a device whose
+    // listener is about to go.
+    if (!_stillOurs) {
+      await _teardownCast();
+      return;
+    }
     _watchCastFetch();
   }
 
@@ -3318,7 +3393,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (mounted) setState(() {});
     if (disconnect) await _cast?.disconnect();
     await _endLanMedia();
-    if (!mounted) return;
+    // Ending the session is a round trip, and what follows it puts the
+    // film back on this device's engine -- which is the one thing a
+    // player being released must not be asked to do.
+    if (!_stillOurs) return;
     _position.value = position;
     await _engine?.seek(position);
     await _engine?.play();
@@ -3352,7 +3430,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Says why casting did not happen. A dialog, because it is the answer to
   /// something that was asked for and it is worth reading.
   Future<void> _explainCast(String explanation, {String? title}) async {
-    if (!mounted) return;
+    if (!_stillOurs) return;
     await showDialog<void>(
       context: context,
       builder: (context) => CastRefusedDialog(
@@ -3503,6 +3581,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// what has not been written yet. What is left running afterwards is the
   /// build -- the picture, which is the whole reason the screen is still
   /// here.
+  ///
+  /// **What it cannot cancel is a continuation.** An `await` that was
+  /// already in flight when the press landed is neither a subscription nor
+  /// a timer; there is nothing here to cancel it with, and it resumes into
+  /// the middle of the wait. That half is [_stillOurs], which every such
+  /// continuation asks -- and which says there why `mounted` on its own
+  /// stopped being an answer the moment this wait existed.
   ///
   /// **[State.dispose] is no longer the place for this.** It used to be
   /// the moment the screen stopped existing and so the moment everything

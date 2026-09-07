@@ -69,6 +69,18 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// the URL).
   Object? openError;
 
+  /// Holds every `open` open until it completes: an `open` is a
+  /// `loadfile` and a first read from the server, so the answer takes as
+  /// long as the stream takes to start -- long enough for the viewer to
+  /// give up and leave, which is what the continuation after it has to
+  /// reckon with.
+  Future<void>? openPending;
+
+  /// The same for the `sub-start` read: a property read is quick, but it
+  /// is still an `await`, and a test about what resumes during a teardown
+  /// needs to choose when it resumes.
+  Future<void>? cueStartPending;
+
   /// When set, `setSubtitleTrack` and `setExternalSubtitle` record the call
   /// and then fail with it (mpv refusing the track).
   Object? subtitleError;
@@ -195,6 +207,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     opened.add((url, start));
     callLog?.add('open');
+    if (openPending != null) await openPending;
     if (openError != null) throw openError!;
   }
 
@@ -295,6 +308,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   @override
   Future<double?> subtitleCueStart() async {
     cueStartReads++;
+    if (cueStartPending != null) await cueStartPending;
     return cueStart;
   }
 

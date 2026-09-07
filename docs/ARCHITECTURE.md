@@ -450,6 +450,30 @@ what every model field means. The shape of the thing is in the
   else), and the fade timer refuses to re-arm -- otherwise the focus change
   `_leave` makes on its way out arms a timer nothing cancels, and it
   outlives the screen.
+- **A suspended continuation is not a subscription, and `mounted` no longer
+  answers for one.** The detach above ends everything that could *arrive*
+  during the wait; it cannot reach an `await` that was already in flight
+  when the press landed, and that one resumes into the middle of the wait.
+  It resumes into a screen that is *more* alive than the one its guard was
+  written against: the player used to pop at the press and release its
+  engine two frames later, so `mounted` was false by the time anything late
+  came back, and now it is true for exactly the stretch it used to be false
+  for. Every `mounted` guard on a continuation therefore passes precisely
+  when it used to fail. Two of them cost the viewer something, both
+  measured: a cast start whose `connect` answered during the wait paused
+  the engine, opened the LAN listener and handed the receiver the film at
+  0:37:00 -- Back was pressed and the film started on the television -- and
+  a hand-over whose registry answer came back during the wait
+  `pushReplacement`ed a second player, a second engine and a fresh open over
+  the screen still waiting for its own teardown. So `PlayerScreen` has one
+  question with one name, `_stillOurs` (`mounted && !_leaving`), and every
+  continuation in the class that can reach the engine, the core, the cast
+  client or the navigator asks it; `mounted` says only that there is a
+  widget to call `setState` on. A continuation that had already *started*
+  something -- `_startCast`, once the session exists -- unwinds it rather
+  than merely returning, because a session and a socket are what must not
+  outlive the screen. `test/features/player/player_leaving_awaits_test.dart`
+  is the list, one row per such await.
 - **`quit` is the kill, and there is nothing stronger to escalate to.**
   `PlaybackEngine.quit` sends it asynchronously on media_kit's own handle,
   never `mpv_terminate_destroy`: destroying a handle whose event loop is

@@ -27,6 +27,9 @@ import '../../support/player_harness.dart';
 /// So the rule is not a guard per handler: the screen lets go of
 /// everything that could reach the player before it awaits anything, and
 /// each test here names one thing that used to get through.
+///
+/// What letting go cannot reach is an `await` that was already out when
+/// the press landed. That half is `player_leaving_awaits_test.dart`.
 void main() {
   const total = Duration(minutes: 96);
   const watched = Duration(minutes: 37);
@@ -36,27 +39,6 @@ void main() {
     name: 'Living Room TV',
     model: 'Chromecast',
   );
-
-  /// The player on a route, which is how the app opens it: mounted as the
-  /// root route there is nothing to leave to.
-  Future<void> pumpPushed(WidgetTester tester, PlayerHarness harness) async {
-    useWideViewport(tester);
-    await harness.pump(
-      tester,
-      home: Builder(
-        builder: (context) => Scaffold(
-          body: TextButton(
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute<void>(builder: (_) => harness.screen())),
-            child: const Text('open'),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-  }
 
   /// A film 37 minutes in, playing, with its teardown held open so that
   /// every test here runs inside the wait.
@@ -73,7 +55,7 @@ void main() {
       lanMedia: lanMedia,
       configureEngine: (engine) => engine.disposeGate = wedged,
     );
-    await pumpPushed(tester, harness);
+    await harness.pumpPushed(tester);
     harness.engine.emitDuration(total);
     harness.engine.emitPosition(watched);
     harness.engine.emitPlaying(true);
@@ -152,7 +134,7 @@ void main() {
       ctx: ctx,
       configureEngine: (engine) => engine.disposeGate = wedged,
     );
-    await pumpPushed(tester, harness);
+    await harness.pumpPushed(tester);
     harness.engine.emitDuration(total);
     harness.engine.emitPlaying(true);
     await pumpEvents(tester);
@@ -238,7 +220,7 @@ void main() {
       checkedBytes: 250,
       checkTotalBytes: 1000,
     );
-    await pumpPushed(tester, harness);
+    await harness.pumpPushed(tester);
     expect(harness.engine.opened, hasLength(1), reason: 'and it failed');
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -292,7 +274,7 @@ void main() {
     final harness = PlayerHarness(
       configureEngine: (engine) => engine.disposeGate = wedged,
     );
-    await pumpPushed(tester, harness);
+    await harness.pumpPushed(tester);
     await tester.pump(PlayerScreen.torrentStatsInterval);
     await tester.pump();
     expect(harness.torrentStats.requests, isNotEmpty, reason: 'it was polling');

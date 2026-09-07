@@ -208,6 +208,29 @@ class PlayerHarness {
     await tester.pumpAndSettle();
   }
 
+  /// The same, but *pushed* on a route, which is how the app opens the
+  /// player and the only way a test can watch it leave: mounted as the
+  /// root there is nothing to pop to, and Escape does nothing anyone can
+  /// see.
+  Future<void> pumpPushed(WidgetTester tester) async {
+    useWideViewport(tester);
+    await pump(
+      tester,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () =>
+                Navigator.of(context)
+                    .push(MaterialPageRoute<void>(builder: (_) => screen())),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+  }
+
   /// Every dispatched `Player` sub-action name, in order.
   List<String> playerActions() => [
     for (final action in core.dispatched)

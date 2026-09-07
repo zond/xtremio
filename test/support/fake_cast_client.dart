@@ -52,6 +52,17 @@ class FakeCastClient implements CastClient {
   bool connectFails = false;
   final List<CastDevice> connectAttempts = [];
 
+  /// Holds `connect` open until it completes. Starting a session is a
+  /// round trip to the platform and then to the receiver -- seconds on a
+  /// real Chromecast -- and everything the player does with a session
+  /// happens after it, so a test about leaving mid-start says here when
+  /// the session comes back.
+  Future<void>? connectPending;
+
+  /// The same for ending one, which is the round trip the film coming
+  /// back to this device waits on.
+  Future<void>? disconnectPending;
+
   bool disposed = false;
 
   /// Puts [devices] on the network and tells whoever is listening.
@@ -90,6 +101,7 @@ class FakeCastClient implements CastClient {
   @override
   Future<CastDevice?> connect(CastDevice device) async {
     connectAttempts.add(device);
+    if (connectPending != null) await connectPending;
     if (connectFails) return null;
     final receiver = CastDevice(
       id: device.id,
@@ -104,6 +116,7 @@ class FakeCastClient implements CastClient {
 
   @override
   Future<void> disconnect() async {
+    if (disconnectPending != null) await disconnectPending;
     disconnects++;
     _connected = null;
     _sessionController.add(null);

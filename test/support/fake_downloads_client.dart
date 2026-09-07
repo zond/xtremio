@@ -53,6 +53,11 @@ class FakeDownloadsClient implements DownloadsClient {
   /// prepare: an SD card that is not in the device.
   final Set<String?> unusableDirectories = {};
 
+  /// Holds [add] and [open] open until it completes -- the registry is a
+  /// round trip over FFI, and what a caller does with the answer is what
+  /// a test about a late answer is about.
+  Future<void>? pending;
+
   /// Thrown by the matching call when set, for the failure paths.
   Object? addError;
   Object? openError;
@@ -99,6 +104,7 @@ class FakeDownloadsClient implements DownloadsClient {
   Future<DownloadAddResult> add(DownloadRequest request) async {
     added.add(request);
     callLog?.add('downloads.add');
+    if (pending != null) await pending;
     final error = addError;
     if (error != null) throw error;
     final result = onAdd?.call(request) ?? _accept(request);
@@ -150,6 +156,7 @@ class FakeDownloadsClient implements DownloadsClient {
   Future<DownloadOpenResult> open(String key) async {
     opens.add(key);
     callLog?.add('downloads.open');
+    if (pending != null) await pending;
     final error = openError;
     if (error != null) throw error;
     final result = onOpen?.call(key) ?? _openFromRegistry(key);
