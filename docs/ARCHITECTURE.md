@@ -730,8 +730,10 @@ what every model field means. The shape of the thing is in the
   where the alphabet left it. The menu itself then lifts at most two
   rows, under a heading of their own -- the languages picked most often
   (`SubtitlePickMemory.pinned`), which is a fact about the viewer rather
-  than about these files, and which cannot move under a finger because a
-  count changes only on a pick and every pick closes the sheet. They are
+  than about these files, and whose reason for being first cannot change
+  under a finger because a count changes only on a pick and every pick
+  closes the sheet. An addon answering late still moves the rows of an
+  open menu, as it did before there were pins. They are
   lifted rather than copied, only ever languages this episode offers, and
   not drawn at all when they would be every language there is. Inside a rank the addon that answered first still wins --
   which matters, because the head of a language is the file its row

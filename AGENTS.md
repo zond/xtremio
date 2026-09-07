@@ -573,8 +573,12 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   what they are), because a language they use is worth more than the
   letter it starts with when the answer is forty rows long. It is safe
   where lifting the playing row is not, because a count moves only on a
-  pick and every pick closes the sheet, so nothing re-orders under a
-  finger. They are **lifted, not duplicated** -- one row each, and the
+  pick and every pick closes the sheet: the reason a row is pinned
+  cannot change while that row is being reached for. What still moves an
+  open menu is a subtitle addon answering late, which has always inserted
+  rows into it -- the spinner at the foot is what says the list is not
+  final -- and a language arriving into a pin moves more of them than one
+  arriving into the alphabet. They are **lifted, not duplicated** -- one row each, and the
   heading explains where they went -- only ever languages this episode
   actually offers, and not at all when every language there is would be
   pinned. It happens in the menu's own rendering, after
