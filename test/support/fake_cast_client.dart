@@ -48,6 +48,10 @@ class FakeCastClient implements CastClient {
   /// listener's count already reset for it and its own wait not yet armed.
   Duration loadDelay = Duration.zero;
 
+  /// When set, `load` records the media and then throws it: the platform
+  /// refusing, not the receiver (a receiver's refusal is a status).
+  Object? loadError;
+
   /// When set, `connect` records the device and then answers null.
   bool connectFails = false;
   final List<CastDevice> connectAttempts = [];
@@ -126,6 +130,7 @@ class FakeCastClient implements CastClient {
   Future<void> load(CastMedia media, {Duration start = Duration.zero}) async {
     loads.add((media, start));
     if (loadDelay > Duration.zero) await Future<void>.delayed(loadDelay);
+    if (loadError != null) throw loadError!;
   }
 
   @override

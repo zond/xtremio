@@ -3294,14 +3294,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
       'casting ${DiagnosticsLog.url(url)} to a receiver at '
           '${receiver.address ?? 'an address it did not report'}',
     );
-    await cast.load(
-      CastMedia(
-        url: url,
-        contentType: (compatibility as CastReady).contentType,
-        title: state?.title ?? '',
-      ),
-      start: position,
-    );
+    try {
+      await cast.load(
+        CastMedia(
+          url: url,
+          contentType: (compatibility as CastReady).contentType,
+          title: state?.title ?? '',
+        ),
+        start: position,
+      );
+    } catch (error) {
+      // A receiver turning the media down does not come back this way --
+      // the plugin hands the load to the SDK and answers at once, and the
+      // refusal arrives later as a media status, which the wait armed
+      // below is for. What does come back this way is the platform itself
+      // refusing: a session that went away between connect and load, a
+      // native exception, a plugin that one day awaits the result. This
+      // call is not awaited by anyone, so an error out of it would land
+      // nowhere -- and the screen would sit in casting, the engine paused,
+      // the listener open, with no wait armed and only Stop left. Undone
+      // the way the no-address branch undoes it: the session and the
+      // listener go, the film comes back here at the position it was
+      // handed over at, and the viewer hears why.
+      DiagnosticsLog.warn(
+        'player',
+        'the receiver did not take the media: $error',
+      );
+      if (!_stillOurs) {
+        await _teardownCast();
+        return;
+      }
+      await _stopCast();
+      await _explainCast('${device.name} did not accept the stream.');
+      return;
+    }
     // A receiver accepting the media is another round trip. Left during
     // it, the wait below would be a timer armed after [_detach] ran, and
     // the receiver would be left playing a stream off a device whose

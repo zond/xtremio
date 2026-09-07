@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/cast_widgets.dart';
@@ -560,6 +561,48 @@ void main() {
       expect(lan.toggles, [true, true, false]);
       expect(harness.engine.seeks, [const Duration(minutes: 7)]);
       expect(harness.engine.playCalls, 1);
+    });
+  });
+
+  group('a load the platform throws out of', () {
+    testWidgets('ends the session and puts the film back here', (tester) async {
+      // Nothing awaits `_startCast`, so an error out of `load` used to land
+      // nowhere: the screen stayed a remote with the engine paused and the
+      // listener open, no wait armed, and only Stop left to press.
+      final lines = captureDiagnostics();
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom])
+        ..loadError = PlatformException(
+          code: 'loadMedia',
+          message: 'no session to load into',
+        );
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      harness.engine.emitPosition(const Duration(minutes: 4));
+      await pumpEvents(tester);
+
+      await castTo(tester, livingRoom);
+
+      // The load was tried once, and then everything it had built is gone.
+      expect(cast.loads, hasLength(1));
+      expect(find.byType(CastRemotePanel), findsNothing);
+      expect(cast.disconnects, 1);
+      expect(lan.running, isFalse);
+      expect(lan.toggles, [true, false]);
+      expect(harness.engine.pauseCalls, 1);
+      expect(harness.engine.seeks, [const Duration(minutes: 4)]);
+      expect(harness.engine.playCalls, 1);
+      expect(find.byType(CastRefusedDialog), findsOneWidget);
+      expect(
+        find.textContaining('${livingRoom.name} did not accept the stream'),
+        findsOneWidget,
+      );
+      expect(lines, anyElement(contains('did not take the media')));
+      // Nothing is left waiting to end a session that is already over.
+      await tester.pump(PlayerScreen.castFetchTimeout);
+      await tester.pumpAndSettle();
+      expect(cast.disconnects, 1);
     });
   });
 
