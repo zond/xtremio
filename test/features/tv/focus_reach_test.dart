@@ -32,6 +32,27 @@ import '../../support/player_harness.dart';
 import '../../support/text_entry.dart';
 import '../../support/tv.dart';
 
+/// What this file does not catch.
+///
+/// It is a guard on a cosmetic fault -- a focusable the remote can land on
+/// with nothing drawn to say so -- and one that shows itself the first time
+/// anybody uses a television. It is worth what it costs and no more, so the
+/// gaps below are recorded rather than closed:
+///
+/// - `countStops` gives up at its limit without saying so, so a screen with
+///   more stops than that has the rest of its tab order unpressed.
+/// - A claim in `unopened` is only as good as the state its mount draws. A
+///   mount whose fixture leaves an action disabled proves nothing about that
+///   action, because a disabled control is not a stop.
+/// - Each mount attaches its own `Pushed` observer by hand. One that does not
+///   turns the route half of the check off silently.
+/// - A surface that appears without pushing a route -- an overlay, an inline
+///   expansion -- is not seen as something opening.
+///
+/// Each of those was measured by planting an unmarked stop and watching the
+/// suite stay green. Fix one if it ever hides something real; do not mistake
+/// a pass here for coverage.
+
 /// One walk: a screen mounted under a television and driven with a remote.
 typedef Walk = Future<void> Function(WidgetTester tester);
 
@@ -368,7 +389,12 @@ void main() {
   }
 
   /// How many stops the tab order has: it is walked until it comes back
-  /// round to where it started.
+  /// round to where it started, or until [limit], whichever comes first.
+  ///
+  /// Hitting the limit is not reported. A screen with more stops than that
+  /// is walked as far as the limit and no further, so a stop past it is
+  /// never pressed -- see the note on what this file does not catch, at the
+  /// top.
   Future<int> countStops(WidgetTester tester, {int limit = 40}) async {
     FocusNode? first;
     var stops = 0;
