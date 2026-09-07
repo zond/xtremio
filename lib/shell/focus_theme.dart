@@ -43,8 +43,11 @@ import '../widgets/focusable_tile.dart';
 ///   chip is wrapped by hand for the outline and keeps the fill.
 /// - **[ListTile]** takes no per-state shape, so a focused row is filled
 ///   and not outlined. That is enough on the app's own solid background,
-///   which is where every list of them is -- and not enough over video,
-///   which is why the player's menus wrap their rows.
+///   which is where every list of them is, the player's track menus
+///   included -- those are a modal bottom sheet in the app's own
+///   near-black, and their rows say in a comment that they are left to the
+///   fill on purpose. What is drawn straight over the video is what wears
+///   a ring: the seek bar, and the chips on the panels.
 /// - **[NavigationRail]** hands out no focus nodes at all, so the shell
 ///   draws that ring itself where it keeps its own nodes; the fill below
 ///   still reaches it, because its ink falls back to [ThemeData.focusColor]
