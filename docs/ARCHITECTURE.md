@@ -156,15 +156,29 @@ what every model field means. The shape of the thing is in the
   is the only way it changes anything about the server.
   `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`) is what
   decides, and the viewer's `shareWhileIdle` preference is the whole of the
-  decision — defaulting to *on* on a television and *off* everywhere else,
-  since a box in a wall socket on the house's line costs nobody anything and
-  a phone spends a battery and a bill. Nothing asks what the connection
-  costs: the term that did (a `ConnectivityManager` watcher behind an event
-  channel, refusing to seed on a metered link) could only be answered on
-  Android, and answered "unmetered" unconditionally on the desktops, so a
-  tethered laptop seeded over mobile data under a tile promising it never
-  would. The policy pushes only changes, serialises its writes, and pushes
-  the first as soon as the preferences have loaded.
+  decision — **on by default on every device**. Nothing asks what the
+  connection costs: the term that did (a `ConnectivityManager` watcher
+  behind an event channel, refusing to seed on a metered link) could only be
+  answered on Android, and answered "unmetered" unconditionally on the
+  desktops, so a tethered laptop seeded over mobile data under a tile
+  promising it never would. What replaced that guess is showing the truth —
+  see the status light below. The policy pushes only changes, serialises its
+  writes, and pushes the first as soon as the preferences have loaded; a
+  "Not now" (`pauseUntilRestart`) holds its answer at false for the rest of
+  the run without writing anything down, and turning the switch on lifts it.
+- **The status light says what is happening, and it is the only thing that
+  says it.** `SharingLight` (`lib/features/sharing/sharing_light.dart`) is
+  drawn in the shell's top right corner while two things are true: the
+  server is uploading, and the shell's own route is the current one, so no
+  player is over it. What answers the first is `SharingActivityMonitor`
+  polling a `SharingActivityClient` — and **there is no implementation of
+  that client**, because `ServerHandle` exposes no all-engines statistics
+  call and its per-torrent ones create the engine they are asked about (see
+  `sharing_activity.dart`, which names the one method that would fix it).
+  Until then the light is never drawn. On a television the remote reaches it
+  from the top of the rail with a press of up, and the node is skipped by
+  traversal so it cannot swallow a press meant for a poster; pressing it
+  offers the two stops above and a way out of neither.
 - **Offline downloads are a pin plus a registry.** The server keeps the
   chosen file of a torrent wanted and un-evictable
   (`ServerHandle::pin_download`, a validated `downloadsDir` setting,
