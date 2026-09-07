@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
+import '../../widgets/focusable_tile.dart';
 import 'diagnostics_report.dart';
 
 /// What the app can say about itself when something went wrong on a device
@@ -205,6 +206,13 @@ class _DhtNotice extends StatelessWidget {
 
 /// The report itself, scrollable -- with the arrow keys too, so a remote
 /// can read past the first screenful once it moves down off the button.
+///
+/// The one control on this screen the theme floor cannot mark: a bare
+/// [Focus] with a box under it and no Material ink anywhere. The rest of
+/// the screen is buttons and rows, which the floor reaches, and this
+/// wears the app's own ring for the same reason the timing panel's
+/// steppers do. A [FocusTreatment.row], because a box holding a
+/// screenful of text is the last thing that should grow.
 class _LogView extends StatefulWidget {
   const _LogView({required this.report});
 
@@ -255,23 +263,24 @@ class _LogViewState extends State<_LogView> {
     return Focus(
       onFocusChange: (focused) => setState(() => _focused = focused),
       onKeyEvent: _onKeyEvent,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: _focused
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant,
+      child: FocusHighlight(
+        focused: _focused,
+        treatment: FocusTreatment.row,
+        borderRadius: BorderRadius.circular(8),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
           ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Scrollbar(
-          controller: _controller,
-          child: SingleChildScrollView(
+          child: Scrollbar(
             controller: _controller,
-            padding: const EdgeInsets.all(8),
-            child: SelectableText(
-              widget.report,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+            child: SingleChildScrollView(
+              controller: _controller,
+              padding: const EdgeInsets.all(8),
+              child: SelectableText(
+                widget.report,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              ),
             ),
           ),
         ),

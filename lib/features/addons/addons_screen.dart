@@ -17,6 +17,12 @@ import 'addon_widgets.dart';
 /// Addons: the profile's (`installed_addons`) and the community catalog
 /// (`remote_addons`), plus "Add addon" by manifest URL.
 ///
+/// An addon is an [AddonTile] and wears the full indicator; the type
+/// filters are chips and are marked one at a time (`FilterChips`). What is
+/// left -- the ⋮ menu beside a tile, the "Add addon" dialog, the retry
+/// buttons -- is Material's on the app's own surface and is left to the
+/// theme floor (`FocusTheme`).
+///
 /// On mount it dispatches `Load InstalledAddonsWithFilters {type: null}` and
 /// `Load CatalogWithFilters` with no request (the engine picks the first
 /// addon catalog, Cinemeta's); both fields are unloaded on dispose, unless

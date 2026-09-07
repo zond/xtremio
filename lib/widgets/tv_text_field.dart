@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../shell/device_profile.dart';
 import '../shell/tv_text_entry.dart';
+import 'focusable_tile.dart';
 import 'remote_press.dart';
 
 /// The one single-line text field in the app, wherever something has to be
@@ -73,11 +74,6 @@ class TvTextField extends StatefulWidget {
   /// One character of a masked value.
   static const String obscuringCharacter = '•';
 
-  /// How strongly the focused field is filled on a television. Material's
-  /// own `focusColor` is a few percent of black or white, which is not a
-  /// cue across a room.
-  static const double focusFill = 0.24;
-
   @override
   State<TvTextField> createState() => _TvTextFieldState();
 }
@@ -142,28 +138,35 @@ class _TvTextFieldState extends State<TvTextField> {
       listenable: widget.controller,
       builder: (context, _) {
         final text = widget.controller.text;
-        final field = RemotePress(
-          onTap: onTap,
-          child: InkWell(
+        // The ring and the fill are the app's, not this field's. It drew
+        // its own fill of a quarter of [ColorScheme.primary], which was a
+        // cue nothing else in the app used and which the Bold switch
+        // could not reach; the ink here now falls through to
+        // `ThemeData.focusColor`, which is the theme floor's, and the
+        // ring around it comes from the same emphasis every other control
+        // reads. A [FocusTreatment.row], because the field sits in a
+        // column of them and a zoom would put it over its neighbours.
+        final field = FocusMarked(
+          child: RemotePress(
             onTap: onTap,
-            autofocus: widget.autofocus,
-            focusColor: theme.colorScheme.primary.withValues(
-              alpha: TvTextField.focusFill,
-            ),
-            onFocusChange: (focused) {
-              if (mounted) setState(() => _focused = focused);
-            },
-            child: InputDecorator(
-              decoration: widget.decoration.copyWith(enabled: widget.enabled),
-              isFocused: _focused,
-              isEmpty: text.isEmpty,
-              child: Text(
-                widget.kind.isSecret
-                    ? TvTextField.obscuringCharacter * text.length
-                    : text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium,
+            child: InkWell(
+              onTap: onTap,
+              autofocus: widget.autofocus,
+              onFocusChange: (focused) {
+                if (mounted) setState(() => _focused = focused);
+              },
+              child: InputDecorator(
+                decoration: widget.decoration.copyWith(enabled: widget.enabled),
+                isFocused: _focused,
+                isEmpty: text.isEmpty,
+                child: Text(
+                  widget.kind.isSecret
+                      ? TvTextField.obscuringCharacter * text.length
+                      : text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium,
+                ),
               ),
             ),
           ),

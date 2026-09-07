@@ -16,6 +16,11 @@ import '../player/subtitle_color_chips.dart';
 /// screen turns that into `UpdateSettings` with the *whole* map and that key
 /// changed (`ProfileSettings.withValue`), since stremio-core has no
 /// per-field defaults. Settings are device-local: the API never sees them.
+///
+/// The focus indicator is the theme floor's throughout -- switch rows,
+/// plain rows, the language dropdowns -- for the reason [SettingsScreen]
+/// gives. The two exceptions are drawn elsewhere and marked there: the
+/// folder field is a [TvTextField] and the subtitle colours are chips.
 typedef SettingWriter = void Function(String key, Object? value);
 
 /// The widget key of the control for one settings key.

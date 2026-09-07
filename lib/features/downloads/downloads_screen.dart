@@ -13,6 +13,12 @@ import 'remove_download_dialog.dart';
 /// Everything kept on the device: what it is, how far along, how much room
 /// it takes and where it goes.
 ///
+/// The poster on a row is a [PosterTile] and wears the full indicator
+/// like every other poster in the app; everything else here -- the rows,
+/// the destination field's menu, the ⋮ per download, the buttons in the
+/// confirmations -- is Material's and is marked by the theme floor
+/// (`FocusTheme`) alone, since a row in a list is not a thing to lift.
+///
 /// The rows come from the registry the Rust side owns, with live progress
 /// merged in ([DownloadsController]); every action here is one call on the
 /// [DownloadsClient], never HTTP. Deleting asks first, and asks the

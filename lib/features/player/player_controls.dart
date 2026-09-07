@@ -9,6 +9,13 @@ const _gradientBlack = Color(0xCC000000);
 
 /// The bar over the top edge of the video: back, title, and the menus.
 ///
+/// Every button on the bar is an [IconButton] and takes the theme floor's
+/// stroke and fill (`FocusTheme`) rather than a ring of its own. The bar
+/// is drawn on its own gradient, black at the panel's edge where the
+/// buttons are, so a light stroke has something to contrast with; and a
+/// button in a row of eight, a few pixels apart, is the last thing that
+/// should grow when the remote reaches it.
+///
 /// Every button here is focusable, so a remote reaches the menus once the
 /// player has moved focus onto the bar ([firstFocusNode] is where it lands:
 /// the leftmost control, with the rest a right press away). They are keyed

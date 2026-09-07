@@ -11,6 +11,10 @@ import '../../core/core.dart';
 /// space, which lives there and not here); this is where it can be watched
 /// and acted on. Cleaning no longer stops playback -- the server can sweep
 /// its cache on request now -- so the action needs no confirmation.
+///
+/// A copy button, a clean-now button and rows, all on the app's own
+/// surface: the theme floor marks every one of them and this screen adds
+/// nothing, the same decision [SettingsScreen] explains.
 class ServerStorageScreen extends StatefulWidget {
   const ServerStorageScreen({super.key, this.client = const ServerClient()});
 

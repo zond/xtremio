@@ -9,6 +9,10 @@ import 'addon_widgets.dart';
 /// One addon by manifest URL (`addon_details`): the fetched manifest next
 /// to the installed copy, with Install / Update / Uninstall / Configure.
 ///
+/// The action buttons are Material's and are left to the theme floor
+/// (`FocusTheme`): they sit in a row on the screen's own surface, where a
+/// stroke reads, and a button that grew would overlap the one beside it.
+///
 /// On mount it dispatches `Load AddonDetails {transportUrl}` (a `stremio://`
 /// URL is accepted; the engine reads it as `https://`) and unloads the field
 /// on dispose, unless another details screen has loaded it since. The

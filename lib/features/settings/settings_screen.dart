@@ -19,6 +19,14 @@ import 'core_settings.dart';
 /// `UpdateSettings` with the whole map and that key changed), the state of
 /// the streaming server (from the `streaming_server` model field) and the
 /// core.
+///
+/// Nothing here draws a focus indicator of its own. Every control is a
+/// Material one on the app's own surface, so what marks the row the remote
+/// is on is the theme floor (`FocusTheme`), which fills it -- and
+/// deliberately only that: a settings row that grew and cast a shadow as
+/// the D-pad walked a screenful of them would overlap the rows above and
+/// below it on every press, which is the reason `FocusTreatment` has two
+/// values.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.dhtStatus});
 

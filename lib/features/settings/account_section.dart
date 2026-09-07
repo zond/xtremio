@@ -9,6 +9,11 @@ import '../../widgets/tv_text_field.dart';
 
 /// Settings → Account, over `ctx.profile.auth`.
 ///
+/// The form's two fields are [TvTextField]s and carry the app's ring
+/// themselves; the consent boxes and the buttons around them are Material
+/// controls on the app's own surface and take the theme floor
+/// (`FocusTheme`), which is the whole of what marks them.
+///
 /// Signed out it is the sign-in / create-account form: `Authenticate` with
 /// `AuthRequest::Login` or `::Register` (the latter with the GDPR consent
 /// the API demands, `from: xtremio`). The engine does not serialize its

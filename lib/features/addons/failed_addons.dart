@@ -1,5 +1,9 @@
 /// The addons that could not answer, and the two things to do about one.
 ///
+/// Rows and a confirmation dialog, all Material's on the app's own
+/// surface: the theme floor (`FocusTheme`) marks them and nothing here
+/// adds to it.
+///
 /// Lives here rather than on the details screen because a failure looks the
 /// same wherever it is reported: a screen that asks several addons at once
 /// and shows only what came back — the sources list, the board — owes the

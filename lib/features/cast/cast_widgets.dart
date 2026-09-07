@@ -6,6 +6,12 @@ import 'cast_client.dart';
 
 /// The list of receivers the cast button opens.
 ///
+/// Rows on a sheet of the app's own, so the theme floor (`FocusTheme`)
+/// fills the one the remote is on and nothing here draws a ring -- the
+/// same decision the player's track menus record. The transport buttons
+/// below, on [CastControls], are over the video but on its black scrim,
+/// where the floor's stroke reads.
+///
 /// Only receivers, and only ones that were found: there is no "searching"
 /// spinner to sit through, because the button that opens this is itself
 /// only on screen once at least one has answered.

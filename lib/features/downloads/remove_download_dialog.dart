@@ -9,6 +9,11 @@ import '../../core/core.dart';
 ///
 /// Popping `true` deletes the file, `false` keeps it as ordinary cache,
 /// nothing at all cancels.
+///
+/// Three buttons on a dialog's own surface, so the theme floor is the
+/// whole of what marks them -- which is the point of having a floor at
+/// all: a dialog is exactly the kind of surface nobody remembers to wrap,
+/// and this one is the last thing a viewer sees before a file goes.
 class RemoveDownloadDialog extends StatelessWidget {
   const RemoveDownloadDialog({super.key, required this.view});
 

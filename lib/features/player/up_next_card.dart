@@ -4,7 +4,11 @@ import 'package:flutter/material.dart';
 /// down to playing it, with a way out.
 ///
 /// Both buttons are focusable, so a remote can take the hand-off early or
-/// call it off once the player has moved focus onto the card.
+/// call it off once the player has moved focus onto the card. They wear
+/// the theme floor's stroke and nothing more: the card is an opaque
+/// surface of the app's own drawn over the video, so a light stroke has a
+/// known background under it, and two buttons side by side in a card that
+/// is itself a hand-over prompt are not things to lift off it.
 class UpNextCard extends StatelessWidget {
   const UpNextCard({
     super.key,
