@@ -211,18 +211,129 @@ void main() {
 
     test('writes a URL without its query or its credentials', () {
       // The embedded server's own URL is worth having whole; an addon's is
-      // where a key rides, and it rides in the query.
+      // where a key rides, and it rides in the query -- or in the path,
+      // which is why a path on somebody else's host goes too.
       expect(
         DiagnosticsLog.url(Uri.parse('http://127.0.0.1:11470/abc123/-1?tr=x')),
         'http://127.0.0.1:11470/abc123/-1?…',
       );
       expect(
         DiagnosticsLog.url(Uri.parse('https://user:pw@host/path?apiKey=k')),
-        'https://host/path?…',
+        'https://host/…?…',
       );
+      expect(DiagnosticsLog.url(Uri.parse('https://host')), 'https://host');
       expect(
         DiagnosticsLog.url(Uri.parse('file:///home/someone/Videos/ep.mkv')),
         'file://…/ep.mkv',
+      );
+    });
+
+    test('keeps the path only where the path is ours', () {
+      // The LAN listener's address, as a receiver is handed it: the same
+      // `/{infoHash}/{fileIdx}` the server serves over loopback.
+      expect(
+        DiagnosticsLog.url(Uri.parse('http://192.168.1.20:39271/abc123/0')),
+        'http://192.168.1.20:39271/abc123/0',
+      );
+      expect(
+        DiagnosticsLog.url(Uri.parse('http://10.0.0.7:39271/abc123/0')),
+        'http://10.0.0.7:39271/abc123/0',
+      );
+      expect(
+        DiagnosticsLog.url(Uri.parse('http://[fd00::7]:39271/abc123/0')),
+        'http://[fd00::7]:39271/abc123/0',
+      );
+      // A debrid host signs its token into the path; Torrentio puts the
+      // debrid API key there. Neither is a path this app wrote.
+      expect(
+        DiagnosticsLog.url(
+          Uri.parse(
+            'https://xx12.download.real-debrid.com/d/ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCD/Some.Movie.2024.1080p.mkv',
+          ),
+        ),
+        'https://xx12.download.real-debrid.com/…',
+      );
+      expect(
+        DiagnosticsLog.url(
+          Uri.parse(
+            'https://torrentio.strem.fun/realdebrid/RDAPIKEY0123456789/abc123/null/0/Movie.mkv',
+          ),
+        ),
+        'https://torrentio.strem.fun/…',
+      );
+      // 172.32.x is not private, whatever it looks like.
+      expect(
+        DiagnosticsLog.url(Uri.parse('http://172.32.0.1/abc123/0')),
+        'http://172.32.0.1/…',
+      );
+    });
+
+    test('a proxied stream keeps the target host and nothing else of it', () {
+      // The exact chain playback runs: a debrid link through
+      // `proxiedThroughServer`, then into the open line. What used to come
+      // out was the whole thing -- debrid token, player token and file.
+      final proxied = proxiedThroughServer(
+        Uri.parse(
+          'https://xx12.download.real-debrid.com/d/ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCD/Some.Movie.2024.1080p.mkv?token=QUERYTOKENabc',
+        ),
+        serverBase: Uri.parse('http://127.0.0.1:11470'),
+        playerToken: 'PLAYERTOKEN-xyz',
+      );
+      expect(proxied.path, startsWith('/proxy/d='));
+      final written = DiagnosticsLog.url(proxied);
+      expect(
+        written,
+        'http://127.0.0.1:11470/proxy/d=xx12.download.real-debrid.com/…',
+      );
+      expect(written, isNot(contains('PLAYERTOKEN')));
+      expect(written, isNot(contains('ABCDEFGHIJ')));
+      expect(written, isNot(contains('QUERYTOKEN')));
+      // A `d=` that does not read as an origin says so rather than guessing.
+      expect(
+        DiagnosticsLog.url(Uri.parse('http://127.0.0.1:11470/proxy/x=1/f')),
+        'http://127.0.0.1:11470/proxy/d=…/…',
+      );
+    });
+
+    test('redacts every URL in a line it did not compose', () {
+      // mpv names the whole URL, full stop included, when it cannot open
+      // it; media_kit and the platform do the same in exception text. The
+      // line is redacted on the way into the ring, because the ring is what
+      // logcat and the copied report both read.
+      final lines = captureDiagnostics();
+      DiagnosticsLog.warn(
+        'mpv',
+        'stream: Failed to open http://127.0.0.1:1/proxy/'
+            'd=https%3A%2F%2Fdl.real-debrid.com&p=player-3/d/rdSECRETsigned1234/'
+            'Movie.mkv?token=QUERYTOKENabc.',
+      );
+      DiagnosticsLog.error(
+        'player',
+        'open rejected: PlatformException(open, '
+            'https://torrentio.strem.fun/realdebrid/RDAPIKEY0123/abc/null/0/Movie.mkv, '
+            'not reachable)',
+      );
+      DiagnosticsLog.info('player', 'stalled; see https://example.org/help.');
+      expect(lines, [
+        'warn mpv stream: Failed to open '
+            'http://127.0.0.1:1/proxy/d=dl.real-debrid.com/….',
+        'error player open rejected: PlatformException(open, '
+            'https://torrentio.strem.fun/…, not reachable)',
+        'info player stalled; see https://example.org/….',
+      ]);
+      for (final line in lines) {
+        expect(line, isNot(contains('SECRET')));
+        expect(line, isNot(contains('TOKEN')));
+        expect(line, isNot(contains('APIKEY')));
+      }
+      // The server's own URL is still worth having whole, and a line with
+      // no URL in it is left exactly as it was.
+      const opened =
+          'open http://127.0.0.1:11470/abc123/0 at 0s (initial (torrent))';
+      expect(DiagnosticsLog.redactUrls(opened), opened);
+      expect(
+        DiagnosticsLog.redactUrls('http:// is not a URL'),
+        'http:// is not a URL',
       );
     });
 

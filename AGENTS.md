@@ -80,6 +80,18 @@ through `server::token_for` in `rust/src/env.rs`) is in the same class:
 never log it, never return it over FFI, never put it in a URL. It exists
 only inside the Rust crate.
 
+A URL in the diagnostics log is made safe in one place, `DiagnosticsLog`
+(`lib/core/diagnostics_log.dart`): `write` rewrites every `http(s)` URL in
+a line through `DiagnosticsLog.url`, which keeps a path only for a host on
+this device or its network and reduces a `/proxy/…` URL to the target's
+host. A debrid link signs its token into the *path*, Torrentio puts the
+debrid API key there, and a proxied stream carries the target's path and
+the player token after `/proxy/d=`, so dropping the query was never
+enough. Nothing below the FFI redacts -- `rust/src/logging.rs` re-emits
+every app line to logcat before storing it -- so a line is made safe
+before it is written, not on the way to the clipboard (`redactSecrets` is
+the second lock).
+
 ## The app never speaks HTTP to the embedded server
 
 Only libmpv fetches from it (the open media routes). Everything else the
