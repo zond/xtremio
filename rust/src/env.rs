@@ -191,10 +191,10 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()>
 /// timing lines; refusing a file over an encoding would lose a set of
 /// observations that is perfectly readable.
 ///
-/// The cap is a real bound rather than a check afterwards -- the body is
-/// accumulated chunk by chunk and abandoned the moment it is exceeded --
-/// because a URL that answers with something enormous must not be able to
-/// spend the device's memory on it.
+/// The cap is a real bound rather than a check afterwards ([`read_capped`],
+/// which [`Env::fetch`] reads through as well) because a URL that answers
+/// with something enormous must not be able to spend the device's memory
+/// on it.
 ///
 /// **The URL never reaches the error.** An addon's URL can carry a debrid
 /// API key (`AGENTS.md`, "Deep links open an addon"), and `reqwest` puts
@@ -206,7 +206,7 @@ pub(crate) async fn fetch_text(url: &url::Url, most_bytes: usize) -> anyhow::Res
     if let Some(token) = crate::server::token_for(url) {
         request = request.bearer_auth(token);
     }
-    let mut response = request
+    let response = request
         .send()
         .await
         .map_err(|error| anyhow::anyhow!("fetch failed: {}", error.without_url()))?;
@@ -214,18 +214,60 @@ pub(crate) async fn fetch_text(url: &url::Url, most_bytes: usize) -> anyhow::Res
     if !status.is_success() {
         anyhow::bail!("HTTP {}", status.as_u16());
     }
-    let mut body: Vec<u8> = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
+    let body = read_capped(response, most_bytes)
         .await
-        .map_err(|error| anyhow::anyhow!("fetch failed: {}", error.without_url()))?
-    {
+        .map_err(|error| match error {
+            ReadError::TooBig(most_bytes) => anyhow::anyhow!("larger than {most_bytes} bytes"),
+            ReadError::Transport(error) => anyhow::anyhow!("fetch failed: {}", error.without_url()),
+        })?;
+    Ok(String::from_utf8_lossy(&body).into_owned())
+}
+
+/// The most a JSON answer may be -- an addon's manifest, catalog page,
+/// meta, streams or subtitles list, or the Stremio API's answer to a login
+/// or a library sync: 32 MiB.
+///
+/// Measured rather than guessed. The largest legitimate answer found is
+/// Cinemeta's meta for General Hospital, some fifteen thousand episodes, at
+/// 3.1 MB; Days of Our Lives is 1.2 MB and One Piece 1.4 MB, a catalog page
+/// 128 KB to 628 KB, a manifest a few KB. A library synced down whole is a
+/// few hundred bytes per item, so tens of thousands of items fit too. Ten
+/// times the largest of those rules nothing real out, and rules out what an
+/// unbounded read let an installed addon do: reqwest inflates gzip
+/// transparently, so a 100 KB body on the wire became 100 MB in memory and
+/// 1.7 GB with the value tree on top -- on a 2 GB television box, and on
+/// every launch, since the board asks every addon's catalogs.
+pub(crate) const MOST_JSON_BYTES: usize = 32 * 1024 * 1024;
+
+/// Why [`read_capped`] stopped short of a whole body.
+enum ReadError {
+    /// The body passed the cap it was given, which is carried for the
+    /// message.
+    TooBig(usize),
+    Transport(reqwest::Error),
+}
+
+/// Reads `response`'s body, at most `most_bytes` of it.
+///
+/// The cap is a real bound rather than a check afterwards: the body is
+/// accumulated chunk by chunk and abandoned the moment it is exceeded. It
+/// has to be, because a `Content-Length` says nothing here -- reqwest drops
+/// it when it inflates a compressed body, and the inflated size is the one
+/// that costs memory -- so only a bound on what arrives after decoding
+/// bounds what the device spends. Both HTTP paths of the crate read through
+/// this, so neither can grow a body of any size again.
+async fn read_capped(
+    mut response: reqwest::Response,
+    most_bytes: usize,
+) -> Result<Vec<u8>, ReadError> {
+    let mut body: Vec<u8> = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(ReadError::Transport)? {
         if body.len() + chunk.len() > most_bytes {
-            anyhow::bail!("larger than {most_bytes} bytes");
+            return Err(ReadError::TooBig(most_bytes));
         }
         body.extend_from_slice(&chunk);
     }
-    Ok(String::from_utf8_lossy(&body).into_owned())
+    Ok(body)
 }
 
 /// Uninhabited: `Env` is implemented on the type, never on a value.
@@ -268,10 +310,15 @@ impl Env for XtremioEnv {
             if !status.is_success() {
                 return Err(EnvError::Fetch(format!("HTTP {}", status.as_u16())));
             }
-            let bytes = response
-                .bytes()
-                .await
-                .map_err(|error| EnvError::Fetch(error.to_string()))?;
+            let bytes =
+                read_capped(response, MOST_JSON_BYTES)
+                    .await
+                    .map_err(|error| match error {
+                        ReadError::TooBig(most_bytes) => {
+                            EnvError::Fetch(format!("response larger than {most_bytes} bytes"))
+                        }
+                        ReadError::Transport(error) => EnvError::Fetch(error.to_string()),
+                    })?;
             let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
             serde_path_to_error::deserialize::<_, OUT>(&mut deserializer)
                 .map_err(|error| EnvError::Serde(error.to_string()))
@@ -494,6 +541,11 @@ mod tests {
     /// also leaves the one test below the only one holding the process's
     /// server.
     fn one_shot(status: &'static str, body: Vec<u8>) -> url::Url {
+        one_shot_with(status, &[], body)
+    }
+
+    /// [`one_shot`] with extra response headers, each `"Name: value"`.
+    fn one_shot_with(status: &'static str, headers: &[&'static str], body: Vec<u8>) -> url::Url {
         use std::io::{BufRead, BufReader, Write};
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
@@ -502,6 +554,7 @@ mod tests {
             listener.local_addr().expect("addr")
         ))
         .expect("url");
+        let headers: Vec<&'static str> = headers.to_vec();
         std::thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept");
             let mut reader = BufReader::new(stream);
@@ -510,14 +563,51 @@ mod tests {
                 line.clear();
             }
             let mut stream = reader.into_inner();
+            let extra: String = headers
+                .iter()
+                .map(|header| format!("{header}\r\n"))
+                .collect();
             let _ = write!(
                 stream,
-                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\n{extra}Connection: close\r\n\r\n",
                 body.len()
             );
             let _ = stream.write_all(&body);
         });
         url
+    }
+
+    /// `Env::fetch` is bounded the way `fetch_text` is, and the bound is on
+    /// what arrives *after* decoding: a compressed body a fraction of the
+    /// cap on the wire is refused once it inflates past it, before serde
+    /// sees a byte. This is the shape a poisoned addon takes -- a 100 KB
+    /// answer that costs the device a gigabyte -- and the shape a
+    /// `Content-Length` check would wave through.
+    #[test]
+    fn fetch_refuses_a_body_that_inflates_past_the_cap() {
+        use std::io::Write;
+
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        encoder
+            .write_all(&vec![b'0'; MOST_JSON_BYTES + 1])
+            .expect("compress");
+        let wire = encoder.finish().expect("finish");
+        assert!(
+            wire.len() < 1024 * 1024,
+            "the wire body is small; that is the point: {} bytes",
+            wire.len()
+        );
+
+        let url = one_shot_with("200 OK", &["Content-Encoding: gzip"], wire);
+        let request = Request::get(url.as_str()).body(()).expect("request");
+        let error = CONCURRENT
+            .block_on(XtremioEnv::fetch::<(), serde_json::Value>(request))
+            .expect_err("a body over the cap is refused");
+        assert!(
+            matches!(&error, EnvError::Fetch(message)
+                if message.contains("larger than") && message.contains(&MOST_JSON_BYTES.to_string())),
+            "{error:?}"
+        );
     }
 
     #[test]

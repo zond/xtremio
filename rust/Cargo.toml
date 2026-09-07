@@ -92,6 +92,11 @@ aws-lc-sys = { version = "0.45", features = ["bindgen"] }
 [dev-dependencies]
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 tempfile = "3"
+# Gzips one test body for `env::tests`, the shape of an addon answer that is
+# small on the wire and enormous inflated. Already in the graph (the vendored
+# stremio-watched-bitfield and stream-server's tree both pull it), so
+# nothing new is compiled.
+flate2 = "1"
 # Real .torrent fixtures for tests/downloads.rs (`librqbit::create_torrent`),
 # so the offline-downloads test needs no network and no peer: the same git pin
 # stream-server's enginefs uses, so nothing extra is compiled.
