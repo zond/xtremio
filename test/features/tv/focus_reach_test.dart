@@ -21,6 +21,7 @@ import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/shell/tv_density.dart';
+import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fake_diagnostics_client.dart';
@@ -637,6 +638,81 @@ void main() {
     for (final entry in opened) {
       testWidgets(entry.name, entry.walk);
     }
+  });
+
+  /// What "one surface, one indicator" is really a rule about.
+  ///
+  /// A ring turns the floor's fill off only where the surface owns the ink
+  /// that would paint it, and the details screen draws all four cases at
+  /// once. Pinned here because the rule is written down in AGENTS.md, and
+  /// a rule with no test under it is the sort that drifts into being
+  /// wrong.
+  testWidgets('a ring turns the fill off only where the surface owns the '
+      'ink', (tester) async {
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(
+      CoreScope(
+        client: fullCore(),
+        child: onTv(
+          const MetaDetailsScreen(type: 'movie', id: 'tt0063350'),
+          pushed: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    /// The marks on the stop the walk reaches by [label], whether that is
+    /// a tooltip or the first text on it.
+    Future<Set<FocusMark>> marksOn(String label) async {
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.tab,
+        () => focusedTooltip() == label || focusedLabel(tester) == label,
+        target: label,
+      );
+      return focusMarks();
+    }
+
+    // A source card builds its own [InkWell], so it can and does hand it a
+    // transparent focus colour: over poster art the floor's near-white
+    // wash says nothing the ring has not.
+    expect(await marksOn('1080p'), {FocusMark.ring});
+    // A chip's ink is Material's and falls through to
+    // `ThemeData.focusColor`; the floor can fill one and cannot outline
+    // one, so the ring is the half put on by hand.
+    expect(await marksOn('Peers per MB'), {FocusMark.ring, FocusMark.fill});
+    // The bookmark is an [IconButton] under a [FocusHighlighted]: the
+    // floor reaches a Material button with both its marks, and the ring is
+    // a third because this one is drawn over a darkened backdrop.
+    expect(await marksOn('Add to library'), {
+      FocusMark.ring,
+      FocusMark.stroke,
+      FocusMark.fill,
+    });
+    // And the app bar's button, which is the floor alone.
+    expect(await marksOn('Back'), {FocusMark.stroke, FocusMark.fill});
+  });
+
+  testWidgets('and a text field keeps the fill although it owns its ink', (
+    tester,
+  ) async {
+    // The exception with a reason: the field drew a fill of its own -- a
+    // quarter of `ColorScheme.primary`, which the Bold switch could not
+    // reach -- and the fix was to hand that fill to the floor rather than
+    // to take it away, with the ring on top.
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(
+      CoreScope(client: fullCore(), child: onTv(const SearchScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    await pressUntil(
+      tester,
+      LogicalKeyboardKey.tab,
+      () => focusIn<TvTextField>(),
+      target: 'the search field',
+    );
+    expect(focusMarks(), {FocusMark.ring, FocusMark.fill});
   });
 
   test('every screen in the app is walked, and twice where it opens '

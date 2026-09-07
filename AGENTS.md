@@ -735,12 +735,21 @@ itself says a test cannot reach it.
   cannot reach (a chip's outline, a bare `Focus`, the navigation rail,
   which hands out no nodes) or what is drawn straight over video or
   poster art, and say in a comment which of the two a surface is getting
-  and why. **One surface, one indicator**: what draws its own ring turns
-  the floor's fill off (`FocusableTile` passes a transparent
-  `focusColor`), because the fill is for the controls that can wear
-  nothing else and under a ring it is only a wash over the art the ring
-  is drawn on. A chip is the one that wears both, and for a stated
-  reason: the floor can fill one and cannot outline one. And a television
+  and why. **A ring turns the floor's fill off where, and only where, the
+  surface owns the ink that would paint it.** `FocusableTile` builds its
+  own `InkWell` and hands it a transparent `focusColor`, because over
+  poster art a near-white wash under a ring says nothing the ring has not.
+  Where the ink is Material's own, the floor arrives with it and is not
+  worth prising off one control at a time -- so **two or three marks is
+  the ordinary case, not a fault**: a chip takes the fill (the floor can
+  fill one and cannot outline one), and an icon button under a
+  `FocusHighlighted`, such as the details header's Add to library, takes
+  the stroke and the fill as well as the ring. One surface owns its ink
+  and keeps the fill anyway, and says so in a comment: the TV text field,
+  which drew a fill of its own that the Bold switch could not reach, so
+  the fix was to hand that fill to the floor rather than to take it away.
+  Which family wears what is measured rather than argued -- two tests near
+  the end of `focus_reach_test.dart` pin all four shapes. And a television
   pins Flutter's highlight mode (`AlwaysShowFocus`), which otherwise
   starts at `touch` on Android: an ink paints no focus highlight in that
   mode, and `DropdownButton` paints its *selected* menu entry with
