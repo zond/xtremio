@@ -2001,7 +2001,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// a film they are coming back to -- is seeked to exactly. The target
   /// is still computed here, because the bar, the core and the check on
   /// the seek all want a position and mpv's answer to a scan arrives on
-  /// the position stream a moment later.
+  /// the position stream a moment later. A step that would land outside
+  /// the file is the exception, and the body says why.
   void _seekTo(Duration target, {Duration? scanning}) {
     final from = _position.value;
     final upper = _duration > Duration.zero ? _duration : target;
@@ -2019,9 +2020,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else {
       // Relative, and so from where playback actually is rather than
       // from the target this press computed: a run of presses under a
-      // held key adds up in libmpv the same way it adds up here, and
-      // the clamp above is mpv's own at both ends of the file.
-      if (scanning != null) {
+      // held key adds up in libmpv the same way it adds up here.
+      //
+      // **Except where the step would land outside the file**, which is
+      // where the clamp above stops being cosmetic. mpv works a relative
+      // seek's target out itself and does not clamp what it then
+      // *reports*: `time-pos` answers `last_seek_pts`, the raw target,
+      // from the moment the seek is queued until the first frame after
+      // it arrives. Stepping ten seconds back from 2.586 s therefore
+      // puts -7.414 on the position stream, and that is what the core is
+      // told playback has got to -- where a time is a `u64` and the
+      // whole action is thrown out (`Seek`/`TimeChanged` in
+      // `stremio_core::runtime::msg`). So a step off either end of the
+      // file is asked for as the position it lands *at*: mpv's own
+      // `last_seek_pts` is then the clamped number, and the seek still
+      // happens -- to the start, which is what the press asked for.
+      if (scanning != null && clamped == target) {
         _engine?.scanBy(scanning);
       } else {
         _engine?.seek(clamped);

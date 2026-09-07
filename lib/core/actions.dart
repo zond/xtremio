@@ -164,13 +164,31 @@ abstract final class CoreActions {
     action: _tagged('Player', _tagged(action, args)),
   );
 
+  /// A playback position on the wire, in milliseconds: never negative.
+  ///
+  /// stremio-core takes a time as a `u64` (`Seek`/`TimeChanged` in
+  /// `stremio_core::runtime::msg`), so a negative one is not a bad
+  /// position -- it is a *rejected action*: serde refuses the whole
+  /// envelope and nothing is dispatched at all. The positions here are
+  /// mpv's, and mpv answers `time-pos` with a seek's raw, unclamped
+  /// target until the first frame after it lands, so one can arrive from
+  /// below whatever the player does. The player does not ask for a seek
+  /// that lands before the start (`_seekTo` in `player_screen.dart`);
+  /// this is the last line before the bridge, for the positions nobody
+  /// here computed -- mpv's, and a Cast receiver's.
+  ///
+  /// It clamps rather than drops: the viewer really is at the start of the
+  /// film, and a report that never arrives is a continue-watching entry
+  /// still pointing at where they were before the seek.
+  static int _wireTime(int milliseconds) => milliseconds < 0 ? 0 : milliseconds;
+
   /// Regular playback progress (milliseconds); monotonic between seeks.
   static CoreAction playerTimeChanged({
     required int time,
     required int duration,
     required String device,
   }) => _player('TimeChanged', {
-    'time': time,
+    'time': _wireTime(time),
     'duration': duration,
     'device': device,
   });
@@ -180,7 +198,11 @@ abstract final class CoreActions {
     required int time,
     required int duration,
     required String device,
-  }) => _player('Seek', {'time': time, 'duration': duration, 'device': device});
+  }) => _player('Seek', {
+    'time': _wireTime(time),
+    'duration': duration,
+    'device': device,
+  });
 
   static CoreAction playerPausedChanged(bool paused) =>
       _player('PausedChanged', {'paused': paused});

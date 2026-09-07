@@ -1098,9 +1098,24 @@ class MediaKitEngine implements PlaybackEngine {
   Future<void> scanBy(Duration delta) {
     final native = _player.platform;
     if (native is! NativePlayer || _player.state.completed) {
-      return _player.seek(_player.state.position + delta);
+      return _player.seek(scanFallbackTarget(_player.state.position, delta));
     }
     return native.command(scanCommand(delta));
+  }
+
+  /// Where the fallback above seeks to: [position] moved by [delta], never
+  /// before the start of the file.
+  ///
+  /// media_kit's absolute seek hands mpv whatever number it is given, and
+  /// mpv reports a seek's raw target on `time-pos` until the first frame
+  /// after it lands -- so a step back from the first seconds of a film
+  /// puts a negative position on the stream the player forwards to the
+  /// core, where a time is unsigned. There is no upper clamp because the
+  /// duration is not this call's to know: past the end is an ending,
+  /// which mpv answers with EOF, and no number reaches the core.
+  static Duration scanFallbackTarget(Duration position, Duration delta) {
+    final target = position + delta;
+    return target < Duration.zero ? Duration.zero : target;
   }
 
   @override
