@@ -35,6 +35,10 @@ fn config(root: &std::path::Path) -> ServerConfig {
 /// is refused (401); the media routes players fetch stay open.
 async fn heartbeat_status(base_url: &str) -> anyhow::Result<StatusCode> {
     let client = reqwest::Client::builder()
+        // Loopback: an ambient `HTTP_PROXY` would send a request meant for
+        // the server this test started off the machine, and reqwest does
+        // not exempt 127.0.0.1 from one.
+        .no_proxy()
         .connect_timeout(std::time::Duration::from_secs(5))
         .build()?;
     Ok(client
@@ -239,6 +243,10 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         )
     };
     let client = reqwest::Client::builder()
+        // Loopback: an ambient `HTTP_PROXY` would send a request meant for
+        // the server this test started off the machine, and reqwest does
+        // not exempt 127.0.0.1 from one.
+        .no_proxy()
         .connect_timeout(std::time::Duration::from_secs(5))
         .build()?;
     let mut one = client.get(proxied("player-1", "film.mp4")).send().await?;

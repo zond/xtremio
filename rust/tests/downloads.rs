@@ -77,7 +77,20 @@ fn hex(bytes: &[u8]) -> String {
 fn create_torrent_on_server(base_url: &url::Url, torrent: &[u8]) -> serde_json::Value {
     let token = xtremio_core::server::token_for(base_url).expect("server token");
     runtime().block_on(async {
-        reqwest::Client::new()
+        // Loopback, and only loopback: a client built the plain way picks up
+        // `HTTP_PROXY`/`ALL_PROXY` from the environment and reqwest does not
+        // exempt 127.0.0.1 from them, so this request to the server this test
+        // just started would leave the machine. That is how a test whose whole
+        // claim is "no network involved at any point" became a test that hangs
+        // for as long as a filtering proxy takes to not answer -- and the bound
+        // below is the second half of the same lesson: a local call that has
+        // not answered in ten seconds is not going to.
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .expect("HTTP client");
+        client
             .post(base_url.join("create").expect("create URL"))
             .bearer_auth(token)
             .json(&serde_json::json!({ "torrent": hex(torrent) }))
