@@ -156,28 +156,18 @@ class BufferAheadSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.hourglass_bottom_outlined),
-      title: const Text('Buffer ahead'),
-      subtitle: Text(prefs.bufferAhead.description),
-      trailing: DropdownButton<BufferAhead>(
+    return SettingTile(
+      icon: Icons.hourglass_bottom_outlined,
+      title: 'Buffer ahead',
+      subtitle: prefs.bufferAhead.description,
+      menu: SettingMenu<BufferAhead>(
         // The same key shape a `profile.settings` control gets, so a test
         // finds this one the same way.
-        key: settingKey(AppPrefs.bufferAheadKey),
+        setting: AppPrefs.bufferAheadKey,
         value: prefs.bufferAhead,
-        underline: const SizedBox.shrink(),
-        items: [
-          for (final choice in BufferAhead.values)
-            DropdownMenuItem<BufferAhead>(
-              value: choice,
-              child: Text(choice.label),
-            ),
-        ],
-        onChanged: (selected) {
-          if (selected != null && selected != prefs.bufferAhead) {
-            prefs.setBufferAhead(selected);
-          }
-        },
+        options: BufferAhead.values,
+        label: (choice) => choice.label,
+        onPicked: prefs.setBufferAhead,
       ),
     );
   }
@@ -689,9 +679,9 @@ class _StreamingServerSectionState extends State<StreamingServerSection> {
   }
 }
 
-/// A setting with a fixed list of values, as a dropdown on a tile. A
-/// current value outside [options] is listed too, so the dropdown never
-/// claims a value the profile does not hold.
+/// A setting with a fixed list of values, as a [SettingTile] whose menu
+/// writes through a [SettingWriter] -- the shape every `profile.settings`
+/// choice on this screen takes.
 class ChoiceTile<T> extends StatelessWidget {
   const ChoiceTile({
     super.key,
@@ -717,23 +707,136 @@ class ChoiceTile<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = options.contains(value) ? options : [...options, value];
+    return SettingTile(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      menu: SettingMenu<T>(
+        setting: setting,
+        value: value,
+        options: options,
+        label: label,
+        onPicked: (selected) => onSetting(setting, selected),
+      ),
+    );
+  }
+}
+
+/// A settings tile whose value is picked from a menu: the icon and the
+/// title, what the setting costs under them, and the menu itself on a line
+/// of its own below both.
+///
+/// **The menu is not the tile's `trailing`,** which is where it started and
+/// where it does not fit. A [DropdownButton] measures itself against its
+/// *widest* item rather than the chosen one -- "Download the whole file"
+/// among the buffer choices, "Portuguese (Brazil)" among the languages --
+/// and `ListTile` lets `trailing` be as wide as it likes in the whole
+/// content width, then lays the title and the subtitle out in what is left
+/// of that, clamped at zero. So the menu had the row and the words had
+/// what was left: the "Buffer ahead" tile was 184 dp tall on a 360 dp
+/// phone with its title clipped to 67 dp, and 376 dp tall at 320 dp with
+/// 27 dp of it. Turn the system font up a third and a 360 dp phone gets a
+/// 1002 dp tile -- a screenful and a half for one row -- and 320 dp gets
+/// no title at all. Nothing was wrong at the 900 dp every other test of
+/// this screen mounts it at, which is the only width it had ever been laid
+/// out at.
+///
+/// **A widget test sees the worse end of it**, because the test font draws
+/// every glyph a square: that makes the menu 395 dp wide against the
+/// 320 dp of content a 360 dp phone has, and a `trailing` measuring
+/// exactly the tile width is the assertion "Trailing widget consumes the
+/// entire tile width", which takes the screen down with a cascade of
+/// `hasSize` failures behind it. It fires below about 436 dp; above that
+/// nothing throws and the tile is 920 dp tall until about 700 dp, so the
+/// width at which the screen stops throwing is nowhere near the width at
+/// which it is right.
+///
+/// On a line of its own the menu has that line to itself at any width, so
+/// nothing here depends on how long the longest label happens to be --
+/// which is the property worth having, since one of those lists is the
+/// languages and it grows. [SettingMenu] fills the line rather than
+/// measuring the labels again, and a width breakpoint would have wanted a
+/// threshold per list.
+class SettingTile extends StatelessWidget {
+  const SettingTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.menu,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+
+  /// The control, which carries the [settingKey] a test finds it by.
+  final Widget menu;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = this.subtitle;
     return ListTile(
       leading: Icon(icon),
       title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle!),
-      trailing: DropdownButton<T>(
-        key: settingKey(setting),
-        value: value,
-        underline: const SizedBox.shrink(),
-        items: [
-          for (final option in items)
-            DropdownMenuItem<T>(value: option, child: Text(label(option))),
-        ],
-        onChanged: (selected) {
-          if (selected != value) onSetting(setting, selected);
-        },
+      // Both under the title, so the menu starts where the text does and
+      // the tile grows to hold them; the colour chips below sit in the
+      // subtitle for the same reason.
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [if (subtitle != null) Text(subtitle), menu],
       ),
+    );
+  }
+}
+
+/// The menu on a [SettingTile]: the current value, the [options] to pick from,
+/// and the pick reported once.
+///
+/// A value outside [options] is listed too, so the menu never claims a
+/// value the profile does not hold, and picking the value already in force
+/// reports nothing.
+///
+/// `isExpanded` is what keeps it inside the row it is given: without it a
+/// [DropdownButton] is as wide as its widest item and overflows anything
+/// narrower, which is the whole of the trouble [SettingTile] describes.
+class SettingMenu<T> extends StatelessWidget {
+  const SettingMenu({
+    super.key,
+    required this.setting,
+    required this.value,
+    required this.options,
+    required this.label,
+    required this.onPicked,
+  });
+
+  /// The `Settings` (or [AppPrefs]) key this picks, which is also the
+  /// widget key it is found by ([settingKey]).
+  final String setting;
+  final T value;
+  final List<T> options;
+  final String Function(T value) label;
+  final ValueChanged<T> onPicked;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = options.contains(value) ? options : [...options, value];
+    return DropdownButton<T>(
+      key: settingKey(setting),
+      value: value,
+      isExpanded: true,
+      underline: const SizedBox.shrink(),
+      items: [
+        for (final option in items)
+          DropdownMenuItem<T>(value: option, child: Text(label(option))),
+      ],
+      // `selected is T` rather than a cast: `T` is nullable in the language
+      // tiles, where the default is a null value like any other, and not in
+      // the rest.
+      onChanged: (selected) {
+        if (selected is T && selected != value) onPicked(selected);
+      },
     );
   }
 }
