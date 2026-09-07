@@ -9,6 +9,7 @@ import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
 import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
@@ -141,6 +142,44 @@ void main() {
     ((catalogs[index] as List<dynamic>)[0] as Map<String, dynamic>)['content'] =
         failedPage(message);
     return board;
+  }
+
+  /// The meta details fixture with WatchHub's stream request failed.
+  ///
+  /// WatchHub is installed and unprotected in the logged-out profile, so
+  /// the card the accounting row draws for it is the removable kind and a
+  /// hold on it asks before uninstalling. The failure the fixture already
+  /// records is the local addon's, which is protected and offers nothing.
+  Map<String, dynamic> metaDetailsWithFailure(String message) {
+    final state = loadMetaDetailsFixture();
+    final groups = state['streams'] as List<dynamic>;
+    (groups[0] as Map<String, dynamic>)['content'] = failedPage(message);
+    return state;
+  }
+
+  /// The movie kept offline from another release, finished.
+  ///
+  /// A source card's hold is then the download affordance, and taking it
+  /// asks before dropping the copy already on the device -- the one
+  /// `showDialog` the details screen makes on a television.
+  FakeDownloadsClient keptFromAnotherRelease() {
+    const entry = {
+      'metaId': 'tt0063350',
+      'videoId': 'tt0063350',
+      'name': 'Night of the Living Dead',
+      'stream': {'infoHash': 'ffff', 'fileIdx': 0},
+      'infoHash': 'ffff',
+      'fileIdx': 0,
+      'size': 4200000000,
+      'downloaded': 4200000000,
+      'state': 'complete',
+      'path': null,
+    };
+    return FakeDownloadsClient(
+      registry: DownloadsRegistry(
+        items: {DownloadView(entry).key: DownloadView(entry)},
+      ),
+    );
   }
 
   /// The query the recorded search fixture answers, so the results the
@@ -556,6 +595,92 @@ void main() {
       expect(find.text('Delete'), findsOneWidget);
       await walkEveryStop(tester, stops: 12);
     }),
+    walk(
+      'meta_details_screen.dart',
+      'the Uninstall dialog on an addon that answered a stream request '
+          'with an error',
+      (tester) async {
+        useScreen(tester, tvSize);
+        await tester.pumpWidget(
+          CoreScope(
+            client: fullCore({
+              CoreField.metaDetails: metaDetailsWithFailure(
+                'Failed to fetch: HTTP 502',
+              ),
+            }),
+            child: onTv(
+              const MetaDetailsScreen(type: 'movie', id: 'tt0063350'),
+              pushed: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // What the addons did other than answer is the last card of the
+        // group row, and the dead addon's own card is in the row it opens.
+        // The dialog is on a hold, because a button drawn inside a card is
+        // not a button a remote can reach.
+        await pressUntil(
+          tester,
+          LogicalKeyboardKey.tab,
+          () => focusedLabel(tester) == kSourceAccountingLabel,
+          target: 'the card that accounts for the addons',
+        );
+        await press(tester, LogicalKeyboardKey.select);
+        // The accounting card is the right-hand end of the group row, so
+        // down lands on the card under it -- the local addon, which is
+        // protected and offers no hold -- and the removable one is to the
+        // left of that.
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        await pressUntil(
+          tester,
+          LogicalKeyboardKey.arrowLeft,
+          () => focusedLabel(tester) == 'WatchHub',
+          target: "the failed addon's card",
+          limit: 8,
+        );
+        await press(tester, LogicalKeyboardKey.contextMenu);
+        expect(find.byType(AlertDialog), findsOneWidget);
+        await walkEveryStop(tester, stops: 12);
+      },
+    ),
+    walk(
+      'meta_details_screen.dart',
+      'the replace dialog a hold on a source card opens',
+      (tester) async {
+        useScreen(tester, tvSize);
+        final downloads = keptFromAnotherRelease();
+        addTearDown(downloads.dispose);
+        await tester.pumpWidget(
+          CoreScope(
+            client: fullCore(),
+            child: DownloadsScope(
+              client: downloads,
+              child: onTv(
+                const MetaDetailsScreen(type: 'movie', id: 'tt0063350'),
+                pushed: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // A group card opens the row of sources under it; the hold on one
+        // of those is the download the vertical list draws a button for.
+        await pressUntil(
+          tester,
+          LogicalKeyboardKey.tab,
+          () => focusIn<TvSourceGroupCard>(),
+          target: 'a group of sources',
+        );
+        await press(tester, LogicalKeyboardKey.select);
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        expect(focusIn<TvSourceCard>(), isTrue);
+        await press(tester, LogicalKeyboardKey.contextMenu);
+        expect(find.byType(AlertDialog), findsOneWidget);
+        await walkEveryStop(tester, stops: 12);
+      },
+    ),
     walk('player_screen.dart', "the player's track menu", (tester) async {
       useScreen(tester, tvSize);
       final player = PlayerHarness(device: tv, prefs: bold());
@@ -606,12 +731,6 @@ void main() {
   /// television: what a phone or a desktop opens over one of these is not
   /// this file's business, and in two cases is the whole of the answer.
   const unopened = <String, String>{
-    'meta_details_screen.dart':
-        'its one showDialog is the "replace the copy you already have" '
-        'question on a download affordance, and a television draws none: '
-        'a TV source row carries a DownloadBadge and no button. The '
-        'failed-addon section it also builds expands in place rather than '
-        'over anything.',
     'addon_details_screen.dart':
         'Install, Update, Uninstall and Configure dispatch straight to the '
         'core and report through a snack bar; nothing here is asked twice.',
