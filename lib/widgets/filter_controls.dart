@@ -11,6 +11,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../shell/device_profile.dart';
+import 'focusable_tile.dart';
 
 /// One selectable entry of a filter: what to show, whether the engine flags
 /// it as the current one, and the request to dispatch to select it.
@@ -57,6 +58,13 @@ class FilterSegments<R> extends StatelessWidget {
 }
 
 /// The options as choice chips (narrow layouts).
+///
+/// Each chip is wrapped rather than left to the theme's focus floor,
+/// because a chip is the one focusable family the floor cannot reach: a
+/// `ChipThemeData` does take a per-state side, and `ChipThemeData.lerp`
+/// then resolves it for the empty state and dereferences it, so a border
+/// that exists only while focused throws the first time the emphasis is
+/// changed. See `FocusTheme`.
 class FilterChips<R> extends StatelessWidget {
   const FilterChips({super.key, required this.options, required this.onSelect});
 
@@ -68,12 +76,15 @@ class FilterChips<R> extends StatelessWidget {
     spacing: 8,
     children: [
       for (final option in options)
-        ChoiceChip(
-          label: Text(option.label),
-          selected: option.selected,
-          onSelected: (_) {
-            if (!option.selected) onSelect(option.request);
-          },
+        FocusMarked(
+          borderRadius: FocusMarked.stadium,
+          child: ChoiceChip(
+            label: Text(option.label),
+            selected: option.selected,
+            onSelected: (_) {
+              if (!option.selected) onSelect(option.request);
+            },
+          ),
         ),
     ],
   );

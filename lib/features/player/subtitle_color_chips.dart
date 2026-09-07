@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/focusable_tile.dart';
 import 'playback_tracks.dart';
 
 /// Named colour swatches; the current value is selected by its hex string,
 /// and a value outside the palette shows as a "Custom" chip so the picker
 /// never claims a colour the user did not set.
+///
+/// Wrapped one chip at a time, for the reason `FilterChips` gives: a chip
+/// is what the theme's focus floor cannot mark.
 class SubtitleColorChips extends StatelessWidget {
   const SubtitleColorChips({
     super.key,
@@ -24,15 +28,18 @@ class SubtitleColorChips extends StatelessWidget {
     final normalized = selected.toUpperCase();
     final known = colors.values.any((hex) => hex.toUpperCase() == normalized);
     final onSelected = this.onSelected;
-    Widget chip(String name, String hex) => ChoiceChip(
-      avatar: CircleAvatar(
-        backgroundColor:
-            SubtitleStyle.parseRgbaHex(hex) ?? const Color(0x00000000),
-        radius: 8,
+    Widget chip(String name, String hex) => FocusMarked(
+      borderRadius: FocusMarked.stadium,
+      child: ChoiceChip(
+        avatar: CircleAvatar(
+          backgroundColor:
+              SubtitleStyle.parseRgbaHex(hex) ?? const Color(0x00000000),
+          radius: 8,
+        ),
+        label: Text(name),
+        selected: hex.toUpperCase() == normalized,
+        onSelected: onSelected == null ? null : (_) => onSelected(hex),
       ),
-      label: Text(name),
-      selected: hex.toUpperCase() == normalized,
-      onSelected: onSelected == null ? null : (_) => onSelected(hex),
     );
     return Padding(
       padding: padding,

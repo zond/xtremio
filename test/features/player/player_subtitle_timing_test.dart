@@ -9,6 +9,8 @@ import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/subtitle_timing.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/shell/focus_theme.dart';
+import 'package:xtremio/widgets/focusable_tile.dart';
 
 import '../../support/fake_prefs_client.dart';
 import '../../support/player_harness.dart';
@@ -172,6 +174,15 @@ void main() {
         .first;
     return (material.shape as OutlinedBorder?)?.side;
   }
+
+  /// The ring around the stepper keyed [key], which is the panel's own
+  /// focus indicator now that it is the app's.
+  FocusRing stepperRing(WidgetTester tester, String key) => tester.widget(
+    find.descendant(
+      of: find.byKey(ValueKey(key)),
+      matching: find.byType(FocusRing),
+    ),
+  );
 
   final panel = find.byType(SubtitleTimingOverlay);
 
@@ -544,7 +555,14 @@ void main() {
     // Also what makes Reset reachable at all, which is exactly when a
     // viewer wants it.
     await step(tester, 'subtitle-shift-later');
-    final primary = Theme.of(tester.element(panel)).colorScheme.primary;
+    // The app's own stroke, at the emphasis in force -- not the theme's
+    // violet, which a mid-luminance line over an unknown picture is
+    // exactly what `FocusRing` refuses to draw, and not something of this
+    // panel's own invention either.
+    final stroke = BorderSide(
+      color: FocusTheme.stroke,
+      width: FocusTheme.strokeWidth(FocusEmphasis.standard),
+    );
     expect(player.engine.subtitleDelay, closeTo(0.1, 1e-9));
 
     // Material's own focus for a TextButton and an IconButton is a
@@ -561,28 +579,45 @@ void main() {
     // what provides. Both are [TextButton]s like Reset and need the same
     // ring for the same reason.
     expect(focusedLabel(tester), SubtitleTimingOverlay.markLabel);
-    expect(ring(tester, 'subtitle-mark'), BorderSide(color: primary, width: 2));
+    expect(ring(tester, 'subtitle-mark'), stroke);
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedLabel(tester), SubtitleTimingOverlay.matchLabel);
-    expect(
-      ring(tester, 'subtitle-match'),
-      BorderSide(color: primary, width: 2),
-    );
+    expect(ring(tester, 'subtitle-match'), stroke);
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedTooltip(), 'Close');
-    expect(
-      ring(tester, 'subtitle-timing-close'),
-      BorderSide(color: primary, width: 2),
-    );
+    expect(ring(tester, 'subtitle-timing-close'), stroke);
 
     for (var i = 0; i < 4; i++) {
       await press(tester, LogicalKeyboardKey.arrowDown);
     }
     expect(focusedLabel(tester), SubtitleTimingOverlay.resetLabel);
-    expect(
-      ring(tester, 'subtitle-timing-reset'),
-      BorderSide(color: primary, width: 2),
-    );
+    expect(ring(tester, 'subtitle-timing-reset'), stroke);
     expect(ring(tester, 'subtitle-timing-close'), BorderSide.none);
+  });
+
+  testWidgets('the steppers wear the app\'s ring, and the switch reaches it', (
+    tester,
+  ) async {
+    useScreen(tester, tvSize);
+    // A stepper is the one control on the panel that is a bare [Focus] --
+    // a hold has to start on the way down, which no Material button
+    // offers -- so neither the theme's floor nor anything else reaches
+    // it, and the ring has to be put there by hand.
+    final prefs = AppPrefs.inMemory()..setFocusEmphasis(FocusEmphasis.bold);
+    await playing(tester, device: tv, prefs: prefs);
+    await openPanel(tester);
+
+    final later = stepperRing(tester, 'subtitle-shift-later');
+    expect(later.emphasis, FocusEmphasis.bold);
+    expect(later.focused, isFalse);
+
+    // Down off the header lands on the first stepper of the shift row.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(
+      stepperRing(tester, 'subtitle-shift-earlier').focused,
+      isTrue,
+      reason: 'the remote is on it and nothing else says so',
+    );
+    expect(stepperRing(tester, 'subtitle-shift-later').focused, isFalse);
   });
 }

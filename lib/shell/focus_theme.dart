@@ -110,6 +110,11 @@ abstract final class FocusTheme {
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: _merge(base.segmentedButtonTheme.style, button),
       ),
+      // The entries of a [MenuAnchor]'s menu: the filter menu a television
+      // gets in place of a dropdown is one of these.
+      menuButtonTheme: MenuButtonThemeData(
+        style: _merge(base.menuButtonTheme.style, button),
+      ),
       switchTheme: base.switchTheme.copyWith(overlayColor: _overlay(emphasis)),
       // The overlay and not a side: `CheckboxThemeData.lerp` reads a side
       // resolved for the empty state and asserts it is not null, so a

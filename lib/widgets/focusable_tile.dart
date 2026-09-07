@@ -398,6 +398,11 @@ class FocusMarked extends StatefulWidget {
 
   final BorderRadius borderRadius;
 
+  /// A radius that comes out a stadium on anything shorter than twice it:
+  /// the painter clamps a corner to half the box it is drawn on and never
+  /// grows one. What the chips wear.
+  static const BorderRadius stadium = BorderRadius.all(Radius.circular(24));
+
   @override
   State<FocusMarked> createState() => _FocusMarkedState();
 }

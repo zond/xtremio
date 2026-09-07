@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/focus_emphasis.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/focus_theme.dart';
 import '../../shell/tv_density.dart';
+import '../../widgets/focusable_tile.dart';
 import '../../widgets/remote_press.dart';
 import 'subtitle_match.dart';
 
@@ -261,21 +264,31 @@ class SubtitleTimingOverlay extends StatelessWidget {
     return 50;
   }
 
-  /// The ring the steppers wear, given to Reset and Close as a border of
-  /// their own.
+  /// The ring the panel's own buttons wear -- Reset and Close, beside the
+  /// steppers.
   ///
   /// Material's own focus for a [TextButton] or an [IconButton] is a
   /// 10 %-opacity overlay, and over this panel's near-black ground that
-  /// is about 1.2:1 -- roughly an eighth of what the steppers' two
-  /// pixels of [ColorScheme.primary] manage, and gone entirely at three
-  /// metres on a lit screen. Two stops of the same panel cannot differ
-  /// by that much: this is the surface meant to be operated *after* the
-  /// OSD bar has faded, so the ring is the only thing saying what the
-  /// centre key will press.
-  static ButtonStyle focusRing(ColorScheme scheme) => ButtonStyle(
+  /// is about 1.2:1 -- gone entirely at three metres on a lit screen.
+  /// Two stops of the same panel cannot differ by that much: this is the
+  /// surface meant to be operated *after* the OSD bar has faded, so the
+  /// ring is the only thing saying what the centre key will press.
+  ///
+  /// It used to be two pixels of [ColorScheme.primary], which was the
+  /// same mistake in a different colour -- a mid-luminance violet line is
+  /// what `FocusRing` refuses to draw, and it was deaf to the viewer's
+  /// [FocusEmphasis] besides. It is the floor's stroke now, at the
+  /// emphasis in force, so the panel and the rest of the app say the same
+  /// thing at the same weight. Kept as a style of its own rather than
+  /// left to `FocusTheme` because the panel is operated on a phone and a
+  /// desktop too, and the floor is a television's.
+  static ButtonStyle focusRing(BuildContext context) => ButtonStyle(
     side: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.focused)
-          ? BorderSide(color: scheme.primary, width: 2)
+          ? BorderSide(
+              color: FocusTheme.stroke,
+              width: FocusTheme.strokeWidth(FocusHighlight.emphasisOf(context)),
+            )
           : BorderSide.none,
     ),
   );
@@ -327,7 +340,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
                         tooltip: 'Close',
                         color: Colors.white,
                         iconSize: 20,
-                        style: focusRing(theme.colorScheme),
+                        style: focusRing(context),
                         onPressed: onClose,
                         icon: const Icon(Icons.close),
                       ),
@@ -338,7 +351,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
                         key: const ValueKey('subtitle-match'),
-                        style: focusRing(theme.colorScheme),
+                        style: focusRing(context),
                         // Disabled rather than hidden while one runs: a
                         // button that vanishes under the remote takes the
                         // focus ring with it.
@@ -356,7 +369,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
                       key: const ValueKey('subtitle-mark'),
-                      style: focusRing(theme.colorScheme),
+                      style: focusRing(context),
                       onPressed: onMark,
                       icon: const Icon(Icons.adjust, size: 18),
                       label: const Text(markLabel),
@@ -399,7 +412,7 @@ class SubtitleTimingOverlay extends StatelessWidget {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       key: const ValueKey('subtitle-timing-reset'),
-                      style: focusRing(theme.colorScheme),
+                      style: focusRing(context),
                       onPressed: timing.adjusted ? onReset : null,
                       child: const Text(resetLabel),
                     ),
@@ -623,7 +636,6 @@ class _PanelButtonState extends State<_PanelButton> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final size = _buttonSize(context);
     // The [Tooltip] is outside the [Focus] rather than inside it so that
     // what the remote is sitting on can be read off the focused node: it
@@ -654,21 +666,26 @@ class _PanelButtonState extends State<_PanelButton> {
             },
             onPointerUp: (_) => _stop(),
             onPointerCancel: (_) => _stop(),
-            child: SizedBox(
-              width: size,
-              height: size,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.12),
-                  border: Border.all(
-                    color: _focused
-                        ? theme.colorScheme.primary
-                        : Colors.transparent,
-                    width: 2,
+            // The app's own indicator rather than a border of its own:
+            // this is the one control in the panel that is a bare [Focus]
+            // -- it has to be, because a hold has to start on the way
+            // down and no Material button offers that -- so neither the
+            // theme's floor nor anything else reaches it. A [row], since
+            // a stepper that grew would overlap the number it steps.
+            child: FocusHighlight(
+              focused: _focused,
+              treatment: FocusTreatment.row,
+              borderRadius: BorderRadius.circular(size / 2),
+              child: SizedBox(
+                width: size,
+                height: size,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.12),
                   ),
+                  child: Icon(widget.icon, size: 20, color: Colors.white),
                 ),
-                child: Icon(widget.icon, size: 20, color: Colors.white),
               ),
             ),
           ),

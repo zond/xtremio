@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../widgets/focusable_tile.dart';
 import '../downloads/download_labels.dart';
 import 'language_names.dart';
 import 'playback_engine.dart';
@@ -512,13 +513,16 @@ class PlayerSettingsSheet extends StatelessWidget {
             spacing: 8,
             children: [
               for (final choice in BufferAhead.values)
-                ChoiceChip(
-                  key: bufferChipKey(choice),
-                  label: Text(choice.label),
-                  selected: choice == buffer.choice,
-                  onSelected: onBufferAhead == null || buffer.busy
-                      ? null
-                      : (_) => onBufferAhead!(choice),
+                FocusMarked(
+                  borderRadius: FocusMarked.stadium,
+                  child: ChoiceChip(
+                    key: bufferChipKey(choice),
+                    label: Text(choice.label),
+                    selected: choice == buffer.choice,
+                    onSelected: onBufferAhead == null || buffer.busy
+                        ? null
+                        : (_) => onBufferAhead!(choice),
+                  ),
                 ),
             ],
           ),
@@ -537,10 +541,13 @@ class PlayerSettingsSheet extends StatelessWidget {
             spacing: 8,
             children: [
               for (final option in rates)
-                ChoiceChip(
-                  label: Text(rateLabel(option)),
-                  selected: option == rate,
-                  onSelected: (_) => onRate(option),
+                FocusMarked(
+                  borderRadius: FocusMarked.stadium,
+                  child: ChoiceChip(
+                    label: Text(rateLabel(option)),
+                    selected: option == rate,
+                    onSelected: (_) => onRate(option),
+                  ),
                 ),
             ],
           ),
@@ -552,13 +559,16 @@ class PlayerSettingsSheet extends StatelessWidget {
             spacing: 8,
             children: [
               for (final size in SubtitleStyle.sizes)
-                ChoiceChip(
-                  label: Text(sizeLabel(size)),
-                  selected: size == settings.subtitlesSize,
-                  onSelected: onSetting == null
-                      ? null
-                      : (_) =>
-                            onSetting(ProfileSettings.subtitlesSizeKey, size),
+                FocusMarked(
+                  borderRadius: FocusMarked.stadium,
+                  child: ChoiceChip(
+                    label: Text(sizeLabel(size)),
+                    selected: size == settings.subtitlesSize,
+                    onSelected: onSetting == null
+                        ? null
+                        : (_) =>
+                              onSetting(ProfileSettings.subtitlesSizeKey, size),
+                  ),
                 ),
             ],
           ),
@@ -657,6 +667,16 @@ class _SectionNote extends StatelessWidget {
   );
 }
 
+/// One row of a picker.
+///
+/// A plain [ListTile], and deliberately not wrapped in a [FocusMarked] the
+/// way the chips two sections up are. These menus are a modal bottom sheet
+/// -- the app's own surface, in the app's own near-black, with a known
+/// contrast against a near-white fill -- and not something drawn over the
+/// video, which is the case the double ring exists for. So the theme
+/// floor's fill is the whole of the indicator here, and a row that lifted
+/// and cast a shadow as focus walked sixty uploads would only make the
+/// list harder to read. See `FocusTheme`.
 class _MenuTile extends StatelessWidget {
   const _MenuTile({
     required this.title,
