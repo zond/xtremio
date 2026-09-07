@@ -41,6 +41,39 @@ typedef Case = ({String screen, String name, Walk walk});
 Case walk(String screen, String name, Walk walk) =>
     (screen: screen, name: name, walk: walk);
 
+/// One mount: a screen put under a television, with the observer that
+/// counts what it pushes.
+///
+/// A mount rather than a walk, because proving that a screen opens nothing
+/// means pressing one stop at a time on a screen nothing has been pressed
+/// on yet -- so the mount is run again for every press.
+typedef Mount = Future<Pushed> Function(WidgetTester tester);
+
+/// A screen that opens nothing over itself, and the mount that is driven
+/// to prove it.
+typedef Claim = ({String screen, String name, Mount mount});
+
+Claim claim(String screen, String name, Mount mount) =>
+    (screen: screen, name: name, mount: mount);
+
+/// What a screen has put on its navigator since it was mounted.
+///
+/// A dialog, a sheet, a menu with a route of its own and another screen are
+/// all a push, and [unopened] is about a screen that makes none: counting
+/// them is how a claim that used to be a sentence is checked.
+class Pushed extends NavigatorObserver {
+  int count = 0;
+
+  /// What was pushed last, so a failure can say what appeared.
+  Route<dynamic>? last;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previous) {
+    count++;
+    last = route;
+  }
+}
+
 /// Every screen the remote can reach, walked stop by stop under a
 /// television profile, checking that this app says where the remote is.
 ///
@@ -57,19 +90,44 @@ Case walk(String screen, String name, Walk walk) =>
 /// the remote is standing on -- and, more usefully, what it does not.
 ///
 /// **Two walks per screen, and the second is the one that has to be
-/// declared.** [drawn] walks every screen as it is first drawn. [opened]
+/// proved.** [drawn] walks every screen as it is first drawn. [opened]
 /// walks what a screen puts *over* itself -- a dialog, a menu, a sheet --
 /// which is not an extra: each of those is a route with a scope and a
 /// surface of its own, and they are where most of the controls a viewer
 /// presses on a television actually are. A screen that opens nothing over
-/// itself on a television is in [unopened] instead, with the reason.
+/// itself on a television is in [unopened] instead.
 ///
-/// Both lists are tables rather than prose, and the tests below are built
-/// from them, so a screen cannot be *named* as covered without a walk
-/// really running: naming was all the old guard checked, which let a
-/// screen whose dialog had an unmarked stop pass. The last test in the
-/// file reads the source tree and requires every `*_screen.dart` to appear
-/// in [drawn], and in exactly one of [opened] and [unopened].
+/// **Nothing here is excused by writing a reason.** [unopened] used to be
+/// a table of prose, and a screen counted as covered the moment somebody
+/// wrote a sentence in it: a reviewer listed a screen whose dialog held an
+/// unmarked stop, gave the reason "nothing at all, honest.", and the suite
+/// stayed green -- and one of the four sentences that were meant seriously
+/// was wrong in the same way, about this app, for a month. So an entry
+/// there is a *mount* now, and the claim is a measurement:
+/// [proveNothingOpens] drives every stop of that screen with the two
+/// presses a remote has -- select, and the menu key, which is how a
+/// television delivers a hold -- and fails on a route being pushed or a
+/// menu opening. A screen with a dialog behind any of its stops cannot be
+/// listed there whatever is written about it.
+///
+/// **Why the claims are checked rather than every screen probed.** The
+/// stronger mechanism -- drive every stop of every screen, walk whatever
+/// answers -- was built first and thrown away: pressing select on a poster
+/// tile pushes a details screen that has no downloads scope over it, on a
+/// catalog card a progress bar that never settles, and on a source card a
+/// player that wants a real libmpv, so a third of the presses failed for
+/// reasons that are about this harness rather than about the app. That
+/// would have traded a claim that can be false for a suite that is flaky,
+/// which is the same bargain in another currency. So the screens that open
+/// something are walked by hand in [opened], where writing the walk is
+/// what says the surface exists, and the screens that open nothing say so
+/// by being driven.
+///
+/// All three lists are tables rather than prose, and the tests below are
+/// built from them, so a screen cannot be *named* as covered without a
+/// walk really running. The last test in the file reads the source tree
+/// and requires every `*_screen.dart` to appear in [drawn], and in exactly
+/// one of [opened] and [unopened].
 void main() {
   /// [screen] under a television, in the theme `XtremioApp` would have
   /// given it, with the emphasis turned up -- the setting this whole
@@ -83,18 +141,32 @@ void main() {
   /// addon's detail screen -- installed, official and up to date, so no
   /// Install, Update or Uninstall is drawn -- that button is the only
   /// thing the remote can land on at all.
-  Widget onTv(Widget screen, {AppPrefs? prefs, bool pushed = false}) {
+  ///
+  /// [pushes] watches the navigator, and keys the subtree as well: a mount
+  /// run a second time with the same widgets would otherwise update the
+  /// screen that is already there, state and all, and what
+  /// [proveNothingOpens] needs is a screen nothing has been pressed on.
+  Widget onTv(
+    Widget screen, {
+    AppPrefs? prefs,
+    bool pushed = false,
+    Pushed? pushes,
+  }) {
     final emphasis = prefs?.focusEmphasis ?? FocusEmphasis.bold;
-    return DeviceScope(
-      profile: tv,
-      child: MaterialApp(
-        theme: XtremioApp.themeFor(isTv: true, emphasis: emphasis),
-        builder: TvMediaQuery.builder,
-        initialRoute: pushed ? '/screen' : '/',
-        routes: {
-          '/': (_) => pushed ? const Scaffold() : screen,
-          if (pushed) '/screen': (_) => screen,
-        },
+    return KeyedSubtree(
+      key: pushes == null ? null : ObjectKey(pushes),
+      child: DeviceScope(
+        profile: tv,
+        child: MaterialApp(
+          theme: XtremioApp.themeFor(isTv: true, emphasis: emphasis),
+          builder: TvMediaQuery.builder,
+          navigatorObservers: [?pushes],
+          initialRoute: pushed ? '/screen' : '/',
+          routes: {
+            '/': (_) => pushed ? const Scaffold() : screen,
+            if (pushed) '/screen': (_) => screen,
+          },
+        ),
       ),
     );
   }
@@ -155,6 +227,19 @@ void main() {
     final groups = state['streams'] as List<dynamic>;
     (groups[0] as Map<String, dynamic>)['content'] = failedPage(message);
     return state;
+  }
+
+  /// The addon details fixture with the protected flag cleared.
+  ///
+  /// What is recorded is Cinemeta, which every profile protects: the
+  /// screen then draws no action at all, and a screen with nothing to
+  /// press proves nothing about what its presses open.
+  Map<String, dynamic> removableAddonDetails() {
+    final details = loadAddonDetailsFixture();
+    final local = details['localAddon'] as Map<String, dynamic>;
+    final flags = local['flags'] as Map<String, dynamic>;
+    flags['protected'] = false;
+    return details;
   }
 
   /// The movie kept offline from another release, finished.
@@ -257,6 +342,166 @@ void main() {
     );
     await press(tester, LogicalKeyboardKey.select);
     expect(find.byType(AlertDialog), findsOneWidget);
+  }
+
+  /// Every stop the remote can land on right now.
+  ///
+  /// The same filter directional traversal applies: a node under an
+  /// [ExcludeFocus], or in a route a dialog is standing over, answers
+  /// `canRequestFocus` false and is not one.
+  List<FocusNode> stopsNow() => FocusManager
+      .instance
+      .rootScope
+      .traversalDescendants
+      .where((node) => node is! FocusScopeNode)
+      .toList();
+
+  /// What the remote is standing on, named as a failure would have to name
+  /// it.
+  String focusedName(WidgetTester tester) {
+    final node = FocusManager.instance.primaryFocus;
+    final context = node?.context;
+    if (context == null) return 'nothing';
+    final label = focusedTooltip() ?? focusedLabel(tester);
+    final type = context.widget.runtimeType;
+    return label == null ? '$type' : '$type "$label"';
+  }
+
+  /// How many stops the tab order has: it is walked until it comes back
+  /// round to where it started.
+  Future<int> countStops(WidgetTester tester, {int limit = 40}) async {
+    FocusNode? first;
+    var stops = 0;
+    for (var i = 0; i < limit; i++) {
+      await press(tester, LogicalKeyboardKey.tab);
+      final node = FocusManager.instance.primaryFocus;
+      if (node == null || node is FocusScopeNode) continue;
+      if (first == null) {
+        first = node;
+      } else if (identical(node, first)) {
+        break;
+      }
+      stops++;
+    }
+    return stops;
+  }
+
+  /// Puts the remote on the [index]th stop of a freshly mounted screen.
+  Future<void> tabTo(WidgetTester tester, int index) async {
+    for (var i = 0; i <= index; i++) {
+      await press(tester, LogicalKeyboardKey.tab);
+    }
+  }
+
+  /// Fails on a stop among [nodes] this app draws nothing on.
+  ///
+  /// [walkEveryStop] reads the mark off whatever the tab order lands on;
+  /// this reads it off a node handed to it, which is what a stop that has
+  /// only just appeared -- a snack bar's action, a row that expanded under
+  /// the press -- needs, since the order is not walked again.
+  Future<void> markEvery(WidgetTester tester, Iterable<FocusNode> nodes) async {
+    for (final node in nodes) {
+      if (node.context == null) continue;
+      node.requestFocus();
+      await tester.pumpAndSettle();
+      if (!identical(FocusManager.instance.primaryFocus, node)) continue;
+      expect(
+        focusMarks(),
+        isNotEmpty,
+        reason:
+            'a press left a ${focusedName(tester)} the remote can land on '
+            'with no ring lit on it, no stroke round it and no fill under '
+            'it',
+      );
+    }
+  }
+
+  /// One press on the stop the remote is standing on: fails if it opened
+  /// anything over the screen, and answers with the stops it revealed.
+  ///
+  /// What counts as opening something is a route being pushed -- a dialog,
+  /// a sheet, a popup menu and another screen are all one -- or a
+  /// [MenuAnchor] menu, which is the one surface this app draws with no
+  /// route of its own. Whatever appears that is neither is more of this
+  /// screen, and is walked instead: every stop of it is marked or this
+  /// fails too.
+  Future<List<FocusNode>> pressAndProve(
+    WidgetTester tester,
+    Pushed pushed,
+    LogicalKeyboardKey key,
+  ) async {
+    final before = pushed.count;
+    final where = focusedName(tester);
+    final known = stopsNow().toSet();
+    await press(tester, key);
+    expect(
+      pushed.count,
+      before,
+      reason:
+          '${key.keyLabel} on $where pushed a ${pushed.last.runtimeType}: '
+          'this screen opens something over itself, so it belongs in the '
+          'walks above rather than here',
+    );
+    expect(
+      find.byType(MenuItemButton),
+      findsNothing,
+      reason:
+          '${key.keyLabel} on $where opened a menu: this screen opens '
+          'something over itself, so it belongs in the walks above rather '
+          'than here',
+    );
+    final fresh = stopsNow().where((node) => !known.contains(node)).toList();
+    await markEvery(tester, fresh);
+    return fresh;
+  }
+
+  /// Drives every stop of [mount]'s screen with both presses a remote has,
+  /// and with them whatever those presses put in reach.
+  ///
+  /// Select is the tap and the menu key is the hold ([RemotePress] takes
+  /// either a held select or that key), so between them every callback a
+  /// stop carries is called. Each press is made on a screen freshly
+  /// mounted and tabbed to, because what the press before it did -- opened
+  /// a section, played something, left the screen -- must not decide which
+  /// stop comes next.
+  Future<void> proveNothingOpens(WidgetTester tester, Mount mount) async {
+    await mount(tester);
+    final stops = await countStops(tester);
+    expect(
+      stops,
+      greaterThan(0),
+      reason:
+          'nothing on this screen can be reached with a remote, so '
+          'driving it proves nothing',
+    );
+    for (var i = 0; i < stops; i++) {
+      for (final key in const [
+        LogicalKeyboardKey.select,
+        LogicalKeyboardKey.contextMenu,
+      ]) {
+        final pushed = await mount(tester);
+        await tabTo(tester, i);
+        // A press that revealed more of the screen is followed one level
+        // down, because that is where a television keeps most of its
+        // actions: a card opens a row of cards, and the dialog is on a
+        // hold two presses in rather than one. Two levels and no more --
+        // the walks in [opened] are what reach further than that.
+        for (final revealed in await pressAndProve(tester, pushed, key)) {
+          if (revealed.context == null) continue;
+          revealed.requestFocus();
+          await tester.pumpAndSettle();
+          if (!identical(FocusManager.instance.primaryFocus, revealed)) {
+            continue;
+          }
+          for (final second in const [
+            LogicalKeyboardKey.select,
+            LogicalKeyboardKey.contextMenu,
+          ]) {
+            await pressAndProve(tester, pushed, second);
+          }
+        }
+      }
+    }
   }
 
   /// Every screen as it is first drawn.
@@ -727,19 +972,76 @@ void main() {
     }),
   ];
 
-  /// The screens no walk in [opened] covers, and exactly why. Read on a
-  /// television: what a phone or a desktop opens over one of these is not
-  /// this file's business, and in two cases is the whole of the answer.
-  const unopened = <String, String>{
-    'addon_details_screen.dart':
-        'Install, Update, Uninstall and Configure dispatch straight to the '
-        'core and report through a snack bar; nothing here is asked twice.',
-    'diagnostics_screen.dart':
-        'every action reports through a snack bar, which is neither a '
-        'route nor a focus stop.',
-    'server_storage_screen.dart':
-        'the same: refresh and clean report through a snack bar.',
-  };
+  /// The screens no walk in [opened] covers, each as a mount
+  /// [proveNothingOpens] drives: every stop pressed and held, and a route
+  /// or a menu appearing is the failure.
+  ///
+  /// Read on a television. What a phone or a desktop opens over one of
+  /// these is not this file's business -- and what a mount here has to be
+  /// is the screen in the state where it draws the *most* it can, since a
+  /// button that is not built is a button nothing presses. The addon
+  /// details mount is an installed, unprotected addon for exactly that
+  /// reason: the protected one the walk above uses draws no action at all.
+  final unopened = <Claim>[
+    // Install, Update, Uninstall and Configure dispatch to the core and
+    // report through a snack bar -- which is neither a route nor, on this
+    // screen, a focus stop. Written down as what the driving found, not as
+    // what lets it be skipped.
+    claim('addon_details_screen.dart', 'an addon in detail', (tester) async {
+      final pushes = Pushed();
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(
+          client: fullCore({CoreField.addonDetails: removableAddonDetails()}),
+          child: onTv(
+            const AddonDetailsScreen(
+              transportUrl: 'https://v3-cinemeta.strem.io/manifest.json',
+            ),
+            pushed: true,
+            pushes: pushes,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return pushes;
+    }),
+    // The same shape: every action here reports through a snack bar.
+    claim('diagnostics_screen.dart', 'Diagnostics', (tester) async {
+      final pushes = Pushed();
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(
+          client: fullCore(),
+          child: onTv(
+            DiagnosticsScreen(client: FakeDiagnosticsClient()),
+            pushed: true,
+            pushes: pushes,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return pushes;
+    }),
+    // And the same for refresh and clean, on a server that is not
+    // answering -- which is the state a television sits in while the
+    // embedded server starts.
+    claim('server_storage_screen.dart', 'server storage', (tester) async {
+      final pushes = Pushed();
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(
+          client: fullCore(),
+          child: onTv(
+            const ServerStorageScreen(client: _StuckCache()),
+            pushed: true,
+            pushes: pushes,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return pushes;
+    }),
+  ];
 
   group('every screen marks what the remote lands on', () {
     for (final entry in drawn) {
@@ -756,6 +1058,17 @@ void main() {
   group('and what a screen opens over itself', () {
     for (final entry in opened) {
       testWidgets(entry.name, entry.walk);
+    }
+  });
+
+  /// And the other half of that: a screen that opens nothing is driven
+  /// until it has had every press a remote can give it, so the claim is
+  /// something this suite found out rather than something somebody wrote.
+  group('and a screen that opens nothing is driven until it proves it', () {
+    for (final entry in unopened) {
+      testWidgets(entry.name, (tester) async {
+        await proveNothingOpens(tester, entry.mount);
+      });
     }
   });
 
@@ -849,7 +1162,7 @@ void main() {
         .toSet();
     final firstWalked = {for (final entry in drawn) entry.screen};
     final secondWalked = {for (final entry in opened) entry.screen};
-    final excused = unopened.keys.toSet();
+    final excused = {for (final entry in unopened) entry.screen};
 
     expect(
       found.difference(firstWalked),
@@ -877,8 +1190,9 @@ void main() {
       secondWalked.intersection(excused),
       isEmpty,
       reason:
-          'a screen both walked with something open and excused from it; '
-          'the excuse is what the walk disproves',
+          'a screen both walked with something open and driven to prove it '
+          'opens nothing; one of the two is wrong, and the walk is the one '
+          'holding the evidence',
     );
   });
 }

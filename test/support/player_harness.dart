@@ -35,6 +35,7 @@ class PlayerHarness {
     this.cast,
     this.lanMedia,
     this.prefs,
+    this.navigatorObservers = const [],
     Uri? serverBaseUrl,
     DhtStatus? dhtStatus,
     bool embeddedServer = true,
@@ -139,6 +140,10 @@ class PlayerHarness {
   /// without.
   final AppPrefs? prefs;
 
+  /// Observers on the screen's own navigator: how a test watches what the
+  /// player pushes over itself.
+  final List<NavigatorObserver> navigatorObservers;
+
   Map<String, dynamic> get selected =>
       fixture['selected'] as Map<String, dynamic>;
 
@@ -168,6 +173,7 @@ class PlayerHarness {
         },
         proxyStreams: proxyStreams,
         child: MaterialApp(
+          navigatorObservers: navigatorObservers,
           // As `XtremioApp` builds it: the television's text scale and
           // overscan band reach the player through the navigator, and the
           // theme carries the ten-foot density and the focus floor. Read
