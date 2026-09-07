@@ -40,7 +40,7 @@ class PlayerSettingsSection extends StatelessWidget {
   final ProfileSettings settings;
   final SettingWriter onSetting;
 
-  /// `nextVideoNotificationDuration` choices, ms: disabled, then 5…90 s
+  /// `nextVideoNotificationDuration` choices, ms: no card, then 5…90 s
   /// (stremio-web's list).
   static final List<int> nextVideoDurations = [
     0,
@@ -57,8 +57,18 @@ class PlayerSettingsSection extends StatelessWidget {
     30000,
   ];
 
-  static String secondsLabel(int millis) =>
-      millis == 0 ? 'Disabled' : '${millis ~/ 1000} s';
+  static String secondsLabel(int millis) => '${millis ~/ 1000} s';
+
+  /// The up-next countdown's label. A zero is not the setting turned off:
+  /// with Binge watching on, the next episode still starts the moment this
+  /// one ends -- it just does so without the card and its seconds. The
+  /// label says that, because "Disabled" (stremio-web's word, under a title
+  /// that calls this a popup duration) read as "nothing plays next" under
+  /// a title that calls it a countdown, and a viewer who wanted exactly
+  /// that picked it and got the opposite. What does stop the next episode
+  /// is the Binge watching switch above, and the subtitle points there.
+  static String upNextLabel(int millis) =>
+      millis == 0 ? 'None (play at once)' : secondsLabel(millis);
 
   @override
   Widget build(BuildContext context) {
@@ -77,10 +87,12 @@ class PlayerSettingsSection extends StatelessWidget {
           setting: ProfileSettings.nextVideoNotificationDurationKey,
           icon: Icons.timer_outlined,
           title: 'Up-next countdown',
-          subtitle: 'How long the next episode waits after this one ends',
+          subtitle:
+              'How long the up-next card counts down before the next '
+              'episode starts; turn off Binge watching to stop it starting',
           value: settings.nextVideoNotificationDuration,
           options: nextVideoDurations,
-          label: secondsLabel,
+          label: upNextLabel,
           onSetting: onSetting,
         ),
         ChoiceTile<int>(

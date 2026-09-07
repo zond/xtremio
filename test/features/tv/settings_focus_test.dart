@@ -197,16 +197,17 @@ void main() {
 
     await press(tester, LogicalKeyboardKey.select);
     // The menu is a route listing every option, the current one focused.
-    expect(find.text('Disabled'), findsOneWidget);
+    final none = PlayerSettingsSection.upNextLabel(0);
+    expect(find.text(none), findsOneWidget);
     expect(focusedLabel(tester), '${countdown ~/ 1000} s');
     await press(tester, LogicalKeyboardKey.arrowUp);
     final picked = focusedLabel(tester);
     expect(picked, isNot('${countdown ~/ 1000} s'));
     await press(tester, LogicalKeyboardKey.select);
-    expect(find.text('Disabled'), findsNothing, reason: 'menu closed');
+    expect(find.text(none), findsNothing, reason: 'menu closed');
     final chosen = lastSettings(core)['nextVideoNotificationDuration'] as int;
     expect(chosen, isNot(countdown));
-    expect(picked, chosen == 0 ? 'Disabled' : '${chosen ~/ 1000} s');
+    expect(picked, PlayerSettingsSection.upNextLabel(chosen));
     expect(focusIn<DropdownButton<int>>(), isTrue, reason: 'focus returns');
   });
 }

@@ -170,7 +170,11 @@ void main() {
 
   group('dropdowns write the picked value', () {
     for (final (key, label, expected) in [
-      (ProfileSettings.nextVideoNotificationDurationKey, 'Disabled', 0),
+      (
+        ProfileSettings.nextVideoNotificationDurationKey,
+        'None (play at once)',
+        0,
+      ),
       (ProfileSettings.nextVideoNotificationDurationKey, '90 s', 90000),
       (ProfileSettings.seekTimeDurationKey, '30 s', 30000),
       (ProfileSettings.seekShortTimeDurationKey, '5 s', 5000),
@@ -215,6 +219,24 @@ void main() {
       await pick(tester, ProfileSettings.seekTimeDurationKey, '7 s');
       expect(core.dispatched, isEmpty);
     });
+    testWidgets(
+      'the up-next countdown at zero says the next episode plays at once, '
+      'not that it is off',
+      (tester) async {
+        await pumpSettings(
+          tester,
+          ctx: ctxWith({'nextVideoNotificationDuration': 0}),
+        );
+        // What a zero does with Binge watching on is play the next episode
+        // the moment this one ends, with no card: the label has to say so,
+        // because a viewer reading "Disabled" under "Up-next countdown"
+        // picks it to stop the next episode and gets the opposite. The
+        // switch that stops it is named on the tile instead.
+        expect(find.text('None (play at once)'), findsOneWidget);
+        expect(find.text('Disabled'), findsNothing);
+        expect(find.textContaining('turn off Binge watching'), findsOneWidget);
+      },
+    );
     testWidgets('a synonym code outside the list is labelled with the code', (
       tester,
     ) async {
