@@ -31,12 +31,16 @@ import '../widgets/focusable_tile.dart';
 ///
 /// **What it cannot reach**, and what therefore has to be wrapped:
 ///
-/// - **Chips**, which do take a [WidgetStateBorderSide] but cannot be given
-///   one from here: `ChipThemeData.lerp` resolves a side for the *empty*
-///   state and dereferences it, so a side that is a border only while
-///   focused throws the moment the theme animates -- which is on every
-///   flip of the switch. `CheckboxThemeData.lerp` does the same, and is
-///   why the box in the account form is given the overlay alone.
+/// - **A chip's outline.** The fill reaches a chip like anything else --
+///   `RawChip` builds an [InkWell] with no focus colour of its own, so it
+///   falls through to [ThemeData.focusColor] -- but the stroke cannot be
+///   given from here, although a chip does take a
+///   [WidgetStateBorderSide]: `ChipThemeData.lerp` resolves a side for the
+///   *empty* state and dereferences it, so a side that is a border only
+///   while focused throws the moment the theme animates -- which is on
+///   every flip of the switch. `CheckboxThemeData.lerp` does the same, and
+///   is why the box in the account form is given the overlay alone. So a
+///   chip is wrapped by hand for the outline and keeps the fill.
 /// - **[ListTile]** takes no per-state shape, so a focused row is filled
 ///   and not outlined. That is enough on the app's own solid background,
 ///   which is where every list of them is -- and not enough over video,

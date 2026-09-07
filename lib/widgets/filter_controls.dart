@@ -59,12 +59,15 @@ class FilterSegments<R> extends StatelessWidget {
 
 /// The options as choice chips (narrow layouts).
 ///
-/// Each chip is wrapped rather than left to the theme's focus floor,
-/// because a chip is the one focusable family the floor cannot reach: a
-/// `ChipThemeData` does take a per-state side, and `ChipThemeData.lerp`
+/// Each chip is wrapped as well as left to the theme's focus floor. The
+/// floor's *fill* does reach a chip -- `RawChip` builds an `InkWell` with
+/// no focus colour of its own, so it falls through to
+/// `ThemeData.focusColor` like any list row -- but its *stroke* cannot:
+/// a `ChipThemeData` does take a per-state side, and `ChipThemeData.lerp`
 /// then resolves it for the empty state and dereferences it, so a border
 /// that exists only while focused throws the first time the emphasis is
-/// changed. See `FocusTheme`.
+/// changed. A fill alone is what a chip on a busy row of chips has, and
+/// the ring is the outline it cannot be given. See `FocusTheme`.
 class FilterChips<R> extends StatelessWidget {
   const FilterChips({super.key, required this.options, required this.onSelect});
 

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/app.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/filter_controls.dart';
+
+import '../support/tv.dart' show FocusMark, focusIn, focusMarks;
 
 void main() {
   const options = [
@@ -55,6 +59,32 @@ void main() {
     await tester.tap(find.text('Movies'));
     await tester.pumpAndSettle();
     expect(selected, ['movie']);
+  });
+
+  testWidgets('on a television a chip wears both marks', (tester) async {
+    // The chip is the case that needs both mechanisms. Its ink has no
+    // focus colour of its own, so the floor's fill reaches it like any
+    // list row; what the floor cannot give it is the outline, because a
+    // side that exists only while focused throws in `ChipThemeData.lerp`
+    // the moment the theme animates. Hence the ring, by hand.
+    await tester.pumpWidget(
+      DeviceScope(
+        profile: const DeviceProfile(isTv: true, hasTouch: false),
+        child: MaterialApp(
+          theme: XtremioApp.themeFor(isTv: true, emphasis: FocusEmphasis.bold),
+          home: Scaffold(
+            body: Center(
+              child: FilterChips(options: options, onSelect: (_) {}),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+
+    expect(focusIn<ChoiceChip>(), isTrue);
+    expect(focusMarks(), {FocusMark.ring, FocusMark.fill});
   });
 
   testWidgets('menu lists every option and dispatches the chosen one', (

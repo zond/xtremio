@@ -6,6 +6,7 @@ import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
+import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
 import '../details/meta_details_screen.dart';
 import '../downloads/downloads_screen.dart';
@@ -325,10 +326,15 @@ class _FilterRow extends StatelessWidget {
                 : FilterChips(options: types, onSelect: onSelect),
           if (sorts.isNotEmpty)
             FilterMenu(label: 'Sort', options: sorts, onSelect: onSelect),
-          ActionChip(
-            avatar: const Icon(Icons.download_done_outlined, size: 18),
-            label: const Text(downloadedLabel),
-            onPressed: onDownloads,
+          // Wrapped for the same reason the filter chips are: the floor
+          // fills a chip and cannot outline one.
+          FocusMarked(
+            borderRadius: FocusMarked.stadium,
+            child: ActionChip(
+              avatar: const Icon(Icons.download_done_outlined, size: 18),
+              label: const Text(downloadedLabel),
+              onPressed: onDownloads,
+            ),
           ),
         ],
       ),

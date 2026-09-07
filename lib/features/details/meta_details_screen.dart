@@ -1782,14 +1782,24 @@ class _MetaHeader extends StatelessWidget {
             spacing: 6,
             runSpacing: -8,
             children: [
+              // Wrapped for the same reason the filter chips are: the
+              // floor fills a chip and cannot outline one. This header is
+              // the phone's and the desktop's -- a television gets
+              // [TvMetaHeader] instead -- so [FocusMarked] is its child
+              // and nothing else here today. It is on every chip in the
+              // app all the same, so which chips are marked is something
+              // to read rather than to trace.
               for (final genre in genres)
-                ActionChip(
-                  label: Text(genre.name),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: switch (genre.discoverRequest) {
-                    null => null,
-                    final request => () => onGenre(request),
-                  },
+                FocusMarked(
+                  borderRadius: FocusMarked.stadium,
+                  child: ActionChip(
+                    label: Text(genre.name),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: switch (genre.discoverRequest) {
+                      null => null,
+                      final request => () => onGenre(request),
+                    },
+                  ),
                 ),
             ],
           ),

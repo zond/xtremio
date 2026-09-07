@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/library/library_screen.dart';
@@ -23,14 +24,20 @@ FakeCoreClient fakeCore() => FakeCoreClient(
   },
 );
 
-Widget harness(FakeCoreClient core, {Widget home = const LibraryScreen()}) =>
-    DeviceScope(
-      profile: tv,
-      child: CoreScope(
-        client: core,
-        child: MaterialApp(home: home),
-      ),
-    );
+/// [theme] is for the one test that cares what the app's own theme draws
+/// on a control; the rest get Material's default, which has no focus floor
+/// and no ten-foot density in it.
+Widget harness(
+  FakeCoreClient core, {
+  Widget home = const LibraryScreen(),
+  ThemeData? theme,
+}) => DeviceScope(
+  profile: tv,
+  child: CoreScope(
+    client: core,
+    child: MaterialApp(theme: theme, home: home),
+  ),
+);
 
 /// Every `Ctx` action dispatched so far, by its `action` name.
 List<String> ctxActions(FakeCoreClient core) => [
@@ -96,6 +103,29 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusIn<SegmentedButton<int>>(), isTrue);
     expect(focusedTileName(tester), isNull);
+  });
+
+  testWidgets('the Downloaded chip is marked like every other chip', (
+    tester,
+  ) async {
+    // It sits in the filter row beside chips that are wrapped, and was
+    // left out of the wrapping. A chip takes the floor's fill and cannot
+    // be given its outline, so the ring is the half that has to be put on
+    // by hand.
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(
+      harness(
+        fakeCore(),
+        theme: XtremioApp.themeFor(isTv: true, emphasis: FocusEmphasis.bold),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    for (var i = 0; i < 6 && focusedLabel(tester) != 'Downloaded'; i++) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+    }
+    expect(focusedLabel(tester), 'Downloaded');
+    expect(focusMarks(), {FocusMark.ring, FocusMark.fill});
   });
 
   testWidgets('select on a segment dispatches its type', (tester) async {
