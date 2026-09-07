@@ -13,6 +13,7 @@ import 'features/downloads/destination.dart';
 import 'features/downloads/downloads_screen.dart';
 import 'features/downloads/downloads_service.dart';
 import 'features/player/playback_engine.dart';
+import 'features/player/player_screen.dart';
 import 'features/sharing/idle_sharing.dart';
 import 'features/sharing/sharing_activity.dart';
 import 'shell/deep_link.dart';
@@ -352,6 +353,16 @@ class _XtremioAppState extends State<XtremioApp> {
   /// when it is tapped. A screen already on top is left where it is rather
   /// than stacked over, and a tap that arrives before the first build (the
   /// app was cold started by the notification) waits for the navigator.
+  ///
+  /// Over a running player the list only shows and removes
+  /// ([DownloadsScreen.canPlay] false), as the player's own way in already
+  /// has it: a title played from here would push a second [PlayerScreen]
+  /// over the first, and both load the one shared `player` field -- the
+  /// first, still mounted and still listening, opens the second's stream
+  /// on its own engine too. Two mpv instances decoding at once is what a
+  /// television box cannot afford, and the film silently replaced is what
+  /// the viewer gets on any device. The whole stack is asked, not the top:
+  /// a sheet or a dialog over the player is still over the player.
   void _openDownloads({bool retry = true}) {
     final navigator = _navigator.currentState;
     if (navigator == null) {
@@ -363,7 +374,9 @@ class _XtremioAppState extends State<XtremioApp> {
       return;
     }
     if (_routes.top?.settings.name == DownloadsScreen.routeName) return;
-    navigator.push(DownloadsScreen.route());
+    navigator.push(
+      DownloadsScreen.route(canPlay: !_routes.contains(PlayerScreen.routeName)),
+    );
   }
 
   void _onAway() => _away = true;
@@ -548,6 +561,11 @@ class _RouteStackObserver extends NavigatorObserver {
   final List<Route<dynamic>> _stack = [];
 
   Route<dynamic>? get top => _stack.isEmpty ? null : _stack.last;
+
+  /// Whether a route named [name] is anywhere on the stack, under whatever
+  /// has been pushed over it since.
+  bool contains(String name) =>
+      _stack.any((route) => route.settings.name == name);
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>

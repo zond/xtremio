@@ -87,6 +87,14 @@ class PlayerScreen extends StatefulWidget {
   /// addons for once the video parameters are known.
   final ResourcePath? subtitlesPath;
 
+  /// The name every route that mounts this screen is pushed under, so
+  /// whoever is about to open something over the player can tell there is
+  /// one. There is only ever meant to be one: two of these load the same
+  /// shared `player` field, and the one underneath opens the other's
+  /// stream on its own engine too (see `XtremioApp`'s downloads path and
+  /// [_PlayerScreenState._openDownloads]).
+  static const String routeName = 'player';
+
   /// Minimum spacing of `TimeChanged` reports to the core.
   static const Duration timeReportInterval = Duration(seconds: 1);
 
@@ -3044,7 +3052,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final subtitlesPath = state.subtitlesPath ?? widget.subtitlesPath;
     navigator.pushReplacement(
       MaterialPageRoute<PlayerScreenResult>(
-        settings: const RouteSettings(name: 'player'),
+        settings: const RouteSettings(name: PlayerScreen.routeName),
         builder: (_) => PlayerScreen(
           stream: stream,
           streamRequest: streamRequest?.copyWith(

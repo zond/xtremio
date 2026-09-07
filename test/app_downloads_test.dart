@@ -1,10 +1,13 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/downloads/downloads_service.dart';
+import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
 import 'support/fake_core_client.dart';
@@ -116,6 +119,91 @@ void main() {
       await tapNotification(tester, messenger);
 
       expect(find.byType(DownloadsScreen), findsOneWidget);
+    });
+
+    /// A route under the player's name, as every screen that opens the
+    /// player pushes it: what the notification must not put a playable
+    /// list over.
+    Future<void> pushPlayer(WidgetTester tester) async {
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      navigator.push(
+        MaterialPageRoute<void>(
+          settings: const RouteSettings(name: PlayerScreen.routeName),
+          builder: (_) => const Scaffold(body: Text('a film is playing')),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    DownloadsScreen downloadsScreen(WidgetTester tester) =>
+        tester.widget<DownloadsScreen>(find.byType(DownloadsScreen));
+
+    testWidgets('over a running player the list cannot play', (tester) async {
+      // Tapped while a film is up: a title played from the list would push
+      // a second PlayerScreen over the first, and the first -- still
+      // mounted, still listening to the shared player field -- would open
+      // the new stream on its own engine as well. The player's own way to
+      // the list already refuses that; this is the other way in.
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      final messenger = install(tester);
+
+      await tester.pumpWidget(
+        XtremioApp(core: emptyBoardCore(), downloads: downloads),
+      );
+      await tester.pumpAndSettle();
+      await pushPlayer(tester);
+
+      await tapNotification(tester, messenger);
+
+      expect(find.byType(DownloadsScreen), findsOneWidget);
+      expect(downloadsScreen(tester).canPlay, isFalse);
+    });
+
+    testWidgets('a dialog over the player is still over the player', (
+      tester,
+    ) async {
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      final messenger = install(tester);
+
+      await tester.pumpWidget(
+        XtremioApp(core: emptyBoardCore(), downloads: downloads),
+      );
+      await tester.pumpAndSettle();
+      await pushPlayer(tester);
+      final context = tester.element(find.text('a film is playing'));
+      unawaited(
+        showDialog<void>(
+          context: context,
+          builder: (_) => const AlertDialog(title: Text('a question')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('a question'), findsOneWidget);
+
+      await tapNotification(tester, messenger);
+
+      expect(downloadsScreen(tester).canPlay, isFalse);
+    });
+
+    testWidgets('with no player up the list plays', (tester) async {
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      final messenger = install(tester);
+
+      await tester.pumpWidget(
+        XtremioApp(core: emptyBoardCore(), downloads: downloads),
+      );
+      await tester.pumpAndSettle();
+      // A player that was up and has been left is no player.
+      await pushPlayer(tester);
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pumpAndSettle();
+
+      await tapNotification(tester, messenger);
+
+      expect(downloadsScreen(tester).canPlay, isTrue);
     });
 
     testWidgets('tapping it again does not stack a second one', (tester) async {

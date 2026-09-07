@@ -245,7 +245,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     if (message != null) _tell(message);
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'player'),
+        settings: const RouteSettings(name: PlayerScreen.routeName),
         builder: (_) => PlayerScreen(
           stream: playback.stream ?? view.stream.json,
           streamRequest: _requestOf(view.streamRequest),

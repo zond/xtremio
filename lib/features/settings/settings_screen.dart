@@ -339,7 +339,7 @@ class _DevPlayTile extends StatelessWidget {
     trailing: const Icon(Icons.play_arrow),
     onTap: () => Navigator.of(context).push(
       MaterialPageRoute<void>(
-        settings: const RouteSettings(name: 'player'),
+        settings: const RouteSettings(name: PlayerScreen.routeName),
         builder: (_) => PlayerScreen(stream: stream),
       ),
     ),
