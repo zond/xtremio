@@ -32,9 +32,10 @@ import '../support/fixtures.dart';
 /// What that admits, and what it is worth writing down: the light does clip
 /// things. On the Library, whose filter row starts immediately under the
 /// app bar, it covers 15 x 40 px of the "Downloaded" chip at 1280x720 on a
-/// television, and the end of that row on a phone narrow enough for the row
-/// to reach the edge. The other four screens draw nothing there on either
-/// layout.
+/// television, and at 400 wide off one, where the row's `Wrap` breaks its
+/// line with a chip ending under the light. At the two phone widths the
+/// sweep runs at, 360 and 320, the break falls elsewhere and nothing is
+/// clipped; the other four screens draw nothing there on either layout.
 void main() {
   const lightKey = Key('sharing-light');
   const tv = DeviceProfile(isTv: true, hasTouch: false);
@@ -183,27 +184,35 @@ void main() {
     }
   });
 
-  testWidgets('and on a phone, where the light is the button', (tester) async {
-    // 480 wide: below that the Settings screen's own "Buffer ahead" tile
-    // throws a layout assertion (its trailing dropdown eats the tile),
-    // which is nothing to do with the light and would be all this
-    // measured.
-    await mount(
+  // The width most phones have, and the narrowest any does. Every screen
+  // lays out at both -- Settings, which used to throw below about 480, is
+  // measured at 320 and 360 by `settings_narrow_test.dart` since its menus
+  // left the tile's trailing slot -- so the sweep runs where the light will
+  // be seen.
+  for (final width in [360, 320]) {
+    testWidgets('and on a phone $width wide, where the light is the button', (
       tester,
-      profile: DeviceProfile.fallback,
-      size: const Size(480, 800),
-    );
-    checkCorner(tester, 'the phone Board');
-    for (final tab in tabs.skip(1)) {
-      await show(tester, tab);
-      checkCorner(tester, 'the phone $tab');
-    }
-  });
+    ) async {
+      await mount(
+        tester,
+        profile: DeviceProfile.fallback,
+        size: Size(width.toDouble(), 800),
+      );
+      checkCorner(tester, 'the $width-wide phone Board');
+      for (final tab in tabs.skip(1)) {
+        await show(tester, tab);
+        checkCorner(tester, 'the $width-wide phone $tab');
+      }
+    });
+  }
 
   testWidgets('a control the light clips still takes the tap', (tester) async {
-    // 400 wide, which is where the Library's filter row really does run
-    // under the light: the second rule is only worth anything if the chip
-    // it leaves half-covered is still pressed by pressing it.
+    // 400 wide, and not one of the sweep's widths: the Library's filter row
+    // is a `Wrap`, and 400 is where its line break leaves a chip ending
+    // under the light -- at 360 and 320 the break falls elsewhere and no
+    // chip is clipped, so the sweeps never meet this case. The second rule
+    // is only worth anything if the chip it leaves half-covered is still
+    // pressed by pressing it, and this is the one width that checks it.
     final core = await mount(
       tester,
       profile: DeviceProfile.fallback,

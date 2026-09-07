@@ -293,18 +293,18 @@ class _RootShellState extends State<RootShell> {
   /// light, which is where a press is aimed and where `tap` lands. Both are
   /// measured on all five screens by
   /// `test/features/sharing_light_placement_test.dart`, at 1280x720 on a
-  /// television and at 480x800 off one.
+  /// television and at 360x800 and 320x800 off one -- the width most
+  /// phones have and the narrowest any does.
   ///
-  /// **That second width is not a phone**, and the sweep cannot go
-  /// narrower: below about 480 the Settings screen's own "Buffer ahead"
-  /// tile throws a layout assertion, which has nothing to do with the light
-  /// and would be all the test measured. So what the five-screen sweep
-  /// covers off a television is the phone layout at a width no phone has.
-  /// The one case a real phone's width brings -- the Library's filter row
-  /// reaching the edge, so the light lands on a chip rather than beside
-  /// one -- is measured on its own at 400 wide, on that screen alone, and
-  /// what it shows is the chip still taking its tap. Widen the sweep to
-  /// 400 when Settings survives it.
+  /// **Whether a chip ends under the light depends on where the row
+  /// wraps**, not on how narrow the phone is. The Library's filter row is a
+  /// `Wrap`, so at 400 wide its line break leaves a chip ending under the
+  /// light, and at 360 and 320 the break falls elsewhere and no chip does.
+  /// The five-screen sweeps at the two phone widths therefore never meet
+  /// the case the second rule exists for, and that case is measured on its
+  /// own at 400 on the Library alone: the chip the light clips still takes
+  /// its tap. A change to that row's chips or their order moves the break,
+  /// so the 400 case checks first that it still has something to measure.
   ///
   /// A television has the easier half of that: the light takes no pointer
   /// there at all -- it is reached from the rail and pressed with select --
