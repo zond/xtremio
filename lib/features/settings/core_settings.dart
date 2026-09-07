@@ -255,9 +255,10 @@ class FocusEmphasisSection extends StatelessWidget {
 /// popup can stop the sharing for the rest of the run without touching the
 /// preference, so the switch can be on over a run in which nothing is
 /// shared; the tile says so on a line of its own rather than leaving the
-/// switch to describe something the app is not doing. Turning the switch
-/// off and on again lifts the pause, which is what makes the extra line go
-/// away.
+/// switch to describe something the app is not doing. The line is only
+/// ever under a switch that is on: either press of the switch lifts the
+/// pause, so what it promises -- sharing again at the next start -- is
+/// what the setting will still be asking for then.
 ///
 /// **And it says so while the pause is granted, not the next time the tab
 /// is opened.** The popup is drawn over whatever screen is showing, this

@@ -403,6 +403,32 @@ void main() {
       );
       expect(find.textContaining(IdleSharing.pausedNote), findsOneWidget);
     });
+
+    testWidgets('stops saying so once the switch is off', (tester) async {
+      final prefs = AppPrefs.inMemory();
+      final policy = startedPolicy(prefs);
+      await pumpTile(tester, policy: policy, prefs: prefs);
+      policy.pauseUntilRestart();
+      await tester.pump();
+      expect(find.textContaining(IdleSharing.pausedNote), findsOneWidget);
+
+      await prefs.setShareWhileIdle(false);
+      await tester.pump();
+
+      // "Paused until you next start Xtremio" under a switch that is off
+      // promises a resumption that is never coming, since the setting will
+      // still be off at that start. The switch is the longer of the two
+      // stops and the tile is left saying that and nothing else.
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(settingKey(AppPrefs.shareWhileIdleKey)),
+            )
+            .value,
+        isFalse,
+      );
+      expect(find.textContaining(IdleSharing.pausedNote), findsNothing);
+    });
   });
 
   group('what it says', () {

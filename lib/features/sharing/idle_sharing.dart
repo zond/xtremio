@@ -103,6 +103,11 @@ class IdleSharing {
   /// the tile would show the switch on while nothing is being shared, which
   /// is the exact fault -- a tile describing something the app is not
   /// doing -- that the rest of this class was rewritten to remove.
+  ///
+  /// It is only ever drawn under a switch that is *on*, and that is what
+  /// makes it true: a pause ends when the switch is turned off
+  /// ([IdleSharingPolicy]), so the resumption this promises is the one the
+  /// setting will still be asking for at the next start.
   static const String pausedNote = 'Paused until you next start Xtremio.';
 }
 
@@ -136,7 +141,10 @@ class IdleSharing {
 /// still says what the viewer chose and the next start of the app shares
 /// again. It is not a second author of `seedingEnabled` -- there is still
 /// exactly one -- and it is not a third state in the preference either,
-/// because it must not survive the process that granted it.
+/// because it must not survive the process that granted it. Nor does it
+/// survive the switch moving: a pause is what a switch that is on looks
+/// like this run, and either press of the switch is a newer answer than
+/// the one the popup took.
 ///
 /// **It notifies when that pause goes on or off**, and that is the only
 /// thing it says anything about: what the server was told is the server's
@@ -199,19 +207,25 @@ class IdleSharingPolicy extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// A "Not now" is in force. What reads it is the settings tile, which
-  /// must not show a switch that is on over a run in which nothing is
-  /// being shared -- and which is on screen when the popup that grants one
-  /// is, so this notifies when it changes.
+  /// A "Not now" is in force, which it can only be while the setting is
+  /// on. What reads it is the settings tile, which must not show a switch
+  /// that is on over a run in which nothing is being shared -- and which
+  /// is on screen when the popup that grants one is, so this notifies when
+  /// it changes.
   bool get pausedForRun => _paused;
 
   void _reconsider() {
     if (_stopped) return;
-    // Turning the switch on is a fresh instruction to share, and it lifts a
-    // "Not now": the alternative is a switch the viewer has just pressed
-    // that does nothing until the app is restarted.
+    // A pause is a state of a switch that is *on*: it holds back a sharing
+    // the setting still allows, and it is over the moment the switch says
+    // anything of its own. Turning it on is a fresh instruction to share,
+    // and the alternative is a switch the viewer has just pressed that does
+    // nothing until the app is restarted. Turning it off ends the pause
+    // too, because the switch is the longer of the two stops and saying
+    // "paused until you next start Xtremio" under it would promise a
+    // resumption that is never coming.
     final wanted = prefs.shareWhileIdle;
-    final lifted = wanted && !_wasAllowed && _paused;
+    final lifted = wanted != _wasAllowed && _paused;
     if (lifted) _paused = false;
     _wasAllowed = wanted;
     final allowed = wanted && !_paused;

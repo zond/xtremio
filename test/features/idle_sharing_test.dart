@@ -179,6 +179,33 @@ void main() {
       expect(server.patches.last, {IdleSharing.seedingEnabledKey: false});
     });
 
+    test(
+      'is over when the switch goes off, which is the longer stop',
+      () async {
+        final prefs = AppPrefs.inMemory();
+        final server = RecordingServerSettings();
+        final policy = started(prefs: prefs, server: server);
+        policy.pauseUntilRestart();
+        await settle(policy);
+        expect(policy.pausedForRun, isTrue);
+
+        // The switch is the stop that outlives the run, so it is a newer
+        // answer than the popup's: a pause left standing under it would have
+        // the tile promising a resumption at the next start that the setting
+        // will not be asking for.
+        await prefs.setShareWhileIdle(false);
+        await settle(policy);
+
+        expect(policy.pausedForRun, isFalse);
+        // And nothing is sent: the server was told false by the pause and
+        // the switch wants the same thing.
+        expect(server.patches, [
+          {IdleSharing.seedingEnabledKey: true},
+          {IdleSharing.seedingEnabledKey: false},
+        ]);
+      },
+    );
+
     test('is announced when it goes on and when it is lifted', () async {
       // The settings tile draws this pause and is on screen when the popup
       // that grants one is open, so a pause nobody is told about is a tile
