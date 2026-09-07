@@ -50,6 +50,17 @@ class PosterTile extends StatelessWidget {
 
 /// The rounded poster image itself, covering whatever box it is given, with
 /// a neutral fallback when [url] is null or fails to load.
+///
+/// The decode is bounded to the box the poster is drawn in. This is the
+/// most numerous image in the app -- a board strip, the discover and search
+/// grids, the library -- and an addon is free to serve a poster at any
+/// size: a TMDB-backed one sends 1000×1500, which decodes to 5.9 MB, so
+/// seventeen tiles filled the whole image cache and every scroll decoded
+/// them again, on the CPU of a 2 GB television. Decoded at the tile's own
+/// width a poster is a few hundred kilobytes, and the same cache holds a
+/// whole board. `cacheWidth` counts physical pixels, which is why the
+/// device's ratio is in it; only the width is given, so the source's own
+/// aspect is kept and `cover` crops as it did.
 class PosterImage extends StatelessWidget {
   const PosterImage({super.key, required this.url});
 
@@ -72,12 +83,21 @@ class PosterImage extends StatelessWidget {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: url == null
             ? const _PosterFallback()
-            : Image.network(
-                url,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (_, _, _) => const _PosterFallback(),
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final pixels = width.isFinite && width > 0
+                      ? (width * MediaQuery.devicePixelRatioOf(context)).round()
+                      : 0;
+                  return Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    cacheWidth: pixels > 0 ? pixels : null,
+                    errorBuilder: (_, _, _) => const _PosterFallback(),
+                  );
+                },
               ),
       ),
     );
