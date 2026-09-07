@@ -4,6 +4,15 @@
          debug/profile manifests, so without this a release APK is offline. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Reading, and watching, whether the connection this device is on is
+         billed by the byte (NetworkCost.kt). A normal permission: granted
+         at install, never asked for, and it reveals nothing about which
+         network this is - only what sending over it costs. Without it
+         registerDefaultNetworkCallback throws, and the app would then have
+         to assume every link is metered and share nothing between
+         sessions. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <!-- Foreground services. Two of them, for two unrelated reasons:
 
          - dataSync is the downloads service (.DownloadsService, declared

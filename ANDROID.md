@@ -103,6 +103,13 @@ existing Flutter escape hatch out of ABI filtering entirely.
 - **`INTERNET` permission** is declared in the main manifest. Flutter's
   template only adds it for debug/profile builds; addon catalogs and posters
   need it in release too.
+- **`ACCESS_NETWORK_STATE` permission** is declared for one reason: knowing
+  whether the connection this device is on is billed by the byte
+  (`NetworkCost.kt`, below). It is a normal permission — granted at install,
+  never asked for at runtime — and it says nothing about *which* network
+  this is, only what sending over it costs. Without it
+  `registerDefaultNetworkCallback` throws, the watcher answers "metered" for
+  the rest of the session, and the app shares nothing between sessions.
 - **`android:usesCleartextTraffic="true"`** is set on the application. This
   flag only governs Android's own network stack (`dart:io` — `Image.network`
   posters from self-hosted `http://` addons; the Flutter side itself makes
@@ -207,6 +214,48 @@ existing Flutter escape hatch out of ABI filtering entirely.
   no other platform calls it (desktop is never a TV). The same channel
   carries `os` (the Diagnostics header's device line), `editText` (below),
   the frame-rate calls (below) and `castDeviceAddress` (above).
+
+## Watching what the connection costs
+
+The embedded server may go on sharing a torrent after playback ends (the
+`seedingEnabled` setting, written by `IdleSharingPolicy` in
+`lib/features/sharing/idle_sharing.dart`). On the owner's Chromecast, on a
+wall socket and an unmetered link, that costs nothing. On a phone it is
+somebody's mobile data, so a metered connection refuses it whatever the
+setting says — and the app therefore has to know what the link costs.
+
+**It watches; it does not ask.** The alternative is to ask once, at the
+moment a session ends, and that answer expires as soon as the owner leaves
+the house: the phone that was on Wi-Fi when the credits rolled is on mobile
+data ten minutes later, with the app never touched and nothing to re-ask.
+Getting it wrong that way costs the owner money; getting it wrong the other
+way — a policy of "no" carried home from the train — costs a stranger some
+bandwidth for as long as it takes the next reading to arrive, which is as
+long as it takes the network to change. So `NetworkCostWatcher`
+(`NetworkCost.kt`) registers a `ConnectivityManager.NetworkCallback` on the
+default network and pushes a reading on the `xtremio/network` **event**
+channel whenever it changes. It is registered for exactly as long as Dart is
+subscribed, which is the life of the app — and so the life of the sharing it
+governs, since the server stops when the app closes.
+
+The reading is one of two strings, `unmetered` or `metered`, and everything
+that is not a clear `NET_CAPABILITY_NOT_METERED` is the second one: no
+default network, no `ConnectivityManager`, a capability set that does not say.
+`NET_CAPABILITY_TEMPORARILY_NOT_METERED` (Android 11) is deliberately *not*
+counted — it is the right capability for a bounded download to wait for and
+the wrong one for seeding, which has no end and would still be running when
+the link goes back to being billed. One is pushed as the callback is
+registered, because a device with no network at all fires no callback and
+the Dart side pushes nothing until it has heard something.
+
+On the Dart side `ChannelNetworkCost` (`lib/shell/network_cost.dart`) opens
+that stream on `metered` and lets the platform's first reading correct it,
+which is not a formality: a `listen` no platform side answers goes to
+Flutter's error reporter rather than to the stream, so without it a build
+with no Kotlin half would sit silent and leave the server sharing. Only
+Android is asked at all — iOS answers `metered` flatly (same radio, nobody
+has written the platform side) and the desktops answer `unmetered` (no API
+to ask, and a desktop is on the line the building is on).
 
 ## Typing with a remote
 
