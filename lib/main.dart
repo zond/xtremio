@@ -6,6 +6,11 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
 import 'core/core.dart';
+import 'features/addons/addon_health_client.dart';
+import 'features/cast/cast_client.dart';
+import 'features/downloads/destination.dart';
+import 'features/sharing/sharing_activity.dart';
+import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
 import 'src/rust/frb_generated.dart';
 
@@ -28,11 +33,27 @@ typedef CoreBoot = Future<(CoreClient, CoreInitInfo)> Function();
 
 /// Loads the Rust library and boots stremio-core (with the embedded
 /// stream-server) before showing the app; shows the failure otherwise.
+///
+/// Everything else [XtremioApp] can be handed -- the clients it would
+/// otherwise build over FFI, and how a player's engine is made -- passes
+/// through unchanged, defaulting to what [XtremioApp] itself defaults to.
+/// [main] sets only [device]; a test that mounts the bootstrap hands in
+/// the same fakes it would hand the app, so that nothing under it reaches
+/// for a Rust library the test never loaded.
 class XtremioBootstrap extends StatefulWidget {
   const XtremioBootstrap({
     super.key,
     this.device = DeviceProfile.fallback,
     this.boot = bootCore,
+    this.engineBuilder,
+    this.downloads,
+    this.cast,
+    this.prefs,
+    this.addonHealth = const RustAddonHealthClient(),
+    this.deepLinks,
+    this.defaultDestination = platformDefaultDestination,
+    this.serverSettings = const ServerClient(),
+    this.sharingActivity = const RustSharingActivityClient(),
   });
 
   /// What [DeviceProfile.detect] found, handed to [XtremioApp].
@@ -41,6 +62,33 @@ class XtremioBootstrap extends StatefulWidget {
   /// How the core comes up; [bootCore] (the Rust library) unless a test
   /// hands in a fake.
   final CoreBoot boot;
+
+  /// Passed through to [XtremioApp.engineBuilder].
+  final PlaybackEngineBuilder? engineBuilder;
+
+  /// Passed through to [XtremioApp.downloads].
+  final DownloadsClient? downloads;
+
+  /// Passed through to [XtremioApp.cast].
+  final CastClient? cast;
+
+  /// Passed through to [XtremioApp.prefs].
+  final AppPrefs? prefs;
+
+  /// Passed through to [XtremioApp.addonHealth].
+  final AddonHealthClient? addonHealth;
+
+  /// Passed through to [XtremioApp.deepLinks].
+  final DeepLinkSource? deepLinks;
+
+  /// Passed through to [XtremioApp.defaultDestination].
+  final DownloadDestinationResolver defaultDestination;
+
+  /// Passed through to [XtremioApp.serverSettings].
+  final ServerSettingsWriter serverSettings;
+
+  /// Passed through to [XtremioApp.sharingActivity].
+  final SharingActivityClient sharingActivity;
 
   /// Loads the Rust library and initializes stremio-core with the app's
   /// support and cache directories.
@@ -77,6 +125,15 @@ class _XtremioBootstrapState extends State<XtremioBootstrap> {
           core: data.$1,
           initInfo: data.$2,
           device: widget.device,
+          engineBuilder: widget.engineBuilder,
+          downloads: widget.downloads,
+          cast: widget.cast,
+          prefs: widget.prefs,
+          addonHealth: widget.addonHealth,
+          deepLinks: widget.deepLinks,
+          defaultDestination: widget.defaultDestination,
+          serverSettings: widget.serverSettings,
+          sharingActivity: widget.sharingActivity,
         );
       },
     );

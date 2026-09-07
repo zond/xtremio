@@ -9,6 +9,8 @@ import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
 import '../support/fake_core_client.dart';
+import '../support/fake_downloads_client.dart';
+import '../support/fake_prefs_client.dart';
 import '../support/fake_sharing.dart';
 
 const tv = DeviceProfile(isTv: true, hasTouch: false);
@@ -90,8 +92,20 @@ void main() {
       tester,
     ) async {
       final core = emptyBoardCore();
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      // The same fakes every other XtremioApp in these tests gets: with no
+      // Rust library loaded, a client left at its default would poll FFI
+      // once and log that it is unavailable.
       await tester.pumpWidget(
-        XtremioBootstrap(device: tv, boot: () async => (core, core.initInfo)),
+        XtremioBootstrap(
+          device: tv,
+          boot: () async => (core, core.initInfo),
+          downloads: downloads,
+          prefs: AppPrefs(client: FakePrefsClient()),
+          serverSettings: RecordingServerSettings(),
+          sharingActivity: FakeSharingActivity(),
+        ),
       );
       await tester.pumpAndSettle();
 
