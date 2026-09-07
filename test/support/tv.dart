@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/focus_emphasis.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/focus_theme.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
@@ -66,33 +67,147 @@ BuildContext? _focusedContext() {
 bool focusIn<T extends Widget>() =>
     _focusedContext()?.findAncestorWidgetOfExactType<T>() != null;
 
-/// Whether this app tells the viewer where the remote is standing.
+/// What this app draws to say the remote is standing here.
 ///
-/// There are exactly two ways it does, and a screen is right when every
-/// stop the D-pad can reach has one of them: a [FocusHighlight] drawn
-/// round it -- what a poster, a chip, a rail destination and the panels
-/// over the video wear -- or the theme floor, which marks every Material
-/// control without being asked and is in force wherever [FocusTheme.apply]
-/// built the theme.
+/// There are exactly two mechanisms and three things they draw, and every
+/// stop the D-pad can reach wears at least one of them.
+enum FocusMark {
+  /// The app's own [FocusHighlight] round this control, *lit*: the
+  /// two-stroke ring, and whatever else its [FocusTreatment] wears.
+  ring,
+
+  /// The floor's stroke: the near-white [BorderSide] [FocusTheme] puts on
+  /// a focused button's shape.
+  stroke,
+
+  /// The floor's fill: the ink a Material control paints while focused,
+  /// in [FocusTheme]'s near-white and at least as heavy as
+  /// [FocusTheme.lift] -- the whole indicator on a [ListTile], a
+  /// [PopupMenuItem] or a chip, none of which can be given a side.
+  fill,
+}
+
+/// What is drawn on the control the remote is standing on.
 ///
-/// **What this catches**, which is what the audit found: a screen with a
-/// focus stop outside both, such as a hand-rolled [Focus] with a border of
-/// its own invention (there were three of those), a control under a
-/// `Theme` of its own, or a route pushed somewhere the floor does not
-/// reach. And a screen the remote lands nowhere on at all, which reads
-/// here as unmarked because nothing has focus to mark.
+/// Which is a different question from what is *available* to it, and the
+/// difference is the whole point: a [FocusHighlight] is in the tree either
+/// side of a focus change and a theme covers a screen whether or not
+/// anything on it is focused, so neither being there says anything. What
+/// counts is a ring that is lit, a stroke this control's own style
+/// resolves to the floor's near-white while focused, and a fill it
+/// resolves to the same. All three are read off the control that holds
+/// focus, and all three are what a viewer would see on it.
 ///
-/// **What it cannot catch** is a Material control whose component theme
-/// the floor has never been told about. That is what `FocusTheme`'s own
-/// tests are for, and why the list of components there is written out one
-/// by one rather than derived from anything.
-bool focusIsMarked() {
+/// **What it cannot catch.** A [FocusMarked] wrapped round more than the
+/// one focus stop it is documented to wrap lights for anything inside it
+/// and reads here as a ring on each. And whether the ink is painted where
+/// the control is drawn is beyond a widget test: that a [ListTile] paints
+/// [ThemeData.focusColor] at all is `FocusTheme`'s own tests' business,
+/// which is why the components there are written out one by one rather
+/// than derived from anything.
+Set<FocusMark> focusMarks() {
   final context = _focusedContext();
-  if (context == null) return false;
-  if (context.findAncestorWidgetOfExactType<FocusHighlight>() != null) {
-    return true;
+  if (context == null) return const <FocusMark>{};
+  return {if (_ringLit(context)) FocusMark.ring, ..._floorMarks(context)};
+}
+
+/// The remote is standing on something this app marks.
+bool focusIsMarked() => focusMarks().isNotEmpty;
+
+/// The nearest [FocusHighlight] on either side of the focused node, lit.
+///
+/// Either side, because the two families put it in different places: a
+/// [FocusableTile] builds the ring *inside* its [InkWell], so the node's
+/// context is above it, while [FocusMarked] and [FocusHighlighted] watch
+/// from *above* the control, so the node's context is below it. Looking
+/// only one way is looking at the wrong widget in half the app.
+bool _ringLit(BuildContext context) =>
+    _ringAbove(context) || _ringBelow(context as Element);
+
+bool _ringAbove(BuildContext context) {
+  var lit = false;
+  context.visitAncestorElements((element) {
+    final widget = element.widget;
+    if (widget is! FocusHighlight) return true;
+    lit = widget.focused;
+    return false;
+  });
+  return lit;
+}
+
+bool _ringBelow(Element element) {
+  bool? lit;
+  void visit(Element child) {
+    if (lit != null) return;
+    final widget = child.widget;
+    if (widget is FocusHighlight) {
+      lit = widget.focused;
+      return;
+    }
+    child.visitChildren(visit);
   }
-  return FocusTheme.emphasisIn(context) != null;
+
+  element.visitChildren(visit);
+  return lit ?? false;
+}
+
+/// What the theme floor is drawing on the focused control.
+///
+/// The nearest control *around* the node decides, because that is the one
+/// whose ink and shape are painted: every button, row, tile and chip
+/// builds an [InkResponse] and focuses with a node inside it, so its
+/// resolved overlay is the fill and the border it hands its ink is the
+/// stroke -- both already resolved for the state the control is really in.
+/// The toggleables paint no ink and are read off the component theme
+/// instead.
+Set<FocusMark> _floorMarks(BuildContext context) {
+  Element? owner;
+  context.visitAncestorElements((element) {
+    final widget = element.widget;
+    if (widget is InkResponse ||
+        widget is Switch ||
+        widget is Checkbox ||
+        widget is Radio) {
+      owner = element;
+      return false;
+    }
+    return true;
+  });
+  final control = owner;
+  if (control == null) return const <FocusMark>{};
+  final theme = Theme.of(control);
+  final emphasis = FocusTheme.emphasisIn(control) ?? FocusEmphasis.standard;
+  const focused = <WidgetState>{WidgetState.focused};
+  final widget = control.widget;
+  final fill = switch (widget) {
+    final InkResponse ink =>
+      ink.overlayColor?.resolve(focused) ?? ink.focusColor ?? theme.focusColor,
+    Switch() => theme.switchTheme.overlayColor?.resolve(focused),
+    Checkbox() => theme.checkboxTheme.overlayColor?.resolve(focused),
+    Radio() => theme.radioTheme.overlayColor?.resolve(focused),
+    _ => null,
+  };
+  final side = widget is InkResponse
+      ? switch (widget.customBorder) {
+          final OutlinedBorder border => border.side,
+          _ => null,
+        }
+      : null;
+  return {
+    if (side != null && side.style != BorderStyle.none && _isFloor(side.color))
+      FocusMark.stroke,
+    if (fill != null && _isFloor(fill) && fill.a >= FocusTheme.lift(emphasis))
+      FocusMark.fill,
+  };
+}
+
+/// [color] is the near-white the floor draws in, whatever it is drawn at:
+/// anything else is Flutter's own tenth, a colour a widget invented for
+/// itself, or the transparent one a surface that draws its own ring passes
+/// to say "not this one as well".
+bool _isFloor(Color color) {
+  const floor = FocusTheme.stroke;
+  return color.r == floor.r && color.g == floor.g && color.b == floor.b;
 }
 
 /// The first text on the widget holding primary focus (a button's label, a

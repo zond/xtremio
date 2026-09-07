@@ -39,8 +39,8 @@ import '../../support/tv.dart';
 /// without an indicator fails here rather than being invisible until
 /// somebody watches it on a projector.
 ///
-/// [focusIsMarked] says what "marked" means and, more usefully, what it
-/// does not. The last test in the file is the other half: it reads the
+/// [focusMarks] says what "marked" means -- what is drawn on the control
+/// the remote is standing on -- and, more usefully, what it does not. The last test in the file is the other half: it reads the
 /// source tree, so a *new* screen is a failure here too rather than a
 /// screen this file has never heard of.
 void main() {
@@ -111,11 +111,12 @@ void main() {
       if (node is FocusScopeNode || node == null) continue;
       seen.add(node.debugLabel ?? '${node.context?.widget.runtimeType}');
       expect(
-        focusIsMarked(),
-        isTrue,
+        focusMarks(),
+        isNotEmpty,
         reason:
             'the remote can land on a ${node.context?.widget.runtimeType} '
-            'that nothing in this app marks',
+            'with no ring lit on it, no stroke round it and no fill under '
+            'it -- nothing a viewer three metres away could find',
       );
     }
     expect(
