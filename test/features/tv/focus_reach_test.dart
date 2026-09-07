@@ -14,6 +14,8 @@ import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/library/library_screen.dart';
+import 'package:xtremio/features/player/playback_tracks.dart';
+import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/search/search_screen.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
@@ -40,7 +42,13 @@ import '../../support/tv.dart';
 /// somebody watches it on a projector.
 ///
 /// [focusMarks] says what "marked" means -- what is drawn on the control
-/// the remote is standing on -- and, more usefully, what it does not. The last test in the file is the other half: it reads the
+/// the remote is standing on -- and, more usefully, what it does not.
+///
+/// Each screen is walked twice over: as it is first drawn, and again with
+/// something opened over it. The second group is not an extra: a dialog, a
+/// menu and a sheet are routes with scopes and surfaces of their own, and
+/// they are where most of the controls a viewer presses on a television
+/// actually are. The last test in the file is the other half: it reads the
 /// source tree, so a *new* screen is a failure here too rather than a
 /// screen this file has never heard of.
 void main() {
@@ -124,6 +132,21 @@ void main() {
       isNotEmpty,
       reason: 'nothing on this screen can be reached with a remote',
     );
+  }
+
+  /// Presses [key] until [reached] answers, and says what it was looking
+  /// for when it never does.
+  Future<void> pressUntil(
+    WidgetTester tester,
+    LogicalKeyboardKey key,
+    bool Function() reached, {
+    required String target,
+    int limit = 30,
+  }) async {
+    for (var i = 0; i < limit && !reached(); i++) {
+      await press(tester, key);
+    }
+    expect(reached(), isTrue, reason: 'the remote never reached $target');
   }
 
   group('every screen marks what the remote lands on', () {
@@ -283,6 +306,173 @@ void main() {
       player.engine.emitPlaying(true);
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
+    });
+  });
+
+  /// The same walk over what a screen puts *over* itself: a dialog, a
+  /// menu, a sheet.
+  ///
+  /// Each of these is a route with a focus scope of its own, drawn on a
+  /// surface of its own, sometimes under a theme of its own -- which is
+  /// the shape of every fault this file exists to catch. The base state
+  /// walked above is also the state a screen spends the least of its life
+  /// in: the controls a viewer presses most on a television are on a menu
+  /// that opened over something.
+  group('and what a screen opens over itself', () {
+    testWidgets('a choice menu on a settings row', (tester) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(client: fullCore(), child: onTv(const SettingsScreen())),
+      );
+      await tester.pumpAndSettle();
+
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.arrowDown,
+        () => focusIn<DropdownButton<BufferAhead>>(),
+        target: 'Buffer ahead',
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text(BufferAhead.wholeFile.label), findsWidgets);
+      await walkEveryStop(tester, stops: 12);
+    });
+
+    testWidgets('the actions menu on a download', (tester) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(
+          client: fullCore(),
+          child: DownloadsScope(
+            client: FakeDownloadsClient(
+              registry: DownloadsRegistry.fromJson(loadDownloadsFixture()),
+            ),
+            child: onTv(const DownloadsScreen(), pushed: true),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.tab,
+        () => focusedTooltip() == 'Download actions',
+        target: 'a download\'s ⋮',
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text('Delete'), findsOneWidget);
+      await walkEveryStop(tester, stops: 12);
+    });
+
+    testWidgets('the actions sheet on a library item', (tester) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(client: fullCore(), child: onTv(const LibraryScreen())),
+      );
+      await tester.pumpAndSettle();
+
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.arrowDown,
+        () => focusedTileName(tester) != null,
+        target: 'a library tile',
+      );
+      await press(tester, LogicalKeyboardKey.contextMenu);
+      expect(find.byType(BottomSheet), findsOneWidget);
+      await walkEveryStop(tester, stops: 12);
+    });
+
+    testWidgets('a filter menu, which a television gets in place of a '
+        'dropdown', (tester) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(client: fullCore(), child: onTv(const LibraryScreen())),
+      );
+      await tester.pumpAndSettle();
+
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.tab,
+        () => focusedLabel(tester)?.startsWith('Sort:') ?? false,
+        target: 'the Sort button',
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(MenuItemButton), findsWidgets);
+      await walkEveryStop(tester, stops: 12);
+    });
+
+    testWidgets('the Add addon dialog', (tester) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(
+          client: fullCore(),
+          child: onTv(const AddonsScreen(), pushed: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.arrowUp,
+        () => focusedTooltip() == 'Back',
+        target: 'the app bar',
+        limit: 8,
+      );
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.arrowRight,
+        () => focusedTooltip() == 'Add addon',
+        target: 'the Add addon button',
+        limit: 4,
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await walkEveryStop(tester, stops: 12);
+    });
+
+    testWidgets("the player's track menu", (tester) async {
+      useScreen(tester, tvSize);
+      final player = PlayerHarness(device: tv, prefs: bold());
+      await player.pump(tester);
+      player.engine.emitDuration(const Duration(minutes: 96));
+      player.engine.emitTracks(
+        const PlaybackTracks(
+          audio: [
+            TrackInfo(id: '1', title: 'English'),
+            TrackInfo(id: '2', title: 'German'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.arrowRight,
+        () => focusedTooltip() == 'Audio track (A)',
+        target: 'the audio menu button',
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(AudioMenu), findsOneWidget);
+      await walkEveryStop(tester, stops: 12);
+    });
+
+    testWidgets("the player's settings sheet", (tester) async {
+      useScreen(tester, tvSize);
+      final player = PlayerHarness(device: tv, prefs: bold());
+      await player.pump(tester);
+      player.engine.emitDuration(const Duration(minutes: 96));
+      await tester.pumpAndSettle();
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.arrowRight,
+        () => focusedTooltip() == 'Playback settings',
+        target: 'the settings button',
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(PlayerSettingsSheet), findsOneWidget);
+      await walkEveryStop(tester, stops: 20);
     });
   });
 
