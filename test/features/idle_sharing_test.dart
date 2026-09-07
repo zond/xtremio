@@ -96,6 +96,90 @@ void main() {
     });
   });
 
+  group('a "Not now"', () {
+    test(
+      'stops the server for this run without writing anything down',
+      () async {
+        final stored = FakePrefsClient();
+        final prefs = AppPrefs(client: stored);
+        await prefs.load();
+        final server = RecordingServerSettings();
+        final policy = started(prefs: prefs, server: server);
+        await settle(policy);
+        expect(server.patches, [
+          {IdleSharing.seedingEnabledKey: true},
+        ]);
+
+        policy.pauseUntilRestart();
+        await settle(policy);
+
+        // The server hears it at once, by the one path that tells it
+        // anything; the choice is untouched, and so is the file.
+        expect(server.patches.last, {IdleSharing.seedingEnabledKey: false});
+        expect(prefs.shareWhileIdle, isTrue);
+        expect(policy.pausedForRun, isTrue);
+        expect(stored.stored, isEmpty, reason: '${stored.stored}');
+      },
+    );
+
+    test('lasts exactly as long as the run', () async {
+      final stored = FakePrefsClient();
+      final prefs = AppPrefs(client: stored);
+      await prefs.load();
+      final first = started(prefs: prefs, server: RecordingServerSettings());
+      first.pauseUntilRestart();
+      await settle(first);
+      first.dispose();
+
+      // The next start of the app: a policy built over the same stored
+      // preferences, which is all a restart leaves behind.
+      final restarted = AppPrefs(client: stored);
+      await restarted.load();
+      final server = RecordingServerSettings();
+      final next = started(prefs: restarted, server: server);
+      await settle(next);
+
+      expect(next.pausedForRun, isFalse);
+      expect(server.patches, [
+        {IdleSharing.seedingEnabledKey: true},
+      ]);
+    });
+
+    test('is lifted by turning the switch back on', () async {
+      // A switch that has just been pressed and does nothing until the app
+      // is restarted is the fault this whole change is about.
+      final prefs = AppPrefs.inMemory();
+      final server = RecordingServerSettings();
+      final policy = started(prefs: prefs, server: server);
+      policy.pauseUntilRestart();
+      await settle(policy);
+      expect(server.patches.last, {IdleSharing.seedingEnabledKey: false});
+
+      await prefs.setShareWhileIdle(false);
+      await prefs.setShareWhileIdle(true);
+      await settle(policy);
+
+      expect(policy.pausedForRun, isFalse);
+      expect(server.patches.last, {IdleSharing.seedingEnabledKey: true});
+    });
+
+    test('is not undone by the switch merely notifying', () async {
+      final prefs = AppPrefs.inMemory();
+      final server = RecordingServerSettings();
+      final policy = started(prefs: prefs, server: server);
+      policy.pauseUntilRestart();
+      await settle(policy);
+
+      // Every preference shares one notification, and the switch is still
+      // on throughout: nothing here is the viewer asking to share again.
+      await prefs.setBufferAhead(BufferAhead.wholeFile);
+      await settle(policy);
+
+      expect(policy.pausedForRun, isTrue);
+      expect(server.patches.last, {IdleSharing.seedingEnabledKey: false});
+    });
+  });
+
   group('the policy watches', () {
     test('only while the app is up', () async {
       final prefs = AppPrefs.inMemory();

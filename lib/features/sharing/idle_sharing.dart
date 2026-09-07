@@ -83,6 +83,27 @@ class IdleSharing {
   static const String description =
       'Keeps uploading what you watched to other people for about five '
       'minutes after playback stops.';
+
+  /// The gentler of the two stops the status light offers, and what it
+  /// costs: nothing is written down, so the next start of the app shares
+  /// again. It is the run that ends it and not a session, because a run is
+  /// a thing this app has -- [IdleSharingPolicy] lives exactly as long as
+  /// the process, and the server it is telling goes down with it -- where a
+  /// "session" would be a timer somebody had to choose the length of.
+  static const String pauseTitle = 'Not now';
+  static const String pauseDescription =
+      'Stops sharing until you next start Xtremio. The setting stays on.';
+
+  /// The other stop: the switch below, from the other end of the app.
+  static const String stopTitle = 'Stop sharing';
+  static const String stopDescription =
+      'Turns this setting off for good, the same switch as in Settings.';
+
+  /// What the settings tile adds while a "Not now" is in force. Without it
+  /// the tile would show the switch on while nothing is being shared, which
+  /// is the exact fault -- a tile describing something the app is not
+  /// doing -- that the rest of this class was rewritten to remove.
+  static const String pausedNote = 'Paused until you next start Xtremio.';
 }
 
 /// Keeps the embedded server's `seedingEnabled` equal to
@@ -108,8 +129,17 @@ class IdleSharing {
 /// fired off, because two settings calls in flight land on the bridge's
 /// worker pool in no particular order and the loser decides what the server
 /// ends up believing.
+///
+/// **A "Not now" is this same policy with a shorter memory.** The status
+/// light's popup calls [pauseUntilRestart], which holds the answer at false
+/// for the rest of the run without writing anything down, so the setting
+/// still says what the viewer chose and the next start of the app shares
+/// again. It is not a second author of `seedingEnabled` -- there is still
+/// exactly one -- and it is not a third state in the preference either,
+/// because it must not survive the process that granted it.
 class IdleSharingPolicy {
-  IdleSharingPolicy({required this.prefs, required this.server});
+  IdleSharingPolicy({required this.prefs, required this.server})
+    : _wasAllowed = prefs.shareWhileIdle;
 
   /// The viewer's choice, and what tells this when it changes.
   final AppPrefs prefs;
@@ -120,6 +150,15 @@ class IdleSharingPolicy {
   /// What the server was last told, or null when it has been told nothing
   /// (or when the telling failed, so the next change tries again).
   bool? _sent;
+
+  /// A "Not now" from the status light's popup: sharing is off for the rest
+  /// of this run, and nothing is written down, so the next start shares
+  /// again. See [pauseUntilRestart].
+  bool _paused = false;
+
+  /// What the preference said when it was last read, so that turning the
+  /// switch *on* can be told from its having been on all along.
+  bool _wasAllowed;
 
   /// The writes so far, chained so the server is never told two things at
   /// once. Also what a test waits on to see what was written.
@@ -139,9 +178,33 @@ class IdleSharingPolicy {
   @visibleForTesting
   Future<void> get settled => _writes;
 
+  /// Stops the sharing for the rest of this run, leaving the preference
+  /// alone: what the status light's "Not now" does.
+  ///
+  /// The server is told at once, through the one path that tells it
+  /// anything. Nothing persists it, so the next start of the app pushes the
+  /// preference again and sharing resumes -- which is what the popup says
+  /// it does, and the whole difference between this and the switch.
+  void pauseUntilRestart() {
+    if (_paused) return;
+    _paused = true;
+    _reconsider();
+  }
+
+  /// A "Not now" is in force. What reads it is the settings tile, which
+  /// must not show a switch that is on over a run in which nothing is
+  /// being shared.
+  bool get pausedForRun => _paused;
+
   void _reconsider() {
     if (_stopped) return;
-    final allowed = prefs.shareWhileIdle;
+    // Turning the switch on is a fresh instruction to share, and it lifts a
+    // "Not now": the alternative is a switch the viewer has just pressed
+    // that does nothing until the app is restarted.
+    final wanted = prefs.shareWhileIdle;
+    if (wanted && !_wasAllowed) _paused = false;
+    _wasAllowed = wanted;
+    final allowed = wanted && !_paused;
     if (allowed == _sent) return;
     _sent = allowed;
     _writes = _writes.then((_) => _push(allowed));
