@@ -461,6 +461,56 @@ void main() {
       );
     });
 
+    testWidgets('every button on the bar wears the floor, stroke and fill', (
+      tester,
+    ) async {
+      // The bar's buttons are marked by the theme floor rather than by a
+      // ring, and they were getting half of it: an [IconButton] given a
+      // `color` has [IconButton.styleFrom] build an `overlayColor` on the
+      // widget's own style -- white at a tenth -- which beats the
+      // [IconButtonTheme] the floor is. A tenth over video in a lit room
+      // is the cue `FocusTheme` exists because nobody can see, and
+      // `FocusTheme.lift` is written for this bar by name.
+      await pumpOnTv(tester, prefs: bold());
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedTooltip(), 'Play (Space)');
+
+      final visited = <String>[];
+      for (var i = 0; i < 12; i++) {
+        final tooltip = focusedTooltip();
+        if (tooltip != null && !focusIn<SeekBar>()) {
+          visited.add(tooltip);
+          expect(focusMarks(), {
+            FocusMark.stroke,
+            FocusMark.fill,
+          }, reason: 'the floor reaches $tooltip by halves');
+        }
+        await press(tester, LogicalKeyboardKey.arrowRight);
+        if (visited.length > 2 && tooltip == focusedTooltip()) {
+          // The last button of the row swallows a further right.
+          await press(tester, LogicalKeyboardKey.arrowUp);
+          await press(tester, LogicalKeyboardKey.arrowUp);
+        }
+      }
+      expect(visited, contains('Play (Space)'));
+      expect(visited, contains('Playback settings'));
+    });
+
+    testWidgets('and its icons are still white over the video', (tester) async {
+      // The colour moved from `color` to the style; a bar whose icons went
+      // grey would be a worse fault than the one that move fixed.
+      await pumpOnTv(tester);
+      final icon = find.descendant(
+        of: find.byType(PlayerTopBar),
+        matching: find.byIcon(Icons.query_stats),
+      );
+      expect(
+        IconTheme.of(tester.element(icon)).color,
+        Colors.white,
+        reason: 'the top bar is drawn on black, and its icons are white',
+      );
+    });
+
     testWidgets('the seek bar wears the ring while it holds focus', (
       tester,
     ) async {

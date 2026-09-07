@@ -7,14 +7,36 @@ import 'time_format.dart';
 
 const _gradientBlack = Color(0xCC000000);
 
+/// A white icon, given as a style rather than as [IconButton.color].
+///
+/// The two are not the same thing here. `color` is handed to
+/// [IconButton.styleFrom] as the foreground, which builds an
+/// **`overlayColor` of its own** -- white at a tenth for the focused state
+/// -- on the widget's style, where it beats the [IconButtonTheme] the
+/// focus floor puts on a television. So every button on the player's bar
+/// wore the floor's stroke and Flutter's own tint underneath it, which is
+/// the exact cue `FocusTheme` exists because nobody can see: a tenth, over
+/// video, in a lit room. `FocusTheme.lift` is written for this bar by name
+/// -- kept small so it does not wash out a white icon -- and was reaching
+/// none of it.
+///
+/// Setting only the icon's colour leaves `overlayColor` unsaid, so the
+/// floor's is what resolves. Nothing else about these buttons changes:
+/// none of them is ever built disabled, which is the one other thing a
+/// foreground colour decides.
+const _whiteOnVideo = ButtonStyle(
+  iconColor: WidgetStatePropertyAll(Colors.white),
+);
+
 /// The bar over the top edge of the video: back, title, and the menus.
 ///
 /// Every button on the bar is an [IconButton] and takes the theme floor's
-/// stroke and fill (`FocusTheme`) rather than a ring of its own. The bar
-/// is drawn on its own gradient, black at the panel's edge where the
-/// buttons are, so a light stroke has something to contrast with; and a
-/// button in a row of eight, a few pixels apart, is the last thing that
-/// should grow when the remote reaches it.
+/// stroke and fill (`FocusTheme`) rather than a ring of its own -- which
+/// is why the white is given as a style rather than as [IconButton.color]
+/// (see `_whiteOnVideo`). The bar is drawn on its own gradient, black at
+/// the panel's edge where the buttons are, so a light stroke has something
+/// to contrast with; and a button in a row of eight, a few pixels apart, is
+/// the last thing that should grow when the remote reaches it.
 ///
 /// Every button here is focusable, so a remote reaches the menus once the
 /// player has moved focus onto the bar ([firstFocusNode] is where it lands:
@@ -95,7 +117,7 @@ class PlayerTopBar extends StatelessWidget {
               // node, and the remote has to be able to land on this one.
               key: const ValueKey('back'),
               tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-              color: Colors.white,
+              style: _whiteOnVideo,
               focusNode: firstFocusNode,
               onPressed: onBack,
               icon: const BackButtonIcon(),
@@ -112,7 +134,7 @@ class PlayerTopBar extends StatelessWidget {
               IconButton(
                 key: const ValueKey('cast'),
                 tooltip: castOn ? 'Casting' : 'Cast to a device',
-                color: Colors.white,
+                style: _whiteOnVideo,
                 isSelected: castOn,
                 onPressed: onCast,
                 icon: Icon(castOn ? Icons.cast_connected : Icons.cast),
@@ -121,7 +143,7 @@ class PlayerTopBar extends StatelessWidget {
               IconButton(
                 key: const ValueKey('next'),
                 tooltip: 'Next episode (N)',
-                color: Colors.white,
+                style: _whiteOnVideo,
                 onPressed: onNext,
                 icon: const Icon(Icons.skip_next),
               ),
@@ -129,7 +151,7 @@ class PlayerTopBar extends StatelessWidget {
               IconButton(
                 key: const ValueKey('subtitles'),
                 tooltip: 'Subtitles (S)',
-                color: Colors.white,
+                style: _whiteOnVideo,
                 onPressed: onSubtitles,
                 icon: Icon(subtitlesOn ? Icons.subtitles : Icons.subtitles_off),
               ),
@@ -137,14 +159,14 @@ class PlayerTopBar extends StatelessWidget {
               IconButton(
                 key: const ValueKey('audio'),
                 tooltip: 'Audio track (A)',
-                color: Colors.white,
+                style: _whiteOnVideo,
                 onPressed: onAudio,
                 icon: const Icon(Icons.audiotrack),
               ),
             IconButton(
               key: const ValueKey('stats'),
               tooltip: 'Playback stats (Shift+I)',
-              color: Colors.white,
+              style: _whiteOnVideo,
               isSelected: statsOn,
               onPressed: onStats,
               icon: const Icon(Icons.query_stats),
@@ -152,7 +174,7 @@ class PlayerTopBar extends StatelessWidget {
             IconButton(
               key: const ValueKey('settings'),
               tooltip: 'Playback settings',
-              color: Colors.white,
+              style: _whiteOnVideo,
               onPressed: onSettings,
               icon: const Icon(Icons.settings),
             ),
@@ -209,7 +231,7 @@ class PlayerCenterControls extends StatelessWidget {
         IconButton(
           tooltip: 'Back ${seekLabel(seekStep)}',
           iconSize: 40,
-          color: Colors.white,
+          style: _whiteOnVideo,
           onPressed: onSeekBack,
           icon: Icon(seekBackIcon(seekStep)),
         ),
@@ -224,7 +246,7 @@ class PlayerCenterControls extends StatelessWidget {
         IconButton(
           tooltip: 'Forward ${seekLabel(seekStep)}',
           iconSize: 40,
-          color: Colors.white,
+          style: _whiteOnVideo,
           onPressed: onSeekForward,
           icon: Icon(seekForwardIcon(seekStep)),
         ),
@@ -353,7 +375,7 @@ class PlayerBottomBar extends StatelessWidget {
                 if (wide) ...[
                   IconButton(
                     tooltip: playing ? 'Pause (Space)' : 'Play (Space)',
-                    color: Colors.white,
+                    style: _whiteOnVideo,
                     focusNode: playPauseFocusNode,
                     iconSize: 32,
                     onPressed: onPlayPause,
@@ -361,13 +383,13 @@ class PlayerBottomBar extends StatelessWidget {
                   ),
                   IconButton(
                     tooltip: 'Back ${seekLabel(seekStep)} (←)',
-                    color: Colors.white,
+                    style: _whiteOnVideo,
                     onPressed: onSeekBack,
                     icon: Icon(seekBackIcon(seekStep)),
                   ),
                   IconButton(
                     tooltip: 'Forward ${seekLabel(seekStep)} (→)',
-                    color: Colors.white,
+                    style: _whiteOnVideo,
                     onPressed: onSeekForward,
                     icon: Icon(seekForwardIcon(seekStep)),
                   ),
@@ -378,7 +400,7 @@ class PlayerBottomBar extends StatelessWidget {
                 if (wide) ...[
                   IconButton(
                     tooltip: volume == 0 ? 'Unmute (M)' : 'Mute (M)',
-                    color: Colors.white,
+                    style: _whiteOnVideo,
                     onPressed: onMute,
                     icon: Icon(
                       volume == 0
@@ -410,7 +432,7 @@ class PlayerBottomBar extends StatelessWidget {
                     tooltip: fullscreen
                         ? 'Exit fullscreen (F)'
                         : 'Fullscreen (F)',
-                    color: Colors.white,
+                    style: _whiteOnVideo,
                     onPressed: onFullscreen,
                     icon: Icon(
                       fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
