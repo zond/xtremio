@@ -60,7 +60,10 @@ what every model field means. The shape of the thing is in the
   which are process-wide by nature; `logging.rs`'s `INIT`, which guards
   `tracing`'s own global).
 - **The engine runs on our `Env`** (`rust/src/env.rs`): reqwest + rustls for
-  HTTP, one JSON file per bucket under the app-support directory with
+  HTTP, trusting Mozilla's compiled-in roots rather than the device store
+  (`http_client_builder` says why: on Android the platform verifier has Java
+  download and parse CRLs on every handshake), one JSON file per bucket
+  under the app-support directory with
   temp-then-fsync-then-rename writes, and two lib-owned tokio runtimes
   (concurrent + a single-worker sequential one for ordered persistence).
   Every HTTP body is read under a cap (`MOST_JSON_BYTES`, 32 MiB, ten times

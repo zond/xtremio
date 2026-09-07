@@ -123,13 +123,19 @@ existing Flutter escape hatch out of ABI filtering entirely.
   because some addons are plain-http, and it keeps the embedded
   `stream-server`'s `http://127.0.0.1:<port>` media URLs open to anything
   on the Dart side that might load one.
-- **`rustls-platform-verifier` JNI hook.** On Android, reqwest's rustls
-  verifies TLS certificates through `rustls-platform-verifier`, which needs
-  the Android `Context` once before any HTTPS request. `MainActivity.onCreate`
-  calls `NativeInit.initTlsVerifier(applicationContext)` (JNI, implemented in
-  `rust/src/android.rs`) before the Flutter engine starts, and both the
-  stremio-core `Env` and the embedded stream-server share that global
-  initialization. Its Kotlin component ships as an AAR inside the Rust crate;
+- **`rustls-platform-verifier` JNI hook.** On Android, a reqwest client
+  built with rustls and no roots of its own verifies TLS certificates
+  through `rustls-platform-verifier`, which needs the Android `Context` once
+  before any HTTPS request. `MainActivity.onCreate` calls
+  `NativeInit.initTlsVerifier(applicationContext)` (JNI, implemented in
+  `rust/src/android.rs`) before the Flutter engine starts. The embedded
+  stream-server's clients (tracker announces, torrent-file fetches) are what
+  still use that verifier; the app's own client
+  (`rust/src/env.rs`, `http_client_builder`) trusts Mozilla's compiled-in
+  roots instead, because the platform path has Java download and parse the
+  issuer's CRL on every handshake to a host without an OCSP URL -- measured
+  at 400 MB of Java heap per tracker announce on a Chromecast, the GC storm
+  behind an ANR. Its Kotlin component ships as an AAR inside the Rust crate;
   Gradle locates it via `cargo metadata`, and
   `android/app/proguard-rules.pro` keeps it from being stripped by R8 in
   release builds.

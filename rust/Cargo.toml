@@ -44,8 +44,21 @@ anyhow = "1"
 chrono = "0.4"
 futures = "0.3"
 http = "1"
-# rustls (aws-lc-rs provider + rustls-platform-verifier roots); no system TLS.
+# rustls with the aws-lc-rs provider; no system TLS. `rustls` is the only
+# public feature that gives reqwest 0.13 a TLS backend at all, and it also
+# pulls `rustls-platform-verifier`, which reqwest constructs for any client
+# that brings no roots of its own. Our client brings them
+# (`env::http_client_builder`: `tls_certs_only` with the roots below), so
+# the platform verifier stays compiled -- stream-server's own reqwest
+# clients still use it -- but is never constructed for the app's own
+# traffic. On Android it was 91% of the Java heap; see `env.rs`.
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "gzip"] }
+# Mozilla's root program as full DER certificates: generated from the same
+# CCADB report as `webpki-roots` (already in the graph via stream-server)
+# and released in step with it, but in the form `reqwest::Certificate::
+# from_der` takes; `webpki-roots` ships trust anchors, which reqwest 0.13
+# has no builder method for.
+webpki-root-certs = "1"
 # Same matcher the server uses for a stream's `fileMustInclude` filters, so
 # a download picks the file the media route would play. Already in the graph
 # (tracing-subscriber's env-filter, stream-server), nothing new is compiled.
@@ -88,7 +101,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 mimalloc = { version = "0.1.52", default-features = false, features = ["local_dynamic_tls"] }
 
 # JNI hook that hands the Android app Context to rustls-platform-verifier
-# (src/android.rs); without it no HTTPS request from Rust succeeds on Android.
+# (src/android.rs). The app's own client no longer uses that verifier (see
+# `reqwest` above); the embedded stream-server's clients still do, and
+# without the init every HTTPS request they make on Android fails.
 # Same versions stream-server uses, so nothing new enters the graph.
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.22"

@@ -1,9 +1,11 @@
 //! `XtremioEnv`: the `stremio_core::runtime::Env` this app runs the engine
 //! on. Modeled on stremio-core-kotlin's `AndroidEnv` and stremiox's `TvosEnv`.
 //!
-//! - **fetch**: reqwest + rustls; JSON bodies in, JSON out (errors name the
-//!   failing JSON path). A request to the embedded server carries its
-//!   bearer token (`crate::server::token_for`); no other host gets it.
+//! - **fetch**: reqwest + rustls with Mozilla's roots compiled in
+//!   ([`http_client_builder`], which says why not the device store); JSON
+//!   bodies in, JSON out (errors name the failing JSON path). A request to
+//!   the embedded server carries its bearer token
+//!   (`crate::server::token_for`); no other host gets it.
 //!   [`fetch_text`] is the same path for a body that is not JSON -- a
 //!   subtitle file -- and shares the client and the token rule rather than
 //!   standing up a second one.
@@ -63,10 +65,60 @@ pub static SEQUENTIAL: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
         .expect("build sequential tokio runtime")
 });
 
+/// A reqwest builder whose TLS trust is the compiled-in Mozilla root set
+/// (`webpki-root-certs`), verified by rustls itself -- not the device's
+/// certificate store through `rustls-platform-verifier`.
+///
+/// reqwest 0.13's `rustls` feature constructs `rustls_platform_verifier::
+/// Verifier` for any client that brings no roots (reqwest 0.13.4
+/// `src/async_impl/client.rs`, the `!config.tls_certs_only` arm of the
+/// verifier `match`); `tls_certs_only` is the one builder state that takes
+/// the plain `with_root_certificates` arm instead, which never names the
+/// platform verifier. On Android that verifier runs every handshake through
+/// Java's `CertPathValidator` with revocation set to SOFT_FAIL and no
+/// NO_FALLBACK, so for a leaf without an OCSP URL Android downloads the
+/// issuer's CRL and parses it in Java. Measured on a Chromecast: ~180k Java
+/// objects per addon or catalog handshake, and 15 million objects / 400 MB
+/// for one tracker whose CRL has 116k entries -- 91% of the app's Java
+/// allocation, the GC storm that pushed a 2 GB box into swap and an ANR.
+///
+/// Trust policy, stated plainly: the app's own HTTPS (addon manifests,
+/// catalogs, the Stremio API, subtitles) trusts Mozilla's root program as
+/// built into this binary, not the device store. A CA the user installed on
+/// the device -- a corporate TLS-inspecting proxy, a debugging proxy -- is
+/// no longer trusted for that traffic, and a root Mozilla admits after this
+/// build ships is not trusted until the crate is updated. That is the right
+/// trade for this app: it talks to public addon servers and Stremio's API,
+/// never to an intranet, so a user-installed CA on this path is far more
+/// likely an interception than a need; the URLs it sends carry debrid API
+/// keys, so a public root set is the conservative choice for them; and the
+/// alternative was the Java heap above. Every client this crate builds for
+/// its own traffic goes through here so the policy has one home.
+///
+/// Verified how: reading the reqwest source named above, and on the device
+/// by the disappearance of the `Thread-N` tokio workers attaching to the JVM
+/// (`jni::vm::java_vm: Attached thread xtremio-core` in logcat) and of the
+/// GC bursts that followed each of the app's own handshakes. reqwest
+/// exposes nothing to inspect a built client's verifier, so
+/// [`tests::our_client_builds_where_the_platform_verifier_cannot`] proves it
+/// behaviourally where the desktop allows.
+pub fn http_client_builder() -> reqwest::ClientBuilder {
+    Client::builder().tls_certs_only(mozilla_roots())
+}
+
+/// The compiled-in Mozilla roots as reqwest certificates. Each is a
+/// constant DER blob, and `from_der` only stores the bytes (rustls parses
+/// them when the client is built), so this cannot fail.
+fn mozilla_roots() -> impl Iterator<Item = reqwest::Certificate> {
+    webpki_root_certs::TLS_SERVER_ROOT_CERTS
+        .iter()
+        .map(|der| reqwest::Certificate::from_der(der).expect("compiled-in root is DER"))
+}
+
 /// Shared HTTP client. Connects lazily, so building it outside a runtime is
 /// fine.
 static CLIENT: LazyLock<Client> = LazyLock::new(|| {
-    Client::builder()
+    http_client_builder()
         .connect_timeout(Duration::from_secs(30))
         .timeout(Duration::from_secs(60))
         .user_agent(concat!("xtremio/", env!("CARGO_PKG_VERSION")))
@@ -784,5 +836,48 @@ mod tests {
         assert!(matches!(error, EnvError::Fetch(_)), "{error:?}");
 
         crate::server::stop().expect("server stop");
+    }
+
+    /// reqwest exposes nothing about a built client's verifier, so this
+    /// proves it by difference. On Linux the platform verifier loads the
+    /// system store through `rustls-native-certs`, which takes the store
+    /// from `SSL_CERT_FILE` and `SSL_CERT_DIR` when either is set (both are,
+    /// in this process: something in the graph runs `openssl-probe` at
+    /// start-up and points them at `/usr/lib/ssl`). Pointed at an empty
+    /// file and an empty directory it loads nothing, and
+    /// `rustls_platform_verifier::Verifier::new` refuses an empty store
+    /// ("No CA certificates were loaded from the system"), so a builder that
+    /// constructs it cannot `build()`. Ours builds regardless, which is only
+    /// possible if it never asked the platform for roots. (Racy in theory
+    /// with anything else reading those variables at the same moment;
+    /// nothing else in this crate's tests builds a platform-verified client.
+    /// Linux only: macOS asks the Security framework and Android the JVM.)
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn our_client_builds_where_the_platform_verifier_cannot() {
+        let empty_file = tempfile::NamedTempFile::new().expect("temp file");
+        let empty_dir = tempfile::tempdir().expect("temp dir");
+        let saved = ["SSL_CERT_FILE", "SSL_CERT_DIR"].map(|name| (name, std::env::var_os(name)));
+        std::env::set_var("SSL_CERT_FILE", empty_file.path());
+        std::env::set_var("SSL_CERT_DIR", empty_dir.path());
+        let platform = Client::builder().build();
+        let ours = http_client_builder().build();
+        for (name, value) in saved {
+            match value {
+                Some(value) => std::env::set_var(name, value),
+                None => std::env::remove_var(name),
+            }
+        }
+        let error = platform.expect_err("the platform verifier found roots in an empty store");
+        assert!(error.is_builder(), "{error:?}");
+        ours.expect("our client does not depend on the platform store");
+    }
+
+    /// The compiled-in set is a real root program, not a stub: Mozilla's
+    /// has held between 130 and 160 roots for years.
+    #[test]
+    fn mozilla_roots_are_a_full_root_program() {
+        let count = mozilla_roots().count();
+        assert!((100..300).contains(&count), "{count} roots");
     }
 }
