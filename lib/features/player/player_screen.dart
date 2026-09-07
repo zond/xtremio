@@ -3022,6 +3022,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
             builder: (context, tracks, _) => SubtitleMenu(
               embedded: tracks.subtitle,
               groups: groups,
+              // The pins are the menu's own presentation and are applied
+              // after the ordering, not inside it: both consumers of the
+              // list still get the same order, and the auto-pick's one
+              // case that reads it (an enabled preference naming no
+              // language takes the head of the whole list) is untouched.
+              pinnedLanguages:
+                  _prefs?.subtitlePicks.pinned(
+                    groups.map((group) => group.language),
+                  ) ??
+                  const [],
               activeId: tracks.activeSubtitleId,
               loading: state?.subtitlesLoading ?? false,
               onOff: () {

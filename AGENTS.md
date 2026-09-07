@@ -562,11 +562,25 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   `_resetSubtitleTiming` will ask it, and why a shift measured against
   another release does not rank: a rank must not promise a fix that
   never comes. **The rows are the alphabet's, not the ranking's**: they
-  come out sorted on the name the menu prints, and nothing is pinned
-  above it -- Off is `SubtitleMenu`'s own row, drawn above every
-  language, and the language that is playing is deliberately not lifted,
-  because the list is ordered before anything is selected and a row that
-  jumps once it is picked takes back the reason to sort at all. Inside a
+  come out sorted on the name the menu prints, and `subtitlesByRelease`
+  pins nothing above it -- Off is `SubtitleMenu`'s own row, drawn above
+  every language, and the language that is playing is deliberately not
+  lifted, because the list is ordered before anything is selected and a
+  row that jumps once it is picked takes back the reason to sort at all.
+  **The menu lifts exactly two rows, and for a reason that rule does not
+  cover**: the languages this viewer picks most often
+  (`SubtitlePickMemory.pinned`, at most two, under a heading that says
+  what they are), because a language they use is worth more than the
+  letter it starts with when the answer is forty rows long. It is safe
+  where lifting the playing row is not, because a count moves only on a
+  pick and every pick closes the sheet, so nothing re-orders under a
+  finger. They are **lifted, not duplicated** -- one row each, and the
+  heading explains where they went -- only ever languages this episode
+  actually offers, and not at all when every language there is would be
+  pinned. It happens in the menu's own rendering, after
+  `groupSubtitlesByLanguage`, so both consumers of the ordered list still
+  get the same order and the auto-pick's one case that reads it is
+  untouched. Inside a
   rank the addon that answered first still wins, because that is the
   file a language row applies. Ordering by the rate is the thing not to put
   back: it had to be taught that a claim beats no claim, and then that a

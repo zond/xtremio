@@ -34,6 +34,7 @@ class SubtitleMenu extends StatefulWidget {
     required this.onEmbedded,
     required this.onExternal,
     required this.onAdjustTiming,
+    this.pinnedLanguages = const [],
   });
 
   final List<TrackInfo> embedded;
@@ -52,6 +53,20 @@ class SubtitleMenu extends StatefulWidget {
   final ValueChanged<TrackInfo> onEmbedded;
   final ValueChanged<SubtitleInfo> onExternal;
 
+  /// The languages of [groups] to draw first, under a section of their
+  /// own: the ones this viewer picks most often
+  /// (`SubtitlePickMemory.pinned`), already in the order they belong in.
+  ///
+  /// They are **lifted, not copied** -- each appears once, above, and not
+  /// again in the alphabet below, because two rows that apply the same
+  /// file are exactly what `_disambiguated` exists to prevent. The
+  /// section label is what explains where they went.
+  ///
+  /// A language not in [groups] is ignored: a pin moves a row that
+  /// exists, and this menu never invents one for a language the addons
+  /// did not answer with.
+  final List<String> pinnedLanguages;
+
   /// Opens the panel that shifts and stretches what is playing. Offered
   /// only while something *is* playing: with subtitles off there is
   /// nothing on screen to move, and a control that does nothing visible
@@ -60,6 +75,16 @@ class SubtitleMenu extends StatefulWidget {
 
   /// The row that opens the hand adjustment.
   static const String adjustTimingLabel = 'Adjust timing';
+
+  /// The heading over the lifted rows.
+  static const String pinnedLabel = 'You usually pick';
+
+  /// What that heading's note says, which has to be true of one row as
+  /// well as of two: a viewer with a single second language sees one.
+  static String pinnedNote(int count) => count == 1
+      ? 'The language you pick most often, lifted out of the list below.'
+      : 'The $count languages you pick most often, lifted out of the '
+            'list below.';
 
   /// `title`, else the language, else a numbered fallback.
   static String embeddedLabel(TrackInfo track, int index) =>
@@ -110,9 +135,35 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
   /// fold an open group back up.
   final Set<String> _expanded = {};
 
+  /// The pinned groups, in the order [SubtitleMenu.pinnedLanguages] puts
+  /// them, and everything else in the order it arrived -- which is the
+  /// alphabet [subtitlesByRelease] left it in.
+  ///
+  /// Nothing is pinned when it would empty the list below: lifting every
+  /// language there is moves no row nearer the top and costs a heading
+  /// and a note for it.
+  (List<SubtitleLanguageGroup>, List<SubtitleLanguageGroup>) get _split {
+    final pinned = [
+      for (final language in widget.pinnedLanguages)
+        for (final group in widget.groups)
+          if (group.language == language) group,
+    ];
+    if (pinned.isEmpty || pinned.length == widget.groups.length) {
+      return (const [], widget.groups);
+    }
+    return (
+      pinned,
+      [
+        for (final group in widget.groups)
+          if (!pinned.contains(group)) group,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeId = widget.activeId;
+    final (pinned, rest) = _split;
     return ListView(
       shrinkWrap: true,
       children: [
@@ -149,39 +200,14 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
               onTap: () => widget.onEmbedded(track),
             ),
         ],
-        if (widget.groups.isNotEmpty || widget.loading)
-          const _SectionLabel('From subtitle addons'),
-        for (final group in widget.groups) ...[
-          _MenuTile(
-            title: group.language,
-            subtitle: _groupDetail(group, activeId),
-            selected: group.contains(activeId),
-            onTap: () => widget.onExternal(group.chosen(activeId).subtitle),
-          ),
-          if (group.hasAlternatives) ...[
-            _AlternativesTile(
-              label: SubtitleMenu.alternativesLabel(
-                group,
-                expanded: _expanded.contains(group.language),
-              ),
-              expanded: _expanded.contains(group.language),
-              onTap: () => setState(() {
-                if (!_expanded.remove(group.language)) {
-                  _expanded.add(group.language);
-                }
-              }),
-            ),
-            if (_expanded.contains(group.language))
-              for (final option in group.options)
-                _MenuTile(
-                  indented: true,
-                  title: option.name,
-                  subtitle: SubtitleMenu.optionDetail(option),
-                  selected: activeId == option.id,
-                  onTap: () => widget.onExternal(option.subtitle),
-                ),
-          ],
+        if (pinned.isNotEmpty) ...[
+          const _SectionLabel(SubtitleMenu.pinnedLabel),
+          _SectionNote(SubtitleMenu.pinnedNote(pinned.length)),
+          for (final group in pinned) ..._languageRows(group, activeId),
         ],
+        if (rest.isNotEmpty || widget.loading)
+          const _SectionLabel('From subtitle addons'),
+        for (final group in rest) ..._languageRows(group, activeId),
         if (widget.loading)
           const ListTile(
             leading: SizedBox(
@@ -197,6 +223,45 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
       ],
     );
   }
+
+  /// One language: the row that applies its best-known file, and -- where
+  /// it has more than one -- the row that opens the rest under it.
+  ///
+  /// One list of rows for both sections, because a pinned language is the
+  /// same row moved and not a different kind of row: the file it applies,
+  /// the mark it carries and the files behind it are whatever they would
+  /// have been down in the alphabet.
+  List<Widget> _languageRows(SubtitleLanguageGroup group, String? activeId) => [
+    _MenuTile(
+      title: group.language,
+      subtitle: _groupDetail(group, activeId),
+      selected: group.contains(activeId),
+      onTap: () => widget.onExternal(group.chosen(activeId).subtitle),
+    ),
+    if (group.hasAlternatives) ...[
+      _AlternativesTile(
+        label: SubtitleMenu.alternativesLabel(
+          group,
+          expanded: _expanded.contains(group.language),
+        ),
+        expanded: _expanded.contains(group.language),
+        onTap: () => setState(() {
+          if (!_expanded.remove(group.language)) {
+            _expanded.add(group.language);
+          }
+        }),
+      ),
+      if (_expanded.contains(group.language))
+        for (final option in group.options)
+          _MenuTile(
+            indented: true,
+            title: option.name,
+            subtitle: SubtitleMenu.optionDetail(option),
+            selected: activeId == option.id,
+            onTap: () => widget.onExternal(option.subtitle),
+          ),
+    ],
+  ];
 
   /// The second line of a language row: which of its files it would apply
   /// and where that one came from. With only one file there is nothing to

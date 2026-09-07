@@ -356,7 +356,7 @@ enum _ReleaseFit {
 /// among the forty rows OpenSubtitles answers with is reading names, and
 /// the order they arrived in is a fact about which addon was quickest.
 ///
-/// Nothing is pinned above the alphabet. There is no "off" row to pin --
+/// Nothing is pinned here. There is no "off" row to pin --
 /// `SubtitleMenu` draws Off itself, above every language, and it stays
 /// first by being drawn there rather than by any order here -- and the
 /// language that is playing is deliberately *not* lifted: this list is
@@ -365,6 +365,13 @@ enum _ReleaseFit {
 /// takes back the one thing an alphabet is for, which is finding a
 /// language where the alphabet left it. The menu marks the row that is
 /// on instead.
+///
+/// The menu *does* lift the two languages this viewer picks most often
+/// (`SubtitleMenu.pinnedLanguages`), and that is deliberately not done
+/// here: it is a fact about the viewer rather than about these files,
+/// and the rule above is about a row moving in front of somebody. A pin
+/// read from stored counts cannot do that, because a count only changes
+/// on a pick and every pick closes the sheet.
 ///
 /// **The one thing this order decides rather than shows.** The auto-pick
 /// walks this list and takes the first file whose language matches the

@@ -723,11 +723,17 @@ what every model field means. The shape of the thing is in the
   arrives fixed, and the rank asks the memory exactly what applying it
   will ask), then everything else in the order the addons answered.
   The language rows themselves are sorted on the name the menu prints,
-  alphabetically and with nothing pinned above it: Off is the menu's own
-  row above every language, and the language that is playing is not
-  lifted, since the list is ordered before anything is selected and a row
-  that jumps to the top once it is picked is no longer where the alphabet
-  left it. Inside a rank the addon that answered first still wins --
+  alphabetically, and `subtitlesByRelease` pins nothing above that: Off
+  is the menu's own row above every language, and the language that is
+  playing is not lifted, since the list is ordered before anything is
+  selected and a row that jumps to the top once it is picked is no longer
+  where the alphabet left it. The menu itself then lifts at most two
+  rows, under a heading of their own -- the languages picked most often
+  (`SubtitlePickMemory.pinned`), which is a fact about the viewer rather
+  than about these files, and which cannot move under a finger because a
+  count changes only on a pick and every pick closes the sheet. They are
+  lifted rather than copied, only ever languages this episode offers, and
+  not drawn at all when they would be every language there is. Inside a rank the addon that answered first still wins --
   which matters, because the head of a language is the file its row
   applies and the file the auto-pick plays. The row order reaches the
   auto-pick in exactly one case: a session preference that is enabled and
