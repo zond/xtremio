@@ -291,8 +291,20 @@ class _RootShellState extends State<RootShell> {
   /// takes a press meant for something else**: nothing an app bar draws is
   /// touched at all, and no control lower down has its middle under the
   /// light, which is where a press is aimed and where `tap` lands. Both are
-  /// measured on all five screens, on a television and on a phone, by
-  /// `test/features/sharing_light_placement_test.dart`.
+  /// measured on all five screens by
+  /// `test/features/sharing_light_placement_test.dart`, at 1280x720 on a
+  /// television and at 480x800 off one.
+  ///
+  /// **That second width is not a phone**, and the sweep cannot go
+  /// narrower: below about 480 the Settings screen's own "Buffer ahead"
+  /// tile throws a layout assertion, which has nothing to do with the light
+  /// and would be all the test measured. So what the five-screen sweep
+  /// covers off a television is the phone layout at a width no phone has.
+  /// The one case a real phone's width brings -- the Library's filter row
+  /// reaching the edge, so the light lands on a chip rather than beside
+  /// one -- is measured on its own at 400 wide, on that screen alone, and
+  /// what it shows is the chip still taking its tap. Widen the sweep to
+  /// 400 when Settings survives it.
   ///
   /// A television has the easier half of that: the light takes no pointer
   /// there at all -- it is reached from the rail and pressed with select --
