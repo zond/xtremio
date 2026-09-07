@@ -62,17 +62,17 @@ async fn lan_media_allowed() -> anyhow::Result<bool> {
     Ok(settings["lanMediaEnabled"] == serde_json::Value::Bool(true))
 }
 
-/// The contract the pin bump brings, from stream-server 02ec741: the LAN
-/// listener serves the bytes of torrents this device already has and can be
-/// made to arrange nothing. A `GET` for a hash the server does not hold is a
-/// `404` at once -- on the pinned rev it is the loopback stream route, which
-/// *creates* the torrent with the request's trackers and answers only once
-/// its metadata resolves or times out, which is the hole -- and the create
-/// routes are not there. Ignored until the pin moves: against the pinned
-/// server the first request would join a swarm for an invented hash and
-/// block for the metadata timeout.
+/// The LAN listener serves the bytes of torrents this device already has
+/// and can be made to arrange nothing (stream-server `388f68b`, in the pin
+/// since 75c15dc): a `GET` for a hash the server does not hold is a `404`
+/// at once, and the create routes are not there. Before that rev its stream
+/// route was the loopback one, which *created* the torrent with the
+/// request's trackers and answered only once its metadata resolved or
+/// timed out -- so for the length of a cast any host on the network could
+/// make this device join a swarm of its choosing. The timing assertion is
+/// what tells the two apart: a lookup answers now, a creation waits on
+/// metadata.
 #[tokio::test]
-#[ignore = "needs the stream-server pin at 02ec741 or later: the pinned LAN listener creates a torrent for an unknown hash"]
 async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::Result<()> {
     let _serial = SERVER.lock().await;
     let tmp = tempfile::tempdir()?;

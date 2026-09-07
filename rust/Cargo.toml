@@ -19,14 +19,14 @@ flutter_rust_bridge = "=2.13.0"
 # `server`, lib `stream_server`). Pinned to a rev for reproducibility. Default
 # features are ON, which links unrar-rs (GPL-3.0-or-later) -- see README.
 # Build with `default-features = false` for an MIT binary without RAR support.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "2bece8412d9e0f7caac684b77d7ce0943265be36" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "75c15dc46a5d62cd032130fbb08b3d14fb78a58e" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "2bece8412d9e0f7caac684b77d7ce0943265be36" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "75c15dc46a5d62cd032130fbb08b3d14fb78a58e" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
