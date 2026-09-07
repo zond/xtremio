@@ -56,7 +56,7 @@ class _Destination {
 /// claims: that something is going out (the [SharingScope]'s monitor) and
 /// that nobody is watching (this route is the current one, so no player is
 /// over it). On a television the remote reaches it from the rail and only
-/// from the rail -- see [sharingLightNode] and [_onRailKey].
+/// from the rail -- see `_lightNode` and `_onRailKey` on the state below.
 ///
 /// Selecting a destination with a pointer (a touch remote, a mouse) while
 /// a tile holds focus is the D-pad's select with the step onto the rail

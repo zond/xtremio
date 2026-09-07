@@ -35,5 +35,20 @@ linter:
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
 
+    # `comment_references` is deliberately off, and that is a measurement
+    # rather than a preference. Turned on over this tree it reports 52
+    # references, of which exactly two were the rot it would be enabled
+    # for -- a name that exists nowhere: `sharingLightNode` in
+    # `lib/shell/root_shell.dart` and `CastControls` in
+    # `lib/features/cast/cast_widgets.dart`, both since fixed. Every other
+    # one is a name that does exist: the doc comments here point across
+    # features on purpose (`[SharingScope]` from the shell, `[RemotePress]`
+    # from an addon tile), and a class comment points at the private
+    # members of the State beside it. Making those pass means importing a
+    # library for the sake of a comment, or unlinking the reference -- and
+    # unlinking is what makes this rot invisible in the first place. Re-run
+    # the measurement before changing this: add the rule here, run
+    # `flutter analyze`, and read what it names.
+
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
