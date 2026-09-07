@@ -137,7 +137,14 @@ class IdleSharing {
 /// again. It is not a second author of `seedingEnabled` -- there is still
 /// exactly one -- and it is not a third state in the preference either,
 /// because it must not survive the process that granted it.
-class IdleSharingPolicy {
+///
+/// **It notifies when that pause goes on or off**, and that is the only
+/// thing it says anything about: what the server was told is the server's
+/// business, but the pause is a state the settings tile draws, and the
+/// popup that grants one is drawn over the very screen that tile is on. A
+/// preference notifies its own listeners already, so nothing here repeats
+/// the switch.
+class IdleSharingPolicy extends ChangeNotifier {
   IdleSharingPolicy({required this.prefs, required this.server})
     : _wasAllowed = prefs.shareWhileIdle;
 
@@ -186,14 +193,16 @@ class IdleSharingPolicy {
   /// preference again and sharing resumes -- which is what the popup says
   /// it does, and the whole difference between this and the switch.
   void pauseUntilRestart() {
-    if (_paused) return;
+    if (_paused || _stopped) return;
     _paused = true;
     _reconsider();
+    notifyListeners();
   }
 
   /// A "Not now" is in force. What reads it is the settings tile, which
   /// must not show a switch that is on over a run in which nothing is
-  /// being shared.
+  /// being shared -- and which is on screen when the popup that grants one
+  /// is, so this notifies when it changes.
   bool get pausedForRun => _paused;
 
   void _reconsider() {
@@ -202,9 +211,11 @@ class IdleSharingPolicy {
     // "Not now": the alternative is a switch the viewer has just pressed
     // that does nothing until the app is restarted.
     final wanted = prefs.shareWhileIdle;
-    if (wanted && !_wasAllowed) _paused = false;
+    final lifted = wanted && !_wasAllowed && _paused;
+    if (lifted) _paused = false;
     _wasAllowed = wanted;
     final allowed = wanted && !_paused;
+    if (lifted) notifyListeners();
     if (allowed == _sent) return;
     _sent = allowed;
     _writes = _writes.then((_) => _push(allowed));
@@ -226,8 +237,16 @@ class IdleSharingPolicy {
   /// Stops watching. The server is left holding whatever it was last told,
   /// which is right: the app going away is what ends the sharing, and it
   /// ends it by taking the server with it.
+  ///
+  /// Stopping twice is stopping, as starting after a stop is nothing:
+  /// [ChangeNotifier.dispose] refuses a second call, and the run this
+  /// object is the length of can be ended by the app and by whatever else
+  /// is holding it.
+  @override
   void dispose() {
+    if (_stopped) return;
     _stopped = true;
     prefs.removeListener(_reconsider);
+    super.dispose();
   }
 }

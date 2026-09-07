@@ -215,8 +215,10 @@ class SharingActivityMonitor extends ChangeNotifier {
 ///
 /// An [InheritedNotifier] over the monitor, so anything drawing the light
 /// is rebuilt when what the server is doing changes. The policy is a plain
-/// field: it notifies nobody, and what reads it -- the light's popup and the
-/// settings tile -- is built afresh each time it is looked at.
+/// field, and a [Listenable] of its own: this scope is not rebuilt when a
+/// "Not now" is granted -- the same object goes on holding it -- so the
+/// settings tile, which draws that pause and is on screen while the popup
+/// granting it is open, listens to the policy rather than to this.
 class SharingScope extends InheritedNotifier<SharingActivityMonitor> {
   const SharingScope({
     super.key,

@@ -258,6 +258,14 @@ class FocusEmphasisSection extends StatelessWidget {
 /// switch to describe something the app is not doing. Turning the switch
 /// off and on again lifts the pause, which is what makes the extra line go
 /// away.
+///
+/// **And it says so while the pause is granted, not the next time the tab
+/// is opened.** The popup is drawn over whatever screen is showing, this
+/// one included, so the press that pauses the sharing lands with the tile
+/// in view: it listens to the policy ([IdleSharingPolicy] notifies when
+/// the pause goes on or off) rather than reading it once. Reading the
+/// scope is not enough on its own -- the scope holds the same policy
+/// object either side of a "Not now" and so has nothing to say about it.
 class IdleSharingSection extends StatelessWidget {
   const IdleSharingSection({super.key, required this.prefs});
 
@@ -265,22 +273,31 @@ class IdleSharingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final paused = SharingScope.read(context)?.policy.pausedForRun ?? false;
-    return SwitchListTile(
-      // The same key shape a `profile.settings` control gets, so a test
-      // finds this one the same way.
-      key: settingKey(AppPrefs.shareWhileIdleKey),
-      secondary: const Icon(Icons.upload_outlined),
-      title: const Text(IdleSharing.title),
-      subtitle: Text(
-        paused
-            ? '${IdleSharing.description}\n${IdleSharing.pausedNote}'
-            : IdleSharing.description,
-      ),
-      value: prefs.shareWhileIdle,
-      onChanged: (on) => prefs.setShareWhileIdle(on),
+    // The scope with a dependency, so a tile under a scope that is replaced
+    // follows the policy it is replaced with; the policy itself for the
+    // pause, which is what changes while this is on screen.
+    final policy = SharingScope.of(context)?.policy;
+    if (policy == null) return _tile(paused: false);
+    return ListenableBuilder(
+      listenable: policy,
+      builder: (context, _) => _tile(paused: policy.pausedForRun),
     );
   }
+
+  Widget _tile({required bool paused}) => SwitchListTile(
+    // The same key shape a `profile.settings` control gets, so a test
+    // finds this one the same way.
+    key: settingKey(AppPrefs.shareWhileIdleKey),
+    secondary: const Icon(Icons.upload_outlined),
+    title: const Text(IdleSharing.title),
+    subtitle: Text(
+      paused
+          ? '${IdleSharing.description}\n${IdleSharing.pausedNote}'
+          : IdleSharing.description,
+    ),
+    value: prefs.shareWhileIdle,
+    onChanged: (on) => prefs.setShareWhileIdle(on),
+  );
 }
 
 /// Subtitles: size and colours, the same values the player's own settings

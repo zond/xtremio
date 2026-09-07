@@ -178,6 +178,28 @@ void main() {
       expect(policy.pausedForRun, isTrue);
       expect(server.patches.last, {IdleSharing.seedingEnabledKey: false});
     });
+
+    test('is announced when it goes on and when it is lifted', () async {
+      // The settings tile draws this pause and is on screen when the popup
+      // that grants one is open, so a pause nobody is told about is a tile
+      // showing a switch that is on over a run in which nothing is shared.
+      final prefs = AppPrefs.inMemory();
+      final policy = started(prefs: prefs, server: RecordingServerSettings());
+      final announced = <bool>[];
+      policy.addListener(() => announced.add(policy.pausedForRun));
+
+      policy.pauseUntilRestart();
+      // And only when it moves: a second "Not now" changes nothing.
+      policy.pauseUntilRestart();
+      await settle(policy);
+      expect(announced, [true]);
+
+      await prefs.setShareWhileIdle(false);
+      await prefs.setShareWhileIdle(true);
+      await settle(policy);
+
+      expect(announced, [true, false]);
+    });
   });
 
   group('the policy watches', () {

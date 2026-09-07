@@ -364,21 +364,31 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('says so while a "Not now" is holding the sharing off', (
-      tester,
-    ) async {
-      final prefs = AppPrefs.inMemory();
+    /// A policy over preferences that persist nothing, started.
+    IdleSharingPolicy startedPolicy(AppPrefs prefs) {
       final policy = IdleSharingPolicy(
         prefs: prefs,
         server: RecordingServerSettings(),
       );
       addTearDown(policy.dispose);
-      policy.start();
+      return policy..start();
+    }
+
+    testWidgets('says so while a "Not now" is holding the sharing off', (
+      tester,
+    ) async {
+      final prefs = AppPrefs.inMemory();
+      final policy = startedPolicy(prefs);
       await pumpTile(tester, policy: policy, prefs: prefs);
       expect(find.textContaining(IdleSharing.pausedNote), findsNothing);
 
+      // What the popup's "Not now" does, while this tile is on screen --
+      // which is where it is pressed from, since the light is drawn over
+      // the Settings tab like every other. No second mount: a tile that
+      // only says this after the tab is left and opened again is showing a
+      // switch that is on over a run in which nothing is being shared.
       policy.pauseUntilRestart();
-      await pumpTile(tester, policy: policy, prefs: prefs);
+      await tester.pump();
 
       // The switch is still on -- that is what "Not now" means -- so the
       // tile has to say why nothing is being shared, or it is describing
