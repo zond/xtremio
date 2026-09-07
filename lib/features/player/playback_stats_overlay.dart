@@ -132,9 +132,8 @@ class PlaybackStatsOverlay extends StatelessWidget {
         '${s.decoderDroppedFrames == null ? '' : ' / ${s.decoderDroppedFrames} decoder'}',
     // Directly under the drop counts, because it is the line that says
     // whether they mean anything. Only where mpv answered: on a backend
-    // with no such properties the row would report a no that nobody asked.
-    if (s.displaySyncActive != null || s.displayFps != null)
-      'sync     ${_displaySync(s)}',
+    // with no such property there is no rate to report.
+    if (s.displayFps != null) 'display  ${_display(s)}',
     'hwdec    ${_hwdec(s)}',
     'video    ${s.videoCodec ?? '-'}'
         '${s.width != null && s.height != null ? ' ${s.width}x${s.height}' : ''}',
@@ -147,21 +146,18 @@ class PlaybackStatsOverlay extends StatelessWidget {
     if (s.seekableRanges case final ranges?) 'ranges   ${_ranges(ranges)}',
   ];
 
-  /// Whether mpv is timing frames against the screen, and at what rate it
-  /// thinks the screen refreshes.
+  /// At what rate mpv thinks the screen refreshes.
   ///
   /// The row the vo drop count above is read against. On Android mpv
   /// cannot measure the display, so the app tells it
-  /// (`MediaKitEngine.displaySyncProperties`); a `no` here says the
-  /// override did not take and the drops belong to the old fault, and a
-  /// `yes` beside a count that has stopped climbing is the whole of the
-  /// evidence that it did. The rate is mpv's own belief rather than the
-  /// number handed to it, which is why it is worth showing next to the
-  /// flag: the two disagreeing is a set that went nowhere.
-  static String _displaySync(PlaybackStats s) {
+  /// (`MediaKitEngine.displayRateProperties`), and this is mpv's own
+  /// belief read back rather than the number handed over -- which is the
+  /// point of showing it: a rate here that is not the one the display
+  /// settled on is a set that went nowhere, and the drops below it belong
+  /// to something else.
+  static String _display(PlaybackStats s) {
     final hz = s.displayFps;
-    return '${_flag(s.displaySyncActive)} · display '
-        '${hz == null ? '-' : '${hz.toStringAsFixed(3)} Hz'}';
+    return hz == null ? '-' : '${hz.toStringAsFixed(3)} Hz';
   }
 
   /// A yes/no mpv answered, or a dash for one it did not.

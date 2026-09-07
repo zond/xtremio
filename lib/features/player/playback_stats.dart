@@ -37,7 +37,6 @@ class PlaybackStats {
     this.containerFps,
     this.droppedFrames,
     this.decoderDroppedFrames,
-    this.displaySyncActive,
     this.displayFps,
     this.hwdec,
     this.videoCodec,
@@ -61,7 +60,6 @@ class PlaybackStats {
     'container-fps',
     'frame-drop-count',
     'decoder-frame-drop-count',
-    'display-sync-active',
     'display-fps',
     'hwdec-current',
     'video-codec',
@@ -109,7 +107,6 @@ class PlaybackStats {
       containerFps: number('container-fps'),
       droppedFrames: integer('frame-drop-count'),
       decoderDroppedFrames: integer('decoder-frame-drop-count'),
-      displaySyncActive: flag('display-sync-active'),
       displayFps: number('display-fps'),
       hwdec: text('hwdec-current'),
       videoCodec: text('video-codec'),
@@ -142,26 +139,25 @@ class PlaybackStats {
   /// Frames the decoder dropped (`decoder-frame-drop-count`).
   final int? decoderDroppedFrames;
 
-  /// Whether mpv is timing frames against the display rather than against
-  /// the audio clock (`display-sync-active`), and what rate it believes
-  /// the display has (`display-fps`, which answers with
-  /// `override-display-fps` when one is set).
+  /// What rate mpv believes the display has (`display-fps`, which answers
+  /// with `override-display-fps` when one is set).
   ///
-  /// **These two are here to keep the drop counts above honest, and the
-  /// pair is the whole point.** On Android mpv cannot measure the display
-  /// at all -- its VO answers `VO_NOTIMPL` -- so display sync silently
-  /// never starts, and the app now hands it the rate instead
-  /// (`MediaKitEngine.displaySyncProperties`). A change that either takes
-  /// or does nothing, with no way to tell which from the sofa, is a change
-  /// that gets defended on the theory rather than measured; these are what
-  /// let one screencap of this panel say "sync is on, the rate is 23.976,
-  /// and the vo count has stopped climbing" -- or say the opposite, which
-  /// is the instruction to take the override back out.
+  /// **Here to keep the drop counts above honest.** On Android mpv cannot
+  /// measure the display at all -- its VO answers `VO_NOTIMPL` -- so the
+  /// app hands it the rate (`MediaKitEngine.displayRateProperties`), and
+  /// this is the only reading back. A number here that is not the rate the
+  /// display was measured at is a set that went nowhere, and a rate that
+  /// matches beside a vo count that has stopped climbing is what a single
+  /// screencap of this panel has to be able to say from the sofa.
   ///
-  /// Null on any backend without the properties, which is what keeps the
-  /// row off the panel entirely rather than drawing a dash that reads as a
-  /// measured no.
-  final bool? displaySyncActive;
+  /// `display-sync-active` was read here too, while
+  /// `video-sync=display-resample` was set. It answered `no` on every
+  /// capture ever taken and the option is gone, so the row said nothing
+  /// and now does not exist.
+  ///
+  /// Null on any backend without the property, which is what keeps the row
+  /// off the panel entirely rather than drawing a dash that reads as a
+  /// measured rate of none.
   final double? displayFps;
 
   /// The hardware decoder in use (`hwdec-current`): an API name such as
@@ -282,7 +278,6 @@ class PlaybackStats {
       other.containerFps == containerFps &&
       other.droppedFrames == droppedFrames &&
       other.decoderDroppedFrames == decoderDroppedFrames &&
-      other.displaySyncActive == displaySyncActive &&
       other.displayFps == displayFps &&
       other.hwdec == hwdec &&
       other.videoCodec == videoCodec &&
@@ -306,7 +301,6 @@ class PlaybackStats {
     containerFps,
     droppedFrames,
     decoderDroppedFrames,
-    displaySyncActive,
     displayFps,
     hwdec,
     videoCodec,
@@ -326,8 +320,8 @@ class PlaybackStats {
   @override
   String toString() =>
       'PlaybackStats(fps: $outputFps/$containerFps, dropped: $droppedFrames'
-      '/$decoderDroppedFrames, displaySync: $displaySyncActive'
-      '@$displayFps, hwdec: $hwdec, codec: $videoCodec'
+      '/$decoderDroppedFrames, display: $displayFps'
+      ', hwdec: $hwdec, codec: $videoCodec'
       '/$audioCodec, '
       '${width}x$height, bitrate: $videoBitrate, cache: $cacheDuration, '
       'pausedForCache: $pausedForCache, buffering: $cacheBufferingState, '

@@ -1806,13 +1806,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Only while this player is holding a rate on the display. The first
     // reading arrives as soon as the display is listened to, which is
     // before any film has said what rate it is, and a screen nobody is
-    // presenting on has nothing for mpv to sync to.
+    // presenting on has no rate worth telling mpv about.
     if (_frameRateAsked) _applyDisplaySync();
   }
 
   /// Tells the engine what the screen is doing, so mpv can time frames
   /// against it instead of against the audio clock
-  /// (`MediaKitEngine.displaySyncProperties`).
+  /// (`MediaKitEngine.displayRateProperties`).
   ///
   /// Tied to the ask rather than to the playback, and deliberately: while
   /// this player holds a rate on the display it knows what the display is
@@ -1849,9 +1849,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!_frameRateAsked) return;
     _frameRateAsked = false;
     _displayFrameRate?.clear().ignore();
-    // And the override with it. A rate mpv is still resampling to after
-    // the platform has taken the mode back is the stale claim this pair
-    // exists to avoid.
+    // And the override with it. A rate mpv is still holding after the
+    // platform has taken the mode back is the stale claim this exists to
+    // avoid.
     _applyDisplaySync();
   }
 

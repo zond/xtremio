@@ -37,7 +37,7 @@ abstract interface class DisplayFrameRate {
   /// that never changes would otherwise never report anything.
   ///
   /// The consumer is libmpv, which cannot measure this on Android and so
-  /// has to be told (`MediaKitEngine.displaySyncProperties`). Nothing is
+  /// has to be told (`MediaKitEngine.displayRateProperties`). Nothing is
   /// emitted where the platform has no such reading, which is everywhere
   /// but Android.
   Stream<double> get refreshRate;

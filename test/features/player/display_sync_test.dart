@@ -6,40 +6,52 @@ import 'package:xtremio/features/player/playback_engine.dart';
 import '../../support/player_harness.dart';
 import '../../support/tv.dart';
 
-/// Telling mpv when the screen refreshes.
+/// Telling mpv what the screen refreshes at.
 ///
-/// Asking the television for the film's own rate removed the cadence and
-/// did not remove the drops: on the owner's Chromecast, a 23.976 fps film
-/// on a projector confirmed at 23.976 Hz still read `2779 vo / 0 decoder`
-/// -- every frame decoded on time and one in five thrown away at
-/// presentation. mpv was timing against the audio clock with no idea when
-/// the screen refreshes, because the Android video output answers
-/// `VO_NOTIMPL` to `VOCTRL_GET_DISPLAY_FPS`. So it is told
-/// (`MediaKitEngine.displaySyncProperties`), and the three things that has
+/// mpv cannot measure it on Android -- the video output answers
+/// `VO_NOTIMPL` to `VOCTRL_GET_DISPLAY_FPS` -- so it is told
+/// (`MediaKitEngine.displayRateProperties`), and the three things that has
 /// to get right are what this file is about: the rate is measured rather
-/// than asked for, the override is Android's alone, and both properties
-/// come back off.
+/// than asked for, the override is Android's alone, and it comes back off.
+///
+/// It used to set `video-sync=display-resample` as well, against 2779 vo
+/// drops at a matched 23.976 Hz. That was the wrong culprit: display sync
+/// never once engaged (`display-sync-active` read `no` throughout) and the
+/// drops were the copying decoder delivering frames late. What the option
+/// did do was drift the audio against a rate mpv cannot verify. It is gone
+/// and the override is on its own; `MediaKitEngine.mpvOverrides` carries
+/// the measurements.
 void main() {
   /// The rate libmpv reports for the owner's film (`container-fps`), and
   /// the rate his projector settled on for it.
   const filmRate = 23.976025;
 
   group('the properties', () {
-    test('are the pair, on the measured rate, with the rate first', () {
-      final properties = MediaKitEngine.displaySyncProperties(
-        filmRate,
-        platform: TargetPlatform.android,
+    test('are the measured rate, and nothing else', () {
+      expect(
+        MediaKitEngine.displayRateProperties(
+          filmRate,
+          platform: TargetPlatform.android,
+        ),
+        {'override-display-fps': '23.976025'},
       );
-      expect(properties, {
-        'override-display-fps': '23.976025',
-        'video-sync': 'display-resample',
-      });
-      // Neither is any use alone: the override is the only display-rate
-      // gate in `handle_display_sync_frame`, and `video-sync` is what asks
-      // for display sync at all. And the rate goes on first -- resampling
-      // asked for while the override is still 0 is display sync with no
-      // display rate, which is the state being escaped.
-      expect(properties.keys.first, 'override-display-fps');
+    });
+
+    test('leave video-sync at mpv own default', () {
+      // Naming `audio` here would write mpv's own default over itself.
+      // What matters is that nothing asks for display sync on any path,
+      // because the mode never engages on this VO and asking for it puts
+      // the audio on a correction loop against a rate it cannot verify.
+      for (final map in [
+        MediaKitEngine.displayRateProperties(
+          filmRate,
+          platform: TargetPlatform.android,
+        ),
+        MediaKitEngine.displayRateOff,
+        MediaKitEngine.mpvOverrides,
+      ]) {
+        expect(map.containsKey('video-sync'), isFalse);
+      }
     });
 
     test('are nothing at all off Android', () {
@@ -49,7 +61,7 @@ void main() {
       for (final platform in TargetPlatform.values) {
         if (platform == TargetPlatform.android) continue;
         expect(
-          MediaKitEngine.displaySyncProperties(filmRate, platform: platform),
+          MediaKitEngine.displayRateProperties(filmRate, platform: platform),
           isEmpty,
           reason: '$platform measures its own rate',
         );
@@ -62,7 +74,7 @@ void main() {
       // bad number looks exactly like the fault this exists to remove.
       for (final hz in <double?>[null, 0, -60, double.nan, double.infinity]) {
         expect(
-          MediaKitEngine.displaySyncProperties(
+          MediaKitEngine.displayRateProperties(
             hz,
             platform: TargetPlatform.android,
           ),
@@ -72,18 +84,15 @@ void main() {
       }
     });
 
-    test('come back off to mpv own defaults', () {
+    test('come back off to mpv own default', () {
       // A zero override is what mpv reads as "no display rate", which is
-      // where this started, and `audio` is its own `video-sync` default.
-      expect(MediaKitEngine.displaySyncOff, {
-        'override-display-fps': '0',
-        'video-sync': 'audio',
-      });
-      // The same two keys either way: half a reset leaves mpv resampling
-      // to a mode nobody is in.
+      // where this started.
+      expect(MediaKitEngine.displayRateOff, {'override-display-fps': '0'});
+      // The same keys either way: a reset that does not name everything
+      // the claim set leaves part of the claim standing.
       expect(
-        MediaKitEngine.displaySyncOff.keys,
-        MediaKitEngine.displaySyncProperties(
+        MediaKitEngine.displayRateOff.keys,
+        MediaKitEngine.displayRateProperties(
           filmRate,
           platform: TargetPlatform.android,
         ).keys,
@@ -91,10 +100,9 @@ void main() {
     });
 
     test('are still not among the properties set once per player', () {
-      // They belong to a playback and to a display, not to the player: the
-      // rate is not known when it is built, it changes underneath, and it
-      // has to be given back.
-      expect(MediaKitEngine.mpvOverrides.containsKey('video-sync'), isFalse);
+      // The rate belongs to a playback and to a display, not to the
+      // player: it is not known when the player is built, it changes
+      // underneath, and it has to be given back.
       expect(
         MediaKitEngine.mpvOverrides.containsKey('override-display-fps'),
         isFalse,
@@ -115,7 +123,7 @@ void main() {
     // The mode switch is asynchronous and neither platform path reports
     // back, so this is the display arriving somewhere else -- a 24.0 Hz
     // mode for a 23.976 fps film, which is a mode every television offers
-    // and a rate mpv must resample against rather than assume away.
+    // and a number mpv has to be given rather than have assumed away.
     harness.displayFrameRate.reportRefreshRate(24);
     await pumpEvents(tester);
 
