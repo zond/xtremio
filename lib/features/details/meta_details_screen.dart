@@ -163,6 +163,14 @@ class MetaDetailsScreen extends StatefulWidget {
   /// Above this width the streams sit in a side pane next to the details.
   static const double wideBreakpoint = 720;
 
+  /// How many times any details screen has derived its sources list from
+  /// scratch (see `_StreamDerivation`). A derivation is a handful of
+  /// regexes per stream, a sort and a sectioning; the tests pin that a
+  /// rebuild which changed none of its inputs -- a download's progress
+  /// tick, once a second -- does not pay for it again.
+  @visibleForTesting
+  static int debugStreamDerivations = 0;
+
   @override
   State<MetaDetailsScreen> createState() => _MetaDetailsScreenState();
 }
@@ -185,6 +193,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// the download affordances off the tiles entirely.
   DownloadsClient? _downloadsClient;
   DownloadsController? _downloads;
+
+  /// This title's rows as the last tick left them (see
+  /// [_onDownloadsChanged]).
+  List<DownloadView> _downloadsSeen = const [];
+
+  /// The sources list as last derived, kept while its inputs stand (see
+  /// [_deriveStreams]).
+  _StreamDerivation? _derived;
 
   /// The app's preferences, for the sources list's layout. From the
   /// [PrefsScope] the app puts above every screen; a screen mounted
@@ -296,6 +312,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         ?..removeListener(_onDownloadsChanged)
         ..dispose();
       _downloadsClient = downloads;
+      _downloadsSeen = const [];
       _downloads = downloads == null
           ? null
           : (DownloadsController(downloads)..addListener(_onDownloadsChanged));
@@ -303,8 +320,28 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     trackRoute();
   }
 
+  /// A tick moved some download's numbers. Only a change to one of *this
+  /// title's* rows is drawn here: the ticker reports every row that moved,
+  /// once a second, for as long as anything is downloading, and a screen
+  /// sitting under the player while another title comes in has nothing to
+  /// redraw for it. Rows are compared by the map behind each view -- a
+  /// progress tick replaces the maps of the rows it moved and keeps the
+  /// others, so identity is the whole test.
   void _onDownloadsChanged() {
-    if (mounted) setState(() {});
+    final downloads = _downloads;
+    if (!mounted || downloads == null) return;
+    final rows = downloads.ofMeta(widget.id);
+    if (_sameRows(rows, _downloadsSeen)) return;
+    _downloadsSeen = rows;
+    setState(() {});
+  }
+
+  static bool _sameRows(List<DownloadView> a, List<DownloadView> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i].json, b[i].json)) return false;
+    }
+    return true;
   }
 
   void _onProfileChanged() {
@@ -389,12 +426,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       _awaitingVideoId != null && state.streamPath?.id != _awaitingVideoId;
 
   MetaDetailsState? get _state => ownState;
-
-  /// The profile behind `ctx`; null until its first pull comes back.
-  ProfileState? get _profile {
-    final ctx = _ctx?.value;
-    return ctx == null ? null : ProfileState.fromCtx(ctx);
-  }
 
   /// Dispatches `Load MetaDetails` for this title, showing [videoId]'s
   /// streams (or letting the engine guess), and takes the field over.
@@ -1004,109 +1035,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // when nothing on the screen is focused yet, so streams arriving after
     // the user has moved on leave focus where it is.
     final isTv = DeviceScope.isTv(context);
-    // An addon that answered with an error has nothing to list, so it is
-    // pulled out of the run of groups and collected below the streams
-    // instead: several dead addons at once are one row there, not a wall
-    // of them above the streams that do work.
-    final profile = _profile;
-    final answered = [
-      for (final g in groups)
-        if (!_hasFailed(g)) g,
-    ];
-    // An addon that answered with nothing is not a section of its own
-    // either: most stream addons have nothing for most episodes, and a
-    // label plus "No streams" each was most of what the list showed.
-    final listed = [
-      for (final g in answered)
-        if (!_answeredEmpty(g)) g,
-    ];
-    final empties = [
-      for (final g in answered)
-        if (_answeredEmpty(g)) g,
-    ];
-    final failures = [
-      for (final group in groups)
-        if (_hasFailed(group))
-          AddonFailure(
-            transportUrl: group.request.base,
-            addon: profile?.installedAddon(group.request.base),
-            fallbackName: group.addonLabel,
-            message: group.error?.message ?? '',
-          ),
-    ];
-    // What the addons agree is one source, and what each of them said its
-    // trackers were. Both layouts collapse on it, and the row that
-    // survives plays and downloads with the union of those trackers.
-    final sources = StreamSourceIndex.of([
-      for (final group in listed)
-        for (final stream in group.streams)
-          (addon: _addonNameOf(profile, group), stream: stream),
-    ]);
-    // The sectioned layout: every listed addon's streams together, put in
-    // the chosen order ([StreamOrder], the same one for every section) and
-    // then split into a collapsible section per resolution. Each row names
-    // the addon it came from, since it has no heading to sit under any
-    // more. Built only for the layout that shows it -- parsing every
-    // stream costs a handful of regexes each.
-    //
-    // Sorted, then collapsed, then sectioned, in that order and for a
-    // reason each: the instance of a duplicate that survives is the
-    // best-ranked one rather than whichever addon was asked first, the
-    // collapse is across the whole list so a source two addons described
-    // differently cannot appear in two sections, and sectioning keeps the
-    // order it is handed, so each section is already sorted.
-    final sections = isSectioned
-        ? sectionsByResolution(
-            _collapse(
-              sortedByStreamOrder(
-                [
-                  for (final group in listed)
-                    for (final stream in group.streams)
-                      (
-                        group: group,
-                        stream: stream,
-                        facts: StreamFacts.of(
-                          stream,
-                          addonName: _addonNameOf(profile, group),
-                        ),
-                        alsoFrom: const <String>[],
-                      ),
-                ],
-                (row) => row.facts!,
-                order,
-              ),
-              sources,
-              (row) => row.facts?.addonName ?? '',
-            ),
-            (row) => row.facts!,
-          )
-        : const <StreamSection<_SourceRow>>[];
+    final derived = _deriveStreams(
+      state,
+      isSectioned: isSectioned,
+      order: order,
+    );
+    final profile = derived.profile;
+    final empties = derived.empties;
+    final failures = derived.failures;
+    final sources = derived.sources;
+    final sections = derived.sections;
+    final grouped = derived.grouped;
     final openSections = _visibleOpenSections(sections);
-    // The grouped layout: each addon's own ranking, with the addon's own
-    // repeats collapsed. A source two addons both offered stays in both
-    // groups -- the groups are the point of this layout -- and each row
-    // says the other addon has it too.
-    final grouped = isSectioned
-        ? const <(StreamGroup, List<_SourceRow>)>[]
-        : [
-            for (final group in listed)
-              (
-                group,
-                _collapse(
-                  [
-                    for (final stream in group.streams)
-                      (
-                        group: group,
-                        stream: stream,
-                        facts: null,
-                        alsoFrom: const <String>[],
-                      ),
-                  ],
-                  sources,
-                  (_) => _addonNameOf(profile, group),
-                ),
-              ),
-          ];
     // The shortcut is the same source as one of the rows below, so it is
     // handed the same merged trackers; nothing else about it changes.
     final lastUsedStream = lastUsed == null
@@ -1221,6 +1161,151 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
     ];
+  }
+
+  /// The sources list derived from [state]: which groups answered with
+  /// nothing and which failed, the source index every layout collapses on,
+  /// and the sectioned and the grouped rows -- computed once per distinct
+  /// set of inputs and kept ([_derived]).
+  ///
+  /// Deriving is a handful of regexes per stream ([StreamFacts.of]), a sort
+  /// and a sectioning: a few milliseconds for three addons' worth of
+  /// streams on a desktop, several times that on the box this runs on. It
+  /// used to run on every build, and this screen is rebuilt by things that
+  /// change none of its inputs -- a download's progress tick once a second
+  /// for as long as anything is downloading, while the screen sits under
+  /// the player. The inputs are the field's state (one object per pull),
+  /// the `ctx` behind the profile (the same) and the two layout
+  /// preferences; what else a build reads -- the open sections, the pins
+  /// in flight, the last-used source's merged trackers -- is cheap and
+  /// stays in [_streamSlivers].
+  _StreamDerivation _deriveStreams(
+    MetaDetailsState state, {
+    required bool isSectioned,
+    required StreamOrder order,
+  }) {
+    final ctx = _ctx?.value;
+    final derived = _derived;
+    if (derived != null &&
+        derived.isFor(state, ctx, isSectioned: isSectioned, order: order)) {
+      return derived;
+    }
+    MetaDetailsScreen.debugStreamDerivations++;
+    final profile = ctx == null ? null : ProfileState.fromCtx(ctx);
+    final groups = state.allStreamGroups;
+    // An addon that answered with an error has nothing to list, so it is
+    // pulled out of the run of groups and collected below the streams
+    // instead: several dead addons at once are one row there, not a wall
+    // of them above the streams that do work.
+    final answered = [
+      for (final g in groups)
+        if (!_hasFailed(g)) g,
+    ];
+    // An addon that answered with nothing is not a section of its own
+    // either: most stream addons have nothing for most episodes, and a
+    // label plus "No streams" each was most of what the list showed.
+    final listed = [
+      for (final g in answered)
+        if (!_answeredEmpty(g)) g,
+    ];
+    final empties = [
+      for (final g in answered)
+        if (_answeredEmpty(g)) g,
+    ];
+    final failures = [
+      for (final group in groups)
+        if (_hasFailed(group))
+          AddonFailure(
+            transportUrl: group.request.base,
+            addon: profile?.installedAddon(group.request.base),
+            fallbackName: group.addonLabel,
+            message: group.error?.message ?? '',
+          ),
+    ];
+    // What the addons agree is one source, and what each of them said its
+    // trackers were. Both layouts collapse on it, and the row that
+    // survives plays and downloads with the union of those trackers.
+    final sources = StreamSourceIndex.of([
+      for (final group in listed)
+        for (final stream in group.streams)
+          (addon: _addonNameOf(profile, group), stream: stream),
+    ]);
+    // The sectioned layout: every listed addon's streams together, put in
+    // the chosen order ([StreamOrder], the same one for every section) and
+    // then split into a collapsible section per resolution. Each row names
+    // the addon it came from, since it has no heading to sit under any
+    // more. Built only for the layout that shows it -- parsing every
+    // stream costs a handful of regexes each.
+    //
+    // Sorted, then collapsed, then sectioned, in that order and for a
+    // reason each: the instance of a duplicate that survives is the
+    // best-ranked one rather than whichever addon was asked first, the
+    // collapse is across the whole list so a source two addons described
+    // differently cannot appear in two sections, and sectioning keeps the
+    // order it is handed, so each section is already sorted.
+    final sections = isSectioned
+        ? sectionsByResolution(
+            _collapse(
+              sortedByStreamOrder(
+                [
+                  for (final group in listed)
+                    for (final stream in group.streams)
+                      (
+                        group: group,
+                        stream: stream,
+                        facts: StreamFacts.of(
+                          stream,
+                          addonName: _addonNameOf(profile, group),
+                        ),
+                        alsoFrom: const <String>[],
+                      ),
+                ],
+                (row) => row.facts!,
+                order,
+              ),
+              sources,
+              (row) => row.facts?.addonName ?? '',
+            ),
+            (row) => row.facts!,
+          )
+        : const <StreamSection<_SourceRow>>[];
+    // The grouped layout: each addon's own ranking, with the addon's own
+    // repeats collapsed. A source two addons both offered stays in both
+    // groups -- the groups are the point of this layout -- and each row
+    // says the other addon has it too.
+    final grouped = isSectioned
+        ? const <(StreamGroup, List<_SourceRow>)>[]
+        : [
+            for (final group in listed)
+              (
+                group,
+                _collapse(
+                  [
+                    for (final stream in group.streams)
+                      (
+                        group: group,
+                        stream: stream,
+                        facts: null,
+                        alsoFrom: const <String>[],
+                      ),
+                  ],
+                  sources,
+                  (_) => _addonNameOf(profile, group),
+                ),
+              ),
+          ];
+    return _derived = _StreamDerivation(
+      state: state,
+      ctx: ctx,
+      isSectioned: isSectioned,
+      order: order,
+      profile: profile,
+      empties: empties,
+      failures: failures,
+      sources: sources,
+      sections: sections,
+      grouped: grouped,
+    );
   }
 
   /// The sources of the selected video as the two rows a television picks
@@ -2412,6 +2497,59 @@ class _ReplaceDialog extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// The sources list as derived from one state of the field, one `ctx` and
+/// the two layout preferences: everything `_streamSlivers` needs that costs
+/// anything to compute, with the inputs it was computed from, so a build
+/// whose inputs are the same objects reuses it (see `_deriveStreams`).
+final class _StreamDerivation {
+  const _StreamDerivation({
+    required this.state,
+    required this.ctx,
+    required this.isSectioned,
+    required this.order,
+    required this.profile,
+    required this.empties,
+    required this.failures,
+    required this.sources,
+    required this.sections,
+    required this.grouped,
+  });
+
+  final MetaDetailsState state;
+  final Map<String, dynamic>? ctx;
+  final bool isSectioned;
+  final StreamOrder order;
+
+  /// The profile behind [ctx]; null until its first pull comes back.
+  final ProfileState? profile;
+
+  /// The groups that answered with nothing, and the addons that failed.
+  final List<StreamGroup> empties;
+  final List<AddonFailure> failures;
+
+  /// What the addons agree is one source, and its merged trackers.
+  final StreamSourceIndex sources;
+
+  /// The rows of the sectioned layout, and of the grouped one; whichever
+  /// [isSectioned] did not choose is empty.
+  final List<StreamSection<_SourceRow>> sections;
+  final List<(StreamGroup, List<_SourceRow>)> grouped;
+
+  /// Whether this was derived from exactly these inputs. The state and the
+  /// `ctx` map are one object per pull ([SharedFieldScreen.ownState],
+  /// [CoreFieldNotifier.value]), so identity says whether anything landed.
+  bool isFor(
+    MetaDetailsState state,
+    Map<String, dynamic>? ctx, {
+    required bool isSectioned,
+    required StreamOrder order,
+  }) =>
+      identical(this.state, state) &&
+      identical(this.ctx, ctx) &&
+      this.isSectioned == isSectioned &&
+      this.order == order;
 }
 
 /// One row of the sources list, in either layout: the stream as it will be
