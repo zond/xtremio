@@ -1381,6 +1381,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // actually draw rather than the label on its own (see
     // [_openSourceRowDrawn]).
     _openSourceRowDrawn = groups.any((g) => g.label == _openSourceGroup);
+    // Every addon is still answering and there is not a card to draw yet.
+    // [TvSourceRows] draws nothing for no groups, which would leave the
+    // heading's 16 dp spinner at the far right of a television as the
+    // whole of the loading indicator; the row the cards will fill gets
+    // one in its middle instead, and the heading's is put away until
+    // there are cards for it to spin beside.
+    final waiting = groups.isEmpty && state.isLoadingStreams;
     return [
       SliverToBoxAdapter(
         child: _StreamsHeader(
@@ -1390,8 +1397,26 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           onSectionedChanged: _setStreamsSectioned,
           order: order,
           onOrderChanged: _setStreamsOrder,
+          withSpinner: !waiting,
         ),
       ),
+      if (waiting)
+        SliverToBoxAdapter(
+          key: const ValueKey('tv-sources-waiting'),
+          child: SizedBox(
+            height: TvSourceRows.groupRowHeight(context),
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text(kLookingForStreams),
+                ],
+              ),
+            ),
+          ),
+        ),
       if (noneYet)
         const SliverToBoxAdapter(
           child: ListTile(
@@ -2351,9 +2376,15 @@ class _StreamsHeader extends StatelessWidget {
     this.onSectionedChanged,
     this.order = StreamOrder.peersPerSize,
     this.onOrderChanged,
+    this.withSpinner = true,
   });
 
   final MetaDetailsState state;
+
+  /// Whether the heading wears its small spinner while addons are still
+  /// answering. False when the list below is drawing a larger one of its
+  /// own, so the screen never spins in two places at once.
+  final bool withSpinner;
 
   /// Whether the list below is the one cut into resolution sections,
   /// rather than one section per addon.
@@ -2436,7 +2467,7 @@ class _StreamsHeader extends StatelessWidget {
                   ),
                   onPressed: () => onSectionedChanged!(!sectioned),
                 ),
-              if (isLoading || state.isLoadingStreams)
+              if (withSpinner && (isLoading || state.isLoadingStreams))
                 const SizedBox.square(
                   dimension: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
