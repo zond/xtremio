@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
@@ -168,8 +169,17 @@ class PlayerHarness {
         proxyStreams: proxyStreams,
         child: MaterialApp(
           // As `XtremioApp` builds it: the television's text scale and
-          // overscan band reach the player through the navigator.
+          // overscan band reach the player through the navigator, and the
+          // theme carries the ten-foot density and the focus floor. Read
+          // off [prefs] once rather than through the scope, which sits
+          // above this `MaterialApp` and so cannot rebuild its theme --
+          // the widgets below read the emphasis from the scope directly,
+          // as they do in the app.
           builder: (this.device?.isTv ?? false) ? TvMediaQuery.builder : null,
+          theme: XtremioApp.themeFor(
+            isTv: this.device?.isTv ?? false,
+            emphasis: this.prefs?.focusEmphasis ?? FocusEmphasis.standard,
+          ),
           home: home ?? screen(),
         ),
       ),

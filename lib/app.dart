@@ -138,6 +138,29 @@ class XtremioApp extends StatefulWidget {
   /// here to see what the app asked for without touching libmpv.
   final PlaybackEngineBuilder? engineBuilder;
 
+  /// The theme the whole app runs under: the dark scheme it has always
+  /// had, the ten-foot density on a television ([TvDensity.theme]), and on
+  /// one the focus floor for [emphasis] ([FocusTheme.apply]).
+  ///
+  /// A static so that a widget test can mount one screen under exactly the
+  /// theme the app would have given it. A test that builds its own
+  /// `ThemeData` is testing a screen the viewer never sees, which for
+  /// anything about focus is the whole question.
+  static ThemeData themeFor({
+    required bool isTv,
+    FocusEmphasis emphasis = FocusEmphasis.standard,
+  }) {
+    final base = ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF7B5BF5),
+        brightness: Brightness.dark,
+      ),
+      scaffoldBackgroundColor: const Color(0xFF0E0B16),
+    );
+    return isTv ? FocusTheme.apply(TvDensity.theme(base), emphasis) : base;
+  }
+
   @override
   State<XtremioApp> createState() => _XtremioAppState();
 }
@@ -389,16 +412,7 @@ class _XtremioAppState extends State<XtremioApp> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF7B5BF5),
-      brightness: Brightness.dark,
-    );
     final isTv = widget.device.isTv;
-    final theme = ThemeData(
-      useMaterial3: true,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFF0E0B16),
-    );
 
     return DeviceScope(
       profile: widget.device,
@@ -425,12 +439,10 @@ class _XtremioAppState extends State<XtremioApp> {
                       title: 'Xtremio',
                       debugShowCheckedModeBanner: false,
                       navigatorKey: _navigator,
-                      theme: isTv
-                          ? FocusTheme.apply(
-                              TvDensity.theme(theme),
-                              FocusHighlight.emphasisOf(context),
-                            )
-                          : theme,
+                      theme: XtremioApp.themeFor(
+                        isTv: isTv,
+                        emphasis: FocusHighlight.emphasisOf(context),
+                      ),
                       builder: isTv ? TvMediaQuery.builder : null,
                       navigatorObservers: [
                         _routes,
