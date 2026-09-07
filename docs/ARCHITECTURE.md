@@ -142,8 +142,15 @@ what every model field means. The shape of the thing is in the
   it is one settings key.** The server keeps a torrent in the swarm after
   playback ends when its `seedingEnabled` setting is true (its own default);
   when it is false a torrent nothing is streaming is paused once its idle
-  grace is up, and a pinned download is exempt either way — it keeps
-  downloading, and stops being shared when it is unpinned. The app decides
+  grace is up (15 s), and a pinned download is exempt either way — it keeps
+  downloading, and stops being shared when it is unpinned. **What it buys
+  is minutes, not sessions**: an unpinned engine nothing is streaming is
+  removed 300 s after it went idle whatever the setting says, and nothing
+  stops sharing when the next stream begins, so the setting's real effect
+  is whether those five minutes are spent seeding (both constants are
+  `enginefs/src/lib.rs` at the pinned rev). The setting's subtitle says
+  that and says nothing else; a longer lifecycle is the server's keep/share
+  policy, being built there. The app decides
   the value and writes it through `ServerClient.updateSettings`
   (`server_update_settings`, the same function `POST /settings` runs), which
   is the only way it changes anything about the server.

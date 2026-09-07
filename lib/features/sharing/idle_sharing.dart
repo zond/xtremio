@@ -61,10 +61,28 @@ class IdleSharing {
   /// What the switch is called in Settings.
   static const String title = 'Share while idle';
 
-  /// What turning it on buys, on the tile rather than in a help page.
+  /// What turning it on buys, on the tile rather than in a help page --
+  /// and what it buys is a few minutes, which is what this says.
+  ///
+  /// It used to promise "until the next stream starts", and the pinned
+  /// server does no such thing: nothing stops sharing when the next stream
+  /// begins, and an engine nothing is streaming is removed once it has been
+  /// idle for `INACTIVE_TORRENT_REMOVE_TIMEOUT` -- 300 seconds, swept every
+  /// 15, whatever `seedingEnabled` says (`enginefs/src/lib.rs` at the rev
+  /// `rust/Cargo.toml` pins; a pinned download is the exception and is
+  /// exempt from the sweep). What the setting really changes is the few
+  /// minutes before that: with it off the torrent is paused
+  /// `INACTIVE_TORRENT_PAUSE_GRACE` -- 15 seconds -- after the last stream
+  /// ends, and with it on those minutes are spent seeding.
+  ///
+  /// A longer lifecycle is the server's keep/share policy, which is being
+  /// built there and is not in the pinned rev. **This sentence describes
+  /// what the app causes today and changes when that lands**, because a
+  /// tile describing a future is the same defect as a comment describing an
+  /// intention.
   static const String description =
-      'Keeps uploading what you watched to other people until the next '
-      'stream starts.';
+      'Keeps uploading what you watched to other people for about five '
+      'minutes after playback stops.';
 }
 
 /// Keeps the embedded server's `seedingEnabled` equal to
