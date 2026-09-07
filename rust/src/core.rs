@@ -537,16 +537,24 @@ pub fn dispatch(action_json: &str) -> anyhow::Result<()> {
 }
 
 /// Serializes one model field (`snake_case` name) to JSON.
+///
+/// The model's read lock is held for the snapshot alone and let go before
+/// the JSON is written. `std::sync::RwLock` queues new readers behind a
+/// waiting writer, and every dispatch and every addon answer is a writer,
+/// so serializing under the lock parked the whole engine -- the next
+/// dispatch and, behind it, every other `get_state` -- for the length of
+/// the serialization; for a loaded board that was the longest hold the lock
+/// ever saw. See [`crate::model::FieldSnapshot`] for what a snapshot costs
+/// per field.
 pub fn get_state(field: &str) -> anyhow::Result<String> {
     let field = parse_field(field)?;
-    with_runtime(|runtime| {
+    let snapshot = with_runtime(|runtime| {
         let model = runtime
             .model()
             .map_err(|_| anyhow::anyhow!("core model lock is poisoned; re-initialize"))?;
-        model
-            .get_state_json(&field)
-            .context("serialize model field")
-    })
+        model.snapshot(&field).context("snapshot model field")
+    })?;
+    snapshot.into_json().context("serialize model field")
 }
 
 /// Drops the Runtime (no more dispatches), writes out how the addons have
