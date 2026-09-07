@@ -49,3 +49,6 @@ app.*.map.json
 
 # Rust bridge crate build output
 rust/target/
+
+# Agent worktrees; each is a git checkout of this repo and must never be committed as a gitlink.
+.claude/worktrees/
