@@ -156,6 +156,109 @@ void main() {
       expect(floorIn(tester), FocusEmphasis.bold);
     });
 
+    testWidgets('a television pins focus to being drawn, and only one does', (
+      tester,
+    ) async {
+      // Flutter starts Android at [FocusHighlightMode.touch], where an
+      // ink paints no focus highlight at all and `DropdownButton` fills
+      // the *selected* entry of an open menu with the focus colour. Both
+      // are wrong on a device whose only way around is focus.
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          prefs: AppPrefs.inMemory(),
+          device: const DeviceProfile(isTv: true, hasTouch: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.highlightStrategy,
+        FocusHighlightStrategy.alwaysTraditional,
+      );
+
+      await tester.pumpWidget(
+        XtremioApp(core: emptyBoardCore(), prefs: AppPrefs.inMemory()),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.highlightStrategy,
+        FocusHighlightStrategy.automatic,
+        reason: 'off a television the machine decides, and it is put back',
+      );
+    });
+
+    testWidgets('so nothing but the focused entry of a menu is filled', (
+      tester,
+    ) async {
+      // The floor raised [ThemeData.focusColor] to a near-white 0.44 to
+      // mean "the remote is here", and `DropdownButton` is the one place
+      // Flutter reads that colour to mean something else: in touch mode
+      // it paints the selected entry of its open menu with it, on a row
+      // nothing is focused on. A television with a touchscreen, which
+      // `DeviceProfile` allows for, opens that menu with a tap.
+      addTearDown(
+        () => FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.automatic,
+      );
+      final theme = XtremioApp.themeFor(
+        isTv: true,
+        emphasis: FocusEmphasis.bold,
+      );
+      Widget dropdown({required bool pinned}) {
+        final app = MaterialApp(
+          theme: theme,
+          home: Scaffold(
+            body: Center(
+              child: DropdownButton<int>(
+                value: 1,
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('zero')),
+                  DropdownMenuItem(value: 1, child: Text('one')),
+                ],
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+        );
+        return pinned ? AlwaysShowFocus(child: app) : app;
+      }
+
+      List<Color?> menuFills(WidgetTester tester) => [
+        for (final ink in tester.widgetList<Ink>(find.byType(Ink)))
+          switch (ink.decoration) {
+            final BoxDecoration decoration => decoration.color,
+            _ => null,
+          },
+      ];
+
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTouch;
+      await tester.pumpWidget(dropdown(pinned: false));
+      await tester.tap(find.text('one'));
+      await tester.pumpAndSettle();
+      expect(
+        menuFills(tester),
+        contains(theme.focusColor),
+        reason: 'what the app is protecting itself from',
+      );
+
+      FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.alwaysTouch;
+      await tester.pumpWidget(dropdown(pinned: true));
+      await tester.tap(find.text('one'));
+      await tester.pumpAndSettle();
+      expect(menuFills(tester), isNot(contains(theme.focusColor)));
+      expect(
+        FocusManager.instance.primaryFocus?.context,
+        isNotNull,
+        reason: 'the entry that is filled now is the one holding focus',
+      );
+    });
+
     testWidgets('off a television nothing is marked differently', (
       tester,
     ) async {

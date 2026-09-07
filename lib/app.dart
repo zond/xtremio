@@ -410,6 +410,13 @@ class _XtremioAppState extends State<XtremioApp> {
     super.dispose();
   }
 
+  /// [child] under [AlwaysShowFocus] on a television and untouched
+  /// anywhere else: the pin is about a device with no pointer on it, and
+  /// off one the app is one window among many that should mark focus the
+  /// way the rest of the machine does.
+  Widget _showingFocus({required bool isTv, required Widget child}) =>
+      isTv ? AlwaysShowFocus(child: child) : child;
+
   @override
   Widget build(BuildContext context) {
     final isTv = widget.device.isTv;
@@ -435,20 +442,23 @@ class _XtremioAppState extends State<XtremioApp> {
                   // builder reads it. Every other part of the theme is
                   // settled before the app is built.
                   child: Builder(
-                    builder: (context) => MaterialApp(
-                      title: 'Xtremio',
-                      debugShowCheckedModeBanner: false,
-                      navigatorKey: _navigator,
-                      theme: XtremioApp.themeFor(
-                        isTv: isTv,
-                        emphasis: FocusHighlight.emphasisOf(context),
+                    builder: (context) => _showingFocus(
+                      isTv: isTv,
+                      child: MaterialApp(
+                        title: 'Xtremio',
+                        debugShowCheckedModeBanner: false,
+                        navigatorKey: _navigator,
+                        theme: XtremioApp.themeFor(
+                          isTv: isTv,
+                          emphasis: FocusHighlight.emphasisOf(context),
+                        ),
+                        builder: isTv ? TvMediaQuery.builder : null,
+                        navigatorObservers: [
+                          _routes,
+                          if (kDebugMode) RouteLogObserver(),
+                        ],
+                        home: const RootShell(),
                       ),
-                      builder: isTv ? TvMediaQuery.builder : null,
-                      navigatorObservers: [
-                        _routes,
-                        if (kDebugMode) RouteLogObserver(),
-                      ],
-                      home: const RootShell(),
                     ),
                   ),
                 ),

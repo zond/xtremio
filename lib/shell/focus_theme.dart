@@ -169,6 +169,84 @@ abstract final class FocusTheme {
       base == null ? extra : extra.merge(base);
 }
 
+/// A television draws focus whatever last moved it.
+///
+/// Flutter decides whether a focus highlight is painted at all from
+/// [FocusManager.highlightMode], and on Android that starts at
+/// [FocusHighlightMode.touch] -- a phone marks nothing until a keyboard
+/// appears, and goes back to marking nothing at the next tap. A television
+/// is the other case entirely: there is no pointer on one, focus is the
+/// only way around, and the app draws an indicator for it on purpose. So
+/// on one the mode is pinned to [FocusHighlightMode.traditional] for as
+/// long as the app is up.
+///
+/// Two things follow, and the second is why this exists at all:
+///
+/// - Every fill the floor lays on is painted from the first frame rather
+///   than from the first press. An [InkResponse] paints no focus highlight
+///   in touch mode, so a control that is focused before any key arrives --
+///   which on a set-top box is the state the app launches in -- wears
+///   nothing.
+/// - Nothing that is *not* focused is painted with the focus colour.
+///   `DropdownButton` fills the **selected** entry of an open menu with
+///   [ThemeData.focusColor] while the mode is touch (it is the one place
+///   Flutter reads that colour to mean something other than focus), and
+///   the floor has raised it to a near-white 0.28, or 0.44 under Bold, to
+///   mean "the remote is here". A television with a touchscreen -- and
+///   `DeviceProfile` allows for one -- opened that menu with a tap and got
+///   its loudest cue on a row nobody was standing on. Traditional mode
+///   takes that branch away: the entry Flutter autofocuses is the selected
+///   one, so the same row is filled, and now because it really does hold
+///   the remote.
+///
+/// It is a widget rather than a line in `main` so that it is put back when
+/// the app goes away, which is a widget test's business rather than a
+/// television's.
+class AlwaysShowFocus extends StatefulWidget {
+  const AlwaysShowFocus({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<AlwaysShowFocus> createState() => _AlwaysShowFocusState();
+}
+
+class _AlwaysShowFocusState extends State<AlwaysShowFocus> {
+  /// Read as the state is created, which is before anything here writes
+  /// over it.
+  final FocusHighlightStrategy _was = FocusManager.instance.highlightStrategy;
+
+  @override
+  void initState() {
+    super.initState();
+    // After the frame, not during it. Writing the strategy tells every
+    // [InkResponse] in the tree at once, synchronously, and one that is
+    // being taken down in the same frame answers by looking up its
+    // [MediaQuery] from an element the framework has already deactivated
+    // -- which is an assertion in a debug build. Nothing is focused
+    // before the first frame is up anyway.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        FocusManager.instance.highlightStrategy =
+            FocusHighlightStrategy.alwaysTraditional;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Only where this really did change it: the app never takes this
+    // down, so the whole of this is for a widget test's next pump.
+    if (FocusManager.instance.highlightStrategy != _was) {
+      FocusManager.instance.highlightStrategy = _was;
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 /// What [FocusTheme.apply] left on the theme: the emphasis the floor was
 /// derived from.
 ///
