@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 
 /**
  * Keeps the process alive and un-frozen while offline downloads are on
@@ -31,6 +32,15 @@ import androidx.core.app.NotificationCompat
  * the app out of recents stops it outright (`android:stopWithTask`): the
  * Flutter engine goes at the same moment, and a notification nobody can
  * move on or take down is worse than no notification.
+ *
+ * And it has a budget. From Android 15 a `dataSync` service may run for
+ * about six hours in twenty-four while the app is not in front; at the end
+ * of that the system calls [onTimeout], and a service that does not stop
+ * within seconds of it is not stopped but *crashed* — the whole process,
+ * `ForegroundServiceDidNotStopInTimeException`, the download halted and no
+ * notification left to say so. So [onTimeout] stops the service itself, and
+ * tells Dart first: the download then waits for the app to be opened, which
+ * is what resets the budget and lets the service go up again.
  */
 class DownloadsService : Service() {
     /** The last thing Dart asked for, so an action intent can rebuild it. */
@@ -57,6 +67,21 @@ class DownloadsService : Service() {
         // opening the app, which re-pins and starts this again. A service
         // brought back on its own would have no Dart side behind it.
         return START_NOT_STICKY
+    }
+
+    /**
+     * The `dataSync` time limit (API 35+; older releases never call this).
+     * Stopping is what cancels the crash that otherwise follows in ten
+     * seconds. Dart hears first so it stops feeding a service that is gone
+     * and asks for a new one the next time the registry changes with the
+     * app in front — a start from the background would be refused until
+     * then anyway.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "the downloads service reached its dataSync time limit; stopping")
+        channel?.timedOut()
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun startForegroundWith(content: Content): Boolean {

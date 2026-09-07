@@ -145,6 +145,18 @@ const String kDownloadsCancelAllAction = 'Cancel all';
 /// loses anything: librqbit keeps its verified pieces, the server keeps its
 /// pin set, and start-up re-pins every unfinished entry.
 ///
+/// **And it has a budget.** From Android 15 a `dataSync` service may run
+/// about six hours in twenty-four while the app is not in front, and at the
+/// end of that the platform side stops itself -- it has to, since a service
+/// that ignores the call is crashed with its process ten seconds later --
+/// and says so with `timedOut`. This side then forgets it had a service: the
+/// download is not moved on, nothing is sent to a service that is gone, and
+/// the next change to the registry asks for a start again, which the system
+/// grants once the app has been in front (that is what resets the budget;
+/// from the background it is refused, and the refusal is already the
+/// ordinary "not running, ask next time" path). Nothing is lost meanwhile,
+/// for the reasons above; the download simply waits for the app.
+///
 /// **How it learns what changed.** Progress arrives on the client's feed
 /// once a second, and that feed only ever carries rows that *moved* — an
 /// entry that has just appeared is not a row it knows. A row for a key no
@@ -202,6 +214,12 @@ class DownloadsForegroundService {
   /// unfinished at launch is not a download starting, and start-up is the
   /// one moment the notification question must not be asked.
   bool _startingUp = true;
+
+  /// True from the platform ending the service at its time limit until a
+  /// service is up again or nothing is left to hold one for. The start that
+  /// follows is the same download carrying on, not one starting, so like
+  /// start-up it asks the notification question of nobody.
+  bool _resuming = false;
 
   /// Whether the service is up as far as this side knows.
   @visibleForTesting
@@ -307,6 +325,7 @@ class DownloadsForegroundService {
     if (_disposed || !_available) return;
     final summary = DownloadsSummary.of(_registry);
     if (summary.isIdle) {
+      _resuming = false;
       if (!_running) return;
       _running = false;
       _shown = DownloadsSummary.idle;
@@ -317,7 +336,7 @@ class DownloadsForegroundService {
     final starting = !_running;
     _shown = summary;
     _running = true;
-    if (starting) await _requestNotifications();
+    if (starting && !_resuming) await _requestNotifications();
     final sent = await _invoke(
       starting ? 'start' : 'update',
       summary.toNotification(),
@@ -325,6 +344,7 @@ class DownloadsForegroundService {
     // A service the platform refused to start is not running; the next
     // change asks again, by which time the app may be in the foreground.
     if (starting && !sent) _running = false;
+    if (starting && sent) _resuming = false;
   }
 
   /// Asks for `POST_NOTIFICATIONS`, once, and only now — a download has
@@ -344,6 +364,20 @@ class DownloadsForegroundService {
     if (await _ask<bool>('takePendingOpen') == true && !_disposed) {
       openDownloads?.call();
     }
+  }
+
+  /// The platform side stopped the service at the end of its running-time
+  /// budget. There is no service now, whatever this side last sent it, so
+  /// the next change starts one afresh rather than updating a ghost.
+  void _onTimedOut() {
+    DiagnosticsLog.warn(
+      'downloads',
+      'the foreground service reached its time limit; the download waits '
+          'for the app to be opened',
+    );
+    _running = false;
+    _shown = DownloadsSummary.idle;
+    _resuming = true;
   }
 
   /// Invokes [method] for its effect: true when the platform side took it.
@@ -384,6 +418,9 @@ class DownloadsForegroundService {
         return null;
       case 'cancelAll':
         await cancelAll();
+        return null;
+      case 'timedOut':
+        _onTimedOut();
         return null;
       default:
         throw MissingPluginException('downloads: ${call.method}');

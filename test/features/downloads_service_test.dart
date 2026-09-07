@@ -62,6 +62,13 @@ void main() {
   Future<void> settle([Duration wait = const Duration(milliseconds: 30)]) =>
       Future<void>.delayed(wait);
 
+  /// Delivers a call the way the platform side makes one.
+  Future<void> fromPlatform(String method) => messenger.handlePlatformMessage(
+    DownloadsForegroundService.defaultChannel.name,
+    const StandardMethodCodec().encodeMethodCall(MethodCall(method)),
+    (_) {},
+  );
+
   setUp(() {
     notificationsGranted = true;
     client = FakeDownloadsClient();
@@ -266,6 +273,29 @@ void main() {
       expect(serviceMethods().length, before);
     });
 
+    test('the platform ending the service at its time limit is heard, and the '
+        'next change asks for a new one', () async {
+      final service = await running();
+      expect(service.isRunning, isTrue);
+
+      // What DownloadsService.onTimeout sends before it stops itself.
+      await fromPlatform('timedOut');
+
+      expect(service.isRunning, isFalse);
+      expect(serviceMethods(), [
+        'start',
+      ], reason: 'a service that is gone is not sent a stop or an update');
+
+      client.emitProgress([rowOf(viewAt('tt1', 30))]);
+      await settle();
+
+      // The same download carrying on is not a download starting, so the
+      // notification question is not asked of it, as at launch.
+      expect(serviceMethods(), ['start', 'start']);
+      expect(service.isRunning, isTrue);
+      expect(lastOf('start').arguments, containsPair('progress', 30));
+    });
+
     test('letting go of the app takes the service down', () async {
       final service = await running();
 
@@ -445,13 +475,6 @@ void main() {
   });
 
   group('what the notification does', () {
-    /// Delivers a call the way the platform side makes one.
-    Future<void> fromPlatform(String method) => messenger.handlePlatformMessage(
-      DownloadsForegroundService.defaultChannel.name,
-      const StandardMethodCodec().encodeMethodCall(MethodCall(method)),
-      (_) {},
-    );
-
     test('tapping it asks for the Downloads screen', () async {
       var opened = 0;
       final service = build(openDownloads: () => opened++);

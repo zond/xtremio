@@ -22,9 +22,11 @@ import io.flutter.plugin.common.MethodChannel
  * From Dart: `start` and `update` (the notification's title, text,
  * percentage and action label), `stop`, `requestNotificationPermission`,
  * and `takePendingOpen` for a tap that arrived before Dart had a handler
- * installed. To Dart: `open` (the notification was tapped) and `cancelAll`
+ * installed. To Dart: `open` (the notification was tapped), `cancelAll`
  * (its action was pressed) — the registry is behind the FFI, so only Dart
- * can act on either.
+ * can act on either — and `timedOut` (the system ended the service's
+ * running-time budget and it stopped itself), so Dart knows there is no
+ * service to update and asks for one again when the app is next in front.
  */
 class DownloadsChannel(
     private val activity: Activity,
@@ -56,6 +58,8 @@ class DownloadsChannel(
     fun openRequested() = channel.invokeMethod("open", null)
 
     fun cancelAllRequested() = channel.invokeMethod("cancelAll", null)
+
+    fun timedOut() = channel.invokeMethod("timedOut", null)
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {

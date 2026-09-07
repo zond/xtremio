@@ -606,7 +606,15 @@ not a guarantee of life. The system may kill the process under memory
 pressure; Doze and the per-app battery optimisation may throttle or park
 the sockets, so an idle screen-off device can slow a download right down;
 and Android 15 (API 35) puts a running-time budget on `dataSync` services
-(about 6 hours in 24), after which the system stops it. Swiping the app
+(about 6 hours in 24 while the app is not in front), at the end of which
+the system calls `onTimeout` — and a service that does not stop within
+seconds of that is not stopped but crashed, the whole process with it
+(`ForegroundServiceDidNotStopInTimeException`, reproduced on an API 36
+emulator with the timeout shortened). So `DownloadsService.onTimeout`
+tells Dart (`timedOut`, after which `DownloadsForegroundService` forgets it
+had a service) and stops itself; the download then waits for the app to be
+opened, which resets the budget and lets the next registry change start
+the service again. Swiping the app
 out of recents stops it outright, on purpose: `android:stopWithTask="true"`
 on the service, because the Flutter engine goes at the same moment and a
 notification nobody can move on or take down is worse than none. All of
