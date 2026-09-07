@@ -82,6 +82,13 @@ url = "2"
 # through the `log` crate into FRB's android_logger instead.
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# `logging::init` caps the `log` crate's process-wide level at our filter's:
+# FRB opens it at TRACE, and rustls, mio and notify log through `log`, not
+# `tracing`. The Android ring layer also re-emits every line through it so
+# logcat keeps working once a tracing subscriber is installed. On every
+# platform so the cap has a desktop test. Already in the graph via tracing's
+# `log` feature, so nothing new is compiled.
+log = "0.4"
 
 # The process allocator (`src/lib.rs`), on every target the app builds for
 # except wasm, where the crate has no allocator to replace. The same crate
@@ -107,11 +114,6 @@ mimalloc = { version = "0.1.52", default-features = false, features = ["local_dy
 # Same versions stream-server uses, so nothing new enters the graph.
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.22"
-# The ring layer re-emits every line through `log` so logcat keeps working:
-# installing a tracing subscriber (which the ring needs) stops tracing's own
-# `log` forwarding, which only happens while there is none. Already in the
-# graph via tracing's `log` feature, so nothing new is compiled.
-log = "0.4"
 rustls-platform-verifier = "0.7"
 
 # aws-lc-sys (rustls' crypto provider) only ships pregenerated bindings for

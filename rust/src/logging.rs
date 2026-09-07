@@ -13,6 +13,19 @@
 //! only does that while no subscriber is installed), so [`RingLayer`]
 //! re-emits each line through `log` itself -- which is what FRB's
 //! `setup_default_user_utils` routes to logcat.
+//!
+//! That FRB setup opens the `log` crate at TRACE, and the crates that log
+//! through `log` rather than `tracing` -- rustls, mio, notify -- never pass
+//! our filter on Android: their lines go straight to logcat at whatever
+//! level they were written. On a Chromecast that was 26k notify, 13k rustls
+//! and 5k mio trace lines in ten minutes, CPU and I/O for nothing, drowning
+//! our own. On the desktop `tracing_subscriber`'s `try_init` prevents this
+//! by installing its `LogTracer` as the `log` logger and setting the `log`
+//! crate's max level to our filter's; on Android FRB's logger is already in
+//! place, so that install fails and `try_init` returns before setting the
+//! level. [`cap_log_bridge`] does that step regardless, and the ring's own
+//! re-emission bypasses the cap (it hands the record to the logger
+//! directly), so what our filter admits is not cut a second time.
 
 use std::collections::VecDeque;
 use std::fmt::{self, Write as _};
@@ -91,8 +104,18 @@ pub fn recent_lines() -> Vec<String> {
     ring().lines()
 }
 
-/// Installs the global subscriber once. Safe to call repeatedly; a subscriber
-/// installed by someone else (e.g. a test harness) is left in place.
+/// Installs the global subscriber once, and caps the `log` crate at the
+/// filter's level ([`cap_log_bridge`]). Safe to call repeatedly; a
+/// subscriber installed by someone else (e.g. a test harness) is left in
+/// place.
+///
+/// The cap has to come after FRB's `setup_default_user_utils`, which is
+/// what opens `log` at TRACE, and it does: that runs from `RustLib.init` on
+/// the Dart side before any other FFI call, and this runs from the first
+/// `core_init` or server start. A second `RustLib.init` (a hot restart)
+/// does not reopen it -- `android_logger::init_once` only sets the level
+/// when it is the one installing the logger, and after the first time it
+/// no longer is.
 pub fn init() {
     INIT.call_once(|| {
         let filter =
@@ -108,7 +131,30 @@ pub fn init() {
             .try_init();
         #[cfg(target_os = "android")]
         let _ = registry.try_init();
+        cap_log_bridge();
     });
+}
+
+/// Caps the `log` crate at the most verbose level the installed `tracing`
+/// filter admits for anything -- INFO under [`DEFAULT_FILTER`] -- so a
+/// crate that logs through `log` rather than `tracing` (rustls, mio,
+/// notify) is held to the same standard as ours instead of the TRACE FRB
+/// opened it at. Our own crates are not affected: they log through
+/// `tracing`, where the filter decides, and the ring's logcat re-emission
+/// does not consult this cap. The same step `tracing_subscriber`'s
+/// `try_init` takes after installing its `LogTracer`, done here because on
+/// Android that install fails (FRB's logger is already there) and
+/// `try_init` returns before reaching it.
+fn cap_log_bridge() {
+    log::set_max_level(as_log(tracing::level_filters::LevelFilter::current()));
+}
+
+/// `tracing`'s filter level as the `log` crate's.
+fn as_log(filter: tracing::level_filters::LevelFilter) -> log::LevelFilter {
+    match filter.into_level() {
+        None => log::LevelFilter::Off,
+        Some(level) => log_level(&level).to_level_filter(),
+    }
 }
 
 /// The longest message the Dart side may record. A ring line is meant to
@@ -163,8 +209,17 @@ impl<S: Subscriber> Layer<S> for RingLayer {
             &visitor.message,
             &visitor.fields,
         );
+        // Straight to the installed logger rather than through `log!`, which
+        // would apply the `log` crate's max level (`cap_log_bridge`) a second
+        // time to a line our own filter already admitted.
         #[cfg(target_os = "android")]
-        log::log!(target: "xtremio_core", log_level(metadata.level()), "{line}");
+        log::logger().log(
+            &log::Record::builder()
+                .level(log_level(metadata.level()))
+                .target("xtremio_core")
+                .args(format_args!("{line}"))
+                .build(),
+        );
         ring().push(line);
     }
 }
@@ -214,8 +269,8 @@ fn format_line(
     line
 }
 
-/// `tracing`'s level as the `log` crate's, for the Android re-emission.
-#[cfg(target_os = "android")]
+/// `tracing`'s level as the `log` crate's, for the cap and for the Android
+/// re-emission.
 fn log_level(level: &Level) -> log::Level {
     match *level {
         Level::ERROR => log::Level::Error,
@@ -279,6 +334,58 @@ mod tests {
         // never cut in half.
         assert_eq!(truncate("héllo", MAX_APP_MESSAGE), "héllo");
         assert_eq!(truncate("héllo", 2), "hé…");
+    }
+
+    /// A crate that logs through `log` (rustls, mio, notify) is held to the
+    /// filter's level: its TRACE is not enabled for the process, so it never
+    /// reaches the logger -- nor the ring -- while our own lines still land
+    /// there. The middle of the test is Android's situation: `log` opened
+    /// at TRACE by FRB and nobody but [`cap_log_bridge`] to close it (on the
+    /// desktop `try_init`'s LogTracer has already done the same, which is
+    /// why the first assertion holds either way). One test rather than two
+    /// because the `log` max level is process-wide and the tests run in
+    /// parallel.
+    #[test]
+    fn third_party_log_lines_are_capped_at_the_filter() {
+        init();
+        let expected = as_log(tracing::level_filters::LevelFilter::current());
+        if std::env::var_os("RUST_LOG").is_none() {
+            assert_eq!(expected, log::LevelFilter::Info);
+        }
+        assert_eq!(log::max_level(), expected);
+
+        log::set_max_level(log::LevelFilter::Trace);
+        cap_log_bridge();
+        assert_eq!(log::max_level(), expected);
+
+        if std::env::var_os("RUST_LOG").is_none() {
+            assert!(!log::log_enabled!(target: "rustls::client::hs", log::Level::Trace));
+            assert!(!log::log_enabled!(target: "notify::inotify", log::Level::Debug));
+        }
+        log::trace!(target: "mio::poll", "marker-third-party-trace");
+        tracing::info!(target: "xtremio_core::logging", "marker-own-info");
+        let lines = recent_lines();
+        assert!(
+            !lines
+                .iter()
+                .any(|line| line.contains("marker-third-party-trace")),
+            "{lines:?}"
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("marker-own-info")),
+            "{lines:?}"
+        );
+    }
+
+    #[test]
+    fn filter_levels_map_onto_log_levels() {
+        use tracing::level_filters::LevelFilter as F;
+        assert_eq!(as_log(F::OFF), log::LevelFilter::Off);
+        assert_eq!(as_log(F::ERROR), log::LevelFilter::Error);
+        assert_eq!(as_log(F::WARN), log::LevelFilter::Warn);
+        assert_eq!(as_log(F::INFO), log::LevelFilter::Info);
+        assert_eq!(as_log(F::DEBUG), log::LevelFilter::Debug);
+        assert_eq!(as_log(F::TRACE), log::LevelFilter::Trace);
     }
 
     #[test]
