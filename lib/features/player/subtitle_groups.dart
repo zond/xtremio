@@ -366,8 +366,9 @@ enum _ReleaseFit {
 /// language where the alphabet left it. The menu marks the row that is
 /// on instead.
 ///
-/// The menu *does* lift the two languages this viewer picks most often
-/// (`SubtitleMenu.pinnedLanguages`), and that is deliberately not done
+/// The menu *does* lift the languages this viewer picks most often, at
+/// most two of them and ranked over what it draws rather than over this
+/// list (`SubtitleMenu.picks`), and that is deliberately not done
 /// here: it is a fact about the viewer rather than about these files,
 /// and the rule above is about a row moving in front of somebody. A pin
 /// read from stored counts cannot do that, because a count only changes
