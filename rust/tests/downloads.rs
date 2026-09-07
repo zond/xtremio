@@ -548,6 +548,100 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         Ok(())
     })?;
 
+    // A refused pin leaves the row that was there: the registry is written
+    // before the pin is asked for, so a refusal has to put things back, and
+    // a title with a download must not lose it to a second stream the
+    // server would not take.
+    let before = list()["items"]["tt-missing:tt-missing"].clone();
+    let refused = add("tt-missing", &info_hash, 99);
+    assert_eq!(refused["ok"], false, "{refused}");
+    assert_eq!(
+        list()["items"]["tt-missing:tt-missing"],
+        before,
+        "the row the refused pin would have replaced is as it was"
+    );
+
+    // The two windows a kill can land in, each reproduced as what the disk
+    // holds afterwards, and each finished by what the next boot runs first
+    // (`repin_unfinished` is what `core_init` starts behind itself).
+    //
+    // Removing: the row is marked before the server is asked and dropped
+    // after it answers. Died in between, the row says a removal was meant,
+    // and the boot carries it out -- whether or not the unpin had happened
+    // -- instead of re-pinning a download the user cancelled and
+    // restarting it on metered data.
+    for (variant, unpinned_before_the_kill) in [("after the unpin", true), ("before it", false)] {
+        let key = format!("tt-doomed-{unpinned_before_the_kill}");
+        add(&key, &info_hash, have_idx);
+        let row = format!("{key}:{key}");
+        xtremio_core::downloads::update(|registry| {
+            registry
+                .items
+                .get_mut(&row)
+                .expect("the doomed row")
+                .pending_removal = Some(xtremio_core::downloads::PendingRemoval {
+                delete_files: false,
+            });
+            Ok(())
+        })?;
+        assert!(
+            list()["items"][&row].is_null(),
+            "a row on its way out is not listed ({variant})"
+        );
+        if unpinned_before_the_kill {
+            xtremio_core::server::unpin_download(&info_hash, have_idx, false)?;
+        }
+        xtremio_core::downloads::repin_unfinished();
+        let pins = xtremio_core::server::downloads()?;
+        assert!(
+            pins.iter().all(|pin| pin.file_idx != have_idx),
+            "the cancelled download was not restarted ({variant}): {pins:?}"
+        );
+        assert!(
+            !xtremio_core::downloads::load()?.items.contains_key(&row),
+            "and the row is gone ({variant})"
+        );
+    }
+
+    // Swapping: the row names the new file before the new pin is taken and
+    // remembers the old one under `replaces` until the new pin is in. Died
+    // between the row and the pin, the boot pins what the row names and
+    // then releases what it used to -- so neither window of a swap leaves a
+    // pin nothing names, nor a title with neither file wanted.
+    add("tt-swap2", &info_hash, have_idx);
+    xtremio_core::downloads::update(|registry| {
+        let entry = registry
+            .items
+            .get_mut("tt-swap2:tt-swap2")
+            .expect("the swapping row");
+        entry.file_idx = missing_idx;
+        entry.state = xtremio_core::downloads::State::Queued;
+        entry.replaces = Some(xtremio_core::downloads::Replaced {
+            info_hash: info_hash.clone(),
+            file_idx: have_idx,
+        });
+        Ok(())
+    })?;
+    let pins = xtremio_core::server::downloads()?;
+    assert!(
+        pins.iter().any(|pin| pin.file_idx == have_idx),
+        "the old pin is still the server's before the boot: {pins:?}"
+    );
+    xtremio_core::downloads::repin_unfinished();
+    let pins = xtremio_core::server::downloads()?;
+    assert_eq!(pins.len(), 1, "the swap is finished: {pins:?}");
+    assert_eq!(pins[0].file_idx, missing_idx, "{pins:?}");
+    assert!(
+        xtremio_core::downloads::load()?.items["tt-swap2:tt-swap2"]
+            .replaces
+            .is_none(),
+        "and the debt is paid"
+    );
+    xtremio_core::downloads::update(|registry| {
+        registry.items.remove("tt-swap2:tt-swap2");
+        Ok(())
+    })?;
+
     // Progress events: the ticker is running (something is unfinished), so a
     // registry that disagrees with the server is corrected and the change is
     // pushed. Written straight into the registry to make the change certain
@@ -824,6 +918,17 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     );
 
     core_shutdown()?;
+
+    // A removal the server cannot be asked about raises and removes nothing
+    // -- and leaves an ordinary row behind, not one marked as leaving, which
+    // the next boot would otherwise finish for a request that failed.
+    assert!(downloads_remove("tt-missing:tt-missing".into(), false).is_err());
+    let reloaded = xtremio_core::downloads::load()?;
+    let entry = &reloaded.items["tt-missing:tt-missing"];
+    assert!(
+        entry.pending_removal.is_none(),
+        "a refused removal marks nothing: {entry:?}"
+    );
     Ok(())
 }
 

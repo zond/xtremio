@@ -19,6 +19,26 @@
 //! Live progress is not stored by the server per download either: it comes
 //! from `ServerHandle::downloads()` and is merged in by [`refresh`], which
 //! the FFI list call and the ~1 Hz [`ticker`] both use.
+//!
+//! ## The row leads the server in and follows it out
+//!
+//! The server's pin set is durable the moment `pin_download` or
+//! `unpin_download` returns, and this file is durable the moment its write
+//! returns; a kill can land between the two, and a registry write can fail
+//! on a volume the pin's free-space check never looked at. So the order is
+//! one rule, applied at both ends. **On the way in, the row is written
+//! before the pin is asked for**, naming the file about to be pinned and,
+//! under [`Entry::replaces`], the file it stops naming -- a pin nothing in
+//! this file names is a torrent that downloads forever, exempt from every
+//! sweeper, that no screen can show and [`remove`] cannot reach. **On the
+//! way out, the intent is written before the pin is dropped**
+//! ([`Entry::pending_removal`]) and the row goes only after the server has
+//! answered -- a row that outlives its pin is a cancelled download the next
+//! boot re-pins and restarts, on metered data. Whatever a kill interrupts,
+//! the row on disk says what was meant, and [`repin_unfinished_in`]
+//! finishes it at the next boot: a removal is carried out, a replacement's
+//! old pin is released once the new pin is in, and an unfinished row is
+//! pinned as it always was.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -229,10 +249,42 @@ pub struct Entry {
     /// The addon request the meta came from, for `Load Player`.
     #[serde(default)]
     pub meta_request: Option<serde_json::Value>,
+    /// The file this row named before [`add`] pointed it at another one,
+    /// whose pin is still the server's until this row's own pin is in. Set
+    /// in the write that precedes the pin and cleared in the one that
+    /// records it; a boot that finds it releases that pin (unless another
+    /// row names the file) once it sees this row pinned, so a kill between
+    /// the two writes leaves no pin this file does not name. Absent from
+    /// the file for every row that is not mid-swap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaces: Option<Replaced>,
+    /// Set by [`remove`] before it asks the server to drop the pin, cleared
+    /// by the row going. A row carrying it is on its way out: not listed,
+    /// not polled, not re-pinned, and finished by the next boot -- the unpin
+    /// is idempotent -- if the process died before the row went.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_removal: Option<PendingRemoval>,
     /// Keys a newer build wrote that this one does not know: kept so a
     /// downgrade round-trip does not throw them away.
     #[serde(flatten, default)]
     pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+/// The coordinates of a pin a row used to name (see [`Entry::replaces`]).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Replaced {
+    pub info_hash: String,
+    pub file_idx: usize,
+}
+
+/// A removal written down before the server was asked to carry it out (see
+/// [`Entry::pending_removal`]). Carries what the request said about the
+/// bytes, so the boot that finishes it deletes exactly what was asked.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingRemoval {
+    pub delete_files: bool,
 }
 
 impl Entry {
@@ -246,9 +298,15 @@ impl Entry {
         Self::key_of(&self.meta_id, &self.video_id)
     }
 
-    /// Whether the ticker still has a reason to poll for this entry.
+    /// Whether the ticker still has a reason to poll for this entry -- and
+    /// the boot a reason to pin it. A row on its way out has neither.
     fn unfinished(&self) -> bool {
-        !matches!(self.state, State::Complete | State::Paused)
+        self.pending_removal.is_none() && !matches!(self.state, State::Complete | State::Paused)
+    }
+
+    /// Whether the row is one [`remove`] has begun on and not finished.
+    fn is_leaving(&self) -> bool {
+        self.pending_removal.is_some()
     }
 
     /// Folds one live `DownloadInfo` into this entry: progress, path, size,
@@ -1044,35 +1102,14 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
         },
     };
 
-    let info = match crate::server::pin_download(&info_hash, file_idx, &announce) {
-        Ok(info) => info,
-        Err(error) => {
-            let failure = PinFailure::classify(&error);
-            tracing::warn!(
-                key,
-                message = failure.message(),
-                "could not pin the download"
-            );
-            return Ok(AddOutcome {
-                ok: false,
-                key: Some(key),
-                entry: None,
-                error: Some(failure),
-            });
-        }
-    };
-    release_replaced_pin(&key, &info_hash, file_idx);
-
-    // `pin_download` already reports the path when the engine knows it; ask
-    // again only for the case where it did not (metadata just landed).
-    let path = match info.path.clone() {
-        Some(path) => Some(path),
-        None => crate::server::download_path(&info_hash, file_idx).unwrap_or_default(),
-    };
-
+    // The row first, the pin second (see the module docs): what is on disk
+    // names the file about to be pinned before the server holds it, so a
+    // kill between the two is a queued row the next boot pins rather than a
+    // pin no row names. The row this one replaces is remembered under
+    // `replaces` rather than dropped, for the same reason at the other end.
     let now = Utc::now();
-    let entry = update(|registry| {
-        let previous = registry.items.get(&key);
+    let previous = update(|registry| {
+        let previous = registry.items.get(&key).cloned();
         // Re-adding the *same* file is a retry, not a new download, and only
         // a reading that counted bytes may move its numbers. `pin_download`
         // can answer `checking` while it relocates the torrent, which
@@ -1080,10 +1117,24 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
         // from zero here would sit at `queued, 0 B` until the hash check
         // ends, and its `completedAt` would be gone for good, that date
         // being set once and never recomputed.
-        let same = previous.filter(|entry| {
+        let same = previous.as_ref().filter(|entry| {
             entry.info_hash.eq_ignore_ascii_case(&info_hash) && entry.file_idx == file_idx
         });
-        let mut entry = Entry {
+        // A different file: the old pin stays the server's until the new one
+        // is in, and the row says so. Unless another row names that file,
+        // in which case the pin is theirs and there is nothing to release.
+        let replaces = previous
+            .as_ref()
+            .filter(|_| same.is_none())
+            .filter(|old| !pin_is_shared(registry, &key, &old.info_hash, old.file_idx))
+            .map(|old| Replaced {
+                info_hash: old.info_hash.clone(),
+                file_idx: old.file_idx,
+            })
+            // A swap interrupted before this one: the pin it was to release
+            // is still owed, and this row carries the debt on.
+            .or_else(|| previous.as_ref().and_then(|old| old.replaces.clone()));
+        let entry = Entry {
             meta_id: request.meta_id.clone(),
             video_id: request.video_id.clone(),
             kind: request.kind.clone(),
@@ -1093,27 +1144,108 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
             info_hash: info_hash.clone(),
             file_idx,
             announce: announce.clone(),
-            path: path
-                .clone()
-                .or_else(|| same.and_then(|entry| entry.path.clone())),
+            path: same.and_then(|entry| entry.path.clone()),
             size: same.map(|entry| entry.size).unwrap_or_default(),
             downloaded: same.map(|entry| entry.downloaded).unwrap_or_default(),
             state: same.map(|entry| entry.state).unwrap_or_default(),
             error: None,
-            created_at: previous.and_then(|entry| entry.created_at).or(Some(now)),
+            created_at: previous
+                .as_ref()
+                .and_then(|entry| entry.created_at)
+                .or(Some(now)),
             completed_at: same.and_then(|entry| entry.completed_at),
-            last_played_at: previous.and_then(|entry| entry.last_played_at),
+            last_played_at: previous.as_ref().and_then(|entry| entry.last_played_at),
             meta: request.meta.clone(),
             stream_request: request.stream_request.clone(),
             meta_request: request.meta_request.clone(),
+            replaces: replaces.clone(),
+            pending_removal: None,
             extra: previous
+                .as_ref()
                 .map(|entry| entry.extra.clone())
                 .unwrap_or_default(),
         };
-        entry.apply_live(&info, now);
-        registry.items.insert(key.clone(), entry.clone());
-        Ok(entry)
+        registry.items.insert(key.clone(), entry);
+        Ok((previous, replaces))
     })?;
+    let (previous, replaces) = previous;
+
+    let info = match crate::server::pin_download(&info_hash, file_idx, &announce) {
+        Ok(info) => info,
+        Err(error) => {
+            let failure = PinFailure::classify(&error);
+            tracing::warn!(
+                key,
+                message = failure.message(),
+                "could not pin the download"
+            );
+            // A refused pin leaves the registry as it found it: the row
+            // that was there before, or no row.
+            update(|registry| {
+                match previous {
+                    Some(previous) => registry.items.insert(key.clone(), previous),
+                    None => registry.items.remove(&key),
+                };
+                Ok(())
+            })?;
+            return Ok(AddOutcome {
+                ok: false,
+                key: Some(key),
+                entry: None,
+                error: Some(failure),
+            });
+        }
+    };
+
+    // `pin_download` already reports the path when the engine knows it; ask
+    // again only for the case where it did not (metadata just landed).
+    let path = match info.path.clone() {
+        Some(path) => Some(path),
+        None => crate::server::download_path(&info_hash, file_idx).unwrap_or_default(),
+    };
+
+    // The new pin is in, so the old one may go -- before the row stops
+    // saying it is owed, and outside the file lock, since it is a server
+    // call. A kill between the two releases it again at boot, idempotently.
+    if let Some(replaced) = &replaces {
+        release_replaced(&key, replaced);
+    }
+
+    let recorded = update(|registry| {
+        let Some(entry) = registry.items.get_mut(&key) else {
+            return Ok(None);
+        };
+        entry.replaces = None;
+        if path.is_some() {
+            entry.path = path.clone();
+        }
+        entry.apply_live(&info, Utc::now());
+        Ok(Some(entry.clone()))
+    })?;
+    let Some(entry) = recorded else {
+        // Removed while the pin was being taken -- a magnet takes as long as
+        // its tracker does -- so the pin just taken is one no row names, and
+        // it goes the way the row went.
+        tracing::info!(
+            key,
+            "the download was removed while its pin was taken; releasing it"
+        );
+        release_replaced(
+            &key,
+            &Replaced {
+                info_hash: info_hash.clone(),
+                file_idx,
+            },
+        );
+        return Ok(AddOutcome {
+            ok: false,
+            key: Some(key),
+            entry: None,
+            error: Some(PinFailure::Unavailable {
+                message: "the download was removed before it was pinned".to_owned(),
+            }),
+        });
+    };
 
     ensure_ticker();
     Ok(AddOutcome {
@@ -1130,59 +1262,43 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
 ///
 /// The server's pin registry is a set with no reference count, so a single
 /// unpin serves every entry naming that file: dropping one of them has to
-/// leave the pin, and the bytes, to the others.
+/// leave the pin, and the bytes, to the others. A row on its way out does
+/// not count as another: its own removal will ask about the pin in turn.
 fn pin_is_shared(registry: &Registry, key: &str, info_hash: &str, file_idx: usize) -> bool {
     registry.items.iter().any(|(other, entry)| {
         other != key
+            && !entry.is_leaving()
             && entry.info_hash.eq_ignore_ascii_case(info_hash)
             && entry.file_idx == file_idx
     })
 }
 
-/// Drops the pin the entry at `key` used to hold, when the download being
-/// recorded is a different file (the user pressed Download on a second
-/// stream for the same title, or retried at another index). The registry is
-/// keyed by meta and video, the server's pin registry by `(infoHash,
-/// fileIdx)`, so without this the replaced torrent stays wanted, exempt
-/// from the idle sweeper and the cache cleaner, and downloading -- with
-/// nothing in `downloads.json` naming it any more, which means the list
-/// cannot show it and [`remove`] cannot reach it, ever.
+/// Drops the pin a row used to hold, once the row names another file and
+/// its own pin is in (the user pressed Download on a second stream for the
+/// same title, or retried at another index). The registry is keyed by meta
+/// and video, the server's pin registry by `(infoHash, fileIdx)`, so
+/// without this the replaced torrent stays wanted, exempt from the idle
+/// sweeper and the cache cleaner, and downloading -- with nothing in
+/// `downloads.json` naming it any more, which means the list cannot show it
+/// and [`remove`] cannot reach it, ever.
 ///
-/// Another entry naming the same file (the same movie under two metas) owns
-/// that pin too, so it is left alone; otherwise the pin goes and the bytes
-/// with it, since nothing references them any more.
-fn release_replaced_pin(key: &str, info_hash: &str, file_idx: usize) {
-    let registry = match load() {
-        Ok(registry) => registry,
-        Err(error) => {
-            tracing::warn!(%error, "could not check for a download to replace");
-            return;
-        }
-    };
-    let Some(previous) = registry.items.get(key) else {
-        return;
-    };
-    if previous.info_hash.eq_ignore_ascii_case(info_hash) && previous.file_idx == file_idx {
-        return;
-    }
-    if pin_is_shared(&registry, key, &previous.info_hash, previous.file_idx) {
-        tracing::info!(
-            key,
-            file_idx = previous.file_idx,
-            "the replaced download is another entry's too; its pin stays"
-        );
-        return;
-    }
-    match crate::server::unpin_download(&previous.info_hash, previous.file_idx, true) {
+/// Whether another entry names the same file was decided when
+/// [`Entry::replaces`] was written, under the lock; the bytes go with the
+/// pin, since nothing references them any more. Idempotent at the server: a
+/// boot that finishes an interrupted swap may release a pin that already
+/// went, and gets `unpinned: false` for it.
+fn release_replaced(key: &str, replaced: &Replaced) {
+    match crate::server::unpin_download(&replaced.info_hash, replaced.file_idx, true) {
         Ok(outcome) => tracing::info!(
             key,
-            file_idx = previous.file_idx,
+            file_idx = replaced.file_idx,
+            unpinned = outcome.unpinned,
             deleted_files = outcome.deleted_files,
             "released the download this one replaces"
         ),
         Err(error) => tracing::warn!(
             key,
-            file_idx = previous.file_idx,
+            file_idx = replaced.file_idx,
             %error,
             "could not release the download this one replaces; it stays pinned"
         ),
@@ -1210,33 +1326,75 @@ pub struct RemoveOutcome {
 /// under it, or at best leave it unpinned and evictable while its row keeps
 /// claiming a complete download.
 pub fn remove(key: &str, delete_files: bool) -> anyhow::Result<RemoveOutcome> {
-    let registry = load()?;
-    let Some(entry) = registry.items.get(key).cloned() else {
-        return Ok(RemoveOutcome {
-            removed: false,
-            unpinned: false,
-            deleted_files: false,
-        });
-    };
-    if pin_is_shared(&registry, key, &entry.info_hash, entry.file_idx) {
-        tracing::info!(
-            key,
-            file_idx = entry.file_idx,
-            "another download names this file; forgetting the entry, keeping the pin"
-        );
-        update(|registry| {
-            registry.items.remove(key);
-            Ok(())
-        })?;
-        return Ok(RemoveOutcome {
-            removed: true,
-            unpinned: false,
-            deleted_files: false,
-        });
+    /// What the first write decided: the row is gone already, or the pin is
+    /// still to be dropped for these coordinates.
+    enum Step {
+        NoRow,
+        Forgotten,
+        Unpin { info_hash: String, file_idx: usize },
     }
-    // The unpin comes first: dropping the registry entry for a pin the
-    // server still holds would leave a download nothing can find again.
-    let outcome = crate::server::unpin_download(&entry.info_hash, entry.file_idx, delete_files)?;
+    // The intent first, the unpin second, the row last (see the module
+    // docs). Dropping the row before the pin would leave a download nothing
+    // can find again; dropping the pin before the row wrote down that the
+    // removal was meant left a row the next boot re-pinned -- the cancelled
+    // download restarting on metered data.
+    let step = update(|registry| {
+        let Some(entry) = registry.items.get(key).cloned() else {
+            return Ok(Step::NoRow);
+        };
+        if pin_is_shared(registry, key, &entry.info_hash, entry.file_idx) {
+            tracing::info!(
+                key,
+                file_idx = entry.file_idx,
+                "another download names this file; forgetting the entry, keeping the pin"
+            );
+            registry.items.remove(key);
+            return Ok(Step::Forgotten);
+        }
+        registry
+            .items
+            .get_mut(key)
+            .expect("the row was just read")
+            .pending_removal = Some(PendingRemoval { delete_files });
+        Ok(Step::Unpin {
+            info_hash: entry.info_hash,
+            file_idx: entry.file_idx,
+        })
+    })?;
+    let (info_hash, file_idx) = match step {
+        Step::NoRow => {
+            return Ok(RemoveOutcome {
+                removed: false,
+                unpinned: false,
+                deleted_files: false,
+            })
+        }
+        Step::Forgotten => {
+            return Ok(RemoveOutcome {
+                removed: true,
+                unpinned: false,
+                deleted_files: false,
+            })
+        }
+        Step::Unpin {
+            info_hash,
+            file_idx,
+        } => (info_hash, file_idx),
+    };
+    let outcome = match crate::server::unpin_download(&info_hash, file_idx, delete_files) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            // The server could not be asked (it is not running), so the row
+            // stays, and stays an ordinary row: nothing was removed.
+            update(|registry| {
+                if let Some(entry) = registry.items.get_mut(key) {
+                    entry.pending_removal = None;
+                }
+                Ok(())
+            })?;
+            return Err(error);
+        }
+    };
     update(|registry| {
         registry.items.remove(key);
         Ok(())
@@ -1246,6 +1404,94 @@ pub fn remove(key: &str, delete_files: bool) -> anyhow::Result<RemoveOutcome> {
         unpinned: outcome.unpinned,
         deleted_files: outcome.deleted_files,
     })
+}
+
+/// Carries out every removal a kill interrupted: the row said the pin was
+/// to go, so it goes (unless another row still names the file), and then
+/// the row does. Run at boot before anything is re-pinned, so that a
+/// cancelled download is not first restarted and then cancelled again.
+fn finish_pending_removals_in(app: &Arc<AppState>) {
+    let registry = match load_in(app) {
+        Ok(registry) => registry,
+        Err(error) => {
+            tracing::warn!(%error, "could not read the downloads registry to finish removals");
+            return;
+        }
+    };
+    for (key, entry) in &registry.items {
+        let Some(pending) = entry.pending_removal else {
+            continue;
+        };
+        if !crate::state::is_current(app) {
+            return;
+        }
+        if !pin_is_shared(&registry, key, &entry.info_hash, entry.file_idx) {
+            match crate::server::unpin_download(
+                &entry.info_hash,
+                entry.file_idx,
+                pending.delete_files,
+            ) {
+                Ok(outcome) => tracing::info!(
+                    key,
+                    unpinned = outcome.unpinned,
+                    deleted_files = outcome.deleted_files,
+                    "finished a removal a kill interrupted"
+                ),
+                Err(error) => {
+                    // Left for the next boot: the row still says what was
+                    // meant, and nothing polls or pins it meanwhile.
+                    tracing::warn!(key, %error, "could not finish an interrupted removal");
+                    continue;
+                }
+            }
+        }
+        if let Err(error) = update_in(app, |registry| {
+            registry.items.remove(key);
+            Ok(())
+        }) {
+            tracing::warn!(key, %error, "could not drop a removed download's row");
+        }
+    }
+}
+
+/// Releases the pin every swapped row still owes, where the row's own pin is
+/// in. Run at boot after the re-pin, which is what puts a swap's new pin in
+/// place when the kill came before it; a row whose own pin the server does
+/// not hold keeps the debt for the next boot, since releasing the old file
+/// ahead of the new one being wanted would leave the title with neither.
+fn release_replaced_in(app: &Arc<AppState>) {
+    let (registry, live) = match (load_in(app), crate::server::downloads()) {
+        (Ok(registry), Ok(live)) => (registry, live),
+        (Err(error), _) | (_, Err(error)) => {
+            tracing::warn!(%error, "could not check for replaced downloads to release");
+            return;
+        }
+    };
+    for (key, entry) in &registry.items {
+        let Some(replaced) = &entry.replaces else {
+            continue;
+        };
+        if !crate::state::is_current(app) {
+            return;
+        }
+        let pinned = live.iter().any(|info| {
+            info.info_hash.eq_ignore_ascii_case(&entry.info_hash) && info.file_idx == entry.file_idx
+        });
+        if !pinned {
+            continue;
+        }
+        if !pin_is_shared(&registry, key, &replaced.info_hash, replaced.file_idx) {
+            release_replaced(key, replaced);
+        }
+        if let Err(error) = update_in(app, |registry| {
+            if let Some(entry) = registry.items.get_mut(key) {
+                entry.replaces = None;
+            }
+            Ok(())
+        }) {
+            tracing::warn!(key, %error, "could not record a replaced download as released");
+        }
+    }
 }
 
 /// Why a download cannot be played off the device. None of these is an
@@ -1327,7 +1573,11 @@ fn local_url(entry: &Entry) -> Result<String, OpenFailure> {
 /// streams the title instead of opening a dead player.
 pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
     update(|registry| {
-        let Some(entry) = registry.items.get_mut(key) else {
+        let Some(entry) = registry
+            .items
+            .get_mut(key)
+            .filter(|entry| !entry.is_leaving())
+        else {
             return Ok(OpenOutcome::refused(key, OpenFailure::Unknown));
         };
         let url = match local_url(entry) {
@@ -1397,6 +1647,10 @@ fn refresh_in(app: &Arc<AppState>) -> anyhow::Result<Refresh> {
         |registry| {
             let mut moved = Vec::new();
             for (key, entry) in registry.items.iter_mut() {
+                // A row on its way out is not progress anyone is shown.
+                if entry.is_leaving() {
+                    continue;
+                }
                 let before = entry.clone();
                 if let Some(info) = live.iter().find(|info| {
                     info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
@@ -1435,12 +1689,13 @@ fn refresh_in(app: &Arc<AppState>) -> anyhow::Result<Refresh> {
 ///
 /// Entries this build cannot parse stay on disk (that is the whole point of
 /// keeping them) but are left out here: the caller could not read them
-/// either, and the list is a payload, not the file.
+/// either, and the list is a payload, not the file. So is a row a removal
+/// has begun on: to the screen it is gone already.
 pub fn list() -> anyhow::Result<Registry> {
     // One state for both halves, and it is `current`: the fallback is a
     // second chance at the registry, not a second chance at the process.
     let app = not_initialized_unless_running()?;
-    let registry = match refresh_in(&app) {
+    let mut registry = match refresh_in(&app) {
         // What the refresh merged, not a re-read: a tick that only moved
         // byte counts leaves the file behind on purpose, and a listing off
         // the disk would then be the one place showing the older numbers.
@@ -1450,6 +1705,7 @@ pub fn list() -> anyhow::Result<Registry> {
             load_in(&app)?
         }
     };
+    registry.items.retain(|_, entry| !entry.is_leaving());
     Ok(Registry {
         unreadable: BTreeMap::new(),
         ..registry
@@ -1647,7 +1903,13 @@ pub fn repin_unfinished() {
 /// Stopping there is also why [`update_in`]'s no-resurrection has no test
 /// left: this was the one path a shutdown could drive into it, and the
 /// point of the check is that it no longer does.
+///
+/// It is also where the file's intents are finished (see the module docs):
+/// removals a kill interrupted first, so a cancelled download is not
+/// re-pinned only to be dropped again; the pins of swapped-out files last,
+/// once the re-pin has put the swap's new pin in place.
 pub fn repin_unfinished_in(app: &Arc<AppState>) {
+    finish_pending_removals_in(app);
     let items = match load_in(app) {
         Ok(registry) => registry.items,
         Err(error) => {
@@ -1690,6 +1952,10 @@ pub fn repin_unfinished_in(app: &Arc<AppState>) {
             }
         }
     }
+    if !crate::state::is_current(app) {
+        return;
+    }
+    release_replaced_in(app);
     ensure_ticker_in(app);
 }
 
@@ -1719,6 +1985,8 @@ mod tests {
             meta: None,
             stream_request: None,
             meta_request: None,
+            replaces: None,
+            pending_removal: None,
             extra: BTreeMap::new(),
         }
     }
@@ -2151,6 +2419,72 @@ mod tests {
             e.state = state;
             assert!(!e.unfinished(), "{state:?}");
         }
+    }
+
+    /// A row a removal has begun on is on its way out: nothing polls it,
+    /// nothing re-pins it, and it does not hold a pin for another row --
+    /// its own removal asks about that pin in turn.
+    #[test]
+    fn a_row_on_its_way_out_is_neither_unfinished_nor_another_owner() {
+        let mut leaving = entry("tt1", "tt1");
+        leaving.state = State::Downloading;
+        leaving.pending_removal = Some(PendingRemoval { delete_files: true });
+        assert!(
+            !leaving.unfinished(),
+            "a removal in progress is not polled for"
+        );
+        assert!(leaving.is_leaving());
+
+        let mut registry = Registry::default();
+        registry.items.insert("tt1:tt1".into(), leaving);
+        registry.items.insert("tt2:tt2".into(), entry("tt2", "tt2"));
+        assert!(
+            !pin_is_shared(&registry, "tt2:tt2", "abc", 2),
+            "the leaving row does not keep the pin for tt2"
+        );
+        registry.items.insert("tt3:tt3".into(), entry("tt3", "tt3"));
+        assert!(
+            pin_is_shared(&registry, "tt2:tt2", "abc", 2),
+            "a row that is staying does"
+        );
+    }
+
+    /// The two intents survive the file, and a row carrying neither is
+    /// written exactly as every build so far wrote it -- the Dart fixture
+    /// and the wire-names test read those keys.
+    #[test]
+    fn the_intents_round_trip_and_an_ordinary_row_does_not_carry_them() {
+        let plain = serde_json::to_value(entry("tt1", "tt1")).unwrap();
+        assert!(plain.get("replaces").is_none(), "{plain}");
+        assert!(plain.get("pendingRemoval").is_none(), "{plain}");
+
+        let mut swapping = entry("tt1", "tt1");
+        swapping.replaces = Some(Replaced {
+            info_hash: "def".into(),
+            file_idx: 0,
+        });
+        let mut leaving = entry("tt2", "tt2");
+        leaving.pending_removal = Some(PendingRemoval {
+            delete_files: false,
+        });
+        let mut registry = Registry::default();
+        registry.items.insert("tt1:tt1".into(), swapping.clone());
+        registry.items.insert("tt2:tt2".into(), leaving.clone());
+        let bytes = serde_json::to_vec(&registry).unwrap();
+        let written: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            written["items"]["tt1:tt1"]["replaces"],
+            serde_json::json!({"infoHash": "def", "fileIdx": 0}),
+            "camelCase, like every other key: {written}"
+        );
+        assert_eq!(
+            written["items"]["tt2:tt2"]["pendingRemoval"],
+            serde_json::json!({"deleteFiles": false}),
+            "{written}"
+        );
+        let parsed = Registry::parse(&bytes);
+        assert_eq!(parsed.items["tt1:tt1"], swapping);
+        assert_eq!(parsed.items["tt2:tt2"], leaving);
     }
 
     /// The pin errors the UI must be able to tell apart survive the trip
