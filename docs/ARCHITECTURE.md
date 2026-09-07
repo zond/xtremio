@@ -169,15 +169,17 @@ what every model field means. The shape of the thing is in the
   it is one settings key.** The server keeps a torrent in the swarm after
   playback ends when its `seedingEnabled` setting is true (its own default);
   when it is false a torrent nothing is streaming is paused once its idle
-  grace is up (15 s), and a pinned download is exempt either way — it keeps
-  downloading, and stops being shared when it is unpinned. **What it buys
-  is minutes, not sessions**: an unpinned engine nothing is streaming is
-  removed 300 s after it went idle whatever the setting says, and nothing
-  stops sharing when the next stream begins, so the setting's real effect
-  is whether those five minutes are spent seeding (both constants are
-  `enginefs/src/lib.rs` at the pinned rev). The setting's subtitle says
-  that and says nothing else; a longer lifecycle is the server's keep/share
-  policy, being built there. The app decides
+  grace is up (15 s) — paused in both directions, so it stops uploading to
+  peers and stops fetching the rest of its own file alike — and a pinned
+  download is exempt either way: it keeps downloading, and stops being
+  shared when it is unpinned. **What it buys is minutes, not sessions**: an
+  unpinned engine nothing is streaming is removed 300 s after it went idle
+  whatever the setting says, and nothing stops sharing when the next stream
+  begins, so the setting's real effect is whether those five minutes are
+  spent in the swarm (both constants are `enginefs/src/lib.rs` at the
+  pinned rev). The setting's subtitle says that and says nothing else; a
+  longer lifecycle is the server's keep/share policy, being built there.
+  The app decides
   the value and writes it through `ServerClient.updateSettings`
   (`server_update_settings`, the same function `POST /settings` runs), which
   is the only way it changes anything about the server.
@@ -200,37 +202,54 @@ what every model field means. The shape of the thing is in the
   come. The policy notifies when that pause goes on or off, which is how the
   tile sees a "Not now" granted by a popup drawn over it.
 - **The status light says what is happening, and it is the only thing that
-  says it.** `SharingLight` (`lib/features/sharing/sharing_light.dart`) is
-  drawn in the shell's top right corner while two things are true: the
-  server is uploading, and the shell's own route is the current one, so no
-  player is over it. What answers the first is `SharingActivityMonitor`
-  polling a `SharingActivityClient` — and **there is no implementation of
-  that client**, because the per-torrent stats calls create the engine they
-  are asked about and the reading the light is coming to want is a different
-  one. That reading now exists: `ServerClient.backgroundTraffic`
-  (`server_background_traffic`, `ServerHandle::background_traffic`) answers
-  whether bytes moved over the connection in the last five seconds with
-  nothing playing, per direction, judged on the Rust side from librqbit's
-  own peer counters — a peek over the engines that exist, so it creates
-  nothing and can be polled. The monitor does not read it yet, so until it
-  is wired in the light is never drawn. On a television the remote reaches it
-  from the top of the rail with a press of up, and the node is skipped by
-  traversal so it cannot swallow a press meant for a poster; pressing it
-  offers the two stops above and a way out of neither — **but only the
-  stops there are something to stop with.** Because the light answers
-  measured bytes and never the setting, it is lit whenever something neither
-  stop governs is uploading — a torrent serving out its idle grace, or a
-  title kept offline — and that happens with the setting already off and
-  under a "Not now" alike. Both stops are about that setting, so with the
-  switch off the popup says that instead and offers neither; with a pause
-  in force the popup says so and offers only the switch, since the policy
-  takes no second pause and a "Not now" row there would be drawn and dead.
-  The popup reads the pause from `pausedForRun`, not from the light, which
-  cannot tell. Choosing the rows by what is running is the part of
-  this that will be widened: the light is coming to mean "Xtremio is using
-  your connection while you are not watching", which a background download
-  does as much as a share does, and the popup will then have to name which
-  of them it is and offer that one's stop.
+  says it.** `SharingLight` (`lib/features/sharing/sharing_light.dart`)
+  means "Xtremio is using your connection while you are not watching" —
+  serving other people, a download filling in, both. It is drawn in the
+  shell's top right corner while the server's reading says bytes moved,
+  and never because a setting is on. The reading is
+  `ServerClient.backgroundTraffic` (`server_background_traffic`,
+  `ServerHandle::background_traffic`), read by `SharingActivityMonitor`
+  through `RustSharingActivityClient` every five seconds while the shell's
+  own route is the current one: per direction, whether librqbit's own peer
+  counters grew over the last five-second window with no player reading
+  over it or since, judged on the Rust side over one sample so the two
+  halves cannot disagree — a peek over the engines that exist, so it creates
+  nothing and touches no idle clock (the per-torrent stats calls create the
+  engine they are asked about and must never stand in for it). The monitor
+  repeats the halves unchanged: `uploading`, `downloading`, `active` as
+  either, and `BackgroundTraffic.none` before the first reading and after a
+  failed one, since a failed reading is darkness and not the last answer.
+  One slot, three glyphs — an up arrow while bytes go out, a down arrow
+  while they come in, `swap_vert` while both — never two lights; the glyph
+  and the popup's title are `SharingLight.glyphFor` and `labelFor`. The
+  shell's on-top rule is no longer what keeps the light off during a film
+  (the server folds "nothing playing" in itself); it is what stops the
+  polling while nobody could see the light. Semi-transparent, a 1.6 s pulse,
+  inside the overscan inset and a toolbar's height below the top; the
+  placement is measured on all five shell screens at TV and phone widths by
+  `test/features/sharing_light_placement_test.dart`. On a television the
+  remote reaches it from the top of the rail with a press of up, and the
+  node is skipped by traversal so it cannot swallow a press meant for a
+  poster. **Pressing it offers a stop for the arrow that is lit, and only
+  rows that do something.** While bytes go out, the sharing rows: "Not
+  now" (`pauseUntilRestart`) and "Stop sharing" (the setting) — but things
+  upload that neither governs, a torrent serving out its idle grace or a
+  title kept offline, so with the switch off the popup says that and offers
+  neither, and under a pause it says so and offers only the switch, since
+  the policy takes no second pause. The pause is read from `pausedForRun`,
+  not from the light, which cannot tell. While bytes come in, the offline
+  downloads: the light lists them before opening the popup and draws one
+  "Cancel <name>" row per download still on its way, each dropping that
+  download and its part-file through `DownloadsClient.remove` — what the
+  downloads notification's "Cancel all" does, and the only stop there is,
+  the server having no pause for a pinned file. With no offline download in
+  flight the bytes are a watched title finishing its own file, which the
+  sharing setting governs (above), so the popup says no download is in
+  flight and draws the sharing rows. While both, both groups under a
+  heading each. The way out is "Close" in every state. Widget tests count
+  the pressable rows in each state; a "Cancel" is checked to remove with
+  `deleteFiles: true`, and a refused removal is said in a snackbar rather
+  than swallowed.
 - **Offline downloads are a pin plus a registry.** The server keeps the
   chosen file of a torrent wanted and un-evictable
   (`ServerHandle::pin_download`, a validated `downloadsDir` setting,

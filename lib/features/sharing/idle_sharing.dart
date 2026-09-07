@@ -73,7 +73,12 @@ class IdleSharing {
   /// exempt from the sweep). What the setting really changes is the few
   /// minutes before that: with it off the torrent is paused
   /// `INACTIVE_TORRENT_PAUSE_GRACE` -- 15 seconds -- after the last stream
-  /// ends, and with it on those minutes are spent seeding.
+  /// ends, and with it on those minutes are spent in the swarm. A live
+  /// torrent both uploads to peers and goes on fetching the rest of the file
+  /// it was streamed from, and a pause stops both, so the sentence names
+  /// both: the light in the corner shows either as its own arrow, and a tile
+  /// that mentioned only the uploading would leave the down arrow
+  /// unexplained.
   ///
   /// A longer lifecycle is the server's keep/share policy, which is being
   /// built there and is not in the pinned rev. **This sentence describes
@@ -81,8 +86,9 @@ class IdleSharing {
   /// tile describing a future is the same defect as a comment describing an
   /// intention.
   static const String description =
-      'Keeps uploading what you watched to other people for about five '
-      'minutes after playback stops.';
+      'Keeps what you watched in the swarm for about five minutes after '
+      'playback stops: uploading it to other people, and finishing its own '
+      'file. The light in the corner shows when either is happening.';
 
   /// The gentler of the two stops the status light offers, and what it
   /// costs: nothing is written down, so the next start of the app shares
