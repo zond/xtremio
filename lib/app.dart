@@ -15,9 +15,11 @@ import 'features/downloads/downloads_service.dart';
 import 'features/player/playback_engine.dart';
 import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
+import 'shell/focus_theme.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
 import 'shell/tv_density.dart';
+import 'widgets/focusable_tile.dart';
 
 /// Builds a [PlaybackEngine] for a player with the profile's
 /// `hardwareDecoding`; [MediaKitEngine.new] fits.
@@ -413,17 +415,29 @@ class _XtremioAppState extends State<XtremioApp> {
                 prefs: _prefs,
                 child: PlaybackScope(
                   createEngine: _createEngine,
-                  child: MaterialApp(
-                    title: 'Xtremio',
-                    debugShowCheckedModeBanner: false,
-                    navigatorKey: _navigator,
-                    theme: isTv ? TvDensity.theme(theme) : theme,
-                    builder: isTv ? TvMediaQuery.builder : null,
-                    navigatorObservers: [
-                      _routes,
-                      if (kDebugMode) RouteLogObserver(),
-                    ],
-                    home: const RootShell(),
+                  // Under the [PrefsScope] rather than above it, so that
+                  // the focus floor is rebuilt when the Bold switch is
+                  // flipped: the scope is an [InheritedNotifier] and this
+                  // builder reads it. Every other part of the theme is
+                  // settled before the app is built.
+                  child: Builder(
+                    builder: (context) => MaterialApp(
+                      title: 'Xtremio',
+                      debugShowCheckedModeBanner: false,
+                      navigatorKey: _navigator,
+                      theme: isTv
+                          ? FocusTheme.apply(
+                              TvDensity.theme(theme),
+                              FocusHighlight.emphasisOf(context),
+                            )
+                          : theme,
+                      builder: isTv ? TvMediaQuery.builder : null,
+                      navigatorObservers: [
+                        _routes,
+                        if (kDebugMode) RouteLogObserver(),
+                      ],
+                      home: const RootShell(),
+                    ),
                   ),
                 ),
               ),
