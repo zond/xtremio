@@ -17,7 +17,6 @@ import '../details/stream_facts.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
-import 'language_names.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
@@ -227,6 +226,42 @@ final class PlayerScreenResult {
   const PlayerScreenResult({required this.selectVideoId});
 
   final String selectVideoId;
+}
+
+/// What the auto-pick is looking for, from whichever of the two answers
+/// there is: the engine's session preference, or what this show was last
+/// watched with (`SubtitlePickMemory`).
+///
+/// One shape for both so there is one piece of code that applies it. What
+/// the two can say differs -- only the memory names a release group, and
+/// only it survives the app being closed -- but what is *done* about it
+/// must not, or the file a viewer gets would depend on which memory
+/// answered.
+final class _WantedSubtitle {
+  const _WantedSubtitle({
+    required this.enabled,
+    required this.language,
+    this.releaseGroup,
+    this.embeddedFirst = false,
+  });
+
+  /// False means subtitles off, and it is an answer rather than the
+  /// absence of one: a viewer who turned them off is not asking to be
+  /// asked again next episode.
+  final bool enabled;
+
+  /// The label the menu prints (`Swedish`), not the code; null matches
+  /// any language, which is what an enabled preference naming none does.
+  final String? language;
+
+  /// The lower-cased release group to prefer among that language's files,
+  /// when one is remembered. Only a preference: nothing here refuses a
+  /// language because the group it named is not on offer this episode.
+  final String? releaseGroup;
+
+  /// Whether a track inside the video wins over an addon's file of the
+  /// same language.
+  final bool embeddedFirst;
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
@@ -2618,6 +2653,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         language: track.language,
       ),
     );
+    // A track in the file has no release group and no URL that means
+    // anything on the next episode; what is worth remembering is the
+    // language, and that the file's own track was preferred to a
+    // download.
+    final language = track.language;
+    if (language != null && language.trim().isNotEmpty) {
+      _rememberPick(language: subtitleLanguageLabel(language), embedded: true);
+    }
   }
 
   void _selectExternalSubtitle(SubtitleInfo subtitle) {
@@ -2638,6 +2681,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
         language: subtitle.lang.isEmpty ? null : subtitle.lang,
       ),
     );
+    // A file the addon gave no language for is a row reading `Unknown`,
+    // which names nothing to look for next episode -- the same rule that
+    // keeps an unnamed release group out of the timing memory.
+    if (subtitle.lang.trim().isNotEmpty) {
+      _rememberPick(
+        language: subtitleLanguageLabel(subtitle.lang),
+        releaseGroup: subtitle.releaseGroupKey,
+      );
+    }
   }
 
   void _disableSubtitles() {
@@ -2648,6 +2700,77 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _client?.dispatch(
       CoreActions.playerSubtitlePreferenceChanged(enabled: false),
     );
+    _rememberPick();
+  }
+
+  /// Writes a pick by hand down against this show: the language and,
+  /// where the addon named one, the release group of the very file, or --
+  /// with no [language] -- that subtitles were turned off here on
+  /// purpose.
+  ///
+  /// **Only the three handlers above call this.** The auto-pick applying
+  /// what is remembered must never write, or one choice made in January
+  /// becomes twenty-two counts by March and the two pinned languages can
+  /// never change again. It is the discipline `_adjustTiming` keeps for
+  /// `subtitleSync`, for the same reason: what is stored has to be a
+  /// judgement, and a machine putting something back is not one.
+  ///
+  /// Nothing is remembered for a play with no meta behind it -- an
+  /// offline file, a deep link straight to a stream -- because there is
+  /// no show to key it on.
+  void _rememberPick({
+    String? language,
+    String? releaseGroup,
+    bool embedded = false,
+  }) {
+    final prefs = _prefs;
+    final series = _syncSeries;
+    if (prefs == null || series == null) return;
+    prefs
+        .setSubtitlePicks(
+          prefs.subtitlePicks.remembering(
+            language == null
+                ? SubtitleShowPick.off(series: series)
+                : SubtitleShowPick(
+                    series: series,
+                    language: language,
+                    releaseGroup: releaseGroup,
+                    embedded: embedded,
+                  ),
+          ),
+        )
+        .ignore();
+  }
+
+  /// What the auto-pick should look for, or null when nothing says.
+  ///
+  /// The session preference wins: it is what the viewer did a moment ago,
+  /// on this very run, and the memory is what they did some other
+  /// evening. It carries no release group -- the core's field has no
+  /// room for one -- so the group only ever comes from the memory.
+  ///
+  /// The languages are compared as the *labels* the menu prints, since
+  /// that is what a pick is remembered as; a code coming from the core
+  /// goes through the same function to get there, so `sv` and `swe` are
+  /// still one language on both paths.
+  _WantedSubtitle? _wanted(PlayerState state) {
+    final preference = state.subtitlePreference;
+    if (preference != null) {
+      final language = preference.language;
+      return _WantedSubtitle(
+        enabled: preference.enabled,
+        language: language == null ? null : subtitleLanguageLabel(language),
+        embeddedFirst: preference.source == 'embedded',
+      );
+    }
+    final remembered = _prefs?.subtitlePicks.forSeries(_syncSeries);
+    if (remembered == null) return null;
+    return _WantedSubtitle(
+      enabled: remembered.enabled,
+      language: remembered.language,
+      releaseGroup: remembered.releaseGroup,
+      embeddedFirst: remembered.embedded,
+    );
   }
 
   /// Applies the session's subtitle preference (set by an earlier pick in
@@ -2657,6 +2780,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// report the media loaded (see [_mediaLoaded]), then retries as
   /// tracks and addon results arrive until something matches, and counts
   /// as done only once the engine accepted the pick.
+  ///
+  /// With no session preference -- which is every fresh start, since the
+  /// core clears it on `Unload` -- what this show was last watched with
+  /// stands in ([_wanted]). The two are read the same way and differ in
+  /// one thing: a remembered row can also name the release group of the
+  /// file that was picked, and among the files of the right language one
+  /// from that group is preferred.
+  ///
+  /// A show never watched is still left alone. Putting this viewer's
+  /// commonest language on a programme nothing is known about would put
+  /// subtitles on a film that needs none, and off is the honest floor;
+  /// what the menu does for that case is lift the two languages they
+  /// usually pick to the top of it.
+  ///
+  /// **Nothing here dispatches `SubtitlePreferenceChanged`.** The core's
+  /// field means "the viewer said so, this session", and writing a
+  /// remembered guess into it would make a memory indistinguishable from
+  /// a judgement -- which is the distinction `_subtitlesChosenByHand`
+  /// rests on -- as well as counting the guess as a pick next time the
+  /// menu is opened.
   void _maybeAutoPickSubtitles() {
     if (_autoPickedSubtitles ||
         _autoPickingSubtitles ||
@@ -2667,8 +2810,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
     final state = _state;
-    final preference = state?.subtitlePreference;
-    if (state == null || preference == null) return;
+    if (state == null) return;
+    final preference = _wanted(state);
+    if (preference == null) return;
     final before = _tracks.value;
     // Where the multiplier has to go back to if the engine refuses the
     // pick below: the file playing now, if it is one of the addons'.
@@ -2688,21 +2832,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
       bool matches(String? candidate) =>
           language == null ||
           (candidate != null &&
-              languageName(candidate).toLowerCase() ==
-                  languageName(language).toLowerCase());
+              subtitleLanguageLabel(candidate).toLowerCase() ==
+                  language.toLowerCase());
       // The same list the menu is built from, in the same order. This is
       // the one path that applies a subtitle without the viewer looking,
       // so it is the one that has to take the language's best-known file
       // rather than whichever addon answered first.
       final offered = _offeredSubtitles(state.externalSubtitleSources);
-      final external = offered
+      final candidates = offered
           .map((source) => source.subtitle)
-          .where((s) => matches(s.lang))
-          .firstOrNull;
+          .where((s) => matches(s.lang));
+      // A remembered group is a preference among the files of the
+      // language, never a condition on the language: a show that changes
+      // release family between seasons, and the six files in ten that
+      // name no group at all, both land on the head of the language the
+      // way they would with nothing remembered.
+      final group = preference.releaseGroup;
+      final external =
+          (group == null
+              ? null
+              : candidates
+                    .where((s) => s.releaseGroupKey == group)
+                    .firstOrNull) ??
+          candidates.firstOrNull;
       final embedded = before.subtitle
           .where((t) => matches(t.language))
           .firstOrNull;
-      final externalFirst = preference.source != 'embedded';
+      final externalFirst = !preference.embeddedFirst;
       if (externalFirst && external != null ||
           embedded == null && external != null) {
         _tracks.value = before.copyWith(
@@ -2850,21 +3006,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
         valueListenable: _player!,
         builder: (context, json, _) {
           final state = json == null ? null : PlayerState.fromJson(json);
+          final groups = groupSubtitlesByLanguage(
+            // Ordered before grouping, so the numbering and "the first
+            // option is what a tap applies" hold over the order the rows
+            // are actually in.
+            _offeredSubtitles(state?.externalSubtitleSources ?? const []),
+            addonName: _subtitleAddonName,
+            // The same name a shift is remembered against, so a row
+            // marked for this release and a correction put back for it
+            // are talking about the same file.
+            release: _syncRelease,
+          );
           return ValueListenableBuilder<PlaybackTracks>(
             valueListenable: _tracks,
             builder: (context, tracks, _) => SubtitleMenu(
               embedded: tracks.subtitle,
-              groups: groupSubtitlesByLanguage(
-                // Ordered before grouping, so the numbering and "the first
-                // option is what a tap applies" hold over the order the
-                // rows are actually in.
-                _offeredSubtitles(state?.externalSubtitleSources ?? const []),
-                addonName: _subtitleAddonName,
-                // The same name a shift is remembered against, so a row
-                // marked for this release and a correction put back for
-                // it are talking about the same file.
-                release: _syncRelease,
-              ),
+              groups: groups,
               activeId: tracks.activeSubtitleId,
               loading: state?.subtitlesLoading ?? false,
               onOff: () {

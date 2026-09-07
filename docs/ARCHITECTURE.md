@@ -999,7 +999,31 @@ what every model field means. The shape of the thing is in the
   Reset off the bottom of the screen, which is the way back from the
   state the viewer had just landed in. The speed row has no buttons and draws the space two
   would have taken, so its number stays in the column the shift row put
-  its own in. Then
+  its own in.
+
+  What was *picked* is remembered too, and separately
+  (`SubtitlePickMemory`, `lib/core/subtitle_picks.dart`, the
+  `subtitlePicks` preference): one row per show holding the language as
+  the label the menu prints, the release group of the file that was
+  picked where the addon named one, or that subtitles were turned off on
+  purpose, plus a count per language with no show attached. The engine's
+  own `subtitle_preference` is session state -- `Unload` clears it and the
+  player dispatches `Unload` on dispose -- so on a fresh start the row is
+  the only thing that knows what this programme is watched in, and the
+  auto-pick falls back to it. Among the files of the remembered language
+  one from the remembered group is preferred, and where there is none the
+  head of the language is taken as always: the group is a preference
+  among files, never a condition on the language, since a show can change
+  release family between seasons and six OpenSubtitles entries in ten
+  name no group. A language the episode does not answer with means
+  nothing is applied at all, and a show never watched is left alone --
+  putting the viewer's commonest language onto an unknown programme would
+  put subtitles on one that needs none. Only a pick made by hand writes
+  to the store, and a preference synthesized from it is never dispatched
+  back to the core. The counts decay on picks rather than on days: they
+  halve when their total passes a ceiling and the zeroes drop out, which
+  follows a taste that really changes without a language going stale
+  while the app is closed. Then
   `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)
   makes one row per language, since OpenSubtitles answers a single movie
   with 69 files, nineteen of them Spanish. Codes group on what they mean

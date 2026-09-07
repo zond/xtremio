@@ -603,6 +603,56 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
 
 Three more things that are easy to undo by accident:
 
+- **What a show was watched with is remembered, and a memory is never a
+  judgement.** `SubtitlePickMemory` (`lib/core/subtitle_picks.dart`, the
+  `subtitlePicks` preference) keeps one row per show -- the language as
+  the label the menu prints, the `releaseGroup` of the file that was
+  picked where the addon named one, or that subtitles were deliberately
+  off -- and a count per language for the menu's two pinned rows. The
+  auto-pick reads the row when the engine has no session preference,
+  which is every fresh start, since `Unload` clears that field and the
+  player dispatches `Unload` on dispose. Four rules hold it up, each with
+  a test. **Only a pick by hand writes**, exactly as only a press on the
+  timing panel writes `subtitleSync`: an auto-pick that counted itself
+  would make twenty-two counts out of one choice over a season and freeze
+  the pins for good. **Nothing is preselected that this episode does not
+  offer**: no remembered language, no pinned row, no group. A group is a
+  preference *among* the files of the language and never a condition on
+  it, because a show can change release family between seasons and six
+  files in ten name no group at all; a language that is missing means
+  nothing is applied, and falling back to the viewer's commonest language
+  would be answering a question nobody asked. **Off is a value**, so the
+  one show watched undubbed does not get subtitles pushed back on every
+  episode. And **a synthesized preference is never dispatched**:
+  `SubtitlePreferenceChanged` means the viewer said so this session, and
+  writing a guess into it would make a memory indistinguishable from a
+  judgement -- which is the distinction `_subtitlesChosenByHand` rests
+  on.
+- **What a show was watched with is remembered, and a memory is never a
+  judgement.** `SubtitlePickMemory` (`lib/core/subtitle_picks.dart`, the
+  `subtitlePicks` preference) keeps one row per show -- the language as
+  the label the menu prints, the `releaseGroup` of the file that was
+  picked where the addon named one, or that subtitles were deliberately
+  off -- and a count per language for the menu's two pinned rows. The
+  auto-pick reads the row when the engine has no session preference,
+  which is every fresh start, since `Unload` clears that field and the
+  player dispatches `Unload` on dispose. Four rules hold it up, each with
+  a test. **Only a pick by hand writes**, exactly as only a press on the
+  timing panel writes `subtitleSync`: an auto-pick that counted itself
+  would make twenty-two counts out of one choice over a season and freeze
+  the pins for good. **Nothing is preselected that this episode does not
+  offer**: no remembered language, no pinned row, no group. A group is a
+  preference *among* the files of the language and never a condition on
+  it, because a show can change release family between seasons and six
+  files in ten name no group at all; a language that is missing means
+  nothing is applied, and falling back to the viewer's commonest language
+  would be answering a question nobody asked. **Off is a value**, so the
+  one show watched undubbed does not get subtitles pushed back on every
+  episode. And **a synthesized preference is never dispatched**:
+  `SubtitlePreferenceChanged` means the viewer said so this session, and
+  writing a guess into it would make a memory indistinguishable from a
+  judgement -- which is the distinction `_subtitlesChosenByHand` rests
+  on.
 - **Everything that consumes the subtitle list orders it.** There are two
   consumers, the menu and the session preference's auto-pick, and the
   auto-pick is the one that applies a file without the viewer looking, so

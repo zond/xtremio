@@ -395,7 +395,7 @@ List<SubtitleSource> subtitlesByRelease(
   for (final source in sources) {
     // Keyed the way the menu groups them, so "within a language" is the
     // same language as the row the files are listed under.
-    final key = _languageLabel(source.subtitle.lang).toLowerCase();
+    final key = subtitleLanguageLabel(source.subtitle.lang).toLowerCase();
     byLanguage
         .putIfAbsent(key, () {
           order.add(key);
@@ -452,7 +452,14 @@ _ReleaseFit _fitOf(
 /// The display name a language code is grouped under: what the code
 /// *means*, so `en` and `eng` are one language; the code itself when
 /// [languageName] does not know it; `Unknown` when there is no code.
-String _languageLabel(String lang) {
+///
+/// Public because it is also what a remembered pick is stored as
+/// (`SubtitleShowPick.language`): the memory has to be the row the menu
+/// prints, or an addon spelling a language differently next episode would
+/// read as a different choice. Passing a label back through is harmless
+/// -- [languageName] answers an unknown code with the code -- which is
+/// what lets a stored label be compared with a fresh one.
+String subtitleLanguageLabel(String lang) {
   final code = lang.trim();
   return code.isEmpty ? 'Unknown' : languageName(code);
 }
@@ -580,7 +587,7 @@ List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
   final labels = <String, String>{};
   final byLanguage = <String, List<SubtitleOption>>{};
   for (final source in sources) {
-    final label = _languageLabel(source.subtitle.lang);
+    final label = subtitleLanguageLabel(source.subtitle.lang);
     final key = label.toLowerCase();
     final options = byLanguage.putIfAbsent(key, () {
       order.add(key);

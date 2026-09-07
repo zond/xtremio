@@ -456,7 +456,10 @@ void main() {
         1e-9,
       ),
     );
-    expect(client.writes, ['subtitleSync']);
+    // The pick that put the file on screen wrote the show's language
+    // down, which is a different key and a different memory; what
+    // this counts is the writes of the timing.
+    expect(client.writes.where((key) => key == 'subtitleSync'), hasLength(1));
   });
 
   testWidgets('a press just before the file changes is still that file\'s', (
@@ -534,7 +537,9 @@ void main() {
     await tester.pumpAndSettle();
     await pumpEvents(tester);
 
-    expect(client.writes, isEmpty);
+    // Picking and turning off are choices and are remembered as such;
+    // what is not written is the *timing*, which nobody adjusted.
+    expect(client.writes, everyElement('subtitlePicks'));
     expect(player.engine.subtitleSpeed, 1);
   });
 }
