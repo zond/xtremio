@@ -3518,44 +3518,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// at, and the layer it would put away first is the OSD it is drawn on.
   void _leavePlayer() => unawaited(_leave());
 
-  /// Stops the player, waits for it, and only then leaves the screen.
-  ///
-  /// The order is the whole of it, and it is the reverse of what this
-  /// screen used to do. The `quit` goes out first, because it is the kill
-  /// and because it is what makes the `stop` inside the teardown come back
-  /// promptly instead of waiting out a five-minute `network-timeout`. Then
-  /// the teardown is awaited *with the video still in the tree and the
-  /// audio device still open* -- media_kit releases both from inside it,
-  /// after the stop, so the sinks are alive and being drained for exactly
-  /// as long as mpv might still be handing them something. Only then does
-  /// the screen go.
-  ///
-  /// It used to be the other way round -- leave at once, release two
-  /// frames later through a future nobody held, quit only on a deadline --
-  /// which is what [PlayerScreen.teardownBound] and [PlaybackEngine.quit]
-  /// are each written against from their own side.
-  ///
-  /// **The wait yields; it never blocks.** An `await` leaves Flutter free
-  /// to go on producing frames, which is what keeps something draining the
-  /// video sink. A blocking join here would deadlock in precisely the case
-  /// worth waiting for -- mpv waiting on the sink, the sink waiting on us
-  /// -- and that is not hypothetical: it is what the community Android
-  /// client does, `pthread_join` and then `mpv_terminate_destroy` inline
-  /// on the UI thread, and an ANR is what it gets for it.
-  ///
-  /// **Keeping the sinks alive means keeping them consuming**, not merely
-  /// undestroyed, which is why the wait happens here rather than from
-  /// [dispose]: a screen that has already gone has nothing drawing the
-  /// texture. Measured on both platforms, mpv's video output does not in
-  /// fact block when nothing consumes -- eight seconds with the `Video`
-  /// widget out of the tree advanced playback normally on Linux and on the
-  /// Chromecast -- so this is the ordering that is safe by construction
-  /// rather than by measurement, and it costs nothing.
-  ///
-  /// The wait is bounded and the pop is not conditional on it: a player
-  /// that will not stop keeps the viewer for [PlayerScreen.teardownBound]
-  /// and no longer, and finishes -- or does not -- in the background,
-  /// where the teardown itself says which.
   /// Cuts this screen off from everything that could still act on the
   /// player, before anything about the leaving is awaited.
   ///
@@ -3626,6 +3588,44 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controlsTimer = null;
   }
 
+  /// Stops the player, waits for it, and only then leaves the screen.
+  ///
+  /// The order is the whole of it, and it is the reverse of what this
+  /// screen used to do. The `quit` goes out first, because it is the kill
+  /// and because it is what makes the `stop` inside the teardown come back
+  /// promptly instead of waiting out a five-minute `network-timeout`. Then
+  /// the teardown is awaited *with the video still in the tree and the
+  /// audio device still open* -- media_kit releases both from inside it,
+  /// after the stop, so the sinks are alive and being drained for exactly
+  /// as long as mpv might still be handing them something. Only then does
+  /// the screen go.
+  ///
+  /// It used to be the other way round -- leave at once, release two
+  /// frames later through a future nobody held, quit only on a deadline --
+  /// which is what [PlayerScreen.teardownBound] and [PlaybackEngine.quit]
+  /// are each written against from their own side.
+  ///
+  /// **The wait yields; it never blocks.** An `await` leaves Flutter free
+  /// to go on producing frames, which is what keeps something draining the
+  /// video sink. A blocking join here would deadlock in precisely the case
+  /// worth waiting for -- mpv waiting on the sink, the sink waiting on us
+  /// -- and that is not hypothetical: it is what the community Android
+  /// client does, `pthread_join` and then `mpv_terminate_destroy` inline
+  /// on the UI thread, and an ANR is what it gets for it.
+  ///
+  /// **Keeping the sinks alive means keeping them consuming**, not merely
+  /// undestroyed, which is why the wait happens here rather than from
+  /// [dispose]: a screen that has already gone has nothing drawing the
+  /// texture. Measured on both platforms, mpv's video output does not in
+  /// fact block when nothing consumes -- eight seconds with the `Video`
+  /// widget out of the tree advanced playback normally on Linux and on the
+  /// Chromecast -- so this is the ordering that is safe by construction
+  /// rather than by measurement, and it costs nothing.
+  ///
+  /// The wait is bounded and the pop is not conditional on it: a player
+  /// that will not stop keeps the viewer for [PlayerScreen.teardownBound]
+  /// and no longer, and finishes -- or does not -- in the background,
+  /// where the teardown itself says which.
   Future<void> _leave([PlayerScreenResult? result]) async {
     if (_leaving) return;
     setState(() => _leaving = true);
