@@ -7,9 +7,12 @@ import 'core_events.dart';
 import 'fields.dart';
 
 /// Keeps the latest JSON of one model field, re-pulling it whenever a
-/// `NewState` event names the field. Pulls are coalesced: a burst of events
-/// within one event-loop turn results in a single `core_get_state`, and a
-/// pull that finishes after a newer request was made is followed by one more.
+/// `NewState` event names the field. Pulls are coalesced within one
+/// microtask turn: several `refresh` calls before the microtask runs are one
+/// pull, and a pull that finishes after a newer request was made is followed
+/// by one more. Events the bridge delivers separately are separate pulls;
+/// what makes those cheap is [FieldPulls] on the client, which fetches and
+/// decodes a field once per `NewState` however many notifiers ask for it.
 ///
 /// The value is null until the first pull completes.
 class CoreFieldNotifier extends ValueNotifier<Map<String, dynamic>?> {
