@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/core_settings.dart';
@@ -13,6 +14,7 @@ import 'package:xtremio/shell/root_shell.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_sharing.dart';
 import '../support/fixtures.dart';
+import '../support/tv.dart';
 
 /// The status light in the shell's corner: when it is drawn, what pressing
 /// it offers, and that each of the three answers does exactly what it says.
@@ -249,6 +251,39 @@ void main() {
       await poll(tester);
 
       expect(find.byKey(lightKey), findsNothing);
+    });
+  });
+
+  group('off a television', () {
+    testWidgets('the light is a button of its own, and the shell keeps its '
+        'node', (tester) async {
+      final s = setUpSharing(tester);
+      seeding(s.server);
+      await tester.pumpWidget(
+        harness(monitor: s.monitor, policy: s.policy, prefs: s.prefs),
+      );
+      await tester.pumpAndSettle();
+      await poll(tester);
+      expect(find.byKey(lightKey), findsOneWidget);
+
+      // The node the shell owns is a television's -- it exists so a rail
+      // key can put focus on the light -- and nothing here takes it, so it
+      // is not in the focus tree at all while the light is lit.
+      expect(
+        FocusManager.instance.rootScope.descendants.map((n) => n.debugLabel),
+        isNot(contains('sharing light')),
+      );
+
+      // Tab still finds the light, through the button's own node: this is
+      // an ordinary focusable, not the shell's node the D-pad is kept off.
+      for (var i = 0; i < 40 && !focusIn<SharingLight>(); i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+      }
+      expect(focusIn<SharingLight>(), isTrue);
+      final node = FocusManager.instance.primaryFocus!;
+      expect(node.debugLabel, isNot('sharing light'));
+      expect(node.skipTraversal, isFalse);
     });
   });
 

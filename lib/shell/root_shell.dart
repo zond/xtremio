@@ -105,19 +105,32 @@ class _RootShellState extends State<RootShell> {
   /// that directional traversal could land on would sit between an up or a
   /// right press and the poster it was meant for, which is the one thing an
   /// overlay on a television must never do. What reaches it instead is
-  /// [_onRailKey], up from the top of the rail. Off a television it is an
-  /// ordinary node and Tab finds it.
+  /// [_onRailKey], up from the top of the rail.
+  ///
+  /// It is a television's node and nothing else's. Off one, [SharingLight]
+  /// draws a plain button that takes no node from the shell, so this one is
+  /// never attached to the tree at all: Tab does reach the light there, but
+  /// through the button's own node rather than this. Which is why the flag
+  /// is set unconditionally and reads as if it were about both -- the
+  /// property is the one thing standing between a D-pad press and the light,
+  /// so it is set where the node is made rather than where the light is
+  /// drawn, and off a television it decides nothing.
   final FocusNode _lightNode = FocusNode(
     debugLabel: 'sharing light',
     skipTraversal: true,
   );
 
-  /// Whether the light is drawn: its node is in the focus tree exactly then,
-  /// since [SharingLight] builds nothing at all when there is nothing going
-  /// out. Asking the node rather than the monitor keeps this one question
-  /// with one answer -- and a [FocusNode.requestFocus] on a node with no
-  /// parent is remembered and applied when it *is* next mounted, which
-  /// would take the remote to a light that appeared ten minutes later.
+  /// Whether the light is drawn *and this node is what the remote would
+  /// land on*: it is in the focus tree exactly then, since [SharingLight]
+  /// builds nothing at all when there is nothing going out, and builds the
+  /// button that ignores this node off a television. So this is false on a
+  /// phone however much is going out, which costs nothing: the only thing
+  /// that asks is [_onRailKey], and a rail key is a television's.
+  ///
+  /// Asking the node rather than the monitor keeps this one question with
+  /// one answer -- and a [FocusNode.requestFocus] on a node with no parent
+  /// is remembered and applied when it *is* next mounted, which would take
+  /// the remote to a light that appeared ten minutes later.
   bool get _lightIsUp => _lightNode.parent != null;
 
   /// Which of the rail's destinations holds focus, or -1 for none (TV
