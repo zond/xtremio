@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import '../../core/core.dart';
 
 /// Whether the embedded server may go on sharing a title after the viewer
-/// has finished watching it: what the choice means, what it defaults to on
-/// each kind of device, and where the answer goes.
+/// has finished watching it: what the choice means, what it defaults to and
+/// where the answer goes.
 ///
 /// **What the server already offers, and what the app adds.** The server
 /// has had this setting all along: `seedingEnabled` in its `ServerSettings`
@@ -21,13 +21,15 @@ import '../../core/core.dart';
 /// whatever this says, and stops being shared when it is unpinned like
 /// anything else.
 ///
-/// **The default is the device's, because the cost is.** On the owner's
-/// Chromecast -- in a wall socket, on the house's own line, idle most of the
-/// day -- keeping a torrent in the swarm costs nothing anybody would notice,
-/// and it is the polite way to have taken the film in the first place. On a
-/// phone the same bytes come out of a battery, and over mobile data out of a
-/// bill. So a television starts sharing and everything else starts not
-/// sharing, and the switch is how either is changed.
+/// **It is on everywhere, and the switch is the whole of the control.**
+/// There used to be a default per device -- a television shares, a phone
+/// does not -- on the reasoning that a box in a wall socket on the house's
+/// line costs nobody anything while a phone spends a battery and a bill.
+/// What that reasoning is really about is a cost the owner cannot see, and
+/// the answer to that is to *show* it rather than to guess at it: a device
+/// this app has never met is not a thing to have opinions about. Keeping a
+/// torrent in the swarm is the polite way to have taken the film in the
+/// first place, so it happens by default, and one press stops it.
 ///
 /// **Nothing here asks what the connection costs, and nothing should.**
 /// There was a term for it: a `ConnectivityManager` watcher behind an event
@@ -48,8 +50,6 @@ import '../../core/core.dart';
 /// nothing for most of the day with nothing on screen saying why, which is
 /// the same fault as a button that is drawn and dead; and it changes several
 /// times a day, so the server's policy would flap on every plug and unplug.
-/// What is left of that worry is the default: off a television nothing is
-/// shared until the owner says so, and the battery is theirs to spend.
 class IdleSharing {
   const IdleSharing._();
 
@@ -65,30 +65,24 @@ class IdleSharing {
   static const String description =
       'Keeps uploading what you watched to other people until the next '
       'stream starts.';
-
-  /// What a device that has never been asked does. See the class comment:
-  /// a television is on a wall socket and a fixed line, and a phone is not.
-  static bool defaultFor({required bool isTv}) => isTv;
-
-  /// Whether the server may share right now: what the viewer chose, or
-  /// [defaultFor] when they have chosen nothing.
-  static bool allowed({required bool? chosen, required bool isTv}) =>
-      chosen ?? defaultFor(isTv: isTv);
 }
 
-/// Keeps the embedded server's `seedingEnabled` equal to what
-/// [IdleSharing.allowed] answers, for as long as the app is running.
+/// Keeps the embedded server's `seedingEnabled` equal to
+/// [AppPrefs.shareWhileIdle], for as long as the app is running.
 ///
 /// One of these for the whole app, built by `XtremioApp`, because there is
-/// one server and one answer. It reads two things -- the viewer's choice
-/// ([AppPrefs], which notifies) and the device (settled at start-up) -- and
-/// writes one settings key.
+/// one server and one answer. It reads one thing -- the viewer's choice
+/// ([AppPrefs], which notifies) -- and writes one settings key. That is
+/// thin enough to look like a wrapper and is not: what it is for is that
+/// nothing else in the app writes `seedingEnabled`, so the server's belief
+/// has one author however many screens change the preference.
 ///
-/// **It pushes as soon as it starts.** The server's own default is `true`,
-/// so a device whose answer is "no" has to be told before anything can be
-/// shared; and [start] is called after the preferences have loaded, so the
-/// first thing the server hears is the viewer's answer and not the default
-/// they overrode.
+/// **It pushes as soon as it starts.** The server's own default is `true`
+/// and so is the preference's, so this agrees with the server on a fresh
+/// install -- but a viewer who has turned it off has to be told before
+/// anything can be shared, and [start] is called after the preferences have
+/// loaded, so the first thing the server hears is their answer and not the
+/// default they overrode.
 ///
 /// **It pushes only changes, and one at a time.** Nothing is written when
 /// the answer is the answer already sent, so a preference that notifies for
@@ -97,18 +91,10 @@ class IdleSharing {
 /// worker pool in no particular order and the loser decides what the server
 /// ends up believing.
 class IdleSharingPolicy {
-  IdleSharingPolicy({
-    required this.prefs,
-    required this.isTv,
-    required this.server,
-  });
+  IdleSharingPolicy({required this.prefs, required this.server});
 
   /// The viewer's choice, and what tells this when it changes.
   final AppPrefs prefs;
-
-  /// What start-up decided this device is, which is where the default
-  /// comes from. Settled once; nothing re-asks the platform.
-  final bool isTv;
 
   /// Where the answer goes: one key of the embedded server's settings.
   final ServerSettingsWriter server;
@@ -137,10 +123,7 @@ class IdleSharingPolicy {
 
   void _reconsider() {
     if (_stopped) return;
-    final allowed = IdleSharing.allowed(
-      chosen: prefs.shareWhileIdle,
-      isTv: isTv,
-    );
+    final allowed = prefs.shareWhileIdle;
     if (allowed == _sent) return;
     _sent = allowed;
     _writes = _writes.then((_) => _push(allowed));

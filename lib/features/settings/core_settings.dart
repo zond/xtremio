@@ -240,10 +240,8 @@ class FocusEmphasisSection extends StatelessWidget {
 /// like those, labelled for what turning it on does.
 ///
 /// **It is offered on every device**, unlike "Bold focus", because the
-/// choice exists everywhere; only the default differs, and the switch shows
-/// that default until somebody moves it ([AppPrefs.shareWhileIdle] is null
-/// until then, which is exactly what lets a television's stored *off*
-/// survive).
+/// choice exists everywhere and now so does the default: sharing is on
+/// until somebody turns it off here.
 ///
 /// It writes only the preference; what reaches the server is
 /// [IdleSharingPolicy]'s to send, so that one object decides for the whole
@@ -264,9 +262,7 @@ class IdleSharingSection extends StatelessWidget {
     secondary: const Icon(Icons.upload_outlined),
     title: const Text(IdleSharing.title),
     subtitle: const Text(IdleSharing.description),
-    value:
-        prefs.shareWhileIdle ??
-        IdleSharing.defaultFor(isTv: DeviceScope.isTv(context)),
+    value: prefs.shareWhileIdle,
     onChanged: (on) => prefs.setShareWhileIdle(on),
   );
 }

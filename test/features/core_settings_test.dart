@@ -300,17 +300,17 @@ void main() {
 
     Finder theSwitch() => find.byKey(settingKey(AppPrefs.shareWhileIdleKey));
 
-    testWidgets('starts where the device puts it, and says what it does', (
+    testWidgets('starts on wherever it is drawn, and says what it does', (
       tester,
     ) async {
       // Nothing has been chosen, so what the switch shows is the default,
-      // and the default is the device's: a box in a wall socket shares,
-      // and a phone does not.
+      // and the default no longer varies by device: the app does not guess
+      // at what this connection costs anybody.
       await pumpSettings(tester, prefs: AppPrefs.inMemory(), device: tv);
       expect(tester.widget<SwitchListTile>(theSwitch()).value, isTrue);
 
       await pumpSettings(tester, prefs: AppPrefs.inMemory());
-      expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isTrue);
 
       // And what turning it on does is on the tile itself: "Share while
       // idle" alone leaves the viewer to guess what "idle" covers.
@@ -337,18 +337,19 @@ void main() {
       expect(restarted.shareWhileIdle, isFalse);
     });
 
-    testWidgets('is offered on a phone too, where the default is off', (
+    testWidgets('is offered on a phone too, and turns off there', (
       tester,
     ) async {
-      // Unlike Bold focus: the choice exists on every device, and only the
-      // default differs.
+      // Unlike Bold focus: the choice exists on every device, and it is
+      // the same choice -- a phone is where somebody is most likely to
+      // want it off, and this is where they say so.
       final prefs = AppPrefs(client: FakePrefsClient());
       await pumpSettings(tester, prefs: prefs);
 
       await tester.tap(theSwitch());
       await tester.pumpAndSettle();
 
-      expect(prefs.shareWhileIdle, isTrue);
+      expect(prefs.shareWhileIdle, isFalse);
     });
 
     testWidgets('is offered before the settings have arrived', (tester) async {

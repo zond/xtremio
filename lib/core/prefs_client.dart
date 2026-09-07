@@ -128,13 +128,14 @@ class AppPrefs extends ChangeNotifier {
   /// The `shareWhileIdle` key: whether the embedded server may go on
   /// sharing a title with the swarm after playback ends (`IdleSharing`).
   ///
-  /// **Null until the viewer has chosen**, and that is the whole reason it
-  /// is a `bool?`. What it means to have chosen nothing differs by device
-  /// -- a television on a wall socket shares, a phone does not -- and this
-  /// class knows nothing about the device, so the default belongs to
-  /// `IdleSharing.defaultFor` and the stored value has to be able to say
-  /// "not that, the viewer's own answer" for both spellings of it. A
-  /// stored `false` on a television is a decision and must survive.
+  /// **On until the viewer turns it off**, which is why it is a plain
+  /// `bool` and not a `bool?`. It used to be the third state: the default
+  /// differed by device, this class knows nothing about the device, so a
+  /// stored value had to be able to say "the viewer's own answer" for both
+  /// spellings of it. The default is now simply on everywhere, so a missing
+  /// key and a stored `true` mean the same thing and there is nothing left
+  /// for a null to say. A stored `false` is a decision and still survives,
+  /// which is all the storage ever had to do.
   static const String shareWhileIdleKey = 'shareWhileIdle';
 
   /// The `subtitleSync` key: every subtitle adjustment the viewer has
@@ -174,11 +175,10 @@ class AppPrefs extends ChangeNotifier {
 
   FocusEmphasis get focusEmphasis => _focusEmphasis;
 
-  /// What the viewer chose about sharing between sessions, or null when
-  /// they never have -- see [shareWhileIdleKey]. Nothing here supplies the
-  /// default; `IdleSharing` does, from the device.
-  bool? get shareWhileIdle => _shareWhileIdle;
-  bool? _shareWhileIdle;
+  /// Whether the server may go on sharing between sessions -- see
+  /// [shareWhileIdleKey], which is also where the default lives.
+  bool get shareWhileIdle => _shareWhileIdle;
+  bool _shareWhileIdle = true;
 
   SubtitleSyncMemory _subtitleSync = SubtitleSyncMemory.empty;
 

@@ -240,11 +240,7 @@ class _XtremioAppState extends State<XtremioApp> {
     _cast = widget.cast ?? GoogleCastClient();
     _ownsPrefs = widget.prefs == null;
     _prefs = widget.prefs ?? AppPrefs(client: const RustPrefsClient());
-    _sharing = IdleSharingPolicy(
-      prefs: _prefs,
-      isTv: widget.device.isTv,
-      server: widget.serverSettings,
-    );
+    _sharing = IdleSharingPolicy(prefs: _prefs, server: widget.serverSettings);
     // After the load, not beside it: a stored choice arriving a moment
     // later would otherwise be preceded by a push of the default it was
     // made to override, and the server would hear both.
