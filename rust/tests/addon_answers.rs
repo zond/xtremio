@@ -22,7 +22,7 @@ use stremio_core::types::streams::StreamsBucket;
 use url::Url;
 use xtremio_core::addon_health::{key_for, table_in, Record, ResourceKind, Table};
 use xtremio_core::env::XtremioEnv;
-use xtremio_core::model::{XtremioModel, XtremioModelField};
+use xtremio_core::model::{GridCatalogs, XtremioModel, XtremioModelField};
 use xtremio_core::state::AppState;
 
 const CINEMETA: &str = "https://v3-cinemeta.strem.io/manifest.json";
@@ -71,7 +71,7 @@ fn row(
 }
 
 /// A board of the given rows, as `ActionLoad::CatalogsWithExtra` leaves it.
-fn board(rows: Vec<Vec<ResourceLoadable<Vec<MetaItemPreview>>>>) -> CatalogsWithExtra {
+fn board(rows: Vec<Vec<ResourceLoadable<Vec<MetaItemPreview>>>>) -> GridCatalogs {
     CatalogsWithExtra {
         selected: Some(Selected {
             r#type: None,
@@ -79,6 +79,7 @@ fn board(rows: Vec<Vec<ResourceLoadable<Vec<MetaItemPreview>>>>) -> CatalogsWith
         }),
         catalogs: rows,
     }
+    .into()
 }
 
 /// The answer with content, the answer with nothing, and the two ways of
@@ -263,7 +264,7 @@ fn a_board_that_was_unloaded_and_loaded_again_counts_again() {
     model.board = board(vec![row(CINEMETA, answered()), row(CHANNELS, failed())]);
     assert_eq!(observe(&app, &model), 1);
 
-    model.board = CatalogsWithExtra::default();
+    model.board = GridCatalogs::default();
     assert_eq!(observe(&app, &model), 0, "an unload is not an answer");
 
     model.board = board(vec![row(CINEMETA, answered()), row(CHANNELS, failed())]);

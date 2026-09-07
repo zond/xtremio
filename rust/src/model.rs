@@ -6,6 +6,8 @@
 //! `update_field` dispatch. Every field is serialized to JSON with serde for
 //! the Dart side; there is no per-type mirroring.
 
+use std::ops::{Deref, DerefMut};
+
 use serde::Serialize;
 use stremio_core::models::addon_details::AddonDetails;
 use stremio_core::models::catalog_with_filters::CatalogWithFilters;
@@ -18,7 +20,8 @@ use stremio_core::models::library_with_filters::{LibraryWithFilters, NotRemovedF
 use stremio_core::models::meta_details::MetaDetails;
 use stremio_core::models::player::Player;
 use stremio_core::models::streaming_server::StreamingServer;
-use stremio_core::runtime::Effects;
+use stremio_core::runtime::msg::{Internal, Msg};
+use stremio_core::runtime::{Effects, UpdateWithCtx};
 use stremio_core::types::addon::Descriptor;
 use stremio_core::types::events::DismissedEventsBucket;
 use stremio_core::types::library::LibraryBucket;
@@ -42,10 +45,10 @@ pub struct XtremioModel {
     pub continue_watching_preview: ContinueWatchingPreview,
     /// Home: every catalog of every installed addon
     /// (`ActionLoad::CatalogsWithExtra`).
-    pub board: CatalogsWithExtra,
+    pub board: GridCatalogs,
     /// Search results: every catalog supporting the `search` extra
     /// (`ActionLoad::CatalogsWithExtra` with `["search", query]`).
-    pub search: CatalogsWithExtra,
+    pub search: GridCatalogs,
     /// One catalog with its filters (`ActionLoad::CatalogWithFilters`).
     pub discover: CatalogWithFilters<MetaItemPreview>,
     /// Meta + per-addon streams for one item (`ActionLoad::MetaDetails`).
@@ -68,6 +71,50 @@ pub struct XtremioModel {
     /// One addon by manifest URL: the installed copy and the fetched manifest
     /// (`ActionLoad::AddonDetails`).
     pub addon_details: AddonDetails,
+}
+
+/// A `CatalogsWithExtra` that does not follow the library.
+///
+/// stremio-core marks the model changed on every `LibraryChanged` -- a
+/// pause, the progress push every 90 s under the player, a title kept --
+/// because stremio-web merges each item's library flags into the board it
+/// serializes, so there the board really has changed. Nothing this crate
+/// puts on the wire for a board or a search reads the library, so here that
+/// `NewState` was a re-serialization of every loaded catalog and a re-decode
+/// of the same document on the Dart UI isolate, for a board nobody was
+/// looking at. The model itself is left exactly as stremio-core keeps it:
+/// the arm being filtered changes no state (`Effects::none()`), only the
+/// flag.
+#[derive(Default, Clone)]
+pub struct GridCatalogs(pub CatalogsWithExtra);
+
+impl Deref for GridCatalogs {
+    type Target = CatalogsWithExtra;
+
+    fn deref(&self) -> &CatalogsWithExtra {
+        &self.0
+    }
+}
+
+impl DerefMut for GridCatalogs {
+    fn deref_mut(&mut self) -> &mut CatalogsWithExtra {
+        &mut self.0
+    }
+}
+
+impl From<CatalogsWithExtra> for GridCatalogs {
+    fn from(catalogs: CatalogsWithExtra) -> Self {
+        GridCatalogs(catalogs)
+    }
+}
+
+impl UpdateWithCtx<XtremioEnv> for GridCatalogs {
+    fn update(&mut self, msg: &Msg, ctx: &Ctx) -> Effects {
+        match msg {
+            Msg::Internal(Internal::LibraryChanged(_)) => Effects::none().unchanged(),
+            _ => UpdateWithCtx::<XtremioEnv>::update(&mut self.0, msg, ctx),
+        }
+    }
 }
 
 impl XtremioModel {
@@ -251,6 +298,8 @@ mod tests {
     use super::*;
     use stremio_core::models::catalogs_with_extra::Selected;
     use stremio_core::models::common::ResourceLoadable;
+    use stremio_core::runtime::msg::{Action, ActionLoad};
+    use stremio_core::runtime::Model as _;
     use stremio_core::types::addon::{ResourcePath, ResourceRequest, ResourceResponse};
 
     const FIELD_NAMES: [&str; 12] = [
@@ -479,7 +528,8 @@ mod tests {
                 // Addon not installed (any more): id and host.
                 planned_catalog("https://example.org/addon/manifest.json", "movie", "weird"),
             ],
-        };
+        }
+        .into();
         let json: serde_json::Value =
             serde_json::from_str(&model.get_state_json(&XtremioModelField::Board).unwrap())
                 .unwrap();
@@ -492,6 +542,39 @@ mod tests {
                 { "name": "YouTube", "addonName": "YouTube", "type": "channel" },
                 { "name": "weird", "addonName": "example.org", "type": "movie" },
             ])
+        );
+    }
+
+    /// A library change -- a pause, the 90 s progress push, a title kept --
+    /// is not a change to the board or the search: nothing they put on the
+    /// wire reads the library, and the field was re-pulled whole on every
+    /// one. A load still is a change, so the filter is not a gag.
+    #[test]
+    fn a_library_change_does_not_touch_the_board_or_the_search() {
+        let mut model = default_model();
+        let (_effects, fields) = model.update_field(
+            &Msg::Action(Action::Load(ActionLoad::CatalogsWithExtra(Selected {
+                r#type: None,
+                extra: vec![],
+            }))),
+            &XtremioModelField::Board,
+        );
+        assert_eq!(fields, vec![XtremioModelField::Board], "a load is a change");
+
+        let (_effects, fields) = model.update(&Msg::Internal(Internal::LibraryChanged(true)));
+        assert!(
+            !fields.contains(&XtremioModelField::Board),
+            "the board is not re-emitted: {fields:?}"
+        );
+        assert!(
+            !fields.contains(&XtremioModelField::Search),
+            "nor is the search: {fields:?}"
+        );
+        // The wrapped model is untouched by the filtering.
+        assert_eq!(
+            model.board.catalogs.len(),
+            6,
+            "the default addons' six catalogs"
         );
     }
 

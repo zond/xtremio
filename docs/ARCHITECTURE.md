@@ -22,7 +22,12 @@ what every model field means. The shape of the thing is in the
   the UI needs, `get_state_json` (`rust/src/model.rs`) adds a sibling key
   rather than reshaping the field: `meta_details` gains `watchedVideoIds`,
   `board`/`search` gain `catalogLabels` (catalog and addon names resolved
-  from the profile's manifests, aligned with `catalogs`). The model
+  from the profile's manifests, aligned with `catalogs`).
+  Those two fields do not follow the library (`GridCatalogs` in `model.rs`),
+  since nothing they carry reads it: stremio-core marks them changed on every
+  library change because stremio-web merges library flags into the board it
+  serializes, and here that was the whole board re-serialized and re-decoded
+  on the UI isolate per pause and per progress push. The model
   (`XtremioModel`) has `ctx`, `continue_watching_preview`, `board`,
   `search`, `discover`, `meta_details`, `streaming_server`, `player`,
   `library`, `installed_addons`, `remote_addons` and `addon_details`;
