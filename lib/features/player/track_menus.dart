@@ -197,9 +197,13 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
   /// twice and counted once, because it is one language to the viewer
   /// and one to the counts (`subtitleLanguageLabel` is what both are
   /// stored under, and `SubtitlePickMemory.pinned` keeps the first
-  /// mention). The alphabet is named first so a tie between two addon
-  /// rows still comes out alphabetically, and a tie with a track in the
-  /// file is spent on the row a viewer would otherwise have to find.
+  /// mention). The addons' rows are named first, so a tie between one of
+  /// them and a track in the file is spent on the row a viewer would
+  /// otherwise have to find. A tie between two addon rows comes out in
+  /// whatever order [SubtitleMenu.groups] arrived in, and that order is
+  /// the caller's: this widget takes the list as given and promises
+  /// nothing about it, so nothing here claims such a tie is settled
+  /// alphabetically.
   List<String> get _pinnedLanguages =>
       widget.picks?.pinned([
         for (final group in widget.groups) group.language,
@@ -210,8 +214,8 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
       const [];
 
   /// The pinned groups, in the order [_pinnedLanguages] puts them, and
-  /// everything else in the order it arrived -- which is the alphabet
-  /// [subtitlesByRelease] left it in.
+  /// everything else in the order it arrived -- which, from the player,
+  /// is the alphabet [subtitlesByRelease] left it in.
   ///
   /// Two things leave the section off the sheet rather than heading an
   /// empty one. Lifting every language there is moves no row nearer the
@@ -221,7 +225,11 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
   /// and the freed slots are deliberately *not* handed to the next
   /// language down -- the heading says these are the ones picked most
   /// often, the third most picked is not that, and the two that are sit
-  /// at the top of this sheet already.
+  /// at the top of this sheet already. That is code not written, so the
+  /// thing that holds it is a test:
+  /// `test/features/player/subtitle_pins_test.dart`, "both winners
+  /// inside the file lift nothing, and the next language down is not
+  /// promoted into their place".
   (List<SubtitleLanguageGroup>, List<SubtitleLanguageGroup>) _split(
     List<String> languages,
   ) {

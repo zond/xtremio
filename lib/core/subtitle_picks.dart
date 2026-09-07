@@ -210,7 +210,7 @@ final class SubtitlePickMemory {
   /// and takes one slot; the first mention is the one that counts.
   ///
   /// [offered] is taken in the order the caller has it -- the menu's
-  /// alphabet, then the file's own tracks -- and the sort is on (picks,
+  /// addon rows, then the file's own tracks -- and the sort is on (picks,
   /// that position) so ties come out in that order and two rebuilds of
   /// one menu never disagree -- `List.sort` is not stable, so the
   /// position is part of the key rather than left to it.
