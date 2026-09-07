@@ -14,6 +14,7 @@ import 'features/downloads/downloads_screen.dart';
 import 'features/downloads/downloads_service.dart';
 import 'features/player/playback_engine.dart';
 import 'features/sharing/idle_sharing.dart';
+import 'features/sharing/sharing_activity.dart';
 import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
 import 'shell/focus_theme.dart';
@@ -84,6 +85,12 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// preferences are in so that the first thing the server hears is the
 /// viewer's own choice rather than the default it overrides.
 ///
+/// And the [SharingScope], which is that policy and one
+/// [SharingActivityMonitor] where the shell can reach them: what the light
+/// in the corner is drawn from, and what its popup presses. The monitor is
+/// built whether or not anything can answer it, so there is one code path
+/// rather than two.
+///
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
 /// [RustDownloadsClient] unless [downloads] hands it one, and disposes only
@@ -105,6 +112,7 @@ class XtremioApp extends StatefulWidget {
     this.defaultDestination = platformDefaultDestination,
     this.device = DeviceProfile.fallback,
     this.serverSettings = const ServerClient(),
+    this.sharingActivity,
   });
 
   final CoreClient core;
@@ -145,6 +153,13 @@ class XtremioApp extends StatefulWidget {
   /// Where that policy is written, which is the embedded server's settings
   /// over FFI unless a test hands over a recorder.
   final ServerSettingsWriter serverSettings;
+
+  /// What the embedded server is uploading right now, for the status light
+  /// ([SharingLight]). **Null in the app as it ships**, and deliberately:
+  /// nothing over FFI can answer the question honestly yet, and the whole
+  /// of why is written down on [SharingActivityClient]. With no client the
+  /// monitor never polls and the light is never drawn.
+  final SharingActivityClient? sharingActivity;
 
   /// Builds the [PlaybackEngine] for one player. Tests inject a recorder
   /// here to see what the app asked for without touching libmpv.
@@ -214,6 +229,10 @@ class _XtremioAppState extends State<XtremioApp> {
   /// app's own.
   late final IdleSharingPolicy _sharing;
 
+  /// The one activity monitor, on the same terms: one server to ask, so one
+  /// thing asking it. The shell turns it on and off with what is on screen.
+  late final SharingActivityMonitor _activity;
+
   /// The `ctx` field, for the settings a new player is created with.
   /// Created in [initState] so its first pull is in flight from start-up;
   /// created lazily it would come into being — empty — inside the first
@@ -241,6 +260,7 @@ class _XtremioAppState extends State<XtremioApp> {
     _ownsPrefs = widget.prefs == null;
     _prefs = widget.prefs ?? AppPrefs(client: const RustPrefsClient());
     _sharing = IdleSharingPolicy(prefs: _prefs, server: widget.serverSettings);
+    _activity = SharingActivityMonitor(client: widget.sharingActivity);
     // After the load, not beside it: a stored choice arriving a moment
     // later would otherwise be preceded by a push of the default it was
     // made to override, and the server would hear both.
@@ -429,6 +449,8 @@ class _XtremioAppState extends State<XtremioApp> {
     // anything: the app going away is what ends the sharing, and it ends
     // it by taking the server with it.
     _sharing.dispose();
+    // Stops the polling with it; nothing else holds the timer.
+    _activity.dispose();
     if (_ownsPrefs) _prefs.dispose();
     _ctx.dispose();
     _lifecycle.dispose();
@@ -459,30 +481,34 @@ class _XtremioAppState extends State<XtremioApp> {
               client: _cast,
               child: PrefsScope(
                 prefs: _prefs,
-                child: PlaybackScope(
-                  createEngine: _createEngine,
-                  // Under the [PrefsScope] rather than above it, so that
-                  // the focus floor is rebuilt when the Bold switch is
-                  // flipped: the scope is an [InheritedNotifier] and this
-                  // builder reads it. Every other part of the theme is
-                  // settled before the app is built.
-                  child: Builder(
-                    builder: (context) => _showingFocus(
-                      isTv: isTv,
-                      child: MaterialApp(
-                        title: 'Xtremio',
-                        debugShowCheckedModeBanner: false,
-                        navigatorKey: _navigator,
-                        theme: XtremioApp.themeFor(
-                          isTv: isTv,
-                          emphasis: FocusHighlight.emphasisOf(context),
+                child: SharingScope(
+                  policy: _sharing,
+                  monitor: _activity,
+                  child: PlaybackScope(
+                    createEngine: _createEngine,
+                    // Under the [PrefsScope] rather than above it, so that
+                    // the focus floor is rebuilt when the Bold switch is
+                    // flipped: the scope is an [InheritedNotifier] and this
+                    // builder reads it. Every other part of the theme is
+                    // settled before the app is built.
+                    child: Builder(
+                      builder: (context) => _showingFocus(
+                        isTv: isTv,
+                        child: MaterialApp(
+                          title: 'Xtremio',
+                          debugShowCheckedModeBanner: false,
+                          navigatorKey: _navigator,
+                          theme: XtremioApp.themeFor(
+                            isTv: isTv,
+                            emphasis: FocusHighlight.emphasisOf(context),
+                          ),
+                          builder: isTv ? TvMediaQuery.builder : null,
+                          navigatorObservers: [
+                            _routes,
+                            if (kDebugMode) RouteLogObserver(),
+                          ],
+                          home: const RootShell(),
                         ),
-                        builder: isTv ? TvMediaQuery.builder : null,
-                        navigatorObservers: [
-                          _routes,
-                          if (kDebugMode) RouteLogObserver(),
-                        ],
-                        home: const RootShell(),
                       ),
                     ),
                   ),
