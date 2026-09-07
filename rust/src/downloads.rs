@@ -40,10 +40,10 @@
 //! old pin is released once the new pin is in, and an unfinished row is
 //! pinned as it always was.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -87,14 +87,45 @@ const METADATA_POLL: Duration = Duration::from_millis(250);
 pub type EventSink = Box<dyn Fn(String) -> bool + Send + Sync>;
 
 /// What is known about the registry file, behind the lock that serializes
-/// read-modify-write cycles on it. `last_write` is only ever read or set
-/// while that lock is held, so it is a field of what the lock guards rather
-/// than a second lock to remember to take.
+/// read-modify-write cycles on it. Both fields are only ever read or set
+/// while that lock is held, so they are fields of what the lock guards
+/// rather than a second lock to remember to take.
 #[derive(Default)]
 struct RegistryFile {
     /// When the registry was last written, so a progress-only change can
     /// wait for [`PROGRESS_WRITE_INTERVAL`].
     last_write: Option<Instant>,
+    /// The registry as the file held it when it was last read or written,
+    /// and the file's identity at that moment. A load answers from here
+    /// while the file still has that identity, which costs one `stat`
+    /// instead of a read and a parse of every entry's `MetaItem` snapshot --
+    /// and the ticker loads twice a second for the length of a download.
+    /// This module is the app's only writer of the file, so the identity
+    /// changes under it only when something outside the app edits it (a
+    /// test, a person), and the `stat` is what keeps that honest.
+    cached: Option<Cached>,
+}
+
+/// A parsed registry and the file it was the contents of.
+struct Cached {
+    /// Which file: the storage directory is process-wide and can be pointed
+    /// elsewhere (every test does), and a registry read from one directory
+    /// must not answer for another whose file happens to be absent too.
+    path: PathBuf,
+    /// `None` when the file was not there.
+    stamp: Option<FileStamp>,
+    registry: Registry,
+}
+
+/// What tells two versions of the file apart without reading it: its
+/// modification time and its length. The rename in `write_atomically` gives
+/// every write a new inode and a new time, so this is exact for the app's
+/// own writes and only coarse (a same-length edit within the timestamp
+/// granularity) for a stranger's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FileStamp {
+    modified: Option<SystemTime>,
+    len: u64,
 }
 
 /// The downloads half of [`AppState`]: the registry file's lock, what was
@@ -662,9 +693,52 @@ fn registry_path_in(dir: Option<PathBuf>) -> anyhow::Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("storage directory is not set; is the core initialized?"))
 }
 
-fn load_locked() -> anyhow::Result<Registry> {
+/// The registry as the file holds it, with the file's lock held. Read and
+/// parsed only when the file is not the one the cache was taken from (see
+/// [`RegistryFile::cached`]); otherwise one `stat` and a borrow.
+fn load_locked(file: &mut RegistryFile) -> anyhow::Result<&Registry> {
     let path = registry_path()?;
-    let bytes = match std::fs::read(&path) {
+    // Taken before the read, so a write landing between the two leaves a
+    // stamp the file no longer matches and the next load reads again.
+    let stamp = stamp(&path)?;
+    let fresh = file
+        .cached
+        .as_ref()
+        .is_some_and(|cached| cached.path == path && cached.stamp == stamp);
+    if !fresh {
+        let registry = read_registry(&path)?;
+        file.cached = Some(Cached {
+            path,
+            stamp,
+            registry,
+        });
+    }
+    Ok(&file.cached.as_ref().expect("just filled").registry)
+}
+
+/// The file's identity, or `None` when it is not there.
+fn stamp(path: &std::path::Path) -> anyhow::Result<Option<FileStamp>> {
+    match std::fs::metadata(path) {
+        Ok(metadata) => Ok(Some(FileStamp {
+            modified: metadata.modified().ok(),
+            len: metadata.len(),
+        })),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(anyhow::anyhow!("stat downloads registry: {error}")),
+    }
+}
+
+/// How many times the file has been read and parsed, for the test that
+/// pins the cache: a tick must not cost a parse.
+#[cfg(test)]
+static REGISTRY_READS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Reads and parses the file at `path`, forgivingly (see [`Registry::parse`]),
+/// moving aside one that cannot be read as JSON at all.
+fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
+    #[cfg(test)]
+    REGISTRY_READS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(Registry::default())
@@ -678,7 +752,7 @@ fn load_locked() -> anyhow::Result<Registry> {
                 .err()
                 .map(|error| error.to_string())
                 .unwrap_or_else(|| "the file is not a JSON object".to_owned());
-            move_aside(&path, &reason);
+            move_aside(path, &reason);
             Ok(Registry::default())
         }
     }
@@ -712,8 +786,8 @@ pub fn load() -> anyhow::Result<Registry> {
 /// is none, so work that outlived a shutdown would put one back into the
 /// process rather than quietly finish against its own.
 fn load_in(app: &AppState) -> anyhow::Result<Registry> {
-    let _guard = app.downloads.file();
-    load_locked()
+    let mut file = app.downloads.file();
+    load_locked(&mut file).cloned()
 }
 
 /// Runs `f` against the registry and writes it back if `f` changed anything.
@@ -754,13 +828,27 @@ fn update_when_in<T>(
     needed: impl FnOnce(&RegistryFile, &Registry, &Registry) -> bool,
 ) -> anyhow::Result<T> {
     let mut file = app.downloads.file();
-    let mut registry = load_locked()?;
-    let before = registry.clone();
+    // One copy for `f` to edit; what the cache holds stays the "before" the
+    // write decision is made against, and the two are compared rather than
+    // the file re-read.
+    let mut registry = load_locked(&mut file)?.clone();
     let result = f(&mut registry)?;
-    if registry != before && needed(&file, &before, &registry) {
+    let before = &file.cached.as_ref().expect("loaded above").registry;
+    let write = registry != *before && needed(&file, before, &registry);
+    if write {
+        let path = registry_path()?;
         let bytes = serde_json::to_vec(&registry)?;
-        crate::env::write_atomically(&registry_path()?, &bytes)
+        crate::env::write_atomically(&path, &bytes)
             .map_err(|error| anyhow::anyhow!("write downloads registry: {error}"))?;
+        // What was just written is what the file now holds; a stat that
+        // fails here leaves a stamp the next load will not match, so it
+        // reads back what it wrote rather than trusting a guess.
+        let stamp = stamp(&path).unwrap_or(None);
+        file.cached = Some(Cached {
+            path,
+            stamp,
+            registry,
+        });
         file.last_write = Some(Instant::now());
     }
     Ok(result)
@@ -1598,21 +1686,11 @@ pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
     })
 }
 
-/// What a [`refresh`] found.
-pub struct Refresh {
-    /// The registry as it now stands, live progress merged in -- which is
-    /// not always what is on disk: a tick that only moved byte counts leaves
-    /// the file alone (see [`PROGRESS_WRITE_INTERVAL`]), so this, and not a
-    /// re-read, is what a listing answers with.
-    pub registry: Registry,
-    /// The rows that moved, narrow enough to push once a second.
-    pub moved: Vec<Progress>,
-}
-
 /// Merges the server's live download stats into the registry and reports
-/// what moved. The file is rewritten for anything but a byte count, and for
-/// a byte count no more often than [`PROGRESS_WRITE_INTERVAL`].
-pub fn refresh() -> anyhow::Result<Refresh> {
+/// the rows that moved, narrow enough to push once a second. The file is
+/// rewritten for anything but a byte count, and for a byte count no more
+/// often than [`PROGRESS_WRITE_INTERVAL`].
+pub fn refresh() -> anyhow::Result<Vec<Progress>> {
     refresh_in(&not_initialized_unless_running()?)
 }
 
@@ -1638,11 +1716,34 @@ fn not_initialized_unless_running() -> anyhow::Result<Arc<AppState>> {
 /// [`crate::state::current`], which answers "not running" instead of
 /// building a state, and a tick whose own server a shutdown has stopped has
 /// nothing left to merge anyway.
-fn refresh_in(app: &Arc<AppState>) -> anyhow::Result<Refresh> {
+fn refresh_in(app: &Arc<AppState>) -> anyhow::Result<Vec<Progress>> {
+    merge_live_in(app, |_| ()).map(|(moved, ())| moved)
+}
+
+/// The merge behind [`refresh_in`] and [`list`]: folds the live stats into
+/// every row, hands the merged registry to `capture` while it exists, and
+/// answers what moved. The merged registry is not always what is on disk --
+/// a tick that only moved byte counts leaves the file alone (see
+/// [`PROGRESS_WRITE_INTERVAL`]) -- so a listing takes its copy here, from
+/// the merge, and the ticker, which wants only the rows that moved, takes
+/// nothing: once a second for the length of a download, a copy of every
+/// entry's `MetaItem` snapshot is the cost this shape exists to avoid.
+///
+/// What moved is decided by the six fields a [`Progress`] carries, which
+/// are exactly the ones [`Entry::apply_live`] can change, so comparing the
+/// row's progress before and after is the whole comparison and no entry is
+/// cloned for it.
+fn merge_live_in<T>(
+    app: &Arc<AppState>,
+    capture: impl FnOnce(&Registry) -> T,
+) -> anyhow::Result<(Vec<Progress>, T)> {
     let live = crate::server::downloads()?;
+    let by_file: HashMap<(String, usize), &DownloadInfo> = live
+        .iter()
+        .map(|info| ((info.info_hash.to_ascii_lowercase(), info.file_idx), info))
+        .collect();
     let now = Utc::now();
-    let mut merged = Registry::default();
-    let moved = update_when_in(
+    let result = update_when_in(
         app,
         |registry| {
             let mut moved = Vec::new();
@@ -1651,19 +1752,20 @@ fn refresh_in(app: &Arc<AppState>) -> anyhow::Result<Refresh> {
                 if entry.is_leaving() {
                     continue;
                 }
-                let before = entry.clone();
-                if let Some(info) = live.iter().find(|info| {
-                    info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
-                        && info.file_idx == entry.file_idx
-                }) {
-                    entry.apply_live(info, now);
-                }
-                if *entry != before {
-                    moved.push(Progress::of(key, entry));
+                let Some(info) =
+                    by_file.get(&(entry.info_hash.to_ascii_lowercase(), entry.file_idx))
+                else {
+                    continue;
+                };
+                let before = Progress::of(key, entry);
+                entry.apply_live(info, now);
+                let after = Progress::of(key, entry);
+                if after != before {
+                    moved.push(after);
                 }
             }
-            merged = registry.clone();
-            Ok(moved)
+            let captured = capture(registry);
+            Ok((moved, captured))
         },
         refresh_needs_a_write,
     )?;
@@ -1674,10 +1776,7 @@ fn refresh_in(app: &Arc<AppState>) -> anyhow::Result<Refresh> {
     // afterwards, so progress would stay silent for the rest of the
     // session.
     ensure_ticker_in(app);
-    Ok(Refresh {
-        registry: merged,
-        moved,
-    })
+    Ok(result)
 }
 
 /// The whole registry with live progress merged in. Falls back to what is on
@@ -1695,11 +1794,11 @@ pub fn list() -> anyhow::Result<Registry> {
     // One state for both halves, and it is `current`: the fallback is a
     // second chance at the registry, not a second chance at the process.
     let app = not_initialized_unless_running()?;
-    let mut registry = match refresh_in(&app) {
+    let mut registry = match merge_live_in(&app, Registry::clone) {
         // What the refresh merged, not a re-read: a tick that only moved
         // byte counts leaves the file behind on purpose, and a listing off
         // the disk would then be the one place showing the older numbers.
-        Ok(refreshed) => refreshed.registry,
+        Ok((_, merged)) => merged,
         Err(error) => {
             tracing::debug!(%error, "listing downloads without live progress");
             load_in(&app)?
@@ -1829,7 +1928,8 @@ pub fn is_ticking() -> bool {
 /// an errored one counts, because peers can still turn up and the poll is
 /// one cheap call.
 fn anything_unfinished_in(app: &AppState) -> bool {
-    load_in(app)
+    let mut file = app.downloads.file();
+    load_locked(&mut file)
         .map(|registry| registry.items.values().any(Entry::unfinished))
         .unwrap_or(false)
 }
@@ -1873,7 +1973,7 @@ async fn ticker(app: Arc<AppState>) {
         }
         let tick = Arc::clone(&app);
         match tokio::task::spawn_blocking(move || refresh_in(&tick)).await {
-            Ok(Ok(refreshed)) => emit(&app, &refreshed.moved),
+            Ok(Ok(moved)) => emit(&app, &moved),
             Ok(Err(error)) => tracing::debug!(%error, "downloads progress tick failed"),
             Err(error) => tracing::warn!(%error, "downloads progress tick panicked"),
         }
@@ -2772,6 +2872,69 @@ mod tests {
         emit(&app, &[Progress::of("tt1:tt1", &entry)]);
         let event = rx.try_recv().expect("and a row that moved does");
         assert!(event.contains(r#""downloaded":8192"#), "{event}");
+    }
+
+    /// The file is parsed when it changes and not otherwise: a tick is a
+    /// `stat`, not a read of every entry's meta snapshot twice a second. An
+    /// edit from outside the app is still seen, because the stamp is what
+    /// the cache is trusted against. Against the process state, since
+    /// `update_when_in` is what the ticker calls; the read counter is
+    /// process-wide, so the numbers are differences.
+    #[test]
+    fn a_tick_reads_the_file_once_and_an_outside_edit_is_still_seen() {
+        use std::sync::atomic::Ordering;
+
+        crate::env::with_storage_dir(|dir| {
+            let app = crate::state::state();
+            let reads = || REGISTRY_READS.load(Ordering::SeqCst);
+            let file = dir.join(FILE_NAME);
+
+            let start = reads();
+            update_in(&app, |registry| {
+                registry.items.insert("tt1:tt1".into(), entry("tt1", "tt1"));
+                Ok(())
+            })
+            .expect("first write");
+            assert_eq!(reads() - start, 1, "the first load reads the file");
+
+            // Two ticks that move nothing, and the question the ticker asks
+            // between them: no reads.
+            for _ in 0..2 {
+                update_when_in(&app, |_| Ok(()), refresh_needs_a_write).expect("tick");
+                assert!(anything_unfinished_in(&app));
+            }
+            assert_eq!(reads() - start, 1, "a tick is a stat, not a parse");
+
+            // A tick that moves a byte count and skips the write keeps the
+            // cache honest: the next load still answers the file's contents.
+            update_when_in(
+                &app,
+                |registry| {
+                    registry.items.get_mut("tt1:tt1").unwrap().downloaded = 4096;
+                    Ok(())
+                },
+                refresh_needs_a_write,
+            )
+            .expect("tick");
+            assert_eq!(
+                load_in(&app).expect("load").items["tt1:tt1"].downloaded,
+                0,
+                "a skipped write is a skipped write, in the cache too"
+            );
+            assert_eq!(reads() - start, 1);
+
+            // Something outside the app rewrites the file: the stamp
+            // differs, so the next load reads again and sees it.
+            let mut outside = Registry::default();
+            outside.items.insert("tt2:tt2".into(), entry("tt2", "tt2"));
+            std::fs::write(&file, serde_json::to_vec(&outside).unwrap()).expect("write");
+            let seen = load_in(&app).expect("load");
+            assert!(seen.items.contains_key("tt2:tt2"), "{seen:?}");
+            assert!(!seen.items.contains_key("tt1:tt1"), "{seen:?}");
+            assert_eq!(reads() - start, 2, "and that cost exactly one read");
+            load_in(&app).expect("load");
+            assert_eq!(reads() - start, 2);
+        });
     }
 
     #[test]
