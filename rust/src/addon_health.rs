@@ -579,17 +579,29 @@ impl AddonHealthState {
 }
 
 /// Reads the stored table into `app`. Called once at init, beside the
-/// bucket hydration, with the state init has just built; a table that
-/// cannot be read is simply an empty one.
+/// bucket hydration, with the state init has just built. A record that is
+/// not there is an empty table; one the disk will not read is *not read*,
+/// and the table stays unloaded for the run -- so nothing this process
+/// observes is written over a record it never saw, which is the erasure
+/// [`Counted::loaded`] exists to prevent and which a read error dressed as
+/// an empty file walked straight past. It is not retried: the counts of
+/// one run are worth less than the record of every run before it.
 ///
 /// Nothing is written out before this has run -- see [`Counted::loaded`].
 pub fn load_in(app: &AppState) {
-    let table = stored();
     let mut counted = app.addon_health.counted();
-    counted.table = table;
-    counted.dirty = false;
-    counted.loaded = true;
-    counted.last_write = Some(Instant::now());
+    match stored() {
+        Ok(table) => {
+            counted.table = table;
+            counted.dirty = false;
+            counted.loaded = true;
+            counted.last_write = Some(Instant::now());
+        }
+        Err(error) => tracing::warn!(
+            %error,
+            "could not read how the addons have been answering; the stored record is left as it is"
+        ),
+    }
 }
 
 /// Commits one sweep into `app` and writes the table out if a write is
@@ -754,16 +766,16 @@ fn flush_locked(app: &AppState, counted: &mut Counted, force: bool) {
     }
 }
 
-/// The stored table, or an empty one when there is nothing to read.
-fn stored() -> Table {
-    match crate::prefs::get_all() {
-        Ok(preferences) => preferences.get(PREFS_KEY).map(Table::from_value),
-        Err(error) => {
-            tracing::debug!(%error, "no stored addon health record");
-            None
-        }
-    }
-    .unwrap_or_default()
+/// The stored table, an empty one when nothing is stored, or the error when
+/// the preferences file could not be read at all -- which is a different
+/// answer from "nothing stored" and is kept apart on purpose (see
+/// [`load_in`]).
+fn stored() -> anyhow::Result<Table> {
+    let preferences = crate::prefs::get_all()?;
+    Ok(preferences
+        .get(PREFS_KEY)
+        .map(Table::from_value)
+        .unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -814,7 +826,11 @@ mod tests {
     }
 
     fn stored_keys() -> Vec<String> {
-        stored().keys().map(str::to_owned).collect()
+        stored()
+            .expect("the stored record is readable")
+            .keys()
+            .map(str::to_owned)
+            .collect()
     }
 
     fn record_of(table: &Table, key: &str, kind: ResourceKind) -> Record {
@@ -1430,6 +1446,52 @@ mod tests {
             let app = AppState::default();
             assert!(!forget_in(&app, "seeded0.example.com#000000000000"));
             assert_eq!(stored_keys(), before, "an unread table was written out");
+        });
+    }
+
+    /// A record the disk will not read is not an empty record. Read as one,
+    /// `load_in` marked the table loaded and the next flush wrote this run's
+    /// few observations over every run before it -- through the very guard
+    /// that exists to prevent it. Permissions stand in for the `EIO` here;
+    /// the read fails the same way.
+    #[cfg(unix)]
+    #[test]
+    fn a_record_that_cannot_be_read_is_never_written_over() {
+        use std::os::unix::fs::PermissionsExt;
+
+        crate::env::with_storage_dir(|dir| {
+            crate::prefs::set(PREFS_KEY, Some(seeded_history())).expect("seed");
+            let before = stored_keys();
+            assert_eq!(before.len(), 5);
+            let file = dir.join("xtremio_prefs.json");
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000)).expect("chmod");
+            let restore = || {
+                std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600))
+                    .expect("chmod back");
+            };
+            if std::fs::read(&file).is_ok() {
+                // Running as root, where no mode refuses a read.
+                restore();
+                return;
+            }
+
+            let app = AppState::default();
+            load_in(&app);
+            assert!(
+                !app.addon_health.counted().loaded,
+                "a read that failed is not a table that was read"
+            );
+            assert!(commit_in(
+                &app,
+                one_answer(&url("https://late.example.com/manifest.json"))
+            ));
+            flush_in(&app);
+            restore();
+            assert_eq!(
+                stored_keys(),
+                before,
+                "one run's observation replaced the whole stored record"
+            );
         });
     }
 
