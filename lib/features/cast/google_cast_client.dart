@@ -97,6 +97,19 @@ class GoogleCastClient implements CastClient {
     ]);
   }
 
+  /// [_onMediaStatus] for a test, which has no SDK stream to arrive on.
+  @visibleForTesting
+  void onMediaStatus(GoggleCastMediaStatus? status) => _onMediaStatus(status);
+
+  /// [_onPosition] for a test.
+  @visibleForTesting
+  void onPosition(Duration position) => _onPosition(position);
+
+  /// The last status built: what the next state change will copy its
+  /// position from.
+  @visibleForTesting
+  CastStatus get lastStatus => _last;
+
   void _onMediaStatus(GoggleCastMediaStatus? status) {
     if (status == null) {
       _emit(const CastStatus(state: CastPlayerState.idle));
@@ -257,6 +270,18 @@ class GoogleCastClient implements CastClient {
 
   @override
   Future<void> load(CastMedia media, {Duration start = Duration.zero}) async {
+    // The position the SDK reports arrives on its own stream, so a state
+    // change is built on whatever position was last seen -- and until the
+    // receiver's first tick that is the *previous* session's, minutes into
+    // a film this receiver has not begun. So the record starts where the
+    // media is being started: the first status of this session then
+    // carries [start], which is the one position that is true of it. The
+    // player's own rule cannot tell that case apart -- a stale forty
+    // minutes looks exactly like a receiver reporting forty minutes --
+    // which is why it is settled here, before anything is loaded and
+    // whether or not the SDK is up (a client that never initialised has
+    // nothing to report either way).
+    _last = _last.at(start);
     if (!_initialised) return;
     final url = media.url.toString();
     final metadata = GoogleCastGenericMediaMetadata(
