@@ -2,26 +2,38 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/remote_press.dart';
 
+import '../support/tv.dart' show FocusMark, focusMarks;
+
 const tv = DeviceProfile(isTv: true, hasTouch: false);
 
 /// [child] in a Material app, on a TV unless [device] says otherwise and
 /// under [prefs] when the emphasis matters.
-Widget harness(Widget child, {DeviceProfile device = tv, AppPrefs? prefs}) =>
-    DeviceScope(
-      profile: device,
-      // Always a scope, even for the tests that do not care which
-      // emphasis is in force: re-pumping with one added would change the
-      // shape of the tree above the tiles and drop focus.
-      child: PrefsScope(
-        prefs: prefs ?? AppPrefs.inMemory(),
-        child: MaterialApp(home: Scaffold(body: child)),
-      ),
-    );
+/// [theme] is for the tests that care what the app's own theme does to a
+/// tile; the rest get Material's default, which has no focus floor in it.
+Widget harness(
+  Widget child, {
+  DeviceProfile device = tv,
+  AppPrefs? prefs,
+  ThemeData? theme,
+}) => DeviceScope(
+  profile: device,
+  // Always a scope, even for the tests that do not care which
+  // emphasis is in force: re-pumping with one added would change the
+  // shape of the tree above the tiles and drop focus.
+  child: PrefsScope(
+    prefs: prefs ?? AppPrefs.inMemory(),
+    child: MaterialApp(
+      theme: theme,
+      home: Scaffold(body: child),
+    ),
+  ),
+);
 
 /// Preferences that persist nothing, set to [emphasis].
 AppPrefs emphasis(FocusEmphasis emphasis) =>
@@ -272,6 +284,28 @@ void main() {
       expect(strokeWidths(tester, 'tile 0'), [4, 4]);
       expect(opacityOf(tester, 'tile 1'), FocusHighlight.dimmedOpacity);
     });
+  });
+
+  testWidgets('under the app\'s own theme, the ring is the whole of it', (
+    tester,
+  ) async {
+    // The tiles are what the ring was built for and what the owner
+    // approved; the theme floor arrived afterwards for the controls that
+    // can wear nothing else. A tile taking both is the floor washing a
+    // near-white 0.44 across poster art under a ring that had already
+    // said everything.
+    await tester.pumpWidget(
+      harness(
+        tiles(),
+        prefs: emphasis(FocusEmphasis.bold),
+        theme: XtremioApp.themeFor(isTv: true, emphasis: FocusEmphasis.bold),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+
+    expect(ringOf(tester, 'tile 0'), isTrue);
+    expect(focusMarks(), {FocusMark.ring});
   });
 
   testWidgets('off a TV the tile is a plain InkWell without a ring', (

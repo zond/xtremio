@@ -123,6 +123,16 @@ class _FocusableTileState extends State<FocusableTile> {
         autofocus: _autofocus,
         onFocusChange: _onFocusChange,
         borderRadius: widget.borderRadius,
+        // The ring below is the whole indicator here, so the theme
+        // floor's fill is turned off rather than laid under it. An ink
+        // with no focus colour of its own falls through to
+        // `ThemeData.focusColor`, which `FocusTheme` raised to a
+        // near-white 0.28 (0.44 bold) for the controls that can wear
+        // nothing else -- a list row, a menu entry, a chip. Over a poster
+        // that is a wash across the art under a ring that had already
+        // said everything, on the one family of surfaces whose focus
+        // treatment nobody asked to change.
+        focusColor: Colors.transparent,
         child: FocusHighlight(
           focused: _focused,
           borderRadius: widget.borderRadius,
