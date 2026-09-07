@@ -550,7 +550,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     if (!mounted) return;
     final result = await Navigator.of(context).push<PlayerScreenResult>(
       MaterialPageRoute<PlayerScreenResult>(
-        settings: const RouteSettings(name: 'player'),
+        settings: const RouteSettings(name: PlayerScreen.routeName),
         builder: (_) => PlayerScreen(
           stream: playback.stream ?? stream.json,
           streamRequest: group.request,
