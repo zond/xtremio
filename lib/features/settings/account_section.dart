@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/device_profile.dart';
 import '../../shell/tv_text_entry.dart';
 import '../../widgets/tv_text_field.dart';
 
@@ -276,6 +277,57 @@ class _AccountSectionState extends State<AccountSection> {
     );
   }
 
+  /// The two buttons at the foot of either state: side by side on a
+  /// television, wrapped anywhere else.
+  ///
+  /// Neither pair has any give in a row. Signed in, "Sync now" and
+  /// "Log out" are each laid out at the width they ask for and the row
+  /// overflows when that is wider than the screen: at Android's largest
+  /// font a 320 dp phone is 23 dp short, which is a debug error and, in a
+  /// release build, "Log out" drawn off the edge. Signed out, the pair
+  /// fitted only because the [Expanded] was around the button that
+  /// matters: it keeps whatever "Create an account" beside it did not
+  /// take, which at that same size and width is 7 dp of a label needing 67
+  /// -- the button the screen exists for, drawn blank. Roboto at the
+  /// default size fits both pairs on a phone, which is why nobody has met
+  /// this; the test font draws every glyph a square and fits neither at
+  /// any phone width, so it is also what a widget test of this screen at
+  /// 320-411 dp sees.
+  ///
+  /// Wrapped, each button is as wide as what it says and the pair takes a
+  /// second line when one line will not hold it, which no width is too
+  /// narrow for.
+  ///
+  /// **A television keeps the row**, because there the pair is a shape the
+  /// D-pad walks and not a width problem: a television is 960 dp at its
+  /// narrowest, and down out of the sign-in fields lands on [primary]
+  /// because [wide] has it spread under them, with right walking on to
+  /// [secondary]. Wrapped, both are their own width at the left of the
+  /// row, and down lands on whichever of them the field's middle is nearer
+  /// -- which is the second one.
+  Widget _actions(
+    BuildContext context, {
+    required Widget primary,
+    required Widget secondary,
+    bool wide = false,
+  }) {
+    if (DeviceScope.isTv(context)) {
+      return Row(
+        children: [
+          if (wide) Expanded(child: primary) else primary,
+          const SizedBox(width: 12),
+          secondary,
+        ],
+      );
+    }
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [primary, secondary],
+    );
+  }
+
   Widget _buildSignedOut(BuildContext context) {
     final theme = Theme.of(context);
     final error = _error;
@@ -351,34 +403,29 @@ class _AccountSectionState extends State<AccountSection> {
               ),
             ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _pending
-                    ? const Center(
-                        child: SizedBox.square(
-                          dimension: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : FilledButton(
-                        key: AccountSection.submitButtonKey,
-                        onPressed: _submit,
-                        child: Text(
-                          _registering ? 'Create account' : 'Sign in',
-                        ),
-                      ),
+          _actions(
+            context,
+            wide: true,
+            primary: _pending
+                ? const Center(
+                    child: SizedBox.square(
+                      dimension: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : FilledButton(
+                    key: AccountSection.submitButtonKey,
+                    onPressed: _submit,
+                    child: Text(_registering ? 'Create account' : 'Sign in'),
+                  ),
+            secondary: TextButton(
+              onPressed: _pending ? null : _toggleMode,
+              child: Text(
+                _registering
+                    ? 'I already have an account'
+                    : 'Create an account',
               ),
-              const SizedBox(width: 12),
-              TextButton(
-                onPressed: _pending ? null : _toggleMode,
-                child: Text(
-                  _registering
-                      ? 'I already have an account'
-                      : 'Create an account',
-                ),
-              ),
-            ],
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -431,28 +478,26 @@ class _AccountSectionState extends State<AccountSection> {
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Row(
-            children: [
-              _syncing
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 24),
-                      child: SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : FilledButton.tonalIcon(
-                      onPressed: _sync,
-                      icon: const Icon(Icons.sync),
-                      label: const Text('Sync now'),
+          child: _actions(
+            context,
+            primary: _syncing
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24),
+                    child: SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: _logout,
-                icon: const Icon(Icons.logout),
-                label: const Text('Log out'),
-              ),
-            ],
+                  )
+                : FilledButton.tonalIcon(
+                    onPressed: _sync,
+                    icon: const Icon(Icons.sync),
+                    label: const Text('Sync now'),
+                  ),
+            secondary: OutlinedButton.icon(
+              onPressed: _logout,
+              icon: const Icon(Icons.logout),
+              label: const Text('Log out'),
+            ),
           ),
         ),
       ],
