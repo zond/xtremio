@@ -103,6 +103,17 @@ existing Flutter escape hatch out of ABI filtering entirely.
 - **`INTERNET` permission** is declared in the main manifest. Flutter's
   template only adds it for debug/profile builds; addon catalogs and posters
   need it in release too.
+- **`ACCESS_NETWORK_STATE` is not declared here, and is in the APK
+  anyway.** This app used to ask for it, to watch whether the connection
+  was billed by the byte; that whole layer is gone (`IdleSharing` says
+  why). The line in this manifest went with it, but the merged manifest
+  still carries the permission, added by
+  `play-services-cast-framework:21.5.0` and by the `datatransport`
+  libraries under it. That was read off the merge report the build writes
+  (`manifest-merger-debug-report.txt`, under `build/app/outputs/logs/`),
+  which is where to check it again rather than believing this sentence. So removing it from here changes what
+  this app asks for and not what the package asks for, and nothing should
+  re-add the line on the strength of seeing the permission on an install.
 - **`android:usesCleartextTraffic="true"`** is set on the application. This
   flag only governs Android's own network stack (`dart:io` — `Image.network`
   posters from self-hosted `http://` addons; the Flutter side itself makes
