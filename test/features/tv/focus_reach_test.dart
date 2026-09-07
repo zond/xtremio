@@ -27,7 +27,17 @@ import '../../support/fake_diagnostics_client.dart';
 import '../../support/fake_downloads_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
+import '../../support/text_entry.dart';
 import '../../support/tv.dart';
+
+/// One walk: a screen mounted under a television and driven with a remote.
+typedef Walk = Future<void> Function(WidgetTester tester);
+
+/// A walk, the `*_screen.dart` it is about, and what it is called.
+typedef Case = ({String screen, String name, Walk walk});
+
+Case walk(String screen, String name, Walk walk) =>
+    (screen: screen, name: name, walk: walk);
 
 /// Every screen the remote can reach, walked stop by stop under a
 /// television profile, checking that this app says where the remote is.
@@ -44,13 +54,20 @@ import '../../support/tv.dart';
 /// [focusMarks] says what "marked" means -- what is drawn on the control
 /// the remote is standing on -- and, more usefully, what it does not.
 ///
-/// Each screen is walked twice over: as it is first drawn, and again with
-/// something opened over it. The second group is not an extra: a dialog, a
-/// menu and a sheet are routes with scopes and surfaces of their own, and
-/// they are where most of the controls a viewer presses on a television
-/// actually are. The last test in the file is the other half: it reads the
-/// source tree, so a *new* screen is a failure here too rather than a
-/// screen this file has never heard of.
+/// **Two walks per screen, and the second is the one that has to be
+/// declared.** [drawn] walks every screen as it is first drawn. [opened]
+/// walks what a screen puts *over* itself -- a dialog, a menu, a sheet --
+/// which is not an extra: each of those is a route with a scope and a
+/// surface of its own, and they are where most of the controls a viewer
+/// presses on a television actually are. A screen that opens nothing over
+/// itself on a television is in [unopened] instead, with the reason.
+///
+/// Both lists are tables rather than prose, and the tests below are built
+/// from them, so a screen cannot be *named* as covered without a walk
+/// really running: naming was all the old guard checked, which let a
+/// screen whose dialog had an unmarked stop pass. The last test in the
+/// file reads the source tree and requires every `*_screen.dart` to appear
+/// in [drawn], and in exactly one of [opened] and [unopened].
 void main() {
   /// [screen] under a television, in the theme `XtremioApp` would have
   /// given it, with the emphasis turned up -- the setting this whole
@@ -83,8 +100,12 @@ void main() {
   /// Preferences that persist nothing, set to bold.
   AppPrefs bold() => AppPrefs.inMemory()..setFocusEmphasis(FocusEmphasis.bold);
 
-  /// Everything the core has to answer for the screens below to settle.
-  FakeCoreClient fullCore() => FakeCoreClient(
+  /// Everything the core has to answer for the screens below to settle,
+  /// with [overrides] laid over it for a walk that needs a state the
+  /// recorded fixtures do not have.
+  FakeCoreClient fullCore([
+    Map<CoreField, Map<String, dynamic>> overrides = const {},
+  ]) => FakeCoreClient(
     state: {
       CoreField.ctx: loadCtxLoggedOutFixture(),
       CoreField.board: loadBoardFixture(),
@@ -96,8 +117,35 @@ void main() {
       CoreField.installedAddons: loadInstalledAddonsFixture(),
       CoreField.remoteAddons: loadRemoteAddonsFixture(),
       CoreField.addonDetails: loadAddonDetailsFixture(),
+      ...overrides,
     },
   );
+
+  /// An `Err` page: what a catalog whose addon could not answer looks like.
+  Map<String, dynamic> failedPage(String message) => {
+    'type': 'Err',
+    'content': {
+      'type': 'Env',
+      'content': {'code': 1, 'message': message},
+    },
+  };
+
+  /// The board fixture with the catalog at [index] failed. Catalog 4 is
+  /// the channels addon's, which the logged-out profile has installed and
+  /// does not protect -- so the failure card offers Uninstall, which is
+  /// the dialog this screen opens over itself.
+  Map<String, dynamic> boardWithFailure(int index, String message) {
+    final board = loadBoardFixture();
+    final catalogs = board['catalogs'] as List<dynamic>;
+    ((catalogs[index] as List<dynamic>)[0] as Map<String, dynamic>)['content'] =
+        failedPage(message);
+    return board;
+  }
+
+  /// The query the recorded search fixture answers, so the results the
+  /// screen gets back are the recorded ones -- among them the one addon
+  /// that failed.
+  const searchQuery = 'night of the living dead';
 
   /// Walks the focus order with Tab, checking every stop.
   ///
@@ -149,8 +197,33 @@ void main() {
     expect(reached(), isTrue, reason: 'the remote never reached $target');
   }
 
-  group('every screen marks what the remote lands on', () {
-    testWidgets('the shell, rail and Board together', (tester) async {
+  /// The failure card's Uninstall, which is the one thing the failed-addon
+  /// section opens a dialog for. The card is behind a summary line the
+  /// remote has to open first.
+  Future<void> openUninstallDialog(WidgetTester tester, String summary) async {
+    await pressUntil(
+      tester,
+      LogicalKeyboardKey.arrowDown,
+      () => focusedLabel(tester) == summary,
+      target: 'the "$summary" line',
+    );
+    await press(tester, LogicalKeyboardKey.select);
+    await pressUntil(
+      tester,
+      LogicalKeyboardKey.tab,
+      () => focusedLabel(tester) == 'Uninstall',
+      target: "the failed addon's Uninstall",
+      limit: 8,
+    );
+    await press(tester, LogicalKeyboardKey.select);
+    expect(find.byType(AlertDialog), findsOneWidget);
+  }
+
+  /// Every screen as it is first drawn.
+  final drawn = <Case>[
+    walk('board_screen.dart', 'the shell, rail and Board together', (
+      tester,
+    ) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(
@@ -160,54 +233,48 @@ void main() {
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('Board', (tester) async {
+    }),
+    walk('board_screen.dart', 'Board', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(client: fullCore(), child: onTv(const BoardScreen())),
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('Discover', (tester) async {
+    }),
+    walk('discover_screen.dart', 'Discover', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(client: fullCore(), child: onTv(const DiscoverScreen())),
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('Search', (tester) async {
+    }),
+    walk('search_screen.dart', 'Search', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(client: fullCore(), child: onTv(const SearchScreen())),
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('Library', (tester) async {
+    }),
+    walk('library_screen.dart', 'Library', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(client: fullCore(), child: onTv(const LibraryScreen())),
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('Settings', (tester) async {
+    }),
+    walk('settings_screen.dart', 'Settings', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(client: fullCore(), child: onTv(const SettingsScreen())),
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('Addons', (tester) async {
+    }),
+    walk('addons_screen.dart', 'Addons', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(
@@ -217,9 +284,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('an addon in detail', (tester) async {
+    }),
+    walk('addon_details_screen.dart', 'an addon in detail', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(
@@ -234,9 +300,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('a title in detail', (tester) async {
+    }),
+    walk('meta_details_screen.dart', 'a title in detail', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(
@@ -249,9 +314,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('Downloads', (tester) async {
+    }),
+    walk('downloads_screen.dart', 'Downloads', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(
@@ -266,9 +330,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('Diagnostics', (tester) async {
+    }),
+    walk('diagnostics_screen.dart', 'Diagnostics', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(
@@ -281,9 +344,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('server storage', (tester) async {
+    }),
+    walk('server_storage_screen.dart', 'server storage', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(
@@ -296,9 +358,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-
-    testWidgets('the player, with its bar up', (tester) async {
+    }),
+    walk('player_screen.dart', 'the player, with its bar up', (tester) async {
       useScreen(tester, tvSize);
       final player = PlayerHarness(device: tv, prefs: bold());
       await player.pump(tester);
@@ -306,64 +367,82 @@ void main() {
       player.engine.emitPlaying(true);
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
-    });
-  });
+    }),
+  ];
 
-  /// The same walk over what a screen puts *over* itself: a dialog, a
-  /// menu, a sheet.
-  ///
-  /// Each of these is a route with a focus scope of its own, drawn on a
-  /// surface of its own, sometimes under a theme of its own -- which is
-  /// the shape of every fault this file exists to catch. The base state
-  /// walked above is also the state a screen spends the least of its life
-  /// in: the controls a viewer presses most on a television are on a menu
-  /// that opened over something.
-  group('and what a screen opens over itself', () {
-    testWidgets('a choice menu on a settings row', (tester) async {
-      useScreen(tester, tvSize);
-      await tester.pumpWidget(
-        CoreScope(client: fullCore(), child: onTv(const SettingsScreen())),
-      );
-      await tester.pumpAndSettle();
-
-      await pressUntil(
-        tester,
-        LogicalKeyboardKey.arrowDown,
-        () => focusIn<DropdownButton<BufferAhead>>(),
-        target: 'Buffer ahead',
-      );
-      await press(tester, LogicalKeyboardKey.select);
-      expect(find.text(BufferAhead.wholeFile.label), findsWidgets);
-      await walkEveryStop(tester, stops: 12);
-    });
-
-    testWidgets('the actions menu on a download', (tester) async {
-      useScreen(tester, tvSize);
+  /// The same walk over what a screen puts *over* itself.
+  final opened = <Case>[
+    walk('board_screen.dart', 'the Uninstall dialog on a failed catalog', (
+      tester,
+    ) async {
+      // Tall enough for the sliver that accounts for the failures, which
+      // is under every row of the board and is not built until it is.
+      // Continue watching is emptied for the same reason: it is one more
+      // row between the remote and the end.
+      useScreen(tester, const Size(1280, 2400));
       await tester.pumpWidget(
         CoreScope(
-          client: fullCore(),
-          child: DownloadsScope(
-            client: FakeDownloadsClient(
-              registry: DownloadsRegistry.fromJson(loadDownloadsFixture()),
-            ),
-            child: onTv(const DownloadsScreen(), pushed: true),
-          ),
+          client: fullCore({
+            CoreField.board: boardWithFailure(4, 'Failed to fetch: HTTP 404'),
+            CoreField.continueWatchingPreview: {'items': <Object>[]},
+          }),
+          child: onTv(const BoardScreen()),
         ),
+      );
+      await tester.pumpAndSettle();
+      await openUninstallDialog(tester, '1 catalog could not be loaded');
+      await walkEveryStop(tester, stops: 12);
+    }),
+    walk('discover_screen.dart', 'the catalog menu on Discover', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(client: fullCore(), child: onTv(const DiscoverScreen())),
       );
       await tester.pumpAndSettle();
 
       await pressUntil(
         tester,
         LogicalKeyboardKey.tab,
-        () => focusedTooltip() == 'Download actions',
-        target: 'a download\'s ⋮',
+        () => focusedLabel(tester)?.startsWith('Catalog:') ?? false,
+        target: 'the Catalog button',
       );
       await press(tester, LogicalKeyboardKey.select);
-      expect(find.text('Delete'), findsOneWidget);
+      expect(find.byType(MenuItemButton), findsWidgets);
       await walkEveryStop(tester, stops: 12);
-    });
+    }),
+    walk(
+      'search_screen.dart',
+      'the Uninstall dialog on an addon that could '
+          'not be searched',
+      (tester) async {
+        // A television types on a screen of the platform's own, so the query
+        // arrives as a reply on the device channel rather than as key
+        // presses. It is the fixture's own query, so what comes back is the
+        // recorded result set -- one of whose addons failed.
+        useScreen(tester, const Size(1280, 4000));
+        answerTextEntry(searchQuery);
+        await tester.pumpWidget(
+          CoreScope(client: fullCore(), child: onTv(const SearchScreen())),
+        );
+        await tester.pumpAndSettle();
 
-    testWidgets('the actions sheet on a library item', (tester) async {
+        await press(tester, LogicalKeyboardKey.tab);
+        // Not `press`: confirming a query starts a search, and a progress
+        // bar never settles while it is out.
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await settleTextEntry(tester);
+        await tester.pumpAndSettle();
+        expect(find.text(searchQuery), findsWidgets);
+
+        await openUninstallDialog(tester, '1 addon could not be searched');
+        await walkEveryStop(tester, stops: 12);
+      },
+    ),
+    walk('library_screen.dart', 'the actions sheet on a library item', (
+      tester,
+    ) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(client: fullCore(), child: onTv(const LibraryScreen())),
@@ -379,28 +458,49 @@ void main() {
       await press(tester, LogicalKeyboardKey.contextMenu);
       expect(find.byType(BottomSheet), findsOneWidget);
       await walkEveryStop(tester, stops: 12);
-    });
+    }),
+    walk(
+      'library_screen.dart',
+      'a filter menu, which a television gets in '
+          'place of a dropdown',
+      (tester) async {
+        useScreen(tester, tvSize);
+        await tester.pumpWidget(
+          CoreScope(client: fullCore(), child: onTv(const LibraryScreen())),
+        );
+        await tester.pumpAndSettle();
 
-    testWidgets('a filter menu, which a television gets in place of a '
-        'dropdown', (tester) async {
+        await pressUntil(
+          tester,
+          LogicalKeyboardKey.tab,
+          () => focusedLabel(tester)?.startsWith('Sort:') ?? false,
+          target: 'the Sort button',
+        );
+        await press(tester, LogicalKeyboardKey.select);
+        expect(find.byType(MenuItemButton), findsWidgets);
+        await walkEveryStop(tester, stops: 12);
+      },
+    ),
+    walk('settings_screen.dart', 'a choice menu on a settings row', (
+      tester,
+    ) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
-        CoreScope(client: fullCore(), child: onTv(const LibraryScreen())),
+        CoreScope(client: fullCore(), child: onTv(const SettingsScreen())),
       );
       await tester.pumpAndSettle();
 
       await pressUntil(
         tester,
-        LogicalKeyboardKey.tab,
-        () => focusedLabel(tester)?.startsWith('Sort:') ?? false,
-        target: 'the Sort button',
+        LogicalKeyboardKey.arrowDown,
+        () => focusIn<DropdownButton<BufferAhead>>(),
+        target: 'Buffer ahead',
       );
       await press(tester, LogicalKeyboardKey.select);
-      expect(find.byType(MenuItemButton), findsWidgets);
+      expect(find.text(BufferAhead.wholeFile.label), findsWidgets);
       await walkEveryStop(tester, stops: 12);
-    });
-
-    testWidgets('the Add addon dialog', (tester) async {
+    }),
+    walk('addons_screen.dart', 'the Add addon dialog', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         CoreScope(
@@ -427,9 +527,35 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       expect(find.byType(AlertDialog), findsOneWidget);
       await walkEveryStop(tester, stops: 12);
-    });
+    }),
+    walk('downloads_screen.dart', 'the actions menu on a download', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(
+          client: fullCore(),
+          child: DownloadsScope(
+            client: FakeDownloadsClient(
+              registry: DownloadsRegistry.fromJson(loadDownloadsFixture()),
+            ),
+            child: onTv(const DownloadsScreen(), pushed: true),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    testWidgets("the player's track menu", (tester) async {
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.tab,
+        () => focusedTooltip() == 'Download actions',
+        target: 'a download\'s ⋮',
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text('Delete'), findsOneWidget);
+      await walkEveryStop(tester, stops: 12);
+    }),
+    walk('player_screen.dart', "the player's track menu", (tester) async {
       useScreen(tester, tvSize);
       final player = PlayerHarness(device: tv, prefs: bold());
       await player.pump(tester);
@@ -454,9 +580,8 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       expect(find.byType(AudioMenu), findsOneWidget);
       await walkEveryStop(tester, stops: 12);
-    });
-
-    testWidgets("the player's settings sheet", (tester) async {
+    }),
+    walk('player_screen.dart', "the player's settings sheet", (tester) async {
       useScreen(tester, tvSize);
       final player = PlayerHarness(device: tv, prefs: bold());
       await player.pump(tester);
@@ -473,44 +598,92 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       expect(find.byType(PlayerSettingsSheet), findsOneWidget);
       await walkEveryStop(tester, stops: 20);
-    });
+    }),
+  ];
+
+  /// The screens no walk in [opened] covers, and exactly why. Read on a
+  /// television: what a phone or a desktop opens over one of these is not
+  /// this file's business, and in two cases is the whole of the answer.
+  const unopened = <String, String>{
+    'meta_details_screen.dart':
+        'its one showDialog is the "replace the copy you already have" '
+        'question on a download affordance, and a television draws none: '
+        'a TV source row carries a DownloadBadge and no button. The '
+        'failed-addon section it also builds expands in place rather than '
+        'over anything.',
+    'addon_details_screen.dart':
+        'Install, Update, Uninstall and Configure dispatch straight to the '
+        'core and report through a snack bar; nothing here is asked twice.',
+    'diagnostics_screen.dart':
+        'every action reports through a snack bar, which is neither a '
+        'route nor a focus stop.',
+    'server_storage_screen.dart':
+        'the same: refresh and clean report through a snack bar.',
+  };
+
+  group('every screen marks what the remote lands on', () {
+    for (final entry in drawn) {
+      testWidgets(entry.name, entry.walk);
+    }
   });
 
-  test('every screen in the app is one of them', () {
+  /// Each of these is a route with a focus scope of its own, drawn on a
+  /// surface of its own, sometimes under a theme of its own -- which is
+  /// the shape of every fault this file exists to catch. The base state
+  /// walked above is also the state a screen spends the least of its life
+  /// in: the controls a viewer presses most on a television are on a menu
+  /// that opened over something.
+  group('and what a screen opens over itself', () {
+    for (final entry in opened) {
+      testWidgets(entry.name, entry.walk);
+    }
+  });
+
+  test('every screen in the app is walked, and twice where it opens '
+      'anything', () {
     // The half of this that survives somebody adding a screen. A file
     // named `*_screen.dart` under `lib/features` is a screen a remote can
-    // be pointed at, and there is no way to write one this test walks
-    // without also naming it here.
-    final covered = {
-      'board_screen.dart',
-      'discover_screen.dart',
-      'search_screen.dart',
-      'library_screen.dart',
-      'settings_screen.dart',
-      'addons_screen.dart',
-      'addon_details_screen.dart',
-      'meta_details_screen.dart',
-      'downloads_screen.dart',
-      'diagnostics_screen.dart',
-      'server_storage_screen.dart',
-      'player_screen.dart',
-    };
+    // be pointed at, and there is no way to write one without also
+    // putting it in the tables above -- in [drawn], and in either [opened]
+    // or [unopened].
     final found = Directory('lib/features')
         .listSync(recursive: true)
         .whereType<File>()
         .map((file) => file.uri.pathSegments.last)
         .where((name) => name.endsWith('_screen.dart'))
         .toSet();
+    final firstWalked = {for (final entry in drawn) entry.screen};
+    final secondWalked = {for (final entry in opened) entry.screen};
+    final excused = unopened.keys.toSet();
 
     expect(
-      found.difference(covered),
+      found.difference(firstWalked),
       isEmpty,
-      reason: 'a screen with no focus-reach test above it',
+      reason: 'a screen with no focus-reach walk over it',
     );
     expect(
-      covered.difference(found),
+      firstWalked.difference(found),
       isEmpty,
-      reason: 'a screen named here that no longer exists',
+      reason: 'a screen walked here that no longer exists',
+    );
+    expect(
+      found.difference(secondWalked.union(excused)),
+      isEmpty,
+      reason:
+          'a screen that is neither walked with something open over it nor '
+          'said to open nothing',
+    );
+    expect(
+      secondWalked.union(excused).difference(found),
+      isEmpty,
+      reason: 'a screen classified here that no longer exists',
+    );
+    expect(
+      secondWalked.intersection(excused),
+      isEmpty,
+      reason:
+          'a screen both walked with something open and excused from it; '
+          'the excuse is what the walk disproves',
     );
   });
 }
