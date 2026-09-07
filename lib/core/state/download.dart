@@ -228,14 +228,23 @@ sealed class DownloadsUpdate {
   const DownloadsUpdate();
 
   /// Reads whichever shape arrived. A `progress` array is the ticker's
-  /// narrow event; anything else is read as a listing, which is what every
-  /// build before the narrow one pushed.
+  /// narrow event; a `removed` array names the entries that are gone (what
+  /// the client pushes for its own removals, and the shape the Rust side
+  /// would push if `remove` ever emitted); anything else is read as a
+  /// listing, which is what every build before the narrow one pushed.
   factory DownloadsUpdate.fromJson(Map<String, dynamic> json) {
     final progress = json['progress'];
     if (progress is List) {
       return DownloadsProgressUpdate([
         for (final row in progress)
           if (row is Map<String, dynamic>) DownloadProgress(row),
+      ]);
+    }
+    final removed = json['removed'];
+    if (removed is List) {
+      return DownloadsRemovalUpdate([
+        for (final key in removed)
+          if (key is String) key,
       ]);
     }
     return DownloadsListingUpdate(DownloadsRegistry.fromJson(json));
@@ -257,6 +266,24 @@ final class DownloadsProgressUpdate extends DownloadsUpdate {
 
   @override
   String toString() => 'DownloadsProgressUpdate(${rows.length} rows)';
+}
+
+/// The entries that are gone. The other two shapes can only add or move a
+/// row -- a listing envelope is merged, a progress row is laid over -- so
+/// without this a removal reached nobody: the Rust side emits nothing for
+/// one, and whoever held a registry kept the row until they listed again.
+/// [DownloadsClient.remove] pushes one for the key it dropped.
+final class DownloadsRemovalUpdate extends DownloadsUpdate {
+  const DownloadsRemovalUpdate(this.keys);
+
+  final List<String> keys;
+
+  @override
+  DownloadsRegistry applyTo(DownloadsRegistry registry) =>
+      registry.without(keys);
+
+  @override
+  String toString() => 'DownloadsRemovalUpdate($keys)';
 }
 
 /// A whole registry envelope, entries and destination and all.
@@ -469,10 +496,24 @@ final class DownloadsRegistry {
     );
   }
 
+  /// This registry without the entries [keys] name. A key nothing holds
+  /// changes nothing.
+  DownloadsRegistry without(Iterable<String> keys) {
+    final kept = {...items};
+    for (final key in keys) {
+      kept.remove(key);
+    }
+    return DownloadsRegistry(
+      version: version,
+      items: kept,
+      destination: destination,
+    );
+  }
+
   /// This registry with [update]'s entries laid over it. A listing update
   /// carries only what it knows about, so folding one in is how a screen
-  /// keeps the full picture; an entry that was *removed* is in no update,
-  /// and only a fresh listing drops it.
+  /// keeps the full picture; an entry that was *removed* is in no listing,
+  /// and only a [DownloadsRemovalUpdate] or a fresh listing drops it.
   DownloadsRegistry merge(DownloadsRegistry update) => DownloadsRegistry(
     version: update.version,
     items: {...items, ...update.items},

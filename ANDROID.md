@@ -572,9 +572,12 @@ follows is what brings the service up. (The Rust ticker's
 shares the test; the service's question is narrower.) The progress
 feed only carries rows that *moved*, so a row for a key no listing has
 mentioned is read as "something was added" and answered with a fresh
-listing, and a removal — which has no event at all — is caught by
-re-reading the listing every 5 s while the service is up. At rest neither
-costs anything.
+listing, and a removal — for which the Rust side emits nothing — is the
+client's own event (`DownloadsClient.remove` pushes a
+`DownloadsRemovalUpdate`). Nothing is re-read on a timer: the service used
+to list the whole registry every 5 s while it ran, to notice a removal,
+which parsed every entry's meta snapshot on the UI isolate twelve times a
+minute on top of the rows already arriving. At rest nothing runs.
 
 **The notification.** One ongoing notification on a low-importance channel
 (`xtremio.downloads`, `IMPORTANCE_LOW`, no sound, no vibration, no badge),

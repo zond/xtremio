@@ -146,18 +146,23 @@ const String kDownloadsCancelAllAction = 'Cancel all';
 /// pin set, and start-up re-pins every unfinished entry.
 ///
 /// **How it learns what changed.** Progress arrives on the client's feed
-/// once a second, but that feed only ever carries rows that *moved* — an
-/// entry that has just appeared or has just been removed is not a row. A
-/// row for a key no listing has mentioned means something was added, and is
-/// answered with a fresh listing; a removal has no event at all, so while
-/// the service runs the listing is re-read every [listingInterval]. At rest
-/// neither costs anything: nothing ticks when nothing is unfinished.
+/// once a second, and that feed only ever carries rows that *moved* — an
+/// entry that has just appeared is not a row it knows. A row for a key no
+/// listing has mentioned means something was added, and is answered with a
+/// fresh listing; a removal is the client's own event
+/// ([DownloadsRemovalUpdate], pushed by [DownloadsClient.remove]), since
+/// the Rust side emits nothing for one. That is the whole of it: the
+/// listing is taken once at [start], once after a [cancelAll], and once
+/// per addition. It used to be re-read every five seconds for as long as
+/// the service ran, to notice a removal — a full registry, every entry's
+/// `MetaItem` snapshot included, parsed on the UI isolate twelve times a
+/// minute on top of the progress rows already arriving, for one thing the
+/// client could simply say. At rest nothing runs at all.
 class DownloadsForegroundService {
   DownloadsForegroundService({
     required this.client,
     this.channel = defaultChannel,
     this.openDownloads,
-    this.listingInterval = const Duration(seconds: 5),
     TargetPlatform? platform,
   }) : isSupported =
            (platform ?? defaultTargetPlatform) == TargetPlatform.android;
@@ -177,16 +182,11 @@ class DownloadsForegroundService {
   /// it is tapped.
   final VoidCallback? openDownloads;
 
-  /// How often the listing is re-read while the service runs; see the class
-  /// comment for why it has to be read at all.
-  final Duration listingInterval;
-
   /// Whether this platform has a foreground service. False everywhere but
   /// Android, and then nothing here ever touches the channel.
   final bool isSupported;
 
   StreamSubscription<DownloadsUpdate>? _updates;
-  Timer? _listings;
   DownloadsRegistry _registry = DownloadsRegistry.empty;
 
   /// What the notification currently says, so an unchanged tick is not sent
@@ -273,7 +273,6 @@ class DownloadsForegroundService {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
-    _stopListings();
     await _updates?.cancel();
     _updates = null;
     if (!isSupported) return;
@@ -296,8 +295,10 @@ class DownloadsForegroundService {
   }
 
   /// The feed died (the Rust side handed its one sink to another client).
-  /// The listing timer still runs while the service is up, so the numbers
-  /// go stale rather than wrong, and a removal is still noticed.
+  /// The app builds one client, so this is a broken bridge rather than a
+  /// rival: what the notification says stands until the next listing — a
+  /// cancel from the notification, or the next launch — and nothing polls
+  /// for a case the design rules out.
   void _onFeedError(Object error) {
     if (kDebugMode) debugPrint('downloads feed for the notification: $error');
   }
@@ -306,14 +307,12 @@ class DownloadsForegroundService {
     if (_disposed || !_available) return;
     final summary = DownloadsSummary.of(_registry);
     if (summary.isIdle) {
-      _stopListings();
       if (!_running) return;
       _running = false;
       _shown = DownloadsSummary.idle;
       await _invoke('stop');
       return;
     }
-    _startListings();
     if (_running && summary == _shown) return;
     final starting = !_running;
     _shown = summary;
@@ -389,15 +388,5 @@ class DownloadsForegroundService {
       default:
         throw MissingPluginException('downloads: ${call.method}');
     }
-  }
-
-  void _startListings() => _listings ??= Timer.periodic(
-    listingInterval,
-    (_) => unawaited(refresh()),
-  );
-
-  void _stopListings() {
-    _listings?.cancel();
-    _listings = null;
   }
 }

@@ -299,7 +299,10 @@ abstract interface class DownloadsClient {
   Future<DownloadAddResult> add(DownloadRequest request);
 
   /// Drops the download [key] (`"{metaId}:{videoId}"`), with [deleteFiles]
-  /// the bytes too.
+  /// the bytes too. A removal that happened is also pushed on [updates] as
+  /// a [DownloadsRemovalUpdate], because nothing else ever says one did:
+  /// the Rust feed carries rows that moved and rows that appeared, and a
+  /// row that is gone is neither.
   Future<DownloadRemoveResult> remove(String key, {bool deleteFiles = false});
 
   /// Every download, live progress merged in. Answers what is on disk when
@@ -334,9 +337,10 @@ abstract interface class DownloadsClient {
   Future<String?> directory();
 
   /// Progress, as it happens: each event carries only what moved -- the
-  /// ticker's narrow rows, or a whole listing envelope -- so fold them into
-  /// a [list] with [DownloadsUpdate.applyTo]. Broadcast, and nothing is
-  /// buffered for a late subscriber.
+  /// ticker's narrow rows, a whole listing envelope, or the keys a
+  /// [remove] through this client dropped -- so fold them into a [list]
+  /// with [DownloadsUpdate.applyTo]. Broadcast, and nothing is buffered
+  /// for a late subscriber.
   Stream<DownloadsUpdate> get updates;
 
   /// Releases the progress subscription. The client is done afterwards.
@@ -405,9 +409,17 @@ class RustDownloadsClient implements DownloadsClient {
   Future<DownloadRemoveResult> remove(
     String key, {
     bool deleteFiles = false,
-  }) async => DownloadRemoveResult.fromJson(
-    _object(await removeDownload(key: key, deleteFiles: deleteFiles)),
-  );
+  }) async {
+    final result = DownloadRemoveResult.fromJson(
+      _object(await removeDownload(key: key, deleteFiles: deleteFiles)),
+    );
+    // Told here rather than by the Rust side, which is the one client
+    // holding every listener anyway: the foreground service used to re-list
+    // the registry on a timer to notice this, and a row it is told about is
+    // a listing it need not take.
+    if (result.removed) _controller?.add(DownloadsRemovalUpdate([key]));
+    return result;
+  }
 
   @override
   Future<DownloadsRegistry> list() async =>

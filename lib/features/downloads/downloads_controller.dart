@@ -10,8 +10,11 @@ import '../../core/core.dart';
 ///
 /// A progress event carries only what moved -- the six numbers of a row,
 /// not the entry -- which is why the registry is kept here and updates are
-/// laid over it rather than replacing it, and why an entry that was
-/// *removed* needs a [refresh], not an event.
+/// laid over it rather than replacing it. An entry *added* needs a
+/// [refresh]: its row says nothing about it but its numbers. A removal
+/// through the client arrives as its own update and is folded in like the
+/// rest; the [refresh] a screen makes after its own remove is still the
+/// listing that settles what it did.
 ///
 /// A failed listing is a value ([error]), not a throw: the Rust side
 /// answers what is on disk when the server cannot be asked, so the only way

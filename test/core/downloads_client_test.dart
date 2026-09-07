@@ -234,6 +234,34 @@ void main() {
       },
     );
 
+    test('a removal that happened is pushed to whoever listens, since the Rust '
+        'feed never carries one', () async {
+      final client = rust.client;
+      final seen = <DownloadsUpdate>[];
+      client.updates.listen(seen.add);
+      await pumpEventQueue();
+
+      final result = await client.remove('tt1:tt1', deleteFiles: true);
+      await pumpEventQueue();
+      expect(result.removed, isTrue);
+      expect(seen.single, isA<DownloadsRemovalUpdate>());
+      expect((seen.single as DownloadsRemovalUpdate).keys, ['tt1:tt1']);
+
+      // A removal of nothing -- the row was already gone -- is not news.
+      rust.removeAnswer =
+          '{"removed":false,"unpinned":false,"deletedFiles":false}';
+      await client.remove('tt1:tt1');
+      await pumpEventQueue();
+      expect(seen.length, 1);
+    });
+
+    test('a removal with nobody listening opens no feed', () async {
+      final client = rust.client;
+      final result = await client.remove('tt1:tt1');
+      expect(result.removed, isTrue);
+      expect(rust.opened, 0, reason: 'telling nobody needs no sink');
+    });
+
     test('list parses the registry the Rust side answers with', () async {
       rust.listAnswer = jsonEncode(loadDownloadsFixture());
 
@@ -566,11 +594,20 @@ void main() {
       final listed = await client.list();
       expect(listed.length, 1);
 
+      final seen = <DownloadsUpdate>[];
+      client.updates.listen(seen.add);
       final removed = await client.remove('tt0903747:tt0903747:1:1');
       expect(removed.removed, isTrue);
       expect(client.removed.single.deleteFiles, isFalse);
       expect((await client.list()).isEmpty, isTrue);
       expect((await client.remove('nothing:here')).removed, isFalse);
+      await pumpEventQueue();
+      // And, as the real client, it tells its listeners about the one that
+      // happened and not about the one that did not.
+      expect(seen.single, isA<DownloadsRemovalUpdate>());
+      expect((seen.single as DownloadsRemovalUpdate).keys, [
+        'tt0903747:tt0903747:1:1',
+      ]);
     });
 
     test('pushes progress the way the ticker does', () async {

@@ -444,6 +444,28 @@ void main() {
       expect(view.state, DownloadState.downloading);
     });
 
+    test('a removed array drops the entries it names, and nothing else', () {
+      final update = DownloadsUpdate.fromJson(const {
+        'version': 1,
+        'removed': ['tt1:tt1', 'tt9:tt9'],
+      });
+      expect(update, isA<DownloadsRemovalUpdate>());
+      expect((update as DownloadsRemovalUpdate).keys, ['tt1:tt1', 'tt9:tt9']);
+
+      final before = listed().merge(
+        DownloadsRegistry(
+          items: {
+            'tt2:tt2': DownloadView(const {'metaId': 'tt2', 'videoId': 'tt2'}),
+          },
+        ),
+      );
+      final after = update.applyTo(before);
+      expect(after['tt1:tt1'], isNull);
+      expect(after['tt2:tt2'], isNotNull, reason: 'only what was named goes');
+      expect(after.length, 1, reason: 'a key nothing held changes nothing');
+      expect(after.destination, before.destination);
+    });
+
     test('for an entry nothing has listed yet is dropped', () {
       final merged = DownloadsUpdate.fromJson(const {
         'version': 1,

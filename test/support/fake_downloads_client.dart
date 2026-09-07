@@ -141,6 +141,11 @@ class FakeDownloadsClient implements DownloadsClient {
       items: items,
       destination: registry.destination,
     );
+    // As the real client does: a removal is the one change the Rust feed
+    // never carries, so the client itself tells its listeners.
+    if (result.removed && !_updates.isClosed) {
+      _updates.add(DownloadsRemovalUpdate([key]));
+    }
     return result;
   }
 

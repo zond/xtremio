@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -55,7 +58,7 @@ void main() {
   MethodCall lastOf(String method) =>
       calls.lastWhere((call) => call.method == method);
 
-  /// Lets the service's own futures and its listing timer run.
+  /// Lets the service's own futures run.
   Future<void> settle([Duration wait = const Duration(milliseconds: 30)]) =>
       Future<void>.delayed(wait);
 
@@ -85,8 +88,7 @@ void main() {
     );
   });
 
-  /// A service on Android unless told otherwise, with a listing timer fast
-  /// enough for a test to wait on.
+  /// A service on Android unless told otherwise.
   DownloadsForegroundService build({
     TargetPlatform platform = TargetPlatform.android,
     VoidCallback? openDownloads,
@@ -94,7 +96,6 @@ void main() {
     client: client,
     platform: platform,
     openDownloads: openDownloads,
-    listingInterval: const Duration(milliseconds: 10),
   );
 
   /// Starts the service with one download already on its way.
@@ -191,13 +192,44 @@ void main() {
     test('the last one being deleted takes it down', () async {
       final service = await running();
 
-      // A removal has no event of its own -- the feed only carries rows that
-      // moved -- so the listing the service re-reads is what notices.
-      client.registry = DownloadsRegistry.empty;
+      // The Rust feed carries no event for a removal -- only rows that
+      // moved -- so the client itself says what it dropped, and that is
+      // what the service hears.
+      await client.remove('tt1:tt1', deleteFiles: true);
       await settle();
 
       expect(serviceMethods().last, 'stop');
       expect(service.isRunning, isFalse);
+    });
+
+    test('the listing is read at start-up and then not on a timer', () {
+      // Under a fake clock, so a minute of a download's life -- long enough
+      // for any timer measured in seconds to show itself -- takes none.
+      fakeAsync((async) {
+        client.callLog = [];
+        client.registry = registryOf([viewAt('tt1', 25)]);
+        final service = build();
+        unawaited(service.start());
+        async.flushMicrotasks();
+        expect(service.isRunning, isTrue);
+        expect(client.callLog, ['downloads.list']);
+
+        // As the feed really delivers it: a row a second, each already the
+        // whole of what changed.
+        for (var second = 26; second <= 85; second++) {
+          client.emitProgress([rowOf(viewAt('tt1', second))]);
+          async.elapse(const Duration(seconds: 1));
+        }
+
+        expect(lastOf('update').arguments, containsPair('progress', 85));
+        expect(
+          client.callLog,
+          ['downloads.list'],
+          reason:
+              'the rows are the truth about progress; a listing every few '
+              'seconds on top of them parsed every meta snapshot for nothing',
+        );
+      });
     });
 
     test(
@@ -295,7 +327,7 @@ void main() {
       client.registry = registryOf([first]);
       client.emitProgress([rowOf(first)]);
       await settle();
-      client.registry = DownloadsRegistry.empty;
+      await client.remove('tt1:tt1', deleteFiles: true);
       await settle();
       expect(service.isRunning, isFalse);
 
