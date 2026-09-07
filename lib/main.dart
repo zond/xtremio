@@ -34,6 +34,9 @@ typedef CoreBoot = Future<(CoreClient, CoreInitInfo)> Function();
 /// Loads the Rust library and boots stremio-core (with the embedded
 /// stream-server) before showing the app; shows the failure otherwise.
 ///
+/// It is also where the process-wide ceilings go that must be in place
+/// before the first screen draws: the image cache's ([imageCacheCeilingBytes]).
+///
 /// Everything else [XtremioApp] can be handed -- the clients it would
 /// otherwise build over FFI, and how a player's engine is made -- passes
 /// through unchanged, defaulting to what [XtremioApp] itself defaults to.
@@ -58,6 +61,36 @@ class XtremioBootstrap extends StatefulWidget {
 
   /// What [DeviceProfile.detect] found, handed to [XtremioApp].
   final DeviceProfile device;
+
+  /// What decoded images Flutter may keep for pictures no widget is showing:
+  /// 32 MiB, in place of the framework's 100 MiB (`ImageCache`, 1000
+  /// images / 100 MiB).
+  ///
+  /// Every poster, backdrop and episode thumbnail is decoded at the box it
+  /// is drawn in (`cacheWidth`), so no single picture is large any more; a
+  /// catalog is. The Board alone walks a few hundred posters past the
+  /// viewer, and Flutter keeps each one until the cache is full -- and the
+  /// default is full at 100 MiB. On the owner's Chromecast with Google TV
+  /// (2 GB of RAM for the whole system, about 650 MB of it ever available)
+  /// Android's low-memory killer took the app twice in one day at
+  /// 311-379 MB resident the moment it went to the background, and that
+  /// latent 100 MiB is the second-largest single number in the
+  /// attribution after the torrent engine. What the ceiling costs is a
+  /// re-decode when a row is scrolled back to, from a bounded-size source
+  /// that is already on disk in the HTTP cache: cheap, and visible only as
+  /// a poster fading in a second time.
+  ///
+  /// One number on every device rather than a television's own. A phone
+  /// decodes at three times the density, so 32 MiB there is a few dozen
+  /// posters rather than a hundred, which is still more than one screen
+  /// shows; nothing this app does on a desktop needs a bigger cache either.
+  /// If re-decoding on a phone ever shows, raise it through the device
+  /// profile rather than here.
+  ///
+  /// The other half is `XtremioApp`, which empties the cache when the app
+  /// goes to the background: a ceiling bounds what a foreground app holds,
+  /// and the kill is of a background one.
+  static const int imageCacheCeilingBytes = 32 * 1024 * 1024;
 
   /// How the core comes up; [bootCore] (the Rust library) unless a test
   /// hands in a fake.
@@ -110,6 +143,16 @@ class XtremioBootstrap extends StatefulWidget {
 
 class _XtremioBootstrapState extends State<XtremioBootstrap> {
   late final Future<(CoreClient, CoreInitInfo)> _boot = widget.boot();
+
+  @override
+  void initState() {
+    super.initState();
+    // Before the first image resolves: the framework's default is the
+    // ceiling until somebody says otherwise, and the splash is the last
+    // frame with no picture on it.
+    PaintingBinding.instance.imageCache.maximumSizeBytes =
+        XtremioBootstrap.imageCacheCeilingBytes;
+  }
 
   @override
   Widget build(BuildContext context) {

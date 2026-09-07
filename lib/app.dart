@@ -268,8 +268,8 @@ class _XtremioAppState extends State<XtremioApp> {
       onExitRequested: _onExitRequested,
       onResume: _onResume,
       onInactive: _onAway,
-      onHide: _onAway,
-      onPause: _onAway,
+      onHide: _onHidden,
+      onPause: _onHidden,
     );
     _events = widget.core.events.listen(_onEvent);
     unawaited(_startDeepLinks());
@@ -378,6 +378,30 @@ class _XtremioAppState extends State<XtremioApp> {
   }
 
   void _onAway() => _away = true;
+
+  /// The app is in the background (`hidden`, and `paused` after it on
+  /// Android), as opposed to merely interrupted (`inactive`: a dialog, the
+  /// notification shade, a call).
+  ///
+  /// What goes here is what a background app should not be holding. On the
+  /// owner's Chromecast with Google TV (2 GB of RAM, about 650 MB of it
+  /// ever available) Android's low-memory killer took this app twice in a
+  /// day at 311-379 MB resident, both times the moment it was backgrounded
+  /// -- at `oom_score_adj` 700 it was the fattest process on the box, so it
+  /// went before the apps cached at 20-150 MB. Until now the process held
+  /// in the background exactly what it held in the foreground.
+  ///
+  /// The decoded images are the part that is the app's own to drop, and
+  /// they are dropped whole: everything no widget is showing goes
+  /// (`ImageCache.clear`; a picture still on a screen in the stack is kept
+  /// alive by that screen and comes back with it), and it is not done on
+  /// `inactive`, where a settings dialog would cost the board its posters
+  /// every time it opened. The ceiling that bounds the same cache in the
+  /// foreground is `XtremioBootstrap.imageCacheCeilingBytes`.
+  void _onHidden() {
+    _away = true;
+    PaintingBinding.instance.imageCache.clear();
+  }
 
   Future<void> _onResume() async {
     if (!_away) return;
