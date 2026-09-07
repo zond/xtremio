@@ -13,14 +13,12 @@ void main() {
     String lang = 'eng',
     String? releaseGroup,
     String? movieReleaseName,
-    Object? g,
   }) => SubtitleSource(
     SubtitleInfo(<String, dynamic>{
       'lang': lang,
       'url': url,
       'releaseGroup': ?releaseGroup,
       'movieReleaseName': ?movieReleaseName,
-      'g': ?g,
     }),
     addonBase: 'https://opensubtitles-v3.strem.io/manifest.json',
   );
@@ -226,20 +224,20 @@ void main() {
     );
   });
 
-  test('then a group the viewer has already fixed for this show', () {
+  test('then a release group the viewer has already fixed for this show', () {
     // The second rank is worth having for one reason: the correction is
     // put back when the file is applied, so it arrives fixed.
     const series = 'tt0068646';
     final memory = SubtitleSyncMemory.empty.remembering(
       series: series,
-      group: '6',
+      releaseGroup: 'six',
       release: null,
       speed: 25 / 23.976,
       shiftSeconds: 0,
     );
     final sources = [
       upload('https://subs/plain.srt', releaseGroup: 'PLAIN'),
-      upload('https://subs/six.srt', releaseGroup: 'SIX', g: 6),
+      upload('https://subs/six.srt', releaseGroup: 'SIX'),
       upload('https://subs/dfn.srt', releaseGroup: 'DFN'),
     ];
     expect(offered(sources, release: playing, series: series, memory: memory), [
@@ -269,14 +267,14 @@ void main() {
     const series = 'tt0068646';
     final elsewhere = SubtitleSyncMemory.empty.remembering(
       series: series,
-      group: '6',
+      releaseGroup: 'six',
       release: 'the.godfather.1972.720p.web.h264-yts.mkv',
       speed: null,
       shiftSeconds: 0.3,
     );
     final sources = [
       upload('https://subs/plain.srt', releaseGroup: 'PLAIN'),
-      upload('https://subs/six.srt', releaseGroup: 'SIX', g: 6),
+      upload('https://subs/six.srt', releaseGroup: 'SIX'),
     ];
     expect(
       offered(sources, release: playing, series: series, memory: elsewhere),
@@ -285,7 +283,7 @@ void main() {
     // Made against this release, it is put back, so it ranks.
     final here = SubtitleSyncMemory.empty.remembering(
       series: series,
-      group: '6',
+      releaseGroup: 'six',
       release: playing,
       speed: null,
       shiftSeconds: 0.3,

@@ -307,11 +307,24 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   (`lib/core/subtitle_sync.dart`, one preferences key, `subtitleSync`)
   stores a multiplier and an offset in seconds, both real numbers
   because both are measured, and keys a *speed* on the series and the
-  addon's `g`, because what a file
+  addon's `releaseGroup` lower-cased, because what a file
   was timed against is a property of where it came from and video
   releases of one show share a frame rate; it keys a *shift* on the
   video release as well, because an offset is the video's pre-roll less
   whatever the subtitle's source assumed and so depends on both sides.
+  **The group is `releaseGroup` and never `g`.** `g` was the key until
+  506 real OpenSubtitles answers for two series were measured: it is a
+  per-*answer* cluster index, re-assigned every time, so one Swedish
+  upload batch is `g=6, 5, 4, 1` across four Gilmore Girls episodes and
+  Breaking Bad's BluRay family is `2, 2, 1` -- and one bucket collects
+  files belonging to another episode entirely. A speed keyed on it
+  therefore usually failed to apply next episode and occasionally
+  applied to a family it was never measured on, which is worse. Rows a
+  build wrote under `g` are dropped rather than migrated, because the
+  release group is not in them. `releaseGroup` is on about four entries
+  in ten and is the same word every episode; the other six are files
+  nothing about the release is remembered for, which is this section's
+  rule and not a shortfall.
   The release is the whole filename from `castFilename` -- the file the
   server says it opened, else the addon's claim -- lower-cased, and not
   a release group parsed out of it: a parse is a guess, and two encodes
@@ -542,7 +555,8 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   the viewer has already adjusted for this series, then the addons' own
   order. The first rank is evidence about *this video*: two files cut
   for one release keep its time, where a declared rate says only where
-  an upload came from. The second is worth having because the
+  an upload came from. The second is the `releaseGroup` the memory is
+  keyed on, and is worth having because the
   correction goes back on when the file is applied, so it arrives fixed
   -- which is why it asks `SubtitleSyncMemory` exactly what
   `_resetSubtitleTiming` will ask it, and why a shift measured against

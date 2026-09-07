@@ -435,12 +435,12 @@ _ReleaseFit _fitOf(
   if (subtitleMatchesRelease(subtitle, release: release)) {
     return _ReleaseFit.release;
   }
-  final group = subtitle.group;
-  if (group != null &&
-      (memory.speedFor(series: series, group: group) != null ||
+  final releaseGroup = subtitle.releaseGroupKey;
+  if (releaseGroup != null &&
+      (memory.speedFor(series: series, releaseGroup: releaseGroup) != null ||
           memory.shiftSecondsFor(
                 series: series,
-                group: group,
+                releaseGroup: releaseGroup,
                 release: release,
               ) !=
               0)) {

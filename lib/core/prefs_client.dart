@@ -143,7 +143,7 @@ class AppPrefs extends ChangeNotifier {
   /// recent first.
   ///
   /// One key for both adjustments even though they are keyed differently
-  /// -- a speed on the series and the subtitle group, a shift on those
+  /// -- a speed on the series and the release group, a shift on those
   /// and the video release as well -- because they are the same
   /// preference: what this viewer has already fixed. It is a list, so
   /// the recency the bound drops by is the order itself.

@@ -66,7 +66,7 @@ void main() {
         'content': {
           'type': 'Ready',
           'content': [
-            {...upload('en-1', plainUrl, 'PLAIN'), 'g': 6},
+            upload('en-1', plainUrl, 'PLAIN'),
             upload('en-2', palUrl, 'PAL', fpsMilli: 25000),
           ],
         },
@@ -123,7 +123,7 @@ void main() {
   AppPrefs prefsWithSpeed() => AppPrefs(
     client: FakePrefsClient({
       'subtitleSync': [
-        {'series': 'tt0063350', 'group': '6', 'speed': measured},
+        {'series': 'tt0063350', 'releaseGroup': 'plain', 'speed': measured},
       ],
     }),
   );

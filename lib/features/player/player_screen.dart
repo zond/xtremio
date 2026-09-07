@@ -2196,11 +2196,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// What the viewer is remembered to have fixed about [subtitle] here,
   /// and untouched when nothing is -- which is every embedded track,
-  /// every subtitle turned off, and every file from an addon that sends
-  /// no group.
+  /// every subtitle turned off, and every file from an addon that names
+  /// no release group.
   ///
   /// The two halves are looked up under different keys because they have
-  /// different causes: the speed under the series and the subtitle group,
+  /// different causes: the speed under the series and the release group,
   /// since what a file was timed against is a property of where it came
   /// from; the offset under the video release as well, since it is the
   /// video's pre-roll less whatever the subtitle's source assumed. See
@@ -2214,25 +2214,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// rather than from nothing.
   SubtitleTiming _rememberedTiming(SubtitleInfo? subtitle) {
     final memory = _prefs?.subtitleSync;
-    final group = subtitle?.group;
-    if (memory == null || group == null) return const SubtitleTiming();
+    final releaseGroup = subtitle?.releaseGroupKey;
+    if (memory == null || releaseGroup == null) return const SubtitleTiming();
     final series = _syncSeries;
     final seconds = memory.shiftSecondsFor(
       series: series,
-      group: group,
+      releaseGroup: releaseGroup,
       release: _syncRelease,
     );
     return SubtitleTiming(
       // Nothing remembered is what nothing applied looks like, so a
       // stored zero and a stored 1.0 both come back as untouched rather
       // than as a correction Reset would offer to undo.
-      calibratedSpeed: _rememberedSpeed(memory, series, group),
+      calibratedSpeed: _rememberedSpeed(memory, series, releaseGroup),
       calibratedDelay: seconds == 0 ? null : seconds,
     );
   }
 
-  /// The multiplier [memory] holds for [group]'s files of [series], and
-  /// null when it holds none this build will put on a player.
+  /// The multiplier [memory] holds for [releaseGroup]'s files of
+  /// [series], and null when it holds none this build will put on a
+  /// player.
   ///
   /// The file is forgiving by design and this is the one place a number
   /// out of it becomes `sub-speed`, so the range is checked here rather
@@ -2246,9 +2247,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   double? _rememberedSpeed(
     SubtitleSyncMemory memory,
     String? series,
-    String group,
+    String releaseGroup,
   ) {
-    final stored = memory.speedFor(series: series, group: group);
+    final stored = memory.speedFor(series: series, releaseGroup: releaseGroup);
     if (stored == null || stored == 1) return null;
     return stored >= minSubtitleSpeed && stored <= maxSubtitleSpeed
         ? stored
@@ -2308,7 +2309,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// made, so that what is written down is the file the press was made
   /// on however long the panel then stays up.
   void _rememberTiming() {
-    final group = _externalSubtitle?.group;
+    final releaseGroup = _externalSubtitle?.releaseGroupKey;
     final series = _syncSeries;
     final release = _syncRelease;
     // What is on the player, not how it got there: a toggle, a
@@ -2318,10 +2319,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final speed = _timing.speed == 1 ? null : _timing.speed;
     final shiftSeconds = _timing.delay;
     _pendingSync = null;
-    // No group from the addon, or no series: there is nothing to key the
-    // adjustment on, and applying it to the files it might belong to is
-    // worse than forgetting it.
-    if (group == null || series == null) return;
+    // No release group from the addon, or no series: there is nothing to
+    // key the adjustment on, and applying it to the files it might belong
+    // to is worse than forgetting it.
+    if (releaseGroup == null || series == null) return;
     _pendingSync = () {
       final prefs = _prefs;
       if (prefs == null) return;
@@ -2329,7 +2330,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           .setSubtitleSync(
             prefs.subtitleSync.remembering(
               series: series,
-              group: group,
+              releaseGroup: releaseGroup,
               release: release,
               speed: speed,
               shiftSeconds: shiftSeconds,

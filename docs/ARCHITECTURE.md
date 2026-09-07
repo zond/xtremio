@@ -718,7 +718,7 @@ what every model field means. The shape of the thing is in the
   cut for says more, because two files made for one release keep its
   time. `subtitlesByRelease` puts a language's files whose `releaseGroup`
   or `movieReleaseName` names the video actually playing first, then the
-  ones from a subtitle group the viewer has already adjusted for this
+  ones from a release group the viewer has already adjusted for this
   series (the correction goes back on when the file is applied, so it
   arrives fixed, and the rank asks the memory exactly what applying it
   will ask), then everything else in the order the addons answered.
@@ -930,21 +930,29 @@ what every model field means. The shape of the thing is in the
   again on the next episode, and `_resetSubtitleTiming` puts it back
   whenever that file goes on screen. The two keys are deliberately
   different because the causes are. A *speed* is remembered against the
-  series and the addon's own grouping of its files (`g`), since what a
-  file was timed against is a property of where it came from -- across
-  two Gilmore Girls episodes `g=1` is all 23.976 and `g=3` all 25, while
-  `g=6` holds one file claiming 23.976 and one claiming 25 that end at
-  exactly the same moment, synced to each other whatever they claim --
-  and since video releases of one show share a frame rate, so a speed
-  carries from one to the next. A *shift* is remembered against the
+  series and the group that cut the release the file was made for
+  (`releaseGroup`, lower-cased), since what a file was timed against is a
+  property of where it came from and video releases of one show share a
+  frame rate, so a speed carries from one episode to the next. It is
+  `releaseGroup` and not the addon's own bucket (`g`), which is what this
+  used to key on: `g` is a per-answer cluster index, re-assigned every
+  answer, so one Swedish upload batch reads `g=6, 5, 4, 1` across four
+  Gilmore Girls episodes and Breaking Bad's BluRay family reads `2, 2,
+  1`, and a bucket can even hold files from another episode. Keyed on it,
+  a measured multiplier usually missed next episode and now and then
+  landed on a family nobody had measured. `releaseGroup` is on about four
+  entries in ten and is the same word every episode -- spelled with
+  whatever capitals the uploader used, which is why the key is
+  lower-cased -- and rows an older build wrote under `g` lapse rather
+  than migrate, since the group's name is not in them. A *shift* is remembered against the
   video release as well, because an offset is the video's pre-roll less
   whatever the subtitle's source assumed and changing either side
   changes the answer; the release is the whole filename the player knows
   (the file the server says it opened, else the addon's claim), not a
   release group parsed out of it, because a parse is a guess and two
   encodes by one group can still start in different places. Any part of
-  a key nobody can name -- an addon that sends no `g`, a torrent nothing
-  has named the file of -- means that adjustment is simply not
+  a key nobody can name -- an addon that names no release group, a
+  torrent nothing has named the file of -- means that adjustment is simply not
   remembered: a narrower key is forgotten more often, and that is the
   price of never being wrong. Both values stored are real numbers, a
   multiplier and an offset in seconds, because both are measured: no
