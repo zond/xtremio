@@ -757,15 +757,26 @@ itself says a test cannot reach it.
   `test/features/tv/focus_reach_test.dart` walks every screen -- as it is
   first drawn, and again with a dialog, a menu or a sheet open over it --
   and fails on a stop with no ring lit on it, no stroke round it and no
-  fill under it. **Both walks are tables of cases, and the tests are built
-  from them**, so a screen cannot be named as covered without a walk
-  really running: it has to appear in `drawn`, and in either `opened` or
-  `unopened` -- the latter naming what it opens on a television and why
-  there is nothing to walk (a screen whose every action reports through a
-  snack bar opens nothing; a details screen's replace dialog hangs off a
-  download button a TV source row does not draw). The last test reads
-  `lib/features` and fails on a `*_screen.dart` missing from either table,
-  and on one claiming both.
+  fill under it. **All three tables are executable, and the tests are
+  built from them**, so a screen cannot be named as covered without
+  something really running: it has to appear in `drawn`, and in either
+  `opened` (a walk over what it puts on top of itself) or `unopened`.
+  **`unopened` is a claim the suite tries to disprove, not a reason
+  somebody wrote.** An entry there is a mount, and `proveNothingOpens`
+  drives it: every stop of
+  the tab order, each from a screen mounted afresh, pressed with select
+  and with the menu key -- the tap and the hold -- and one level down into
+  whatever those presses reveal. A route pushed or a menu opened is the
+  failure. It used to be a sentence saying why there was nothing to walk,
+  and a sentence is not checked: a planted screen whose dialog held an
+  unmarked stop passed with the reason "nothing at all, honest.", and the
+  worked example that stood here -- a details screen's replace dialog
+  hanging off a download button a TV source row does not draw -- was
+  false. A hold on a TV source card *is* that button
+  (`_StreamDownloads.remoteAction`), and a hold on the accounting row's
+  card for a dead addon opens the uninstall dialog; both are walked in
+  `opened` now. The last test reads `lib/features` and fails on a
+  `*_screen.dart` missing from either table, and on one claiming both.
 - **An image holds its box before it has arrived, and a late failure is
   the case that matters.** An `Image.network` given only a height occupies
   exactly that from its first frame, so a shorter fallback moves
