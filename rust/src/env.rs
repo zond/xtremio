@@ -283,10 +283,22 @@ impl Env for XtremioEnv {
             Ok(_) => Body::from(Vec::<u8>::new()),
             Err(error) => return future::err(EnvError::Serde(error.to_string())).boxed_env(),
         };
+        // **The URL never reaches an error out of here**, as with
+        // [`fetch_text`]: a stream request to a Torrentio-style addon
+        // carries the debrid API key in its path, `reqwest` puts the URL it
+        // was given into its own `Display`, and `EnvError::Fetch`'s text is
+        // what the failed-addons line on screen shows verbatim -- so every
+        // `reqwest::Error` here goes through `without_url` first. The host
+        // alone is logged, at debug: the readable half the addon health
+        // record keeps too, enough to say which addon failed and nothing
+        // about how it is configured.
         let mut request = match reqwest::Request::try_from(Request::from_parts(parts, body)) {
             Ok(request) => request,
-            Err(error) => return future::err(EnvError::Fetch(error.to_string())).boxed_env(),
+            Err(error) => {
+                return future::err(EnvError::Fetch(error.without_url().to_string())).boxed_env()
+            }
         };
+        let host = request.url().host_str().map(str::to_owned);
         // The embedded server's control API (settings, stats, create, ...)
         // requires its per-launch bearer token; no other host gets it.
         if let Some(token) = crate::server::token_for(request.url()) {
@@ -302,10 +314,11 @@ impl Env for XtremioEnv {
             }
         }
         async move {
-            let response = CLIENT
-                .execute(request)
-                .await
-                .map_err(|error| EnvError::Fetch(error.to_string()))?;
+            let response = CLIENT.execute(request).await.map_err(|error| {
+                let error = error.without_url();
+                tracing::debug!(host = host.as_deref().unwrap_or("-"), %error, "fetch failed");
+                EnvError::Fetch(error.to_string())
+            })?;
             let status = response.status();
             if !status.is_success() {
                 return Err(EnvError::Fetch(format!("HTTP {}", status.as_u16())));
@@ -317,7 +330,9 @@ impl Env for XtremioEnv {
                         ReadError::TooBig(most_bytes) => {
                             EnvError::Fetch(format!("response larger than {most_bytes} bytes"))
                         }
-                        ReadError::Transport(error) => EnvError::Fetch(error.to_string()),
+                        ReadError::Transport(error) => {
+                            EnvError::Fetch(error.without_url().to_string())
+                        }
                     })?;
             let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
             serde_path_to_error::deserialize::<_, OUT>(&mut deserializer)
@@ -662,6 +677,30 @@ mod tests {
             .block_on(fetch_text(&url, 4096))
             .expect_err("nothing is listening there");
         let message = error.to_string();
+        assert!(!message.contains("hunter2"), "{message}");
+        assert!(!message.contains(&address.to_string()), "{message}");
+    }
+
+    /// `fetch`'s errors keep the URL out the way `fetch_text`'s do. A stream
+    /// request to a Torrentio-style addon has the debrid API key in its
+    /// path, and `EnvError::Fetch`'s text is what the failed-addons line on
+    /// screen shows verbatim -- on a television in a shared room.
+    #[test]
+    fn fetch_keeps_the_url_out_of_its_errors() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("addr");
+        drop(listener);
+        let url = format!(
+            "http://{address}/realdebrid=SECRETKEY123/stream/movie/tt1.json?apikey=hunter2"
+        );
+        let request = Request::get(&url).body(()).expect("request");
+        let error = CONCURRENT
+            .block_on(XtremioEnv::fetch::<(), serde_json::Value>(request))
+            .expect_err("nothing is listening there");
+        let EnvError::Fetch(message) = &error else {
+            panic!("a transport failure is a Fetch error: {error:?}");
+        };
+        assert!(!message.contains("SECRETKEY123"), "{message}");
         assert!(!message.contains("hunter2"), "{message}");
         assert!(!message.contains(&address.to_string()), "{message}");
     }
