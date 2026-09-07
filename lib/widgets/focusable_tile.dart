@@ -196,13 +196,26 @@ class TileFocus extends InheritedWidget {
 
 /// How much of the focus indicator a surface family wears.
 ///
-/// The ring is the part everything the remote can land on gets. The zoom
-/// and the shadow are the parts that only mean anything on something drawn
-/// as an object: a poster lifted a twentieth out of its row reads as picked
-/// up, from three metres, on a display that cannot deliver contrast. A
-/// settings row lifted the same amount reads as a mistake -- [AnimatedScale]
-/// is a paint transform, so nothing moves aside for it and the row overlaps
-/// the two it sits between, on every step of the walk down a list.
+/// The ring is the part everything the remote can land on gets. The other
+/// two are each a cue only in the right company, which is what the members
+/// below are really choosing between.
+///
+/// The zoom and the shadow mean something on what is drawn as an object: a
+/// poster lifted a twentieth out of its row reads as picked up, from three
+/// metres, on a display that cannot deliver contrast. A settings row lifted
+/// the same amount reads as a mistake -- [AnimatedScale] is a paint
+/// transform, so nothing moves aside for it and the row overlaps the two it
+/// sits between, on every step of the walk down a list.
+///
+/// The dimming ([FocusEmphasis.bold]'s) is a comparison rather than a mark:
+/// it is drawn on everything the remote is *not* on, so it is read off the
+/// neighbours going dark. That works where the neighbours wear this same
+/// indicator -- a grid of posters dims as one and the focused one is the
+/// one left bright. Where a surface is the only thing on its bar wearing
+/// one, and its neighbours are marked by the theme floor instead, there is
+/// no such company: it is the single element that fades, which reads as
+/// something that has gone away rather than as something the remote is not
+/// on. That is [readout].
 ///
 /// So the family decides once, where the widget is written, rather than
 /// every call site deciding again.
@@ -212,16 +225,34 @@ enum FocusTreatment {
   /// everything that is not focused.
   tile,
 
-  /// Something drawn as a line or a control in a row: a menu row, a rail
-  /// destination, a chip, a button on a panel. The ring and the dimming,
-  /// and neither the zoom nor the shadow, so its neighbours stay put.
+  /// Something drawn as a line or a control in a list or a row of its own
+  /// kind: a menu row, a rail destination, a chip, a button on a panel. The
+  /// ring and the dimming, and neither the zoom nor the shadow, so its
+  /// neighbours stay put.
   row,
+
+  /// Something the viewer reads while the remote is somewhere else, drawn
+  /// among neighbours that are not marked this way: the player's seek bar,
+  /// on a control bar of icon buttons the theme floor marks. The ring
+  /// alone -- no zoom, no shadow, and no dimming, because there is nothing
+  /// dimming beside it for the dimming to be read against.
+  readout;
+
+  /// Whether [FocusEmphasis.bold] draws this at
+  /// [FocusHighlight.dimmedOpacity] while something else holds focus.
+  bool get dims => this != readout;
+
+  /// Whether a focused one is zoomed and given a shadow under it.
+  bool get lifts => this == tile;
 }
 
 /// The whole focus indicator on a television: the two-stroke [FocusRing],
 /// a slight zoom and a shadow under what is focused, and -- in
-/// [FocusEmphasis.bold] -- everything that is *not* focused dimmed. How
-/// much of that a surface gets is [treatment]'s to say.
+/// [FocusEmphasis.bold] -- this dimmed while something else is focused. How
+/// much of that a surface gets is [treatment]'s to say, and the dimming is
+/// the member of the three easiest to reach for by accident: it is drawn on
+/// the *unfocused* surface, so what a treatment turns on is one surface
+/// fading, and only a family of them fading together is a cue.
 ///
 /// One colour cannot carry this on its own. The indicator is drawn over
 /// poster art, on a display the app knows nothing about; the owner's is a
@@ -284,17 +315,17 @@ class FocusHighlight extends StatelessWidget {
       emphasis: emphasis,
       child: child,
     );
-    if (emphasis == FocusEmphasis.bold) {
+    if (emphasis == FocusEmphasis.bold && treatment.dims) {
       content = AnimatedOpacity(
         opacity: focused ? 1 : dimmedOpacity,
         duration: duration,
         child: content,
       );
     }
-    // A row keeps its neighbours where they are: no zoom, and so no
-    // shadow either, since a shadow under something that has not been
-    // lifted is a smudge.
-    if (treatment == FocusTreatment.row) return content;
+    // A row and a readout keep their neighbours where they are: no zoom,
+    // and so no shadow either, since a shadow under something that has not
+    // been lifted is a smudge.
+    if (!treatment.lifts) return content;
     return AnimatedScale(
       scale: focused ? focusedScale : 1,
       duration: duration,

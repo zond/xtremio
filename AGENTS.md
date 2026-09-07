@@ -719,7 +719,14 @@ itself says a test cannot reach it.
   `FocusMarked` for one that will not, and `FocusTreatment` for how much
   of the indicator a surface family wears -- a `tile` zooms and casts a
   shadow, a `row` does neither, because an `AnimatedScale` is a paint
-  transform and nothing moves aside for a settings row that grew. The
+  transform and nothing moves aside for a settings row that grew, and a
+  `readout` also keeps Bold's dimming off. **The dimming is read off the
+  neighbours**: it is drawn on everything the remote is *not* on, so a
+  family that dims together says which one is focused, and a lone surface
+  among neighbours the floor marks instead just fades out on its own. That
+  was the seek bar, sitting at 0.45 whenever the remote was on any other
+  control of the player's bar -- the one element of it a viewer reads while
+  pressing something else. The
   second is `FocusTheme`, the floor: the emphasis derived into
   `ThemeData` on a television, so every Material control is marked
   without opting in to anything. Wrapping by hand had reached exactly the

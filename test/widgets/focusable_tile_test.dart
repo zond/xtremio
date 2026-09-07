@@ -692,4 +692,74 @@ void main() {
       expect(find.text('row 0'), findsOneWidget);
     });
   });
+
+  group('a readout keeps its brightness', () {
+    /// A readout above two ordinary rows: the shape of the player's
+    /// control bar, where the seek bar is the one thing on it wearing a
+    /// [FocusHighlight] and its neighbours are marked by the theme floor.
+    /// A bare [Focus] over a [Text] is the bar's own shape, too -- no
+    /// Material in it for a floor to stroke or fill.
+    Widget bar() => Column(
+      children: [
+        const FocusMarked(
+          treatment: FocusTreatment.readout,
+          child: Focus(child: Text('readout')),
+        ),
+        for (var i = 0; i < 2; i++)
+          FocusMarked(
+            child: TextButton(onPressed: () {}, child: Text('row $i')),
+          ),
+      ],
+    );
+
+    testWidgets('the ring still follows focus onto it', (tester) async {
+      await tester.pumpWidget(
+        harness(bar(), prefs: emphasis(FocusEmphasis.bold)),
+      );
+      await tester.pumpAndSettle();
+      expect(ringOf(tester, 'readout'), isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(ringOf(tester, 'readout'), isTrue);
+      expect(strokeWidths(tester, 'readout'), [
+        FocusRing.boldWidth / 2,
+        FocusRing.boldWidth / 2,
+      ]);
+      expect(
+        find
+            .ancestor(
+              of: find.text('readout'),
+              matching: find.byType(AnimatedScale),
+            )
+            .evaluate(),
+        isEmpty,
+        reason: 'a readout is not lifted, for the reason a row is not',
+      );
+    });
+
+    testWidgets('and bold dims its neighbours without dimming it', (
+      tester,
+    ) async {
+      // The dimming is read off the neighbours going dark, so it says
+      // something only where the neighbours wear this indicator too. A
+      // readout stands among controls the theme floor marks instead: dim
+      // it and it is the one element of the bar that fades, at the moment
+      // the viewer is reading it from another control.
+      await tester.pumpWidget(
+        harness(bar(), prefs: emphasis(FocusEmphasis.bold)),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+
+      expect(ringOf(tester, 'row 0'), isTrue);
+      expect(opacityOf(tester, 'row 1'), FocusHighlight.dimmedOpacity);
+      expect(
+        opacityOf(tester, 'readout'),
+        isNull,
+        reason: 'nothing dims a readout, in either emphasis',
+      );
+    });
+  });
 }

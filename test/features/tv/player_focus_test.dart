@@ -20,6 +20,18 @@ bool lit(WidgetTester tester, Finder ring) => tester
     .widgetList<FocusHighlight>(ring)
     .any((highlight) => highlight.focused);
 
+/// What the seek bar is drawn at, which is what a viewer reading the
+/// progress sees: the opacity of whatever dims it, or 1 where nothing
+/// does.
+double seekBarOpacity(WidgetTester tester) {
+  final fader = find.descendant(
+    of: find.byType(SeekBar),
+    matching: find.byType(AnimatedOpacity),
+  );
+  if (fader.evaluate().isEmpty) return 1;
+  return tester.widget<AnimatedOpacity>(fader.first).opacity;
+}
+
 /// The player driven by a remote: the D-pad's centre and the media keys.
 void main() {
   const total = Duration(minutes: 96);
@@ -45,6 +57,11 @@ void main() {
     await pumpEvents(tester);
     return harness;
   }
+
+  /// Preferences that persist nothing, with the emphasis turned up: the
+  /// setting under which a missing -- or a misplaced -- indicator is most
+  /// obviously so.
+  AppPrefs bold() => AppPrefs.inMemory()..setFocusEmphasis(FocusEmphasis.bold);
 
   /// Plays and lets the controls fade.
   Future<void> playUntilHidden(WidgetTester tester, PlayerHarness h) async {
@@ -467,6 +484,55 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<PlayerTopBar>(), isTrue);
       expect(lit(tester, ring), isFalse, reason: 'the ring follows focus');
+    });
+
+    testWidgets('and does not fade out while the remote is on the rest of '
+        'the bar', (tester) async {
+      // Bold dims everything the remote is not on, and that is a cue only
+      // where the neighbours dim too: on a grid of posters the focused one
+      // is the one left bright. On the control bar the seek bar is the
+      // only thing wearing a [FocusHighlight] -- play/pause, the seek
+      // buttons, the time labels and every button on the top bar are
+      // marked by the theme floor and stay where they are -- so dimming it
+      // fades out the one element of the bar the viewer is reading, at
+      // exactly the moment they are reading it from another control.
+      final harness = await pumpOnTv(tester, prefs: bold());
+      expect(seekBarOpacity(tester), 1, reason: 'nothing is focused yet');
+
+      // Down onto the transport row, then right along all of it.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      final visited = <String>[];
+      for (var i = 0; i < 10; i++) {
+        visited.add(focusedTooltip() ?? '${focusedLabel(tester)}');
+        expect(
+          seekBarOpacity(tester),
+          1,
+          reason: 'the seek bar faded while the remote was on ${visited.last}',
+        );
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+
+      // Up onto the bar itself, and up again onto the top bar's buttons.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<SeekBar>(), isTrue);
+      expect(seekBarOpacity(tester), 1);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      for (var i = 0; i < 8; i++) {
+        visited.add(focusedTooltip() ?? '${focusedLabel(tester)}');
+        expect(
+          seekBarOpacity(tester),
+          1,
+          reason: 'the seek bar faded while the remote was on ${visited.last}',
+        );
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(
+        visited,
+        contains('Playback settings'),
+        reason: 'the walk never left the transport row',
+      );
+      expect(harness.engine.seeks, isEmpty);
     });
 
     testWidgets('left and right seek while the seek bar has focus', (

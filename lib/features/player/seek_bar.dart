@@ -26,6 +26,16 @@ import 'time_format.dart';
 /// cannot reach: it is a bare [Focus] over a [CustomPaint], with no
 /// Material anywhere in it for the floor to fill or stroke. It is drawn
 /// straight over the picture, which is what the ring is for.
+///
+/// The ring and *not* Bold's dimming, which is the rest of what a
+/// [FocusMarked] carries by default. The dimming is read off a surface's
+/// neighbours going dark with it, and this bar has none: play/pause, the
+/// seek buttons, the time labels and every button on the top bar are
+/// marked by the theme floor, so they stay where they are and only the bar
+/// fades -- to 0.45, at rest and at every other stop on the control bar,
+/// which is to say for the whole time the viewer is reading how far
+/// through the film they are while pressing something else. It is a
+/// [FocusTreatment.readout] for that reason.
 class SeekBar extends StatefulWidget {
   const SeekBar({
     super.key,
@@ -135,7 +145,7 @@ class _SeekBarState extends State<SeekBar> {
         final drag = _drag;
         final progress = drag ?? _fraction(widget.position);
         return FocusMarked(
-          treatment: FocusTreatment.row,
+          treatment: FocusTreatment.readout,
           child: Focus(
             focusNode: widget.focusNode,
             canRequestFocus: widget.focusable,
