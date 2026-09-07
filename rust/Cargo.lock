@@ -6259,6 +6259,7 @@ dependencies = [
  "jni",
  "librqbit",
  "log",
+ "mimalloc",
  "regex",
  "reqwest",
  "rustls-platform-verifier",

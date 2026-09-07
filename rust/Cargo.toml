@@ -70,6 +70,23 @@ url = "2"
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# The process allocator (`src/lib.rs`), on every target the app builds for
+# except wasm, where the crate has no allocator to replace. The same crate
+# and the same features as the standalone stream-server binary
+# (`server/src/main.rs`: `default-features = false`, no `secure`, no
+# `override`), plus `local_dynamic_tls`: that binary owns its process, and
+# this crate is a shared library Dart `dlopen`s, which is the case mimalloc
+# documents `-ftls-model=local-dynamic` for -- initial-exec TLS in a
+# library loaded after start-up is a "cannot allocate memory in static TLS
+# block" waiting on a loader with no surplus left. Purging is not a Cargo
+# feature: mimalloc returns freed pages to the OS on its own
+# (`MIMALLOC_PURGE_DELAY`, 10 ms by default); tuning that at run time is
+# `mi_option_set` behind the `extended` feature, which nothing here needs
+# yet. Already in the graph through stream-server, so nothing new is
+# compiled.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+mimalloc = { version = "0.1.52", default-features = false, features = ["local_dynamic_tls"] }
+
 # JNI hook that hands the Android app Context to rustls-platform-verifier
 # (src/android.rs); without it no HTTPS request from Rust succeeds on Android.
 # Same versions stream-server uses, so nothing new enters the graph.
