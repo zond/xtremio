@@ -62,7 +62,13 @@ torrent-level fallback's `streamName` is the file the server *guessed*.
 `127.0.0.1`, so a loopback URL is rebuilt on the server's **LAN media
 listener** — a second HTTP listener with no control routes on it at all, and
 deliberately without `/proxy` and `/ftp` (`rust/src/server.rs`,
-`server_set_lan_media`). A stream served from somewhere else on the internet is
+`server_set_lan_media`). What its stream route does is the server's: on the
+pinned stream-server it is the loopback route, which *creates* a torrent for
+a hash the server does not have, so for the length of a cast any host on the
+LAN can make this device join a swarm; stream-server `02ec741` gives the
+listener lookup-only routes (an unknown hash is a `404`, no `/create`), and
+the pin bump is what closes it — `rust/tests/lan_media.rs` carries the test
+for that contract, ignored until then. A stream served from somewhere else on the internet is
 handed over as it is; the receiver has a connection of its own, and no listener
 is started for it. If no local interface can reach the receiver, the app says
 the device is unreachable rather than casting a URL that could never be
@@ -122,11 +128,13 @@ our listener is not the one it would be asking.
 **The listener lives exactly as long as a session**, and that is made hard to
 get wrong rather than merely intended: it is closed when the session ends, when
 the session ends from the television or another phone, when a start fails, on
-`dispose`, and defensively right after the server starts — stream-server binds
-a configured `lan_media_addr` at boot, so `start_in` shuts it again as the
-first thing it does. Turning it on also grants the server's `lanMediaEnabled`
-veto and turning it off takes it back, so what is on disk while nothing is
-casting is "no".
+`dispose`, and defensively right after the server starts — `start_in` turns
+it off as the first thing it does, which on the pinned stream-server closes
+the listener `run` binds from a configured `lan_media_addr` at boot (from
+`02ec741` nothing binds at boot) and on either takes back the permission a
+cast the process died inside had left granted. Turning it on also grants the
+server's `lanMediaEnabled` veto and turning it off takes it back, so what is
+on disk while nothing is casting is "no".
 
 **While casting** the player screen shows the title, the position, play/pause,
 seek and stop, all from the receiver's own status — a pause from its remote

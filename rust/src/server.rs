@@ -106,9 +106,24 @@ fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
 ///
 /// Configuring it is what makes [`set_lan_media`] able to start it at all
 /// ([`stream_server::ServerConfig::lan_media_addr`] is `None` by default and
-/// then there is nothing to start). It also means `stream_server::run` binds
-/// it once at boot, which is why [`start_in`] shuts it again immediately:
-/// see [`lan_media_off`].
+/// then there is nothing to start). On the pinned stream-server it also
+/// means `stream_server::run` binds it once at boot, veto or no veto, which
+/// is one of the two reasons [`start_in`] turns it off as its first act
+/// (see [`lan_media_off`]); from stream-server `02ec741` nothing binds at
+/// boot -- the address is a place, not a listener -- and only the other
+/// reason remains.
+///
+/// **What the listener serves is the server's decision, and on the pinned
+/// rev it is too much.** It mounts no control route, but its stream route
+/// is the loopback one: a `GET /{infoHash}/{fileIdx}` for a hash the server
+/// does not have *creates* the torrent, with the request's `tr=` trackers,
+/// so for the length of a cast any host on the LAN can make this device
+/// join a swarm of its choosing. Nothing on this side can filter that
+/// listener's requests. stream-server `02ec741` closes it -- the LAN
+/// listener gets lookup-only stream routes, an unknown hash is a `404`, and
+/// `/create` is not there -- and the pin bump is the fix;
+/// `rust/tests/lan_media.rs` carries the test for the new contract, ignored
+/// until then.
 const LAN_MEDIA_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0);
 
 /// Starts the server if it is not running and returns its base URL
@@ -146,11 +161,15 @@ pub(crate) fn start_in(app: &AppState, config: StartConfig) -> anyhow::Result<Ur
     };
     let url = url_of(&handle)?;
     // The LAN media listener exists for the length of a cast session and no
-    // longer, and `stream_server::run` binds a configured `lan_media_addr`
-    // once at boot regardless of the `lanMediaEnabled` veto. So the first
-    // thing a freshly started server is told is to close it again: whatever
-    // a previous run persisted, and however the last session ended, the app
-    // comes up with nothing of ours listening on the LAN.
+    // longer, so the first thing a freshly started server is told is that
+    // there is none. Two things this takes back, and only the first outlives
+    // the pin bump: the `lanMediaEnabled` permission a cast granted and a
+    // kill mid-session left on disk, so that what is persisted while
+    // nothing is casting is always "no"; and, on the pinned stream-server,
+    // the listener `stream_server::run` bound at boot from the configured
+    // address regardless of that veto (from `02ec741` nothing binds at boot
+    // and the stop half is an idempotent no-op). Either way the app comes up
+    // with nothing of ours listening on the LAN.
     lan_media_off(&handle);
     tracing::info!(%url, "embedded stream-server started");
     *guard = Some(handle);
@@ -374,7 +393,9 @@ pub fn close_proxy_streams(token: &str) -> usize {
 /// listener, which serves media bytes to the local network and mounts no
 /// control route at all (deliberately not `/proxy` and not `/ftp`) -- and
 /// answers the address it is bound to afterwards: `Some` after a start,
-/// `None` after a stop.
+/// `None` after a stop. What its stream route does with a hash the server
+/// does not have is the server's affair, and on the pinned rev it creates
+/// the torrent; see [`LAN_MEDIA_ADDR`].
 ///
 /// This is what a cast session turns on and off, and the only thing that
 /// ever should: a Chromecast cannot fetch from a loopback-only server, and

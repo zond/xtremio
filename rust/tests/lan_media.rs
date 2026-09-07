@@ -4,11 +4,19 @@
 //! after start-up and once the server has been shut down.
 //!
 //! Its own test binary, and so its own process: the embedded server is a
-//! process-wide singleton and `embedded.rs` drives the same one.
+//! process-wide singleton and `embedded.rs` drives the same one. The tests
+//! in here take [`SERVER`] for the same reason, since the harness runs them
+//! on separate threads and each starts and stops that one server.
 
 use std::net::SocketAddr;
 
 use reqwest::StatusCode;
+use tokio::sync::Mutex;
+
+/// Held for the length of each test: one embedded server per process, so
+/// one test at a time. Tokio's, since it is held across the awaits.
+static SERVER: Mutex<()> = Mutex::const_new(());
+
 use xtremio_core::api::server::{
     server_lan_media_base_url, server_lan_media_requests_served, server_lan_media_running,
     server_set_lan_media, server_settings, server_start, server_stop, ServerConfig,
@@ -54,8 +62,89 @@ async fn lan_media_allowed() -> anyhow::Result<bool> {
     Ok(settings["lanMediaEnabled"] == serde_json::Value::Bool(true))
 }
 
+/// The contract the pin bump brings, from stream-server 02ec741: the LAN
+/// listener serves the bytes of torrents this device already has and can be
+/// made to arrange nothing. A `GET` for a hash the server does not hold is a
+/// `404` at once -- on the pinned rev it is the loopback stream route, which
+/// *creates* the torrent with the request's trackers and answers only once
+/// its metadata resolves or times out, which is the hole -- and the create
+/// routes are not there. Ignored until the pin moves: against the pinned
+/// server the first request would join a swarm for an invented hash and
+/// block for the metadata timeout.
+#[tokio::test]
+#[ignore = "needs the stream-server pin at 02ec741 or later: the pinned LAN listener creates a torrent for an unknown hash"]
+async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::Result<()> {
+    let _serial = SERVER.lock().await;
+    let tmp = tempfile::tempdir()?;
+    tokio::task::spawn_blocking({
+        let cfg = config(tmp.path());
+        move || server_start(cfg)
+    })
+    .await??;
+    let addr = tokio::task::spawn_blocking(|| server_set_lan_media(true))
+        .await??
+        .expect("an address after a start");
+    let socket = loopback(&addr)?;
+
+    // An invented hash with an attacker's tracker on it: nothing about the
+    // request may reach the network, so it has to be answered from what the
+    // server holds, which is nothing.
+    let unknown = "0123456789abcdef0123456789abcdef01234567";
+    let started = std::time::Instant::now();
+    let status = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        status_of(
+            socket,
+            &format!("/{unknown}/0?tr=http%3A%2F%2F127.0.0.1%3A9%2Fannounce"),
+        ),
+    )
+    .await
+    .expect("a lookup answers at once; a creation waits on metadata")?;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "an unknown hash is not created"
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "the answer took {:?}, which is a magnet being resolved",
+        started.elapsed()
+    );
+    assert_eq!(
+        status_of(socket, &format!("/stream/{unknown}/0")).await?,
+        StatusCode::NOT_FOUND
+    );
+
+    // The create routes are control routes and are not mounted at all: a
+    // 404 (or the stream route's 405 for a POST on a path it also matches),
+    // never a 401 that would say the route exists behind a token.
+    let client = reqwest::Client::builder().no_proxy().build()?;
+    for path in [
+        "/create".to_owned(),
+        format!("/{unknown}/create"),
+        "/rar/create".to_owned(),
+        "/zip/create".to_owned(),
+    ] {
+        let status = client
+            .post(format!("http://{socket}{path}"))
+            .body("{}")
+            .send()
+            .await?
+            .status();
+        assert!(
+            status == StatusCode::NOT_FOUND || status == StatusCode::METHOD_NOT_ALLOWED,
+            "{path} answered {status} on the LAN listener"
+        );
+    }
+
+    tokio::task::spawn_blocking(|| server_set_lan_media(false)).await??;
+    tokio::task::spawn_blocking(server_stop).await??;
+    Ok(())
+}
+
 #[tokio::test]
 async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()> {
+    let _serial = SERVER.lock().await;
     let tmp = tempfile::tempdir()?;
     assert!(
         !server_lan_media_running()?,
@@ -73,9 +162,10 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
     })
     .await??;
 
-    // A configured `lan_media_addr` makes stream-server bind the listener at
-    // boot, so "off at start-up" is a claim about what start does with it,
-    // not about what the server would have done on its own.
+    // The pinned stream-server binds a configured `lan_media_addr` at boot
+    // (from 02ec741 nothing does), so "off at start-up" is a claim about
+    // what start does with it, not about what the server would have done on
+    // its own -- and the veto being off is the half that matters on either.
     assert!(
         !server_lan_media_running()?,
         "the LAN listener was left running by start-up"
