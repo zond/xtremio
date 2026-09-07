@@ -364,11 +364,20 @@ enum _ReleaseFit {
 /// the selection), and a row that jumps to the top once it is picked
 /// takes back the one thing an alphabet is for, which is finding a
 /// language where the alphabet left it. The menu marks the row that is
-/// on instead. The auto-pick is unaffected either way, since it takes
-/// the first file of the language it was asked for; only a preference
-/// that names *no* language reads the head of the whole list, and the
-/// first language alphabetically is no more arbitrary than the first
-/// answered -- it is merely the same one every time.
+/// on instead.
+///
+/// **The one thing this order decides rather than shows.** The auto-pick
+/// walks this list and takes the first file whose language matches the
+/// session preference (`PlayerScreen._maybeAutoPickSubtitles`). A
+/// preference that names a language therefore reads the head of *that*
+/// language's group and cannot tell what order the groups are in. A
+/// preference that is enabled and names **no** language -- which is what
+/// picking a file the addon gave no language for leaves behind, since
+/// that pick sends a null language -- matches every file, so it takes the
+/// head of the whole list: the alphabetically first language now, where
+/// it was the first language answered before. Neither is a judgement
+/// about the file, and the alphabet's at least picks the same one every
+/// time. Every other reader of this order is a menu.
 ///
 /// The order *inside* a language is untouched, and so is the order
 /// inside each rank, so the addon that answered first still wins a tie.

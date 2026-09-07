@@ -605,8 +605,11 @@ what every model field means. The shape of the thing is in the
   that jumps to the top once it is picked is no longer where the alphabet
   left it. Inside a rank the addon that answered first still wins --
   which matters, because the head of a language is the file its row
-  applies and the file the auto-pick plays. Nothing is dropped or
-  hidden. The video is named by the same
+  applies and the file the auto-pick plays. The row order reaches the
+  auto-pick in exactly one case: a session preference that is enabled and
+  names no language matches every file and so takes the head of the whole
+  list, which is now the alphabetically first language rather than the
+  first one answered. Nothing is dropped or hidden. The video is named by the same
   `castFilename` a remembered shift is keyed on (the file the server says
   it opened, else the addon's claim); both sides are cut into lower-case
   runs of letters and digits, since release names are written with dots,

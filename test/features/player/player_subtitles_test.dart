@@ -848,6 +848,35 @@ void main() {
     );
   });
 
+  testWidgets('a preference with no language takes the head of the alphabet', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // The one thing the order *between* languages decides rather than
+    // shows. A preference that is enabled and names no language -- what a
+    // pick of a file the addon gave no language for leaves behind --
+    // matches every file, so the auto-pick takes the head of the whole
+    // list. That is the alphabetically first language now, where it was
+    // whichever addon answered first before the rows were sorted; the
+    // addon here answers Swedish first and German second.
+    final harness = subtitleHarness(
+      [
+        upload('sv-1', 'swe', 'https://subs.example.org/sv.srt', 'YTS'),
+        upload('de-1', 'ger', 'https://subs.example.org/de.srt', 'YTS'),
+      ],
+      preference: {'enabled': true, 'source': 'external'},
+    );
+    harness.torrentStats.response = openedStats;
+    await harness.pump(tester);
+    final engine = harness.engine;
+    engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+
+    expect(engine.externalSubtitles, [
+      (Uri.parse('https://subs.example.org/de.srt'), 'German', 'ger'),
+    ]);
+  });
+
   testWidgets('the session preference applies the only file there is, as it '
       'stands', (tester) async {
     useWideViewport(tester);
