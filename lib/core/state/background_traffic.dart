@@ -48,6 +48,21 @@ class BackgroundTraffic {
         windowSecs: (json['windowSecs'] as num?)?.toInt() ?? 0,
       );
 
+  /// Nothing moving, nothing playing, nothing known: every field at its
+  /// dark value. What a caller holds before its first reading and after a
+  /// failed one, since not knowing is drawn exactly like nothing moving --
+  /// a light that cannot tell the two apart stays off for both, and off is
+  /// the answer that claims nothing.
+  static const BackgroundTraffic none = BackgroundTraffic(
+    active: false,
+    downloading: false,
+    uploading: false,
+    playing: false,
+    bytesDownloaded: 0,
+    bytesUploaded: 0,
+    windowSecs: 0,
+  );
+
   /// `downloading || uploading`: the connection is in use while nobody is
   /// watching, whichever way the bytes went. The one-glyph answer; the two
   /// halves are the three-glyph one.

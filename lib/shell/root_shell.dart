@@ -51,12 +51,13 @@ class _Destination {
 /// rail included, since it is the panel's edges that eat it.
 ///
 /// It also draws the [SharingLight], the status light that says the
-/// embedded server is uploading to the swarm right now. It lives here
-/// because this is the one place that knows both halves of what the light
-/// claims: that something is going out (the [SharingScope]'s monitor) and
-/// that nobody is watching (this route is the current one, so no player is
-/// over it). On a television the remote reaches it from the rail and only
-/// from the rail -- see `_lightNode` and `_onRailKey` on the state below.
+/// embedded server is using the connection while nothing is playing. It
+/// lives here because this is the one place that can both read the
+/// [SharingScope]'s monitor and tell that nobody could be watching anything
+/// else (this route is the current one, so no player is over it), which is
+/// where the polling is worth doing. On a television the remote reaches it
+/// from the rail and only from the rail -- see `_lightNode` and `_onRailKey`
+/// on the state below.
 ///
 /// Selecting a destination with a pointer (a touch remote, a mouse) while
 /// a tile holds focus is the D-pad's select with the step onto the rail

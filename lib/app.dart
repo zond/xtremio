@@ -88,9 +88,9 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 ///
 /// And the [SharingScope], which is that policy and one
 /// [SharingActivityMonitor] where the shell can reach them: what the light
-/// in the corner is drawn from, and what its popup presses. The monitor is
-/// built whether or not anything can answer it, so there is one code path
-/// rather than two.
+/// in the corner is drawn from, and what its popup presses. The monitor
+/// reads the embedded server over FFI ([RustSharingActivityClient]) unless
+/// [sharingActivity] hands it a fake.
 ///
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
@@ -113,7 +113,7 @@ class XtremioApp extends StatefulWidget {
     this.defaultDestination = platformDefaultDestination,
     this.device = DeviceProfile.fallback,
     this.serverSettings = const ServerClient(),
-    this.sharingActivity,
+    this.sharingActivity = const RustSharingActivityClient(),
   });
 
   final CoreClient core;
@@ -155,12 +155,10 @@ class XtremioApp extends StatefulWidget {
   /// over FFI unless a test hands over a recorder.
   final ServerSettingsWriter serverSettings;
 
-  /// What the embedded server is uploading right now, for the status light
-  /// ([SharingLight]). **Null in the app as it ships**, and deliberately:
-  /// nothing over FFI can answer the question honestly yet, and the whole
-  /// of why is written down on [SharingActivityClient]. With no client the
-  /// monitor never polls and the light is never drawn.
-  final SharingActivityClient? sharingActivity;
+  /// Whether the embedded server is moving bytes over the connection while
+  /// nothing is playing, for the status light ([SharingLight]): the
+  /// server's own reading over FFI unless a test hands over a fake.
+  final SharingActivityClient sharingActivity;
 
   /// Builds the [PlaybackEngine] for one player. Tests inject a recorder
   /// here to see what the app asked for without touching libmpv.

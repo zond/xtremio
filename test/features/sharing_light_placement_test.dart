@@ -61,9 +61,7 @@ void main() {
         const FakeAccessibilityFeatures(disableAnimations: true);
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
 
-    final server = FakeSharingActivity()
-      ..answer = const SharingActivity(uploadSpeed: 4000, torrents: 1)
-      ..perRead = 64000;
+    final server = FakeSharingActivity(answer: traffic(up: true));
     final monitor = SharingActivityMonitor(
       client: server,
       period: const Duration(milliseconds: 20),
@@ -115,10 +113,6 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    // One reading, then the one after it: the light comes on when the
-    // counter has moved between two of them.
-    await tester.pump(const Duration(milliseconds: 25));
     await tester.pumpAndSettle();
     expect(find.byKey(lightKey), findsOneWidget);
     return core;

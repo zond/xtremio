@@ -6,28 +6,37 @@ import '../../shell/device_profile.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/remote_press.dart';
-import '../player/torrent_progress_card.dart';
 import 'idle_sharing.dart';
 import 'sharing_activity.dart';
 
-/// The status light that says the embedded server is uploading right now.
+/// The status light that says Xtremio is using this device's connection
+/// while nothing is playing.
 ///
 /// **It says what is happening, never what is allowed.** It is drawn only
-/// while [SharingActivityMonitor.uploading] -- bytes measured leaving the
-/// device between two readings -- and never because the setting is on. An
-/// icon that is on whenever the switch is on says nothing and becomes
-/// furniture, and the point of the whole change it belongs to is that seeing
-/// the sharing is the control.
+/// while [SharingActivityMonitor.active] -- the server measured bytes
+/// moving to or from peers over the last window, with no player reading --
+/// and never because the setting is on. An icon that is on whenever the
+/// switch is on says nothing and becomes furniture, and the point of the
+/// whole change it belongs to is that seeing the traffic is the control.
 ///
-/// **And only while the shell is what is on screen.** The other half of the
-/// claim is that nobody is watching, which the shell can answer honestly for
-/// itself: the light is drawn by `RootShell`, and its route stops being the
-/// current one the moment a player (or anything else) is pushed over it. So
-/// it appears on the five shell screens and nowhere else -- not over the
-/// player, where a torrent being streamed is uploading as it goes and the
-/// light would be true and mean something completely different, and not over
-/// the details or downloads screens either, which is a silence rather than a
-/// lie. That is also where the polling stops; see [SharingActivityMonitor].
+/// **One slot, three glyphs.** An up arrow while bytes go out (serving other
+/// people), a down arrow while they come in (an offline download filling
+/// in, or a title you watched finishing its own file), and one glyph with
+/// both arrows while both are true -- never two lights, because two pulsing
+/// things fight the brief of a discreet status light. What is lit is the
+/// server's own halves ([BackgroundTraffic.uploading] and
+/// [BackgroundTraffic.downloading]), judged on the Rust side over one
+/// sample with "nothing playing" already folded in; see [glyphFor].
+///
+/// **And only while the shell is what is on screen.** The server already
+/// answers dark while a player is reading, so this is not what keeps the
+/// light off during a film. It is what keeps the polling from costing
+/// anything while nobody could see the light: it is drawn by `RootShell`,
+/// and its route stops being the current one the moment a player (or
+/// anything else) is pushed over it, so it appears on the five shell
+/// screens and nowhere else -- not over the details or downloads screens
+/// either, which is a silence rather than a lie. That is also where the
+/// polling stops; see [SharingActivityMonitor].
 ///
 /// **On a television the remote reaches it from the rail.** The node the
 /// shell hands in is skipped by traversal, so the light can never stand
@@ -51,27 +60,38 @@ class SharingLight extends StatefulWidget {
   /// takes the remote back. Null off a television, where nothing needs it.
   final VoidCallback? onLeave;
 
-  /// The light's own glyph, which is the settings switch's: the light and
-  /// the switch are the same subject, so they are the same picture.
-  static const IconData icon = Icons.upload_outlined;
+  /// The three glyphs: up while bytes go out, down while they come in, both
+  /// arrows while both. The up arrow is the settings switch's own icon,
+  /// since serving other people is what that switch is about.
+  static const IconData uploadingIcon = Icons.upload_outlined;
+  static const IconData downloadingIcon = Icons.download_outlined;
+  static const IconData bothIcon = Icons.swap_vert;
 
-  /// What a viewer hears, and what a pointer's tooltip says.
-  static const String label = 'Sharing with other people';
+  /// Which glyph [reading] lights, or null when it lights none -- which is
+  /// when the light is not drawn at all.
+  static IconData? glyphFor(BackgroundTraffic reading) =>
+      switch ((up: reading.uploading, down: reading.downloading)) {
+        (up: true, down: true) => bothIcon,
+        (up: true, down: false) => uploadingIcon,
+        (up: false, down: true) => downloadingIcon,
+        (up: false, down: false) => null,
+      };
 
-  /// One sentence saying what is going out, for the popup. Reads the
-  /// server's own numbers and nothing else.
-  static String summary(SharingActivity activity) {
-    final rate = TorrentProgressCard.formatSpeed(activity.uploadSpeed);
-    return switch (activity.torrents) {
-      <= 0 => 'Uploading to other people at $rate.',
-      1 =>
-        'One title you have watched is being uploaded to other people, '
-            'at $rate.',
-      final count =>
-        '$count titles you have watched are being uploaded to other people, '
-            'at $rate.',
-    };
-  }
+  /// What a viewer hears for [reading], what a pointer's tooltip says, and
+  /// the popup's title: which way the bytes are going.
+  static String labelFor(BackgroundTraffic reading) =>
+      switch ((up: reading.uploading, down: reading.downloading)) {
+        (up: true, down: true) => 'Uploading and downloading',
+        (up: true, down: false) => 'Uploading to other people',
+        _ => 'Downloading',
+      };
+
+  /// The one sentence the popup opens with, in the words the light means.
+  /// No numbers: the reading carries the sums a verdict was judged from, not
+  /// a rate, and a total over whichever torrents exist right now is not a
+  /// figure a viewer can do anything with.
+  static const String summary =
+      'Xtremio is using your connection while nothing is playing.';
 
   /// How long one half of the pulse takes. Slow: a status light is meant to
   /// be noticeable when looked for and ignorable when not, and anything
@@ -142,7 +162,7 @@ class _SharingLightState extends State<SharingLight> {
     if (scope == null) return;
     await showDialog<void>(
       context: context,
-      builder: (context) => SharingStopDialog(activity: scope.monitor.activity),
+      builder: (context) => SharingStopDialog(traffic: scope.monitor.reading),
     );
   }
 
@@ -150,20 +170,21 @@ class _SharingLightState extends State<SharingLight> {
   Widget build(BuildContext context) {
     final scope = SharingScope.of(context);
     final onTop = ModalRoute.of(context)?.isCurrent ?? true;
-    if (scope == null || !scope.monitor.uploading || !onTop) {
-      return const SizedBox.shrink();
-    }
+    final reading = scope?.monitor.reading ?? BackgroundTraffic.none;
+    final glyph = SharingLight.glyphFor(reading);
+    if (glyph == null || !onTop) return const SizedBox.shrink();
+    final label = SharingLight.labelFor(reading);
     final isTv = DeviceScope.isTv(context);
     final size = isTv ? TvDensity.minTarget : 40.0;
     final light = Semantics(
       button: true,
-      label: SharingLight.label,
+      label: label,
       child: SizedBox.square(
         dimension: size,
         child: Center(
           child: _Pulse(
             child: Icon(
-              SharingLight.icon,
+              glyph,
               size: isTv ? 28 : 20,
               color: Theme.of(context).colorScheme.onSurface,
             ),
@@ -174,7 +195,7 @@ class _SharingLightState extends State<SharingLight> {
 
     if (!isTv) {
       return Tooltip(
-        message: SharingLight.label,
+        message: label,
         child: InkWell(
           key: const Key('sharing-light'),
           customBorder: const CircleBorder(),
@@ -302,9 +323,10 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
 /// difference to be guessed at. The dialog's one action is its way out, and
 /// Back (or the barrier) is the same answer.
 class SharingStopDialog extends StatelessWidget {
-  const SharingStopDialog({super.key, required this.activity});
+  const SharingStopDialog({super.key, required this.traffic});
 
-  final SharingActivity activity;
+  /// The reading the light was lit by when it was pressed.
+  final BackgroundTraffic traffic;
 
   /// Keys a test presses, and the only names these rows answer to. A stop
   /// is drawn only while it would do something -- both with the setting on
@@ -341,12 +363,12 @@ class SharingStopDialog extends StatelessWidget {
       },
     );
     return AlertDialog(
-      title: const Text(SharingLight.label),
+      title: Text(SharingLight.labelFor(traffic)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(SharingLight.summary(activity)),
+          const Text(SharingLight.summary),
           const SizedBox(height: 12),
           if (!sharing)
             ListTile(

@@ -1,9 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/sharing/sharing_activity.dart';
 
 import '../support/fake_sharing.dart';
 
-/// What the app is allowed to say about the server's uploading: only what a
+/// What the app is allowed to say about the server's traffic: only what a
 /// reading says, only while it is being read, and nothing at all when the
 /// reading failed.
 ///
@@ -16,7 +17,7 @@ import '../support/fake_sharing.dart';
 void main() {
   const period = Duration(milliseconds: 20);
 
-  SharingActivityMonitor monitorOver(FakeSharingActivity? server) =>
+  SharingActivityMonitor monitorOver(FakeSharingActivity server) =>
       SharingActivityMonitor(client: server, period: period);
 
   /// Lets the reading that turning the watch on started land.
@@ -29,96 +30,90 @@ void main() {
   }
 
   testWidgets('says nothing before anybody has asked', (tester) async {
-    final monitor = monitorOver(FakeSharingActivity());
+    final monitor = monitorOver(FakeSharingActivity(answer: traffic(up: true)));
+    expect(monitor.active, isFalse);
     expect(monitor.uploading, isFalse);
-    expect(monitor.activity, SharingActivity.none);
+    expect(monitor.downloading, isFalse);
+    expect(monitor.reading, BackgroundTraffic.none);
     expect(monitor.watching, isFalse);
     monitor.dispose();
   });
 
-  testWidgets('with nothing able to answer it never polls at all', (
+  testWidgets('repeats the halves the server judged, and nothing else', (
     tester,
   ) async {
-    // Which is the app as it ships; see [SharingActivityClient].
-    final monitor = monitorOver(null);
-    monitor.watching = true;
-    await answered(tester);
-
-    expect(monitor.watching, isFalse);
-    expect(monitor.uploading, isFalse);
-    monitor.dispose();
-  });
-
-  testWidgets('lights on a counter that moved, not on a rate that sampled', (
-    tester,
-  ) async {
-    final server = FakeSharingActivity();
-    // A torrent seeding steadily, reported by a rate that reads zero in the
-    // gap between two pieces -- which is what a sample does and what a
-    // light must not blink on.
-    server.answer = const SharingActivity(torrents: 1);
-    server.perRead = 32000;
+    // The server has already folded "nothing playing" into each half and
+    // compared the counters over its own window; the monitor is a mirror
+    // of that verdict, not a second judge over it.
+    final server = FakeSharingActivity(answer: traffic(up: true));
     final monitor = monitorOver(server);
     monitor.watching = true;
     await answered(tester);
+    expect(monitor.uploading, isTrue);
+    expect(monitor.downloading, isFalse);
+    expect(monitor.active, isTrue);
 
-    // The first reading has nothing to compare against and no rate, so it
-    // claims nothing; the second has bytes that really left the device.
+    server.answer = traffic(down: true);
+    await nextReading(tester);
     expect(monitor.uploading, isFalse);
+    expect(monitor.downloading, isTrue);
+    expect(monitor.active, isTrue);
+
+    server.answer = traffic(up: true, down: true);
     await nextReading(tester);
     expect(monitor.uploading, isTrue);
-    expect(monitor.activity.torrents, 1);
+    expect(monitor.downloading, isTrue);
+    expect(monitor.active, isTrue);
 
-    // And it goes out when the counter stops moving, however large it is.
-    server.perRead = 0;
+    server.answer = traffic();
     await nextReading(tester);
-    expect(monitor.uploading, isFalse);
+    expect(monitor.active, isFalse);
     monitor.dispose();
   });
 
-  testWidgets('lights on the first reading when it names a rate', (
-    tester,
-  ) async {
-    // Nothing to compare against is not nothing to go on: a reading taken
-    // mid-share reports the rate, and that is a share.
-    final server = FakeSharingActivity()
-      ..answer = const SharingActivity(uploadSpeed: 4000, torrents: 1);
+  testWidgets('asks at once, then once a period', (tester) async {
+    final server = FakeSharingActivity(answer: traffic(up: true));
     final monitor = monitorOver(server);
     monitor.watching = true;
     await answered(tester);
-
-    expect(monitor.uploading, isTrue);
+    expect(server.reads, 1);
+    await nextReading(tester);
+    await nextReading(tester);
+    expect(server.reads, 3);
     monitor.dispose();
   });
 
   testWidgets('goes dark when the server cannot be asked', (tester) async {
-    final server = FakeSharingActivity()
-      ..answer = const SharingActivity(uploadSpeed: 4000, torrents: 1);
+    final server = FakeSharingActivity(answer: traffic(up: true, down: true));
     final monitor = monitorOver(server);
     monitor.watching = true;
     await answered(tester);
-    expect(monitor.uploading, isTrue);
+    expect(monitor.active, isTrue);
 
-    // Not knowing is a different thing from knowing nothing is going out,
-    // and it is drawn the same way, because a light that stays on says
+    // Not knowing is a different thing from knowing nothing is moving, and
+    // it is drawn the same way, because a light that stays on says
     // something nobody can support.
     server.failure = StateError('server is not running');
     await nextReading(tester);
 
-    expect(monitor.uploading, isFalse);
-    expect(monitor.activity, SharingActivity.none);
+    expect(monitor.active, isFalse);
+    expect(monitor.reading, BackgroundTraffic.none);
+
+    // And comes back with the server, without being asked to.
+    server.failure = null;
+    await nextReading(tester);
+    expect(monitor.active, isTrue);
     monitor.dispose();
   });
 
   testWidgets('stops asking, and forgets, when nobody is watching', (
     tester,
   ) async {
-    final server = FakeSharingActivity()
-      ..answer = const SharingActivity(uploadSpeed: 4000, torrents: 1);
+    final server = FakeSharingActivity(answer: traffic(up: true));
     final monitor = monitorOver(server);
     monitor.watching = true;
     await answered(tester);
-    expect(monitor.uploading, isTrue);
+    expect(monitor.active, isTrue);
     final asked = server.reads;
 
     monitor.watching = false;
@@ -127,8 +122,8 @@ void main() {
 
     expect(server.reads, asked);
     // What it read is no longer known to be true, so it is not held on to.
-    expect(monitor.uploading, isFalse);
-    expect(monitor.activity, SharingActivity.none);
+    expect(monitor.active, isFalse);
+    expect(monitor.reading, BackgroundTraffic.none);
     monitor.dispose();
   });
 }

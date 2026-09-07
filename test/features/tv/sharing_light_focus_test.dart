@@ -48,11 +48,9 @@ void main() {
         const FakeAccessibilityFeatures(disableAnimations: true);
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
 
-    final server = FakeSharingActivity();
-    if (uploading) {
-      server.answer = const SharingActivity(uploadSpeed: 4000, torrents: 1);
-      server.perRead = 64000;
-    }
+    final server = FakeSharingActivity(
+      answer: uploading ? traffic(up: true) : traffic(),
+    );
     final monitor = SharingActivityMonitor(
       client: server,
       period: const Duration(milliseconds: 20),
@@ -89,8 +87,6 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(milliseconds: 25));
     await tester.pumpAndSettle();
     return server;
   }

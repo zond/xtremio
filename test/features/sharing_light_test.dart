@@ -16,24 +16,17 @@ import '../support/fake_sharing.dart';
 import '../support/fixtures.dart';
 import '../support/tv.dart';
 
-/// The status light in the shell's corner: when it is drawn, what pressing
-/// it offers, and that each of the three answers does exactly what it says.
+/// The status light in the shell's corner: when it is drawn, which glyph,
+/// what pressing it offers, and that each answer does exactly what it says.
 void main() {
   const phone = DeviceProfile.fallback;
   const lightKey = Key('sharing-light');
 
-  /// One torrent really being seeded: the counter moves on every reading,
-  /// which is what the monitor measures.
-  void seeding(FakeSharingActivity server) {
-    server.answer = const SharingActivity(uploadSpeed: 4000, torrents: 1);
-    server.perRead = 64000;
-  }
+  /// The server serving other people, with nothing playing.
+  void seeding(FakeSharingActivity server) => server.answer = traffic(up: true);
 
-  /// The same torrent no longer giving anything to anybody.
-  void quiet(FakeSharingActivity server) {
-    server.answer = SharingActivity(uploadedBytes: server.answer.uploadedBytes);
-    server.perRead = 0;
-  }
+  /// Nothing moving either way.
+  void quiet(FakeSharingActivity server) => server.answer = traffic();
 
   FakeCoreClient fakeCore() => FakeCoreClient(
     state: {
@@ -126,9 +119,8 @@ void main() {
       expect(find.byKey(lightKey), findsNothing);
     });
 
-    testWidgets('comes on when bytes have actually left the device', (
-      tester,
-    ) async {
+    testWidgets('comes on when the server says bytes are going out, with '
+        'the up arrow', (tester) async {
       final s = setUpSharing(tester);
       quiet(s.server);
       await tester.pumpWidget(
@@ -138,13 +130,102 @@ void main() {
       await poll(tester);
       expect(find.byKey(lightKey), findsNothing);
 
-      // The counter moves between two readings, which is a measurement
-      // where the rate alone is a sample that reads zero between pieces --
-      // so this reading reports no rate at all and still lights it.
-      s.server.perRead = 64000;
+      seeding(s.server);
       await poll(tester);
 
       expect(find.byKey(lightKey), findsOneWidget);
+      expect(find.byIcon(SharingLight.uploadingIcon), findsOneWidget);
+      expect(find.byIcon(SharingLight.downloadingIcon), findsNothing);
+      expect(find.byIcon(SharingLight.bothIcon), findsNothing);
+      expect(find.bySemanticsLabel('Uploading to other people'), findsWidgets);
+    });
+
+    testWidgets('shows the down arrow while bytes are coming in', (
+      tester,
+    ) async {
+      // A download filling in while nothing plays lights it as much as a
+      // share does: what the viewer is told about is the connection.
+      final s = setUpSharing(tester);
+      s.server.answer = traffic(down: true);
+      await tester.pumpWidget(
+        harness(monitor: s.monitor, policy: s.policy, prefs: s.prefs),
+      );
+      await tester.pumpAndSettle();
+      await poll(tester);
+
+      expect(find.byKey(lightKey), findsOneWidget);
+      expect(find.byIcon(SharingLight.downloadingIcon), findsOneWidget);
+      expect(find.byIcon(SharingLight.uploadingIcon), findsNothing);
+      expect(find.byIcon(SharingLight.bothIcon), findsNothing);
+      expect(find.bySemanticsLabel('Downloading'), findsWidgets);
+    });
+
+    testWidgets('shows one glyph with both arrows while both are true, '
+        'never two lights', (tester) async {
+      final s = setUpSharing(tester);
+      s.server.answer = traffic(up: true, down: true);
+      await tester.pumpWidget(
+        harness(monitor: s.monitor, policy: s.policy, prefs: s.prefs),
+      );
+      await tester.pumpAndSettle();
+      await poll(tester);
+
+      expect(find.byKey(lightKey), findsOneWidget);
+      expect(find.byIcon(SharingLight.bothIcon), findsOneWidget);
+      expect(find.byIcon(SharingLight.uploadingIcon), findsNothing);
+      expect(find.byIcon(SharingLight.downloadingIcon), findsNothing);
+      // One slot: the light is one button however many directions are lit.
+      expect(find.byType(SharingLight), findsOneWidget);
+      expect(find.byKey(lightKey), findsOneWidget);
+    });
+
+    testWidgets('changes glyph as the traffic changes direction', (
+      tester,
+    ) async {
+      final s = setUpSharing(tester);
+      seeding(s.server);
+      await tester.pumpWidget(
+        harness(monitor: s.monitor, policy: s.policy, prefs: s.prefs),
+      );
+      await tester.pumpAndSettle();
+      await poll(tester);
+      expect(find.byIcon(SharingLight.uploadingIcon), findsOneWidget);
+
+      s.server.answer = traffic(up: true, down: true);
+      await poll(tester);
+      expect(find.byIcon(SharingLight.bothIcon), findsOneWidget);
+
+      s.server.answer = traffic(down: true);
+      await poll(tester);
+      expect(find.byIcon(SharingLight.downloadingIcon), findsOneWidget);
+      expect(find.byIcon(SharingLight.bothIcon), findsNothing);
+    });
+
+    testWidgets('stays out while a film is playing, whatever is moving', (
+      tester,
+    ) async {
+      // The server folds "nothing playing" into both halves itself: a
+      // reading taken during a film has bytes moving and both halves dark,
+      // and the light follows the halves. (The shell also stops asking
+      // while a player is on top; this is the other lock.)
+      final s = setUpSharing(tester);
+      s.server.answer = const BackgroundTraffic(
+        active: false,
+        downloading: false,
+        uploading: false,
+        playing: true,
+        bytesDownloaded: 9000000,
+        bytesUploaded: 800000,
+        windowSecs: 5,
+      );
+      await tester.pumpWidget(
+        harness(monitor: s.monitor, policy: s.policy, prefs: s.prefs),
+      );
+      await tester.pumpAndSettle();
+      await poll(tester);
+
+      expect(s.server.reads, greaterThan(0));
+      expect(find.byKey(lightKey), findsNothing);
     });
 
     testWidgets('goes out again when the sharing stops', (tester) async {
@@ -157,7 +238,7 @@ void main() {
       await poll(tester);
       expect(find.byKey(lightKey), findsOneWidget);
 
-      // Nothing more goes out, and the rate has fallen to nothing.
+      // Nothing more goes out.
       quiet(s.server);
       await poll(tester);
 
@@ -470,7 +551,7 @@ void main() {
             prefs: prefs,
             child: SharingScope(
               policy: policy,
-              monitor: SharingActivityMonitor(client: null),
+              monitor: SharingActivityMonitor(client: FakeSharingActivity()),
               child: MaterialApp(
                 home: Scaffold(body: IdleSharingSection(prefs: prefs)),
               ),
@@ -578,20 +659,27 @@ void main() {
   });
 
   group('what it says', () {
-    test('counts what is being uploaded and at what rate', () {
+    test('one glyph and one label per direction, none when dark', () {
+      expect(SharingLight.glyphFor(traffic(up: true)), Icons.upload_outlined);
       expect(
-        SharingLight.summary(
-          const SharingActivity(uploadSpeed: 4000, torrents: 1),
-        ),
-        'One title you have watched is being uploaded to other people, at '
-        '4 kB/s.',
+        SharingLight.glyphFor(traffic(down: true)),
+        Icons.download_outlined,
       );
       expect(
-        SharingLight.summary(
-          const SharingActivity(uploadSpeed: 2000000, torrents: 3),
-        ),
-        '3 titles you have watched are being uploaded to other people, at '
-        '2.0 MB/s.',
+        SharingLight.glyphFor(traffic(up: true, down: true)),
+        Icons.swap_vert,
+      );
+      expect(SharingLight.glyphFor(traffic()), isNull);
+      expect(SharingLight.glyphFor(BackgroundTraffic.none), isNull);
+
+      expect(
+        SharingLight.labelFor(traffic(up: true)),
+        'Uploading to other people',
+      );
+      expect(SharingLight.labelFor(traffic(down: true)), 'Downloading');
+      expect(
+        SharingLight.labelFor(traffic(up: true, down: true)),
+        'Uploading and downloading',
       );
     });
   });

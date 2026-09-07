@@ -6,103 +6,62 @@ import 'package:flutter/widgets.dart';
 import '../../core/core.dart';
 import 'idle_sharing.dart';
 
-/// What the embedded server is giving to the swarm at one moment: the rate
-/// bytes are leaving at, how many bytes have left in total, and how many
-/// torrents they are leaving from.
+/// Asks the embedded server whether it is using this device's connection
+/// while nothing is playing: one [BackgroundTraffic] per reading.
 ///
-/// It is a reading, not a claim: everything here is what the server answered
-/// when it was last asked, and nothing derives from the setting. A viewer
-/// who has turned sharing on but is not uploading anything reads exactly the
-/// same as one who has turned it off, which is the whole point of measuring
-/// rather than reporting the switch.
-@immutable
-final class SharingActivity {
-  const SharingActivity({
-    this.uploadSpeed = 0,
-    this.uploadedBytes = 0,
-    this.torrents = 0,
-  });
-
-  /// Bytes per second going out, over every torrent the server holds.
-  final double uploadSpeed;
-
-  /// Bytes that have gone out since the server started, over the same
-  /// torrents. Cumulative, so two readings apart in time say whether
-  /// anything really left the device in between -- which is a measurement,
-  /// where [uploadSpeed] alone is a sample that can read zero in the gap
-  /// between two pieces.
-  final int uploadedBytes;
-
-  /// How many torrents are being uploaded from.
-  final int torrents;
-
-  /// Nothing is known, which is also what nothing going out looks like.
-  /// The two are deliberately one value: a light that cannot tell them
-  /// apart stays off for both, and off is the answer that claims nothing.
-  static const SharingActivity none = SharingActivity();
-
-  @override
-  bool operator ==(Object other) =>
-      other is SharingActivity &&
-      other.uploadSpeed == uploadSpeed &&
-      other.uploadedBytes == uploadedBytes &&
-      other.torrents == torrents;
-
-  @override
-  int get hashCode => Object.hash(uploadSpeed, uploadedBytes, torrents);
-
-  @override
-  String toString() =>
-      'SharingActivity($uploadSpeed B/s, $uploadedBytes B, $torrents torrents)';
-}
-
-/// Asks the embedded server what it is uploading right now.
+/// It is a reading, not a claim. Everything in the answer is what the
+/// server measured -- per direction, whether librqbit's own peer counters
+/// grew over the last window with no player reading over it -- and nothing
+/// derives from the sharing setting. A viewer who has turned sharing on but
+/// is moving no bytes reads exactly the same as one who has turned it off,
+/// which is the whole point of measuring rather than reporting the switch.
 ///
-/// **There is no implementation of this, and there is not going to be one
-/// in this shape.** What the server now answers is
-/// `ServerClient.backgroundTraffic` (`ServerHandle::background_traffic`, a
-/// [BackgroundTraffic]): per direction, whether bytes moved over the
-/// connection in the last window with nothing playing, judged on the Rust
-/// side from librqbit's own peer counters and safe to poll. That is the
-/// light's next reading -- "Xtremio is using your connection while you are
-/// not watching", a download as much as a share -- and it is not these
-/// three numbers, so wiring it in means replacing this reading rather than
-/// implementing it. Until that is done the app builds no client,
-/// [SharingActivityMonitor] never polls, and the light is never drawn --
-/// which is the honest state, not a broken one.
-///
-/// **The per-torrent stats calls must not stand in for either.** A stats
+/// **The per-torrent stats calls must not stand in for this.** A stats
 /// request for a hash with no engine *creates* one
 /// (`routes::system::stats_target` falls through to
 /// `get_or_begin_add_magnet`), so polling the last film's hash to find out
 /// whether it is still being shared would re-add the torrent the server had
-/// already swept -- the icon would start the very sharing it exists to
-/// report. Approximating with `AppPrefs.shareWhileIdle` is the other way to
-/// get this wrong: a light that is on whenever the setting is on says
-/// nothing and becomes furniture.
+/// already swept -- the light would start the very sharing it exists to
+/// report. `ServerHandle::background_traffic` is the opposite kind of call:
+/// it peeks at the counters of the engines that exist, creates nothing and
+/// touches no idle clock, which is what makes it safe to poll.
 abstract interface class SharingActivityClient {
   /// One reading. Throws when the server is not running or refuses.
-  Future<SharingActivity> fetch();
+  Future<BackgroundTraffic> fetch();
+}
+
+/// [SharingActivityClient] over FFI: [ServerClient.backgroundTraffic],
+/// which is `server_background_traffic`. What the app ships with.
+class RustSharingActivityClient implements SharingActivityClient {
+  const RustSharingActivityClient({this.server = const ServerClient()});
+
+  final ServerClient server;
+
+  @override
+  Future<BackgroundTraffic> fetch() => server.backgroundTraffic();
 }
 
 /// Polls a [SharingActivityClient] while somebody is watching, and says
-/// whether bytes are actually going out.
+/// whether bytes are moving in each direction.
 ///
 /// One of these for the whole app, built by `XtremioApp` beside
 /// [IdleSharingPolicy], because there is one server to ask.
 ///
 /// **It polls only while [watching].** The shell turns it on while its own
 /// route is on top and off as soon as anything is pushed over it, so nothing
-/// is asked while a film is playing -- which is also when the answer would
-/// be true and would mean something else entirely, since a torrent being
-/// streamed uploads to the swarm as it goes.
+/// is asked while a film is playing. The server folds "nothing playing" into
+/// the answer itself, so this is not what keeps the light off during a
+/// film; it is what keeps a light nobody can see from costing anything.
 ///
-/// **What it reports is what moved.** [uploading] is true when the last two
-/// readings show bytes having left the device, and falls back to the rate
-/// for the first reading of a run, which has nothing to compare against. The
-/// rate alone is a sample: librqbit reports it over a short window, so a
-/// seeding torrent between two pieces can read zero and blink a light that
-/// nothing is wrong with. A counter that grew cannot.
+/// **What it reports is what the server judged, unchanged.** [uploading]
+/// and [downloading] are the reading's own halves -- each "that direction's
+/// counter grew over the last window and nothing was playing" -- and
+/// [active] is either. The window is closed by whoever asks, so [period] is
+/// its length: five seconds, the server's own `TRAFFIC_WINDOW`, long enough
+/// to cover the gap between two block requests and short enough that the
+/// answer is about now. Nothing is inferred here from a previous reading;
+/// the comparison of two counters is the server's, made over one set of
+/// torrents, and doing it again on this side would be a second judge.
 ///
 /// **A failure is darkness, not the last answer.** An error means the app
 /// does not know, and a light that stays on when nothing is known is a claim
@@ -113,34 +72,29 @@ class SharingActivityMonitor extends ChangeNotifier {
     this.period = const Duration(seconds: 5),
   });
 
-  /// Where the readings come from, or null when nothing can answer -- see
-  /// [SharingActivityClient], which is the state the app ships in today.
-  final SharingActivityClient? client;
+  /// Where the readings come from.
+  final SharingActivityClient client;
 
-  /// How often the server is asked while [watching]. Five seconds: the
-  /// thing being watched lives for minutes (an idle engine is swept after
-  /// five of them), so this is fast enough to catch the start and the end
-  /// of a share, and slow enough that it costs the bridge nothing.
+  /// How often the server is asked while [watching], which is also the
+  /// window each reading is judged over; see the class comment.
   final Duration period;
 
-  SharingActivity _activity = SharingActivity.none;
+  BackgroundTraffic _reading = BackgroundTraffic.none;
 
-  /// The last reading, or [SharingActivity.none] when there is none.
-  SharingActivity get activity => _activity;
+  /// The last reading, or [BackgroundTraffic.none] when there is none.
+  BackgroundTraffic get reading => _reading;
 
-  bool _uploading = false;
+  /// Bytes went out to peers over the last window with nothing playing.
+  bool get uploading => _reading.uploading;
 
-  /// Bytes are going out right now; see the class comment for what that is
-  /// measured from.
-  bool get uploading => _uploading;
+  /// Bytes came in from peers over the last window with nothing playing.
+  bool get downloading => _reading.downloading;
+
+  /// Either: the connection is in use while nobody is watching. What the
+  /// light is drawn from.
+  bool get active => uploading || downloading;
 
   Timer? _timer;
-
-  /// [SharingActivity.uploadedBytes] of the reading before this one, so the
-  /// comparison above has something to make. Null until a run has taken a
-  /// reading at all, which is what makes the first one fall back to the
-  /// rate.
-  int? _lastUploaded;
 
   bool get watching => _timer != null;
 
@@ -154,49 +108,33 @@ class SharingActivityMonitor extends ChangeNotifier {
     if (!value) {
       _timer?.cancel();
       _timer = null;
-      _forget();
+      _update(BackgroundTraffic.none);
       return;
     }
-    if (client == null) return;
     _timer = Timer.periodic(period, (_) => unawaited(_poll()));
     unawaited(_poll());
   }
 
   Future<void> _poll() async {
-    final client = this.client;
-    if (client == null) return;
-    final SharingActivity reading;
+    final BackgroundTraffic reading;
     try {
       reading = await client.fetch();
     } catch (error) {
       // The server may not be up, or may be shutting down. Not knowing is
-      // not the same as knowing nothing is going out, but it is drawn the
+      // not the same as knowing nothing is moving, but it is drawn the
       // same way: nothing.
       if (kDebugMode) debugPrint('sharing activity unavailable: $error');
-      _forget();
+      _update(BackgroundTraffic.none);
       return;
     }
     // A reading that arrived after the watch stopped belongs to nobody.
     if (!watching) return;
-    final before = _lastUploaded;
-    _lastUploaded = reading.uploadedBytes;
-    _update(
-      reading,
-      uploading: before == null
-          ? reading.uploadSpeed > 0
-          : reading.uploadedBytes > before,
-    );
+    _update(reading);
   }
 
-  void _forget() {
-    _lastUploaded = null;
-    _update(SharingActivity.none, uploading: false);
-  }
-
-  void _update(SharingActivity reading, {required bool uploading}) {
-    if (reading == _activity && uploading == _uploading) return;
-    _activity = reading;
-    _uploading = uploading;
+  void _update(BackgroundTraffic reading) {
+    if (reading == _reading) return;
+    _reading = reading;
     notifyListeners();
   }
 
