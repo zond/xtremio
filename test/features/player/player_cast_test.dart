@@ -636,10 +636,12 @@ void main() {
           await castTo(tester, livingRoom);
           expect(find.byType(CastRemotePanel), findsOneWidget);
 
+          // At position zero, which is what the real client's first report
+          // carries: the SDK's position stream has not ticked for a
+          // receiver that never fetched, and the status is folded with the
+          // zero it was seeded with.
           if (reported != null) {
-            cast.emitStatus(
-              CastStatus(state: reported, position: const Duration(minutes: 4)),
-            );
+            cast.emitStatus(CastStatus(state: reported));
             await tester.pumpAndSettle();
           }
           await tester.pump(PlayerScreen.castFetchTimeout);
@@ -815,6 +817,52 @@ void main() {
       // The local engine was not touched by any of it.
       expect(harness.engine.playCalls, 0);
       expect(harness.engine.seeks, isEmpty);
+    });
+
+    testWidgets('a position the receiver has not reported is the one it was '
+        'handed', (tester) async {
+      // The client folds the SDK's status and position streams into one
+      // report, carrying the last position it saw -- a zero, until the
+      // receiver's first progress tick. Believed, that zero reached the
+      // core as `TimeChanged{0}` on every cast start and drew a scrubber at
+      // 0:00 for a film forty minutes in.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast);
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 90));
+      harness.engine.emitPosition(const Duration(minutes: 40));
+      await pumpEvents(tester);
+      await castTo(tester, livingRoom);
+      final before = harness.playerActions().length;
+
+      cast.emitStatus(const CastStatus(state: CastPlayerState.buffering));
+      await tester.pumpAndSettle();
+      final buffering = harness.playerActions().skip(before).toList();
+      if (buffering.contains('TimeChanged')) {
+        expect(
+          harness.lastPlayerArgs('TimeChanged')?['time'],
+          const Duration(minutes: 40).inMilliseconds,
+        );
+      }
+      expect(find.text('40:00'), findsOneWidget);
+
+      // The receiver's own tick is believed, and so is everything after it
+      // -- a zero included, which is then a receiver really at the start.
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.playing,
+          position: Duration(minutes: 40, seconds: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        harness.lastPlayerArgs('TimeChanged')?['time'],
+        const Duration(minutes: 40, seconds: 1).inMilliseconds,
+      );
+      cast.emitStatus(const CastStatus(state: CastPlayerState.playing));
+      await tester.pumpAndSettle();
+      expect(harness.lastPlayerArgs('TimeChanged')?['time'], 0);
     });
 
     testWidgets('the receiver keeps continue-watching moving', (tester) async {

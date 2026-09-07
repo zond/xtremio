@@ -685,6 +685,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// told. A receiver keeps saying so; the core hears it once.
   bool _castEnded = false;
 
+  /// Where the receiver was told to start, and whether it has yet said
+  /// where it actually is. The Cast SDK reports a media status and a
+  /// position on two separate streams, and the client folds them into one
+  /// report by carrying the last position it saw -- which, before the
+  /// receiver's first progress tick, is a zero it never reported (or the
+  /// last session's number). Taken at its word, that zero was dispatched
+  /// to the core as `TimeChanged{0}`, drawn as a scrubber at 0:00, and,
+  /// when a receiver never fetched and the session was ended for it, was
+  /// where local playback resumed: from the start of a film that was forty
+  /// minutes in. So until the receiver has reported a position of its own,
+  /// a zero stands for "not yet", and the position it was handed is the
+  /// best knowledge there is ([_trustedCastStatus]).
+  Duration _castHandedAt = Duration.zero;
+  bool _castReported = false;
+
   bool get _casting => _castingTo != null;
 
   bool _controlsVisible = true;
@@ -3114,8 +3129,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// The same three actions local playback dispatches -- `TimeChanged`,
   /// `PausedChanged`, `Ended` -- so the library and continue-watching do not
   /// notice which device the pixels were on.
-  void _onCastStatus(CastStatus status) {
+  void _onCastStatus(CastStatus reported) {
     if (!mounted) return;
+    final status = _casting ? _trustedCastStatus(reported) : reported;
     setState(() => _castStatus = status);
     if (!_casting || _opened == null) return;
     final duration = status.duration;
@@ -3129,6 +3145,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _castEnded = true;
       _client?.dispatch(CoreActions.playerEnded());
     }
+  }
+
+  /// [reported] as it is to be believed: with a zero the receiver has not
+  /// actually reported replaced by the position it was handed (see
+  /// [_castHandedAt]). The first position that is not zero is the
+  /// receiver's own tick, and from then on every report is its own --
+  /// including a later zero, which is then a receiver really at the start.
+  CastStatus _trustedCastStatus(CastStatus reported) {
+    if (_castReported) return reported;
+    if (reported.position != Duration.zero) {
+      _castReported = true;
+      return reported;
+    }
+    return reported.at(_castHandedAt);
   }
 
   /// The receivers, and Stop when one of them has the stream.
@@ -3279,6 +3309,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() {
       _castingTo = device;
       _castEnded = false;
+      _castHandedAt = position;
+      _castReported = false;
       _castStatus = CastStatus(
         state: CastPlayerState.buffering,
         position: position,
