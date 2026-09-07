@@ -125,6 +125,18 @@ class AppPrefs extends ChangeNotifier {
   /// `profile.settings`.
   static const String focusEmphasisKey = 'focusEmphasis';
 
+  /// The `shareWhileIdle` key: whether the embedded server may go on
+  /// sharing a title with the swarm after playback ends (`IdleSharing`).
+  ///
+  /// **Null until the viewer has chosen**, and that is the whole reason it
+  /// is a `bool?`. What it means to have chosen nothing differs by device
+  /// -- a television on a wall socket shares, a phone does not -- and this
+  /// class knows nothing about the device, so the default belongs to
+  /// `IdleSharing.defaultFor` and the stored value has to be able to say
+  /// "not that, the viewer's own answer" for both spellings of it. A
+  /// stored `false` on a television is a decision and must survive.
+  static const String shareWhileIdleKey = 'shareWhileIdle';
+
   /// The `subtitleSync` key: every subtitle adjustment the viewer has
   /// made that is still remembered (see [SubtitleSyncMemory]), most
   /// recent first.
@@ -161,6 +173,12 @@ class AppPrefs extends ChangeNotifier {
   FocusEmphasis _focusEmphasis = FocusEmphasis.standard;
 
   FocusEmphasis get focusEmphasis => _focusEmphasis;
+
+  /// What the viewer chose about sharing between sessions, or null when
+  /// they never have -- see [shareWhileIdleKey]. Nothing here supplies the
+  /// default; `IdleSharing` does, from the device.
+  bool? get shareWhileIdle => _shareWhileIdle;
+  bool? _shareWhileIdle;
 
   SubtitleSyncMemory _subtitleSync = SubtitleSyncMemory.empty;
 
@@ -227,6 +245,11 @@ class AppPrefs extends ChangeNotifier {
       _focusEmphasis = emphasis;
       changed = true;
     }
+    final shareWhileIdle = stored[shareWhileIdleKey];
+    if (shareWhileIdle is bool && shareWhileIdle != _shareWhileIdle) {
+      _shareWhileIdle = shareWhileIdle;
+      changed = true;
+    }
     // Rows this build cannot read are dropped rather than failing the
     // load; an adjustment forgotten is the failure this whole store is
     // built to accept.
@@ -271,6 +294,13 @@ class AppPrefs extends ChangeNotifier {
     _focusEmphasis = value;
     notifyListeners();
     await _write(focusEmphasisKey, value.stored);
+  }
+
+  Future<void> setShareWhileIdle(bool value) async {
+    if (_shareWhileIdle == value) return;
+    _shareWhileIdle = value;
+    notifyListeners();
+    await _write(shareWhileIdleKey, value);
   }
 
   /// Stores [value], or removes the key entirely once nothing is

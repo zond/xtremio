@@ -101,6 +101,20 @@ abstract interface class ProxyStreamControl {
   int closeProxyStreams(String token);
 }
 
+/// Changing something about the embedded server, which is one call: a
+/// patch of settings keys, exactly as `POST /settings` takes it.
+///
+/// It exists so that the sharing policy can be handed a recorder in tests
+/// and its writes read back, and so that the one method it needs is named
+/// rather than the whole of [ServerClient]. There is deliberately no
+/// second way in: a new need is another key in the patch, not another
+/// call.
+abstract interface class ServerSettingsWriter {
+  /// Applies [patch] and answers the settings afterwards. Throws on a
+  /// rejected value or when the server is not running.
+  Future<Map<String, dynamic>> updateSettings(Map<String, dynamic> patch);
+}
+
 /// What the storage screen needs from the server: the cache's usage
 /// against its limit, and the one way there is to ask it to reclaim some.
 ///
@@ -128,7 +142,11 @@ abstract interface class ServerCacheControl {
 /// routes want a bearer token only the Rust side knows); the player fetches
 /// media from the open stream routes.
 class ServerClient
-    implements LanMediaControl, ServerCacheControl, ProxyStreamControl {
+    implements
+        LanMediaControl,
+        ServerCacheControl,
+        ProxyStreamControl,
+        ServerSettingsWriter {
   const ServerClient();
 
   /// Starts the server (idempotent) and returns its base URL.
@@ -170,6 +188,7 @@ class ServerClient
   /// `POST /settings` would -- validated, merged, persisted -- and returns
   /// the settings afterwards. Throws on a rejected value or when the server
   /// is not running.
+  @override
   Future<Map<String, dynamic>> updateSettings(
     Map<String, dynamic> patch,
   ) async =>

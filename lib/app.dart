@@ -13,9 +13,11 @@ import 'features/downloads/destination.dart';
 import 'features/downloads/downloads_screen.dart';
 import 'features/downloads/downloads_service.dart';
 import 'features/player/playback_engine.dart';
+import 'features/sharing/idle_sharing.dart';
 import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
 import 'shell/focus_theme.dart';
+import 'shell/network_cost.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
 import 'shell/tv_density.dart';
@@ -77,6 +79,12 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// download goes on after the user leaves the app. Its notification opens
 /// the [DownloadsScreen] from here, the way a deep link opens an addon.
 ///
+/// It also decides whether the embedded server may keep a title in the
+/// swarm between sessions ([IdleSharingPolicy]): one policy for the whole
+/// app, because there is one server and one answer, started once the
+/// preferences are in so that the first thing the server hears is the
+/// viewer's own choice rather than the default it overrides.
+///
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
 /// [RustDownloadsClient] unless [downloads] hands it one, and disposes only
@@ -97,6 +105,8 @@ class XtremioApp extends StatefulWidget {
     this.deepLinks,
     this.defaultDestination = platformDefaultDestination,
     this.device = DeviceProfile.fallback,
+    this.network = const ChannelNetworkCost(),
+    this.serverSettings = const ServerClient(),
   });
 
   final CoreClient core;
@@ -133,6 +143,14 @@ class XtremioApp extends StatefulWidget {
 
   /// The device the app runs on; tests put the app on a TV through it.
   final DeviceProfile device;
+
+  /// What the connection costs, for the sharing policy. The platform's own
+  /// watcher unless a test hands over readings of its own.
+  final NetworkCostSource network;
+
+  /// Where that policy is written, which is the embedded server's settings
+  /// over FFI unless a test hands over a recorder.
+  final ServerSettingsWriter serverSettings;
 
   /// Builds the [PlaybackEngine] for one player. Tests inject a recorder
   /// here to see what the app asked for without touching libmpv.
@@ -197,6 +215,11 @@ class _XtremioAppState extends State<XtremioApp> {
   late final CastClient _cast;
   late final bool _ownsCast;
 
+  /// The one sharing policy, built here and disposed here: it belongs to
+  /// nobody else, since what it reads (the preferences, the device) is the
+  /// app's own.
+  late final IdleSharingPolicy _sharing;
+
   /// The `ctx` field, for the settings a new player is created with.
   /// Created in [initState] so its first pull is in flight from start-up;
   /// created lazily it would come into being — empty — inside the first
@@ -223,7 +246,16 @@ class _XtremioAppState extends State<XtremioApp> {
     _cast = widget.cast ?? GoogleCastClient();
     _ownsPrefs = widget.prefs == null;
     _prefs = widget.prefs ?? AppPrefs(client: const RustPrefsClient());
-    unawaited(_prefs.load());
+    _sharing = IdleSharingPolicy(
+      prefs: _prefs,
+      isTv: widget.device.isTv,
+      network: widget.network,
+      server: widget.serverSettings,
+    );
+    // After the load, not beside it: a stored choice arriving a moment
+    // later would otherwise be preceded by a push of the default it was
+    // made to override, and the server would hear both.
+    unawaited(_prefs.load().whenComplete(_sharing.start));
     _lifecycle = AppLifecycleListener(
       onExitRequested: _onExitRequested,
       onResume: _onResume,
@@ -404,6 +436,10 @@ class _XtremioAppState extends State<XtremioApp> {
     // Lets go of the progress stream the client holds open on the Rust side.
     if (_ownsDownloads) _downloads.dispose();
     if (_ownsCast) _cast.dispose();
+    // Before the preferences it listens to, and without telling the server
+    // anything: the app going away is what ends the sharing, and it ends
+    // it by taking the server with it.
+    _sharing.dispose();
     if (_ownsPrefs) _prefs.dispose();
     _ctx.dispose();
     _lifecycle.dispose();

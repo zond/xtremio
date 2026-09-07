@@ -138,6 +138,26 @@ what every model field means. The shape of the thing is in the
   `lib/core/server_client.dart`. Nothing logs the token; the header value
   is marked sensitive. `media_kit`'s `Media.httpHeaders` could carry it to
   mpv should a media route ever need it; none does.
+- **Whether the server shares between sessions is the app's decision, and
+  it is one settings key.** The server keeps a torrent in the swarm after
+  playback ends when its `seedingEnabled` setting is true (its own default);
+  when it is false a torrent nothing is streaming is paused once its idle
+  grace is up, and a pinned download is exempt either way — it keeps
+  downloading, and stops being shared when it is unpinned. The app decides
+  the value and writes it through `ServerClient.updateSettings`
+  (`server_update_settings`, the same function `POST /settings` runs), which
+  is the only way it changes anything about the server.
+  `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`) is what
+  decides: the viewer's `shareWhileIdle` preference — defaulting to *on* on
+  a television and *off* everywhere else, since a box in a wall socket on
+  the house's line costs nobody anything and a phone spends a battery and a
+  bill — and, over both, a metered connection, which refuses whatever the
+  setting says. What the connection costs is *watched*, not asked
+  (`NetworkCostSource`, ANDROID.md's "Watching what the connection costs"):
+  a phone leaves the house without the app being touched, and an answer
+  given when the credits rolled expires at the front door. The policy pushes
+  only changes, serialises its writes, and pushes nothing at all until it
+  has heard a first reading.
 - **Offline downloads are a pin plus a registry.** The server keeps the
   chosen file of a torrent wanted and un-evictable
   (`ServerHandle::pin_download`, a validated `downloadsDir` setting,
