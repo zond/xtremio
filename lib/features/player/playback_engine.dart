@@ -683,13 +683,30 @@ class MediaKitEngine implements PlaybackEngine {
     bufferSize: memoryCacheBytes,
   );
 
-  /// The controller configuration for a `hardwareDecoding` setting:
-  /// media_kit's default (GPU decode and render) when on, software
-  /// decoding when off.
+  /// The controller configuration for a `hardwareDecoding` setting.
+  ///
+  /// media_kit's own default is `hwdec=auto-safe`, and in the libmpv it
+  /// ships the direct `mediacodec` hwdec is deliberately not on that
+  /// whitelist, so on Android auto-safe can only ever pick
+  /// `mediacodec-copy`: the codec decodes into its own buffer, ffmpeg copies
+  /// every frame out of it into CPU memory, and mpv uploads that to GL. On a
+  /// Chromecast with Google TV that copy is 10-30 ms of a 41 ms frame on the
+  /// one core the player shares with everything else, and the stats OSD
+  /// showed it as `hwdec mediacodec-copy` with thousands of `vo` drops and
+  /// none at the decoder -- frames decoded fine and arrived late. ffmpeg
+  /// announces the mode at every decoder init with "Both surface and
+  /// native_window are NULL".
+  ///
+  /// So name the list mpv-android uses: direct `mediacodec` first -- mpv's
+  /// AImageReader interop renders the codec's output as an external texture
+  /// with no CPU copy -- and `mediacodec-copy` as the fallback, which is
+  /// exactly today's behaviour if the direct path fails to initialise. The
+  /// OSD's hwdec row says which one took.
   static VideoControllerConfiguration configurationFor({
     required bool hardwareDecoding,
   }) => VideoControllerConfiguration(
     enableHardwareAcceleration: hardwareDecoding,
+    hwdec: hardwareDecoding ? 'mediacodec,mediacodec-copy' : 'no',
   );
 
   /// How often [stats] samples while listened to.
