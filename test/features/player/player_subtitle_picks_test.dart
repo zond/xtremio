@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/player/playback_tracks.dart';
 
 import '../../support/fake_prefs_client.dart';
 import '../../support/player_harness.dart';
@@ -61,6 +62,24 @@ void main() {
     PlayerHarness harness,
   ) async {
     await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(minutes: 96));
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+    return harness;
+  }
+
+  /// The player as above, with one English track inside the video --
+  /// which is what a remembered row saying `embedded` has to find.
+  Future<PlayerHarness> playingWithTrack(
+    WidgetTester tester,
+    PlayerHarness harness,
+  ) async {
+    await harness.pump(tester);
+    harness.engine.emitTracks(
+      const PlaybackTracks(
+        subtitle: [TrackInfo(id: '3', language: 'eng')],
+      ),
+    );
     harness.engine.emitDuration(const Duration(minutes: 96));
     harness.engine.emitPlaying(true);
     await pumpEvents(tester);
@@ -340,5 +359,50 @@ void main() {
 
     expect(client.writes, isEmpty);
     expect(prefs.subtitlePicks, SubtitlePickMemory.empty);
+  });
+
+  testWidgets('a show watched on the file\'s own track comes up on it', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    // The row says English and says the track inside the video was
+    // preferred to a download. Both English uploads are on offer, so
+    // only the second half of the row can decide this.
+    final prefs = remembering({'language': 'English', 'embedded': true});
+    await prefs.load();
+
+    final harness = await playingWithTrack(
+      tester,
+      harnessWith(twoEnglish(), prefs: prefs),
+    );
+
+    expect(harness.engine.setSubtitleTrackIds, ['3']);
+    expect(harness.engine.externalSubtitles, isEmpty);
+  });
+
+  testWidgets('picking the file\'s own track is remembered as one', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final prefs = AppPrefs(client: FakePrefsClient());
+    await prefs.load();
+    await playingWithTrack(tester, harnessWith(twoEnglish(), prefs: prefs));
+
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    // The embedded section is drawn above the addons', so the first
+    // English row is the file's own track.
+    await tester.tap(find.text('English').first);
+    await tester.pumpAndSettle();
+
+    // A track in the file has no group and no URL that means anything
+    // next episode; the language and the fact that it was a track are
+    // the whole of what there is to remember.
+    final row = prefs.subtitlePicks.forSeries(series)!;
+    expect(row.language, 'English');
+    expect(row.embedded, isTrue);
+    expect(row.releaseGroup, isNull);
+    // And it counts towards the menu's pins like any other pick.
+    expect(prefs.subtitlePicks.languages, {'English': 1});
   });
 }
