@@ -154,10 +154,17 @@ void main() {
     // would hang the run rather than fail it, and Dart has no way to
     // express one here in the first place. What this pins is the shape
     // that keeps it out -- an `await` in an ordinary async method, with
-    // the screen still taking events off the engine and still rebuilding
-    // the video surface for them while mpv has not come back. Keeping the
-    // sink alive means keeping it consuming, and a tree that has stopped
-    // being rebuilt is not consuming anything.
+    // the screen still laying out and rebuilding the video surface while
+    // mpv has not come back. Keeping the sink alive means keeping it
+    // consuming, and a tree that has stopped being rebuilt is not
+    // consuming anything.
+    //
+    // What asks for the rebuild here is the framework and not the engine:
+    // the screen lets go of every engine subscription at the press
+    // (`PlayerScreen._detach`), so an event is the one stimulus it is
+    // deliberately deaf to by then. A window resize is the ordinary thing
+    // that still arrives -- an exit transition, a rotation, a system bar
+    // -- and answering it is what a live tree does.
     final wedged = Completer<void>();
     final harness = PlayerHarness(
       configureEngine: (engine) => engine.disposeGate = wedged,
@@ -169,7 +176,7 @@ void main() {
     await tester.pumpAndSettle();
     final builtWhenLeft = engine.videoBuilds;
 
-    engine.emitBuffering(true);
+    tester.view.physicalSize = const Size(1000, 700);
     await pumpEvents(tester);
 
     expect(engine.disposed, isFalse, reason: 'still stopping');

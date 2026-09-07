@@ -323,12 +323,34 @@ class FakePlaybackEngine implements PlaybackEngine {
     );
   }
 
+  /// A real teardown stops the player before it releases it, and a stop
+  /// *announces itself*: media_kit's own `stop` defaults to
+  /// `notify: true`, and once its commands have come back it pushes
+  /// `playing: false`, `completed: false`, `position: Duration.zero` and
+  /// `duration: Duration.zero` down the very streams a screen has been
+  /// listening to all session, in that order
+  /// (`player/native/player/real.dart`).
+  ///
+  /// None of those is a fact about the playback -- they are the player
+  /// being emptied -- and the zero *position* arrives while the duration
+  /// is still the film's, which is exactly the shape a screen forwards to
+  /// the core as "the viewer is at the start of this".
+  ///
+  /// So the fake emits them, in mpv's order and at mpv's moment: after
+  /// [disposeGate], because the gate stands in for the stop commands that
+  /// a wedged core never answers, and the announcement is what the stop
+  /// makes on its way back. A fake that went quiet on the way out would
+  /// leave nothing for a test to catch this with.
   @override
   Future<void> dispose() async {
     disposeAsked = true;
     callLog?.add('dispose');
     await disposeGate?.future;
     if (disposeError != null) throw disposeError!;
+    emitPlaying(false);
+    _completed.add(false);
+    emitPosition(Duration.zero);
+    emitDuration(Duration.zero);
     disposed = true;
   }
 

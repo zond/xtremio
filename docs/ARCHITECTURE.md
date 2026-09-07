@@ -425,6 +425,31 @@ what every model field means. The shape of the thing is in the
   a socket wedged for good, and mpv's core thread goes on answering
   commands throughout, because `quit` starts the shutdown rather than
   ending the core.
+- **The screen lets go of the player before it waits for it.** Waiting with
+  the picture up leaves the screen built and subscribed while its engine is
+  being released, which is a state it was never in before: a `completed`
+  during the wait re-opened the stream, the app going to the background
+  paused a released player, a cast session ending elsewhere seeked and
+  played one, the open-retry and the torrent poll ran on, and media_kit's
+  own `stop` -- `notify: true` by default -- pushed `position:
+  Duration.zero` with the duration still the film's, which reached the core
+  as a `TimeChanged` of zero and reset continue-watching for every film
+  that was not finished. `PlayerScreen._detach` is the one act that ends
+  all of it: the engine subscriptions, the cast subscriptions, the `player`
+  and `ctx` listeners and every timer go there, before the first `await` in
+  `_leave`. It is not a guard per handler, because the next handler would
+  have to remember one; a screen with nothing subscribed cannot be reached
+  by anything, including what has not been written yet. `State.dispose`
+  still calls it (idempotently) for the screens that go without a leave --
+  the hand-over's `pushReplacement`, a route dismantled from above -- but
+  it is no longer where this belongs, since it now runs after the wait
+  rather than instead of it. What is left after the detach is input, which
+  stands down the same way the remote does: a key press is swallowed
+  (`_onKeyEvent`), a hover is refused (`_onPointerMoved`, since the
+  `MouseRegion` sits above the `IgnorePointer` that covers everything
+  else), and the fade timer refuses to re-arm -- otherwise the focus change
+  `_leave` makes on its way out arms a timer nothing cancels, and it
+  outlives the screen.
 - **`quit` is the kill, and there is nothing stronger to escalate to.**
   `PlaybackEngine.quit` sends it asynchronously on media_kit's own handle,
   never `mpv_terminate_destroy`: destroying a handle whose event loop is

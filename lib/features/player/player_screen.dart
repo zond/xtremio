@@ -305,6 +305,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// the bar aims at an engine that is stopping, and media_kit throws on a
   /// player that has been released.
   bool _leaving = false;
+
+  /// Whether [_detach] has run. Once per screen, from whichever of the two
+  /// ways out reaches it first.
+  bool _detached = false;
   FullscreenController? _fullscreen;
   SubtitleStyle _subtitleStyle = const SubtitleStyle();
   final List<StreamSubscription<void>> _subscriptions = [];
@@ -1794,7 +1798,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _restartControlsTimer() {
     _controlsTimer?.cancel();
     _controlsTimer = null;
-    if (!_canAutoHide || !_controlsVisible) return;
+    // The bar is out of the frame for good once the player is stopping
+    // ([build]), so there is nothing left for this to fade -- and a timer
+    // armed after [_detach] has run is one nothing cancels, which outlives
+    // the screen. The focus change [_leave] makes on its way out arrives
+    // here, so this is not a hypothetical door.
+    if (_leaving || !_canAutoHide || !_controlsVisible) return;
     _controlsTimer = Timer(PlayerScreen.controlsTimeout, _hideControls);
   }
 
@@ -3469,15 +3478,80 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// that will not stop keeps the viewer for [PlayerScreen.teardownBound]
   /// and no longer, and finishes -- or does not -- in the background,
   /// where the teardown itself says which.
+  /// Cuts this screen off from everything that could still act on the
+  /// player, before anything about the leaving is awaited.
+  ///
+  /// The wait put this screen somewhere it had never been. It used to pop
+  /// at the press and release the engine two frames later, so by the time
+  /// mpv was being stopped there was no screen left to answer an event.
+  /// Now it stays -- built, subscribed, and holding an engine that is
+  /// being released -- for as long as the teardown takes, and every
+  /// subscription and every timer it still owns is a way for the last
+  /// seconds of a session to reach a player on its way out. An `open` on
+  /// it (the false-end recovery), a `pause` (the app going to the
+  /// background), a `seek` and a `play` (a cast session ending
+  /// elsewhere), and -- the one that cost the viewer something -- a
+  /// `TimeChanged` of zero, because media_kit's `stop` announces itself
+  /// with `position: Duration.zero` while the duration is still the
+  /// film's, and a film left half-watched came back offering itself from
+  /// the beginning.
+  ///
+  /// **So it is one act rather than a guard per handler.** A guard has to
+  /// be remembered by whoever writes the next handler, and there is
+  /// nothing about a handler that says it needs one; a screen with no
+  /// subscriptions and no timers cannot be reached by anything, including
+  /// what has not been written yet. What is left running afterwards is the
+  /// build -- the picture, which is the whole reason the screen is still
+  /// here.
+  ///
+  /// **[State.dispose] is no longer the place for this.** It used to be
+  /// the moment the screen stopped existing and so the moment everything
+  /// it owned stopped mattering; with the wait in front of it, it runs
+  /// after the events it was cancelling have already been answered. It
+  /// still calls this, because a screen can go without a leave (the
+  /// hand-over's `pushReplacement`, a route dismantled from above), and
+  /// this is idempotent so that a screen going through both paths detaches
+  /// once.
+  ///
+  /// The core field listeners go too: `player` is what opens a stream, and
+  /// `ctx` writes the subtitle style onto the engine. The preferences
+  /// listener stays where it is, because what it answers is a `setState`
+  /// and it reaches neither the engine nor the core.
+  void _detach() {
+    if (_detached) return;
+    _detached = true;
+    _lifecycle.dispose();
+    _player?.removeListener(_onPlayerState);
+    _ctx?.removeListener(_onCtx);
+    for (final subscription in _subscriptions) {
+      subscription.cancel();
+    }
+    _subscriptions.clear();
+    unawaited(_castStatsSubscription?.cancel());
+    _castStatsSubscription = null;
+    _cancelCastFetch();
+    _cancelOpenRetry();
+    _stopTorrentStats();
+    _statsHoverTimer?.cancel();
+    _statsHoverTimer = null;
+    _seekCheck?.cancel();
+    _seekCheck = null;
+    _pauseUpNext();
+    _controlsTimer?.cancel();
+    _controlsTimer = null;
+  }
+
   Future<void> _leave([PlayerScreenResult? result]) async {
     if (_leaving) return;
     setState(() => _leaving = true);
+    // Nothing may act on the player from here on, and this is the line
+    // that says so: it comes before the first `await` below, because what
+    // it stops is precisely what would otherwise get a turn during one.
+    _detach();
     // The control bar leaves the frame with this ([build]), so nothing may
     // be left focused on it: hiding the bar and handing the remote back to
     // the video are one act, and a leave is no exception. The timer that
-    // would have done it has nothing left to hide.
-    _controlsTimer?.cancel();
-    _controlsTimer = null;
+    // would have done it has gone with [_detach].
     if (_controlFocused) _focusNode.requestFocus();
     // From the press, not from the pop: the display is not presenting a
     // film any more the moment the viewer says so.
@@ -3709,6 +3783,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // --- Stats hover ---------------------------------------------------------
 
   void _onPointerMoved() {
+    // The `MouseRegion` sits above the `IgnorePointer` that covers the
+    // rest of the screen ([build]), so a hover still arrives while the
+    // player is stopping. It is aimed at nothing, exactly as a key press
+    // is ([_onKeyEvent]): bringing the OSD back over a picture on its way
+    // out is the opposite of what the viewer asked for, and the timer
+    // below would be armed after [_detach] had run.
+    if (_leaving) return;
     _showControls();
     _statsHoverTimer?.cancel();
     _statsHoverTimer = Timer(PlayerScreen.statsHoverTimeout, () {
@@ -3734,24 +3815,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    _lifecycle.dispose();
-    _castStatsSubscription?.cancel();
+    // Ordinarily a second call that does nothing: [_leave] detaches at the
+    // press, which is where it has to happen now that this method runs
+    // after the wait rather than instead of it. What is left for this line
+    // is the screen that went without a leave -- the hand-over's
+    // `pushReplacement`, a route dismantled from above -- where this is
+    // still the moment nothing may act on the player any more.
+    _detach();
     // Whatever else is true when this screen goes, nothing of ours is left
-    // on the LAN: the session ends and the listener with it. The
-    // subscriptions below are cancelled first, so nothing reports back into
-    // a disposed screen while this runs.
+    // on the LAN: the session ends and the listener with it. Everything
+    // that could report back was cancelled above, so nothing lands in a
+    // disposed screen while this runs.
     _cast?.stopDiscovery().ignore();
-    _cancelCastFetch();
     if (_casting || _lanMediaOn) unawaited(_teardownCast());
-    _cancelOpenRetry();
-    _statsHoverTimer?.cancel();
-    _seekCheck?.cancel();
-    _controlsTimer?.cancel();
-    _upNextTimer?.cancel();
-    _stopTorrentStats();
-    for (final subscription in _subscriptions) {
-      subscription.cancel();
-    }
     // A television gives the system its bars back when the player is
     // really over, not when it hands over to the next episode: the
     // replacement enters fullscreen while this screen is still alive, and
@@ -3793,9 +3869,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _flushRememberedTiming();
     _ownPrefs?.dispose();
     _bufferStatus.dispose();
-    _player?.removeListener(_onPlayerState);
+    // Both were unsubscribed from in [_detach]; what is left is the
+    // notifiers themselves.
     _player?.dispose();
-    _ctx?.removeListener(_onCtx);
     _ctx?.dispose();
     if (!_handedOver) _client?.dispatch(CoreActions.unload(CoreField.player));
     _position.dispose();
