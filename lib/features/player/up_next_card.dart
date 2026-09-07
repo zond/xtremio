@@ -82,19 +82,35 @@ class UpNextCard extends StatelessWidget {
               // how the remote walks them; the wrap is what happens
               // instead of an overflow when a viewer has also asked the
               // platform for larger text.
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  TextButton(onPressed: onDismiss, child: const Text('Cancel')),
-                  FilledButton.icon(
-                    focusNode: playFocusNode,
-                    onPressed: onPlay,
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Play now'),
-                  ),
-                ],
+              //
+              // The [Align] is what puts them at the end of the card,
+              // which the [Row] did for nothing: a [Wrap] laid out on a
+              // [Column]'s cross axis is handed loose constraints and
+              // takes the width of its own children, so
+              // `WrapAlignment.end` has no room to distribute and the two
+              // buttons come out flush left under the "Up next" label.
+              // The [Align] takes the width instead and the wrap aligns
+              // inside it, on the last line too when the text is large
+              // enough to break them apart.
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    TextButton(
+                      onPressed: onDismiss,
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton.icon(
+                      focusNode: playFocusNode,
+                      onPressed: onPlay,
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Play now'),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
