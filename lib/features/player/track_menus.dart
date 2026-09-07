@@ -94,8 +94,17 @@ class SubtitleMenu extends StatefulWidget {
   /// The heading over the lifted rows.
   static const String pinnedLabel = 'You usually pick';
 
-  /// What that heading's note says, which has to be true of one row as
-  /// well as of two: a viewer with a single second language sees one.
+  /// What that heading's note says, over the shapes it is really asked
+  /// for.
+  ///
+  /// The note is drawn only where a row was lifted, so [shown] is one or
+  /// two. There are at most `SubtitlePickMemory.pinCount` winners, which
+  /// is two, so [inFile] -- the winners with no row down here to lift --
+  /// is none or one, and where it is one the single other slot is the
+  /// row that was lifted. A viewer with one second language sees the
+  /// singular; a winner the file itself carries is the only thing that
+  /// splits the sentence in two. There is no third slot, so the note is
+  /// never asked to speak of "the rest".
   ///
   /// **"on offer here" is the whole of what makes it true, and "here" is
   /// the whole sheet.** A pin is only ever a language this episode
@@ -124,8 +133,7 @@ class SubtitleMenu extends StatefulWidget {
         ? 'The language on offer here that you pick most often'
         : 'The $total languages on offer here that you pick most often';
     if (inFile == 0) return '$head, lifted out of the list below.';
-    return '$head. ${inFile == 1 ? 'One is' : '$inFile are'} already in '
-        'this file, above; ${shown == 1 ? 'the other is' : 'the rest are'} '
+    return '$head. One is already in this file, above; the other is '
         'lifted out of the list below.';
   }
 
