@@ -9,6 +9,7 @@ import '../player/language_names.dart';
 import '../player/playback_engine.dart';
 import '../player/subtitle_color_chips.dart';
 import '../sharing/idle_sharing.dart';
+import '../sharing/sharing_activity.dart';
 
 /// Settings → Player / Subtitles / Interface / Streaming server: the
 /// controls over `profile.settings`.
@@ -249,22 +250,37 @@ class FocusEmphasisSection extends StatelessWidget {
 /// the *embedded* server either way -- with a remote server chosen, this
 /// still governs the one on this device, which is the one holding what this
 /// device fetched.
+///
+/// **And it says when a "Not now" is holding it off.** The status light's
+/// popup can stop the sharing for the rest of the run without touching the
+/// preference, so the switch can be on over a run in which nothing is
+/// shared; the tile says so on a line of its own rather than leaving the
+/// switch to describe something the app is not doing. Turning the switch
+/// off and on again lifts the pause, which is what makes the extra line go
+/// away.
 class IdleSharingSection extends StatelessWidget {
   const IdleSharingSection({super.key, required this.prefs});
 
   final AppPrefs prefs;
 
   @override
-  Widget build(BuildContext context) => SwitchListTile(
-    // The same key shape a `profile.settings` control gets, so a test
-    // finds this one the same way.
-    key: settingKey(AppPrefs.shareWhileIdleKey),
-    secondary: const Icon(Icons.upload_outlined),
-    title: const Text(IdleSharing.title),
-    subtitle: const Text(IdleSharing.description),
-    value: prefs.shareWhileIdle,
-    onChanged: (on) => prefs.setShareWhileIdle(on),
-  );
+  Widget build(BuildContext context) {
+    final paused = SharingScope.read(context)?.policy.pausedForRun ?? false;
+    return SwitchListTile(
+      // The same key shape a `profile.settings` control gets, so a test
+      // finds this one the same way.
+      key: settingKey(AppPrefs.shareWhileIdleKey),
+      secondary: const Icon(Icons.upload_outlined),
+      title: const Text(IdleSharing.title),
+      subtitle: Text(
+        paused
+            ? '${IdleSharing.description}\n${IdleSharing.pausedNote}'
+            : IdleSharing.description,
+      ),
+      value: prefs.shareWhileIdle,
+      onChanged: (on) => prefs.setShareWhileIdle(on),
+    );
+  }
 }
 
 /// Subtitles: size and colours, the same values the player's own settings

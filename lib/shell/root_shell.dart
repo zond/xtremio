@@ -7,6 +7,7 @@ import '../features/discover/discover_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/sharing/sharing_light.dart';
 import '../widgets/focusable_tile.dart';
 import 'device_profile.dart';
 import 'tv_density.dart';
@@ -49,6 +50,14 @@ class _Destination {
 /// that the pushed routes get it too) and the shell keeps out of all of it,
 /// rail included, since it is the panel's edges that eat it.
 ///
+/// It also draws the [SharingLight], the status light that says the
+/// embedded server is uploading to the swarm right now. It lives here
+/// because this is the one place that knows both halves of what the light
+/// claims: that something is going out (the [SharingScope]'s monitor) and
+/// that nobody is watching (this route is the current one, so no player is
+/// over it). On a television the remote reaches it from the rail and only
+/// from the rail -- see [sharingLightNode] and [_onRailKey].
+///
 /// Selecting a destination with a pointer (a touch remote, a mouse) while
 /// a tile holds focus is the D-pad's select with the step onto the rail
 /// skipped, so the shell takes that step itself: it focuses the chosen
@@ -90,6 +99,26 @@ class _RootShellState extends State<RootShell> {
     canRequestFocus: false,
     skipTraversal: true,
   );
+
+  /// The status light's focus node, owned here so the rail can put focus
+  /// on it, and **skipped by traversal**: a light in the top right corner
+  /// that directional traversal could land on would sit between an up or a
+  /// right press and the poster it was meant for, which is the one thing an
+  /// overlay on a television must never do. What reaches it instead is
+  /// [_onRailKey], up from the top of the rail. Off a television it is an
+  /// ordinary node and Tab finds it.
+  final FocusNode _lightNode = FocusNode(
+    debugLabel: 'sharing light',
+    skipTraversal: true,
+  );
+
+  /// Whether the light is drawn: its node is in the focus tree exactly then,
+  /// since [SharingLight] builds nothing at all when there is nothing going
+  /// out. Asking the node rather than the monitor keeps this one question
+  /// with one answer -- and a [FocusNode.requestFocus] on a node with no
+  /// parent is remembered and applied when it *is* next mounted, which
+  /// would take the remote to a light that appeared ten minutes later.
+  bool get _lightIsUp => _lightNode.parent != null;
 
   /// Which of the rail's destinations holds focus, or -1 for none (TV
   /// only); see [_onFocusMoved] and [_railIcon].
@@ -157,6 +186,13 @@ class _RootShellState extends State<RootShell> {
 
   /// Up from the first destination and down from the last stay where they
   /// are (TV only); see [RootShell]. Every other key passes.
+  ///
+  /// With one exception, which is how a remote reaches the status light:
+  /// up from the first destination moves focus onto it while it is lit.
+  /// That key did nothing before, the rail is reachable from every tab's
+  /// body with one left press, and the light is out of the traversal
+  /// altogether -- so this is the whole of the path to it, and it costs the
+  /// walk nothing when the light is not there.
   KeyEventResult _onRailKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final focused = FocusManager.instance.primaryFocus;
@@ -168,8 +204,17 @@ class _RootShellState extends State<RootShell> {
     final atEdge =
         (key == LogicalKeyboardKey.arrowUp && i == 0) ||
         (key == LogicalKeyboardKey.arrowDown && i == destinations.length - 1);
+    if (key == LogicalKeyboardKey.arrowUp && i == 0 && _lightIsUp) {
+      _lightNode.requestFocus();
+      return KeyEventResult.handled;
+    }
     return atEdge ? KeyEventResult.handled : KeyEventResult.ignored;
   }
+
+  /// The remote leaving the light: back to the destination it came from,
+  /// which is the rail's first, since that is the only press that reaches
+  /// the light at all.
+  void _leaveLight() => _railDestination(0)?.requestFocus();
 
   @override
   void dispose() {
@@ -177,6 +222,7 @@ class _RootShellState extends State<RootShell> {
     for (final scope in _tabScopes) {
       scope.dispose();
     }
+    _lightNode.dispose();
     _railNode.dispose();
     super.dispose();
   }
@@ -208,6 +254,29 @@ class _RootShellState extends State<RootShell> {
       size: _indicatorSize,
       child: Center(child: Icon(icon)),
     ),
+  );
+
+  /// [content] with the status light over its top right corner.
+  ///
+  /// Inside the television's overscan band, since the [SafeArea] that keeps
+  /// that band clear is put on outside this. And a toolbar's height down
+  /// from the top, because the shell does not know what a screen puts in
+  /// its own app bar and one of them does put a button in exactly that
+  /// corner (the Library's "Sync now"): a light drawn over a control is a
+  /// control nobody can press, which is worse than a light sitting a little
+  /// lower than the corner it is named for.
+  Widget _withLight(Widget content, {required bool isTv}) => Stack(
+    children: [
+      content,
+      Positioned(
+        top: kToolbarHeight,
+        right: 0,
+        child: SharingLight(
+          focusNode: _lightNode,
+          onLeave: isTv ? _leaveLight : null,
+        ),
+      ),
+    ],
   );
 
   @override
@@ -269,15 +338,16 @@ class _RootShellState extends State<RootShell> {
           ),
         ],
       );
+      final lit = _withLight(row, isTv: isTv);
       return Scaffold(
         // The band itself comes down as `MediaQuery` padding from
         // `TvMediaQuery`, so the shell only has to keep out of it.
-        body: isTv ? SafeArea(key: RootShell.overscanKey, child: row) : row,
+        body: isTv ? SafeArea(key: RootShell.overscanKey, child: lit) : lit,
       );
     }
 
     return Scaffold(
-      body: body,
+      body: _withLight(body, isTv: isTv),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: _select,
