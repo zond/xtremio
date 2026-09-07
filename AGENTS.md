@@ -567,11 +567,12 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   every language, and the language that is playing is deliberately not
   lifted, because the list is ordered before anything is selected and a
   row that jumps once it is picked takes back the reason to sort at all.
-  **The menu lifts exactly two rows, and for a reason that rule does not
-  cover**: the languages this viewer picks most often
-  (`SubtitlePickMemory.pinned`, at most two, under a heading that says
-  what they are), because a language they use is worth more than the
-  letter it starts with when the answer is forty rows long. It is safe
+  **The menu spends exactly two pin slots, and lifts at most two rows,
+  for a reason that rule does not cover**: the languages this viewer
+  picks most often (`SubtitlePickMemory.pinned`, at most two, under a
+  heading that says what they are), because a language they use is worth
+  more than the letter it starts with when the answer is forty rows
+  long. It is safe
   where lifting the playing row is not, because a count moves only on a
   pick and every pick closes the sheet: the reason a row is pinned
   cannot change while that row is being reached for. What still moves an
@@ -595,7 +596,14 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   the file itself carries has no row down here to lift, so it takes its
   slot without one and the note says that in a sentence of its own
   (`SubtitleMenu.pinnedNote`, `shown` and `inFile`); a language the file
-  and an addon both offer is one language and takes one slot. It happens
+  and an addon both offer is one language and takes one slot. **Two
+  slots, then, but one row lifted or none**: with both winners inside
+  the file nothing is lifted at all, and the section is left off the
+  sheet rather than heading an empty one. A slot that lifts nothing is
+  deliberately not handed to the next language down -- the heading says
+  these are the two picked most often, the third most picked is not
+  that, and the two that are sit at the top of this sheet already, as
+  the video's own tracks. It happens
   in the menu's own rendering, after
   `groupSubtitlesByLanguage`, so both consumers of the ordered list still
   get the same order and the auto-pick's one case that reads it is

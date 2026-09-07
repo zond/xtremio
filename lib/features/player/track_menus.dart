@@ -205,9 +205,15 @@ class _SubtitleMenuState extends State<SubtitleMenu> {
   /// everything else in the order it arrived -- which is the alphabet
   /// [subtitlesByRelease] left it in.
   ///
-  /// Nothing is pinned when it would empty the list below: lifting every
-  /// language there is moves no row nearer the top and costs a heading
-  /// and a note for it.
+  /// Two things leave the section off the sheet rather than heading an
+  /// empty one. Lifting every language there is moves no row nearer the
+  /// top and costs a heading and a note for it. And a winner can have no
+  /// row down here at all, because the file carries it and its row is
+  /// two sections up: when both winners are like that nothing is lifted,
+  /// and the freed slots are deliberately *not* handed to the next
+  /// language down -- the heading says these are the ones picked most
+  /// often, the third most picked is not that, and the two that are sit
+  /// at the top of this sheet already.
   (List<SubtitleLanguageGroup>, List<SubtitleLanguageGroup>) _split(
     List<String> languages,
   ) {

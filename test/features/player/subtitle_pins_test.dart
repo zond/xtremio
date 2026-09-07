@@ -77,6 +77,15 @@ void main() {
     subtitle: [TrackInfo(id: '3', language: 'eng')],
   );
 
+  /// Both of this viewer's languages inside the video, so neither has a
+  /// row down among the addons' languages to lift.
+  const englishAndSwedishTracks = PlaybackTracks(
+    subtitle: [
+      TrackInfo(id: '3', language: 'eng'),
+      TrackInfo(id: '4', language: 'swe'),
+    ],
+  );
+
   /// Preferences whose only content is how often each language has been
   /// picked -- no show row, so nothing is preselected and the menu is the
   /// whole of what changes.
@@ -348,6 +357,39 @@ void main() {
     expect(find.text(SubtitleMenu.pinnedLabel), findsNothing);
     expect(find.text('From subtitle addons'), findsOneWidget);
     expect(topOf(tester, 'English'), lessThan(topOf(tester, 'Swedish')));
+  });
+
+  testWidgets('both winners inside the file lift nothing, and the next '
+      'language down is not promoted into their place', (tester) async {
+    useWideViewport(tester);
+    // English and Swedish are what this viewer picks, the video carries
+    // both, and the addons answered with neither. Both slots are spent
+    // where they were won -- on rows already at the top of this sheet --
+    // so nothing is lifted and the section is not drawn at all.
+    final prefs = counting({'English': 41, 'Swedish': 30, 'Danish': 10});
+    await prefs.load();
+
+    await openMenu(
+      tester,
+      harnessWith([
+        upload('da-1', 'dan', 'https://subs.example.org/da.srt'),
+        upload('fr-1', 'fre', 'https://subs.example.org/fr.srt'),
+      ], prefs: prefs),
+      tracks: englishAndSwedishTracks,
+    );
+
+    expect(find.text(SubtitleMenu.pinnedLabel), findsNothing);
+    // Danish is the third language this viewer picks and the heading
+    // would call it one of the two: a freed slot is not a slot for the
+    // next language down, so Danish stays in the alphabet.
+    expect(
+      topOf(tester, 'From subtitle addons'),
+      lessThan(topOf(tester, 'Danish')),
+    );
+    expect(topOf(tester, 'Danish'), lessThan(topOf(tester, 'French')));
+    // What the viewer came for is above all of it either way.
+    expect(topOf(tester, 'English'), lessThan(topOf(tester, 'Danish')));
+    expect(topOf(tester, 'Swedish'), lessThan(topOf(tester, 'Danish')));
   });
 
   testWidgets('nothing is remembered, nothing is pinned', (tester) async {
