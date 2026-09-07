@@ -174,6 +174,10 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    // Scrolled *to* is not the same as scrolled into view: the row above
+    // it is the sharing tile, whose height is a sentence somebody edits.
+    await tester.ensureVisible(find.text('Download test torrent'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Download test torrent'));
     await tester.pumpAndSettle();
 

@@ -312,11 +312,9 @@ void main() {
       await pumpSettings(tester, prefs: AppPrefs.inMemory());
       expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
 
-      // And the rule the viewer never set is on the tile with the promise:
-      // "Share while idle" alone leaves them guessing whether the phone
-      // will be uploading on the train.
+      // And what turning it on does is on the tile itself: "Share while
+      // idle" alone leaves the viewer to guess what "idle" covers.
       expect(find.text(IdleSharing.description), findsOneWidget);
-      expect(find.textContaining('metered'), findsOneWidget);
     });
 
     testWidgets('writes the choice to the preferences, not the core', (

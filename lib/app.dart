@@ -17,7 +17,6 @@ import 'features/sharing/idle_sharing.dart';
 import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
 import 'shell/focus_theme.dart';
-import 'shell/network_cost.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
 import 'shell/tv_density.dart';
@@ -105,7 +104,6 @@ class XtremioApp extends StatefulWidget {
     this.deepLinks,
     this.defaultDestination = platformDefaultDestination,
     this.device = DeviceProfile.fallback,
-    this.network = const ChannelNetworkCost(),
     this.serverSettings = const ServerClient(),
   });
 
@@ -143,10 +141,6 @@ class XtremioApp extends StatefulWidget {
 
   /// The device the app runs on; tests put the app on a TV through it.
   final DeviceProfile device;
-
-  /// What the connection costs, for the sharing policy. The platform's own
-  /// watcher unless a test hands over readings of its own.
-  final NetworkCostSource network;
 
   /// Where that policy is written, which is the embedded server's settings
   /// over FFI unless a test hands over a recorder.
@@ -249,7 +243,6 @@ class _XtremioAppState extends State<XtremioApp> {
     _sharing = IdleSharingPolicy(
       prefs: _prefs,
       isTv: widget.device.isTv,
-      network: widget.network,
       server: widget.serverSettings,
     );
     // After the load, not beside it: a stored choice arriving a moment

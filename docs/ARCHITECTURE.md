@@ -148,16 +148,16 @@ what every model field means. The shape of the thing is in the
   (`server_update_settings`, the same function `POST /settings` runs), which
   is the only way it changes anything about the server.
   `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`) is what
-  decides: the viewer's `shareWhileIdle` preference — defaulting to *on* on
-  a television and *off* everywhere else, since a box in a wall socket on
-  the house's line costs nobody anything and a phone spends a battery and a
-  bill — and, over both, a metered connection, which refuses whatever the
-  setting says. What the connection costs is *watched*, not asked
-  (`NetworkCostSource`, ANDROID.md's "Watching what the connection costs"):
-  a phone leaves the house without the app being touched, and an answer
-  given when the credits rolled expires at the front door. The policy pushes
-  only changes, serialises its writes, and pushes nothing at all until it
-  has heard a first reading.
+  decides, and the viewer's `shareWhileIdle` preference is the whole of the
+  decision — defaulting to *on* on a television and *off* everywhere else,
+  since a box in a wall socket on the house's line costs nobody anything and
+  a phone spends a battery and a bill. Nothing asks what the connection
+  costs: the term that did (a `ConnectivityManager` watcher behind an event
+  channel, refusing to seed on a metered link) could only be answered on
+  Android, and answered "unmetered" unconditionally on the desktops, so a
+  tethered laptop seeded over mobile data under a tile promising it never
+  would. The policy pushes only changes, serialises its writes, and pushes
+  the first as soon as the preferences have loaded.
 - **Offline downloads are a pin plus a registry.** The server keeps the
   chosen file of a torrent wanted and un-evictable
   (`ServerHandle::pin_download`, a validated `downloadsDir` setting,

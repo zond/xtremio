@@ -46,14 +46,6 @@ class MainActivity : FlutterActivity() {
      */
     private var displayRefreshRates: DisplayRefreshRates? = null
 
-    /**
-     * What is telling Dart whether this device's connection is billed by
-     * the byte, alive for as long as the engine is. Held so its
-     * `NetworkCallback` is unregistered with the activity rather than
-     * outliving it.
-     */
-    private var networkCost: NetworkCostWatcher? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before the Flutter engine starts Dart: RustLib.init() may
         // issue HTTPS requests right away.
@@ -118,15 +110,6 @@ class MainActivity : FlutterActivity() {
         // rather than a call (lib/shell/display_frame_rate.dart).
         displayRefreshRates = DisplayRefreshRates().also {
             EventChannel(flutterEngine.dartExecutor.binaryMessenger, DISPLAY_CHANNEL)
-                .setStreamHandler(it)
-        }
-        // Whether the connection this device is on is billed by the byte,
-        // watched rather than asked (lib/shell/network_cost.dart): it
-        // decides whether the embedded server may go on sharing a torrent
-        // between sessions, and a phone changes networks under that
-        // decision without the app being touched.
-        networkCost = NetworkCostWatcher(this).also {
-            EventChannel(flutterEngine.dartExecutor.binaryMessenger, NETWORK_CHANNEL)
                 .setStreamHandler(it)
         }
         // The downloads notification (lib/features/downloads/downloads_service.dart).
@@ -461,8 +444,6 @@ class MainActivity : FlutterActivity() {
         downloads = null
         displayRefreshRates?.detach()
         displayRefreshRates = null
-        networkCost?.detach()
-        networkCost = null
         textEntry = null
         super.onDestroy()
     }
@@ -486,7 +467,6 @@ class MainActivity : FlutterActivity() {
     private companion object {
         const val DEVICE_CHANNEL = "xtremio/device"
         const val DISPLAY_CHANNEL = "xtremio/display"
-        const val NETWORK_CHANNEL = "xtremio/network"
         const val REQUEST_TEXT_ENTRY = 4712
     }
 }

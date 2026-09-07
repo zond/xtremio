@@ -245,17 +245,12 @@ class FocusEmphasisSection extends StatelessWidget {
 /// until then, which is exactly what lets a television's stored *off*
 /// survive).
 ///
-/// **The subtitle says what it does, including what it will not do.**
-/// "Share while idle" on its own leaves a viewer to work out whether their
-/// phone will be uploading on the train, and the answer to that is a rule
-/// they never set and cannot see. So the metered refusal is on the tile
-/// next to the promise.
-///
 /// It writes only the preference; what reaches the server is
-/// [IdleSharingPolicy]'s to send, since the connection has a say the switch
-/// does not. It is the *embedded* server either way -- with a remote server
-/// chosen, this still governs the one on this device, which is the one
-/// holding what this device fetched.
+/// [IdleSharingPolicy]'s to send, so that one object decides for the whole
+/// app and this screen is one of the things that can change its mind. It is
+/// the *embedded* server either way -- with a remote server chosen, this
+/// still governs the one on this device, which is the one holding what this
+/// device fetched.
 class IdleSharingSection extends StatelessWidget {
   const IdleSharingSection({super.key, required this.prefs});
 
