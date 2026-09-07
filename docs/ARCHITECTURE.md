@@ -77,7 +77,11 @@ what every model field means. The shape of the thing is in the
   Interface -> "Bold focus", a switch offered on a television only:
   `standard` is the two-stroke ring with its zoom and shadow, `bold`
   thickens the ring and dims everything the remote is not on, for a bright
-  room a display cannot fight; an unreadable or absent value is `standard`) and
+  room a display cannot fight; an unreadable or absent value is `standard`.
+  It reaches the app twice over: `FocusHighlight` reads it for what the app
+  draws itself, and `FocusTheme.apply` derives it into the `ThemeData` the
+  app runs under, so every Material control is marked without opting in --
+  see AGENTS.md, *Eleven rules a real device taught us*) and
   `subtitleSync` (the subtitle timings the viewer has fixed by hand, most
   recent first, bounded by recency -- see Subtitles). Nothing
   secret goes in it.

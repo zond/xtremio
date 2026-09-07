@@ -708,14 +708,29 @@ itself says a test cannot reach it.
   other key passes -- up and down are the way out and have to keep
   working.
 - **Anything the remote can land on wears the app's own focus
-  indicator.** Material marks a focused button with a tint of about a
-  tenth, which over poster art or a darkened backdrop, on a panel in a
-  room this app knows nothing about, is exactly the cue that disappears --
-  the reason `FocusHighlight` draws three of them. A control with a focus
-  node and no ring is one the remote can reach and nobody can find, which
-  is the same class of fault as a button that is drawn and dead.
-  `FocusHighlighted` puts the ring on a control that owns its own node (a
-  chip, an `IconButton`) without touching traversal.
+  indicator, and there are two ways it does.** Material marks a focused
+  button with a tint of about a tenth, which over poster art or a
+  darkened backdrop, on a panel in a room this app knows nothing about,
+  is exactly the cue that disappears -- the reason `FocusHighlight` draws
+  three of them. A control with a focus node and no ring is one the
+  remote can reach and nobody can find, which is the same class of fault
+  as a button that is drawn and dead. The first way is that ring, put on
+  by hand: `FocusHighlighted` for a control that will take a node,
+  `FocusMarked` for one that will not, and `FocusTreatment` for how much
+  of the indicator a surface family wears -- a `tile` zooms and casts a
+  shadow, a `row` does neither, because an `AnimatedScale` is a paint
+  transform and nothing moves aside for a settings row that grew. The
+  second is `FocusTheme`, the floor: the emphasis derived into
+  `ThemeData` on a television, so every Material control is marked
+  without opting in to anything. Wrapping by hand had reached exactly the
+  tiles, and left twenty files of settings rows, dialog buttons and ⋮
+  menus deaf to the switch. **Prefer the floor**; wrap only what it
+  cannot reach (a chip, a bare `Focus`, the navigation rail, which hands
+  out no nodes) or what is drawn straight over video or poster art, and
+  say in a comment which of the two a surface is getting and why.
+  `test/features/tv/focus_reach_test.dart` walks every screen and fails
+  on a stop that has neither -- and on a `*_screen.dart` it has never
+  heard of, so a new screen has to be added to it.
 - **An image holds its box before it has arrived, and a late failure is
   the case that matters.** An `Image.network` given only a height occupies
   exactly that from its first frame, so a shorter fallback moves
