@@ -4,15 +4,17 @@
 //! app renders (or is about to render). `#[derive(Model)]` generates `XtremioModelField` (a
 //! `snake_case` serde enum, one variant per field) and the `update` /
 //! `update_field` dispatch. Every field is serialized to JSON with serde for
-//! the Dart side; there is no per-type mirroring.
+//! the Dart side; there is no per-type mirroring -- with one exception, the
+//! board and the search, whose items go over as the projection a poster
+//! grid draws ([`GridItem`]).
 
 use std::ops::{Deref, DerefMut};
 
 use serde::Serialize;
 use stremio_core::models::addon_details::AddonDetails;
 use stremio_core::models::catalog_with_filters::CatalogWithFilters;
-use stremio_core::models::catalogs_with_extra::CatalogsWithExtra;
-use stremio_core::models::common::Loadable;
+use stremio_core::models::catalogs_with_extra::{CatalogsWithExtra, Selected};
+use stremio_core::models::common::{Loadable, ResourceLoadable};
 use stremio_core::models::continue_watching_preview::ContinueWatchingPreview;
 use stremio_core::models::ctx::Ctx;
 use stremio_core::models::installed_addons_with_filters::InstalledAddonsWithFilters;
@@ -27,11 +29,12 @@ use stremio_core::types::events::DismissedEventsBucket;
 use stremio_core::types::library::LibraryBucket;
 use stremio_core::types::notifications::NotificationsBucket;
 use stremio_core::types::profile::Profile;
-use stremio_core::types::resource::MetaItemPreview;
+use stremio_core::types::resource::{MetaItemPreview, PosterShape};
 use stremio_core::types::search_history::SearchHistoryBucket;
 use stremio_core::types::server_urls::ServerUrlsBucket;
 use stremio_core::types::streams::StreamsBucket;
 use stremio_core::Model;
+use url::Url;
 
 use crate::env::XtremioEnv;
 
@@ -79,12 +82,12 @@ pub struct XtremioModel {
 /// pause, the progress push every 90 s under the player, a title kept --
 /// because stremio-web merges each item's library flags into the board it
 /// serializes, so there the board really has changed. Nothing this crate
-/// puts on the wire for a board or a search reads the library, so here that
-/// `NewState` was a re-serialization of every loaded catalog and a re-decode
-/// of the same document on the Dart UI isolate, for a board nobody was
-/// looking at. The model itself is left exactly as stremio-core keeps it:
-/// the arm being filtered changes no state (`Effects::none()`), only the
-/// flag.
+/// puts on the wire for a board or a search reads the library
+/// ([`GridItem`]), so here that `NewState` was a re-serialization of every
+/// loaded catalog and a re-decode of the same document on the Dart UI
+/// isolate, for a board nobody was looking at. The model itself is left
+/// exactly as stremio-core keeps it: the arm being filtered changes no
+/// state (`Effects::none()`), only the flag.
 #[derive(Default, Clone)]
 pub struct GridCatalogs(pub CatalogsWithExtra);
 
@@ -113,6 +116,91 @@ impl UpdateWithCtx<XtremioEnv> for GridCatalogs {
         match msg {
             Msg::Internal(Internal::LibraryChanged(_)) => Effects::none().unchanged(),
             _ => UpdateWithCtx::<XtremioEnv>::update(&mut self.0, msg, ctx),
+        }
+    }
+}
+
+/// What a poster grid draws of one catalog item: the tile's id, type, name,
+/// poster and shape, and the release year that sits beside the name.
+///
+/// A `MetaItemPreview` serializes to about 2 KB, of which `links` --
+/// synthesized from the genres, the cast and the IMDb rating for a details
+/// page this item never reaches -- is three fifths, and the description most
+/// of the rest; a board of eight Cinemeta catalogs was 770 KB per pull,
+/// pulled again as each row landed. The tile reads these six, so these six
+/// cross. A tile's tap opens the details field by id and type, which
+/// carries the whole item.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GridItem {
+    id: String,
+    r#type: String,
+    name: String,
+    poster: Option<Url>,
+    poster_shape: PosterShape,
+    release_info: Option<String>,
+}
+
+impl GridItem {
+    fn of(item: &MetaItemPreview) -> GridItem {
+        GridItem {
+            id: item.id.clone(),
+            r#type: item.r#type.clone(),
+            name: item.name.clone(),
+            poster: item.poster.clone(),
+            poster_shape: item.poster_shape.clone(),
+            release_info: item.release_info.clone(),
+        }
+    }
+}
+
+/// The name of one board/search row, aligned by index with `catalogs`.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogLabel {
+    name: String,
+    addon_name: String,
+    r#type: String,
+}
+
+/// A `CatalogsWithExtra` on the wire: the model's own `selected` and page
+/// shape (`ResourceLoadable`/`Loadable`, so `content.type` is `Ready`,
+/// `Loading` or `Err` exactly as stremio-core writes it), the items reduced
+/// to [`GridItem`], plus `catalogLabels`. Owned, so it can be taken under
+/// the model's read lock and serialized after it is released.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GridJson {
+    selected: Option<Selected>,
+    catalogs: Vec<Vec<ResourceLoadable<Vec<GridItem>>>>,
+    catalog_labels: Vec<Option<CatalogLabel>>,
+}
+
+/// One model field as taken from the model, before it is a string.
+///
+/// The model sits behind a `std::sync::RwLock` whose readers queue behind a
+/// waiting writer, and every dispatch and every addon answer is a writer.
+/// Serializing under the read lock therefore parked the whole engine for
+/// the length of the serialization, which for a loaded board was the
+/// longest thing the lock ever saw. What is taken under the lock is now the
+/// cheapest owned form of the field: a projection for the two grid fields,
+/// the JSON itself for the small ones (where cloning the model would cost
+/// more than writing it out).
+#[derive(Debug)]
+pub enum FieldSnapshot {
+    /// Already serialized; the field is small enough that a clone would
+    /// not have been cheaper.
+    Json(String),
+    /// A board or a search, still to be serialized.
+    Grid(GridJson),
+}
+
+impl FieldSnapshot {
+    /// The field as JSON.
+    pub fn into_json(self) -> serde_json::Result<String> {
+        match self {
+            FieldSnapshot::Json(json) => Ok(json),
+            FieldSnapshot::Grid(grid) => serde_json::to_string(&grid),
         }
     }
 }
@@ -175,41 +263,67 @@ impl XtremioModel {
         )
     }
 
-    /// Serializes one field to JSON.
+    /// Serializes one field to JSON: [`Self::snapshot`] and then
+    /// [`FieldSnapshot::into_json`], for a caller that holds nothing else.
     pub fn get_state_json(&self, field: &XtremioModelField) -> serde_json::Result<String> {
-        match field {
-            XtremioModelField::Ctx => serde_json::to_string(&self.ctx),
-            XtremioModelField::ContinueWatchingPreview => {
-                serde_json::to_string(&self.continue_watching_preview)
-            }
-            XtremioModelField::Board => self.catalogs_with_extra_json(&self.board),
-            XtremioModelField::Search => self.catalogs_with_extra_json(&self.search),
-            XtremioModelField::Discover => serde_json::to_string(&self.discover),
-            XtremioModelField::MetaDetails => self.meta_details_json(),
-            XtremioModelField::StreamingServer => serde_json::to_string(&self.streaming_server),
-            XtremioModelField::Player => serde_json::to_string(&self.player),
-            XtremioModelField::Library => serde_json::to_string(&self.library),
-            XtremioModelField::InstalledAddons => serde_json::to_string(&self.installed_addons),
-            XtremioModelField::RemoteAddons => serde_json::to_string(&self.remote_addons),
-            XtremioModelField::AddonDetails => serde_json::to_string(&self.addon_details),
-        }
+        self.snapshot(field)?.into_json()
     }
 
-    /// `CatalogsWithExtra` plus a `catalogLabels` array aligned by index with
-    /// `catalogs`. The raw model only carries requests; the catalog and addon
-    /// names live in the profile's manifests, so they are resolved here the
-    /// way stremio-core-web's `serialize_catalogs_with_extra` does (the same
-    /// lookup `CatalogsWithExtra` itself uses for `LoadNextPage`). A catalog
-    /// whose addon is gone from the profile falls back to its id and host.
-    fn catalogs_with_extra_json(&self, model: &CatalogsWithExtra) -> serde_json::Result<String> {
-        let mut value = serde_json::to_value(model)?;
-        let labels: Vec<serde_json::Value> = model
+    /// Takes one field off the model in the cheapest form that no longer
+    /// borrows it (see [`FieldSnapshot`]).
+    pub fn snapshot(&self, field: &XtremioModelField) -> serde_json::Result<FieldSnapshot> {
+        let json = match field {
+            XtremioModelField::Board => return Ok(FieldSnapshot::Grid(self.grid(&self.board))),
+            XtremioModelField::Search => return Ok(FieldSnapshot::Grid(self.grid(&self.search))),
+            XtremioModelField::Ctx => serde_json::to_string(&self.ctx)?,
+            XtremioModelField::ContinueWatchingPreview => {
+                serde_json::to_string(&self.continue_watching_preview)?
+            }
+            XtremioModelField::Discover => serde_json::to_string(&self.discover)?,
+            XtremioModelField::MetaDetails => self.meta_details_json()?,
+            XtremioModelField::StreamingServer => serde_json::to_string(&self.streaming_server)?,
+            XtremioModelField::Player => serde_json::to_string(&self.player)?,
+            XtremioModelField::Library => serde_json::to_string(&self.library)?,
+            XtremioModelField::InstalledAddons => serde_json::to_string(&self.installed_addons)?,
+            XtremioModelField::RemoteAddons => serde_json::to_string(&self.remote_addons)?,
+            XtremioModelField::AddonDetails => serde_json::to_string(&self.addon_details)?,
+        };
+        Ok(FieldSnapshot::Json(json))
+    }
+
+    /// The board or the search as [`GridJson`]: every page with its items
+    /// reduced to [`GridItem`], and a `catalogLabels` array aligned by index
+    /// with `catalogs`. The raw model only carries requests; the catalog and
+    /// addon names live in the profile's manifests, so they are resolved
+    /// here the way stremio-core-web's `serialize_catalogs_with_extra` does
+    /// (the same lookup `CatalogsWithExtra` itself uses for `LoadNextPage`).
+    /// A catalog whose addon is gone from the profile falls back to its id
+    /// and host.
+    fn grid(&self, model: &CatalogsWithExtra) -> GridJson {
+        let catalogs = model
             .catalogs
             .iter()
             .map(|catalog| {
-                let Some(request) = catalog.first().map(|page| &page.request) else {
-                    return serde_json::Value::Null;
-                };
+                catalog
+                    .iter()
+                    .map(|page| ResourceLoadable {
+                        request: page.request.clone(),
+                        content: page.content.as_ref().map(|content| match content {
+                            Loadable::Loading => Loadable::Loading,
+                            Loadable::Ready(items) => {
+                                Loadable::Ready(items.iter().map(GridItem::of).collect())
+                            }
+                            Loadable::Err(error) => Loadable::Err(error.clone()),
+                        }),
+                    })
+                    .collect()
+            })
+            .collect();
+        let catalog_labels = model
+            .catalogs
+            .iter()
+            .map(|catalog| {
+                let request = &catalog.first()?.request;
                 let addon = self
                     .ctx
                     .profile
@@ -231,17 +345,18 @@ impl XtremioModel {
                         Some(_) => addon_name.clone(),
                         None => request.path.id.clone(),
                     });
-                serde_json::json!({
-                    "name": name,
-                    "addonName": addon_name,
-                    "type": request.path.r#type,
+                Some(CatalogLabel {
+                    name,
+                    addon_name,
+                    r#type: request.path.r#type.clone(),
                 })
             })
             .collect();
-        if let Some(object) = value.as_object_mut() {
-            object.insert("catalogLabels".to_owned(), serde_json::json!(labels));
+        GridJson {
+            selected: model.selected.clone(),
+            catalogs,
+            catalog_labels,
         }
-        serde_json::to_string(&value)
     }
 
     /// `MetaDetails` plus a `watchedVideoIds` array. The engine's `watched`
@@ -295,9 +410,10 @@ fn _assert_field_serializes(field: &XtremioModelField) -> impl Serialize + '_ {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, Instant};
+
     use super::*;
-    use stremio_core::models::catalogs_with_extra::Selected;
-    use stremio_core::models::common::ResourceLoadable;
+    use stremio_core::models::common::ResourceError;
     use stremio_core::runtime::msg::{Action, ActionLoad};
     use stremio_core::runtime::Model as _;
     use stremio_core::types::addon::{ResourcePath, ResourceRequest, ResourceResponse};
@@ -332,18 +448,98 @@ mod tests {
         model
     }
 
+    fn catalog_request(base: &str, r#type: &str, id: &str) -> ResourceRequest {
+        ResourceRequest::new(
+            url::Url::parse(base).unwrap(),
+            ResourcePath::without_extra("catalog", r#type, id),
+        )
+    }
+
     fn planned_catalog(
         base: &str,
         r#type: &str,
         id: &str,
     ) -> Vec<ResourceLoadable<Vec<MetaItemPreview>>> {
         vec![ResourceLoadable {
-            request: ResourceRequest::new(
-                url::Url::parse(base).unwrap(),
-                ResourcePath::without_extra("catalog", r#type, id),
-            ),
+            request: catalog_request(base, r#type, id),
             content: None,
         }]
+    }
+
+    /// The items of every `Ready` page of the recorded board fixture: what
+    /// Cinemeta really answers, `links` and descriptions included.
+    fn recorded_items() -> Vec<MetaItemPreview> {
+        let fixture: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/board_default_addons.json"
+            ))
+            .expect("the board fixture"),
+        )
+        .expect("valid JSON");
+        fixture["catalogs"]
+            .as_array()
+            .expect("catalogs")
+            .iter()
+            .flat_map(|pages| pages.as_array().expect("pages"))
+            .filter(|page| page["content"]["type"] == "Ready")
+            .flat_map(|page| {
+                serde_json::from_value::<Vec<MetaItemPreview>>(page["content"]["content"].clone())
+                    .expect("recorded items parse back")
+            })
+            .collect()
+    }
+
+    /// A loaded board of `catalogs` Cinemeta-shaped rows with `per_row`
+    /// recorded items each -- eight rows of a hundred is what a full
+    /// default board is once every row has been scrolled into range.
+    fn loaded_board(catalogs: usize, per_row: usize) -> CatalogsWithExtra {
+        let items = recorded_items();
+        assert!(items.len() >= 50, "the fixture holds three Ready pages");
+        let page: Vec<MetaItemPreview> = items.iter().cycle().take(per_row).cloned().collect();
+        CatalogsWithExtra {
+            selected: Some(Selected {
+                r#type: None,
+                extra: vec![],
+            }),
+            catalogs: (0..catalogs)
+                .map(|index| {
+                    vec![ResourceLoadable {
+                        request: catalog_request(
+                            "https://v3-cinemeta.strem.io/manifest.json",
+                            "movie",
+                            &format!("row{index}"),
+                        ),
+                        content: Some(Loadable::Ready(page.clone())),
+                    }]
+                })
+                .collect(),
+        }
+    }
+
+    /// What the wire carried before the projection: the whole
+    /// `CatalogsWithExtra` through a `Value` tree with the labels inserted,
+    /// then written out. Kept here as the yardstick.
+    fn whole_document(model: &XtremioModel, catalogs: &CatalogsWithExtra) -> String {
+        let mut value = serde_json::to_value(catalogs).unwrap();
+        let labels = serde_json::to_value(model.grid(catalogs).catalog_labels).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("catalogLabels".to_owned(), labels);
+        serde_json::to_string(&value).unwrap()
+    }
+
+    fn best_of<T>(runs: u32, mut f: impl FnMut() -> T) -> (Duration, T) {
+        let mut best = Duration::MAX;
+        let mut last = None;
+        for _ in 0..runs {
+            let started = Instant::now();
+            let out = f();
+            best = best.min(started.elapsed());
+            last = Some(out);
+        }
+        (best, last.unwrap())
     }
 
     #[test]
@@ -545,6 +741,81 @@ mod tests {
         );
     }
 
+    /// The board's and the search's items go over as what a poster tile
+    /// draws, and every page keeps the shape stremio-core gives it -- the
+    /// Dart side reads `content.type` and the request off each page exactly
+    /// as it did when the whole item crossed.
+    #[test]
+    fn board_items_are_the_grid_projection_and_pages_keep_their_shape() {
+        let items = recorded_items();
+        let item = &items[0];
+        assert!(
+            !item.links.is_empty(),
+            "the yardstick item has links to lose"
+        );
+        assert!(item.description.is_some());
+        let base = "https://v3-cinemeta.strem.io/manifest.json";
+        let mut model = default_model();
+        for field in [XtremioModelField::Board, XtremioModelField::Search] {
+            let catalogs = CatalogsWithExtra {
+                selected: Some(Selected {
+                    r#type: Some("movie".to_owned()),
+                    extra: vec![],
+                }),
+                catalogs: vec![
+                    vec![ResourceLoadable {
+                        request: catalog_request(base, "movie", "top"),
+                        content: Some(Loadable::Ready(vec![item.clone()])),
+                    }],
+                    vec![ResourceLoadable {
+                        request: catalog_request(base, "movie", "loading"),
+                        content: Some(Loadable::Loading),
+                    }],
+                    vec![ResourceLoadable {
+                        request: catalog_request(base, "movie", "empty"),
+                        content: Some(Loadable::Err(ResourceError::EmptyContent)),
+                    }],
+                ],
+            };
+            match field {
+                XtremioModelField::Board => model.board = catalogs.into(),
+                _ => model.search = catalogs.into(),
+            }
+            let json: serde_json::Value =
+                serde_json::from_str(&model.get_state_json(&field).unwrap()).unwrap();
+            assert_eq!(
+                json["selected"],
+                serde_json::json!({ "type": "movie", "extra": [] })
+            );
+            let page = &json["catalogs"][0][0];
+            assert_eq!(page["request"]["base"], base);
+            assert_eq!(page["request"]["path"]["id"], "top");
+            assert_eq!(page["content"]["type"], "Ready");
+            assert_eq!(
+                page["content"]["content"][0],
+                serde_json::json!({
+                    "id": item.id,
+                    "type": item.r#type,
+                    "name": item.name,
+                    "poster": item.poster,
+                    "posterShape": "poster",
+                    "releaseInfo": item.release_info,
+                }),
+                "the six fields a tile reads, and no others"
+            );
+            assert_eq!(
+                json["catalogs"][1][0]["content"],
+                serde_json::json!({ "type": "Loading" })
+            );
+            assert_eq!(
+                json["catalogs"][2][0]["content"],
+                serde_json::json!({ "type": "Err", "content": { "type": "EmptyContent" } })
+            );
+            assert_eq!(json["catalogLabels"].as_array().map(Vec::len), Some(3));
+            assert_eq!(json["catalogLabels"][0]["name"], "Popular");
+        }
+    }
+
     /// A library change -- a pause, the 90 s progress push, a title kept --
     /// is not a change to the board or the search: nothing they put on the
     /// wire reads the library, and the field was re-pulled whole on every
@@ -575,6 +846,51 @@ mod tests {
             model.board.catalogs.len(),
             6,
             "the default addons' six catalogs"
+        );
+    }
+
+    /// The snapshot of a board owns what it needs: it is taken under the
+    /// model's read lock and serialized after the lock is gone, which is a
+    /// property of the type (this test would not compile against a
+    /// borrowing one) as much as of the bytes. The numbers it prints are
+    /// what the projection buys against the whole document that crossed
+    /// before it, on an eight-by-hundred board -- run with `--nocapture`.
+    #[test]
+    fn a_board_snapshot_outlives_the_model_and_is_a_fraction_of_the_document() {
+        let mut model = default_model();
+        model.board = loaded_board(8, 100).into();
+
+        let (whole_took, whole) = best_of(5, || whole_document(&model, &model.board));
+        let (snapshot_took, snapshot) = best_of(5, || model.snapshot(&XtremioModelField::Board));
+        let snapshot = snapshot.unwrap();
+        drop(model);
+        let (write_took, grid) = best_of(5, || {
+            serde_json::to_string(match &snapshot {
+                FieldSnapshot::Grid(grid) => grid,
+                FieldSnapshot::Json(_) => panic!("a board is a grid"),
+            })
+            .unwrap()
+        });
+        println!(
+            "board 8x100: whole document {} bytes in {whole_took:?}; \
+             projection {} bytes, snapshot (under the lock) {snapshot_took:?} \
+             + write (outside it) {write_took:?}",
+            whole.len(),
+            grid.len()
+        );
+        assert!(
+            grid.len() * 5 < whole.len(),
+            "the grid is under a fifth of the document: {} vs {}",
+            grid.len(),
+            whole.len()
+        );
+        let value: serde_json::Value = serde_json::from_str(&grid).unwrap();
+        assert_eq!(value["catalogs"].as_array().map(Vec::len), Some(8));
+        assert_eq!(
+            value["catalogs"][7][0]["content"]["content"]
+                .as_array()
+                .map(Vec::len),
+            Some(100)
         );
     }
 

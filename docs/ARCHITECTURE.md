@@ -27,7 +27,12 @@ what every model field means. The shape of the thing is in the
   since nothing they carry reads it: stremio-core marks them changed on every
   library change because stremio-web merges library flags into the board it
   serializes, and here that was the whole board re-serialized and re-decoded
-  on the UI isolate per pause and per progress push. The model
+  on the UI isolate per pause and per progress push. The one field that *is*
+  reshaped is those two: a board or search item crosses as what a poster tile
+  draws -- `id`, `type`, `name`, `poster`, `posterShape`, `releaseInfo`
+  (`GridItem`) -- and not the whole `MetaItemPreview`, whose `links` alone
+  were three fifths of a 1.4 MB board re-serialized every time a row landed.
+  The model
   (`XtremioModel`) has `ctx`, `continue_watching_preview`, `board`,
   `search`, `discover`, `meta_details`, `streaming_server`, `player`,
   `library`, `installed_addons`, `remote_addons` and `addon_details`;
