@@ -493,6 +493,10 @@ class MediaKitEngine implements PlaybackEngine {
   static const Map<String, String> mpvOverrides = {
     'network-timeout': '300',
     'cache-on-disk': 'no',
+    // The window behind the play head, set apart from the one ahead of it:
+    // media_kit puts [memoryCacheBytes] on both, and [backCacheBytes] says
+    // why the two are not the same number.
+    'demuxer-max-back-bytes': '$backCacheBytes',
   };
 
   /// What starts mpv's display sync on a display refreshing at [hz]
@@ -637,21 +641,22 @@ class MediaKitEngine implements PlaybackEngine {
     }
   }
 
-  /// What mpv keeps in memory for one playback: 32 MiB of packets ahead of
-  /// the play head and 32 MiB behind it, media_kit's own default written
-  /// out rather than inherited.
+  /// What mpv keeps in memory ahead of the play head: 32 MiB of packets,
+  /// media_kit's own default written out rather than inherited.
   ///
   /// `PlayerConfiguration.bufferSize` is set on both `demuxer-max-bytes`
   /// and `demuxer-max-back-bytes` (media_kit 1.2.6,
-  /// `player/native/player/real.dart`), so the number is per side and the
-  /// player's ceiling is twice it.
+  /// `player/native/player/real.dart`), so on its own this number is per
+  /// side and the player's ceiling is twice it. It is not on its own any
+  /// more: [backCacheBytes] takes the back side down through
+  /// [mpvOverrides], and the ceiling is the sum of the two, 48 MiB.
   ///
-  /// **It was reconsidered when the disk cache went, and deliberately left
-  /// where it is.** With `cache-on-disk=no` this is the whole of what the
-  /// player holds: about two minutes ahead of a 2.3 Mbps film and nine
-  /// seconds of a 30 Mbps remux, and everything past that comes from the
-  /// server on demand. Raising it is the obvious answer and the wrong one
-  /// here, for three reasons that all point the same way.
+  /// **The forward side was reconsidered when the disk cache went, and
+  /// deliberately left where it is.** With `cache-on-disk=no` this is the
+  /// whole of what the player holds ahead: about two minutes of a 2.3 Mbps
+  /// film and nine seconds of a 30 Mbps remux, and everything past that
+  /// comes from the server on demand. Raising it is the obvious answer and
+  /// the wrong one here, for three reasons that all point the same way.
   ///
   /// The room is not there. The owner's television has 2 GB of RAM for the
   /// whole system, this app measured 245 MB PSS with a player up, and the
@@ -675,8 +680,39 @@ class MediaKitEngine implements PlaybackEngine {
   /// It is written out rather than inherited because it is now the player's
   /// only buffer, and the only buffer should not be somebody else's
   /// default: a media_kit release that changed `bufferSize` would change
-  /// what a television holds, silently.
+  /// what a television holds, silently. mpv's own default for the forward
+  /// side is 150 MiB and for the back side 50 MiB, so what media_kit hands
+  /// out is already a sixth of that; what is written here is smaller
+  /// still, and on purpose.
   static const int memoryCacheBytes = 32 * 1024 * 1024;
+
+  /// What mpv keeps in memory *behind* the play head: 16 MiB, half of what
+  /// it keeps ahead, where media_kit would have made the two the same.
+  ///
+  /// The two sides are not worth the same. The window ahead is what
+  /// playback is about to need and what a thin swarm is racing to fill;
+  /// the window behind is what a backward seek lands in without going to
+  /// the server, and nothing else. Every stream reaches this player
+  /// through the embedded server's own cache ([proxiedThroughServer]), so
+  /// a seek that falls out of this window is a range request answered from
+  /// the server's disk, not a re-download -- a stall of a second or so
+  /// while the demuxer re-opens, rather than a re-fetch from the swarm.
+  ///
+  /// What 16 MiB is in seconds, at the bitrates this app plays: about
+  /// 90 s of a 1.5 Mbps SD encode, 45 s of a 3 Mbps 720p encode, 27 s of a
+  /// 5 Mbps 1080p encode and 17 s of an 8 Mbps one. The remote's seek step
+  /// is ten seconds (`SeekBar.defaultSeekStep`), so one press back stays in
+  /// memory at anything up to about 13 Mbps, and a 30 Mbps remux gets
+  /// 4.5 s, where the old 32 MiB gave it 9 -- both less than a press, so
+  /// nothing changes for the file that was already going to the server.
+  /// At 8 MiB, the other number considered, a press back at 8 Mbps would
+  /// have missed the window too.
+  ///
+  /// The reason is the same television as above: 32 + 32 MiB was 64 MiB
+  /// standing for every open player on a device where the low-memory
+  /// killer took the app at 311-379 MB resident, and halving the back side
+  /// is 16 MiB of that for a cost nobody watching forwards ever pays.
+  static const int backCacheBytes = 16 * 1024 * 1024;
 
   /// media_kit's own defaults with [memoryCacheBytes] named.
   static const PlayerConfiguration playerConfiguration = PlayerConfiguration(

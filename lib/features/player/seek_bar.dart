@@ -48,7 +48,7 @@ class SeekBar extends StatefulWidget {
     this.onScrubEnd,
     this.focusable = false,
     this.focusNode,
-    this.seekStep = const Duration(seconds: 10),
+    this.seekStep = defaultSeekStep,
   });
 
   final Duration position;
@@ -79,6 +79,11 @@ class SeekBar extends StatefulWidget {
 
   /// How far one left/right press seeks while focused (`seekTimeDuration`).
   final Duration seekStep;
+
+  /// What a press seeks by unless the bar is told otherwise: ten seconds.
+  /// Named so the player's memory budget can be reasoned about in presses
+  /// (`MediaKitEngine.backCacheBytes`).
+  static const Duration defaultSeekStep = Duration(seconds: 10);
 
   static const double height = 28;
 

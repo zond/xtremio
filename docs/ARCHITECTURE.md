@@ -488,10 +488,14 @@ what every model field means. The shape of the thing is in the
   with.
 - **What the player still holds is memory, and it is deliberately small.**
   `MediaKitEngine.memoryCacheBytes` is 32 MiB, written out rather than
-  inherited from media_kit's `bufferSize`, and media_kit sets it on both
-  `demuxer-max-bytes` and `demuxer-max-back-bytes` -- so the ceiling is
-  twice it: about two minutes ahead of a 2.3 Mbps film and 32 MiB behind
-  the play head. Measured, mpv fills that and then reads at what playback
+  inherited from media_kit's `bufferSize`. media_kit sets that on both
+  `demuxer-max-bytes` and `demuxer-max-back-bytes`, and the app then sets
+  the back side apart (`MediaKitEngine.backCacheBytes`, 16 MiB, through
+  `mpvOverrides`) -- so the ceiling is 48 MiB: about two minutes ahead of
+  a 2.3 Mbps film and 16 MiB behind the play head, which is one ten-second
+  press back at anything up to about 13 Mbps; a seek that misses the
+  window is a range request answered from the server's cache. Measured,
+  mpv fills the forward side and then reads at what playback
   consumes (2 MB/s down to 18 KB/s within a second of the cache filling),
   so a player with no disk is not a player downloading without bound. It
   was reconsidered when the disk cache went and left where it is: the

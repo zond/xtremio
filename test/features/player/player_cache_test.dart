@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/features/player/seek_bar.dart';
 
 /// What the app tells mpv about its own cache, which is now one sentence:
 /// keep nothing on disk.
@@ -49,17 +50,49 @@ void main() {
     expect(MediaKitEngine.mpvOverrides['network-timeout'], '300');
   });
 
-  test('what it keeps instead is 32 MiB of memory, each way', () {
+  test('what it keeps instead is 32 MiB of memory ahead of the play head', () {
     // media_kit 1.2.6 puts `PlayerConfiguration.bufferSize` on both
-    // `demuxer-max-bytes` and `demuxer-max-back-bytes`, so this is the
-    // window ahead and the window behind, and the player's ceiling is twice
-    // it. Written out rather than inherited: it is the only buffer the
-    // player has now, and the only buffer should not be a dependency's
-    // default.
+    // `demuxer-max-bytes` and `demuxer-max-back-bytes`; this is the window
+    // ahead, and the one behind is set apart from it below. Written out
+    // rather than inherited: it is the only buffer the player has now, and
+    // the only buffer should not be a dependency's default.
     expect(MediaKitEngine.memoryCacheBytes, 32 * 1024 * 1024);
     expect(
       MediaKitEngine.playerConfiguration.bufferSize,
       MediaKitEngine.memoryCacheBytes,
+    );
+  });
+
+  test('and 16 MiB behind it, set apart from the 32 media_kit would copy '
+      'there', () {
+    // The window behind the play head is what a backward seek lands in
+    // without going to the server, and nothing else; a seek that misses it
+    // is a range request answered from the server's own cache. So it is
+    // half the forward window, and the player's ceiling is 48 MiB instead
+    // of the 64 the shared number gave it -- 16 MiB back on a television
+    // whose low-memory killer took the app at 311-379 MB.
+    expect(MediaKitEngine.backCacheBytes, 16 * 1024 * 1024);
+    expect(
+      MediaKitEngine.backCacheBytes,
+      lessThan(MediaKitEngine.memoryCacheBytes),
+    );
+    // It reaches mpv as a property override, after media_kit has set both
+    // sides from `bufferSize` and before the first `loadfile`.
+    expect(
+      MediaKitEngine.mpvOverrides['demuxer-max-back-bytes'],
+      '${MediaKitEngine.backCacheBytes}',
+    );
+    // What it buys, at the bitrates this app plays: the remote's seek step
+    // is ten seconds, and one press back stays in memory at 8 Mbps.
+    const eightMbps = 8 * 1000 * 1000 / 8;
+    expect(
+      MediaKitEngine.backCacheBytes / eightMbps,
+      greaterThan(SeekBar.defaultSeekStep.inSeconds),
+    );
+    // And the forward side is not touched by the override.
+    expect(
+      MediaKitEngine.mpvOverrides.containsKey('demuxer-max-bytes'),
+      isFalse,
     );
   });
 
