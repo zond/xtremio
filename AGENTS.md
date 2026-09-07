@@ -725,12 +725,24 @@ itself says a test cannot reach it.
   without opting in to anything. Wrapping by hand had reached exactly the
   tiles, and left twenty files of settings rows, dialog buttons and ⋮
   menus deaf to the switch. **Prefer the floor**; wrap only what it
-  cannot reach (a chip, a bare `Focus`, the navigation rail, which hands
-  out no nodes) or what is drawn straight over video or poster art, and
-  say in a comment which of the two a surface is getting and why.
-  `test/features/tv/focus_reach_test.dart` walks every screen and fails
-  on a stop that has neither -- and on a `*_screen.dart` it has never
-  heard of, so a new screen has to be added to it.
+  cannot reach (a chip's outline, a bare `Focus`, the navigation rail,
+  which hands out no nodes) or what is drawn straight over video or
+  poster art, and say in a comment which of the two a surface is getting
+  and why. **One surface, one indicator**: what draws its own ring turns
+  the floor's fill off (`FocusableTile` passes a transparent
+  `focusColor`), because the fill is for the controls that can wear
+  nothing else and under a ring it is only a wash over the art the ring
+  is drawn on. A chip is the one that wears both, and for a stated
+  reason: the floor can fill one and cannot outline one. And a television
+  pins Flutter's highlight mode (`AlwaysShowFocus`), which otherwise
+  starts at `touch` on Android: an ink paints no focus highlight in that
+  mode, and `DropdownButton` paints its *selected* menu entry with
+  `ThemeData.focusColor` in it.
+  `test/features/tv/focus_reach_test.dart` walks every screen -- as it is
+  first drawn, and again with a dialog, a menu or a sheet open over it --
+  and fails on a stop with no ring lit on it, no stroke round it and no
+  fill under it, and on a `*_screen.dart` it has never heard of, so a new
+  screen has to be added to it.
 - **An image holds its box before it has arrived, and a late failure is
   the case that matters.** An `Image.network` given only a height occupies
   exactly that from its first frame, so a shorter fallback moves
