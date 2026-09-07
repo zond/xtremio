@@ -320,6 +320,7 @@ void main() {
             client: FakePrefsClient({AppPrefs.shareWhileIdleKey: false}),
           ),
           serverSettings: server,
+          sharingActivity: FakeSharingActivity(),
         ),
       );
       await tester.pumpAndSettle();

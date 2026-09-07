@@ -7,6 +7,7 @@ import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'support/fake_core_client.dart';
 import 'support/fake_deep_links.dart';
 import 'support/fake_downloads_client.dart';
+import 'support/fake_sharing.dart';
 import 'support/fixtures.dart';
 
 void main() {
@@ -56,7 +57,12 @@ void main() {
     final downloads = FakeDownloadsClient();
     addTearDown(downloads.dispose);
     await tester.pumpWidget(
-      XtremioApp(core: core, deepLinks: links, downloads: downloads),
+      XtremioApp(
+        core: core,
+        deepLinks: links,
+        downloads: downloads,
+        sharingActivity: FakeSharingActivity(),
+      ),
     );
     await tester.pumpAndSettle();
     return links;

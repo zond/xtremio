@@ -9,6 +9,7 @@ import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
 import '../support/fake_core_client.dart';
+import '../support/fake_sharing.dart';
 
 const tv = DeviceProfile(isTv: true, hasTouch: false);
 
@@ -73,7 +74,13 @@ void main() {
     testWidgets('XtremioApp puts its device profile above the shell', (
       tester,
     ) async {
-      await tester.pumpWidget(XtremioApp(core: emptyBoardCore(), device: tv));
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          device: tv,
+          sharingActivity: FakeSharingActivity(),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(DeviceScope.of(tester.element(find.byType(RootShell))), tv);
@@ -92,7 +99,12 @@ void main() {
     });
 
     testWidgets('XtremioApp is not a TV unless told so', (tester) async {
-      await tester.pumpWidget(XtremioApp(core: emptyBoardCore()));
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          sharingActivity: FakeSharingActivity(),
+        ),
+      );
       await tester.pumpAndSettle();
 
       final profile = DeviceScope.of(tester.element(find.byType(RootShell)));

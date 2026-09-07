@@ -7,6 +7,7 @@ import 'package:xtremio/shell/root_shell.dart';
 
 import 'support/fake_core_client.dart';
 import 'support/fake_playback_engine.dart';
+import 'support/fake_sharing.dart';
 import 'support/fixtures.dart';
 
 /// The anonymous profile's `ctx` with `hardwareDecoding` set.
@@ -43,6 +44,7 @@ void main() {
       built.add(hardwareDecoding);
       return FakePlaybackEngine();
     },
+    sharingActivity: FakeSharingActivity(),
   );
 
   /// What a player does when it opens: asks the [PlaybackScope] the app

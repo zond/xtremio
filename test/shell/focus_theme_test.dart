@@ -7,6 +7,7 @@ import 'package:xtremio/shell/focus_theme.dart';
 import 'package:xtremio/shell/tv_density.dart';
 
 import '../support/fake_core_client.dart';
+import '../support/fake_sharing.dart';
 
 /// The dark theme the app builds, before any floor is on it.
 ThemeData bare() => ThemeData(
@@ -146,6 +147,7 @@ void main() {
           core: emptyBoardCore(),
           prefs: prefs,
           device: const DeviceProfile(isTv: true, hasTouch: false),
+          sharingActivity: FakeSharingActivity(),
         ),
       );
       await tester.pumpAndSettle();
@@ -172,6 +174,7 @@ void main() {
           core: emptyBoardCore(),
           prefs: AppPrefs.inMemory(),
           device: const DeviceProfile(isTv: true, hasTouch: false),
+          sharingActivity: FakeSharingActivity(),
         ),
       );
       await tester.pumpAndSettle();
@@ -181,7 +184,11 @@ void main() {
       );
 
       await tester.pumpWidget(
-        XtremioApp(core: emptyBoardCore(), prefs: AppPrefs.inMemory()),
+        XtremioApp(
+          core: emptyBoardCore(),
+          prefs: AppPrefs.inMemory(),
+          sharingActivity: FakeSharingActivity(),
+        ),
       );
       await tester.pumpAndSettle();
       expect(
@@ -266,7 +273,11 @@ void main() {
       // remote; a desktop draws Material's own tint like everything else
       // on the machine.
       await tester.pumpWidget(
-        XtremioApp(core: emptyBoardCore(), prefs: AppPrefs.inMemory()),
+        XtremioApp(
+          core: emptyBoardCore(),
+          prefs: AppPrefs.inMemory(),
+          sharingActivity: FakeSharingActivity(),
+        ),
       );
       await tester.pumpAndSettle();
       expect(floorIn(tester), isNull);

@@ -4,6 +4,7 @@ import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 
 import 'support/fake_core_client.dart';
+import 'support/fake_sharing.dart';
 import 'support/fixtures.dart';
 
 /// A core with a `ctx` and a board that plans no catalogs, so the shell
@@ -33,7 +34,10 @@ void main() {
   testWidgets('the app carries a navigator key that pushes a route from '
       'outside the tree', (tester) async {
     await tester.pumpWidget(
-      XtremioApp(core: coreWith(loadCtxLoggedOutFixture())),
+      XtremioApp(
+        core: coreWith(loadCtxLoggedOutFixture()),
+        sharingActivity: FakeSharingActivity(),
+      ),
     );
     await tester.pumpAndSettle();
 

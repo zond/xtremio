@@ -13,6 +13,7 @@ import 'package:xtremio/shell/tv_density.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../../support/fake_core_client.dart';
+import '../../support/fake_sharing.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 import '../../support/tv.dart';
@@ -34,7 +35,13 @@ Future<BuildContext> pumpApp(
   WidgetTester tester, {
   required DeviceProfile device,
 }) async {
-  await tester.pumpWidget(XtremioApp(core: fakeCore(), device: device));
+  await tester.pumpWidget(
+    XtremioApp(
+      core: fakeCore(),
+      device: device,
+      sharingActivity: FakeSharingActivity(),
+    ),
+  );
   await tester.pumpAndSettle();
   return tester.element(find.byType(RootShell));
 }
@@ -319,6 +326,7 @@ void main() {
             },
           ),
           device: tv,
+          sharingActivity: FakeSharingActivity(),
         ),
       );
       await tester.pumpAndSettle();
@@ -349,6 +357,7 @@ void main() {
               },
             ),
             device: tv,
+            sharingActivity: FakeSharingActivity(),
           ),
         );
         await tester.pumpAndSettle();

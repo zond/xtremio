@@ -12,6 +12,7 @@ import 'package:xtremio/shell/root_shell.dart';
 
 import 'support/fake_core_client.dart';
 import 'support/fake_downloads_client.dart';
+import 'support/fake_sharing.dart';
 
 /// A core whose board plans no catalogs, so the shell settles.
 FakeCoreClient emptyBoardCore() => FakeCoreClient(
@@ -36,7 +37,11 @@ void main() {
     addTearDown(downloads.dispose);
 
     await tester.pumpWidget(
-      XtremioApp(core: emptyBoardCore(), downloads: downloads),
+      XtremioApp(
+        core: emptyBoardCore(),
+        downloads: downloads,
+        sharingActivity: FakeSharingActivity(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -50,7 +55,11 @@ void main() {
     addTearDown(downloads.dispose);
 
     await tester.pumpWidget(
-      XtremioApp(core: emptyBoardCore(), downloads: downloads),
+      XtremioApp(
+        core: emptyBoardCore(),
+        downloads: downloads,
+        sharingActivity: FakeSharingActivity(),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
@@ -60,7 +69,12 @@ void main() {
 
   testWidgets('with none given the app runs the real one, and lets go of it '
       'when it goes away', (tester) async {
-    await tester.pumpWidget(XtremioApp(core: emptyBoardCore()));
+    await tester.pumpWidget(
+      XtremioApp(
+        core: emptyBoardCore(),
+        sharingActivity: FakeSharingActivity(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final client = downloadsOf(tester);
@@ -111,7 +125,11 @@ void main() {
       final messenger = install(tester);
 
       await tester.pumpWidget(
-        XtremioApp(core: emptyBoardCore(), downloads: downloads),
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          sharingActivity: FakeSharingActivity(),
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.byType(DownloadsScreen), findsNothing);
@@ -149,7 +167,11 @@ void main() {
       final messenger = install(tester);
 
       await tester.pumpWidget(
-        XtremioApp(core: emptyBoardCore(), downloads: downloads),
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          sharingActivity: FakeSharingActivity(),
+        ),
       );
       await tester.pumpAndSettle();
       await pushPlayer(tester);
@@ -168,7 +190,11 @@ void main() {
       final messenger = install(tester);
 
       await tester.pumpWidget(
-        XtremioApp(core: emptyBoardCore(), downloads: downloads),
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          sharingActivity: FakeSharingActivity(),
+        ),
       );
       await tester.pumpAndSettle();
       await pushPlayer(tester);
@@ -193,7 +219,11 @@ void main() {
       final messenger = install(tester);
 
       await tester.pumpWidget(
-        XtremioApp(core: emptyBoardCore(), downloads: downloads),
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          sharingActivity: FakeSharingActivity(),
+        ),
       );
       await tester.pumpAndSettle();
       // A player that was up and has been left is no player.
@@ -212,7 +242,11 @@ void main() {
       final messenger = install(tester);
 
       await tester.pumpWidget(
-        XtremioApp(core: emptyBoardCore(), downloads: downloads),
+        XtremioApp(
+          core: emptyBoardCore(),
+          downloads: downloads,
+          sharingActivity: FakeSharingActivity(),
+        ),
       );
       await tester.pumpAndSettle();
       await tapNotification(tester, messenger);
@@ -237,6 +271,7 @@ void main() {
           core: emptyBoardCore(),
           downloads: downloads,
           defaultDestination: () async => '/sdcard/files/downloads',
+          sharingActivity: FakeSharingActivity(),
         ),
       );
       await tester.pumpAndSettle();
@@ -259,6 +294,7 @@ void main() {
           core: emptyBoardCore(),
           downloads: downloads,
           defaultDestination: () async => null,
+          sharingActivity: FakeSharingActivity(),
         ),
       );
       await tester.pumpAndSettle();

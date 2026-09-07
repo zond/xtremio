@@ -6,6 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/root_shell.dart';
 
 import 'support/fake_core_client.dart';
+import 'support/fake_sharing.dart';
 import 'support/fixtures.dart';
 
 /// A core whose board is loaded but plans no catalogs, so the Board section
@@ -25,7 +26,12 @@ void main() {
   testWidgets('app boots into the Board section with navigation', (
     tester,
   ) async {
-    await tester.pumpWidget(XtremioApp(core: emptyBoardCore()));
+    await tester.pumpWidget(
+      XtremioApp(
+        core: emptyBoardCore(),
+        sharingActivity: FakeSharingActivity(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // The default section renders.
@@ -64,7 +70,12 @@ void main() {
       tester,
     ) async {
       final calls = recordPlatformCalls(tester);
-      await tester.pumpWidget(XtremioApp(core: emptyBoardCore()));
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          sharingActivity: FakeSharingActivity(),
+        ),
+      );
 
       // The platform's back button / key arrives here.
       await tester.binding.handlePopRoute();
@@ -78,7 +89,12 @@ void main() {
       tester,
     ) async {
       final calls = recordPlatformCalls(tester);
-      await tester.pumpWidget(XtremioApp(core: emptyBoardCore()));
+      await tester.pumpWidget(
+        XtremioApp(
+          core: emptyBoardCore(),
+          sharingActivity: FakeSharingActivity(),
+        ),
+      );
 
       final navigator = tester.state<NavigatorState>(find.byType(Navigator));
       navigator.push(
@@ -121,7 +137,13 @@ void main() {
         schemaVersion: 25,
       ),
     );
-    await tester.pumpWidget(XtremioApp(core: core, initInfo: core.initInfo));
+    await tester.pumpWidget(
+      XtremioApp(
+        core: core,
+        initInfo: core.initInfo,
+        sharingActivity: FakeSharingActivity(),
+      ),
+    );
 
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
