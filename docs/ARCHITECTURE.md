@@ -165,7 +165,12 @@ what every model field means. The shape of the thing is in the
   see the status light below. The policy pushes only changes, serialises its
   writes, and pushes the first as soon as the preferences have loaded; a
   "Not now" (`pauseUntilRestart`) holds its answer at false for the rest of
-  the run without writing anything down, and turning the switch on lifts it.
+  the run without writing anything down, and either press of the switch
+  lifts it — a pause is a state of a switch that is on, so the settings
+  tile's "Paused until you next start Xtremio." is never drawn under one
+  that is off, where the resumption it promises would never come. The
+  policy notifies when that pause goes on or off, which is how the tile
+  sees a "Not now" granted by a popup drawn over it.
 - **The status light says what is happening, and it is the only thing that
   says it.** `SharingLight` (`lib/features/sharing/sharing_light.dart`) is
   drawn in the shell's top right corner while two things are true: the
