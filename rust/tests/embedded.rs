@@ -8,9 +8,9 @@ use std::sync::{Arc, Mutex};
 
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
-    server_base_url, server_cache_usage, server_clean_cache_now, server_close_proxy_streams,
-    server_dht_status, server_settings, server_start, server_stop, server_storage_report,
-    server_torrent_stats, server_update_settings, ServerConfig,
+    server_background_traffic, server_base_url, server_cache_usage, server_clean_cache_now,
+    server_close_proxy_streams, server_dht_status, server_settings, server_start, server_stop,
+    server_storage_report, server_torrent_stats, server_update_settings, ServerConfig,
 };
 
 /// A well-known public-domain torrent (Night of the Living Dead), never
@@ -19,6 +19,17 @@ const INFO_HASH: &str = "11ea02584fa6351956f35671962ab46354d99060";
 
 fn json(text: &str) -> serde_json::Value {
     serde_json::from_str(text).expect("valid JSON")
+}
+
+fn fixtures_dir() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
+}
+
+/// A committed fixture, parsed.
+fn fixture(name: &str) -> anyhow::Result<serde_json::Value> {
+    Ok(serde_json::from_slice(&std::fs::read(
+        fixtures_dir().join(name),
+    )?)?)
 }
 
 fn config(root: &std::path::Path) -> ServerConfig {
@@ -148,6 +159,19 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         .unwrap_err();
     assert!(error.to_string().contains("settings patch"), "{error}");
 
+    // The activity light's reading, before anything has asked the server
+    // for a torrent: dark in both directions, nothing playing, both peer
+    // counters at zero, judged over the server's five-second window. It is
+    // exactly what the committed fixture holds (`record_background_traffic_fixture`
+    // below writes it), so the Dart decoder is tested against the bytes a
+    // real server answers rather than against a hand-typed copy.
+    let traffic = json(&tokio::task::spawn_blocking(server_background_traffic).await??);
+    assert_eq!(
+        traffic,
+        fixture("background_traffic.json")?,
+        "re-record with `cargo test --test embedded -- --ignored`"
+    );
+
     let trackers = vec!["udp://tracker.opentrackr.org:1337/announce".to_owned()];
     let stats = json(
         &tokio::task::spawn_blocking({
@@ -172,6 +196,19 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     .await?
     .unwrap_err();
     assert!(error.to_string().contains("file index"), "{error}");
+
+    // With an engine now in existence the reading is still an answer about
+    // the connection, not about the engine: the magnet is resolving, no
+    // player reads it, and no window has closed with bytes in it. What this
+    // call did not do is as much the point -- it read the counters of the
+    // engine the stats call created and created none of its own, which is
+    // what makes it pollable where `server_torrent_stats` is not.
+    let traffic = json(&tokio::task::spawn_blocking(server_background_traffic).await??);
+    assert_eq!(traffic["playing"], false, "{traffic}");
+    assert_eq!(traffic["active"], false, "{traffic}");
+    assert!(traffic["bytesDownloaded"].is_u64(), "{traffic}");
+    assert!(traffic["bytesUploaded"].is_u64(), "{traffic}");
+    assert_eq!(traffic["windowSecs"], 5, "{traffic}");
 
     // What the storage costs: the cache root the server was given, the
     // bytes under it (a fresh server has written a little), the limit from
@@ -343,6 +380,12 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
             .await?
             .unwrap_err();
     assert!(error.to_string().contains("not running"), "{error}");
+    // The light's reading errors too rather than answering dark: the caller
+    // draws both the same way, but gets to know which it is.
+    let error = tokio::task::spawn_blocking(server_background_traffic)
+        .await?
+        .unwrap_err();
+    assert!(error.to_string().contains("not running"), "{error}");
     assert!(
         heartbeat_status(&url).await.is_err(),
         "server still answering after stop"
@@ -366,5 +409,35 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         StatusCode::UNAUTHORIZED
     );
     tokio::task::spawn_blocking(server_stop).await??;
+    Ok(())
+}
+
+/// Records `tests/fixtures/background_traffic.json`, what
+/// `server_background_traffic` answers on a server that has just started,
+/// for the Dart decoder's test (`test/core/background_traffic_test.dart`):
+/// `cargo test --test embedded -- --ignored`.
+///
+/// Hermetic and deterministic -- every verdict dark, nothing playing, both
+/// counters at zero, the five-second window -- so re-recording against an
+/// unchanged server changes no bytes, and the lifecycle test above holds
+/// the committed file to what a live server answers. Ignored all the same,
+/// because it rewrites a committed file and takes the process-wide server
+/// the lifecycle test takes.
+#[tokio::test]
+#[ignore = "rewrites a committed fixture, and takes the process-wide server the lifecycle test takes"]
+async fn record_background_traffic_fixture() -> anyhow::Result<()> {
+    let tmp = tempfile::tempdir()?;
+    tokio::task::spawn_blocking({
+        let cfg = config(tmp.path());
+        move || server_start(cfg)
+    })
+    .await??;
+    let traffic = json(&tokio::task::spawn_blocking(server_background_traffic).await??);
+    tokio::task::spawn_blocking(server_stop).await??;
+    std::fs::create_dir_all(fixtures_dir())?;
+    std::fs::write(
+        fixtures_dir().join("background_traffic.json"),
+        serde_json::to_vec_pretty(&traffic)?,
+    )?;
     Ok(())
 }

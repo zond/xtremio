@@ -24,6 +24,7 @@ void main() {
 
       expect(server.baseUrl, isNull);
       await expectLater(server.settings(), throwsA(anything));
+      await expectLater(server.backgroundTraffic(), throwsA(anything));
 
       final url = await server.start(
         configDir: Directory('${tmp.path}/server'),
@@ -43,6 +44,17 @@ void main() {
       final patched = await server.updateSettings({'btMaxConnections': 77});
       expect(patched['btMaxConnections'], 77);
       expect((await server.settings())['btMaxConnections'], 77);
+
+      // ... the activity light's reading, dark on a server nothing has
+      // asked anything of and judged over the server's own window ...
+      final traffic = await server.backgroundTraffic();
+      expect(traffic.active, isFalse);
+      expect(traffic.downloading, isFalse);
+      expect(traffic.uploading, isFalse);
+      expect(traffic.playing, isFalse);
+      expect(traffic.bytesDownloaded, 0);
+      expect(traffic.bytesUploaded, 0);
+      expect(traffic.windowSecs, 5);
 
       // ... and a torrent's stats, which create the engine and report the
       // metadata phase at once, per-file included; a negative index is

@@ -341,6 +341,77 @@ pub fn clean_cache_now() -> anyhow::Result<EvictionReport> {
     with_handle(|handle| handle.clean_cache_now())
 }
 
+/// [`enginefs::traffic::BackgroundTraffic`] as it crosses the FFI: the same
+/// seven fields, camelCase like every other JSON this crate hands Dart. The
+/// server's own struct serialises snake_case (`bytes_downloaded`), and the
+/// app reads one shape for everything the server answers, so the rename
+/// happens here rather than in a Dart decoder that would be the odd one
+/// out. A field added upstream crosses only once it is added here, which is
+/// the point: what crosses is what the app was written for.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundTraffic {
+    /// `downloading || uploading`: the connection is in use while nobody is
+    /// watching, whichever way the bytes went.
+    pub active: bool,
+    /// Bytes came in from peers over the last closed window and nothing was
+    /// playing over it or since.
+    pub downloading: bool,
+    /// Bytes went out to peers over the last closed window and nothing was
+    /// playing over it or since.
+    pub uploading: bool,
+    /// Whether a player is reading from the server as this is answered.
+    pub playing: bool,
+    /// The sums the verdict was judged from, over the torrents that exist
+    /// right now: bytes received from and sent to peers.
+    pub bytes_downloaded: u64,
+    pub bytes_uploaded: u64,
+    /// The window the halves were judged over, in seconds.
+    pub window_secs: u64,
+}
+
+impl From<enginefs::traffic::BackgroundTraffic> for BackgroundTraffic {
+    fn from(traffic: enginefs::traffic::BackgroundTraffic) -> Self {
+        Self {
+            active: traffic.active,
+            downloading: traffic.downloading,
+            uploading: traffic.uploading,
+            playing: traffic.playing,
+            bytes_downloaded: traffic.bytes_downloaded,
+            bytes_uploaded: traffic.bytes_uploaded,
+            window_secs: traffic.window_secs,
+        }
+    }
+}
+
+/// Whether the server is moving bytes over this device's connection while
+/// nothing is playing, in each direction
+/// (`ServerHandle::background_traffic`): the activity light's reading.
+///
+/// Each half is "that direction's peer counter grew over the last closed
+/// window (`enginefs::traffic::TRAFFIC_WINDOW`, 5 s) and no player was seen
+/// reading over it or since"; `active` is either. The conjunction with
+/// playback is taken on the server side over one sample, on purpose: a
+/// client reading traffic and playback as two calls would sample them a
+/// moment apart and get a light that flickers whenever they disagree.
+///
+/// **It creates and touches nothing, so it is safe to poll every few
+/// seconds.** The traffic is `EngineFS::transfer_totals`, a peek: it walks
+/// the engines that exist and reads each one's `TransferTotals` off
+/// librqbit's live stats snapshot -- no hash is looked up, so nothing goes
+/// near `get_or_begin_add_magnet`, and `last_accessed` is left alone, so a
+/// poll never holds a torrent out of the idle sweep and lights itself with
+/// the seeding it caused. "Playing" is `playback_is_live`, three live
+/// fields. That is the opposite of [`torrent_stats`], which creates the
+/// engine it is asked about and must never stand in for this.
+///
+/// Errors when the server is not running, like the other blocking calls
+/// here: the caller can draw "no server" and "idle" the same way, but it
+/// gets to know which it is.
+pub fn background_traffic() -> anyhow::Result<BackgroundTraffic> {
+    with_handle(|handle| handle.background_traffic().map(Into::into))
+}
+
 /// The mainline DHT's status on this host, exactly the `dht` key of
 /// `GET /stats.json` (`ServerHandle::dht_status`): whether a DHT is
 /// running, how many nodes are in each routing table right now, and

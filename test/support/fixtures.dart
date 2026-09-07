@@ -103,3 +103,11 @@ Map<String, dynamic> loadLibraryFixture() =>
 /// the tests here can quote them.
 Map<String, dynamic> loadDownloadsFixture() =>
     loadFixture('downloads_registry.json');
+
+/// What `server_background_traffic` answers on a server that has just
+/// started, recorded by the `#[ignore]`d `record_background_traffic_fixture`
+/// in `rust/tests/embedded.rs`: every verdict dark, nothing playing, both
+/// counters at zero, and the five-second window. Deterministic, so
+/// re-recording it changes no bytes.
+Map<String, dynamic> loadBackgroundTrafficFixture() =>
+    loadFixture('background_traffic.json');

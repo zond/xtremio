@@ -117,6 +117,37 @@ Future<String> serverCacheUsage() =>
 Future<String> serverCleanCacheNow() =>
     RustLib.instance.api.crateApiServerServerCleanCacheNow();
 
+/// Whether the server is moving bytes over this device's connection while
+/// nothing is playing, as JSON (`BackgroundTraffic`: `active`,
+/// `downloading`, `uploading`, `playing`, `bytesDownloaded`,
+/// `bytesUploaded`, `windowSecs`) -- `ServerHandle::background_traffic`,
+/// what the activity light reads.
+///
+/// `downloading` and `uploading` are each "that direction's peer counter
+/// grew over the last five-second window and nothing was playing over it
+/// or since", `active` is either, and `playing` is the moment's own answer
+/// so a caller can tell "dark because idle" from "dark because a film is
+/// on" without a second call. The conjunction with playback is taken on
+/// the Rust side over one sample; do not rebuild it in Dart from two
+/// calls, which would flicker whenever they disagree. The counters are the
+/// sums the verdict was judged from, over the torrents that exist right
+/// now -- a torrent that pauses or leaves takes its bytes with it.
+///
+/// **Safe to poll every few seconds.** The server peeks at counters
+/// librqbit already keeps for the engines that exist: no hash is looked up
+/// so no engine is created, and no idle clock is touched so a poll never
+/// keeps a torrent seeding to report on it. `server_torrent_stats` is the
+/// opposite -- it creates the engine it is asked about -- and must never
+/// stand in for this. The verdict changes when a window closes or the
+/// moment playback is seen; asking faster is answered from the standing
+/// reading.
+///
+/// Blocks the FRB worker for one hop onto the server's runtime; never call
+/// from the UI thread. Errors when the server is not running, which a
+/// caller draws as dark.
+Future<String> serverBackgroundTraffic() =>
+    RustLib.instance.api.crateApiServerServerBackgroundTraffic();
+
 /// The mainline DHT's status on this host, as JSON (`DhtStatus`: `enabled`,
 /// `nodes`, `nodesV6`, `everBootstrapped`) -- exactly the `dht` key of
 /// `GET /stats.json` (`ServerHandle::dht_status`).

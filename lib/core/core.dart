@@ -17,6 +17,7 @@ export 'resource.dart';
 export 'server_client.dart';
 export 'state/addon_descriptor.dart';
 export 'state/addon_details.dart';
+export 'state/background_traffic.dart';
 export 'state/catalog.dart';
 export 'state/catalogs_with_extra.dart';
 export 'state/continue_watching.dart';

@@ -160,7 +160,8 @@ what every model field means. The shape of the thing is in the
   JSON), `server_settings()` and `server_update_settings(patch_json)`
   (`GET`/`POST /settings`), plus `server_storage_report()`,
   `server_cache_usage()` and `server_clean_cache_now()` (see "What the
-  server's storage costs") — wrapped by `ServerClient` in
+  server's storage costs"), and `server_background_traffic()` (below) —
+  wrapped by `ServerClient` in
   `lib/core/server_client.dart`. Nothing logs the token; the header value
   is marked sensitive. `media_kit`'s `Media.httpHeaders` could carry it to
   mpv should a media route ever need it; none does.
@@ -204,10 +205,15 @@ what every model field means. The shape of the thing is in the
   server is uploading, and the shell's own route is the current one, so no
   player is over it. What answers the first is `SharingActivityMonitor`
   polling a `SharingActivityClient` — and **there is no implementation of
-  that client**, because `ServerHandle` exposes no all-engines statistics
-  call and its per-torrent ones create the engine they are asked about (see
-  `sharing_activity.dart`, which names the one method that would fix it).
-  Until then the light is never drawn. On a television the remote reaches it
+  that client**, because the per-torrent stats calls create the engine they
+  are asked about and the reading the light is coming to want is a different
+  one. That reading now exists: `ServerClient.backgroundTraffic`
+  (`server_background_traffic`, `ServerHandle::background_traffic`) answers
+  whether bytes moved over the connection in the last five seconds with
+  nothing playing, per direction, judged on the Rust side from librqbit's
+  own peer counters — a peek over the engines that exist, so it creates
+  nothing and can be polled. The monitor does not read it yet, so until it
+  is wired in the light is never drawn. On a television the remote reaches it
   from the top of the rail with a press of up, and the node is skipped by
   traversal so it cannot swallow a press meant for a poster; pressing it
   offers the two stops above and a way out of neither — **but only the

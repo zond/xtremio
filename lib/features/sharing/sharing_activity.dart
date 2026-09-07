@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../core/core.dart';
 import 'idle_sharing.dart';
 
 /// What the embedded server is giving to the swarm at one moment: the rate
@@ -57,31 +58,28 @@ final class SharingActivity {
 
 /// Asks the embedded server what it is uploading right now.
 ///
-/// **There is no implementation of this over the pinned server, and that is
-/// a fact about the server rather than an omission here.** What would answer
-/// it exists and is already computed: `GET /stats.json` reports every live
-/// engine's `uploadSpeed`/`uploaded` (`routes::system::combined_engine_stats`,
-/// which merges `EngineFS::get_all_statistics` over the stream engine and the
-/// download engine). What the app may use is the *library* API over FFI --
-/// the app never speaks HTTP to the embedded server -- and `ServerHandle`
-/// exposes no all-engines call: it has `engine_stats(info_hash, trackers)`
-/// and `file_stats(...)`, both per torrent.
+/// **There is no implementation of this, and there is not going to be one
+/// in this shape.** What the server now answers is
+/// `ServerClient.backgroundTraffic` (`ServerHandle::background_traffic`, a
+/// [BackgroundTraffic]): per direction, whether bytes moved over the
+/// connection in the last window with nothing playing, judged on the Rust
+/// side from librqbit's own peer counters and safe to poll. That is the
+/// light's next reading -- "Xtremio is using your connection while you are
+/// not watching", a download as much as a share -- and it is not these
+/// three numbers, so wiring it in means replacing this reading rather than
+/// implementing it. Until that is done the app builds no client,
+/// [SharingActivityMonitor] never polls, and the light is never drawn --
+/// which is the honest state, not a broken one.
 ///
-/// **Those two must not stand in for it.** A stats request for a hash with
-/// no engine *creates* one (`routes::system::stats_target` falls through to
+/// **The per-torrent stats calls must not stand in for either.** A stats
+/// request for a hash with no engine *creates* one
+/// (`routes::system::stats_target` falls through to
 /// `get_or_begin_add_magnet`), so polling the last film's hash to find out
 /// whether it is still being shared would re-add the torrent the server had
 /// already swept -- the icon would start the very sharing it exists to
 /// report. Approximating with `AppPrefs.shareWhileIdle` is the other way to
 /// get this wrong: a light that is on whenever the setting is on says
 /// nothing and becomes furniture.
-///
-/// So the smallest honest addition is one method on `ServerHandle` returning
-/// `combined_engine_stats` (the parity rule that server keeps between its
-/// routes and its library API), and a `server_sharing_activity` FFI function
-/// here summing it into the three numbers above. Until that lands the app
-/// builds no client, [SharingActivityMonitor] never polls, and the light is
-/// never drawn -- which is the honest state, not a broken one.
 abstract interface class SharingActivityClient {
   /// One reading. Throws when the server is not running or refuses.
   Future<SharingActivity> fetch();

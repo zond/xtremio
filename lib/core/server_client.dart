@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../src/rust/api/server.dart' as rust;
+import 'state/background_traffic.dart';
 import 'state/dht_status.dart';
 import 'state/server_storage.dart';
 
@@ -234,6 +235,21 @@ class ServerClient
   /// a poll that is already running.
   DhtStatus get dhtStatus =>
       DhtStatus.fromJson(_object(rust.serverDhtStatus()));
+
+  /// Whether the server is moving bytes over this device's connection while
+  /// nothing is playing, in each direction
+  /// (`ServerHandle::background_traffic`): what the activity light reads.
+  /// The "nothing playing" conjunction is taken on the Rust side over one
+  /// sample, so the two halves and [BackgroundTraffic.playing] agree with
+  /// each other; read them from one call rather than combining calls.
+  ///
+  /// Safe to poll every few seconds: the server peeks at the per-torrent
+  /// peer counters librqbit already keeps, creates no engine and touches no
+  /// idle clock -- unlike [torrentStats], which creates the engine it is
+  /// asked about and must never stand in for this. Throws when the server
+  /// is not running, which the caller draws as dark.
+  Future<BackgroundTraffic> backgroundTraffic() async =>
+      BackgroundTraffic.fromJson(_object(await rust.serverBackgroundTraffic()));
 
   /// A torrent's `stats.json`: the per-file stats when [fileIdx] is set,
   /// the torrent-level ones otherwise. [trackers] is the stream's
