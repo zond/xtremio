@@ -1303,18 +1303,29 @@ class MediaKitEngine implements PlaybackEngine {
   /// sends back for it belongs to nobody else.
   ///
   /// It used to be zero, and zero is a live id on the other side of the
-  /// handle: media_kit's `_asyncRequestNumber` starts at zero and hands it
-  /// to the first async call an engine makes, so the reply to our quit is
-  /// an id media_kit is keeping a completer under. Nothing came of it --
-  /// request zero is always a `set_property` during `_create` and so sits
-  /// in a different map from the command replies -- but every exit printed
-  /// `Received MPV_EVENT_COMMAND_REPLY with unregistered ID 0` from
-  /// media_kit's own event loop, which is a line in every log that means
-  /// nothing, and a collision that only the map it landed in kept benign.
+  /// handle: media_kit's `_asyncRequestNumber` starts there and hands it
+  /// to the first async call an engine makes, so the reply to our quit
+  /// carried an id media_kit was keeping a completer under. Nothing ever
+  /// came of it -- request zero is always a `set_property` during
+  /// `_create`, and those replies wait in a different map from the command
+  /// replies -- but which map an id ends up in is not this side's to
+  /// choose, and an engine whose first async call was a command instead
+  /// would have had our quit's reply complete *that* command's completer,
+  /// with the quit's error code. The counter only ever steps by one per
+  /// async call, so a number past anything a session of them could reach
+  /// belongs to us alone. This one also reads as itself in a libmpv log.
   ///
-  /// That counter only ever steps by one per async call, so any number
-  /// past what a session of them could reach belongs to us alone. This one
-  /// also reads as itself in a libmpv log.
+  /// **What it does not do is quiet the log, and no id could.** media_kit's
+  /// event loop looks every `MPV_EVENT_COMMAND_REPLY` up in
+  /// `_commandRequests` and prints `Received MPV_EVENT_COMMAND_REPLY with
+  /// unregistered ID` and the number, for every one it does not find there
+  /// -- which is every reply to a command it did not send itself. It cannot
+  /// find this one: the map is private, and the command deliberately goes
+  /// past media_kit rather than through it. Through it is not the answer either, since
+  /// `_command` awaits the reply from the core thread, and a core thread
+  /// that answers is exactly what a teardown worth quitting does not have.
+  /// So the line is still printed on every exit that sends a quit. What
+  /// changed is the number in it, and the collision that number used to be.
   static const int _quitReplyId = 0xD1E00000000;
 
   /// libmpv's `quit`, sent asynchronously on the live handle -- and not
