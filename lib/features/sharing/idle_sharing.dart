@@ -260,14 +260,16 @@ class IdleSharingPolicy extends ChangeNotifier {
 
   void _reconsider() {
     if (_stopped) return;
-    // A pause is a state of a switch that is *on*: it holds back a sharing
-    // the setting still allows, and it is over the moment the switch says
-    // anything of its own. Turning it on is a fresh instruction to share,
-    // and the alternative is a switch the viewer has just pressed that does
-    // nothing until the app is restarted. Turning it off ends the pause
-    // too, because the switch is the longer of the two stops and saying
-    // "paused until you next start Xtremio" under it would promise a
-    // resumption that is never coming.
+    // A pause is a state of a switch that is *on*, and it ends the moment
+    // the switch moves. Since [pauseUntilRestart] refuses one while the
+    // switch is off, the one move a held pause can see is the switch going
+    // off, and that lifts it: the switch is the longer of the two stops,
+    // and "paused until you next start Xtremio" under a switch that is off
+    // would promise a resumption that is never coming. The comparison is
+    // written as "moved" rather than "turned off" as a guard: should a
+    // pause ever be held under a switch that is off, turning it on must
+    // not leave the viewer with a switch they have just pressed that does
+    // nothing until the app is restarted.
     final wanted = prefs.shareWhileIdle;
     final lifted = wanted != _wasAllowed && _paused;
     if (lifted) _paused = false;
