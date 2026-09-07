@@ -142,6 +142,57 @@ async fn lan_listener_serves_only_torrents_the_device_already_has() -> anyhow::R
     Ok(())
 }
 
+/// The half of start-up that outlived the listener no longer binding at
+/// boot. A cast grants the server's `lanMediaEnabled` permission and the
+/// server persists it; a process killed mid-cast never takes it back, and
+/// the server loads the setting as it finds it and resets it for nobody. So
+/// `server_start` clears it first thing, and what is on disk while nothing
+/// is casting reads "no" whatever the last run did. The kill is staged with
+/// the server's own file: a cast leaves `settings.json` with the permission
+/// granted, and that file is put back after the orderly stop that cleared
+/// it, so the next start finds exactly what a kill leaves.
+#[tokio::test]
+async fn a_kill_mid_cast_leaves_no_permission_behind_at_the_next_start() -> anyhow::Result<()> {
+    let _serial = SERVER.lock().await;
+    let tmp = tempfile::tempdir()?;
+    let settings_file = tmp.path().join("server").join("settings.json");
+    tokio::task::spawn_blocking({
+        let cfg = config(tmp.path());
+        move || server_start(cfg)
+    })
+    .await??;
+    tokio::task::spawn_blocking(|| server_set_lan_media(true))
+        .await??
+        .expect("an address after a start");
+    assert!(lan_media_allowed().await?);
+    let mid_cast = std::fs::read(&settings_file)?;
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&mid_cast)?["lanMediaEnabled"],
+        true,
+        "the permission was granted but is not on disk, so a kill could not leave it"
+    );
+
+    // An orderly stop writes "no"; a kill writes nothing. Put back what the
+    // cast had written.
+    tokio::task::spawn_blocking(server_stop).await??;
+    std::fs::write(&settings_file, mid_cast)?;
+
+    tokio::task::spawn_blocking({
+        let cfg = config(tmp.path());
+        move || server_start(cfg)
+    })
+    .await??;
+    assert!(!server_lan_media_running()?);
+    assert!(
+        !lan_media_allowed().await?,
+        "the permission a kill left behind survived start-up"
+    );
+    let on_disk: serde_json::Value = serde_json::from_slice(&std::fs::read(&settings_file)?)?;
+    assert_eq!(on_disk["lanMediaEnabled"], false, "cleared in memory only");
+    tokio::task::spawn_blocking(server_stop).await??;
+    Ok(())
+}
+
 #[tokio::test]
 async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()> {
     let _serial = SERVER.lock().await;
@@ -162,10 +213,10 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
     })
     .await??;
 
-    // The pinned stream-server binds a configured `lan_media_addr` at boot
-    // (from 02ec741 nothing does), so "off at start-up" is a claim about
-    // what start does with it, not about what the server would have done on
-    // its own -- and the veto being off is the half that matters on either.
+    // Nothing binds a configured `lan_media_addr` at boot, so a listener
+    // that is off at start-up is the server's own doing. The veto being off
+    // is the half start-up is responsible for, and the test below proves it
+    // against a permission that was actually left behind.
     assert!(
         !server_lan_media_running()?,
         "the LAN listener was left running by start-up"

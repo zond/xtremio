@@ -62,13 +62,14 @@ torrent-level fallback's `streamName` is the file the server *guessed*.
 `127.0.0.1`, so a loopback URL is rebuilt on the server's **LAN media
 listener** — a second HTTP listener with no control routes on it at all, and
 deliberately without `/proxy` and `/ftp` (`rust/src/server.rs`,
-`server_set_lan_media`). What its stream route does is the server's: on the
-pinned stream-server it is the loopback route, which *creates* a torrent for
-a hash the server does not have, so for the length of a cast any host on the
-LAN can make this device join a swarm; stream-server `02ec741` gives the
-listener lookup-only routes (an unknown hash is a `404`, no `/create`), and
-the pin bump is what closes it — `rust/tests/lan_media.rs` carries the test
-for that contract, ignored until then. A stream served from somewhere else on the internet is
+`server_set_lan_media`). What its stream route does is the server's, and
+since stream-server `388f68b` (in the pin from 75c15dc) it serves only the
+torrents this device already holds: an unknown hash is a `404` at once and no
+`/create` is mounted, so nothing on the network can make this device join a
+swarm. Before that rev the route was the loopback one and *created* a torrent
+for any hash it was asked for, with the request's trackers, for the length of
+a cast; `rust/tests/lan_media.rs` pins the closed contract, and its timing
+assertion is what would catch the old one coming back. A stream served from somewhere else on the internet is
 handed over as it is; the receiver has a connection of its own, and no listener
 is started for it. If no local interface can reach the receiver, the app says
 the device is unreachable rather than casting a URL that could never be
@@ -127,14 +128,14 @@ our listener is not the one it would be asking.
 
 **The listener lives exactly as long as a session**, and that is made hard to
 get wrong rather than merely intended: it is closed when the session ends, when
-the session ends from the television or another phone, when a start fails, on
-`dispose`, and defensively right after the server starts — `start_in` turns
-it off as the first thing it does, which on the pinned stream-server closes
-the listener `run` binds from a configured `lan_media_addr` at boot (from
-`02ec741` nothing binds at boot) and on either takes back the permission a
-cast the process died inside had left granted. Turning it on also grants the
-server's `lanMediaEnabled` veto and turning it off takes it back, so what is
-on disk while nothing is casting is "no".
+the session ends from the television or another phone, when a start fails and
+on `dispose`. Nothing binds it at boot (stream-server `710ad38`; a configured
+`lan_media_addr` is a place, not a listener), so start-up has no listener to
+close — what `start_in` still does first is take back the `lanMediaEnabled`
+permission a cast the process died inside had left granted, since the server
+persists that setting and resets it for nobody. Turning the listener on grants
+that veto and turning it off takes it back, so what is on disk while nothing is
+casting is "no".
 
 **While casting** the player screen shows the title, the position, play/pause,
 seek and stop, all from the receiver's own status — a pause from its remote

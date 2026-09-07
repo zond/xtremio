@@ -106,24 +106,22 @@ fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
 ///
 /// Configuring it is what makes [`set_lan_media`] able to start it at all
 /// ([`stream_server::ServerConfig::lan_media_addr`] is `None` by default and
-/// then there is nothing to start). On the pinned stream-server it also
-/// means `stream_server::run` binds it once at boot, veto or no veto, which
-/// is one of the two reasons [`start_in`] turns it off as its first act
-/// (see [`lan_media_off`]); from stream-server `02ec741` nothing binds at
-/// boot -- the address is a place, not a listener -- and only the other
-/// reason remains.
+/// then there is nothing to start). It is a place, not a listener: nothing
+/// binds it at boot, and only `set_lan_media(true)` ever does.
 ///
-/// **What the listener serves is the server's decision, and on the pinned
-/// rev it is too much.** It mounts no control route, but its stream route
-/// is the loopback one: a `GET /{infoHash}/{fileIdx}` for a hash the server
-/// does not have *creates* the torrent, with the request's `tr=` trackers,
-/// so for the length of a cast any host on the LAN can make this device
-/// join a swarm of its choosing. Nothing on this side can filter that
-/// listener's requests. stream-server `02ec741` closes it -- the LAN
-/// listener gets lookup-only stream routes, an unknown hash is a `404`, and
-/// `/create` is not there -- and the pin bump is the fix;
-/// `rust/tests/lan_media.rs` carries the test for the new contract, ignored
-/// until then.
+/// **What the listener serves is the server's decision, and it is narrow**:
+/// the bytes of torrents and archive sessions the loopback side has already
+/// created, and nothing a stranger on the network could make this device
+/// *do*. A `GET /{infoHash}/{fileIdx}` for a hash the server does not hold
+/// is a `404` at once, no `/create` is mounted, and no control route sits
+/// behind a token to guess. It was not always so -- before stream-server
+/// `388f68b` the stream route was the loopback one and *created* the torrent
+/// with the request's `tr=` trackers, so for the length of a cast any host
+/// on the LAN could make this device join a swarm of its choosing, and
+/// nothing on this side could filter it. `rust/tests/lan_media.rs` pins the
+/// closed contract, with a timing assertion that would catch the old
+/// behaviour coming back: a lookup answers now, a creation waits on
+/// metadata.
 const LAN_MEDIA_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0);
 
 /// Starts the server if it is not running and returns its base URL
@@ -160,17 +158,17 @@ pub(crate) fn start_in(app: &AppState, config: StartConfig) -> anyhow::Result<Ur
         Err(error) => return Err(error.context("start embedded server")),
     };
     let url = url_of(&handle)?;
-    // The LAN media listener exists for the length of a cast session and no
-    // longer, so the first thing a freshly started server is told is that
-    // there is none. Two things this takes back, and only the first outlives
-    // the pin bump: the `lanMediaEnabled` permission a cast granted and a
-    // kill mid-session left on disk, so that what is persisted while
-    // nothing is casting is always "no"; and, on the pinned stream-server,
-    // the listener `stream_server::run` bound at boot from the configured
-    // address regardless of that veto (from `02ec741` nothing binds at boot
-    // and the stop half is an idempotent no-op). Either way the app comes up
-    // with nothing of ours listening on the LAN.
-    lan_media_off(&handle);
+    // A cast grants the server's `lanMediaEnabled` permission and the server
+    // persists it; a process killed mid-cast never takes it back, and the
+    // server loads the setting as it finds it and resets it for nobody. No
+    // listener stands on it -- nothing binds the LAN address at boot, only
+    // `set_lan_media(true)` does -- but what is on disk while nothing is
+    // casting has to read "no", so the first thing a freshly started server
+    // is told is that there is no permission. Start-up has nobody to report
+    // a failure to, so this warns and goes on.
+    if let Err(error) = allow_lan_media(&handle, false) {
+        tracing::warn!(%error, "could not clear the lanMediaEnabled setting");
+    }
     tracing::info!(%url, "embedded stream-server started");
     *guard = Some(handle);
     Ok(url)
@@ -178,8 +176,8 @@ pub(crate) fn start_in(app: &AppState, config: StartConfig) -> anyhow::Result<Ur
 
 /// Closes the LAN media listener on `handle`, best effort, and drops the
 /// `lanMediaEnabled` permission with it. Used where the answer has to be
-/// "off" and there is nobody left to report a failure to: start-up, and the
-/// end of a cast session.
+/// "off" and there is nobody left to report a failure to: shutdown, on the
+/// way out of a cast session the process is ending inside.
 fn lan_media_off(handle: &ServerHandle) {
     if let Err(error) = handle.set_lan_media(false) {
         tracing::warn!(%error, "could not stop the LAN media listener");
@@ -393,9 +391,8 @@ pub fn close_proxy_streams(token: &str) -> usize {
 /// listener, which serves media bytes to the local network and mounts no
 /// control route at all (deliberately not `/proxy` and not `/ftp`) -- and
 /// answers the address it is bound to afterwards: `Some` after a start,
-/// `None` after a stop. What its stream route does with a hash the server
-/// does not have is the server's affair, and on the pinned rev it creates
-/// the torrent; see [`LAN_MEDIA_ADDR`].
+/// `None` after a stop. What it serves is the server's affair, and it is
+/// only what this device already holds; see [`LAN_MEDIA_ADDR`].
 ///
 /// This is what a cast session turns on and off, and the only thing that
 /// ever should: a Chromecast cannot fetch from a loopback-only server, and
@@ -404,9 +401,8 @@ pub fn close_proxy_streams(token: &str) -> usize {
 /// The server keeps a `lanMediaEnabled` setting that vetoes the listener
 /// outright and defaults to `false`, so enabling carries that permission
 /// with it and disabling takes it back. That way the persisted answer to
-/// "may this app serve the LAN" is `false` whenever no session is running,
-/// and a start the server performs by itself at boot cannot serve anything
-/// this app did not ask for in the same breath.
+/// "may this app serve the LAN" is `false` whenever no session is running
+/// -- and [`start_in`] makes it so after a kill that skipped the disabling.
 pub fn set_lan_media(enabled: bool) -> anyhow::Result<Option<SocketAddr>> {
     with_handle(|handle| {
         if !enabled {
