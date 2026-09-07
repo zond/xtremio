@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/shell/focus_theme.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 
 /// A television: remote only, no touchscreen.
@@ -64,6 +65,35 @@ BuildContext? _focusedContext() {
 /// The widget with primary focus sits under a [T].
 bool focusIn<T extends Widget>() =>
     _focusedContext()?.findAncestorWidgetOfExactType<T>() != null;
+
+/// Whether this app tells the viewer where the remote is standing.
+///
+/// There are exactly two ways it does, and a screen is right when every
+/// stop the D-pad can reach has one of them: a [FocusHighlight] drawn
+/// round it -- what a poster, a chip, a rail destination and the panels
+/// over the video wear -- or the theme floor, which marks every Material
+/// control without being asked and is in force wherever [FocusTheme.apply]
+/// built the theme.
+///
+/// **What this catches**, which is what the audit found: a screen with a
+/// focus stop outside both, such as a hand-rolled [Focus] with a border of
+/// its own invention (there were three of those), a control under a
+/// `Theme` of its own, or a route pushed somewhere the floor does not
+/// reach. And a screen the remote lands nowhere on at all, which reads
+/// here as unmarked because nothing has focus to mark.
+///
+/// **What it cannot catch** is a Material control whose component theme
+/// the floor has never been told about. That is what `FocusTheme`'s own
+/// tests are for, and why the list of components there is written out one
+/// by one rather than derived from anything.
+bool focusIsMarked() {
+  final context = _focusedContext();
+  if (context == null) return false;
+  if (context.findAncestorWidgetOfExactType<FocusHighlight>() != null) {
+    return true;
+  }
+  return FocusTheme.emphasisIn(context) != null;
+}
 
 /// The first text on the widget holding primary focus (a button's label, a
 /// tile's title), null when nothing with text has it.
