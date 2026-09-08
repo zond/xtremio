@@ -123,7 +123,8 @@ what every model field means. The shape of the thing is in the
   is the same under all three, so nothing starts more slowly). The app adds
   it in `withBufferAhead` (`lib/core/buffer_ahead.dart`) to the URL
   stremio-core resolved, and only for a torrent served over http(s) -- an
-  addon's own host and an offline `file://` URL know nothing about it. It
+  addon's own host knows nothing about it, and a kept download's URL is
+  this server's own media route with every piece already here. It
   is additive on the wire: a server that predates the parameter ignores it.
   Settings -> Player -> "Buffer ahead" is the standing choice
   (`AppPrefs.bufferAhead`); the player's own settings sheet overrides it
@@ -255,16 +256,16 @@ what every model field means. The shape of the thing is in the
   than swallowed.
 - **Offline downloads are a pin plus a registry.** The server keeps the
   chosen file of a torrent wanted and un-evictable
-  (`ServerHandle::pin_download`, a validated `downloadsDir` setting,
-  `pinned`/`complete` per file in `stats.json`); `rust/src/downloads.rs`
+  (`ServerHandle::pin_download`, `pinned`/`complete` per file in
+  `stats.json`) -- a *retention* property, not a location: the bytes are
+  pieces in the one torrent-data root either way; `rust/src/downloads.rs`
   keeps everything it has no idea about in `<storage_dir>/downloads.json` —
   keyed `"{metaId}:{videoId}"`, holding the raw stream JSON `Load Player`
   takes back, a `MetaItem` snapshot so Details renders offline, and
   `createdAt`/`completedAt`/`lastPlayedAt`. The FFI is
   `rust/src/api/downloads.rs`: `downloads_add(request_json)`,
   `downloads_remove(key, delete_files)`, `downloads_list()`,
-  `downloads_open(key)`, `downloads_set_dir(path)`,
-  `downloads_apply_default_dir(path)` and a `downloads_events()` stream that
+  `downloads_open(key)` and a `downloads_events()` stream that
   ticks about once a second, only while something is unfinished, and pushes
   just the rows that moved -- and of each row only what moves
   (`{"version":1,"progress":[{"key","downloaded","size","state","path",
@@ -310,86 +311,87 @@ what every model field means. The shape of the thing is in the
   disposes and a `DownloadsScope` hands down the tree -- one client,
   because the progress sink is one -- with `DownloadView`
   (`lib/core/state/download.dart`) reading the registry it answers with.
-- **Where the files land is the platform's question.** The server's own
-  default keeps a pinned torrent in its cache root
-  (`<cache>/rqbit-downloads`) with everything else, which is right on a
-  desktop and wrong on Android, where `<cache>` is the OS's to reclaim
-  whenever it wants room. So start-up settles it once
-  (`applyDefaultDestination`, `lib/features/downloads/destination.dart`,
-  called by `XtremioApp`): on
-  Android the server is pointed at the app-specific external files
-  directory --
-  `/storage/emulated/0/Android/data/com.zond.xtremio/files/downloads`,
-  which needs no storage permission at all on `minSdk` 24 and which the
-  system keeps until the app is uninstalled -- through
-  `downloads_set_dir`, which is `POST /settings` with its validation (the
-  path must be absolute, creatable, writable and not at or above a cache
-  root). Everywhere else nothing is written and the server keeps deciding.
-  An answer already given is never overridden: what start-up asks is the
-  registry's own record of where the downloads were answered to go
-  (`Registry::destination`, written as `destinationSettled` and
-  `destinationChoice`), because a null `downloadsDir` is not only the
-  unset state -- it is also "put them back with the cache" chosen by hand,
-  and what the server writes for itself when it clears a destination it
-  cannot use at boot (an SD card that is not in the device). The record
-  says which of four situations it is: nothing asked, the platform default
-  the app applied itself (`downloads_apply_default_dir`, which does *not*
-  answer for the user), the cache on purpose, or a folder chosen
-  (`downloads_set_dir`). A chosen folder the settings no longer have is
-  the server having dropped it, so start-up asks for it again -- and if
-  the volume is really gone the platform default stands in (on Android the
-  external files directory, never the purgeable cache) while the folder
-  stays on record, so the next launch tries it again and the Downloads
-  screen can say which folder is missing. A `downloadsDir` left by a build
-  from before any of this was recorded is adopted as the answer rather
-  than overwritten. The Downloads
-  screen's picker offers the same directories
-  (`getExternalStorageDirectories()`, so an SD card is among them) plus a
-  typed path off Android. With a destination set, each pin
-  gets a folder of its own (`<downloadsDir>/<infoHash>/`), and only pins
-  taken from then on move there: the server relocates an already-managed
-  torrent when it is pinned again, which for an unfinished download is
-  the next boot's re-pin and for a finished one never (its bytes stay
-  where they were downloaded, and the registry keeps naming that path).
-  A download whose volume is not mounted reads as `missing` rather than
-  as an error. **On Android a download keeps going while the app is
-  away**: `DownloadsForegroundService`
+- **There is one place torrent data can be, and it is not a downloads
+  folder.** Everything a torrent puts on this device is under the server's
+  `cacheRoot`: the piece store the streaming cache and the kept downloads
+  share (`<cacheRoot>/rqbit-downloads/.pieces/<infoHash>/<bucket>/<piece>`,
+  one file per whole piece), the session's own records beside it, and what
+  `/proxy` cached. It is the only tree the cleaner walks. A pin decides
+  that bytes are *kept*, never where they go, so a `downloadsDir` distinct
+  from the cache had nothing left to hold and is gone -- an unknown key the
+  server ignores on write and does not answer with. So is the app's whole
+  destination model: the `Destination` enum, the `destinationSettled` /
+  `destinationChoice` pair in `downloads.json`, `downloads_set_dir`,
+  `downloads_apply_default_dir` and the start-up that settled the question.
+  A file a previous build left with those keys keeps its entries and loses
+  them at the next write; nothing adopts the folder it names, because that
+  folder holds neither the piece store nor the session's records, and
+  making it the root would orphan both.
+
+  The root is named twice. Its **default** is the directory the app hands
+  `server_start` (`XtremioBootstrap.dataDirectory`, `lib/main.dart`): the
+  app cache directory everywhere but Android, and on Android the
+  app-specific external files directory
+  (`/storage/emulated/0/Android/data/com.zond.xtremio/files`), because
+  `getCacheDir()` is the system's to reclaim whenever it wants room and
+  with one root there is nowhere else for a kept download to be. Its
+  **setting** is `cacheRoot`, written like any other settings key through
+  `server_update_settings` from Settings → Server storage
+  (`lib/features/diagnostics/server_storage_screen.dart`, which offers
+  `getExternalStorageDirectories()` on Android so an SD card is reachable
+  without a permission, and a typed path elsewhere). It is the server's
+  one validated setting -- absolute, created if missing, writable, stored
+  resolved -- so a root it cannot use fails the whole update and nothing in
+  Dart checks a path itself. A persisted `cacheRoot` outranks the app's
+  default for ever after, and a change takes effect at the **next start**:
+  the running librqbit session was opened on the old root and cannot be
+  moved, and what is already there is not moved either. **On Android a
+  download keeps going while the app is away**: `DownloadsForegroundService`
   (`lib/features/downloads/downloads_service.dart`) puts a `dataSync`
-  foreground service up over the `xtremio/downloads` channel as soon as
-  one entry is unfinished and takes it down when none is (ANDROID.md,
+  foreground service up over the `xtremio/downloads` channel as soon as one
+  entry is unfinished and takes it down when none is (ANDROID.md,
   "Downloads while the app is away", for what Android still reserves the
-  right to do to it). The registry and the server's own pin set survive
-  the process dying either way, and the boot re-pin picks the unfinished
-  ones up again.
-- **A finished download is played from the file, not from the server.**
-  `downloads_open(key)` answers the `file://` URL of a download whose
-  bytes are all here and whose file really is where it was left, and
-  stamps the entry's `lastPlayedAt` as it does. Details and the Downloads
-  screen hand the player that URL as a plain `url` stream
+  right to do to it). The registry and the server's own pin set survive the
+  process dying either way, and the boot re-pin picks the unfinished ones
+  up again.
+- **A finished download is played off this device, and there is no file to
+  open.** Torrent data is one file per piece, so no whole file is ever
+  produced and the `path` the server reports is a *name* for the file
+  rather than something to open. `downloads_open(key)` answers the
+  embedded server's own media route for the entry's torrent and file
+  (`{base}/{infoHash}/{fileIdx}`), which is served off the pieces already
+  here -- no peer, no tracker, no network -- and stamps the entry's
+  `lastPlayedAt` as it does. It refuses with `unknown`, `incomplete` or
+  `unavailable`, the last meaning the server is not running, which is the
+  only way a whole download has nowhere to play from. Details and the
+  Downloads screen hand the player that URL as a plain `url` stream
   (`lib/features/downloads/offline_play.dart`) together with the
   *original* `streamRequest` and `metaRequest`, which is what keeps
   continue-watching moving: stremio-core's `TimeChanged` writes progress
   only with a stream request and a library item, and offline the library
   item comes out of the `ctx` bucket the download put the title into.
-  There is no torrent for the player to wait on, so the start-up overlay
-  (which keys on `infoHash`) never appears. The file wins over the server
+  It is a `url` stream and not the torrent it came from even though the
+  URL names the same server, because a torrent stream sends the player
+  through the engine's start-up and the overlay keys on `infoHash`: a
+  download with every byte here would sit behind a "connecting to peers"
+  panel it has no need of. The kept copy wins over the addon's stream
   even with a connection -- but only for the release that was
   downloaded; picking another stream is a request for that source. A
-  download whose file went away with its volume streams instead and says
-  so, rather than opening a player on a URL with no file behind it.
+  download with nowhere to play from streams the addon's own stream
+  instead, rather than opening a player on a URL with nothing behind it.
   Binge-advancing asks the same question about the next episode before it
-  hands over, so a downloaded season plays through off the disk -- and
+  hands over, so a downloaded season plays through off the device -- and
   offline that is the only way it advances at all, since the next
   episode's streams never load and the engine finds nothing to move on
   to.
-  *Known consequence:* the synthesized `file://` stream is what
+  *Known consequence:* the synthesized `url` stream is what
   stremio-core records as that video's last stream, and it is persisted.
   `MetaDetails` resolves the last stream against the addon's current
   responses by `Stream::is_source_match` (which compares the source, so a
   `Url` never matches the `Torrent` the addon offers) and then by
   `Stream::is_binge_match`. The binge match is why `offlineStream` keeps
   `behaviorHints.bingeGroup` -- but an addon that sets none leaves neither
-  match to make, so after one play off the disk that title's "Continue
+  match to make, so after one play off the device that title's "Continue
   with last source" tile is gone until it is played from an addon stream
   again, and `StreamsItem::adjusted_state` starts the next play of it with
   no remembered subtitle or audio track (playback speed survives). The
@@ -459,7 +461,8 @@ what every model field means. The shape of the thing is in the
   from `CoreInitInfo`, which is settled before the first `open`, rather
   than from `profile.settings.streamingServerUrl`, which arrives with a
   `ctx` pull that can land later. Left alone: a loopback URL (already the
-  server, whatever port it bound), a `file://` offline copy, and everything
+  server, whatever port it bound -- which is what a kept download's own
+  URL is), and everything
   when this build runs no embedded server -- which is not what configuring
   a streaming server elsewhere does. That rewrites
   `profile.settings.streamingServerUrl` only: the embedded server keeps

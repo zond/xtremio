@@ -40,13 +40,24 @@ embedded server; "Play test HTTP stream" is the direct-play path). The
 stats OSD (Shift+I) ends with the URL libmpv is playing, so a torrent
 should read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
 
-## What the server's storage costs
+## Where torrent data lives, and what it costs
 
-**Settings → Developer → Server storage** answers the question a
+**Settings → Streaming server → Server storage** names the one root
+everything a torrent puts on this device is under (the server's
+`cacheRoot`: the piece store the streaming cache and the kept downloads
+share, the session's records, the proxy cache), and answers the question a
 misbehaving playback raises first: is the cache over the limit its cleaner
 is supposed to hold it to. The same number is in the copied diagnostics
 header too (alongside the device's free space, which lives only there),
 since it is what a person should look at before reading a single log line.
+
+Moving the root writes one settings key (`cacheRoot`, through
+`server_update_settings`), which the server validates -- absolute, created
+if missing, writable, stored resolved -- and it takes effect at the **next
+start**: the running librqbit session was opened on the old root and
+cannot be moved onto another one, and nothing copies what is already
+there. On Android the picker offers `getExternalStorageDirectories()`, so
+an SD card is reachable without a permission; elsewhere a path is typed.
 
 The cache-vs-limit number comes straight from the pinned server
 (`ServerHandle::cache_usage()`, `rust/src/server.rs`
@@ -57,7 +68,8 @@ own occupancy accounting (allocated blocks, not apparent length), reporting
 right now, which a clean pass can never touch. The device's free/total
 space (a different concern — is the disk full, not is the cache over its
 limit) is still measured on the Rust side, in `rust/src/storage.rs`
-(`server_storage_report()`), and shown only in the diagnostics header.
+(`server_storage_report()`), and shown beside the root on that screen and
+in the diagnostics header.
 
 "Clean cache now" runs `ServerHandle::clean_cache_now()`
 (`server_clean_cache_now()`) — the exact function the server's own

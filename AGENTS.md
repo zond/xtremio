@@ -104,9 +104,9 @@ in one of two ways: stremio-core's `StreamingServer` model through
 `server_storage_report`, `server_cache_usage`, `server_clean_cache_now`,
 `server_background_traffic`) and
 `rust/src/api/downloads.rs` (`downloads_add`, `downloads_remove`,
-`downloads_list`, `downloads_open`, `downloads_set_dir`,
-`downloads_apply_default_dir`, `downloads_events`). A new need goes in one of those, as a Rust function
-returning JSON, not as a `dart:io` `HttpClient` call.
+`downloads_list`, `downloads_open`, `downloads_events`). A new need goes in
+one of those, as a Rust function returning JSON, not as a `dart:io`
+`HttpClient` call.
 
 There used to be one FFI call in that shape that was *not* about the
 server: `volume_free_bytes`, a bare `statvfs` for the volume the player's
@@ -123,8 +123,8 @@ and the bytes. Keep it that way:
 - **Progress has one source of truth, and the registry is not it.**
   `downloaded`/`size`/`path`/`state` come from the server's `downloads()`,
   which `refresh` merges into the entries and writes back: the file keeps
-  the last-known copy so the list and `downloads_open` still work with no
-  server, and that is all it is. Never compute or advance progress
+  the last-known copy so the list still renders with no server, and that is
+  all it is. Never compute or advance progress
   locally, and do not add a field the server could answer that is not a
   cached echo of it — that is two truths, and one of them stale. Because
   it is a cache, a tick that moved nothing but `downloaded` does not
@@ -153,19 +153,29 @@ and the bytes. Keep it that way:
   through `DownloadsScope`. A screen takes the client from the scope;
   widget tests put `FakeDownloadsClient` (`test/support/`) there and never
   reach FFI.
-- **Where the files go is asked, not assumed.** The destination is the
-  server's `downloadsDir` setting: read it with `DownloadsClient.directory`
-  and write it with `setDirectory`, which is `downloads_set_dir` and its
-  validation. The registry records *what was answered and by whom*
-  (`Registry::destination`, on the wire the `destinationSettled` and
-  `destinationChoice` pair): nothing asked, the platform default the app
-  applied, the cache on purpose, or a folder chosen. A default the app
-  applies goes through `applyDefaultDirectory`
-  (`downloads_apply_default_dir`), never `setDirectory`, so standing in
-  for a folder the server dropped at boot does not erase which folder that
-  was. Start-up reads the record
-  (`lib/features/downloads/destination.dart`) and no screen invents a
-  path.
+- **A download has no location, and the registry records none.** There is
+  one torrent-data root, the server's `cacheRoot`, and everything a
+  torrent puts on this device is under it -- the piece store the streaming
+  cache and the kept downloads share, the session's own records, the proxy
+  cache. A pin is a *retention* property: it decides that bytes are kept,
+  never where they go, so there is no second location for a download to be
+  moved to and nothing about one to write down. The pair of keys a
+  previous build wrote (`destinationSettled` and `destinationChoice`) is
+  not read and not written; a file that still has them keeps its entries
+  and loses them at the next write. Moving the root is one settings key
+  through `server_update_settings` like every other one, from Settings →
+  Server storage, and it takes effect at the next start (a running
+  librqbit session cannot be moved).
+- **A kept download is not a file, so nothing opens one.** Torrent data is
+  stored one file per piece; no whole file is ever produced, and the
+  `path` the server reports is a *name* for the file, not something to
+  `open`. `downloads_open` answers the embedded server's media route for
+  the entry's own torrent and file
+  (`{base}/{infoHash}/{fileIdx}`), which is served off the pieces already
+  here -- no peer, no tracker, no network -- and refuses with `unknown`,
+  `incomplete` or `unavailable` (the server is not running, and it is the
+  only reader those pieces have). A build that goes back to consulting
+  `entry.path` refuses every download on the device.
 - Downloads are control calls like any other: over FFI, never HTTP (see
   above).
 

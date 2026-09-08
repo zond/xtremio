@@ -480,59 +480,53 @@ sync works by itself). Both of those render into a real Surface and align
 frame release to `Choreographer` vsync. It is a platform view rather than a
 texture, and a much larger change than this one.
 
-## Where offline downloads go, and when they run
+## Where torrent data goes, and when downloads run
 
-- **The destination is set by the app, once.** The embedded server's own
-  default keeps a pinned torrent in its cache root — on Android that is
+- **There is one root, and the app only names its default.** Everything a
+  torrent puts on this device is under the server's `cacheRoot`: the piece
+  store the streaming cache and the kept downloads share
+  (`<cacheRoot>/rqbit-downloads/.pieces/<infoHash>/<bucket>/<piece>`, one
+  file per whole piece), the session's own records, and what the proxy
+  cached. A pin keeps bytes; it does not move them, so there is no
+  downloads folder any more and nothing to move a download *to*.
+
+  The server's own default root is the directory the app hands
+  `server_start`, and on Android that must not be
   `getApplicationCacheDirectory()` (`/data/data/com.zond.xtremio/cache`),
-  which the system is free to reclaim whenever it wants space. Half a film
-  reclaimed mid-download is not a download, so start-up points the server
-  at the app-specific external files directory instead
-  (`applyDefaultDestination`, `lib/features/downloads/destination.dart`,
-  called from `XtremioApp.initState`) through the `downloads_set_dir` FFI
-  call — `POST /settings`'s `downloadsDir`, with its validation.
+  which the system is free to reclaim whenever it wants space: half a film
+  reclaimed mid-download is not a download, and with one root there is
+  nowhere else for a kept download to be. So `XtremioBootstrap.dataDirectory`
+  (`lib/main.dart`) answers the app-specific external files directory
+  instead:
 
   ```
-  /storage/emulated/0/Android/data/com.zond.xtremio/files/downloads/<infoHash>/<file>
+  /storage/emulated/0/Android/data/com.zond.xtremio/files
   ```
 
-  `adb shell run-as com.zond.xtremio ls …` is not needed for it: the
-  external files directory is world-readable over adb
-  (`adb shell ls /sdcard/Android/data/com.zond.xtremio/files/downloads`).
+  `adb shell run-as com.zond.xtremio ls …` is not needed for it: that
+  directory is world-readable over adb
+  (`adb shell ls /sdcard/Android/data/com.zond.xtremio/files/rqbit-downloads/.pieces`).
 
-  *Once* means once ever, not once per launch: the registry records both
-  that the question was answered and which answer it was
-  (`destinationSettled` and `destinationChoice` in
-  `<files>/core/downloads.json`, written by `downloads_set_dir`), and
-  start-up reads those rather than "is `downloadsDir` null?". Null is an
-  answer too — it is what the Downloads screen writes for "Default (with
-  the cache)" — and it is not quietly replaced on the next launch.
-
-  The two are not the same null, which is why the path is recorded and not
-  just the flag. The server clears a `downloadsDir` it cannot prepare at
-  boot (an SD card that is not in the device) and persists the null, and
-  on Android the fallback that leaves is `getApplicationCacheDirectory()`
-  — the purgeable directory this whole section exists to stay out of. So
-  a recorded path that the settings no longer have is read as the server
-  having dropped it: start-up asks for that path again, and if the volume
-  is really gone it applies the external files directory instead. Never
-  the cache. An install upgraded from a build before `destinationChoice`
-  has no path on record; if its destination was cleared it reads as
-  "Default (with the cache)" and has to be re-picked on the Downloads
-  screen.
+  It is a *default*: the server persists a `cacheRoot` of its own as soon
+  as anything writes one, and that wins from then on. **An install
+  upgraded from a build that persisted the old root keeps it** -- including
+  one still pointing at the purgeable app cache. Settings → Server storage
+  names the root in force and is where it is moved; a change takes effect
+  at the next start, because the running librqbit session was opened on the
+  old root and cannot be moved onto another one.
 - **No permission is involved.** An app's own external files directory
   needs none on `minSdk` 24 (`getExternalFilesDir`, which is what
   path_provider's `getExternalStorageDirectory()` returns), and it must
   stay that way: the manifest declares no storage permission, and
-  `MANAGE_EXTERNAL_STORAGE` is never the answer. The Downloads screen's
-  picker offers `getExternalStorageDirectories()`, which is the same
-  directory on every removable volume — an SD card among them — so a
-  chosen destination is still permission-free.
-- **Uninstall takes the downloads with it**, as it does for anything in the
-  app's own directories, and the system does *not* purge them the way it
+  `MANAGE_EXTERNAL_STORAGE` is never the answer. The Server storage
+  screen's picker offers `getExternalStorageDirectories()`, which is the
+  same directory on every removable volume -- an SD card among them -- so a
+  chosen root is still permission-free.
+- **Uninstall takes the torrent data with it**, as it does for anything in
+  the app's own directories, and the system does *not* purge it the way it
   may purge `getCacheDir()`. "Clear storage" in the app info screen does
-  delete them; the registry (`<files>/core/downloads.json`) goes at the
-  same time, so the two stay consistent.
+  delete it; the registry (`<files>/core/downloads.json`) goes at the same
+  time, so the two stay consistent.
 - **A download keeps going after the user leaves the app**, held up by a
   foreground service; see "Downloads while the app is away" below for what
   that does and does not promise. Nothing is lost when the process does go:
@@ -541,11 +535,9 @@ texture, and a much larger change than this one.
   entry, so reopening the app continues where it stopped. A *finished*
   download needs nothing running at all — it is played straight off the
   file.
-- **Moving the destination moves nothing that is already there.** The
-  server relocates a torrent only when it is pinned again, which for an
-  unfinished download happens at the next start-up. Files a finished
-  download left behind stay where they were downloaded; the registry keeps
-  naming that path.
+- **Moving the root moves nothing that is already there.** The setting
+  says where torrent data will live from the next start; the pieces under
+  the old root stay there and nothing copies them.
 
 ## Downloads while the app is away
 
@@ -874,6 +866,15 @@ debug APK was actually run, though the arm64 slice built cleanly), release
 builds, and end-to-end torrent playback on Android.
 
 ### Offline downloads on the phone emulator (2026-09-03)
+
+**Superseded by the build this record predates.** It was taken when a pin
+placed a torrent in a `downloadsDir` of its own and a finished download was
+a whole file to open. There is one torrent-data root now, torrent data is
+one file per piece, and a kept download plays through the embedded server's
+own media route -- so the paths, the `file://` URL and the `<infoHash>`
+folder below are all gone. The rest (the download running, the row's
+numbers, the foreground service, the two adb notes) still describes what to
+check. Kept as it was written, because a re-run is what replaces it.
 
 Verified on the headless `xtremio_api36` AVD
 (`android-36;google_apis;x86_64`, `-gpu swiftshader_indirect`) with the
