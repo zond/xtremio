@@ -59,6 +59,15 @@ cannot be moved onto another one, and nothing copies what is already
 there. On Android the picker offers `getExternalStorageDirectories()`, so
 an SD card is reachable without a permission; elsewhere a path is typed.
 
+What a move costs is the downloads that were under the old root: nothing
+follows them, and at the next start the reconciliation marks each finished
+row the server no longer holds as **Not on this device**, with a button on
+the row that fetches it again. It never fetches one by itself — a moved
+root would otherwise mean every kept film re-downloaded over whatever
+connection the device is on. Playing such a row is refused (`notHeld`) and
+the title streams instead, which is also what happens between the move and
+that next start.
+
 The cache-vs-limit number comes straight from the pinned server
 (`ServerHandle::cache_usage()`, `rust/src/server.rs`
 `cache_usage()`/`server_cache_usage()`): a read-only walk in the cleaner's

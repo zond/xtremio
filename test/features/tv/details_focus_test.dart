@@ -771,6 +771,45 @@ void main() {
       ]);
     });
 
+    testWidgets('holding select on a stream whose pieces are gone downloads '
+        'it again', (tester) async {
+      // The remote's one option on a source card is whatever the button
+      // beside the play arrow would do, and on a row the boot marked gone
+      // that is "have this file again". Without it a television has no way
+      // at all to recover a download the moved root took with it: the
+      // button inside the card cannot be focused.
+      useScreen(tester, tvSize);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final gone = DownloadView({
+        'metaId': movieId,
+        'videoId': movieId,
+        'name': 'Night of the Living Dead',
+        'stream': {'infoHash': movieHash, 'fileIdx': 0},
+        'infoHash': movieHash,
+        'fileIdx': 0,
+        'size': 1000,
+        'downloaded': 0,
+        'state': 'gone',
+        'error': 'the downloaded data is not on this device any more',
+      });
+      final downloads = FakeDownloadsClient(
+        registry: DownloadsRegistry(items: {gone.key: gone}),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(
+        harness(core, downloads: downloads, prefs: await groupedPrefs()),
+      );
+      await tester.pumpAndSettle();
+
+      await openSource(tester, 'caching.stremio.net', '1080p');
+      await hold(tester, LogicalKeyboardKey.select, RemotePress.holdDuration);
+
+      expect(find.byType(PlayerScreen), findsNothing, reason: 'not a tap');
+      expect(downloads.added.single.stream.infoHash, movieHash);
+    });
+
     testWidgets('holding select on a stream that is not kept downloads it', (
       tester,
     ) async {

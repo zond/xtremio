@@ -30,6 +30,19 @@ DownloadsRegistry recorded() =>
     DownloadsRegistry.fromJson(loadDownloadsFixture());
 
 /// The same, with the pilot stopped and a reason for it.
+/// The pilot as the boot leaves it when the server turns out not to hold
+/// its pieces any more: no bytes, no completion date, and a reason.
+DownloadsRegistry withGonePilot() {
+  final json = loadDownloadsFixture();
+  final pilot =
+      (json['items'] as Map<String, dynamic>)[pilotKey] as Map<String, dynamic>;
+  pilot['state'] = 'gone';
+  pilot['downloaded'] = 0;
+  pilot['completedAt'] = null;
+  pilot['error'] = 'the downloaded data is not on this device any more';
+  return DownloadsRegistry.fromJson(json);
+}
+
 DownloadsRegistry withStoppedPilot() {
   final json = loadDownloadsFixture();
   final pilot =
@@ -412,6 +425,46 @@ void main() {
         reason: 'the file already half on disk, not another guess',
       );
       expect(find.text('Downloading Breaking Bad: Pilot'), findsOneWidget);
+    });
+
+    testWidgets('a row whose pieces are gone says so, and can be fetched '
+        'again', (tester) async {
+      // The state the boot reconciliation leaves behind when the root moved
+      // or was reclaimed under a finished download. It reads as what it is
+      // -- not "Stopped", which would say something is being tried -- and
+      // the only way back is the same button, because nothing fetches a
+      // whole film again on its own.
+      useTallViewport(tester);
+      final downloads = FakeDownloadsClient(registry: withGonePilot());
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Not on this device · the downloaded data is not on this device '
+          'any more',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Breaking Bad: Pilot'),
+          matching: find.byTooltip('Download actions'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Play').hitTestable(),
+        findsNothing,
+        reason: 'there is nothing on the device to play',
+      );
+      await tester.tap(find.text('Retry').hitTestable());
+      await tester.pumpAndSettle();
+
+      expect(downloads.added, hasLength(1));
+      expect(downloads.added.single.key, pilotKey);
     });
 
     testWidgets('a retry in flight is not offered a second time', (

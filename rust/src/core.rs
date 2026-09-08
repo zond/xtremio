@@ -449,10 +449,12 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     *app.core.runtime_mut() = Some(runtime);
 
     // The server persists its own pin set, but a registry entry can outlive
-    // it (a purged cache dir, a downloads volume that was not mounted last
-    // boot), so every unfinished download is pinned again. Off the boot
-    // path: a pin blocks while a magnet resolves its metadata, and nothing
-    // on screen waits for it.
+    // it (a torrent-data root that was moved, or one the system reclaimed),
+    // so the two are put back into agreement: every unfinished download is
+    // pinned again, and every finished one the server does not hold whole is
+    // marked as gone rather than left claiming a film that is not there. Off
+    // the boot path: a pin blocks while a magnet resolves its metadata, and
+    // nothing on screen waits for it.
     if server_base_url.is_some() {
         // Against the state this boot built, not whatever the process holds
         // when it gets there: a pin blocks until the tracker answers, so a
@@ -461,10 +463,10 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
         let booted = Arc::clone(&app);
         XtremioEnv::exec_concurrent(async move {
             if let Err(error) =
-                tokio::task::spawn_blocking(move || crate::downloads::repin_unfinished_in(&booted))
+                tokio::task::spawn_blocking(move || crate::downloads::reconcile_pins_in(&booted))
                     .await
             {
-                tracing::warn!(%error, "re-pinning the offline downloads panicked");
+                tracing::warn!(%error, "reconciling the offline downloads panicked");
             }
         });
     }

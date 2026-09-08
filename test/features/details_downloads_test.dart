@@ -636,6 +636,23 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Downloading Night of the Living Dead'), findsOneWidget);
     });
+
+    testWidgets('offers to fetch it again when the pieces are gone', (
+      tester,
+    ) async {
+      // A row the boot found the server no longer holding: the bytes are
+      // not on the device and nothing is fetching them. It is not the
+      // stopped state and does not read as one -- nothing is being tried
+      // -- but the button does the same thing, because pinning the file
+      // again is the only way back and has to be asked for.
+      await pumpWith(tester, 'gone', done: 0);
+
+      expect(onStreamTile(kDownloadRetryTooltip), findsNothing);
+      expect(onStreamTile(kDownloadGoneTooltip), findsOneWidget);
+      await tester.tap(find.byTooltip(kDownloadGoneTooltip));
+      await tester.pumpAndSettle();
+      expect(find.text('Downloading Night of the Living Dead'), findsOneWidget);
+    });
   });
 
   group('badges', () {
@@ -677,6 +694,49 @@ void main() {
         ),
         findsOneWidget,
       );
+    });
+
+    testWidgets("an episode whose pieces are gone wears the fault, not a "
+        "ring at zero", (tester) async {
+      // A ring at 0 is what an unhandled state falls through to, and it
+      // would say "queued, nothing sent yet" about an episode there is
+      // nothing left of.
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadSeriesEpisodeMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient(
+        registry: registryOf([
+          entry(
+            metaId: seriesId,
+            videoId: pilotId,
+            stream: {'infoHash': 'aaaa', 'fileIdx': 3},
+            state: 'gone',
+            size: 10,
+            downloaded: 0,
+          ),
+        ]),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(
+        harness(core, downloads, type: 'series', id: seriesId),
+      );
+      await tester.pumpAndSettle();
+
+      final badge = find.byType(DownloadBadge);
+      expect(badge, findsOneWidget);
+      expect(
+        find.descendant(of: badge, matching: find.byIcon(Icons.error_outline)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: badge,
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsNothing,
+      );
+      expect(find.byTooltip('Not on this device'), findsOneWidget);
     });
 
     testWidgets('the badge of a finished episode deletes it, and asks first', (
@@ -935,6 +995,18 @@ void main() {
           view('$seriesId:1:3', 'error'),
         ], metaId: seriesId),
         '1 downloaded · 1 downloading · 1 stopped',
+      );
+      // Counted apart from both: an episode whose pieces are gone is not
+      // arriving (nothing is fetching it) and is not stopped either
+      // (nothing is trying), and folding it into either count would say
+      // the season is in a state it is not.
+      expect(
+        DownloadSummary.label([
+          view('$seriesId:1:1', 'complete'),
+          view('$seriesId:1:2', 'gone'),
+          view('$seriesId:1:3', 'error'),
+        ], metaId: seriesId),
+        '1 downloaded · 1 stopped · 1 not on this device',
       );
     });
   });

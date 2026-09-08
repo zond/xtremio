@@ -82,12 +82,17 @@ pub fn downloads_list() -> anyhow::Result<String> {
 /// `lastPlayedAt` as it goes. **There is no file to open**: torrent data is
 /// one file per piece in the server's store, so a kept download plays
 /// through the embedded server's media route, off the pieces already on
-/// this device — no peer, no tracker, no network. When there is nothing to
-/// play from it answers `{"ok":false,"key":…,"reason":…}` — `unknown` (no
-/// such entry), `incomplete` (the bytes are not all here) or `unavailable`
-/// (whole, but the server that reads the pieces is not running) — so the
-/// caller can stream the title instead of opening a player on a dead URL.
-/// Only a registry that cannot be read or written raises.
+/// this device — no peer, no tracker, no network. Two things have to be
+/// true for that: the row says the file is whole, **and** the server says it
+/// is holding it whole right now. When either is not, it answers
+/// `{"ok":false,"key":…,"reason":…}` — `unknown` (no such entry),
+/// `incomplete` (the bytes are not all here), `unavailable` (the server that
+/// reads the pieces is not running) or `notHeld` (it is running and does not
+/// have these pieces: the root moved or was reclaimed under them, the
+/// torrent was not restored, or it is still being checked) — so the caller
+/// can stream the title instead of opening a player on a URL that would
+/// start a fresh torrent. Only a registry that cannot be read or written
+/// raises.
 pub fn downloads_open(key: String) -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::downloads::open(&key)?).map_err(Into::into))
 }

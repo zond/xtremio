@@ -198,7 +198,13 @@ enum DownloadOpenFailure {
 
   /// Whole, and nothing can serve it: the embedded server is not running.
   /// The pieces a download is made of are only ever read through it.
-  unavailable('unavailable');
+  unavailable('unavailable'),
+
+  /// The server is running and does not hold these pieces: the root they
+  /// were under was moved or reclaimed, the torrent was not restored, or
+  /// it is still being checked. The row will say `gone` after the next
+  /// start; until then this is what a play of it answers.
+  notHeld('notHeld');
 
   const DownloadOpenFailure(this.wireName);
 
@@ -313,9 +319,10 @@ abstract interface class DownloadsClient {
   /// it was played: a finished download answers the embedded server's media
   /// route for its own torrent and file -- there is no whole file to open,
   /// only the pieces that server reads -- and takes a `lastPlayedAt` stamp.
-  /// Anything else -- no such entry, not finished, or no server running to
-  /// read the pieces -- answers [DownloadOpenResult.reason] so the caller
-  /// streams the title instead of opening a player on a dead URL.
+  /// Anything else -- no such entry, not finished, no server running to
+  /// read the pieces, or a server that no longer holds them -- answers
+  /// [DownloadOpenResult.reason] so the caller streams the title instead
+  /// of opening a player on a URL that would start a fresh torrent.
   Future<DownloadOpenResult> open(String key);
 
   /// Progress, as it happens: each event carries only what moved -- the

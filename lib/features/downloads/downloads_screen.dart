@@ -30,9 +30,16 @@ import 'remove_download_dialog.dart';
 /// the two are separable: the pin can be dropped and the bytes left where
 /// they are.
 ///
-/// Play opens the file itself (`offline_play.dart`), with no server and no
-/// network in the way, and falls back to streaming -- saying so -- when the
-/// file is not there any more.
+/// Play goes through the embedded server (`offline_play.dart`), because
+/// that is the only reader the pieces have: the row is handed the server's
+/// media route for its own torrent and file, served off the pieces already
+/// here -- no peer, no tracker, no network -- and never a `file://` URL,
+/// since no whole file is written. It is refused when the pieces cannot be
+/// served (the server is not running, or it no longer holds them), and a
+/// refusal streams the title instead, silently: the stream plays either
+/// way, and there is nothing useful to say about which of the two it was.
+/// A row whose pieces are gone for good says so on the row itself
+/// (`DownloadState.gone`) rather than in a message about a play.
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key, this.canPlay = true});
 
@@ -264,7 +271,13 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                   ? () => _play(view)
                   : null,
               onDelete: () => _delete(view),
-              onRetry: view.state == DownloadState.error
+              // A row whose pieces are gone gets the same button as one
+              // the server stopped: pressing it pins the same file again,
+              // which is the only way back and has to be asked for rather
+              // than done for the user.
+              onRetry:
+                  view.state == DownloadState.error ||
+                      view.state == DownloadState.gone
                   ? () => _retry(view)
                   : null,
               isRetrying: _retrying.contains(view.key),
@@ -352,7 +365,9 @@ class _DownloadRow extends StatelessWidget {
   static String status(DownloadView view) {
     final state = downloadStateLabel(view);
     final error = view.error;
-    if (view.state == DownloadState.error && error != null) {
+    if ((view.state == DownloadState.error ||
+            view.state == DownloadState.gone) &&
+        error != null) {
       return '$state · $error';
     }
     if (view.isComplete) return '$state · ${view.sizeLabel}';

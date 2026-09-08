@@ -352,8 +352,23 @@ what every model field means. The shape of the thing is in the
   entry is unfinished and takes it down when none is (ANDROID.md,
   "Downloads while the app is away", for what Android still reserves the
   right to do to it). The registry and the server's own pin set survive the
-  process dying either way, and the boot re-pin picks the unfinished ones
-  up again.
+  process dying either way, and the boot reconciliation picks the
+  unfinished ones up again.
+
+  **An install that has run before does not get that default, and one
+  Android case is corrected.** stream-server fills its own default in only
+  when `cacheRoot` is *empty*, and every earlier build persisted one at
+  first start -- on Android the app cache directory, with the kept
+  downloads then in a `downloadsDir` of their own. With one root those
+  downloads would land in `getCacheDir()` on exactly the devices that had
+  been safe from it, so `XtremioBootstrap.moveOffPurgeableRoot`
+  (`lib/main.dart`) writes `cacheRoot` once at boot when the persisted root
+  is inside the app cache directory and there is a directory the system
+  does not reclaim to move it to. It compares the paths *resolved*, because
+  the server stores a canonical root and `/data/user/0/<pkg>` is a symlink
+  to `/data/data/<pkg>`. Everywhere else -- a desktop, an Android device
+  with no external storage, and any root somebody chose on the storage
+  screen -- it reads the setting and writes nothing.
 - **A finished download is played off this device, and there is no file to
   open.** Torrent data is one file per piece, so no whole file is ever
   produced and the `path` the server reports is a *name* for the file
@@ -361,9 +376,29 @@ what every model field means. The shape of the thing is in the
   embedded server's own media route for the entry's torrent and file
   (`{base}/{infoHash}/{fileIdx}`), which is served off the pieces already
   here -- no peer, no tracker, no network -- and stamps the entry's
-  `lastPlayedAt` as it does. It refuses with `unknown`, `incomplete` or
-  `unavailable`, the last meaning the server is not running, which is the
-  only way a whole download has nowhere to play from. Details and the
+  `lastPlayedAt` as it does. **Two things have to be true for that, and the
+  row is only one of them**: the entry says `complete`, *and* the server
+  answers that it is holding that file whole right now. The rows are a
+  record, and the pieces are under a root that can be moved (Settings →
+  Server storage) or reclaimed (an Android cache directory) without any row
+  being rewritten, so a row alone is not evidence. It refuses with
+  `unknown` (no such entry), `incomplete` (the bytes are not all here),
+  `unavailable` (the server that reads the pieces is not running) or
+  `notHeld` (it is running and does not hold these pieces: no pin, a
+  dormant one, or a torrent still being checked). `notHeld` is a refusal
+  and not a 404 waiting to happen: on loopback the media route *creates*
+  the torrent it is asked for, so a URL handed out for a hash the session
+  does not have starts a magnet add from a bare info hash with no trackers
+  and blocks to its metadata timeout -- a kept download starting a
+  download, behind a screen that says the film is on the device.
+
+  The row is corrected at the next boot rather than left saying `complete`
+  for ever: `reconcile_pins` marks a finished entry the server does not
+  hold as `gone` -- no bytes, no completion date, a reason on the row and
+  "Not on this device" in the list -- and deliberately does **not** re-pin
+  it, because that would fetch a whole film again over whatever connection
+  the device is on, asked for by nobody. Pressing Download on the title
+  pins it again, which is what a `gone` row's own button does. Details and the
   Downloads screen hand the player that URL as a plain `url` stream
   (`lib/features/downloads/offline_play.dart`) together with the
   *original* `streamRequest` and `metaRequest`, which is what keeps

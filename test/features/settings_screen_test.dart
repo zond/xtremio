@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
+import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 
@@ -52,6 +53,51 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(DiagnosticsScreen), findsOneWidget);
       expect(core.dispatched, isEmpty, reason: 'the engine is not involved');
+    },
+  );
+
+  testWidgets(
+    'Server storage sits with the streaming server, not with the developer '
+    'tools',
+    (tester) async {
+      // Where the root of every torrent byte on the device is named and
+      // moved. It used to be a developer entry, from when it was a number
+      // to look at while diagnosing a stuck cache; with one root it is
+      // also the answer to "where do my downloads go", which is an
+      // ordinary thing to want and not a thing to find at the bottom of
+      // the screen under Diagnostics.
+      //
+      // Tall enough that the whole list lays out at once, so the two
+      // positions are comparable without scrolling one of them out of the
+      // tree.
+      tester.view.physicalSize = const Size(900, 4000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final core = FakeCoreClient(
+        state: {CoreField.ctx: loadCtxLoggedOutFixture()},
+      );
+      await tester.pumpWidget(
+        CoreScope(
+          client: core,
+          child: const MaterialApp(home: SettingsScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getTopLeft(find.text('Server storage')).dy,
+        lessThan(tester.getTopLeft(find.text('Developer')).dy),
+        reason: 'it is above the Developer section, not inside it',
+      );
+      expect(
+        tester.getTopLeft(find.text('Server storage')).dy,
+        greaterThan(tester.getTopLeft(find.text('Streaming server')).dy),
+        reason: 'and with the server whose storage it is',
+      );
+
+      await tester.tap(find.widgetWithText(ListTile, 'Server storage'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ServerStorageScreen), findsOneWidget);
     },
   );
 

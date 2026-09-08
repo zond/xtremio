@@ -56,6 +56,88 @@ Future<Directory> dataDirectory({
   Future<Directory> Function() appCache = getApplicationCacheDirectory,
 }) async => (isAndroid ? await externalFiles() : null) ?? await appCache();
 
+/// Moves the torrent-data root off a directory the system may reclaim,
+/// and answers the root it wrote (null when it wrote nothing).
+///
+/// **This is a migration, and it exists because the default cannot reach
+/// an upgraded device.** [dataDirectory] is only what a server with no
+/// `cacheRoot` of its own is given; stream-server fills its default in
+/// when the key is *empty*, and every build before this one persisted a
+/// `cacheRoot` at first start -- on Android the app cache directory. So an
+/// install that has run before comes up on `getCacheDir()` however good
+/// this build's default is, and with one root that is where the kept
+/// downloads land too: the earlier build put those in the external files
+/// directory and this one has nowhere else to put them. Left alone, a
+/// user's downloads sit in the one directory Android reclaims without
+/// asking, and nothing in the app would ever write the key again.
+///
+/// So the *old* root is what decides: a persisted root inside [purgeable]
+/// is replaced by [wanted], once, and after that it is no longer inside it
+/// and this does nothing for the life of the install. Nothing else is
+/// touched -- a root somebody chose on Settings -> Server storage is not
+/// under the app's cache directory and is left exactly as it is.
+///
+/// [safe] is the directory [wanted] is under, and the guard that makes
+/// this a no-op everywhere but Android: where [dataDirectory] answers the
+/// cache directory itself (every desktop, and an Android device with no
+/// external storage at all) there is no safer place to move to, and moving
+/// a root onto itself would only churn the settings file.
+///
+/// What a user sees: the root named on Settings -> Server storage is the
+/// new one, with the screen's own note that a root takes effect at the
+/// next start -- the running librqbit session was opened on the old one.
+/// Nothing is copied, which costs nothing that was not already lost: the
+/// pieces under the old root were written by a build that stored whole
+/// files, and no build can read those as pieces.
+@visibleForTesting
+Future<String?> moveOffPurgeableRoot({
+  required ServerSettingsAccess server,
+  required String wanted,
+  required Directory purgeable,
+  required Directory safe,
+}) async {
+  final String reclaimable = await _resolved(purgeable);
+  if (await _resolved(safe) == reclaimable) return null;
+  String current;
+  try {
+    current = (await server.settings())['cacheRoot'] as String? ?? '';
+  } catch (_) {
+    // A server that cannot be asked is not a server on a bad root; the
+    // next start asks again.
+    DiagnosticsLog.warn('boot', 'could not read the torrent-data root');
+    return null;
+  }
+  if (!_isUnder(current, reclaimable)) return null;
+  try {
+    await server.updateSettings({'cacheRoot': wanted});
+  } catch (_) {
+    DiagnosticsLog.warn('boot', 'could not move the torrent-data root');
+    return null;
+  }
+  DiagnosticsLog.info(
+    'boot',
+    'torrent data moves off the purgeable cache directory at the next start',
+  );
+  return wanted;
+}
+
+/// [directory] with its symlinks followed, or its plain path when it
+/// cannot be resolved. The server stores a *canonical* `cacheRoot`, and on
+/// Android the two spellings genuinely differ (`/data/user/0/<pkg>` is a
+/// symlink to `/data/data/<pkg>`), so a comparison of the raw strings
+/// would answer "not under the cache directory" for a root that is.
+Future<String> _resolved(Directory directory) async {
+  try {
+    return await directory.resolveSymbolicLinks();
+  } catch (_) {
+    return directory.path;
+  }
+}
+
+/// Whether [path] is [dir] itself or something under it.
+bool _isUnder(String path, String dir) =>
+    path == dir || path.startsWith('$dir${Platform.pathSeparator}');
+
 /// Loads the Rust library and boots stremio-core (with the embedded
 /// stream-server) before showing the app; shows the failure otherwise.
 ///
@@ -153,9 +235,13 @@ class XtremioBootstrap extends StatefulWidget {
     DiagnosticsLog.useCoreRing();
     final client = RustCoreClient();
     final Directory support = await getApplicationSupportDirectory();
-    final info = await client.init(
-      support: support,
-      cache: await dataDirectory(isAndroid: Platform.isAndroid),
+    final Directory data = await dataDirectory(isAndroid: Platform.isAndroid);
+    final info = await client.init(support: support, cache: data);
+    await moveOffPurgeableRoot(
+      server: const ServerClient(),
+      wanted: '${data.path}/server',
+      purgeable: await getApplicationCacheDirectory(),
+      safe: data,
     );
     return (client, info);
   }

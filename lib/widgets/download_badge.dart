@@ -61,7 +61,10 @@ class DownloadBadge extends StatelessWidget {
             size: size,
             color: scheme.primary,
           ),
-          DownloadState.error => Icon(
+          // A download that stopped and one whose pieces are gone are the
+          // same thing to look at from across a room -- something is wrong
+          // with this one -- and the tooltip above says which.
+          DownloadState.error || DownloadState.gone => Icon(
             Icons.error_outline,
             size: size,
             color: scheme.error,
@@ -102,6 +105,7 @@ class DownloadSummary extends StatelessWidget {
     if (downloads.isEmpty) return null;
     var complete = 0;
     var stopped = 0;
+    var gone = 0;
     var arriving = 0;
     for (final download in downloads) {
       switch (download.state) {
@@ -109,6 +113,11 @@ class DownloadSummary extends StatelessWidget {
           complete++;
         case DownloadState.error:
           stopped++;
+        // Counted apart from the stopped ones on purpose: a stopped
+        // download is one the device is still trying to finish, and this
+        // is one there is nothing left of.
+        case DownloadState.gone:
+          gone++;
         case _:
           arriving++;
       }
@@ -117,6 +126,7 @@ class DownloadSummary extends StatelessWidget {
       if (complete > 0) '$complete downloaded',
       if (arriving > 0) '$arriving downloading',
       if (stopped > 0) '$stopped stopped',
+      if (gone > 0) '$gone not on this device',
     ].join(' · ');
   }
 

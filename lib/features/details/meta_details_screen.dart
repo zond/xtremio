@@ -2671,7 +2671,7 @@ final class _StreamDownloads {
     if (entry == null) return starter(stream);
     return switch (entry.state) {
       DownloadState.complete => () => onDelete(entry),
-      DownloadState.error => starter(stream),
+      DownloadState.error || DownloadState.gone => starter(stream),
       _ => null,
     };
   }
@@ -3080,8 +3080,16 @@ class _StreamTile extends StatelessWidget {
         icon: const Icon(Icons.delete_outline),
         onPressed: () => downloads.onDelete(entry),
       ),
+      // The same button for a download that stopped and one whose pieces
+      // are gone: both are "press to have this file again", and the
+      // tooltip is what tells them apart.
       DownloadState.error => IconButton(
         tooltip: kDownloadRetryTooltip,
+        icon: const Icon(Icons.error_outline),
+        onPressed: start,
+      ),
+      DownloadState.gone => IconButton(
+        tooltip: kDownloadGoneTooltip,
         icon: const Icon(Icons.error_outline),
         onPressed: start,
       ),

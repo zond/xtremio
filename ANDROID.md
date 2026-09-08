@@ -533,11 +533,31 @@ texture, and a much larger change than this one.
   librqbit persists the torrent and its verified pieces, the server
   persists its pin set, and start-up re-pins every unfinished registry
   entry, so reopening the app continues where it stopped. A *finished*
-  download needs nothing running at all — it is played straight off the
-  file.
+  download still needs the embedded server, and only that: torrent data is
+  one file per piece and the server is the one reader those pieces have, so
+  it is played through the server's own media route off the disk — no peer,
+  no tracker, no network — and never off a file, because none is written.
 - **Moving the root moves nothing that is already there.** The setting
   says where torrent data will live from the next start; the pieces under
-  the old root stay there and nothing copies them.
+  the old root stay there and nothing copies them. The rows that named them
+  are not left claiming a film that is gone either: the next boot's
+  reconciliation marks a finished download the server no longer holds as
+  "Not on this device", and does not fetch it again on its own.
+- **An install upgraded from an earlier build is moved off `getCacheDir()`
+  once.** Those builds persisted a `cacheRoot` inside the app cache
+  directory and kept the downloads in a `downloadsDir` of their own; with
+  one root the downloads would follow the cache into the directory the
+  system reclaims, which is the one place they had been safe from. So
+  `XtremioBootstrap.moveOffPurgeableRoot` (`lib/main.dart`) writes
+  `cacheRoot` once at boot when the persisted root is inside the app cache
+  directory — the app's default cannot do it, because stream-server fills
+  its default in only when the key is empty. It compares the paths
+  *resolved*: the server stores a canonical root and `/data/user/0/<pkg>`
+  is a symlink to `/data/data/<pkg>`. What such a user sees is the new root
+  on Settings → Server storage with its "takes effect at the next start"
+  note, and — since nothing is copied and no earlier build's whole files
+  are readable as pieces — their kept downloads listed as "Not on this
+  device", with a button that fetches each one again if they want it.
 
 ## Downloads while the app is away
 
@@ -558,14 +578,16 @@ FFI and only Dart can act on either.
 **What decides when it runs.** `DownloadsForegroundService`
 (`lib/features/downloads/downloads_service.dart`), from the one
 `DownloadsClient` the app holds: the service goes up as soon as one entry
-is on its way -- neither complete nor paused, and not in the error state
-either -- and comes down the moment none is. Playing or seeding is not a
-reason to hold it, and neither is an errored entry: that is a pin the
-server refused (a downloads volume that is not mounted, a full disk) or a
+is on its way -- not complete, not paused, not gone, and not in the error
+state either -- and comes down the moment none is. Playing or seeding is
+not a reason to hold it, and neither is an errored entry: that is a pin the
+server refused (an unwritable root, a full disk) or a
 torrent whose add failed, with no engine and no peers behind it, so a
 process kept alive for it would fetch nothing and the notification would
-say "Waiting to start" for ever. A retry re-adds it, and the row that
-follows is what brings the service up. (The Rust ticker's
+say "Waiting to start" for ever. A row whose pieces are gone is further
+still from a download in progress: nothing is being fetched for it and
+nothing will be until it is asked for again. A retry re-adds either, and
+the row that follows is what brings the service up. (The Rust ticker's
 `Entry::unfinished` still counts an error, because the boot's re-pin
 shares the test; the service's question is narrower.) The progress
 feed only carries rows that *moved*, so a row for a key no listing has

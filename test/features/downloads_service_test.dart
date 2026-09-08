@@ -431,7 +431,7 @@ void main() {
     });
 
     test('an errored download is not something to hold it for either', () {
-      // What repin_unfinished_in leaves behind when the server refuses the
+      // What reconcile_pins_in leaves behind when the server refuses the
       // pin at boot -- an unmounted downloads volume, a full disk: no
       // engine, no peers, nothing the process could be kept alive for.
       final refused = DownloadView({
@@ -456,6 +456,29 @@ void main() {
       );
       expect(summary.active, 1);
       expect(summary.percent, 40);
+    });
+
+    test('and neither is one whose pieces are gone', () {
+      // What the boot reconciliation leaves behind when the server turns
+      // out not to hold a finished download any more. Further from a
+      // download in progress than an errored one: nothing is being fetched
+      // for it and nothing will be until the user asks. Counting it would
+      // put a foreground service up, and a "Waiting to start" notification,
+      // for a row nothing is working on.
+      final gone = DownloadView({
+        'metaId': 'tt2',
+        'videoId': 'tt2',
+        'size': 100,
+        'downloaded': 0,
+        'state': 'gone',
+        'error': 'the downloaded data is not on this device any more',
+      });
+      expect(
+        gone.isUnfinished,
+        isFalse,
+        reason: 'the ticker has nothing to poll for either',
+      );
+      expect(DownloadsSummary.of(registryOf([gone])).isIdle, isTrue);
     });
 
     test('a complete or paused download is not something to hold it for', () {

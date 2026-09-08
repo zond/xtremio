@@ -27,7 +27,14 @@ enum DownloadState {
   error('error'),
 
   /// Reserved: the server has no pause for a pinned file yet.
-  paused('paused');
+  paused('paused'),
+
+  /// Everything this row named is off the device: the server holds no pin
+  /// for its pieces any more, so there is nothing here to read. Written
+  /// once, by the boot reconciliation that found the root moved or
+  /// reclaimed out from under it. Nothing fetches it again until the user
+  /// asks -- which is the whole difference between this and [error].
+  gone('gone');
 
   const DownloadState(this.wireName);
 
@@ -99,12 +106,17 @@ final class DownloadView {
 
   bool get isComplete => state == DownloadState.complete;
 
-  /// Still on its way: neither whole on the device nor paused. The same
-  /// test `Entry::unfinished` in `rust/src/downloads.rs` makes, which is
-  /// what decides whether the progress ticker keeps polling -- an errored
-  /// entry counts, because a peer can still turn up.
+  /// Still on its way: not whole on the device, and not one of the two
+  /// states nothing is working on. The same test `Entry::unfinished` in
+  /// `rust/src/downloads.rs` makes, which is what decides whether the
+  /// progress ticker keeps polling -- an errored entry counts, because a
+  /// peer can still turn up, and a [DownloadState.gone] one does not,
+  /// because nothing is fetching it and nothing will until it is asked
+  /// for again.
   bool get isUnfinished =>
-      state != DownloadState.complete && state != DownloadState.paused;
+      state != DownloadState.complete &&
+      state != DownloadState.paused &&
+      state != DownloadState.gone;
 
   /// The server's reason this is not progressing, when it gave one. Never
   /// names a local path.

@@ -84,7 +84,7 @@ fn dirty_the_health_table(app: &AppState) {
 
 /// Puts one unfinished download in `storage`'s registry, because an empty
 /// one is not something a shutdown can outrun: `ensure_ticker_in` starts no
-/// ticker without work to do, and `repin_unfinished_in` never enters its
+/// ticker without work to do, and `reconcile_pins_in` never enters its
 /// loop, so between them they reach the registry's `load` and nothing past
 /// it. With an entry here both walk the paths a tick and a boot really take.
 ///
@@ -187,7 +187,7 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
     // test can drive tells that half's `_in` calls apart from the
     // resurrecting ones.
     xtremio_core::downloads::ensure_ticker_in(&first);
-    xtremio_core::downloads::repin_unfinished_in(&first);
+    xtremio_core::downloads::reconcile_pins_in(&first);
     assert!(
         state::current().is_none(),
         "the retired instance's background work rebuilt the state shutdown took"

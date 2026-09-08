@@ -52,10 +52,11 @@ Future<String> serverUpdateSettings({required String patchJson}) => RustLib
     .api
     .crateApiServerServerUpdateSettings(patchJson: patchJson);
 
-/// What the server's storage costs right now, as JSON: the cache
-/// directory, the bytes under it, the `cacheSize` limit, and the free and
-/// total space of the volume it is on (plus the downloads volume when that
-/// is a different filesystem).
+/// What the server's storage costs right now, as JSON: the one torrent-data
+/// root, every byte under it, the `cacheSize` limit, and the free and total
+/// space of the volume it is on. One root and one volume: the streaming
+/// cache and everything kept offline are the same pieces in the same store,
+/// so there is no second tree to leave out and no second volume to report.
 ///
 /// The first question about a playback that misbehaves is whether the
 /// device is full -- bytes arriving with no verified progress is what

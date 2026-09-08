@@ -199,6 +199,27 @@ fn create_torrent_on_server(base_url: &url::Url, torrent: &[u8]) -> serde_json::
     })
 }
 
+/// `GET`s a media URL the way the player does: no bearer token (the media
+/// routes are the open ones), no proxy, and a bound short enough that a
+/// route which decided to *fetch* rather than read fails the test instead
+/// of hanging on a magnet nobody can answer.
+fn fetch(url: &url::Url) -> (u16, Vec<u8>) {
+    runtime().block_on(async {
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .expect("HTTP client");
+        let response = client
+            .get(url.clone())
+            .send()
+            .await
+            .expect("GET the media route");
+        let status = response.status().as_u16();
+        (status, response.bytes().await.expect("body").to_vec())
+    })
+}
+
 fn list() -> serde_json::Value {
     json(&downloads_list().expect("downloads_list"))
 }
@@ -490,6 +511,19 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         "the stamp is on disk, not only in the answer"
     );
 
+    // And the URL is fetched, because "it plays off the pieces already
+    // here" is a claim about what happens on the wire and a URL string
+    // proves none of it. Whole file, byte for byte, from a torrent with no
+    // tracker in it and no peer anywhere: every byte came off this disk.
+    let (status, body) = fetch(&played_url);
+    assert_eq!(status, 200, "the media route serves it");
+    assert_eq!(body.len(), HAVE_LEN, "the whole file came back");
+    assert_eq!(
+        body,
+        (0..HAVE_LEN).map(|i| (i % 251) as u8).collect::<Vec<u8>>(),
+        "and it is the payload that was written, not something refetched"
+    );
+
     // Everything that is not a whole download on this device is a refusal
     // with a reason, never an exception and never a dead player: an
     // unfinished download and an entry the registry does not have. A
@@ -499,43 +533,6 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert_eq!(refused["reason"], "incomplete", "{refused}");
     let refused = json(&downloads_open("tt-nothing:tt-nothing".into())?);
     assert_eq!(refused["reason"], "unknown", "{refused}");
-
-    // The path the entry carries decides nothing, and must not: the server
-    // answers it as a *name* for the file and never writes one there, so a
-    // build that went back to opening it would refuse every download on the
-    // device. Written to a name nothing could ever have created, the
-    // download still plays.
-    //
-    // Unpin the file at the server *before* writing that path: the
-    // background ticker is still running (tt-missing is unfinished) and
-    // calls `refresh` about once a second, which folds the server's live
-    // info back onto every entry that matches its (infoHash, fileIdx) --
-    // including this one, overwriting whatever path is written here with
-    // the name the engine still resolves. With no pin left for
-    // (info_hash, have_idx), `refresh` finds nothing to match and never
-    // touches this entry again. `deleteFiles: false`, so the pieces stay on
-    // disk for the assertions below it and the re-add further down.
-    xtremio_core::server::unpin_download(&info_hash, have_idx, false)?;
-    xtremio_core::downloads::update(|registry| {
-        let entry = registry
-            .items
-            .get_mut("tt-have:tt-have")
-            .expect("the finished entry");
-        entry.last_played_at = None;
-        entry.path = Some(named.join("unplugged.bin").to_string_lossy().into_owned());
-        Ok(())
-    })?;
-    assert!(
-        !named.join("unplugged.bin").exists(),
-        "the substituted name must really not exist"
-    );
-    let opened = json(&downloads_open("tt-have:tt-have".into())?);
-    assert_eq!(opened["ok"], true, "{opened}");
-    assert_eq!(
-        url::Url::parse(opened["url"].as_str().expect("a URL"))?,
-        base_url.join(&format!("{info_hash}/{have_idx}"))?,
-        "still its own torrent and file: {opened}"
-    );
 
     // Pressing Download again on a finished title -- the button is not
     // disabled yet, or the user is retrying after a scare -- is a retry of
@@ -561,6 +558,85 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         .map(String::as_str)
         .collect();
     assert_eq!(keys, ["tt-have:tt-have", "tt-missing:tt-missing"]);
+
+    // A row saying `complete` is not on its own a reason to hand that URL
+    // out, and this is the case that proves it: the pin is dropped while
+    // the pieces are left where they are (`deleteFiles: false`), which is
+    // the shape of a root that moved out from under a download -- the
+    // registry still says `complete` and the session holds nothing.
+    //
+    // Handing back a URL here would not 404. On loopback the media route
+    // creates what it is asked for, so it would start a magnet add from a
+    // bare info hash with no trackers on it and block until the metadata
+    // timeout, behind a screen that says the film is on the device.
+    //
+    // The ticker is running (tt-missing is unfinished) and cannot correct
+    // this row either: `refresh` folds in the rows the server *lists*, and
+    // with no pin for (info_hash, have_idx) there is nothing to match.
+    xtremio_core::server::unpin_download(&info_hash, have_idx, false)?;
+    let refused = json(&downloads_open("tt-have:tt-have".into())?);
+    assert_eq!(refused["ok"], false, "{refused}");
+    assert_eq!(refused["reason"], "notHeld", "{refused}");
+    assert!(
+        refused["url"].is_null(),
+        "and nothing to play it with: {refused}"
+    );
+    assert_eq!(
+        list()["items"]["tt-have:tt-have"]["state"],
+        "complete",
+        "the row itself is untouched -- the refusal is what the server holds"
+    );
+
+    // What corrects the row is the boot reconciliation, and what it must
+    // not do is fetch the film again: the entry is marked gone, with no
+    // bytes and no completion date, and no pin is issued for it. A row that
+    // went back to `queued` would be a whole download restarted on whatever
+    // connection the device is on, asked for by nobody.
+    xtremio_core::downloads::reconcile_pins();
+    let gone = list()["items"]["tt-have:tt-have"].clone();
+    assert_eq!(gone["state"], "gone", "{gone}");
+    assert_eq!(gone["downloaded"], 0, "{gone}");
+    assert!(gone["completedAt"].is_null(), "{gone}");
+    assert!(gone["error"].is_string(), "with a reason on it: {gone}");
+    let pins = xtremio_core::server::downloads()?;
+    assert!(
+        pins.iter().all(|pin| pin.file_idx != have_idx),
+        "and nothing was re-pinned to get it back: {pins:?}"
+    );
+    let refused = json(&downloads_open("tt-have:tt-have".into())?);
+    assert_eq!(refused["reason"], "incomplete", "{refused}");
+
+    // And it stays inert: the *next* boot must not pick it up either. A
+    // gone row that counted as unfinished would be re-pinned by every boot
+    // from here on, which is the same unasked-for download arriving a
+    // launch later.
+    xtremio_core::downloads::reconcile_pins();
+    assert_eq!(
+        list()["items"]["tt-have:tt-have"]["state"],
+        "gone",
+        "a second boot leaves it where the first one put it"
+    );
+    let pins = xtremio_core::server::downloads()?;
+    assert!(
+        pins.iter().all(|pin| pin.file_idx != have_idx),
+        "and pins nothing for it: {pins:?}"
+    );
+
+    // The pieces were never deleted, so what comes next is a re-pin of a
+    // file that is all there -- and the row has to come back with it.
+    assert_eq!(
+        pieces_on_disk(&cache_root, &info_hash, have_pieces.clone()),
+        have_pieces.len(),
+        "the bytes are still on disk; it is the pin that went"
+    );
+
+    // And what the re-add has to be able to come back from: the pin gone
+    // with the pieces left where they are.
+    let readded = add("tt-have", &info_hash, have_idx);
+    assert_eq!(readded["ok"], true, "the download comes back: {readded}");
+    wait_for("tt-have:tt-have", "have.bin to be whole again", |entry| {
+        entry["state"] == "complete"
+    });
 
     // Unpinning without deleting keeps the bytes and forgets the entry.
     let removed = json(&downloads_remove("tt-have:tt-have".into(), false)?);
@@ -682,7 +758,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
 
     // The two windows a kill can land in, each reproduced as what the disk
     // holds afterwards, and each finished by what the next boot runs first
-    // (`repin_unfinished` is what `core_init` starts behind itself).
+    // (`reconcile_pins` is what `core_init` starts behind itself).
     //
     // Removing: the row is marked before the server is asked and dropped
     // after it answers. Died in between, the row says a removal was meant,
@@ -710,7 +786,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         if unpinned_before_the_kill {
             xtremio_core::server::unpin_download(&info_hash, have_idx, false)?;
         }
-        xtremio_core::downloads::repin_unfinished();
+        xtremio_core::downloads::reconcile_pins();
         let pins = xtremio_core::server::downloads()?;
         assert!(
             pins.iter().all(|pin| pin.file_idx != have_idx),
@@ -746,7 +822,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         pins.iter().any(|pin| pin.file_idx == have_idx),
         "the old pin is still the server's before the boot: {pins:?}"
     );
-    xtremio_core::downloads::repin_unfinished();
+    xtremio_core::downloads::reconcile_pins();
     let pins = xtremio_core::server::downloads()?;
     assert_eq!(pins.len(), 1, "the swap is finished: {pins:?}");
     assert_eq!(pins[0].file_idx, missing_idx, "{pins:?}");
@@ -800,7 +876,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         xtremio_core::server::downloads()?.is_empty(),
         "the pin is gone from the server"
     );
-    xtremio_core::downloads::repin_unfinished();
+    xtremio_core::downloads::reconcile_pins();
     let pins = xtremio_core::server::downloads()?;
     assert_eq!(pins.len(), 1, "{pins:?}");
     assert_eq!(pins[0].file_idx, missing_idx);

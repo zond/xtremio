@@ -27,6 +27,7 @@ import 'package:xtremio/widgets/tv_text_field.dart';
 import '../../support/fake_core_client.dart';
 import '../../support/fake_diagnostics_client.dart';
 import '../../support/fake_downloads_client.dart';
+import '../../support/fake_server_cache.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 import '../../support/text_entry.dart';
@@ -670,6 +671,66 @@ void main() {
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
     }),
+    // The same screen with a server that answers, which is the only state
+    // that draws the control this screen exists for: where torrent data
+    // lives. It is hand-rolled -- rows that are radio buttons by icon, and
+    // a text field where the platform offers no directories -- so nothing
+    // Material puts a focus treatment on covers it, and both shapes are
+    // walked. Under a stuck server the control is not built at all and
+    // neither would be.
+    walk(
+      'server_storage_screen.dart',
+      'server storage, on a television '
+          'that can be moved between its volumes',
+      (tester) async {
+        useScreen(tester, tvSize);
+        await tester.pumpWidget(
+          CoreScope(
+            client: fullCore(),
+            child: onTv(
+              ServerStorageScreen(
+                client: FakeServerCache(usage: overLimitEvictable),
+                roots: () async => const [
+                  '/storage/emulated/0/Android/data/com.zond.xtremio/files',
+                  '/storage/1A2B-3C4D/Android/data/com.zond.xtremio/files',
+                ],
+              ),
+              pushed: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(ServerStorageScreen.rootTitle),
+          findsOneWidget,
+          reason: 'the control this case is about has to be on screen',
+        );
+        await walkEveryStop(tester);
+      },
+    ),
+    walk(
+      'server_storage_screen.dart',
+      'server storage, where the folder is '
+          'typed instead of picked',
+      (tester) async {
+        useScreen(tester, tvSize);
+        await tester.pumpWidget(
+          CoreScope(
+            client: fullCore(),
+            child: onTv(
+              ServerStorageScreen(
+                client: FakeServerCache(usage: overLimitEvictable),
+                roots: () async => const [],
+              ),
+              pushed: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(TvTextField), findsOneWidget);
+        await walkEveryStop(tester);
+      },
+    ),
     walk('player_screen.dart', 'the player, with its bar up', (tester) async {
       useScreen(tester, tvSize);
       final player = PlayerHarness(device: tv, prefs: bold());
@@ -1067,6 +1128,38 @@ void main() {
       await tester.pumpAndSettle();
       return pushes;
     }),
+    // And with the root control drawn: picking a volume reports through a
+    // snack bar like everything else here, so pressing every stop on this
+    // screen still opens nothing -- there is no folder browser behind it
+    // and there must not be one, since the server is what validates a
+    // root.
+    claim(
+      'server_storage_screen.dart',
+      'server storage, with a root to '
+          'pick',
+      (tester) async {
+        final pushes = Pushed();
+        useScreen(tester, tvSize);
+        await tester.pumpWidget(
+          CoreScope(
+            client: fullCore(),
+            child: onTv(
+              ServerStorageScreen(
+                client: FakeServerCache(usage: overLimitEvictable),
+                roots: () async => const [
+                  '/storage/emulated/0/Android/data/com.zond.xtremio/files',
+                  '/storage/1A2B-3C4D/Android/data/com.zond.xtremio/files',
+                ],
+              ),
+              pushed: true,
+              pushes: pushes,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        return pushes;
+      },
+    ),
   ];
 
   group('every screen marks what the remote lands on', () {

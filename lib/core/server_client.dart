@@ -116,6 +116,20 @@ abstract interface class ServerSettingsWriter {
   Future<Map<String, dynamic>> updateSettings(Map<String, dynamic> patch);
 }
 
+/// Reading the server's settings as well as writing them, which is what
+/// the start-up root correction needs and nothing else does: it has to see
+/// the `cacheRoot` a *previous* build persisted before it can decide
+/// whether this device is on a root the system may reclaim.
+///
+/// Deliberately not folded into [ServerSettingsWriter]: a writer is handed
+/// to policies that must not be able to read the settings back, and a read
+/// is the whole of what this adds.
+abstract interface class ServerSettingsAccess implements ServerSettingsWriter {
+  /// The settings as they stand (`GET /settings` -> `values`). Throws when
+  /// the server is not running.
+  Future<Map<String, dynamic>> settings();
+}
+
 /// What the storage screen needs from the server: where torrent data
 /// lives, what it occupies against its limit, and the one way there is to
 /// ask the server to reclaim some.
@@ -156,6 +170,7 @@ class ServerClient
         LanMediaControl,
         ServerCacheControl,
         ProxyStreamControl,
+        ServerSettingsAccess,
         ServerSettingsWriter {
   const ServerClient();
 
@@ -189,8 +204,10 @@ class ServerClient
     return url == null ? null : Uri.parse(url);
   }
 
-  /// The server's settings (`GET /settings` → `values`: `cacheSize`,
-  /// `btMaxConnections`, ...). Throws when the server is not running.
+  /// The server's settings (`GET /settings` → `values`: `cacheRoot`,
+  /// `cacheSize`, `btMaxConnections`, ...). Throws when the server is not
+  /// running.
+  @override
   Future<Map<String, dynamic>> settings() async =>
       _object(await rust.serverSettings());
 
@@ -204,16 +221,17 @@ class ServerClient
   ) async =>
       _object(await rust.serverUpdateSettings(patchJson: jsonEncode(patch)));
 
-  /// What the server's storage costs right now: the cache against its
-  /// `cacheSize` limit, and the room left on the volumes it writes to.
+  /// What the server's storage costs right now: the one torrent-data root,
+  /// everything under it against the `cacheSize` limit, and the room left
+  /// on the volume it is on.
   ///
-  /// Walks the cache directory on the Rust side, so it is a worker call
-  /// rather than a property; throws when the server is not running (there
-  /// is no cache root to name then). This is the disk-and-cache-directory
-  /// half of the picture -- the free/total space of the volumes the server
-  /// writes to, which stream-server does not report itself; for the
-  /// cache's own occupancy against its limit, [cacheUsage] is the
-  /// authoritative number (see `server_storage_report`).
+  /// Walks that root on the Rust side, so it is a worker call rather than
+  /// a property; throws when the server is not running (there is no root
+  /// to name then). This is the disk-and-directory half of the picture --
+  /// the free/total space of the volume the server writes to, which
+  /// stream-server does not report itself; for the cache's own occupancy
+  /// against its limit, [cacheUsage] is the authoritative number (see
+  /// `server_storage_report`).
   @override
   Future<ServerStorage> storage() async =>
       ServerStorage.fromJson(_object(await rust.serverStorageReport()));

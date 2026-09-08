@@ -24,6 +24,12 @@ const String kDownloadDeleteTooltip = 'Downloaded — delete from this device';
 /// ... when the server reported a reason it stopped; pressing it pins again.
 const String kDownloadRetryTooltip = 'Download stopped — try again';
 
+/// ... when the pieces this row named are not on the device any more (the
+/// root they were under was moved or reclaimed); pressing it downloads the
+/// same file again. A separate sentence from the one above because it is a
+/// separate thing to have happened: nothing is being tried.
+const String kDownloadGoneTooltip = 'No longer on this device — download again';
+
 /// ... on a stream whose video is already kept from *another* release.
 /// Pinning this one drops that pin, and the server deletes its file, so the
 /// button must not read like a first download.
@@ -50,6 +56,7 @@ String downloadStateLabel(DownloadView view) => switch (view.state) {
   DownloadState.queued => 'Waiting to start',
   DownloadState.paused => 'Paused',
   DownloadState.error => 'Stopped',
+  DownloadState.gone => 'Not on this device',
 };
 
 /// ` 42%` when there is a fraction to report, nothing while there is not

@@ -146,7 +146,7 @@ and the bytes. Keep it that way:
   the row `pendingRemoval` before the unpin and drops it after (a row that
   outlives its pin is a cancelled download the next boot restarts). Any
   intent the server still has to act on is on disk before the server is
-  asked, and `repin_unfinished_in` finishes it at boot. Keep every new
+  asked, and `reconcile_pins_in` finishes it at boot. Keep every new
   server call on that side of its write.
 - **One client, one sink.** The Rust side keeps a single progress sink, so
   the app builds one `DownloadsClient` in `XtremioApp` and hands it down
@@ -165,17 +165,34 @@ and the bytes. Keep it that way:
   and loses them at the next write. Moving the root is one settings key
   through `server_update_settings` like every other one, from Settings →
   Server storage, and it takes effect at the next start (a running
-  librqbit session cannot be moved).
+  librqbit session cannot be moved). The one write the app makes by
+  itself is `moveOffPurgeableRoot` at boot (`lib/main.dart`), which moves
+  an upgraded Android install off a `cacheRoot` inside the app cache
+  directory -- the app's default cannot reach such a device, because the
+  server fills its own in only when the key is empty.
 - **A kept download is not a file, so nothing opens one.** Torrent data is
   stored one file per piece; no whole file is ever produced, and the
   `path` the server reports is a *name* for the file, not something to
   `open`. `downloads_open` answers the embedded server's media route for
-  the entry's own torrent and file
-  (`{base}/{infoHash}/{fileIdx}`), which is served off the pieces already
-  here -- no peer, no tracker, no network -- and refuses with `unknown`,
-  `incomplete` or `unavailable` (the server is not running, and it is the
-  only reader those pieces have). A build that goes back to consulting
-  `entry.path` refuses every download on the device.
+  the entry's own torrent and file (`{base}/{infoHash}/{fileIdx}`), served
+  off the pieces already here -- no peer, no tracker, no network. A build
+  that goes back to consulting `entry.path` refuses every download on the
+  device.
+- **The row is not evidence; ask the server.** A `complete` row is the
+  last reading, and the pieces sit under a root that can be moved or
+  reclaimed without any row being rewritten -- so `downloads_open` hands
+  back a URL only when the server *also* answers that it holds that file
+  whole right now, and refuses with `notHeld` when it does not (beside
+  `unknown`, `incomplete` and `unavailable`, the last meaning the server is
+  not running). It is not a 404 that something downstream would catch: the
+  loopback media route creates the torrent it is asked for, so a URL for a
+  hash the session does not hold starts a magnet add with no trackers on it
+  and blocks to its metadata timeout -- a kept download starting a
+  download. The boot reconciliation (`reconcile_pins`) is the other half: a
+  finished row the server does not hold becomes `gone` -- inert, with a
+  reason on it and "Not on this device" in the list -- and is never
+  re-pinned, because re-pinning it is a whole film fetched again that
+  nobody asked for. Pressing Download on the title is what asks.
 - Downloads are control calls like any other: over FFI, never HTTP (see
   above).
 

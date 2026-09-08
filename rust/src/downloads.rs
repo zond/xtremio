@@ -35,10 +35,12 @@
 //! ([`Entry::pending_removal`]) and the row goes only after the server has
 //! answered -- a row that outlives its pin is a cancelled download the next
 //! boot re-pins and restarts, on metered data. Whatever a kill interrupts,
-//! the row on disk says what was meant, and [`repin_unfinished_in`]
+//! the row on disk says what was meant, and [`reconcile_pins_in`]
 //! finishes it at the next boot: a removal is carried out, a replacement's
-//! old pin is released once the new pin is in, and an unfinished row is
-//! pinned as it always was.
+//! old pin is released once the new pin is in, an unfinished row is pinned
+//! as it always was, and a finished row the server turns out not to hold is
+//! marked [`State::Gone`] instead of going on claiming a film that is not
+//! there.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -204,6 +206,18 @@ pub enum State {
     Error,
     /// Reserved: the server has no pause for a pinned file yet.
     Paused,
+    /// Everything this row named is off the device: the server holds no pin
+    /// for it any more, so its pieces are not in the store and nothing can
+    /// read them. Written by the boot reconciliation
+    /// ([`reconcile_pins_in`]) and by nothing else.
+    ///
+    /// It is deliberately *not* [`State::Error`]. An error is a download
+    /// that is still wanted and still being tried: the boot re-pins it, and
+    /// re-pinning a row whose bytes are gone is a whole film fetched again
+    /// over whatever connection the device is on, asked for by nobody. This
+    /// state is inert -- nothing polls it and nothing pins it -- until the
+    /// user presses Download on the title again.
+    Gone,
 }
 
 impl<'de> Deserialize<'de> for State {
@@ -215,6 +229,7 @@ impl<'de> Deserialize<'de> for State {
             "complete" => Self::Complete,
             "error" => Self::Error,
             "paused" => Self::Paused,
+            "gone" => Self::Gone,
             other => {
                 tracing::warn!(
                     state = other,
@@ -332,7 +347,8 @@ impl Entry {
     /// Whether the ticker still has a reason to poll for this entry -- and
     /// the boot a reason to pin it. A row on its way out has neither.
     fn unfinished(&self) -> bool {
-        self.pending_removal.is_none() && !matches!(self.state, State::Complete | State::Paused)
+        self.pending_removal.is_none()
+            && !matches!(self.state, State::Complete | State::Paused | State::Gone)
     }
 
     /// Whether the row is one [`remove`] has begun on and not finished.
@@ -1478,10 +1494,24 @@ pub enum OpenFailure {
     Unknown,
     /// The bytes are not all here yet.
     Incomplete,
-    /// Everything is here, and nothing can serve it: the embedded server is
-    /// not running. The pieces are only ever read through it, so this is
-    /// the one way a whole download has nowhere to play from.
+    /// The embedded server is not running, and the pieces are only ever
+    /// read through it.
     Unavailable,
+    /// The server is running and does not have this file's pieces to serve:
+    /// it holds no pin for them (the root was moved, or the volume they were
+    /// on was reclaimed and the start-up sweep took what was left), the pin
+    /// is dormant because the torrent was not restored, or the torrent is
+    /// re-checking and has not said the file is whole yet.
+    ///
+    /// It is a refusal and not a URL for a sharp reason. On loopback the
+    /// media route creates the torrent it is asked for when the session does
+    /// not have it (stream-server `c225908`, `routes/stream.rs` ->
+    /// `compat::get_or_add_magnet`), so a URL handed out for a torrent the
+    /// server does not hold is not a 404: it is a fresh magnet add from a
+    /// bare info hash with no trackers on it, which blocks until the
+    /// metadata timeout and joins a swarm on the way. The one thing a kept
+    /// download must never do is start a download.
+    NotHeld,
 }
 
 /// What [`open`] answers.
@@ -1512,24 +1542,56 @@ impl OpenOutcome {
     }
 }
 
-/// Where a finished download plays from, or why it does not.
+/// Whether `live` -- the server's pinned downloads, read a moment ago --
+/// says this entry's file is whole in the store right now.
+///
+/// `complete` and not merely "listed": a listed pin can be dormant (the
+/// backend did not restore the torrent, so it reports zeroes and an error)
+/// or mid-check, and neither of those has bytes to serve.
+fn holds_whole(live: &[DownloadInfo], entry: &Entry) -> bool {
+    live.iter().any(|info| {
+        info.complete
+            && info.file_idx == entry.file_idx
+            && info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
+    })
+}
+
+/// Where a finished download plays from, or why it does not. `live` is the
+/// server's pin set, or `None` when it could not be asked at all.
 ///
 /// **There is no file to open.** Torrent data is one file per piece in the
 /// server's store, for the streaming cache and a kept download alike, so
 /// what a download has on this device is its pieces and the only reader of
 /// those is the embedded server. The URL is therefore its media route for
-/// this torrent and file (`{base}/{infoHash}/{fileIdx}`), which for a
-/// complete download is served from the disk with no peer, no tracker and
-/// no network involved -- the same independence the `file://` URL before it
-/// had, through the one process that can now read the bytes.
+/// this torrent and file (`{base}/{infoHash}/{fileIdx}`), served from the
+/// disk with no peer, no tracker and no network involved -- the same
+/// independence the `file://` URL before it had, through the one process
+/// that can now read the bytes.
+///
+/// **Two things have to be true, and the row is only one of them.**
+/// [`State::Complete`] is the registry's last reading, and a reading can be
+/// stale in the one direction that matters: the pieces live under a root
+/// that can be moved (Settings -> Server storage) or reclaimed (an Android
+/// cache directory), and neither event goes back and rewrites the rows. So
+/// the server is asked what it is holding *now*, and a row it does not back
+/// is refused with [`OpenFailure::NotHeld`] -- see there for what the URL
+/// would otherwise have started. The old build had the same guard in the
+/// shape its model allowed, an `is_file()` on the download's path; the file
+/// went, and the check has to go on existing without it.
 ///
 /// `entry.path` is not consulted, and must not be: the server answers it as
 /// a *name* for the file, and no whole file is ever written there.
-/// [`State::Complete`] is the proof that every piece is down, which is what
-/// it always was.
-fn stream_url(entry: &Entry) -> Result<String, OpenFailure> {
+fn stream_url(entry: &Entry, live: Option<&[DownloadInfo]>) -> Result<String, OpenFailure> {
     if entry.state != State::Complete {
         return Err(OpenFailure::Incomplete);
+    }
+    // No answer from the server at all is [`OpenFailure::Unavailable`]: it
+    // is not running, and "not held" and "not asked" must not read alike.
+    let Some(live) = live else {
+        return Err(OpenFailure::Unavailable);
+    };
+    if !holds_whole(live, entry) {
+        return Err(OpenFailure::NotHeld);
     }
     let base = crate::server::base_url().ok_or(OpenFailure::Unavailable)?;
     base.join(&format!("{}/{}", entry.info_hash, entry.file_idx))
@@ -1539,9 +1601,10 @@ fn stream_url(entry: &Entry) -> Result<String, OpenFailure> {
 
 /// What to play `key` off the device with, and a note that it was played.
 ///
-/// A finished download answers `ok: true` with the URL it plays from --
-/// the embedded server's media route, reading the pieces already on this
-/// device -- and its `lastPlayedAt` is stamped in the same
+/// A finished download the server is still holding whole answers `ok: true`
+/// with the URL it plays from -- the embedded server's media route, reading
+/// the pieces already on this device (see [`stream_url`] for why both halves
+/// are asked) -- and its `lastPlayedAt` is stamped in the same
 /// locked read-modify-write — so the timestamp cannot be lost to a progress
 /// tick landing between the check and the write, and cannot be stamped on a
 /// play that never happened.
@@ -1549,6 +1612,14 @@ fn stream_url(entry: &Entry) -> Result<String, OpenFailure> {
 /// Anything else answers `ok: false` with a [`OpenFailure`]: the caller
 /// streams the title instead of opening a dead player.
 pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
+    // The pin set first and the registry lock second, which is the order
+    // [`merge_live_in`] takes them in and therefore the only order anything
+    // may: asking the server from inside `update` would hold the file lock
+    // across a blocking call into the server's runtime, and the refresh
+    // running the other way round is a cycle. `Err` here is a server that
+    // cannot answer -- `None`, which `stream_url` reads as
+    // [`OpenFailure::Unavailable`].
+    let live = crate::server::downloads().ok();
     update(|registry| {
         let Some(entry) = registry
             .items
@@ -1557,7 +1628,7 @@ pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
         else {
             return Ok(OpenOutcome::refused(key, OpenFailure::Unknown));
         };
-        let url = match stream_url(entry) {
+        let url = match stream_url(entry, live.as_deref()) {
             Ok(url) => url,
             Err(reason) => {
                 tracing::info!(key, ?reason, "nothing to play this download from");
@@ -1817,16 +1888,68 @@ async fn ticker(app: Arc<AppState>) {
     }
 }
 
-/// Re-issues the pin for every entry the server may have forgotten (it
-/// persists its own pin set, but a registry entry can outlive a purged
-/// torrent-data root). Complete downloads are left
-/// alone: their bytes are on disk and re-pinning them would only re-check.
-/// Blocks per entry while a magnet resolves, so run it off the boot path.
-pub fn repin_unfinished() {
-    repin_unfinished_in(&crate::state::state())
+/// What a row marked [`State::Gone`] carries as its reason, for the screen
+/// that draws it and the log that records it. It names what is true of the
+/// device rather than blaming a folder: with one root there is no second
+/// place the bytes could have been, and which root they were under when
+/// they went is not something the registry knows.
+pub const GONE_MESSAGE: &str = "the downloaded data is not on this device any more";
+
+/// Records that `key`'s pieces are not on the device: [`State::Gone`], no
+/// bytes and no completion date, because none of the three is true any more.
+///
+/// A fresh read-modify-write rather than an edit of the copy the caller is
+/// looping over: the loop blocks on magnet resolution between rows, and the
+/// registry can have been written by an `add`, a `remove` or the ticker in
+/// between. Only a row still saying `complete` is changed, so a download the
+/// user started again while this ran keeps what that start wrote.
+fn mark_gone_in(app: &Arc<AppState>, key: &str) {
+    let marked = update_in(app, |registry| {
+        let Some(entry) = registry
+            .items
+            .get_mut(key)
+            .filter(|entry| entry.state == State::Complete && !entry.is_leaving())
+        else {
+            return Ok(false);
+        };
+        entry.state = State::Gone;
+        entry.error = Some(GONE_MESSAGE.to_owned());
+        entry.downloaded = 0;
+        entry.completed_at = None;
+        Ok(true)
+    });
+    match marked {
+        Ok(true) => tracing::warn!(key, "a finished download's pieces are gone"),
+        Ok(false) => {}
+        Err(error) => tracing::warn!(key, %error, "could not record a download as gone"),
+    }
 }
 
-/// [`repin_unfinished`] against a state the caller already holds -- `init`'s,
+/// Puts the registry and the server's pin set back into agreement, which is
+/// the one moment either of them can be checked against the other: the
+/// server has just finished restoring its own pins (live or dormant) and
+/// nothing has been asked of it yet.
+///
+/// Two halves, because a row can be wrong in two directions:
+///
+/// - **An unfinished row with no pin behind it** is re-pinned. The server
+///   persists its pin set, but a registry entry outlives a torrent-data root
+///   that was moved or purged, and without this the download would sit at
+///   whatever it last read for ever.
+/// - **A finished row the server does not hold whole** is marked
+///   [`State::Gone`]. Its pieces were under that same root, and with them
+///   gone there is nothing on the device to play: the row said `complete`
+///   and would have said it for ever, because the merge only touches rows
+///   the server lists. It is *not* re-pinned, which is the difference
+///   between a boot that reports a loss and one that quietly re-downloads
+///   a film over whatever connection the device is on.
+///
+/// Blocks per entry while a magnet resolves, so run it off the boot path.
+pub fn reconcile_pins() {
+    reconcile_pins_in(&crate::state::state())
+}
+
+/// [`reconcile_pins`] against a state the caller already holds -- `init`'s,
 /// which is the state this work belongs to. It is the other half of the
 /// boot that can still be running after a shutdown (a magnet blocks it for
 /// as long as the tracker takes), so it may not look a state up either, and
@@ -1840,7 +1963,7 @@ pub fn repin_unfinished() {
 /// removals a kill interrupted first, so a cancelled download is not
 /// re-pinned only to be dropped again; the pins of swapped-out files last,
 /// once the re-pin has put the swap's new pin in place.
-pub fn repin_unfinished_in(app: &Arc<AppState>) {
+pub fn reconcile_pins_in(app: &Arc<AppState>) {
     finish_pending_removals_in(app);
     let items = match load_in(app) {
         Ok(registry) => registry.items,
@@ -1849,8 +1972,30 @@ pub fn repin_unfinished_in(app: &Arc<AppState>) {
             return;
         }
     };
+    // One reading of the pin set for the finished half, taken before
+    // anything is pinned so that no pin this function issues is mistaken for
+    // one the last run left. A server that cannot answer marks nothing: "not
+    // held" and "not asked" are the same silence, and only one of them is a
+    // download that is gone.
+    let live = match crate::server::downloads() {
+        Ok(live) => Some(live),
+        Err(error) => {
+            tracing::warn!(%error, "could not read the server's pins; leaving the finished rows alone");
+            None
+        }
+    };
     for (key, entry) in items {
         if !entry.unfinished() {
+            let lost = entry.state == State::Complete
+                && live
+                    .as_deref()
+                    .is_some_and(|live| !holds_whole(live, &entry));
+            if lost {
+                if !crate::state::is_current(app) {
+                    return;
+                }
+                mark_gone_in(app, &key);
+            }
             continue;
         }
         // The ticker's check, in the loop that needs it most, and twice:
@@ -1953,6 +2098,24 @@ mod tests {
             !written.contains("/sdcard/downloads"),
             "and the folder itself is not carried either: {written}"
         );
+    }
+
+    /// A row the last boot marked gone reads back as gone.
+    ///
+    /// It is the one state whose *reading* decides whether a download
+    /// happens: an unknown state reads as `queued`, `queued` is
+    /// unfinished, and the next boot pins every unfinished row -- so a
+    /// build that dropped this arm would answer a moved root by fetching
+    /// every film again, one launch later and asked for by nobody.
+    #[test]
+    fn a_row_marked_gone_reads_back_gone_rather_than_as_something_to_pin() {
+        let registry = Registry::parse(
+            br#"{"version":1,"items":{"tt1:tt1":{"metaId":"tt1","videoId":"tt1",
+                 "infoHash":"abc","fileIdx":0,"stream":{},"state":"gone"}}}"#,
+        );
+        let entry = &registry.items["tt1:tt1"];
+        assert_eq!(entry.state, State::Gone);
+        assert!(!entry.unfinished(), "so the boot leaves it alone");
     }
 
     /// A registry survives a round-trip, and reading is forgiving in the
@@ -2397,12 +2560,54 @@ mod tests {
         entry.path = Some("/data/rqbit-downloads/A Film/A Film 1080p.mkv".into());
 
         entry.state = State::Downloading;
-        assert_eq!(stream_url(&entry), Err(OpenFailure::Incomplete));
+        assert_eq!(stream_url(&entry, None), Err(OpenFailure::Incomplete));
 
         // Complete, with no server in this test binary: there is no reader
         // for the pieces, so there is no URL either.
         entry.state = State::Complete;
-        assert_eq!(stream_url(&entry), Err(OpenFailure::Unavailable));
+        assert_eq!(stream_url(&entry, None), Err(OpenFailure::Unavailable));
+    }
+
+    /// A pin listing, as `crate::server::downloads` answers one.
+    fn pinned(info_hash: &str, file_idx: usize, complete: bool) -> DownloadInfo {
+        serde_json::from_value(serde_json::json!({
+            "infoHash": info_hash,
+            "fileIdx": file_idx,
+            "path": "/data/rqbit-downloads/A Film/A Film 1080p.mkv",
+            "name": "A Film 1080p.mkv",
+            "length": 100,
+            "downloaded": if complete { 100 } else { 40 },
+            "complete": complete,
+            "phase": "ready",
+            "error": null,
+        }))
+        .expect("DownloadInfo")
+    }
+
+    /// Which pin listings answer for a row, without a server to ask.
+    ///
+    /// The three that do not are the three ways a root goes out from under
+    /// a finished download: another torrent's pin is not this one's, another
+    /// file of the same torrent is not this file, and a pin the session has
+    /// not filled -- a dormant one, or a torrent still checking -- has no
+    /// pieces to read yet. Case is not one of the three: the registry keeps
+    /// the hash as the stream gave it and the server answers lower case.
+    #[test]
+    fn a_finished_row_is_only_playable_while_the_server_holds_it_whole() {
+        let mut entry = entry("tt1", "tt1");
+        entry.info_hash = "ABC".into();
+        entry.file_idx = 2;
+        entry.state = State::Complete;
+
+        assert!(holds_whole(&[pinned("abc", 2, true)], &entry));
+        assert!(!holds_whole(&[], &entry));
+        assert!(!holds_whole(&[pinned("def", 2, true)], &entry));
+        assert!(!holds_whole(&[pinned("abc", 3, true)], &entry));
+        assert!(!holds_whole(&[pinned("abc", 2, false)], &entry));
+
+        // And what `open` does with that answer: a refusal naming the pin
+        // rather than the server, since the server is what answered.
+        assert_eq!(stream_url(&entry, Some(&[])), Err(OpenFailure::NotHeld));
     }
 
     /// The wire shape the Dart side reads: a refusal names its reason and
@@ -2423,6 +2628,11 @@ mod tests {
         assert_eq!(
             serde_json::to_value(OpenFailure::Unknown).unwrap(),
             "unknown"
+        );
+        assert_eq!(
+            serde_json::to_value(OpenFailure::NotHeld).unwrap(),
+            "notHeld",
+            "the spelling `DownloadOpenFailure` reads on the other side"
         );
     }
 
