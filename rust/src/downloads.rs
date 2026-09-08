@@ -1542,18 +1542,59 @@ impl OpenOutcome {
     }
 }
 
-/// Whether `live` -- the server's pinned downloads, read a moment ago --
-/// says this entry's file is whole in the store right now.
+/// What `live` -- the server's pinned downloads, read a moment ago -- says
+/// about this entry's file being whole in the store.
 ///
-/// `complete` and not merely "listed": a listed pin can be dormant (the
-/// backend did not restore the torrent, so it reports zeroes and an error)
-/// or mid-check, and neither of those has bytes to serve.
-fn holds_whole(live: &[DownloadInfo], entry: &Entry) -> bool {
-    live.iter().any(|info| {
-        info.complete
-            && info.file_idx == entry.file_idx
-            && info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
-    })
+/// **Three answers, not two, and that is the whole point.** `complete` is
+/// false for a file that is genuinely short *and* for one the server cannot
+/// speak for yet: a dormant pin (the backend did not restore the torrent, so
+/// it reports zeroes and an error), a torrent still hash-checking what is on
+/// disk, and a magnet still resolving its metadata all report `complete:
+/// false` over bytes that may be entirely present.
+///
+/// Reading that as "not held" cost both of the things this type prevents: at
+/// boot it marked a whole, present download `gone` and let it decay into a
+/// re-download nobody asked for, and on Play it refused a file that was on
+/// the device, which `offline_play.dart` answers by falling back to the
+/// addon's own stream -- fetching a film from peers that was already here.
+///
+/// An absence of knowledge is not a negative fact. So the caller is handed
+/// the distinction and has to decide what to do with it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Held {
+    /// The server says this file is whole.
+    Whole,
+    /// The server says it is not, and is in a state where it would know.
+    NotWhole,
+    /// The server cannot answer yet: dormant, hash-checking, or still
+    /// resolving metadata. Says nothing about the bytes either way.
+    Unknown,
+}
+
+fn holds_whole(live: &[DownloadInfo], entry: &Entry) -> Held {
+    let Some(info) = live.iter().find(|info| {
+        info.file_idx == entry.file_idx && info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
+    }) else {
+        // Not in the pin set at all: the pin is gone, which the server does
+        // know.
+        return Held::NotWhole;
+    };
+    if info.complete {
+        return Held::Whole;
+    }
+    let phase = phase(info);
+    // A dormant pin carries an error and zeroes; a checking or resolving
+    // torrent has not looked at the disk yet. None of them has been asked
+    // the question this answers.
+    if info.error.is_some()
+        || phase == "error"
+        || phase == "checking"
+        || phase == "resolvingMetadata"
+    {
+        Held::Unknown
+    } else {
+        Held::NotWhole
+    }
 }
 
 /// Where a finished download plays from, or why it does not. `live` is the
@@ -1590,8 +1631,15 @@ fn stream_url(entry: &Entry, live: Option<&[DownloadInfo]>) -> Result<String, Op
     let Some(live) = live else {
         return Err(OpenFailure::Unavailable);
     };
-    if !holds_whole(live, entry) {
-        return Err(OpenFailure::NotHeld);
+    match holds_whole(live, entry) {
+        Held::Whole => {}
+        Held::NotWhole => return Err(OpenFailure::NotHeld),
+        // The server is up but cannot speak for this file yet -- it is
+        // dormant, hash-checking, or still resolving. Refusing as `NotHeld`
+        // sends `offline_play.dart` to the addon's stream, which re-fetches
+        // from peers a film that is very likely on the device; `Unavailable`
+        // is the honest answer and the one that says "ask again in a moment".
+        Held::Unknown => return Err(OpenFailure::Unavailable),
     }
     let base = crate::server::base_url().ok_or(OpenFailure::Unavailable)?;
     base.join(&format!("{}/{}", entry.info_hash, entry.file_idx))
@@ -1986,10 +2034,14 @@ pub fn reconcile_pins_in(app: &Arc<AppState>) {
     };
     for (key, entry) in items {
         if !entry.unfinished() {
+            // Only a server that would know may condemn a row. `Unknown`
+            // leaves it alone: marking a whole, present download `gone`
+            // because its torrent happened to be hash-checking at boot is
+            // how a row decays into a re-download nobody asked for.
             let lost = entry.state == State::Complete
                 && live
                     .as_deref()
-                    .is_some_and(|live| !holds_whole(live, &entry));
+                    .is_some_and(|live| holds_whole(live, &entry) == Held::NotWhole);
             if lost {
                 if !crate::state::is_current(app) {
                     return;
@@ -2584,14 +2636,70 @@ mod tests {
         .expect("DownloadInfo")
     }
 
+    /// A pin the server cannot speak for yet, in the three shapes that
+    /// takes: dormant (an error and zeroes), hash-checking, and a magnet
+    /// still resolving its metadata.
+    fn cannot_say(info_hash: &str, file_idx: usize, phase: &str, error: bool) -> DownloadInfo {
+        serde_json::from_value(serde_json::json!({
+            "infoHash": info_hash,
+            "fileIdx": file_idx,
+            "path": null,
+            "name": "",
+            "length": 0,
+            "downloaded": 0,
+            "complete": false,
+            "phase": phase,
+            "error": if error { Some("torrent not restored") } else { None },
+        }))
+        .expect("DownloadInfo")
+    }
+
+    /// `complete: false` is not "the bytes are missing" -- it is also every
+    /// state in which the server has not looked.
+    ///
+    /// Reading the two alike cost both of the things `Held` exists to
+    /// prevent. At boot a whole, present download whose torrent happened to
+    /// be hash-checking was marked `gone`, and a `gone` row is not re-pinned,
+    /// so it decayed into a re-download nobody asked for. And on Play the
+    /// same reading refused a file that was on the device, which
+    /// `offline_play.dart` answers by falling back to the addon's stream --
+    /// fetching from peers a film already here.
+    #[test]
+    fn a_server_that_has_not_looked_yet_says_nothing_about_the_bytes() {
+        let mut entry = entry("tt1", "tt1");
+        entry.info_hash = "ABC".into();
+        entry.file_idx = 2;
+        entry.state = State::Complete;
+        for (phase, error) in [
+            ("error", true),
+            ("checking", false),
+            ("resolvingMetadata", false),
+        ] {
+            assert_eq!(
+                holds_whole(&[cannot_say("abc", 2, phase, error)], &entry),
+                Held::Unknown,
+                "{phase} is not an answer about the bytes"
+            );
+        }
+        // Whereas a torrent that is up and looked says so, and that is a
+        // reading a row may be condemned on.
+        assert_eq!(
+            holds_whole(&[pinned("abc", 2, false)], &entry),
+            Held::NotWhole
+        );
+    }
+
     /// Which pin listings answer for a row, without a server to ask.
     ///
     /// The three that do not are the three ways a root goes out from under
     /// a finished download: another torrent's pin is not this one's, another
-    /// file of the same torrent is not this file, and a pin the session has
-    /// not filled -- a dormant one, or a torrent still checking -- has no
-    /// pieces to read yet. Case is not one of the three: the registry keeps
-    /// the hash as the stream gave it and the server answers lower case.
+    /// file of the same torrent is not this file, and a pin a torrent that
+    /// is up reports short really is short. A pin the server cannot speak
+    /// for -- dormant, checking, resolving -- is a fourth case and not one
+    /// of these; see
+    /// [`a_server_that_has_not_looked_yet_says_nothing_about_the_bytes`].
+    /// Case is not one of them either: the registry keeps the hash as the
+    /// stream gave it and the server answers lower case.
     #[test]
     fn a_finished_row_is_only_playable_while_the_server_holds_it_whole() {
         let mut entry = entry("tt1", "tt1");
@@ -2599,11 +2707,20 @@ mod tests {
         entry.file_idx = 2;
         entry.state = State::Complete;
 
-        assert!(holds_whole(&[pinned("abc", 2, true)], &entry));
-        assert!(!holds_whole(&[], &entry));
-        assert!(!holds_whole(&[pinned("def", 2, true)], &entry));
-        assert!(!holds_whole(&[pinned("abc", 3, true)], &entry));
-        assert!(!holds_whole(&[pinned("abc", 2, false)], &entry));
+        assert_eq!(holds_whole(&[pinned("abc", 2, true)], &entry), Held::Whole);
+        assert_eq!(holds_whole(&[], &entry), Held::NotWhole);
+        assert_eq!(
+            holds_whole(&[pinned("def", 2, true)], &entry),
+            Held::NotWhole
+        );
+        assert_eq!(
+            holds_whole(&[pinned("abc", 3, true)], &entry),
+            Held::NotWhole
+        );
+        assert_eq!(
+            holds_whole(&[pinned("abc", 2, false)], &entry),
+            Held::NotWhole
+        );
 
         // And what `open` does with that answer: a refusal naming the pin
         // rather than the server, since the server is what answered.
