@@ -12,14 +12,59 @@ class FakeServerCache implements ServerCacheControl {
     this.usageError,
     this.cleanResult,
     this.cleanError,
-  });
+    ServerStorage? report,
+  }) : report = report ?? defaultReport;
 
   CacheUsage? usage;
   Object? usageError;
   EvictionReport? cleanResult;
   Object? cleanError;
+
+  /// What [storage] answers: the root and the volume it is on.
+  ServerStorage report;
+
+  /// Thrown by [updateSettings], as the server refuses a root it cannot
+  /// prepare.
+  Object? settingsError;
+
+  /// Every patch written, in order.
+  final List<Map<String, dynamic>> patches = [];
   int reads = 0;
   int cleans = 0;
+
+  static const ServerStorage defaultReport = ServerStorage(
+    cacheDir: '/data/cache/server',
+    cacheUsedBytes: 17000000000,
+    cacheLimitBytes: 10000000000,
+    cacheVolume: StorageVolume(
+      path: '/data/cache/server',
+      freeBytes: 402653184,
+      totalBytes: 57000000000,
+    ),
+  );
+
+  @override
+  Future<ServerStorage> storage() async {
+    final error = usageError;
+    if (error != null) throw error;
+    return report;
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateSettings(
+    Map<String, dynamic> patch,
+  ) async {
+    patches.add(patch);
+    final error = settingsError;
+    if (error != null) throw error;
+    report = ServerStorage(
+      cacheDir: patch['cacheRoot'] as String? ?? report.cacheDir,
+      cacheUsedBytes: report.cacheUsedBytes,
+      cacheLimitBytes: report.cacheLimitBytes,
+      cacheVolume: report.cacheVolume,
+    );
+    return {'cacheRoot': report.cacheDir};
+  }
 
   @override
   Future<CacheUsage> cacheUsage() async {
@@ -229,6 +274,100 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Nothing needed cleaning'), findsOneWidget);
+  });
+
+  group('where torrent data lives', () {
+    testWidgets('names the one root and the room on its volume', (
+      tester,
+    ) async {
+      final client = FakeServerCache(usage: overLimitEvictable);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ServerStorageScreen(
+            client: client,
+            roots: () async => const [],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(ServerStorageScreen.rootTitle), findsOneWidget);
+      expect(find.text('/data/cache/server'), findsWidgets);
+      expect(find.text('403 MB free of 57.0 GB'), findsOneWidget);
+    });
+
+    testWidgets('a typed folder is written to cacheRoot, and only takes '
+        'effect at the next start', (tester) async {
+      final client = FakeServerCache(usage: overLimitEvictable);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ServerStorageScreen(
+            client: client,
+            roots: () async => const [],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '/media/torrents');
+      await tester.tap(find.text('Use this folder'));
+      await tester.pumpAndSettle();
+
+      expect(client.patches, [
+        {'cacheRoot': '/media/torrents'},
+      ], reason: 'one settings key, like every other');
+      expect(
+        find.text(ServerStorageScreen.movedMessage('/media/torrents')),
+        findsOneWidget,
+        reason: 'the running torrent session cannot be moved onto it',
+      );
+      expect(find.text('/media/torrents'), findsWidgets);
+    });
+
+    testWidgets('a volume the platform offers is picked rather than typed', (
+      tester,
+    ) async {
+      final client = FakeServerCache(usage: overLimitEvictable);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ServerStorageScreen(
+            client: client,
+            roots: () async => const ['/data/cache/server', '/storage/ABCD/x'],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('/storage/ABCD/x'));
+      await tester.pumpAndSettle();
+
+      expect(client.patches, [
+        {'cacheRoot': '/storage/ABCD/x'},
+      ]);
+    });
+
+    testWidgets('a root the server refuses says so and moves nothing', (
+      tester,
+    ) async {
+      final client = FakeServerCache(usage: overLimitEvictable)
+        ..settingsError = StateError('not writable');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ServerStorageScreen(
+            client: client,
+            roots: () async => const [],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '/root/nope');
+      await tester.tap(find.text('Use this folder'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(ServerStorageScreen.refusedMessage), findsOneWidget);
+      expect(find.text('/data/cache/server'), findsWidgets);
+    });
   });
 
   group('one device with no cacheSize, read by two screens', () {

@@ -1,7 +1,12 @@
 //! FRB surface for offline downloads: add, remove, list, open from the
-//! device, the destination directory, and a progress stream. JSON strings in
-//! and out, all real work in `crate::downloads`; like every other server call
-//! these go over the handle's library API, never over HTTP.
+//! device, and a progress stream. JSON strings in and out, all real work in
+//! `crate::downloads`; like every other server call these go over the
+//! handle's library API, never over HTTP.
+//!
+//! Where the bytes go is not here. There is one torrent-data root, the
+//! server's `cacheRoot`, shared by the streaming cache and the kept
+//! downloads alike; it is an ordinary settings key and is written through
+//! `server_update_settings` like every other one.
 
 use crate::frb_generated::StreamSink;
 use crate::guard::guarded;
@@ -72,46 +77,19 @@ pub fn downloads_list() -> anyhow::Result<String> {
 /// What to play the download `key` off the device with, and a note that it
 /// was played.
 ///
-/// Answers `{"ok":true,"key":…,"url":"file:///…","entry":{…}}` for a
-/// finished download whose file is really on the disk, stamping the entry's
-/// `lastPlayedAt` as it goes. When there is nothing to play from it answers
-/// `{"ok":false,"key":…,"reason":…}` — `unknown` (no such entry),
-/// `incomplete` (the bytes are not all here) or `missing` (complete, but
-/// the file is gone or its volume is not mounted) — so the caller can
-/// stream the title instead of opening a player on a dead URL. Only a
-/// registry that cannot be read or written raises.
+/// Answers `{"ok":true,"key":…,"url":"http://127.0.0.1:…/{infoHash}/{fileIdx}",
+/// "entry":{…}}` for a finished download, stamping the entry's
+/// `lastPlayedAt` as it goes. **There is no file to open**: torrent data is
+/// one file per piece in the server's store, so a kept download plays
+/// through the embedded server's media route, off the pieces already on
+/// this device — no peer, no tracker, no network. When there is nothing to
+/// play from it answers `{"ok":false,"key":…,"reason":…}` — `unknown` (no
+/// such entry), `incomplete` (the bytes are not all here) or `unavailable`
+/// (whole, but the server that reads the pieces is not running) — so the
+/// caller can stream the title instead of opening a player on a dead URL.
+/// Only a registry that cannot be read or written raises.
 pub fn downloads_open(key: String) -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::downloads::open(&key)?).map_err(Into::into))
-}
-
-/// Points the server's `downloadsDir` at `path`, or unsets it (back to the
-/// torrent cache root) with null. Validated and persisted exactly as
-/// `POST /settings` does: the path must be absolute, creatable, writable and
-/// not at or above a cache root. Returns the settings afterwards as JSON.
-///
-/// This is the *user's* answer to where downloads go, and the registry
-/// records it as such (`destinationChoice`): the path for a folder chosen,
-/// null-with-`destinationSettled` for "back with the cache". Nothing the
-/// app applies on its own may overwrite either -- that is
-/// [`downloads_apply_default_dir`].
-pub fn downloads_set_dir(path: Option<String>) -> anyhow::Result<String> {
-    guarded(|| serde_json::to_string(&crate::downloads::set_dir(path)?).map_err(Into::into))
-}
-
-/// Points the server's `downloadsDir` at a default the app resolved for
-/// this platform -- on Android the app's external files directory, which
-/// the OS does not reclaim -- with the same validation `downloads_set_dir`
-/// gets, and without recording it as an answer the user gave.
-///
-/// The registry's `destinationChoice` becomes this default only while
-/// nothing has been chosen. A folder the user chose that the server dropped
-/// at boot stays on record while this stands in for it, so the next
-/// start-up asks for that folder again and the screen can say which one is
-/// missing. Returns the settings afterwards as JSON.
-pub fn downloads_apply_default_dir(path: String) -> anyhow::Result<String> {
-    guarded(|| {
-        serde_json::to_string(&crate::downloads::apply_default_dir(path)?).map_err(Into::into)
-    })
 }
 
 /// Progress, one JSON string per change:

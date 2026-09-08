@@ -11,23 +11,16 @@ class FakeDownloadsClient implements DownloadsClient {
   /// What [list] answers, and what [add], [remove] and [emit] change.
   DownloadsRegistry registry;
 
-  /// The server settings [setDirectory] answers with, `downloadsDir` laid
-  /// over them.
-  Map<String, dynamic> settings = const {};
-
   /// Every call made, in order.
   final List<DownloadRequest> added = [];
   final List<({String key, bool deleteFiles})> removed = [];
 
-  /// Every destination asked for, chosen and applied alike, in order.
-  final List<String?> directories = [];
-
-  /// Only the defaults the app applied itself
-  /// ([DownloadsClient.applyDefaultDirectory]).
-  final List<String> defaultsApplied = [];
-
   /// The keys [open] was called with, in order.
   final List<String> opens = [];
+
+  /// The embedded server [open]'s URLs are built on, as the Rust side
+  /// builds them from the running server's base URL.
+  static const String baseUrl = 'http://127.0.0.1:11470/';
 
   /// When set, every call also appends its name here: a log shared with the
   /// other fakes, for tests about the order of calls across them.
@@ -44,14 +37,10 @@ class FakeDownloadsClient implements DownloadsClient {
   /// only when the answer says [DownloadRemoveResult.removed].
   DownloadRemoveResult Function(String key, bool deleteFiles)? onRemove;
 
-  /// Answers [open] instead of the default (which plays the entry's own
-  /// `path` when it is complete, and refuses with the reason the Rust side
-  /// would give otherwise).
+  /// Answers [open] instead of the default (which answers a server URL for
+  /// a complete entry and refuses with the reason the Rust side would give
+  /// otherwise).
   DownloadOpenResult Function(String key)? onOpen;
-
-  /// Paths [setDirectory] refuses, as the server refuses one it cannot
-  /// prepare: an SD card that is not in the device.
-  final Set<String?> unusableDirectories = {};
 
   /// Holds [add] and [open] open until it completes -- the registry is a
   /// round trip over FFI, and what a caller does with the answer is what
@@ -63,8 +52,6 @@ class FakeDownloadsClient implements DownloadsClient {
   Object? openError;
   Object? removeError;
   Object? listError;
-  Object? setDirectoryError;
-  Object? directoryError;
 
   bool disposed = false;
 
@@ -136,11 +123,7 @@ class FakeDownloadsClient implements DownloadsClient {
           deletedFiles: had && deleteFiles,
         );
     if (result.removed) items.remove(key);
-    registry = DownloadsRegistry(
-      version: registry.version,
-      items: items,
-      destination: registry.destination,
-    );
+    registry = DownloadsRegistry(version: registry.version, items: items);
     // As the real client does: a removal is the one change the Rust feed
     // never carries, so the client itself tells its listeners.
     if (result.removed && !_updates.isClosed) {
@@ -169,11 +152,11 @@ class FakeDownloadsClient implements DownloadsClient {
     return result;
   }
 
-  /// What the Rust side answers for an entry it has: the file the registry
-  /// names when the download is finished and names one, and the reason it
-  /// cannot be played otherwise. A path is taken at its word here -- a fake
-  /// registry names files that were never written -- so a test that wants
-  /// the vanished-file path sets [onOpen].
+  /// What the Rust side answers for an entry it has: the embedded server's
+  /// media route for a finished download -- the pieces are only readable
+  /// through it, and there is no file to open -- and the reason it cannot
+  /// be played otherwise. A test that wants a server that is not running
+  /// sets [onOpen].
   DownloadOpenResult _openFromRegistry(String key) {
     final view = registry[key];
     if (view == null) {
@@ -190,16 +173,9 @@ class FakeDownloadsClient implements DownloadsClient {
         reason: DownloadOpenFailure.incomplete,
       );
     }
-    final path = view.path;
-    if (path == null) {
-      return const DownloadOpenResult(
-        ok: false,
-        reason: DownloadOpenFailure.missing,
-      );
-    }
     return DownloadOpenResult(
       ok: true,
-      url: Uri.file(path).toString(),
+      url: '$baseUrl${view.infoHash}/${view.fileIdx}',
       entry: view,
     );
   }
@@ -215,61 +191,7 @@ class FakeDownloadsClient implements DownloadsClient {
     registry = DownloadsRegistry(
       version: registry.version,
       items: {...registry.items, key: entry},
-      destination: registry.destination,
     );
-  }
-
-  @override
-  Future<Map<String, dynamic>> setDirectory(String? path) async {
-    directories.add(path);
-    callLog?.add('downloads.setDirectory');
-    final error = setDirectoryError;
-    if (error != null) throw error;
-    if (unusableDirectories.contains(path)) {
-      throw ArgumentError.value(path, 'downloadsDir', 'cannot be created');
-    }
-    // As the Rust side does: an accepted destination -- null among them --
-    // settles the question for good, and is recorded as the answer.
-    registry = DownloadsRegistry(
-      version: registry.version,
-      items: registry.items,
-      destination: path == null
-          ? const DownloadDestination.cache()
-          : DownloadDestination.explicit(path),
-    );
-    return settings = {...settings, 'downloadsDir': path};
-  }
-
-  /// As the Rust side does: the server takes the destination like any
-  /// other, and the record becomes the default applied only while nothing
-  /// has been chosen -- a folder the user chose stays on record while this
-  /// stands in for it.
-  @override
-  Future<Map<String, dynamic>> applyDefaultDirectory(String path) async {
-    directories.add(path);
-    defaultsApplied.add(path);
-    callLog?.add('downloads.applyDefaultDirectory');
-    final error = setDirectoryError;
-    if (error != null) throw error;
-    if (unusableDirectories.contains(path)) {
-      throw ArgumentError.value(path, 'downloadsDir', 'cannot be created');
-    }
-    if (!registry.destination.isChosen) {
-      registry = DownloadsRegistry(
-        version: registry.version,
-        items: registry.items,
-        destination: DownloadDestination.platformDefault(path),
-      );
-    }
-    return settings = {...settings, 'downloadsDir': path};
-  }
-
-  @override
-  Future<String?> directory() async {
-    callLog?.add('downloads.directory');
-    final error = directoryError;
-    if (error != null) throw error;
-    return settings['downloadsDir'] as String?;
   }
 
   @override

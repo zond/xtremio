@@ -43,13 +43,14 @@ import 'dart:io';
 ///
 /// **Left alone:**
 ///
-/// - Anything that is not `http` or `https` -- an offline `file://`, a
-///   `magnet:` the core has not resolved. There is nothing for a proxy to
-///   fetch.
+/// - Anything that is not `http` or `https` -- a `magnet:` the core has not
+///   resolved. There is nothing for a proxy to fetch.
 /// - A loopback URL. That is the embedded server itself, whatever port it
 ///   ended up on: a recorded profile says `11470` and the server takes
 ///   whatever it can bind, so the port is no part of the test. Proxying it
-///   would be the server fetching from itself.
+///   would be the server fetching from itself. A kept download's URL is
+///   one of these -- the server's own media route, off the pieces already
+///   on the device.
 /// - A URL already on [serverBase]. The loopback case again, said in terms
 ///   of the server we were handed rather than of the address family: a
 ///   stream this server is already serving is not one to give back to it.

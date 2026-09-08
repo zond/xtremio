@@ -8,7 +8,6 @@ import 'app.dart';
 import 'core/core.dart';
 import 'features/addons/addon_health_client.dart';
 import 'features/cast/cast_client.dart';
-import 'features/downloads/destination.dart';
 import 'features/sharing/sharing_activity.dart';
 import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
@@ -30,6 +29,32 @@ Future<void> main() async {
 
 /// Boots the core: the client to use and what its init reported.
 typedef CoreBoot = Future<(CoreClient, CoreInitInfo)> Function();
+
+/// Where the core and the embedded server keep what they write: the
+/// server's torrent data above all, since that is the one root everything a
+/// torrent puts on this device shares -- the streaming cache and the kept
+/// downloads alike.
+///
+/// It is the *default*. The server persists a `cacheRoot` of its own once
+/// anything sets one, and that wins from then on; this is what a device
+/// with none gets, and it is where Settings' "Server storage" starts from.
+///
+/// **On Android that must not be the app cache directory.** `getCacheDir()`
+/// is the system's to reclaim whenever it wants room, and with one root
+/// there is nowhere else for a kept download to be -- half a film reclaimed
+/// mid-download is not a download. The app's own external files directory
+/// is left alone until the app is uninstalled, is world-readable over adb
+/// (which is how a download is looked at from a workstation), and needs no
+/// permission at all on `minSdk` 24. Everywhere else the cache directory is
+/// the right place and there is nothing to choose; and a device with no
+/// external storage at all falls back to it too, because a purgeable root
+/// still beats no server.
+@visibleForTesting
+Future<Directory> dataDirectory({
+  required bool isAndroid,
+  Future<Directory?> Function() externalFiles = getExternalStorageDirectory,
+  Future<Directory> Function() appCache = getApplicationCacheDirectory,
+}) async => (isAndroid ? await externalFiles() : null) ?? await appCache();
 
 /// Loads the Rust library and boots stremio-core (with the embedded
 /// stream-server) before showing the app; shows the failure otherwise.
@@ -54,7 +79,6 @@ class XtremioBootstrap extends StatefulWidget {
     this.prefs,
     this.addonHealth = const RustAddonHealthClient(),
     this.deepLinks,
-    this.defaultDestination = platformDefaultDestination,
     this.serverSettings = const ServerClient(),
     this.sharingActivity = const RustSharingActivityClient(),
   });
@@ -114,9 +138,6 @@ class XtremioBootstrap extends StatefulWidget {
   /// Passed through to [XtremioApp.deepLinks].
   final DeepLinkSource? deepLinks;
 
-  /// Passed through to [XtremioApp.defaultDestination].
-  final DownloadDestinationResolver defaultDestination;
-
   /// Passed through to [XtremioApp.serverSettings].
   final ServerSettingsWriter serverSettings;
 
@@ -132,8 +153,10 @@ class XtremioBootstrap extends StatefulWidget {
     DiagnosticsLog.useCoreRing();
     final client = RustCoreClient();
     final Directory support = await getApplicationSupportDirectory();
-    final Directory cache = await getApplicationCacheDirectory();
-    final info = await client.init(support: support, cache: cache);
+    final info = await client.init(
+      support: support,
+      cache: await dataDirectory(isAndroid: Platform.isAndroid),
+    );
     return (client, info);
   }
 
@@ -174,7 +197,6 @@ class _XtremioBootstrapState extends State<XtremioBootstrap> {
           prefs: widget.prefs,
           addonHealth: widget.addonHealth,
           deepLinks: widget.deepLinks,
-          defaultDestination: widget.defaultDestination,
           serverSettings: widget.serverSettings,
           sharingActivity: widget.sharingActivity,
         );

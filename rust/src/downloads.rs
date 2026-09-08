@@ -456,115 +456,12 @@ struct ProgressEvent<'a> {
     progress: &'a [Progress],
 }
 
-/// Where the downloads were last answered to go, and by whom.
-///
-/// It is the registry's business rather than the server's because the
-/// server's `downloadsDir` cannot say any of this: a null there is both
-/// "with the torrent cache, on purpose" and "nobody has been asked", and
-/// the server clears a `downloadsDir` it cannot prepare at boot -- which
-/// would take the answer with it.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub enum Destination {
-    /// Nobody has been asked yet, so a start-up may point the server at
-    /// whatever this platform's default is.
-    #[default]
-    Unset,
-    /// The app applied this platform's own default because nothing had been
-    /// chosen. Not an answer: a build whose default lies elsewhere may
-    /// replace it, and nothing presents it as something the user picked.
-    PlatformDefault(String),
-    /// "Default (with the cache)", chosen on purpose: a null `downloadsDir`
-    /// and not an open question.
-    Cache,
-    /// A directory the user chose, spelled the way the server stored it
-    /// (`prepare_downloads_dir` resolves symlinks, so what [`set_dir`] was
-    /// handed is not always what comes back). Kept so a start-up can
-    /// compare it with the live `downloadsDir`: a recorded path the
-    /// settings no longer have is one the server dropped at boot, and the
-    /// app asks for it again rather than leaving the files in a cache the
-    /// OS may reclaim.
-    Explicit(String),
-}
-
-impl Destination {
-    /// Whether where the downloads go has been answered at all -- by the
-    /// user, or by the platform default a first run applies.
-    pub fn is_settled(&self) -> bool {
-        !matches!(self, Self::Unset)
-    }
-
-    /// Whether the answer is the user's own, which is what a default must
-    /// never overwrite.
-    pub fn is_chosen(&self) -> bool {
-        matches!(self, Self::Cache | Self::Explicit(_))
-    }
-
-    /// The directory it names, where it names one.
-    pub fn path(&self) -> Option<&str> {
-        match self {
-            Self::PlatformDefault(path) | Self::Explicit(path) => Some(path),
-            Self::Unset | Self::Cache => None,
-        }
-    }
-
-    /// What goes under `destinationChoice`. A user's answer keeps the shape
-    /// every build so far has written -- the path as a string, and null for
-    /// the cache, which `destinationSettled` tells apart from an open
-    /// question -- so an older build still reads it the way it always did.
-    /// Only the platform default, which no older build could record, needs
-    /// a shape of its own.
-    fn to_json(&self) -> serde_json::Value {
-        match self {
-            Self::Unset | Self::Cache => serde_json::Value::Null,
-            Self::Explicit(path) => serde_json::Value::String(path.clone()),
-            Self::PlatformDefault(path) => {
-                serde_json::json!({ "kind": "platformDefault", "path": path })
-            }
-        }
-    }
-
-    /// Reads the two keys back, forgivingly: a bare string is the path a
-    /// user chose (the shape written before this build), an object names
-    /// its own kind, and anything else -- a kind from a newer build among
-    /// it -- falls back on the two things always readable, whether the
-    /// question was settled and whether a path was named.
-    fn from_json(settled: bool, choice: Option<&serde_json::Value>) -> Self {
-        let named = |path: Option<&str>| match path {
-            Some(path) => Self::Explicit(path.to_owned()),
-            None if settled => Self::Cache,
-            None => Self::Unset,
-        };
-        match choice {
-            None | Some(serde_json::Value::Null) => named(None),
-            Some(serde_json::Value::String(path)) => named(Some(path)),
-            Some(value) => {
-                let path = value.get("path").and_then(serde_json::Value::as_str);
-                match value.get("kind").and_then(serde_json::Value::as_str) {
-                    // A platform default with no path names nothing, so it
-                    // answers nothing either.
-                    Some("platformDefault") => path
-                        .map(|path| Self::PlatformDefault(path.to_owned()))
-                        .unwrap_or(Self::Unset),
-                    Some("cache") => Self::Cache,
-                    Some("unset") => Self::Unset,
-                    _ => named(path),
-                }
-            }
-        }
-    }
-}
-
 /// `downloads.json` as a whole: the file shape, and what the list call and
 /// the progress events emit.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Registry {
     pub version: u32,
     pub items: BTreeMap<String, Entry>,
-    /// Where the downloads were answered to go, and by whom: [`set_dir`]
-    /// records the user's own answer, [`apply_default_dir`] the platform
-    /// default the app stands in with. On the wire it is the pair of keys
-    /// it has always been, `destinationSettled` and `destinationChoice`.
-    pub destination: Destination,
     /// Entries this build could not parse, exactly as they were on disk.
     /// They are invisible to everything but [`Registry::serialize`], which
     /// writes them back among the items: a forgiving read plus a whole-file
@@ -579,7 +476,6 @@ impl Default for Registry {
         Self {
             version: VERSION,
             items: BTreeMap::new(),
-            destination: Destination::Unset,
             unreadable: BTreeMap::new(),
         }
     }
@@ -599,11 +495,9 @@ impl Serialize for Registry {
         for (key, raw) in &self.unreadable {
             items.entry(key.clone()).or_insert_with(|| raw.clone());
         }
-        let mut registry = serializer.serialize_struct("Registry", 4)?;
+        let mut registry = serializer.serialize_struct("Registry", 2)?;
         registry.serialize_field("version", &self.version)?;
         registry.serialize_field("items", &items)?;
-        registry.serialize_field("destinationSettled", &self.destination.is_settled())?;
-        registry.serialize_field("destinationChoice", &self.destination.to_json())?;
         registry.end()
     }
 }
@@ -638,18 +532,10 @@ impl Registry {
                 "downloads registry was written by a newer build; unknown keys are kept as-is"
             );
         }
-        let destination = Destination::from_json(
-            value
-                .get("destinationSettled")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false),
-            value.get("destinationChoice"),
-        );
         let Some(items) = value.get("items").and_then(serde_json::Value::as_object) else {
             tracing::warn!("downloads registry has no items object; starting empty");
             return Self {
                 version,
-                destination,
                 ..Self::default()
             };
         };
@@ -671,7 +557,6 @@ impl Registry {
         Self {
             version,
             items: parsed,
-            destination,
             unreadable,
         }
     }
@@ -869,7 +754,7 @@ fn refresh_needs_a_write(file: &RegistryFile, before: &Registry, after: &Registr
 /// disk. Compared by laying `after`'s byte count over `before`'s entry, so a
 /// field added later is a difference until someone says otherwise.
 fn only_downloaded_moved(before: &Registry, after: &Registry) -> bool {
-    if before.items.len() != after.items.len() || before.destination != after.destination {
+    if before.items.len() != after.items.len() {
         return false;
     }
     after.items.iter().all(|(key, entry)| {
@@ -1593,10 +1478,10 @@ pub enum OpenFailure {
     Unknown,
     /// The bytes are not all here yet.
     Incomplete,
-    /// Whole as far as the registry knows, but the file is not where it was
-    /// left: an unmounted downloads volume, or something outside the app
-    /// deleted it.
-    Missing,
+    /// Everything is here, and nothing can serve it: the embedded server is
+    /// not running. The pieces are only ever read through it, so this is
+    /// the one way a whole download has nowhere to play from.
+    Unavailable,
 }
 
 /// What [`open`] answers.
@@ -1605,7 +1490,7 @@ pub enum OpenFailure {
 pub struct OpenOutcome {
     pub ok: bool,
     pub key: String,
-    /// The `file://` URL to hand the player, when there is one.
+    /// The URL to hand the player, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     /// The entry as it now stands, `lastPlayedAt` included.
@@ -1627,32 +1512,36 @@ impl OpenOutcome {
     }
 }
 
-/// The `file://` URL of a finished download's file, or why there is none.
+/// Where a finished download plays from, or why it does not.
 ///
-/// Only the entry and the filesystem are consulted — never the length on
-/// disk, which says nothing about how much of the file is real (librqbit
-/// allocates it whole; `downloaded == size` is the only proof, and that is
-/// what [`State::Complete`] already stands for).
-fn local_url(entry: &Entry) -> Result<String, OpenFailure> {
+/// **There is no file to open.** Torrent data is one file per piece in the
+/// server's store, for the streaming cache and a kept download alike, so
+/// what a download has on this device is its pieces and the only reader of
+/// those is the embedded server. The URL is therefore its media route for
+/// this torrent and file (`{base}/{infoHash}/{fileIdx}`), which for a
+/// complete download is served from the disk with no peer, no tracker and
+/// no network involved -- the same independence the `file://` URL before it
+/// had, through the one process that can now read the bytes.
+///
+/// `entry.path` is not consulted, and must not be: the server answers it as
+/// a *name* for the file, and no whole file is ever written there.
+/// [`State::Complete`] is the proof that every piece is down, which is what
+/// it always was.
+fn stream_url(entry: &Entry) -> Result<String, OpenFailure> {
     if entry.state != State::Complete {
         return Err(OpenFailure::Incomplete);
     }
-    let path = entry.path.as_deref().ok_or(OpenFailure::Missing)?;
-    let path = std::path::Path::new(path);
-    if !path.is_file() {
-        return Err(OpenFailure::Missing);
-    }
-    // Only fails on a relative path; the server always answers an absolute
-    // one, so this is the same "not playable from here" as a missing file.
-    url::Url::from_file_path(path)
+    let base = crate::server::base_url().ok_or(OpenFailure::Unavailable)?;
+    base.join(&format!("{}/{}", entry.info_hash, entry.file_idx))
         .map(String::from)
-        .map_err(|()| OpenFailure::Missing)
+        .map_err(|_| OpenFailure::Unavailable)
 }
 
 /// What to play `key` off the device with, and a note that it was played.
 ///
-/// A finished download whose file is really there answers `ok: true` with
-/// the `file://` URL for it, and its `lastPlayedAt` is stamped in the same
+/// A finished download answers `ok: true` with the URL it plays from --
+/// the embedded server's media route, reading the pieces already on this
+/// device -- and its `lastPlayedAt` is stamped in the same
 /// locked read-modify-write — so the timestamp cannot be lost to a progress
 /// tick landing between the check and the write, and cannot be stamped on a
 /// play that never happened.
@@ -1668,10 +1557,10 @@ pub fn open(key: &str) -> anyhow::Result<OpenOutcome> {
         else {
             return Ok(OpenOutcome::refused(key, OpenFailure::Unknown));
         };
-        let url = match local_url(entry) {
+        let url = match stream_url(entry) {
             Ok(url) => url,
             Err(reason) => {
-                tracing::info!(key, ?reason, "no file to play this download from");
+                tracing::info!(key, ?reason, "nothing to play this download from");
                 return Ok(OpenOutcome::refused(key, reason));
             }
         };
@@ -1811,63 +1700,6 @@ pub fn list() -> anyhow::Result<Registry> {
     })
 }
 
-/// Points the server's `downloadsDir` at `path` (or unsets it with `None`),
-/// with the validation and persistence `POST /settings` does.
-///
-/// This is the *user's* answer: a path the server accepts is recorded as
-/// [`Destination::Explicit`] and `None` as [`Destination::Cache`], and from
-/// here on no default may overwrite either. A path the server refuses
-/// records nothing -- it raises before this. What is recorded is what the
-/// settings came back with, not what was asked for, so it can be compared
-/// with the live `downloadsDir` later: the server resolves the path before
-/// it stores it. That the answer could not be written down is worth a
-/// warning and no more -- the setting itself is already in place, and
-/// failing the call would be the worse lie.
-pub fn set_dir(path: Option<String>) -> anyhow::Result<stream_server::ServerSettings> {
-    let settings = crate::server::update_settings(serde_json::json!({ "downloadsDir": path }))?;
-    record_destination(match settings.downloads_dir.clone() {
-        Some(path) => Destination::Explicit(path),
-        None => Destination::Cache,
-    });
-    Ok(settings)
-}
-
-/// Points the server's `downloadsDir` at a default the app resolved for
-/// this platform, with the same validation [`set_dir`] gets -- and without
-/// answering the question on the user's behalf.
-///
-/// The recorded destination becomes [`Destination::PlatformDefault`] only
-/// while nothing has been chosen. A choice the server dropped at boot (an
-/// SD card that is not in the device) stays on record while the default
-/// stands in for it, so the next start-up asks for the chosen folder again
-/// and the UI can say which folder is missing rather than quietly
-/// presenting the fallback as what was wanted.
-pub fn apply_default_dir(path: String) -> anyhow::Result<stream_server::ServerSettings> {
-    let settings =
-        crate::server::update_settings(serde_json::json!({ "downloadsDir": path.clone() }))?;
-    let stored = settings.downloads_dir.clone().unwrap_or(path);
-    if let Err(error) = update(|registry| {
-        if !registry.destination.is_chosen() {
-            registry.destination = Destination::PlatformDefault(stored.clone());
-        }
-        Ok(())
-    }) {
-        tracing::warn!(%error, "could not record the downloads destination applied");
-    }
-    Ok(settings)
-}
-
-/// Writes down where the downloads were answered to go. A failure here is
-/// a warning: the server's setting is already in place either way.
-fn record_destination(destination: Destination) {
-    if let Err(error) = update(move |registry| {
-        registry.destination = destination;
-        Ok(())
-    }) {
-        tracing::warn!(%error, "could not record where the downloads were answered to go");
-    }
-}
-
 /// Installs the progress sink, replacing any previous one, and starts the
 /// ticker if there is anything to watch. Nothing is buffered for a missing
 /// sink the way core events are: the full picture is one `downloads_list`
@@ -1986,8 +1818,8 @@ async fn ticker(app: Arc<AppState>) {
 }
 
 /// Re-issues the pin for every entry the server may have forgotten (it
-/// persists its own pin set, but a registry entry can outlive a purged cache
-/// dir or a `downloadsDir` that came back). Complete downloads are left
+/// persists its own pin set, but a registry entry can outlive a purged
+/// torrent-data root). Complete downloads are left
 /// alone: their bytes are on disk and re-pinning them would only re-check.
 /// Blocks per entry while a magnet resolves, so run it off the boot path.
 pub fn repin_unfinished() {
@@ -2096,127 +1928,30 @@ mod tests {
         assert_eq!(entry("tt1", "tt1:1:2").key(), "tt1:tt1:1:2");
     }
 
-    /// Where the downloads go is part of the file, not something derived
-    /// from the settings, and the four answers it can hold are told apart
-    /// across a round trip.
+    /// The record of where the downloads went is gone, and gone from what
+    /// is written. A file a previous build left naming a downloads folder
+    /// still parses and keeps its entries, and comes back with nothing
+    /// about a folder in it: there is one torrent-data root now, the
+    /// server owns it, and a second answer written down here could only
+    /// ever contradict it.
     #[test]
-    fn the_destination_survives_the_file() {
-        for destination in [
-            Destination::Unset,
-            Destination::Cache,
-            Destination::Explicit("/sdcard/downloads".into()),
-            Destination::PlatformDefault("/sdcard/files/downloads".into()),
-        ] {
-            let registry = Registry {
-                destination: destination.clone(),
-                ..Registry::default()
-            };
-            let bytes = serde_json::to_vec(&registry).unwrap();
-            assert_eq!(
-                Registry::parse(&bytes),
-                registry,
-                "{destination:?} came back as something else"
-            );
-        }
-    }
-
-    /// The two keys keep the shape every build so far has written, so a
-    /// downgrade reads an answer rather than an open question -- and so
-    /// this build reads what those builds left behind.
-    #[test]
-    fn the_destination_is_written_the_way_it_always_was() {
-        let written = |destination: Destination| {
-            String::from_utf8(
-                serde_json::to_vec(&Registry {
-                    destination,
-                    ..Registry::default()
-                })
-                .unwrap(),
-            )
-            .unwrap()
-        };
+    fn a_recorded_downloads_folder_is_dropped_rather_than_carried() {
+        let registry = Registry::parse(
+            br#"{"version":1,"destinationSettled":true,
+                 "destinationChoice":"/sdcard/downloads",
+                 "items":{"tt1:tt1":{"metaId":"tt1","videoId":"tt1","type":"movie",
+                                     "name":"A","infoHash":"a","fileIdx":0,
+                                     "stream":{},"createdAt":"2024-01-01T00:00:00Z"}}}"#,
+        );
+        assert_eq!(registry.items.len(), 1, "the entries are untouched");
+        let written = String::from_utf8(serde_json::to_vec(&registry).unwrap()).unwrap();
         assert!(
-            written(Destination::Explicit("/sdcard/downloads".into()))
-                .contains(r#""destinationSettled":true,"destinationChoice":"/sdcard/downloads""#),
-            "a chosen path is the path, under its camelCase name"
+            !written.contains("destination"),
+            "no key about a destination is written back: {written}"
         );
         assert!(
-            written(Destination::Cache)
-                .contains(r#""destinationSettled":true,"destinationChoice":null"#),
-            "the cache is the null it has always been, settled"
-        );
-        assert!(
-            written(Destination::Unset)
-                .contains(r#""destinationSettled":false,"destinationChoice":null"#),
-            "and nothing answered is the null with nothing settled"
-        );
-
-        assert_eq!(
-            Registry::parse(br#"{"version":1,"items":{}}"#).destination,
-            Destination::Unset,
-            "a file from before the keys has answered nothing"
-        );
-        assert_eq!(
-            Registry::parse(br#"{"version":1,"destinationSettled":true}"#).destination,
-            Destination::Cache,
-            "settled with no path recorded is the cache, on purpose"
-        );
-        assert_eq!(
-            Registry::parse(br#"{"version":1,"destinationSettled":true,"destinationChoice":"/x"}"#)
-                .destination,
-            Destination::Explicit("/x".into()),
-            "and a recorded path is the user's own answer"
-        );
-    }
-
-    /// A default the app applied is not an answer, and is the one shape an
-    /// older build could not have written -- so it is the only one written
-    /// as an object, and a shape this build cannot read falls back on the
-    /// two things it can always see.
-    #[test]
-    fn a_default_is_told_apart_from_an_answer() {
-        let applied = Destination::PlatformDefault("/sdcard/files/downloads".into());
-        assert!(applied.is_settled(), "the question is not open any more");
-        assert!(!applied.is_chosen(), "but nobody chose it");
-        assert_eq!(applied.path(), Some("/sdcard/files/downloads"));
-        assert!(Destination::Explicit("/x".into()).is_chosen());
-        assert!(Destination::Cache.is_chosen());
-        assert!(!Destination::Unset.is_settled());
-
-        assert_eq!(
-            Registry::parse(
-                br#"{"version":1,"destinationSettled":true,
-                     "destinationChoice":{"kind":"platformDefault","path":"/sdcard/files"}}"#
-            )
-            .destination,
-            Destination::PlatformDefault("/sdcard/files".into())
-        );
-        assert_eq!(
-            Registry::parse(
-                br#"{"version":1,"destinationSettled":true,
-                     "destinationChoice":{"kind":"somethingNewer","path":"/x"}}"#
-            )
-            .destination,
-            Destination::Explicit("/x".into()),
-            "a kind this build does not know still names a path"
-        );
-        assert_eq!(
-            Registry::parse(
-                br#"{"version":1,"destinationSettled":true,
-                     "destinationChoice":{"kind":"somethingNewer"}}"#
-            )
-            .destination,
-            Destination::Cache,
-            "and one that names none is the answer the flag reports"
-        );
-        assert_eq!(
-            Registry::parse(
-                br#"{"version":1,"destinationSettled":true,
-                     "destinationChoice":{"kind":"platformDefault"}}"#
-            )
-            .destination,
-            Destination::Unset,
-            "a default that names no directory has applied nothing"
+            !written.contains("/sdcard/downloads"),
+            "and the folder itself is not carried either: {written}"
         );
     }
 
@@ -2647,55 +2382,38 @@ mod tests {
         );
     }
 
-    /// The half of [`open`] that decides: only a finished entry whose file
-    /// is really there is playable off the device, and the URL is a real
-    /// `file://` one (a space in the name and all).
+    /// The half of [`open`] that decides. A download that is not whole has
+    /// nothing to play whatever is on the disk, and a whole one still needs
+    /// the embedded server, because the pieces are only readable through
+    /// it -- no server, nowhere to play from. What a complete download's
+    /// URL *is* is checked against a running one, in `tests/downloads.rs`.
+    ///
+    /// The path the server reports is deliberately not consulted: it names
+    /// a file that is never written, and a build that went back to opening
+    /// it would refuse every download on the device.
     #[test]
-    fn only_a_finished_file_that_is_there_is_playable() {
-        let dir = std::env::temp_dir().join(format!("xtremio-open-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("A Film 1080p.mkv");
-        std::fs::write(&file, b"bytes").unwrap();
-
+    fn only_a_finished_download_is_playable_and_only_through_the_server() {
         let mut entry = entry("tt1", "tt1");
-        entry.path = Some(file.to_string_lossy().into_owned());
+        entry.path = Some("/data/rqbit-downloads/A Film/A Film 1080p.mkv".into());
 
-        // Not finished: what is on disk is a fragment, whatever its name.
         entry.state = State::Downloading;
-        assert_eq!(local_url(&entry), Err(OpenFailure::Incomplete));
+        assert_eq!(stream_url(&entry), Err(OpenFailure::Incomplete));
 
+        // Complete, with no server in this test binary: there is no reader
+        // for the pieces, so there is no URL either.
         entry.state = State::Complete;
-        let url = local_url(&entry).expect("a finished file is playable");
-        assert!(url.starts_with("file://"), "{url}");
-        assert!(url.ends_with("/A%20Film%201080p.mkv"), "{url}");
-        assert_eq!(
-            url::Url::parse(&url).unwrap().to_file_path().unwrap(),
-            file,
-            "the URL points back at the file it was built from"
-        );
-
-        // The file went away under a complete entry (an unplugged volume,
-        // or a deletion from outside the app), and an entry the server
-        // never gave a path.
-        std::fs::remove_file(&file).unwrap();
-        assert_eq!(local_url(&entry), Err(OpenFailure::Missing));
-        entry.path = None;
-        assert_eq!(local_url(&entry), Err(OpenFailure::Missing));
-        // A directory is not a file to play either.
-        entry.path = Some(dir.to_string_lossy().into_owned());
-        assert_eq!(local_url(&entry), Err(OpenFailure::Missing));
-        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(stream_url(&entry), Err(OpenFailure::Unavailable));
     }
 
     /// The wire shape the Dart side reads: a refusal names its reason and
     /// carries no URL, and the reasons are camelCase like everything else.
     #[test]
     fn a_refused_open_is_a_value_with_a_reason() {
-        let json =
-            serde_json::to_value(OpenOutcome::refused("tt1:tt1", OpenFailure::Missing)).unwrap();
+        let json = serde_json::to_value(OpenOutcome::refused("tt1:tt1", OpenFailure::Unavailable))
+            .unwrap();
         assert_eq!(json["ok"], false);
         assert_eq!(json["key"], "tt1:tt1");
-        assert_eq!(json["reason"], "missing");
+        assert_eq!(json["reason"], "unavailable");
         assert!(json.get("url").is_none(), "{json}");
         assert!(json.get("entry").is_none(), "{json}");
         assert_eq!(
@@ -2790,12 +2508,6 @@ mod tests {
         let (before, mut after) = one(|entry| entry.downloaded = 4096);
         after.items.insert("tt2:tt2".into(), entry("tt2", "tt2"));
         assert!(!only_downloaded_moved(&before, &after), "an entry appeared");
-        let (before, mut after) = one(|entry| entry.downloaded = 4096);
-        after.destination = Destination::Cache;
-        assert!(
-            !only_downloaded_moved(&before, &after),
-            "and where the downloads go is not progress at all"
-        );
     }
 
     /// What that means for the file: a tick that only moved a byte count

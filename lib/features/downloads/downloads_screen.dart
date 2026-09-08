@@ -2,22 +2,26 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../widgets/poster_tile.dart';
-import '../../widgets/tv_text_field.dart';
 import '../player/player_screen.dart';
-import 'destination.dart';
 import 'download_labels.dart';
 import 'downloads_controller.dart';
 import 'offline_play.dart';
 import 'remove_download_dialog.dart';
 
-/// Everything kept on the device: what it is, how far along, how much room
-/// it takes and where it goes.
+/// Everything kept on the device: what it is, how far along and how much
+/// room it takes.
+///
+/// **Not where it goes.** Torrent data has one root now, shared by the
+/// streaming cache and the kept downloads, and it is named and moved where
+/// the rest of that root's business is (Settings, "Server storage"): a
+/// folder control here would go on saying downloads have a place of their
+/// own to be moved between.
 ///
 /// The poster on a row is a [PosterTile] and wears the full indicator
 /// like every other poster in the app; everything else here -- the rows,
-/// the destination field's menu, the ⋮ per download, the buttons in the
-/// confirmations -- is Material's and is marked by the theme floor
-/// (`FocusTheme`) alone, since a row in a list is not a thing to lift.
+/// the ⋮ per download, the buttons in the confirmations -- is Material's
+/// and is marked by the theme floor (`FocusTheme`) alone, since a row in a
+/// list is not a thing to lift.
 ///
 /// The rows come from the registry the Rust side owns, with live progress
 /// merged in ([DownloadsController]); every action here is one call on the
@@ -30,11 +34,7 @@ import 'remove_download_dialog.dart';
 /// network in the way, and falls back to streaming -- saying so -- when the
 /// file is not there any more.
 class DownloadsScreen extends StatefulWidget {
-  const DownloadsScreen({
-    super.key,
-    this.destinations = platformDownloadDestinations,
-    this.canPlay = true,
-  });
+  const DownloadsScreen({super.key, this.canPlay = true});
 
   /// The name this screen's route carries, so something outside the tree
   /// -- the downloads notification -- can tell whether it is already up
@@ -56,18 +56,12 @@ class DownloadsScreen extends StatefulWidget {
   /// only the actions that do not open a player.
   final bool canPlay;
 
-  /// The directories the destination control offers to choose between. On
-  /// Android those are the app's own external storage directories, an SD
-  /// card among them; everywhere else there are none to enumerate and a
-  /// path is typed instead.
-  final Future<List<String>> Function() destinations;
-
   /// What is on the device for these downloads. A complete one has fetched
   /// its whole length, so this is the same sum either way.
   ///
   /// Summed over distinct files, not over rows: one torrent file offered
-  /// under two metas is two downloads and one file on the disk, which is
-  /// the same reason a removal can report `unpinned: false`.
+  /// under two metas is two downloads and one file's pieces on the device,
+  /// which is the same reason a removal can report `unpinned: false`.
   static int storageUsed(DownloadsRegistry registry) {
     final counted = <String>{};
     var total = 0;
@@ -79,33 +73,6 @@ class DownloadsScreen extends StatefulWidget {
     return total;
   }
 
-  /// Shown in place of the destination when none is set.
-  static const String defaultDestinationLabel = 'Default (with the cache)';
-
-  /// Heading of the destination control.
-  static const String destinationTitle = 'Where downloads go';
-
-  /// What to say when the folder chosen is not the one in use, and nothing
-  /// when it is.
-  ///
-  /// The server clears a `downloadsDir` it cannot prepare at boot -- a card
-  /// that is not in the device -- and start-up puts the chosen folder back
-  /// when it can ([applyDefaultDestination]). When it cannot, the folder
-  /// stays on record and something else holds the downloads meanwhile,
-  /// which is worth a sentence: the row above would otherwise show a folder
-  /// nobody picked with nothing to say why.
-  static String? destinationMissing(DownloadDestination chosen, String? live) {
-    final path = chosen.path;
-    if (chosen.kind != DownloadDestinationKind.explicit ||
-        path == null ||
-        path == live) {
-      return null;
-    }
-    return live == null
-        ? '$path is not available. Downloads go with the cache until it is.'
-        : '$path is not available. Downloads go to $live until it is.';
-  }
-
   @override
   State<DownloadsScreen> createState() => _DownloadsScreenState();
 }
@@ -113,16 +80,6 @@ class DownloadsScreen extends StatefulWidget {
 class _DownloadsScreenState extends State<DownloadsScreen> {
   DownloadsClient? _client;
   DownloadsController? _downloads;
-
-  /// Where the files go, once the server has been asked; null is the
-  /// torrent cache, and [_destinationKnown] tells the two apart.
-  String? _destination;
-  bool _destinationKnown = false;
-
-  /// The directories to choose between; empty means a path is typed.
-  List<String> _destinations = const [];
-
-  final TextEditingController _typed = TextEditingController();
 
   /// The rows whose retry is in flight, by [DownloadView.key]. Pinning a
   /// magnet again blocks on its metadata, and nothing on the row moves
@@ -148,7 +105,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         ..dispose();
       _client = client;
       _downloads = DownloadsController(client)..addListener(_onDownloads);
-      _readDestination();
     }
   }
 
@@ -157,7 +113,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     _downloads
       ?..removeListener(_onDownloads)
       ..dispose();
-    _typed.dispose();
     super.dispose();
   }
 
@@ -165,66 +120,22 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     if (mounted) setState(() {});
   }
 
-  /// Asks the server where downloads go, and the platform where they could
-  /// go. Neither failing is worth an error on screen: without the choices
-  /// the control is a text field, and without the answer it reads as the
-  /// default.
-  Future<void> _readDestination() async {
-    final client = _client;
-    String? destination;
-    try {
-      destination = await client?.directory();
-    } catch (_) {
-      destination = null;
-    }
-    var destinations = const <String>[];
-    try {
-      destinations = await widget.destinations();
-    } catch (_) {
-      destinations = const [];
-    }
-    if (!mounted) return;
-    setState(() {
-      _destination = destination;
-      _destinationKnown = true;
-      _destinations = destinations;
-      _typed.text = destination ?? '';
-    });
-  }
-
-  Future<void> _setDestination(String? path) async {
-    final client = _client;
-    if (client == null) return;
-    try {
-      final settings = await client.setDirectory(path);
-      if (!mounted) return;
-      setState(() => _destination = settings['downloadsDir'] as String?);
-      _tell(
-        path == null
-            ? 'Downloads go back with the cache.'
-            : 'Downloads go to $path.',
-      );
-    } catch (_) {
-      if (!mounted) return;
-      _tell('That folder cannot be used for downloads.');
-    }
-  }
-
   void _tell(String message) =>
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
 
-  /// Plays the file on the disk, with the addon requests the download was
-  /// taken with: those are what keep continue-watching moving while the
-  /// player runs offline (`Load Player` needs the stream request to record
-  /// progress at all, and the meta request to find the library item -- which
-  /// offline comes out of the bucket the download put the title in).
+  /// Plays what is on this device -- the embedded server's own media route
+  /// for the download's torrent and file, off the pieces already here --
+  /// with the addon requests the download was taken with: those are what
+  /// keep continue-watching moving while the player runs offline (`Load
+  /// Player` needs the stream request to record progress at all, and the
+  /// meta request to find the library item -- which offline comes out of
+  /// the bucket the download put the title in).
   ///
-  /// A row is only offered Play when it is finished, but the file can still
-  /// be gone by the time it is pressed: an unplugged volume, or a deletion
-  /// from outside the app. Then the addon's own stream is played instead --
-  /// through the server, over the network -- and the row says so, rather
-  /// than opening a player on a URL with no file behind it.
+  /// A row is only offered Play when it is finished, but the registry can
+  /// still refuse by the time it is pressed. Then the addon's own stream is
+  /// played instead, rather than opening a player on a URL with nothing
+  /// behind it.
   ///
   /// A second press while that lookup is out is dropped ([_playing]).
   Future<void> _play(DownloadView view) async {
@@ -241,13 +152,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Future<void> _pushPlayer(DownloadsClient client, DownloadView view) async {
     final playback = await offlinePlayback(client, view);
     if (!mounted) return;
-    final message = playback.message;
-    if (message != null) _tell(message);
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         settings: const RouteSettings(name: PlayerScreen.routeName),
         builder: (_) => PlayerScreen(
-          stream: playback.stream ?? view.stream.json,
+          stream: playback ?? view.stream.json,
           streamRequest: _requestOf(view.streamRequest),
           metaRequest: _requestOf(view.metaRequest),
           subtitlesPath: ResourcePath(
@@ -337,14 +246,6 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             registry: counted ? registry : null,
             failed: downloads?.error != null,
           ),
-          _DestinationControl(
-            destination: _destination,
-            chosen: registry.destination,
-            isKnown: _destinationKnown,
-            choices: _destinations,
-            typed: _typed,
-            onSelect: _setDestination,
-          ),
           const Divider(height: 1),
           // A listing that failed is not an empty one: saying "nothing
           // downloaded" to someone whose disk is full of downloads is a lie,
@@ -418,135 +319,6 @@ class _StorageHeader extends StatelessWidget {
   }
 }
 
-/// Where the files go: a choice of directories where the platform has them
-/// (Android), a typed path where it does not.
-class _DestinationControl extends StatelessWidget {
-  const _DestinationControl({
-    required this.destination,
-    required this.chosen,
-    required this.isKnown,
-    required this.choices,
-    required this.typed,
-    required this.onSelect,
-  });
-
-  final String? destination;
-
-  /// What the registry says was answered, which is not always what the
-  /// server has: a folder it could not prepare at boot is dropped from the
-  /// settings and stays on record here.
-  final DownloadDestination chosen;
-
-  /// Whether the server has been asked yet; before that "default" would be
-  /// a guess.
-  final bool isKnown;
-  final List<String> choices;
-  final TextEditingController typed;
-
-  /// Null puts them back with the cache.
-  final ValueChanged<String?> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final subtitle = !isKnown
-        ? 'Asking the server…'
-        : destination ?? DownloadsScreen.defaultDestinationLabel;
-    final missing = isKnown
-        ? DownloadsScreen.destinationMissing(chosen, destination)
-        : null;
-    if (choices.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              DownloadsScreen.destinationTitle,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-            if (missing != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                missing,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-            const SizedBox(height: 8),
-            TvTextField(
-              controller: typed,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                isDense: true,
-                labelText: 'Folder',
-                hintText: '/media/downloads',
-              ),
-              onSubmitted: (path) =>
-                  onSelect(path.trim().isEmpty ? null : path.trim()),
-            ),
-            const SizedBox(height: 8),
-            // A Wrap, not a Row: the two labels do not fit side by side on
-            // a phone.
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton(
-                  onPressed: () {
-                    final path = typed.text.trim();
-                    onSelect(path.isEmpty ? null : path);
-                  },
-                  child: const Text('Use this folder'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    typed.clear();
-                    onSelect(null);
-                  },
-                  child: const Text('Use the default'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-    return ListTile(
-      leading: const Icon(Icons.folder_outlined),
-      title: const Text(DownloadsScreen.destinationTitle),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(subtitle),
-          if (missing != null)
-            Text(
-              missing,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-        ],
-      ),
-      // The empty path stands for the default: a `PopupMenuButton` reads a
-      // null selection as a dismissed menu and never reports it.
-      trailing: PopupMenuButton<String>(
-        icon: const Icon(Icons.edit_outlined),
-        tooltip: DownloadsScreen.destinationTitle,
-        onSelected: (choice) => onSelect(choice.isEmpty ? null : choice),
-        itemBuilder: (context) => [
-          const PopupMenuItem<String>(
-            value: '',
-            child: Text(DownloadsScreen.defaultDestinationLabel),
-          ),
-          for (final choice in choices)
-            PopupMenuItem<String>(value: choice, child: Text(choice)),
-        ],
-      ),
-    );
-  }
-}
-
 enum _RowAction { play, retry, delete }
 
 /// One download: poster, what it is, how far along, and the actions.
@@ -561,7 +333,8 @@ class _DownloadRow extends StatelessWidget {
 
   final DownloadView view;
 
-  /// Null until the file is whole: there is nothing to play off the disk.
+  /// Null until every piece is here: there is nothing to play off the
+  /// device.
   final VoidCallback? onPlay;
   final VoidCallback onDelete;
 

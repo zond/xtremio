@@ -225,8 +225,9 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         report["cacheVolume"]["totalBytes"].as_u64().unwrap_or(0) > 0,
         "{report}"
     );
-    // No downloadsDir is set here, so there is no second volume to name.
-    assert!(report["downloadsVolume"].is_null(), "{report}");
+    // One root, so one volume line: there is no second tree for the report
+    // to name and nothing left in it to name one with.
+    assert!(report.get("downloadsVolume").is_none(), "{report}");
 
     // What the cache occupies against its limit, read without evicting
     // anything: a fresh server has written a little and nothing is

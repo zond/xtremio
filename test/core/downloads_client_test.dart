@@ -23,9 +23,7 @@ class _Recorder {
   final List<String> addRequests = [];
   final List<({String key, bool deleteFiles})> removals = [];
   final List<String> openKeys = [];
-  final List<String?> directories = [];
   int lists = 0;
-  int settingsReads = 0;
 
   /// How many times the progress stream was opened. The Rust side keeps one
   /// event sink, so this must never go past 1 for one client.
@@ -37,11 +35,9 @@ class _Recorder {
   String removeAnswer = '{"removed":true,"unpinned":true,"deletedFiles":false}';
   String listAnswer = '{"version":1,"items":{}}';
   String openAnswer =
-      '{"ok":true,"key":"tt1:tt1","url":"file:///films/A%20Film.mkv",'
+      '{"ok":true,"key":"tt1:tt1","url":"http://127.0.0.1:11470/abc123/0",'
       '"entry":{"metaId":"tt1","videoId":"tt1","state":"complete",'
       '"lastPlayedAt":"2026-09-03T10:00:00Z"}}';
-  String setDirAnswer = '{"downloadsDir":null}';
-  String settingsAnswer = '{"downloadsDir":null,"cacheSize":2147483648}';
 
   RustDownloadsClient get client => RustDownloadsClient(
     addDownload: ({required String requestJson}) async {
@@ -59,14 +55,6 @@ class _Recorder {
     openDownload: ({required String key}) async {
       openKeys.add(key);
       return openAnswer;
-    },
-    setDownloadsDir: ({String? path}) async {
-      directories.add(path);
-      return setDirAnswer;
-    },
-    readSettings: () async {
-      settingsReads++;
-      return settingsAnswer;
     },
     openEvents: () {
       opened++;
@@ -271,12 +259,12 @@ void main() {
       expect(registry['tt0063350:tt0063350']!.isComplete, isTrue);
     });
 
-    test('open names the key and reads back the file to play', () async {
+    test('open names the key and reads back where it plays from', () async {
       final result = await rust.client.open('tt1:tt1');
 
       expect(rust.openKeys, ['tt1:tt1']);
       expect(result.ok, isTrue);
-      expect(result.url, 'file:///films/A%20Film.mkv');
+      expect(result.url, 'http://127.0.0.1:11470/abc123/0');
       expect(result.reason, isNull);
       expect(
         result.entry?.lastPlayedAt,
@@ -301,30 +289,6 @@ void main() {
       final result = await rust.client.open('tt1:tt1');
       expect(result.ok, isFalse);
       expect(result.reason, DownloadOpenFailure.unknown);
-    });
-
-    test('setDirectory passes the path, and null to unset it', () async {
-      rust.setDirAnswer = '{"downloadsDir":"/media/sd/xtremio"}';
-
-      final client = rust.client;
-      final settings = await client.setDirectory('/media/sd/xtremio');
-      await client.setDirectory(null);
-
-      expect(rust.directories, ['/media/sd/xtremio', null]);
-      expect(settings['downloadsDir'], '/media/sd/xtremio');
-    });
-
-    test('directory reads the destination out of the settings', () async {
-      rust.settingsAnswer = '{"downloadsDir":"/media/sd/xtremio"}';
-      expect(await rust.client.directory(), '/media/sd/xtremio');
-      expect(rust.settingsReads, 1);
-
-      rust.settingsAnswer = '{"cacheSize":2147483648}';
-      expect(
-        await rust.client.directory(),
-        isNull,
-        reason: 'unset means the torrent cache',
-      );
     });
 
     test('a retry sends the entry back as the request that made it', () async {
@@ -658,67 +622,69 @@ void main() {
       await expectLater(client.list(), throwsStateError);
     });
 
-    test('open plays a finished entry off its path, and stamps it', () async {
-      final client = FakeDownloadsClient(
-        registry: DownloadsRegistry(
-          items: {
-            'tt1:tt1': const DownloadView({
-              'metaId': 'tt1',
-              'videoId': 'tt1',
-              'state': 'complete',
-              'path': '/downloads/abc/A Film.mkv',
-            }),
-            'tt2:tt2': const DownloadView({
-              'metaId': 'tt2',
-              'videoId': 'tt2',
-              'state': 'downloading',
-              'path': '/downloads/def/Half.mkv',
-            }),
-          },
-        ),
-      );
+    test(
+      'open plays a finished entry through the server, and stamps it',
+      () async {
+        final client = FakeDownloadsClient(
+          registry: DownloadsRegistry(
+            items: {
+              'tt1:tt1': const DownloadView({
+                'metaId': 'tt1',
+                'videoId': 'tt1',
+                'state': 'complete',
+                'infoHash': 'abc123',
+                'fileIdx': 2,
+                'path': '/downloads/abc/A Film.mkv',
+              }),
+              'tt2:tt2': const DownloadView({
+                'metaId': 'tt2',
+                'videoId': 'tt2',
+                'state': 'downloading',
+                'path': '/downloads/def/Half.mkv',
+              }),
+            },
+          ),
+        );
 
-      final played = await client.open('tt1:tt1');
-      expect(played.ok, isTrue);
-      expect(played.url, 'file:///downloads/abc/A%20Film.mkv');
-      expect(client.opens, ['tt1:tt1']);
-      expect(
-        (await client.list())['tt1:tt1']?.lastPlayedAt,
-        isNotNull,
-        reason: 'the fake stamps what the registry would',
-      );
+        final played = await client.open('tt1:tt1');
+        expect(played.ok, isTrue);
+        expect(
+          played.url,
+          '${FakeDownloadsClient.baseUrl}abc123/2',
+          reason:
+              'there is no file to open; the pieces are the server\'s to '
+              'read',
+        );
+        expect(client.opens, ['tt1:tt1']);
+        expect(
+          (await client.list())['tt1:tt1']?.lastPlayedAt,
+          isNotNull,
+          reason: 'the fake stamps what the registry would',
+        );
 
-      final incomplete = await client.open('tt2:tt2');
-      expect(incomplete.reason, DownloadOpenFailure.incomplete);
-      // `OpenOutcome::refused` never fills the entry in, so neither does
-      // the fake: a screen that read it back would find it on a device.
-      expect(incomplete.entry, isNull);
-      expect(
-        (await client.open('tt9:tt9')).reason,
-        DownloadOpenFailure.unknown,
-      );
-      // The one the default cannot reach: a finished entry whose file went
-      // away with its volume.
-      client.onOpen = (_) => const DownloadOpenResult(
-        ok: false,
-        reason: DownloadOpenFailure.missing,
-      );
-      expect(
-        (await client.open('tt1:tt1')).reason,
-        DownloadOpenFailure.missing,
-      );
-    });
+        final incomplete = await client.open('tt2:tt2');
+        expect(incomplete.reason, DownloadOpenFailure.incomplete);
+        // `OpenOutcome::refused` never fills the entry in, so neither does
+        // the fake: a screen that read it back would find it on a device.
+        expect(incomplete.entry, isNull);
+        expect(
+          (await client.open('tt9:tt9')).reason,
+          DownloadOpenFailure.unknown,
+        );
+        // The one the default cannot reach: everything is here and the
+        // server that reads the pieces is not running.
+        client.onOpen = (_) => const DownloadOpenResult(
+          ok: false,
+          reason: DownloadOpenFailure.unavailable,
+        );
+        expect(
+          (await client.open('tt1:tt1')).reason,
+          DownloadOpenFailure.unavailable,
+        );
 
-    test('records the destination it was pointed at', () async {
-      final client = FakeDownloadsClient();
-      addTearDown(client.dispose);
-
-      final settings = await client.setDirectory('/media/sd/xtremio');
-      expect(client.directories, ['/media/sd/xtremio']);
-      expect(settings['downloadsDir'], '/media/sd/xtremio');
-
-      await client.dispose();
-      expect(client.disposed, isTrue);
-    });
+        await client.dispose();
+        expect(client.disposed, isTrue);
+      },
+    );
   });
 }

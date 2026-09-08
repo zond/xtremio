@@ -116,11 +116,20 @@ abstract interface class ServerSettingsWriter {
   Future<Map<String, dynamic>> updateSettings(Map<String, dynamic> patch);
 }
 
-/// What the storage screen needs from the server: the cache's usage
-/// against its limit, and the one way there is to ask it to reclaim some.
+/// What the storage screen needs from the server: where torrent data
+/// lives, what it occupies against its limit, and the one way there is to
+/// ask the server to reclaim some.
+///
+/// It writes through [ServerSettingsWriter] rather than owning a call of
+/// its own, because moving the root is one settings key (`cacheRoot`) like
+/// every other -- see there.
 ///
 /// Behind an interface so the screen can be driven by a fake in tests.
-abstract interface class ServerCacheControl {
+abstract interface class ServerCacheControl implements ServerSettingsWriter {
+  /// Where the server writes and what room that volume has left. Throws
+  /// when the server is not running.
+  Future<ServerStorage> storage();
+
   /// What the cache currently occupies against its limit, without evicting
   /// anything. Throws when the server is not running.
   Future<CacheUsage> cacheUsage();
@@ -205,6 +214,7 @@ class ServerClient
   /// writes to, which stream-server does not report itself; for the
   /// cache's own occupancy against its limit, [cacheUsage] is the
   /// authoritative number (see `server_storage_report`).
+  @override
   Future<ServerStorage> storage() async =>
       ServerStorage.fromJson(_object(await rust.serverStorageReport()));
 

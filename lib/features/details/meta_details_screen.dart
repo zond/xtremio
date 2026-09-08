@@ -568,22 +568,20 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final videoId = state.streamPath?.id ?? state.meta?.id ?? widget.id;
     final client = _downloadsClient;
     final download = _videoDownload(videoId);
-    OfflinePlayback playback = (stream: null, message: null);
+    Map<String, dynamic>? playback;
     if (client != null &&
         download != null &&
         download.isComplete &&
         download.stream.isSameSource(stream)) {
       playback = await offlinePlayback(client, download);
       if (!mounted) return;
-      final message = playback.message;
-      if (message != null) _tell(message);
     }
     if (!mounted) return;
     final result = await Navigator.of(context).push<PlayerScreenResult>(
       MaterialPageRoute<PlayerScreenResult>(
         settings: const RouteSettings(name: PlayerScreen.routeName),
         builder: (_) => PlayerScreen(
-          stream: playback.stream ?? stream.json,
+          stream: playback ?? stream.json,
           streamRequest: group.request,
           metaRequest: state.metaRequest,
           subtitlesPath: ResourcePath(

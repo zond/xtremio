@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
-import 'package:xtremio/features/downloads/offline_play.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
@@ -16,11 +15,13 @@ import '../support/fixtures.dart';
 
 const movieKey = 'tt0063350:tt0063350';
 
-/// Where the recorded registry says the movie's file is, as a URL.
+/// Where the movie in the recorded registry plays from: the embedded
+/// server's media route for its torrent and file. There is no file to open
+/// -- the bytes are pieces in the server's store -- and this URL is served
+/// off them with no peer and no network.
 const movieFileUrl =
-    'file:///downloads/cache/server/rqbit-downloads/'
-    'Night.of.the.Living.Dead.1968.1080p.BluRay/'
-    'night.of.the.living.dead.1968.1080p.mkv';
+    '${FakeDownloadsClient.baseUrl}'
+    'bbdd47be75282ea36cddf7a48ba5a73e667e57bb/1';
 const pilotKey = 'tt0903747:tt0903747:1:1';
 
 /// The recorded registry: a finished movie, an episode two thirds in, an
@@ -86,7 +87,6 @@ void main() {
   Widget harness(
     FakeCoreClient core,
     DownloadsClient downloads, {
-    List<String> destinations = const [],
     FakePlaybackEngine? engine,
     bool canPlay = true,
   }) => CoreScope(
@@ -96,12 +96,7 @@ void main() {
       child: PlaybackScope(
         createEngine: () => engine ?? FakePlaybackEngine(),
         torrentStats: FakeTorrentStatsClient(),
-        child: MaterialApp(
-          home: DownloadsScreen(
-            destinations: () async => destinations,
-            canPlay: canPlay,
-          ),
-        ),
+        child: MaterialApp(home: DownloadsScreen(canPlay: canPlay)),
       ),
     ),
   );
@@ -290,8 +285,8 @@ void main() {
       final args = loadArgs(
         core.dispatched.firstWhere((a) => a.field == CoreField.player),
       );
-      // A `url` stream on the file itself: no torrent for the player to
-      // wait on, and nothing for the embedded server to serve.
+      // A `url` stream on the server's own media route: no torrent for the
+      // player to wait on, and no peer for the server to ask.
       expect(args['stream'], {
         'url': movieFileUrl,
         'name': 'Torrent',
@@ -351,7 +346,7 @@ void main() {
       expect(find.byType(PlayerScreen), findsNothing);
     });
 
-    testWidgets('a download whose file went away streams it, and says so', (
+    testWidgets('a download with nowhere to play from streams it instead', (
       tester,
     ) async {
       useTallViewport(tester);
@@ -359,7 +354,7 @@ void main() {
       final downloads = FakeDownloadsClient(registry: recorded())
         ..onOpen = (_) => const DownloadOpenResult(
           ok: false,
-          reason: DownloadOpenFailure.missing,
+          reason: DownloadOpenFailure.unavailable,
         );
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(core, downloads));
@@ -368,7 +363,6 @@ void main() {
       await tester.tap(find.text('Night of the Living Dead'));
       await tester.pump();
 
-      expect(find.text(kDownloadGoneMessage), findsOneWidget);
       await tester.pumpAndSettle();
       expect(find.byType(PlayerScreen), findsOneWidget);
       final args = loadArgs(
@@ -628,162 +622,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('This download could not be removed.'), findsOneWidget);
-    });
-  });
-
-  group('where downloads go', () {
-    testWidgets('shows what the server says, and picks from what the '
-        'platform offers', (tester) async {
-      useTallViewport(tester);
-      final downloads = FakeDownloadsClient()
-        ..settings = const {'downloadsDir': '/storage/emulated/0/downloads'};
-      addTearDown(downloads.dispose);
-      await tester.pumpWidget(
-        harness(
-          coreWithPlayer(),
-          downloads,
-          destinations: const [
-            '/storage/emulated/0/downloads',
-            '/storage/ABCD-1234/downloads',
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('/storage/emulated/0/downloads'), findsOneWidget);
-
-      await tester.tap(find.byTooltip(DownloadsScreen.destinationTitle));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('/storage/ABCD-1234/downloads').last);
-      await tester.pumpAndSettle();
-
-      expect(downloads.directories, ['/storage/ABCD-1234/downloads']);
-      expect(find.text('/storage/ABCD-1234/downloads'), findsOneWidget);
-    });
-
-    testWidgets('the default puts them back with the cache', (tester) async {
-      useTallViewport(tester);
-      final downloads = FakeDownloadsClient()
-        ..settings = const {'downloadsDir': '/storage/emulated/0/downloads'};
-      addTearDown(downloads.dispose);
-      await tester.pumpWidget(
-        harness(
-          coreWithPlayer(),
-          downloads,
-          destinations: const ['/storage/emulated/0/downloads'],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byTooltip(DownloadsScreen.destinationTitle));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(DownloadsScreen.defaultDestinationLabel));
-      await tester.pumpAndSettle();
-
-      expect(downloads.directories, [null]);
-      expect(
-        find.text(DownloadsScreen.defaultDestinationLabel),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('with nothing to choose between, a path is typed', (
-      tester,
-    ) async {
-      useTallViewport(tester);
-      final downloads = FakeDownloadsClient();
-      addTearDown(downloads.dispose);
-      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(TextField), findsOneWidget);
-      await tester.enterText(find.byType(TextField), '/media/downloads');
-      await tester.tap(find.text('Use this folder'));
-      await tester.pumpAndSettle();
-
-      expect(downloads.directories, ['/media/downloads']);
-      expect(find.text('Downloads go to /media/downloads.'), findsOneWidget);
-
-      await tester.tap(find.text('Use the default'));
-      await tester.pumpAndSettle();
-      expect(downloads.directories, ['/media/downloads', null]);
-    });
-
-    testWidgets('a folder chosen that the server has dropped is explained', (
-      tester,
-    ) async {
-      // The server clears a `downloadsDir` it cannot prepare at boot -- a
-      // card that is not in the device -- and start-up could not put it
-      // back, so the files are somewhere else meanwhile. Without a word
-      // here the row shows a folder nobody picked and no reason for it.
-      useTallViewport(tester);
-      final downloads = FakeDownloadsClient(
-        registry: const DownloadsRegistry(
-          destination: DownloadDestination.explicit(
-            '/storage/ABCD-1234/downloads',
-          ),
-        ),
-      )..settings = const {'downloadsDir': '/sdcard/files/downloads'};
-      addTearDown(downloads.dispose);
-      await tester.pumpWidget(
-        harness(
-          coreWithPlayer(),
-          downloads,
-          destinations: const ['/sdcard/files/downloads'],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text(
-          '/storage/ABCD-1234/downloads is not available. Downloads go to '
-          '/sdcard/files/downloads until it is.',
-        ),
-        findsOneWidget,
-      );
-
-      // And with the destination in force, nothing to explain.
-      expect(
-        DownloadsScreen.destinationMissing(
-          const DownloadDestination.explicit('/sdcard/files/downloads'),
-          '/sdcard/files/downloads',
-        ),
-        isNull,
-      );
-      expect(
-        DownloadsScreen.destinationMissing(
-          const DownloadDestination.platformDefault('/sdcard/files/downloads'),
-          null,
-        ),
-        isNull,
-        reason: 'a default the app applied is nobody\'s choice to miss',
-      );
-      expect(
-        DownloadsScreen.destinationMissing(
-          const DownloadDestination.explicit('/storage/ABCD-1234/downloads'),
-          null,
-        ),
-        '/storage/ABCD-1234/downloads is not available. Downloads go with '
-        'the cache until it is.',
-      );
-    });
-
-    testWidgets('a folder the server refuses says so', (tester) async {
-      useTallViewport(tester);
-      final downloads = FakeDownloadsClient()
-        ..setDirectoryError = StateError('not writable');
-      addTearDown(downloads.dispose);
-      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextField), '/root/nope');
-      await tester.tap(find.text('Use this folder'));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('That folder cannot be used for downloads.'),
-        findsOneWidget,
-      );
     });
   });
 }

@@ -54,6 +54,11 @@ void main() {
   /// was loaded for, and that episode.
   const nextKey = 'tt0063350:$nextId';
   const nextPath = '/downloads/breaking/e2.mkv';
+  const nextHash = 'cccccccccccccccccccccccccccccccccccccccc';
+
+  /// Where a kept episode plays from: the embedded server's media route for
+  /// its torrent and file, off the pieces on this device.
+  const nextUrl = '${FakeDownloadsClient.baseUrl}$nextHash/1';
 
   /// A client holding a finished download of the next episode.
   FakeDownloadsClient withNextEpisodeOnDisk() => FakeDownloadsClient(
@@ -64,8 +69,10 @@ void main() {
           'videoId': nextId,
           'type': 'series',
           'name': 'S1E2',
+          'infoHash': nextHash,
+          'fileIdx': 1,
           'stream': {
-            'infoHash': 'cccccccccccccccccccccccccccccccccccccccc',
+            'infoHash': nextHash,
             'fileIdx': 1,
             'name': 'Torrentio',
             'behaviorHints': {'bingeGroup': 'pdm-1080p'},
@@ -188,9 +195,9 @@ void main() {
   });
 
   testWidgets('binges into a downloaded episode off the disk', (tester) async {
-    // A whole file for the next episode is on the device, so there is
-    // nothing for the server -- or the network -- to do, connection or
-    // not. The addon's stream for it is only the fallback.
+    // Every piece of the next episode is on the device, so there is no peer
+    // for the server to ask and nothing for the network to do, connection
+    // or not. The addon's stream for it is only the fallback.
     useWideViewport(tester);
     final downloads = withNextEpisodeOnDisk();
     addTearDown(downloads.dispose);
@@ -202,7 +209,7 @@ void main() {
 
     expect(downloads.opens, [nextKey]);
     expect(lastLoadedStream(harness), {
-      'url': 'file://$nextPath',
+      'url': nextUrl,
       'name': 'Torrentio',
       'behaviorHints': {'filename': 'e2.mkv', 'bingeGroup': 'pdm-1080p'},
     });
@@ -225,7 +232,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(PlayerScreen), findsOneWidget);
-    expect(lastLoadedStream(harness)['url'], 'file://$nextPath');
+    expect(lastLoadedStream(harness)['url'], nextUrl);
     expect(harness.engines, hasLength(2));
     // A hand-over, not an exit: the core's player stays loaded for the
     // screen that took this one's place.

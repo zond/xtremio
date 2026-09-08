@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../src/rust/api/downloads.dart' as rust;
-import '../src/rust/api/server.dart' as rust_server;
 import 'state/download.dart';
 import 'state/stream.dart';
 
@@ -197,10 +196,9 @@ enum DownloadOpenFailure {
   /// The bytes are not all here yet.
   incomplete('incomplete'),
 
-  /// Whole as far as the registry knows, but the file is not where it was
-  /// left -- an unmounted downloads volume, or a deletion from outside the
-  /// app.
-  missing('missing');
+  /// Whole, and nothing can serve it: the embedded server is not running.
+  /// The pieces a download is made of are only ever read through it.
+  unavailable('unavailable');
 
   const DownloadOpenFailure(this.wireName);
 
@@ -214,9 +212,9 @@ enum DownloadOpenFailure {
   );
 }
 
-/// What [DownloadsClient.open] answers: the file to play, or why there is
-/// none. A download whose file went away is a sentence and a fallback to
-/// streaming, not an exception.
+/// What [DownloadsClient.open] answers: where to play the download from, or
+/// why there is nowhere. A download that cannot be played from the device
+/// is a fallback to streaming, not an exception.
 final class DownloadOpenResult {
   const DownloadOpenResult({
     required this.ok,
@@ -225,10 +223,12 @@ final class DownloadOpenResult {
     this.reason,
   });
 
-  /// Whether there is a file on this device to play.
+  /// Whether this download can be played from what is on this device.
   final bool ok;
 
-  /// The `file://` URL for it; null when there is none.
+  /// The URL to play it from -- the embedded server's media route for the
+  /// torrent and file, served off the pieces already here; null when there
+  /// is nowhere to play it from.
   final String? url;
 
   /// The entry as it now stands, `lastPlayedAt` stamped; null when the open
@@ -310,31 +310,13 @@ abstract interface class DownloadsClient {
   Future<DownloadsRegistry> list();
 
   /// What to play the download [key] off the device with, and a note that
-  /// it was played: a finished download whose file is really there answers
-  /// its `file://` URL and takes a `lastPlayedAt` stamp. Anything else --
-  /// no such entry, not finished, or the file gone with its volume --
-  /// answers [DownloadOpenResult.reason] so the caller streams the title
-  /// instead of opening a player on a dead URL.
+  /// it was played: a finished download answers the embedded server's media
+  /// route for its own torrent and file -- there is no whole file to open,
+  /// only the pieces that server reads -- and takes a `lastPlayedAt` stamp.
+  /// Anything else -- no such entry, not finished, or no server running to
+  /// read the pieces -- answers [DownloadOpenResult.reason] so the caller
+  /// streams the title instead of opening a player on a dead URL.
   Future<DownloadOpenResult> open(String key);
-
-  /// Points the downloads at [path], or back at the torrent cache with null,
-  /// as the *user's* answer to where they go: the registry records it
-  /// ([DownloadsRegistry.destination]) and nothing the app applies on its
-  /// own overwrites it afterwards. Answers the server's settings; throws on
-  /// a path it refuses.
-  Future<Map<String, dynamic>> setDirectory(String? path);
-
-  /// Points the downloads at [path] as a default the app resolved for this
-  /// platform, without answering for the user: the registry records it only
-  /// while nothing has been chosen, so a folder the server dropped at boot
-  /// stays on record while this stands in for it. Answers the server's
-  /// settings; throws on a path it refuses.
-  Future<Map<String, dynamic>> applyDefaultDirectory(String path);
-
-  /// Where the files are being put (`settings.downloadsDir`), or null when
-  /// they live in the torrent cache with everything else. Throws when the
-  /// server cannot be asked.
-  Future<String?> directory();
 
   /// Progress, as it happens: each event carries only what moved -- the
   /// ticker's narrow rows, a whole listing envelope, or the keys a
@@ -356,14 +338,6 @@ typedef DownloadsRemoveFn = Future<String> Function({
 });
 typedef DownloadsListFn = Future<String> Function();
 typedef DownloadsOpenFn = Future<String> Function({required String key});
-typedef DownloadsSetDirFn = Future<String> Function({String? path});
-typedef DownloadsApplyDefaultDirFn = Future<String> Function({
-  required String path,
-});
-
-/// Reading the destination back is reading the server's settings, which is
-/// `server_settings` — the same JSON `downloads_set_dir` answers with.
-typedef DownloadsSettingsFn = Future<String> Function();
 typedef DownloadsEventsFn = Stream<String> Function();
 
 /// [DownloadsClient] over `rust/src/api/downloads.rs` — the same functions
@@ -380,9 +354,6 @@ class RustDownloadsClient implements DownloadsClient {
     this.removeDownload = rust.downloadsRemove,
     this.listDownloads = rust.downloadsList,
     this.openDownload = rust.downloadsOpen,
-    this.setDownloadsDir = rust.downloadsSetDir,
-    this.applyDefaultDownloadsDir = rust.downloadsApplyDefaultDir,
-    this.readSettings = rust_server.serverSettings,
     this.openEvents = rust.downloadsEvents,
   });
 
@@ -390,9 +361,6 @@ class RustDownloadsClient implements DownloadsClient {
   final DownloadsRemoveFn removeDownload;
   final DownloadsListFn listDownloads;
   final DownloadsOpenFn openDownload;
-  final DownloadsSetDirFn setDownloadsDir;
-  final DownloadsApplyDefaultDirFn applyDefaultDownloadsDir;
-  final DownloadsSettingsFn readSettings;
   final DownloadsEventsFn openEvents;
 
   StreamController<DownloadsUpdate>? _controller;
@@ -428,18 +396,6 @@ class RustDownloadsClient implements DownloadsClient {
   @override
   Future<DownloadOpenResult> open(String key) async =>
       DownloadOpenResult.fromJson(_object(await openDownload(key: key)));
-
-  @override
-  Future<Map<String, dynamic>> setDirectory(String? path) async =>
-      _object(await setDownloadsDir(path: path));
-
-  @override
-  Future<Map<String, dynamic>> applyDefaultDirectory(String path) async =>
-      _object(await applyDefaultDownloadsDir(path: path));
-
-  @override
-  Future<String?> directory() async =>
-      _object(await readSettings())['downloadsDir'] as String?;
 
   @override
   Stream<DownloadsUpdate> get updates {

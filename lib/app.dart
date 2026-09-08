@@ -9,7 +9,6 @@ import 'features/addons/addon_details_screen.dart';
 import 'features/addons/addon_health_client.dart';
 import 'features/cast/cast_client.dart';
 import 'features/cast/google_cast_client.dart';
-import 'features/downloads/destination.dart';
 import 'features/downloads/downloads_screen.dart';
 import 'features/downloads/downloads_service.dart';
 import 'features/player/playback_engine.dart';
@@ -95,10 +94,9 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// And the [DownloadsScope]: one [DownloadsClient] for the whole app, since
 /// the Rust side keeps a single progress sink. The app builds a
 /// [RustDownloadsClient] unless [downloads] hands it one, and disposes only
-/// the one it built itself. Start-up also settles where the files go, once:
-/// on a platform with a default of its own ([defaultDestination]) and no
-/// destination configured yet, the server is pointed there
-/// ([applyDefaultDestination]).
+/// the one it built itself. Nothing here settles where the files go: there
+/// is one torrent-data root, the embedded server's, named where the server
+/// is started and moved from Settings.
 class XtremioApp extends StatefulWidget {
   const XtremioApp({
     super.key,
@@ -110,7 +108,6 @@ class XtremioApp extends StatefulWidget {
     this.prefs,
     this.addonHealth = const RustAddonHealthClient(),
     this.deepLinks,
-    this.defaultDestination = platformDefaultDestination,
     this.device = DeviceProfile.fallback,
     this.serverSettings = const ServerClient(),
     this.sharingActivity = const RustSharingActivityClient(),
@@ -139,14 +136,6 @@ class XtremioApp extends StatefulWidget {
   /// Where `stremio://` links arrive from; tests hand in a fake instead of
   /// the platform's own ([AppLinksDeepLinkSource]).
   final DeepLinkSource? deepLinks;
-
-  /// Where the downloads go on a first run: on Android the app's external
-  /// files directory, which the OS does not purge, and null -- leave it to
-  /// the server -- everywhere else. Applied only while the registry says
-  /// the question is still open, so an answer already given (including
-  /// "back with the cache", which is a null `downloadsDir`) is never
-  /// overridden.
-  final DownloadDestinationResolver defaultDestination;
 
   /// The device the app runs on; tests put the app on a TV through it.
   final DeviceProfile device;
@@ -273,9 +262,6 @@ class _XtremioAppState extends State<XtremioApp> {
     );
     _events = widget.core.events.listen(_onEvent);
     unawaited(_startDeepLinks());
-    unawaited(
-      applyDefaultDestination(_downloads, resolve: widget.defaultDestination),
-    );
     _startupHousekeeping();
   }
 

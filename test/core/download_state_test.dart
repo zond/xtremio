@@ -252,102 +252,18 @@ void main() {
       );
     });
 
-    test('the four answers about where downloads go are told apart', () {
-      DownloadDestination read(Map<String, dynamic> json) =>
-          DownloadsRegistry.fromJson({
-            'version': 1,
-            'items': const <String, dynamic>{},
-            ...json,
-          }).destination;
-
-      expect(
-        read(const {}),
-        const DownloadDestination.unset(),
-        reason: 'a registry from before the keys has answered nothing',
-      );
-      expect(
-        read(const {'destinationSettled': true}),
-        const DownloadDestination.cache(),
-        reason: 'settled with no path is "with the torrent cache", on purpose',
-      );
-      expect(
-        read(const {
-          'destinationSettled': true,
-          'destinationChoice': '/sdcard/files/downloads',
-        }),
-        const DownloadDestination.explicit('/sdcard/files/downloads'),
-        reason: 'a recorded path is the folder the user chose',
-      );
-      expect(
-        read(const {
-          'destinationSettled': true,
-          'destinationChoice': {
-            'kind': 'platformDefault',
-            'path': '/sdcard/files/downloads',
-          },
-        }),
-        const DownloadDestination.platformDefault('/sdcard/files/downloads'),
-        reason: 'and a default the app applied is not an answer at all',
-      );
-
-      expect(const DownloadDestination.unset().isSettled, isFalse);
-      expect(
-        const DownloadDestination.platformDefault('/x').isChosen,
-        isFalse,
-        reason: 'settled, but nobody chose it',
-      );
-      expect(const DownloadDestination.platformDefault('/x').isSettled, isTrue);
-      expect(const DownloadDestination.cache().isChosen, isTrue);
-      expect(const DownloadDestination.explicit('/x').isChosen, isTrue);
-      expect(const DownloadDestination.explicit('/x').path, '/x');
-    });
-
-    test('a shape this build does not know still reads as an answer', () {
-      DownloadDestination read(Object? choice) => DownloadsRegistry.fromJson({
-        'version': 1,
-        'items': const <String, dynamic>{},
-        'destinationSettled': true,
-        'destinationChoice': choice,
-      }).destination;
-
-      expect(
-        read(const {'kind': 'somethingNewer', 'path': '/x'}),
-        const DownloadDestination.explicit('/x'),
-        reason: 'a kind from a newer build still names a folder',
-      );
-      expect(
-        read(const {'kind': 'somethingNewer'}),
-        const DownloadDestination.cache(),
-        reason: 'and one that names none is what the flag says',
-      );
-      expect(
-        read(const {'kind': 'platformDefault'}),
-        const DownloadDestination.unset(),
-        reason: 'a default that names no folder has applied nothing',
-      );
-      expect(read(42), const DownloadDestination.cache());
-    });
-
-    test('an update cannot unsettle the destination', () {
-      final chosen = DownloadsRegistry.fromJson(const {
+    /// The keys a build with a downloads folder of its own wrote are not
+    /// read and not carried: there is one torrent-data root, the server
+    /// owns it, and a second answer here could only contradict it.
+    test('a recorded downloads folder is not read back', () {
+      final registry = DownloadsRegistry.fromJson(const {
         'version': 1,
         'items': <String, dynamic>{},
         'destinationSettled': true,
         'destinationChoice': '/sdcard/files/downloads',
       });
-
-      // An update that says nothing about the destination must not read as
-      // "nobody has answered" -- which is what would send the next start-up
-      // moving the downloads to a default.
-      expect(
-        chosen.merge(DownloadsRegistry.empty).destination,
-        const DownloadDestination.explicit('/sdcard/files/downloads'),
-      );
-      expect(
-        DownloadsRegistry.empty.merge(chosen).destination,
-        const DownloadDestination.explicit('/sdcard/files/downloads'),
-        reason: 'and a listing that carries one is taken',
-      );
+      expect(registry.isEmpty, isTrue);
+      expect(registry.toString(), isNot(contains('/sdcard/files/downloads')));
     });
   });
 
@@ -463,7 +379,7 @@ void main() {
       expect(after['tt1:tt1'], isNull);
       expect(after['tt2:tt2'], isNotNull, reason: 'only what was named goes');
       expect(after.length, 1, reason: 'a key nothing held changes nothing');
-      expect(after.destination, before.destination);
+      expect(after.version, before.version);
     });
 
     test('for an entry nothing has listed yet is dropped', () {

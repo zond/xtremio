@@ -392,10 +392,10 @@ String _describeContainer(String extension) =>
 /// It outranks the converted stream too, because for a torrent the two are
 /// the same claim: `Stream::to_converted` clones `behavior_hints` verbatim,
 /// so a converted stream's filename is the addon's filename. The one place
-/// a converted stream knows better is an offline play, where the app builds
-/// the stream from the file on disk -- and that is a `url` stream with no
-/// torrent behind it, so [serverFilename] is null there and the order never
-/// comes up.
+/// a converted stream knows better is a kept download, where the app builds
+/// a `url` stream on the server's media route -- and a `url` stream has no
+/// torrent behind it as far as the core is concerned, so [serverFilename]
+/// is null there and the order never comes up.
 String? castFilename(PlayerState? state, {String? serverFilename}) =>
     serverFilename ??
     state?.convertedStream?.filename ??

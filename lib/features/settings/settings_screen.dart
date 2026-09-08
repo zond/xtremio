@@ -252,6 +252,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
+          // Where the bytes go, what they cost and the sweep that holds
+          // them to it -- one root and one screen for all of it, which is
+          // why this is here and not among the developer tools it used to
+          // sit with: moving it is an ordinary thing to want.
+          ListTile(
+            leading: const Icon(Icons.sd_storage_outlined),
+            title: const Text('Server storage'),
+            subtitle: const Text(
+              'Where torrent data lives, what it costs, and a clean-now',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ServerStorageScreen(),
+              ),
+            ),
+          ),
           // Directly under the server's own status: the DHT is a peer
           // *source* for that server, not a requirement (a torrent with
           // working trackers downloads fine without one), so this shows
@@ -282,19 +299,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const DiagnosticsScreen(),
-              ),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.sd_storage_outlined),
-            title: const Text('Server storage'),
-            subtitle: const Text(
-              'What the cache costs against its limit, and a clean-now',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const ServerStorageScreen(),
               ),
             ),
           ),

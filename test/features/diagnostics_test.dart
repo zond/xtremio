@@ -382,11 +382,6 @@ void main() {
             freeBytes: 402653184,
             totalBytes: 57000000000,
           ),
-          downloadsVolume: const StorageVolume(
-            path: '/storage/emulated/0/Android/data/com.zond.xtremio/files',
-            freeBytes: 12000000000,
-            totalBytes: 128000000000,
-          ),
         ),
         appVersion: '1.0.0+1',
         gitCommit: '577fe03',
@@ -401,8 +396,6 @@ void main() {
         'cache: 17.0 GB of 10.7 GB limit · '
             '/data/user/0/com.zond.xtremio/cache/server',
         'disk: 403 MB free of 57.0 GB',
-        'downloads: 12.0 GB free of 128 GB · '
-            '/storage/emulated/0/Android/data/com.zond.xtremio/files',
         'stream-server: 7c46427bc09075b98f5febe10f2a90143e44d826',
         'stremio-core: 00265b3bad7158535fccf1e119e10d6ad492183e',
         'log: 2 lines, oldest first',

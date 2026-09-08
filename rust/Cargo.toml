@@ -19,14 +19,14 @@ flutter_rust_bridge = "=2.13.0"
 # `server`, lib `stream_server`). Pinned to a rev for reproducibility. Default
 # features are ON, which links unrar-rs (GPL-3.0-or-later) -- see README.
 # Build with `default-features = false` for an MIT binary without RAR support.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "f54a75cad41aef12be70ea90ac530fb897f6b7d7" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "c2259085cfd886655be885f4b193e64c312eb0d1" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "f54a75cad41aef12be70ea90ac530fb897f6b7d7" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "c2259085cfd886655be885f4b193e64c312eb0d1" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
@@ -141,7 +141,7 @@ flate2 = "1"
 # branch that no longer exists (renamed `pinned`); the build only worked
 # because Cargo.lock held the orphaned sha, and the next `cargo update`
 # would have failed to find the branch.
-librqbit = { git = "https://github.com/zond/rqbit", rev = "cfd11fb9ff9e7802ffc1347cb5b90002e4691230", default-features = false, features = [
+librqbit = { git = "https://github.com/zond/rqbit", rev = "1ba6468a2ce00e238ba307a4d710c3da03f8a27b", default-features = false, features = [
     "rust-tls",
     "http-api-client",
 ] }

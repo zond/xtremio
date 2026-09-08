@@ -17,10 +17,10 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-/// How deep the cache walk goes. The torrent cache is
-/// `<root>/rqbit-downloads/<info hash>/<the torrent's own layout>`, which
-/// is shallow; a bound keeps a symlinked loop or a surprising layout from
-/// turning a report into a filesystem crawl.
+/// How deep the walk goes. The torrent data root is
+/// `<root>/rqbit-downloads/.pieces/<info hash>/<piece>` plus the session's
+/// own records beside it, which is shallow; a bound keeps a symlinked loop
+/// or a surprising layout from turning a report into a filesystem crawl.
 const MAX_DEPTH: usize = 8;
 
 /// One filesystem's room, as `statvfs` sees it. `None` for a path that
@@ -46,24 +46,19 @@ impl Volume {
             total_bytes: existing.and_then(|dir| fs4::total_space(dir).ok()),
         }
     }
-
-    /// Whether this is, as far as free and total space can tell, the same
-    /// filesystem as `other`. Used only to leave a second line out of a
-    /// report when it would say the same thing twice.
-    fn looks_like(&self, other: &Volume) -> bool {
-        self.total_bytes == other.total_bytes && self.free_bytes == other.free_bytes
-    }
 }
 
 /// What the server's storage costs right now.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageReport {
-    /// The server's `cacheRoot` setting: where the torrent cache lives.
+    /// The server's `cacheRoot` setting: **the one root**, where every
+    /// byte a torrent puts on this device lives -- the piece store the
+    /// streaming cache and the kept downloads share, the session's own
+    /// records, and what `/proxy` cached.
     pub cache_dir: String,
-    /// What is under it, in bytes, not counting the downloads directory
-    /// when that sits inside it (offline downloads are not cache and the
-    /// server's cleaner does not count them either).
+    /// What is under it, in bytes. All of it: there is no second tree to
+    /// leave out any more, and the cleaner walks exactly this one.
     pub cache_used_bytes: u64,
     /// The `cacheSize` setting, or null for "no limit". Bytes.
     pub cache_limit_bytes: Option<u64>,
@@ -71,13 +66,8 @@ pub struct StorageReport {
     /// could not be read, which makes `cache_used_bytes` a floor rather
     /// than a total.
     pub cache_complete: bool,
-    /// The volume the cache is on.
+    /// The volume the root is on. There is one, so there is one line.
     pub cache_volume: Volume,
-    /// Where offline downloads go, and the volume that is on -- null when
-    /// the server has no `downloadsDir` set (downloads then live with the
-    /// cache), and left out when it is the same filesystem as the cache's,
-    /// since a second identical line explains nothing.
-    pub downloads_volume: Option<Volume>,
 }
 
 /// Reads the report. Blocks: it asks the server for its settings and walks
@@ -88,20 +78,13 @@ pub struct StorageReport {
 pub fn report() -> anyhow::Result<StorageReport> {
     let settings = crate::server::settings()?;
     let cache_dir = PathBuf::from(&settings.cache_root);
-    let downloads_dir = settings.downloads_dir.as_ref().map(PathBuf::from);
-    let (cache_used_bytes, cache_complete) = directory_size(&cache_dir, downloads_dir.as_deref());
-    let cache_volume = Volume::of(&cache_dir);
-    let downloads_volume = downloads_dir
-        .as_deref()
-        .map(Volume::of)
-        .filter(|volume| !volume.looks_like(&cache_volume));
+    let (cache_used_bytes, cache_complete) = directory_size(&cache_dir);
     Ok(StorageReport {
         cache_dir: cache_dir.to_string_lossy().to_string(),
         cache_used_bytes,
         cache_limit_bytes: cache_limit_bytes(settings.cache_size),
         cache_complete,
-        cache_volume,
-        downloads_volume,
+        cache_volume: Volume::of(&cache_dir),
     })
 }
 
@@ -115,22 +98,22 @@ fn cache_limit_bytes(cache_size: Option<f64>) -> Option<u64> {
     }
 }
 
-/// The bytes under `root`, skipping `skip` (the downloads directory, when
-/// it is inside), and whether the whole tree could be read.
+/// The bytes under `root`, and whether the whole tree could be read.
+///
+/// Nothing is skipped. A kept download is pieces in the same store as the
+/// streaming cache, under the same root, so a walk that left a subtree out
+/// would be reporting on a tree the server does not have.
 ///
 /// Sizes are the files' own lengths, not their allocated blocks: it is the
 /// same number the server's cleaner compares against `cacheSize`, which is
 /// what makes "17 GB against a 10 GB limit" a statement about the same two
 /// things. Symlinks are not followed and not counted, so nothing outside
 /// the cache is ever attributed to it and no loop can be walked.
-fn directory_size(root: &Path, skip: Option<&Path>) -> (u64, bool) {
+fn directory_size(root: &Path) -> (u64, bool) {
     let mut total = 0;
     let mut complete = true;
     let mut stack = vec![(root.to_path_buf(), 0usize)];
     while let Some((dir, depth)) = stack.pop() {
-        if skip.is_some_and(|skip| dir == skip) {
-            continue;
-        }
         let entries = match std::fs::read_dir(&dir) {
             Ok(entries) => entries,
             // A root that is not there yet costs nothing and is not a
@@ -234,28 +217,29 @@ fn existing_ancestor(path: &Path) -> Option<&Path> {
 mod tests {
     use super::*;
 
+    /// Everything under the root counts, whatever it is for. A kept
+    /// download and a streamed film are pieces in one store now, so a walk
+    /// that held any subtree back would be measuring a tree the server
+    /// does not have -- and would report a root well under its limit while
+    /// the disk filled up.
     #[test]
-    fn sums_the_files_under_a_root_and_skips_the_downloads_dir() {
+    fn sums_every_file_under_the_one_root() {
         let root = tempfile::tempdir().unwrap();
-        let cache = root.path().join("cache");
-        std::fs::create_dir_all(cache.join("rqbit-downloads/abc")).unwrap();
-        std::fs::write(cache.join("rqbit-downloads/abc/piece"), vec![0u8; 1000]).unwrap();
-        std::fs::write(cache.join("session.db"), vec![0u8; 24]).unwrap();
-        // Offline downloads are not cache: the server's own cleaner walks
-        // past them, and a report that counted them would say the cache is
-        // over its limit when it is not.
-        let downloads = cache.join("downloads");
-        std::fs::create_dir_all(&downloads).unwrap();
-        std::fs::write(downloads.join("film.mkv"), vec![0u8; 5000]).unwrap();
+        let data = root.path().join("data");
+        std::fs::create_dir_all(data.join("rqbit-downloads/.pieces/abc")).unwrap();
+        std::fs::write(data.join("rqbit-downloads/.pieces/abc/0"), vec![0u8; 1000]).unwrap();
+        std::fs::write(data.join("session.db"), vec![0u8; 24]).unwrap();
+        let kept = data.join("downloads");
+        std::fs::create_dir_all(&kept).unwrap();
+        std::fs::write(kept.join("film.mkv"), vec![0u8; 5000]).unwrap();
 
-        assert_eq!(directory_size(&cache, Some(&downloads)), (1024, true));
-        assert_eq!(directory_size(&cache, None), (6024, true));
+        assert_eq!(directory_size(&data), (6024, true));
     }
 
     #[test]
     fn a_root_that_is_not_there_costs_nothing_and_is_not_a_failure() {
         let root = tempfile::tempdir().unwrap();
-        assert_eq!(directory_size(&root.path().join("gone"), None), (0, true));
+        assert_eq!(directory_size(&root.path().join("gone")), (0, true));
     }
 
     #[test]

@@ -601,8 +601,9 @@ class MediaKitEngine implements PlaybackEngine {
   /// or a host that ignores `Range`, really cannot be seeked in, and
   /// forcing it there does not make a seek work -- it turns a refusal the
   /// viewer sees into a bar sitting at a position no packets will ever
-  /// arrive for. A refusal is the better failure. An offline `file://` is
-  /// left alone too: it is seekable and the demuxer knows it.
+  /// arrive for. A refusal is the better failure. A kept download is on the
+  /// loopback address like any other torrent, so it is forced along with
+  /// them -- and it is the one case where every byte is already here.
   ///
   /// What forcing cannot do is invent an index. A demuxer with no index at
   /// all may still refuse the seek itself, which is a different fault with

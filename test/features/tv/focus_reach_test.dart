@@ -1236,4 +1236,13 @@ class _StuckCache implements ServerCacheControl {
   @override
   Future<EvictionReport> cleanCacheNow() async =>
       throw StateError('server not running');
+
+  @override
+  Future<ServerStorage> storage() async =>
+      throw StateError('server not running');
+
+  @override
+  Future<Map<String, dynamic>> updateSettings(
+    Map<String, dynamic> patch,
+  ) async => throw StateError('server not running');
 }

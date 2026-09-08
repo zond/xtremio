@@ -40,8 +40,9 @@ class StorageVolume {
   }
 }
 
-/// What the embedded server's storage costs right now: the torrent cache
-/// against its limit, and the room left on the volumes it writes to.
+/// What the embedded server's storage costs right now: the one root every
+/// torrent byte on this device is under, what is in it against its limit,
+/// and the room left on the volume it is on.
 ///
 /// The first question about a playback that misbehaves is whether the
 /// device is full -- bytes arriving with no verified progress is what
@@ -55,7 +56,6 @@ class ServerStorage {
     required this.cacheVolume,
     this.cacheLimitBytes,
     this.cacheComplete = true,
-    this.downloadsVolume,
   });
 
   factory ServerStorage.fromJson(Map<String, dynamic> json) => ServerStorage(
@@ -66,17 +66,14 @@ class ServerStorage {
     cacheVolume: StorageVolume.fromJson(
       (json['cacheVolume'] as Map<String, dynamic>?) ?? const {},
     ),
-    downloadsVolume: json['downloadsVolume'] == null
-        ? null
-        : StorageVolume.fromJson(
-            json['downloadsVolume'] as Map<String, dynamic>,
-          ),
   );
 
-  /// The server's `cacheRoot`.
+  /// The server's `cacheRoot`: the one root, where the piece store the
+  /// streaming cache and the kept downloads share lives, along with the
+  /// session's records and what the proxy cached.
   final String cacheDir;
 
-  /// What is under it, offline downloads excluded (they are not cache).
+  /// What is under it, all of it. There is no second tree to leave out.
   final int cacheUsedBytes;
 
   /// The `cacheSize` setting, or null when nobody set one.
@@ -94,11 +91,6 @@ class ServerStorage {
   final bool cacheComplete;
 
   final StorageVolume cacheVolume;
-
-  /// The volume offline downloads go to, when the server has a
-  /// `downloadsDir` on a different filesystem from the cache's. Null
-  /// otherwise: a second identical line explains nothing.
-  final StorageVolume? downloadsVolume;
 
   /// Whether the cache is bigger than the size that was configured for it.
   /// Says nothing about the device's own cap, which binds whether or not a
@@ -131,8 +123,6 @@ class ServerStorage {
   List<String> get reportLines => [
     'cache: $cacheLabel · $cacheDir',
     'disk: ${cacheVolume.label}',
-    if (downloadsVolume case final downloads?)
-      'downloads: ${downloads.label} · ${downloads.path}',
   ];
 
   /// What those lines say when the report could not be read at all. The

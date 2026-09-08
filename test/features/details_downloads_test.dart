@@ -6,7 +6,6 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
-import 'package:xtremio/features/downloads/offline_play.dart';
 import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
@@ -1043,8 +1042,12 @@ void main() {
   group('playing what is kept', () {
     const movieKey = '$movieId:$movieId';
     const path = '/downloads/abc/Night of the Living Dead.mkv';
+
+    /// Where a kept download plays from: the embedded server's media route
+    /// for its torrent and file, off the pieces on this device.
     const fileUrl =
-        'file:///downloads/abc/Night%20of%20the%20Living%20Dead.mkv';
+        '${FakeDownloadsClient.baseUrl}'
+        '11ea02584fa6351956f35671962ab46354d99060/0';
 
     /// The stream tile of the movie fixture's one torrent.
     final tile = find.widgetWithText(ListTile, '1080p');
@@ -1092,7 +1095,7 @@ void main() {
       return (core, downloads);
     }
 
-    testWidgets('a finished download of this release plays off the disk', (
+    testWidgets('a finished download of this release plays off the device', (
       tester,
     ) async {
       final (core, downloads) = await pumpWithDownload(tester);
@@ -1181,19 +1184,18 @@ void main() {
       expect(loadArgs(core)['stream']['infoHash'], movieHash);
     });
 
-    testWidgets('a download whose file went away streams it, and says so', (
+    testWidgets('a download with nowhere to play from streams it instead', (
       tester,
     ) async {
       final (core, downloads) = await pumpWithDownload(tester);
       downloads.onOpen = (_) => const DownloadOpenResult(
         ok: false,
-        reason: DownloadOpenFailure.missing,
+        reason: DownloadOpenFailure.unavailable,
       );
 
       await tester.tap(tile);
       await tester.pump();
 
-      expect(find.text(kDownloadGoneMessage), findsOneWidget);
       await tester.pumpAndSettle();
       expect(find.byType(PlayerScreen), findsOneWidget);
       expect(loadArgs(core)['stream']['infoHash'], movieHash);

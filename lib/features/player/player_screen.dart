@@ -1125,8 +1125,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// the server's `/proxy` route when it is anybody else's host.
   ///
   /// `buffer=` goes on the torrent alone. A remote host knows nothing about
-  /// the parameter, and an offline `file://` URL has no server at the other
-  /// end at all; adding a query to either would be noise at best.
+  /// the parameter, and a kept download's URL -- this server's own media
+  /// route, with every piece already on the device -- has nothing left to
+  /// read ahead of; adding a query to either would be noise at best. A
+  /// kept download falls through to the proxy check and is left alone
+  /// there too, because it is a loopback URL.
   ///
   /// The proxy is the other half of having one cache instead of two
   /// ([proxiedThroughServer]). The player keeps nothing on disk now, so a
@@ -3239,12 +3242,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // must not put a second player over itself -- a second engine and a
     // fresh open, from a press that asked to stop watching.
     if (!_stillOurs) return;
-    _handOver(
-      navigator,
-      state,
-      next,
-      playback.stream ?? state.nextStream?.json,
-    );
+    _handOver(navigator, state, next, playback ?? state.nextStream?.json);
   }
 
   /// Puts a player for [next] in this screen's place, or -- with no

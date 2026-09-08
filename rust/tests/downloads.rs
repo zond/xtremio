@@ -18,10 +18,11 @@ use std::time::{Duration, Instant};
 
 use xtremio_core::api::core::{core_init, core_shutdown, CoreConfig};
 use xtremio_core::api::downloads::{
-    downloads_add, downloads_apply_default_dir, downloads_list, downloads_open, downloads_remove,
-    downloads_set_dir,
+    downloads_add, downloads_list, downloads_open, downloads_remove,
 };
-use xtremio_core::api::server::{server_start, ServerConfig};
+use xtremio_core::api::server::{
+    server_settings, server_start, server_update_settings, ServerConfig,
+};
 
 /// Whole 16 KiB pieces per file, so no piece straddles the two and "this
 /// file is complete" means only its own bytes are on disk.
@@ -45,8 +46,10 @@ fn write_payload(path: &std::path::Path, len: usize) {
 }
 
 /// A real multi-file torrent (correct piece hashes) over the files in `dir`,
-/// whose name is the folder librqbit will put them in.
-fn real_torrent(dir: &std::path::Path) -> (Vec<u8>, String) {
+/// whose name is the folder librqbit will put them in. The files come back
+/// in the torrent's own order with their lengths, which is what turns a
+/// file name into the range of pieces that hold it.
+fn real_torrent(dir: &std::path::Path) -> (Vec<u8>, String, Vec<(String, u64)>) {
     runtime().block_on(async {
         let torrent = librqbit::create_torrent(
             dir,
@@ -59,11 +62,102 @@ fn real_torrent(dir: &std::path::Path) -> (Vec<u8>, String) {
         )
         .await
         .expect("create torrent");
+        let files = torrent
+            .as_info()
+            .info
+            .data
+            .files
+            .as_ref()
+            .expect("a multi-file torrent")
+            .iter()
+            .map(|file| {
+                let name = file
+                    .path
+                    .iter()
+                    .map(|part| String::from_utf8_lossy(part.as_ref()).into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                (name, file.length)
+            })
+            .collect();
         (
             torrent.as_bytes().expect("serialize").to_vec(),
             torrent.info_hash().as_string(),
+            files,
         )
     })
+}
+
+/// Puts the pieces of `name` on disk where the server keeps torrent data:
+/// `<root>/rqbit-downloads/.pieces/<info hash>/<piece / 1000>/<piece>`, one
+/// file per whole piece, which is the one layout there is -- the streaming
+/// cache and a kept download are the same pieces in the same store.
+///
+/// Both payloads here are exact multiples of [`PIECE`], so every piece of a
+/// file holds that file's bytes alone and "this file is complete" means
+/// only its own pieces are down.
+/// `pieces` caps how many of the file's own pieces are placed, which is
+/// what a download caught halfway looks like now: whole pieces on disk and
+/// whole pieces missing, with no partial file anywhere.
+/// The pieces `name` occupies, in the torrent's own numbering.
+fn piece_range(files: &[(String, u64)], name: &str) -> std::ops::Range<u32> {
+    let mut offset = 0u64;
+    for (file, length) in files {
+        if file == name {
+            let first = (offset / PIECE as u64) as u32;
+            return first..first + (*length / PIECE as u64) as u32;
+        }
+        offset += length;
+    }
+    panic!("no file {name} in {files:?}");
+}
+
+/// How many of `pieces` are on the disk, which is what "this file's bytes
+/// are here" means with a piece store: there is no file to stat.
+fn pieces_on_disk(root: &std::path::Path, info_hash: &str, pieces: std::ops::Range<u32>) -> usize {
+    let dir = root
+        .join("rqbit-downloads")
+        .join(".pieces")
+        .join(info_hash.to_ascii_lowercase());
+    pieces
+        .filter(|piece| {
+            dir.join((piece / 1000).to_string())
+                .join(piece.to_string())
+                .is_file()
+        })
+        .count()
+}
+
+fn place_pieces(
+    root: &std::path::Path,
+    info_hash: &str,
+    files: &[(String, u64)],
+    name: &str,
+    pieces: Option<u32>,
+) {
+    let mut offset = 0u64;
+    for (file, length) in files {
+        if file != name {
+            offset += length;
+            continue;
+        }
+        let dir = root
+            .join("rqbit-downloads")
+            .join(".pieces")
+            .join(info_hash.to_ascii_lowercase());
+        let first = (offset / PIECE as u64) as u32;
+        let whole = (*length / PIECE as u64) as u32;
+        for index in 0..pieces.unwrap_or(whole).min(whole) {
+            let piece = first + index;
+            let bucket = dir.join((piece / 1000).to_string());
+            std::fs::create_dir_all(&bucket).expect("piece bucket");
+            let start = index as usize * PIECE;
+            let data: Vec<u8> = (start..start + PIECE).map(|i| (i % 251) as u8).collect();
+            std::fs::write(bucket.join(piece.to_string()), data).expect("write piece");
+        }
+        return;
+    }
+    panic!("no file {name} in {files:?}");
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -179,12 +273,14 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     std::fs::create_dir_all(&content)?;
     write_payload(&content.join("have.bin"), HAVE_LEN);
     write_payload(&content.join("missing.bin"), MISSING_LEN);
-    let (torrent, info_hash) = real_torrent(&content);
+    let (torrent, info_hash, files) = real_torrent(&content);
 
     let cache_root = tmp.path().join("cache").join("server");
-    let managed = cache_root.join("rqbit-downloads").join("Test Show");
-    std::fs::create_dir_all(&managed)?;
-    std::fs::copy(content.join("have.bin"), managed.join("have.bin"))?;
+    // What the backend *calls* each file. A name, not a file: nothing is
+    // ever written there, and the entry carries it so a listing can show
+    // one. The bytes are the pieces placed above.
+    let named = cache_root.join("rqbit-downloads").join("Test Show");
+    let have_pieces = piece_range(&files, "have.bin");
 
     let base_url = url::Url::parse(&server_start(ServerConfig {
         config_dir: tmp.path().join("server").display().to_string(),
@@ -192,6 +288,10 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         port: 0,
         fallback_to_ephemeral: true,
     })?)?;
+    // After the server is up, not before: a start-up sweep deletes the
+    // pieces of every torrent the session does not know about yet, and
+    // these are placed for a torrent it is about to be told about.
+    place_pieces(&cache_root, &info_hash, &files, "have.bin", None);
     let created = create_torrent_on_server(&base_url, &torrent);
     assert_eq!(created["infoHash"], info_hash, "{created}");
     let have_idx = file_index(&created, "have.bin");
@@ -275,7 +375,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert_eq!(added["key"], "tt-have:tt-have");
     assert_eq!(
         added["entry"]["path"],
-        managed.join("have.bin").to_string_lossy().as_ref(),
+        named.join("have.bin").to_string_lossy().as_ref(),
         "{added}"
     );
     assert_eq!(added["entry"]["infoHash"], info_hash);
@@ -332,7 +432,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert_eq!(added["ok"], true, "{added}");
     assert_eq!(
         added["entry"]["path"],
-        managed.join("missing.bin").to_string_lossy().as_ref(),
+        named.join("missing.bin").to_string_lossy().as_ref(),
         "{added}"
     );
 
@@ -362,20 +462,25 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     assert_eq!(pending["size"], MISSING_LEN, "{pending}");
     assert!(pending["completedAt"].is_null(), "{pending}");
 
-    // Playing it off the device: a finished download answers the `file://`
-    // URL of the file the server actually wrote, and records that it was
-    // played. Nothing else in the registry is touched, and the stamp is on
-    // the disk, not only in the answer.
+    // Playing it off the device: there is no file to open -- the bytes are
+    // pieces in the server's store -- so a finished download answers the
+    // embedded server's media route for its own torrent and file, which
+    // reads those pieces with no peer and no network. It records that it
+    // was played; nothing else in the registry is touched, and the stamp is
+    // on the disk, not only in the answer.
     assert!(complete["lastPlayedAt"].is_null(), "{complete}");
+    assert!(
+        !named.join("have.bin").exists(),
+        "no whole file is ever written at the name the entry carries"
+    );
     let opened = json(&downloads_open("tt-have:tt-have".into())?);
     assert_eq!(opened["ok"], true, "{opened}");
     assert_eq!(opened["key"], "tt-have:tt-have");
     let played_url = url::Url::parse(opened["url"].as_str().expect("a URL"))?;
-    assert_eq!(played_url.scheme(), "file", "{opened}");
     assert_eq!(
-        played_url.to_file_path().expect("a local path"),
-        managed.join("have.bin"),
-        "the URL is the file on disk: {opened}"
+        played_url,
+        base_url.join(&format!("{info_hash}/{have_idx}"))?,
+        "the URL is this server's media route for the file: {opened}"
     );
     let played_at = opened["entry"]["lastPlayedAt"].clone();
     assert!(played_at.is_string(), "{opened}");
@@ -385,30 +490,31 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         "the stamp is on disk, not only in the answer"
     );
 
-    // Everything that is not a whole file on this device is a refusal with
-    // a reason, never an exception and never a dead player: an unfinished
-    // download, an entry the registry does not have, and -- the one that
-    // matters offline -- a complete one whose file went away with its
-    // volume. A refusal stamps nothing.
+    // Everything that is not a whole download on this device is a refusal
+    // with a reason, never an exception and never a dead player: an
+    // unfinished download and an entry the registry does not have. A
+    // refusal stamps nothing.
     let refused = json(&downloads_open("tt-missing:tt-missing".into())?);
     assert_eq!(refused["ok"], false, "{refused}");
     assert_eq!(refused["reason"], "incomplete", "{refused}");
     let refused = json(&downloads_open("tt-nothing:tt-nothing".into())?);
     assert_eq!(refused["reason"], "unknown", "{refused}");
 
-    // Unpin the file at the server *before* corrupting the stored path: the
+    // The path the entry carries decides nothing, and must not: the server
+    // answers it as a *name* for the file and never writes one there, so a
+    // build that went back to opening it would refuse every download on the
+    // device. Written to a name nothing could ever have created, the
+    // download still plays.
+    //
+    // Unpin the file at the server *before* writing that path: the
     // background ticker is still running (tt-missing is unfinished) and
     // calls `refresh` about once a second, which folds the server's live
     // info back onto every entry that matches its (infoHash, fileIdx) --
     // including this one, overwriting whatever path is written here with
-    // the real one the engine still resolves. Whether that tick lands in
-    // the gap between this write and the `downloads_open` below is exactly
-    // the kind of timing the CI runner and this machine disagreed on. With
-    // no pin left for (info_hash, have_idx), `refresh` finds nothing to
-    // match and never touches this entry again, so the corruption survives
-    // on every runner, not just the ones slow enough to miss a tick.
-    // `deleteFiles: false`, so `have.bin` stays on disk for the assertions
-    // below it and the re-add further down.
+    // the name the engine still resolves. With no pin left for
+    // (info_hash, have_idx), `refresh` finds nothing to match and never
+    // touches this entry again. `deleteFiles: false`, so the pieces stay on
+    // disk for the assertions below it and the re-add further down.
     xtremio_core::server::unpin_download(&info_hash, have_idx, false)?;
     xtremio_core::downloads::update(|registry| {
         let entry = registry
@@ -416,24 +522,19 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
             .get_mut("tt-have:tt-have")
             .expect("the finished entry");
         entry.last_played_at = None;
-        entry.path = Some(managed.join("unplugged.bin").to_string_lossy().into_owned());
+        entry.path = Some(named.join("unplugged.bin").to_string_lossy().into_owned());
         Ok(())
     })?;
-    // The corrupted path is what has to make this a refusal, not merely the
-    // absence of a pin: the real file is still on disk and still a `state:
-    // complete` entry away from playing, so if `downloads_open` somehow
-    // still resolved `have.bin` here, this would pass for the wrong reason.
     assert!(
-        !managed.join("unplugged.bin").exists(),
-        "the substituted path must really not exist"
+        !named.join("unplugged.bin").exists(),
+        "the substituted name must really not exist"
     );
-    let refused = json(&downloads_open("tt-have:tt-have".into())?);
-    assert_eq!(refused["ok"], false, "{refused}");
-    assert_eq!(refused["reason"], "missing", "{refused}");
-    assert!(refused["url"].is_null(), "{refused}");
-    assert!(
-        list()["items"]["tt-have:tt-have"]["lastPlayedAt"].is_null(),
-        "a play that could not happen is not recorded"
+    let opened = json(&downloads_open("tt-have:tt-have".into())?);
+    assert_eq!(opened["ok"], true, "{opened}");
+    assert_eq!(
+        url::Url::parse(opened["url"].as_str().expect("a URL"))?,
+        base_url.join(&format!("{info_hash}/{have_idx}"))?,
+        "still its own torrent and file: {opened}"
     );
 
     // Pressing Download again on a finished title -- the button is not
@@ -467,13 +568,21 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         removed,
         serde_json::json!({"removed": true, "unpinned": true, "deletedFiles": false})
     );
-    assert!(managed.join("have.bin").is_file(), "the file stays");
+    assert_eq!(
+        pieces_on_disk(&cache_root, &info_hash, have_pieces.clone()),
+        have_pieces.len(),
+        "the pieces stay"
+    );
     assert_eq!(list()["items"]["tt-have:tt-have"], serde_json::Value::Null);
 
     // Removing something the registry does not have is not an error.
     let removed = json(&downloads_remove("tt-have:tt-have".into(), true)?);
     assert_eq!(removed["removed"], false, "{removed}");
-    assert!(managed.join("have.bin").is_file(), "and touches nothing");
+    assert_eq!(
+        pieces_on_disk(&cache_root, &info_hash, have_pieces.clone()),
+        have_pieces.len(),
+        "and touches nothing"
+    );
 
     // Re-adding keeps the original `createdAt`... after re-adding it under a
     // key that never left, which is what a retry looks like.
@@ -495,8 +604,9 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         serde_json::json!({"removed": true, "unpinned": false, "deletedFiles": false}),
         "the pin the other entry names is not this entry's to drop"
     );
-    assert!(
-        managed.join("have.bin").is_file(),
+    assert_eq!(
+        pieces_on_disk(&cache_root, &info_hash, have_pieces.clone()),
+        have_pieces.len(),
         "and its bytes are still there"
     );
     let pins = xtremio_core::server::downloads()?;
@@ -512,7 +622,11 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     // The last entry naming it does take the pin with it.
     let removed = json(&downloads_remove("tt-shared-b:tt-shared-b".into(), false)?);
     assert_eq!(removed["unpinned"], true, "{removed}");
-    assert!(managed.join("have.bin").is_file(), "without the bytes");
+    assert_eq!(
+        pieces_on_disk(&cache_root, &info_hash, have_pieces.clone()),
+        have_pieces.len(),
+        "without the bytes"
+    );
 
     // With `deleteFiles` the bytes go. The other file of the same torrent is
     // still pinned, so only this one is deleted and the torrent lives on.
@@ -520,10 +634,15 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     let removed = json(&downloads_remove("tt-have:tt-have".into(), true)?);
     assert_eq!(removed["removed"], true, "{removed}");
     assert_eq!(removed["deletedFiles"], true, "{removed}");
-    assert!(!managed.join("have.bin").exists(), "the file is gone");
+    assert_eq!(
+        pieces_on_disk(&cache_root, &info_hash, have_pieces.clone()),
+        0,
+        "its pieces are gone"
+    );
+    let pins = xtremio_core::server::downloads()?;
     assert!(
-        managed.join("missing.bin").exists(),
-        "the still-pinned file of the same torrent stays"
+        pins.iter().any(|pin| pin.file_idx == missing_idx),
+        "the still-pinned file of the same torrent is untouched: {pins:?}"
     );
 
     // Pressing Download on a second stream for the same title replaces the
@@ -742,107 +861,58 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     );
     std::fs::write(&registry_file, recorded)?;
 
-    // The destination directory goes through the server's own validation.
+    // Where torrent data lives is one setting, `cacheRoot`, and the app
+    // reaches it the way it reaches every other one. It is the only
+    // validated key: a path the server cannot use fails the whole update
+    // rather than being ignored, and one it can use is created on the spot
+    // and stored resolved.
+    let settings = json(&server_settings()?);
     assert_eq!(
-        list()["destinationSettled"],
-        false,
-        "nobody has answered where the downloads go yet"
+        settings["cacheRoot"],
+        stream_server::resolved_path(&cache_root)
+            .to_string_lossy()
+            .as_ref(),
+        "the root starts as the directory the app configured: {settings}"
     );
-    let error = downloads_set_dir(Some("relative/dir".into())).unwrap_err();
+    assert_eq!(
+        settings["downloadsDir"],
+        serde_json::Value::Null,
+        "and there is no second location to be distinct from: {settings}"
+    );
+    let error = server_update_settings(r#"{"cacheRoot":"relative/dir"}"#.into()).unwrap_err();
     assert!(error.to_string().contains("absolute"), "{error}");
     assert_eq!(
-        list()["destinationSettled"],
-        false,
-        "a path the server refused settles nothing"
+        json(&server_settings()?)["cacheRoot"],
+        settings["cacheRoot"],
+        "a root the server refused changed nothing"
     );
-    let destination = tmp.path().join("offline");
-    let settings = json(&downloads_set_dir(Some(destination.display().to_string()))?);
-    assert_eq!(
-        settings["downloadsDir"],
-        destination.to_string_lossy().as_ref(),
-        "{settings}"
-    );
-    assert!(destination.is_dir(), "created on the spot");
-    assert_eq!(
-        list()["destinationSettled"],
-        true,
-        "and the answer is recorded, so a platform default stops applying"
-    );
-    assert_eq!(
-        list()["destinationChoice"],
-        settings["downloadsDir"],
-        "and *which* answer it was, spelled the way the server stored it, \
-         so a start-up can see when the server has dropped it"
-    );
-
-    // Back to the torrent cache is an answer too, and the flag is what says
-    // so: the setting itself is null again, exactly as it was at start-up.
-    let settings = json(&downloads_set_dir(None)?);
-    assert_eq!(
-        settings["downloadsDir"],
-        serde_json::Value::Null,
-        "{settings}"
-    );
-    assert_eq!(
-        list()["destinationSettled"],
-        true,
-        "choosing the default is still choosing"
-    );
-    assert_eq!(
-        list()["destinationChoice"],
-        serde_json::Value::Null,
-        "and the choice recorded is the null itself, not the path before it"
-    );
-    let on_disk = json(&std::fs::read_to_string(&registry_file)?);
-    assert_eq!(
-        on_disk["destinationSettled"], true,
-        "and it is in the file, not only in the answer: {on_disk}"
-    );
-    let settings = json(&downloads_set_dir(Some(destination.display().to_string()))?);
-    assert_eq!(
-        settings["downloadsDir"],
-        destination.to_string_lossy().as_ref(),
-        "{settings}"
-    );
-
-    // A default the app applies is not an answer. The server takes it like
-    // any other destination, but the folder the user chose stays on record,
-    // so the next start-up asks for that folder again instead of presenting
-    // the stand-in as what was wanted.
-    let fallback = tmp.path().join("fallback");
-    let settings = json(&downloads_apply_default_dir(
-        fallback.display().to_string(),
+    let elsewhere = tmp.path().join("elsewhere");
+    let patched = json(&server_update_settings(
+        serde_json::json!({ "cacheRoot": elsewhere.display().to_string() }).to_string(),
     )?);
     assert_eq!(
-        settings["downloadsDir"],
-        fallback.to_string_lossy().as_ref(),
-        "{settings}"
+        patched["cacheRoot"],
+        stream_server::resolved_path(&elsewhere)
+            .to_string_lossy()
+            .as_ref(),
+        "{patched}"
     );
-    assert_eq!(
-        list()["destinationChoice"],
-        destination.to_string_lossy().as_ref(),
-        "the answer given is still the answer on record"
-    );
+    assert!(elsewhere.is_dir(), "created on the spot");
+    // Put it back: the running session is still on the old root (librqbit
+    // cannot be moved), and the rest of this test downloads through it.
+    server_update_settings(
+        serde_json::json!({ "cacheRoot": cache_root.display().to_string() }).to_string(),
+    )?;
 
-    // With nothing answered it is all there is to record -- and it records
-    // itself as what it is, a default this build applied rather than a
-    // choice a later one has to keep.
-    xtremio_core::downloads::update(|registry| {
-        registry.destination = xtremio_core::downloads::Destination::Unset;
-        Ok(())
-    })?;
-    downloads_apply_default_dir(fallback.display().to_string())?;
+    // Nothing about a folder is written down beside the entries any more.
+    let on_disk = json(&std::fs::read_to_string(&registry_file)?);
     assert_eq!(
-        list()["destinationChoice"],
-        serde_json::json!({
-            "kind": "platformDefault",
-            "path": fallback.to_string_lossy().as_ref(),
-        }),
-        "{}",
-        list()
+        on_disk
+            .as_object()
+            .map(|file| file.keys().cloned().collect::<Vec<_>>()),
+        Some(vec!["items".to_string(), "version".to_string()]),
+        "the registry holds entries and a version, and nothing else: {on_disk}"
     );
-    assert_eq!(list()["destinationSettled"], true, "the question is closed");
-    downloads_set_dir(Some(destination.display().to_string()))?;
 
     // A registry the app cannot read must not take the app down with it: the
     // list is empty rather than an error, and the next write starts over --
@@ -932,15 +1002,6 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A payload whose first `valid` bytes hash as the torrent says and whose
-/// tail does not: a file caught halfway, with whole pieces on disk and whole
-/// pieces still missing. `0xff` never occurs in a valid payload byte.
-fn write_partial(path: &std::path::Path, len: usize, valid: usize) {
-    let mut data: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
-    data[valid..].fill(0xff);
-    std::fs::write(path, data).expect("write partial payload");
-}
-
 /// Rewrites the two things a recording captures that say nothing about the
 /// contract and differ on every run: the fresh temporary directory in every
 /// `path`, and the wall clock in `createdAt`/`completedAt`. With them fixed,
@@ -1007,7 +1068,7 @@ fn record_registry_fixture() -> anyhow::Result<()> {
     std::fs::create_dir_all(&movie_dir)?;
     write_payload(&movie_dir.join(movie_file), HAVE_LEN);
     write_payload(&movie_dir.join("sample.mkv"), PIECE);
-    let (movie_torrent, movie_hash) = real_torrent(&movie_dir);
+    let (movie_torrent, movie_hash, movie_files) = real_torrent(&movie_dir);
 
     let series_name = "Breaking.Bad.S01.1080p.BluRay";
     let first = "Breaking.Bad.S01E01.1080p.mkv";
@@ -1016,23 +1077,11 @@ fn record_registry_fixture() -> anyhow::Result<()> {
     std::fs::create_dir_all(&series_dir)?;
     write_payload(&series_dir.join(first), MISSING_LEN);
     write_payload(&series_dir.join(second), HAVE_LEN);
-    let (series_torrent, series_hash) = real_torrent(&series_dir);
+    let (series_torrent, series_hash, series_files) = real_torrent(&series_dir);
 
     // What the torrent engine already has: the whole movie, and the first
     // two pieces of the first episode.
     let cache_root = tmp.path().join("cache").join("server");
-    let managed = cache_root.join("rqbit-downloads");
-    std::fs::create_dir_all(managed.join(movie_name))?;
-    std::fs::copy(
-        movie_dir.join(movie_file),
-        managed.join(movie_name).join(movie_file),
-    )?;
-    std::fs::create_dir_all(managed.join(series_name))?;
-    write_partial(
-        &managed.join(series_name).join(first),
-        MISSING_LEN,
-        2 * PIECE,
-    );
 
     let base_url = url::Url::parse(&server_start(ServerConfig {
         config_dir: tmp.path().join("server").display().to_string(),
@@ -1040,6 +1089,10 @@ fn record_registry_fixture() -> anyhow::Result<()> {
         port: 0,
         fallback_to_ephemeral: true,
     })?)?;
+    // After the server is up: its start-up sweep takes the pieces of any
+    // torrent the session does not know about.
+    place_pieces(&cache_root, &movie_hash, &movie_files, movie_file, None);
+    place_pieces(&cache_root, &series_hash, &series_files, first, Some(2));
     let movie_stats = create_torrent_on_server(&base_url, &movie_torrent);
     let series_stats = create_torrent_on_server(&base_url, &series_torrent);
     let movie_idx = file_index(&movie_stats, movie_file);
