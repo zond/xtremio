@@ -84,8 +84,12 @@ pub fn server_settings() -> anyhow::Result<String> {
 /// malformed JSON, a rejected value, or when the server is not running.
 pub fn server_update_settings(patch_json: String) -> anyhow::Result<String> {
     guarded(|| {
-        let patch: serde_json::Value = serde_json::from_str(&patch_json)
-            .map_err(|error| anyhow::anyhow!("invalid settings patch JSON: {error}"))?;
+        let patch: serde_json::Value = serde_json::from_str(&patch_json).map_err(|error| {
+            anyhow::anyhow!(
+                "invalid settings patch JSON: {}",
+                crate::serde_fault::cause(&error)
+            )
+        })?;
         let settings = crate::server::update_settings(patch)?;
         serde_json::to_string(&settings).map_err(Into::into)
     })

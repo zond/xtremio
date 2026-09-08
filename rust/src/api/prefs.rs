@@ -28,10 +28,12 @@ pub fn prefs_get_all() -> anyhow::Result<String> {
 pub fn prefs_set(key: String, value_json: Option<String>) -> anyhow::Result<()> {
     guarded(|| {
         let value = match value_json {
-            Some(json) => Some(
-                serde_json::from_str(&json)
-                    .map_err(|error| anyhow::anyhow!("invalid preference value: {error}"))?,
-            ),
+            Some(json) => Some(serde_json::from_str(&json).map_err(|error| {
+                anyhow::anyhow!(
+                    "invalid preference value: {}",
+                    crate::serde_fault::cause(&error)
+                )
+            })?),
             None => None,
         };
         crate::prefs::set(&key, value)

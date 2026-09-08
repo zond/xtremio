@@ -33,9 +33,8 @@ pub fn downloads_add(request_json: String) -> anyhow::Result<String> {
         let request: crate::downloads::AddRequest =
             serde_path_to_error::deserialize(&mut deserializer).map_err(|error| {
                 anyhow::anyhow!(
-                    "invalid download request at `{}`: {}",
-                    error.path(),
-                    error.inner()
+                    "invalid download request {}",
+                    crate::serde_fault::at_path(error.path(), error.inner())
                 )
             })?;
         let outcome = crate::downloads::add(request)?;

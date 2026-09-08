@@ -387,8 +387,9 @@ impl Env for XtremioEnv {
                         }
                     })?;
             let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
-            serde_path_to_error::deserialize::<_, OUT>(&mut deserializer)
-                .map_err(|error| EnvError::Serde(error.to_string()))
+            serde_path_to_error::deserialize::<_, OUT>(&mut deserializer).map_err(|error| {
+                EnvError::Serde(crate::serde_fault::at_path(error.path(), error.inner()))
+            })
         }
         .boxed_env()
     }

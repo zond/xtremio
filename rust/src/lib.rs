@@ -65,6 +65,7 @@ pub mod guard;
 pub mod logging;
 pub mod model;
 pub mod prefs;
+pub mod serde_fault;
 pub mod server;
 pub mod state;
 pub mod storage;

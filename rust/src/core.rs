@@ -522,9 +522,8 @@ pub fn dispatch(action_json: &str) -> anyhow::Result<()> {
     let envelope: ActionEnvelope =
         serde_path_to_error::deserialize(&mut deserializer).map_err(|error| {
             anyhow::anyhow!(
-                "invalid action JSON at `{}`: {}",
-                error.path(),
-                error.inner()
+                "invalid action JSON {}",
+                crate::serde_fault::at_path(error.path(), error.inner())
             )
         })?;
     with_runtime(|runtime| {
