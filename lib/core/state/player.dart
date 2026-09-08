@@ -92,22 +92,51 @@ final class SubtitleInfo {
   String? get movieReleaseName => _text('movieReleaseName');
 
   /// The group that cut that release (`DFN`), when the addon split it out.
+  ///
+  /// On about four OpenSubtitles entries in ten, and the one thing on an
+  /// entry that names the same upload family from one episode of a show
+  /// to the next: the Swedish `Gilmore.Girls.SxxExx.WEBRip.x264-FGT`
+  /// files answer `FGT` on every episode measured. Spelling drifts in
+  /// case only (`FoV` beside `fov`, `MEDiEVAL` beside `Medieval`), which
+  /// is what [releaseGroupKey] is for. Shown as it was sent.
   String? get releaseGroup => _text('releaseGroup');
+
+  /// [releaseGroup] as something to remember a file under: lower-cased,
+  /// so one addon's `FoV` and another's `fov` are one group, and null
+  /// when the addon named none.
+  ///
+  /// This is the only stable name an addon gives a subtitle across the
+  /// episodes of a show -- an `id` and a `url` are per file, and `g` is
+  /// per answer ([group]) -- so it is what a remembered adjustment and a
+  /// remembered pick are keyed on. Six entries in ten carry no group at
+  /// all, and for those nothing about the release is remembered rather
+  /// than something narrower being guessed.
+  String? get releaseGroupKey => releaseGroup?.toLowerCase();
 
   /// The source that release came from (`BluRay`, `WEB-DL`).
   String? get releaseFormat => _text('releaseFormat');
 
   /// The addon's own bucket for this upload (`g`): OpenSubtitles v3 sends
-  /// a small integer, the same one across every episode of a series.
+  /// a small integer, and it is only ever the same one **within a single
+  /// answer**.
   ///
-  /// It says where the file came from -- one uploader's batch, one
-  /// source -- and that turns out to predict its *timing* better than the
-  /// declared rate does. Across two Gilmore Girls episodes `g=1` is all
-  /// 23.976 and `g=3` all 25, while `g=6` holds one file declaring 23.976
-  /// and one declaring 25 that end at exactly the same moment: synced to
-  /// each other, whatever they claim. So it is what an adjustment the
-  /// viewer made is remembered against (`SubtitleSyncMemory`), and an
-  /// addon that sends none is an adjustment not remembered at all.
+  /// **Nothing reads it, and a new reader is almost certainly a
+  /// mistake.** It used to be what an adjustment the viewer made was
+  /// remembered against, on the belief that the integer named one
+  /// uploader's batch across a whole series. It does not. Measured over
+  /// 506 real answers for two shows: one Swedish upload batch
+  /// (`Gilmore.Girls.SxxExx.WEBRip.x264-FGT`, consecutive addon ids) is
+  /// `g=6` on S01E01, `5` on S01E02, `4` on S01E03 and `1` on S03E05,
+  /// and Breaking Bad's BluRay family is `2`, `2`, then `1`. The index is
+  /// re-assigned per answer, roughly in size order, so the same small
+  /// integer names a different release family next episode -- and one
+  /// bucket even collects files whose `movieReleaseName` is another
+  /// episode's. Within one answer it really does cluster a family
+  /// together, which is why it looked stable when it was measured across
+  /// two episodes of one show.
+  ///
+  /// What names a family across episodes is [releaseGroupKey], and that
+  /// is what the memories key on now.
   ///
   /// Read as text whether the addon sent a number or a string, since it
   /// is only ever compared with itself; anything else -- a list, an

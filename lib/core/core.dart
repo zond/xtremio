@@ -37,4 +37,5 @@ export 'state/stream.dart';
 export 'state/stream_hints.dart';
 export 'stream_order.dart';
 export 'stream_proxy.dart';
+export 'subtitle_picks.dart';
 export 'subtitle_sync.dart';

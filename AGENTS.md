@@ -307,11 +307,24 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   (`lib/core/subtitle_sync.dart`, one preferences key, `subtitleSync`)
   stores a multiplier and an offset in seconds, both real numbers
   because both are measured, and keys a *speed* on the series and the
-  addon's `g`, because what a file
+  addon's `releaseGroup` lower-cased, because what a file
   was timed against is a property of where it came from and video
   releases of one show share a frame rate; it keys a *shift* on the
   video release as well, because an offset is the video's pre-roll less
   whatever the subtitle's source assumed and so depends on both sides.
+  **The group is `releaseGroup` and never `g`.** `g` was the key until
+  506 real OpenSubtitles answers for two series were measured: it is a
+  per-*answer* cluster index, re-assigned every time, so one Swedish
+  upload batch is `g=6, 5, 4, 1` across four Gilmore Girls episodes and
+  Breaking Bad's BluRay family is `2, 2, 1` -- and one bucket collects
+  files belonging to another episode entirely. A speed keyed on it
+  therefore usually failed to apply next episode and occasionally
+  applied to a family it was never measured on, which is worse. Rows a
+  build wrote under `g` are dropped rather than migrated, because the
+  release group is not in them. `releaseGroup` is on about four entries
+  in ten and is the same word every episode; the other six are files
+  nothing about the release is remembered for, which is this section's
+  rule and not a shortfall.
   The release is the whole filename from `castFilename` -- the file the
   server says it opened, else the addon's claim -- lower-cased, and not
   a release group parsed out of it: a parse is a guess, and two encodes
@@ -542,17 +555,69 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   the viewer has already adjusted for this series, then the addons' own
   order. The first rank is evidence about *this video*: two files cut
   for one release keep its time, where a declared rate says only where
-  an upload came from. The second is worth having because the
+  an upload came from. The second is the `releaseGroup` the memory is
+  keyed on, and is worth having because the
   correction goes back on when the file is applied, so it arrives fixed
   -- which is why it asks `SubtitleSyncMemory` exactly what
   `_resetSubtitleTiming` will ask it, and why a shift measured against
   another release does not rank: a rank must not promise a fix that
   never comes. **The rows are the alphabet's, not the ranking's**: they
-  come out sorted on the name the menu prints, and nothing is pinned
-  above it -- Off is `SubtitleMenu`'s own row, drawn above every
-  language, and the language that is playing is deliberately not lifted,
-  because the list is ordered before anything is selected and a row that
-  jumps once it is picked takes back the reason to sort at all. Inside a
+  come out sorted on the name the menu prints, and `subtitlesByRelease`
+  pins nothing above it -- Off is `SubtitleMenu`'s own row, drawn above
+  every language, and the language that is playing is deliberately not
+  lifted, because the list is ordered before anything is selected and a
+  row that jumps once it is picked takes back the reason to sort at all.
+  **The menu spends at most two pin slots, and lifts at most two rows,
+  for a reason that rule does not cover**: the languages this viewer
+  picks most often (`SubtitlePickMemory.pinned`, under a heading that
+  says what they are), because a language they use is worth more than
+  the letter it starts with when the answer is forty rows long. Two is
+  the ceiling and not a quota: a slot is spent only on a language this
+  episode offers that has been picked `pinThreshold` times, so a viewer
+  with one such language spends one slot -- the note under the heading
+  is written in the singular for exactly that case
+  (`SubtitleMenu.pinnedNote`) -- and a fresh install spends none. It is
+  safe
+  where lifting the playing row is not, because a count moves only on a
+  pick and every pick closes the sheet: the reason a row is pinned
+  cannot change while that row is being reached for. What still moves an
+  open menu is a subtitle addon answering late, which has always inserted
+  rows into it -- the spinner at the foot is what says the list is not
+  final -- and a language arriving into a pin moves more of them than one
+  arriving into the alphabet. They are **lifted, not duplicated** -- one row each, and the
+  heading explains where they went -- only ever languages this episode
+  actually offers, and not at all when every language there is would be
+  pinned. **What is ranked is everything the sheet offers, the tracks in
+  the file with the addons' languages**: picking either raises the same
+  count, both are counted under one label
+  (`subtitleLanguageLabel`), and the heading's note claims a comparison
+  among the languages *on offer here* -- which was false the moment the
+  ranking left out a section the sheet draws three
+  rows higher. So the menu is handed the counts and not a ranking
+  (`SubtitleMenu.picks`) and builds that union out of the two lists it
+  draws itself: a parameter taking a finished ranking is one a caller
+  can fill from less than the sheet, and the doc sentence asking them
+  not to was checked by nothing. A winner
+  the file itself carries has no row down here to lift, so it takes its
+  slot without one and the note says that in a sentence of its own
+  (`SubtitleMenu.pinnedNote`, `shown` and `inFile`); a language the file
+  and an addon both offer is one language and takes one slot. **A row
+  lifted for each slot that has a row under it**: two where two
+  languages won and an addon offers both, one where the file itself
+  carries one of them, and none where the file carries every winner --
+  and then the section is left off the sheet rather than heading an
+  empty one. A slot that lifts nothing is deliberately not
+  handed to the next language down -- the heading says these are the
+  ones picked most often, the third most picked is not that, and the
+  ones that are sit at the top of this sheet already, as the video's own
+  tracks. That is an absence of code, so what holds it is a test:
+  "both winners inside the file lift nothing, and the next language down
+  is not promoted into their place"
+  (`test/features/player/subtitle_pins_test.dart`). It happens
+  in the menu's own rendering, after
+  `groupSubtitlesByLanguage`, so both consumers of the ordered list still
+  get the same order and the auto-pick's one case that reads it is
+  untouched. Inside a
   rank the addon that answered first still wins, because that is the
   file a language row applies. Ordering by the rate is the thing not to put
   back: it had to be taught that a claim beats no claim, and then that a
@@ -589,6 +654,31 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
 
 Three more things that are easy to undo by accident:
 
+- **What a show was watched with is remembered, and a memory is never a
+  judgement.** `SubtitlePickMemory` (`lib/core/subtitle_picks.dart`, the
+  `subtitlePicks` preference) keeps one row per show -- the language as
+  the label the menu prints, the `releaseGroup` of the file that was
+  picked where the addon named one, or that subtitles were deliberately
+  off -- and a count per language for the menu's two pinned rows. The
+  auto-pick reads the row when the engine has no session preference,
+  which is every fresh start, since `Unload` clears that field and the
+  player dispatches `Unload` on dispose. Four rules hold it up, each with
+  a test. **Only a pick by hand writes**, exactly as only a press on the
+  timing panel writes `subtitleSync`: an auto-pick that counted itself
+  would make twenty-two counts out of one choice over a season and freeze
+  the pins for good. **Nothing is preselected that this episode does not
+  offer**: no remembered language, no pinned row, no group. A group is a
+  preference *among* the files of the language and never a condition on
+  it, because a show can change release family between seasons and six
+  files in ten name no group at all; a language that is missing means
+  nothing is applied, and falling back to the viewer's commonest language
+  would be answering a question nobody asked. **Off is a value**, so the
+  one show watched undubbed does not get subtitles pushed back on every
+  episode. And **a synthesized preference is never dispatched**:
+  `SubtitlePreferenceChanged` means the viewer said so this session, and
+  writing a guess into it would make a memory indistinguishable from a
+  judgement -- which is the distinction `_subtitlesChosenByHand` rests
+  on.
 - **Everything that consumes the subtitle list orders it.** There are two
   consumers, the menu and the session preference's auto-pick, and the
   auto-pick is the one that applies a file without the viewer looking, so

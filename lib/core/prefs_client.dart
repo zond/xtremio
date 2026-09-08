@@ -7,6 +7,7 @@ import '../src/rust/api/prefs.dart' as rust;
 import 'buffer_ahead.dart';
 import 'focus_emphasis.dart';
 import 'stream_order.dart';
+import 'subtitle_picks.dart';
 import 'subtitle_sync.dart';
 
 /// The app's own preferences, over the Rust side's small JSON file
@@ -143,11 +144,22 @@ class AppPrefs extends ChangeNotifier {
   /// recent first.
   ///
   /// One key for both adjustments even though they are keyed differently
-  /// -- a speed on the series and the subtitle group, a shift on those
+  /// -- a speed on the series and the release group, a shift on those
   /// and the video release as well -- because they are the same
   /// preference: what this viewer has already fixed. It is a list, so
   /// the recency the bound drops by is the order itself.
   static const String subtitleSyncKey = 'subtitleSync';
+
+  /// The `subtitlePicks` key: which subtitle each show was last watched
+  /// with, and how often each language has been picked at all (see
+  /// [SubtitlePickMemory]).
+  ///
+  /// A separate key from [subtitleSyncKey] because it answers a different
+  /// question. The sync memory is what the viewer *fixed* about a file's
+  /// timing; this is what they *chose*, and the two are written by
+  /// different hands -- the panel writes one, the menu the other -- read
+  /// at different moments and forgotten independently.
+  static const String subtitlePicksKey = 'subtitlePicks';
 
   bool _streamsSectioned = true;
 
@@ -183,6 +195,10 @@ class AppPrefs extends ChangeNotifier {
   SubtitleSyncMemory _subtitleSync = SubtitleSyncMemory.empty;
 
   SubtitleSyncMemory get subtitleSync => _subtitleSync;
+
+  SubtitlePickMemory _subtitlePicks = SubtitlePickMemory.empty;
+
+  SubtitlePickMemory get subtitlePicks => _subtitlePicks;
 
   /// Reads every stored preference. Called once at start-up, before any
   /// screen that reads one can be on the stack, so the first list is
@@ -258,6 +274,11 @@ class AppPrefs extends ChangeNotifier {
       _subtitleSync = sync;
       changed = true;
     }
+    final picks = SubtitlePickMemory.fromJson(stored[subtitlePicksKey]);
+    if (picks != _subtitlePicks) {
+      _subtitlePicks = picks;
+      changed = true;
+    }
     if (changed) notifyListeners();
   }
 
@@ -313,6 +334,18 @@ class AppPrefs extends ChangeNotifier {
     await _write(
       subtitleSyncKey,
       value.entries.isEmpty ? null : value.toJson(),
+    );
+  }
+
+  /// Stores [value], or removes the key entirely once nothing is
+  /// remembered -- for the same reason [setSubtitleSync] does.
+  Future<void> setSubtitlePicks(SubtitlePickMemory value) async {
+    if (_subtitlePicks == value) return;
+    _subtitlePicks = value;
+    notifyListeners();
+    await _write(
+      subtitlePicksKey,
+      value == SubtitlePickMemory.empty ? null : value.toJson(),
     );
   }
 

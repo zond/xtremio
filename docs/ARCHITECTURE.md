@@ -721,16 +721,24 @@ what every model field means. The shape of the thing is in the
   cut for says more, because two files made for one release keep its
   time. `subtitlesByRelease` puts a language's files whose `releaseGroup`
   or `movieReleaseName` names the video actually playing first, then the
-  ones from a subtitle group the viewer has already adjusted for this
+  ones from a release group the viewer has already adjusted for this
   series (the correction goes back on when the file is applied, so it
   arrives fixed, and the rank asks the memory exactly what applying it
   will ask), then everything else in the order the addons answered.
   The language rows themselves are sorted on the name the menu prints,
-  alphabetically and with nothing pinned above it: Off is the menu's own
-  row above every language, and the language that is playing is not
-  lifted, since the list is ordered before anything is selected and a row
-  that jumps to the top once it is picked is no longer where the alphabet
-  left it. Inside a rank the addon that answered first still wins --
+  alphabetically, and `subtitlesByRelease` pins nothing above that: Off
+  is the menu's own row above every language, and the language that is
+  playing is not lifted, since the list is ordered before anything is
+  selected and a row that jumps to the top once it is picked is no longer
+  where the alphabet left it. The menu itself then lifts at most two
+  rows, under a heading of their own -- the languages picked most often
+  (`SubtitlePickMemory.pinned`), which is a fact about the viewer rather
+  than about these files, and whose reason for being first cannot change
+  under a finger because a count changes only on a pick and every pick
+  closes the sheet. An addon answering late still moves the rows of an
+  open menu, as it did before there were pins. They are
+  lifted rather than copied, only ever languages this episode offers, and
+  not drawn at all when they would be every language there is. Inside a rank the addon that answered first still wins --
   which matters, because the head of a language is the file its row
   applies and the file the auto-pick plays. The row order reaches the
   auto-pick in exactly one case: a session preference that is enabled and
@@ -933,21 +941,29 @@ what every model field means. The shape of the thing is in the
   again on the next episode, and `_resetSubtitleTiming` puts it back
   whenever that file goes on screen. The two keys are deliberately
   different because the causes are. A *speed* is remembered against the
-  series and the addon's own grouping of its files (`g`), since what a
-  file was timed against is a property of where it came from -- across
-  two Gilmore Girls episodes `g=1` is all 23.976 and `g=3` all 25, while
-  `g=6` holds one file claiming 23.976 and one claiming 25 that end at
-  exactly the same moment, synced to each other whatever they claim --
-  and since video releases of one show share a frame rate, so a speed
-  carries from one to the next. A *shift* is remembered against the
+  series and the group that cut the release the file was made for
+  (`releaseGroup`, lower-cased), since what a file was timed against is a
+  property of where it came from and video releases of one show share a
+  frame rate, so a speed carries from one episode to the next. It is
+  `releaseGroup` and not the addon's own bucket (`g`), which is what this
+  used to key on: `g` is a per-answer cluster index, re-assigned every
+  answer, so one Swedish upload batch reads `g=6, 5, 4, 1` across four
+  Gilmore Girls episodes and Breaking Bad's BluRay family reads `2, 2,
+  1`, and a bucket can even hold files from another episode. Keyed on it,
+  a measured multiplier usually missed next episode and now and then
+  landed on a family nobody had measured. `releaseGroup` is on about four
+  entries in ten and is the same word every episode -- spelled with
+  whatever capitals the uploader used, which is why the key is
+  lower-cased -- and rows an older build wrote under `g` lapse rather
+  than migrate, since the group's name is not in them. A *shift* is remembered against the
   video release as well, because an offset is the video's pre-roll less
   whatever the subtitle's source assumed and changing either side
   changes the answer; the release is the whole filename the player knows
   (the file the server says it opened, else the addon's claim), not a
   release group parsed out of it, because a parse is a guess and two
   encodes by one group can still start in different places. Any part of
-  a key nobody can name -- an addon that sends no `g`, a torrent nothing
-  has named the file of -- means that adjustment is simply not
+  a key nobody can name -- an addon that names no release group, a
+  torrent nothing has named the file of -- means that adjustment is simply not
   remembered: a narrower key is forgotten more often, and that is the
   price of never being wrong. Both values stored are real numbers, a
   multiplier and an offset in seconds, because both are measured: no
@@ -994,7 +1010,31 @@ what every model field means. The shape of the thing is in the
   Reset off the bottom of the screen, which is the way back from the
   state the viewer had just landed in. The speed row has no buttons and draws the space two
   would have taken, so its number stays in the column the shift row put
-  its own in. Then
+  its own in.
+
+  What was *picked* is remembered too, and separately
+  (`SubtitlePickMemory`, `lib/core/subtitle_picks.dart`, the
+  `subtitlePicks` preference): one row per show holding the language as
+  the label the menu prints, the release group of the file that was
+  picked where the addon named one, or that subtitles were turned off on
+  purpose, plus a count per language with no show attached. The engine's
+  own `subtitle_preference` is session state -- `Unload` clears it and the
+  player dispatches `Unload` on dispose -- so on a fresh start the row is
+  the only thing that knows what this programme is watched in, and the
+  auto-pick falls back to it. Among the files of the remembered language
+  one from the remembered group is preferred, and where there is none the
+  head of the language is taken as always: the group is a preference
+  among files, never a condition on the language, since a show can change
+  release family between seasons and six OpenSubtitles entries in ten
+  name no group. A language the episode does not answer with means
+  nothing is applied at all, and a show never watched is left alone --
+  putting the viewer's commonest language onto an unknown programme would
+  put subtitles on one that needs none. Only a pick made by hand writes
+  to the store, and a preference synthesized from it is never dispatched
+  back to the core. The counts decay on picks rather than on days: they
+  halve when their total passes a ceiling and the zeroes drop out, which
+  follows a taste that really changes without a language going stale
+  while the app is closed. Then
   `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)
   makes one row per language, since OpenSubtitles answers a single movie
   with 69 files, nineteen of them Spanish. Codes group on what they mean

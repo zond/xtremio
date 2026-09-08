@@ -356,7 +356,7 @@ enum _ReleaseFit {
 /// among the forty rows OpenSubtitles answers with is reading names, and
 /// the order they arrived in is a fact about which addon was quickest.
 ///
-/// Nothing is pinned above the alphabet. There is no "off" row to pin --
+/// Nothing is pinned here. There is no "off" row to pin --
 /// `SubtitleMenu` draws Off itself, above every language, and it stays
 /// first by being drawn there rather than by any order here -- and the
 /// language that is playing is deliberately *not* lifted: this list is
@@ -365,6 +365,14 @@ enum _ReleaseFit {
 /// takes back the one thing an alphabet is for, which is finding a
 /// language where the alphabet left it. The menu marks the row that is
 /// on instead.
+///
+/// The menu *does* lift the languages this viewer picks most often, at
+/// most two of them and ranked over what it draws rather than over this
+/// list (`SubtitleMenu.picks`), and that is deliberately not done
+/// here: it is a fact about the viewer rather than about these files,
+/// and the rule above is about a row moving in front of somebody. A pin
+/// read from stored counts cannot do that, because a count only changes
+/// on a pick and every pick closes the sheet.
 ///
 /// **The one thing this order decides rather than shows.** The auto-pick
 /// walks this list and takes the first file whose language matches the
@@ -395,7 +403,7 @@ List<SubtitleSource> subtitlesByRelease(
   for (final source in sources) {
     // Keyed the way the menu groups them, so "within a language" is the
     // same language as the row the files are listed under.
-    final key = _languageLabel(source.subtitle.lang).toLowerCase();
+    final key = subtitleLanguageLabel(source.subtitle.lang).toLowerCase();
     byLanguage
         .putIfAbsent(key, () {
           order.add(key);
@@ -435,12 +443,12 @@ _ReleaseFit _fitOf(
   if (subtitleMatchesRelease(subtitle, release: release)) {
     return _ReleaseFit.release;
   }
-  final group = subtitle.group;
-  if (group != null &&
-      (memory.speedFor(series: series, group: group) != null ||
+  final releaseGroup = subtitle.releaseGroupKey;
+  if (releaseGroup != null &&
+      (memory.speedFor(series: series, releaseGroup: releaseGroup) != null ||
           memory.shiftSecondsFor(
                 series: series,
-                group: group,
+                releaseGroup: releaseGroup,
                 release: release,
               ) !=
               0)) {
@@ -452,7 +460,14 @@ _ReleaseFit _fitOf(
 /// The display name a language code is grouped under: what the code
 /// *means*, so `en` and `eng` are one language; the code itself when
 /// [languageName] does not know it; `Unknown` when there is no code.
-String _languageLabel(String lang) {
+///
+/// Public because it is also what a remembered pick is stored as
+/// (`SubtitleShowPick.language`): the memory has to be the row the menu
+/// prints, or an addon spelling a language differently next episode would
+/// read as a different choice. Passing a label back through is harmless
+/// -- [languageName] answers an unknown code with the code -- which is
+/// what lets a stored label be compared with a fresh one.
+String subtitleLanguageLabel(String lang) {
   final code = lang.trim();
   return code.isEmpty ? 'Unknown' : languageName(code);
 }
@@ -580,7 +595,7 @@ List<SubtitleLanguageGroup> groupSubtitlesByLanguage(
   final labels = <String, String>{};
   final byLanguage = <String, List<SubtitleOption>>{};
   for (final source in sources) {
-    final label = _languageLabel(source.subtitle.lang);
+    final label = subtitleLanguageLabel(source.subtitle.lang);
     final key = label.toLowerCase();
     final options = byLanguage.putIfAbsent(key, () {
       order.add(key);

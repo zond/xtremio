@@ -33,19 +33,20 @@ void main() {
 
   Map<String, dynamic> upload(
     String id,
-    String url,
-    String releaseGroup, {
-    Object? g,
+    String url, {
+    String? releaseGroup,
+    String? label,
   }) => {
     'id': id,
     'lang': 'eng',
     'url': url,
-    'releaseGroup': releaseGroup,
-    'g': ?g,
+    'releaseGroup': ?releaseGroup,
+    'label': ?label,
   };
 
-  /// Two English uploads: `SIX` from the addon's group 6, and `NONE` from
-  /// an addon that says nothing about where its files came from.
+  /// Two English uploads: `FGT` from the group that cut that release, and
+  /// `NONE` from an addon that says nothing about where its file came
+  /// from -- so there is nothing to key a correction on for it.
   PlayerHarness harness({AppPrefs? prefs}) {
     final harness = PlayerHarness(prefs: prefs);
     harness.fixture['subtitlePreference'] = null;
@@ -63,8 +64,8 @@ void main() {
         'content': {
           'type': 'Ready',
           'content': [
-            upload('en-1', plainUrl, 'SIX', g: 6),
-            upload('en-2', otherUrl, 'NONE'),
+            upload('en-1', plainUrl, releaseGroup: 'FGT'),
+            upload('en-2', otherUrl, label: 'NONE'),
             // A language of its own, so its row applies it with one tap
             // and no second menu transition.
             {'id': 'fr-1', 'lang': 'fre', 'url': frenchUrl},
@@ -79,7 +80,7 @@ void main() {
   /// it opened, and [pick] playing.
   Future<PlayerHarness> playing(
     WidgetTester tester, {
-    String pick = 'SIX',
+    String pick = 'FGT',
     AppPrefs? prefs,
     String? streamName = opened,
   }) async {
@@ -153,7 +154,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('a measured multiplier is remembered against the subtitle '
+  testWidgets('a measured multiplier is remembered against the release '
       'group', (tester) async {
     useWideViewport(tester);
     final prefs = prefsWith();
@@ -163,11 +164,11 @@ void main() {
     await matchAgainst(tester, player, 'NONE', offset: 0);
     await closePanel(tester);
 
-    // Series and group, and no release: what a file was timed against is
-    // a property of where it came from, so the same group's files carry
-    // the correction to any release of this show.
+    // Series and release group, and no release: what a file was timed
+    // against is a property of where it came from, so the same group's
+    // files carry the correction to any release of this show.
     expect(
-      prefs.subtitleSync.speedFor(series: series, group: '6'),
+      prefs.subtitleSync.speedFor(series: series, releaseGroup: 'fgt'),
       closeTo(stretch, 1e-9),
     );
     expect(
@@ -193,7 +194,7 @@ void main() {
     expect(
       prefs.subtitleSync.shiftSecondsFor(
         series: series,
-        group: '6',
+        releaseGroup: 'fgt',
         release: opened.toLowerCase(),
       ),
       closeTo(SubtitleTiming.shiftStep, 1e-9),
@@ -201,23 +202,22 @@ void main() {
     expect(
       prefs.subtitleSync.shiftSecondsFor(
         series: series,
-        group: '6',
+        releaseGroup: 'fgt',
         release: 'some.other.release.mkv',
       ),
       0,
     );
   });
 
-  testWidgets('an addon that names no group is not remembered at all', (
-    tester,
-  ) async {
+  testWidgets('an addon that names no release group is not remembered at '
+      'all', (tester) async {
     useWideViewport(tester);
     final prefs = prefsWith();
     final player = await playing(tester, pick: 'NONE', prefs: prefs);
     await openPanel(tester);
 
     await press(tester, 'subtitle-shift-later');
-    await matchAgainst(tester, player, 'SIX');
+    await matchAgainst(tester, player, 'FGT');
     await closePanel(tester);
 
     // Nothing keys it, and applying it to the files it might belong to
@@ -242,7 +242,7 @@ void main() {
     // The speed still is: it never depended on the release.
     expect(prefs.subtitleSync.entries, hasLength(1));
     expect(
-      prefs.subtitleSync.speedFor(series: series, group: '6'),
+      prefs.subtitleSync.speedFor(series: series, releaseGroup: 'fgt'),
       closeTo(stretch, 1e-9),
     );
   });
@@ -253,10 +253,10 @@ void main() {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': stretch},
+        {'series': series, 'releaseGroup': 'fgt', 'speed': stretch},
         {
           'series': series,
-          'group': '6',
+          'releaseGroup': 'fgt',
           'release': opened.toLowerCase(),
           'shiftSeconds': 0.3,
         },
@@ -280,10 +280,10 @@ void main() {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': stretch},
+        {'series': series, 'releaseGroup': 'fgt', 'speed': stretch},
         {
           'series': series,
-          'group': '6',
+          'releaseGroup': 'fgt',
           'release': 'a.different.release.mkv',
           'shiftSeconds': 0.3,
         },
@@ -313,7 +313,7 @@ void main() {
     // claims this one.
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': 40.0},
+        {'series': series, 'releaseGroup': 'fgt', 'speed': 40.0},
       ],
     });
     await prefs.load();
@@ -334,10 +334,10 @@ void main() {
     // seconds is thirty times the adjustment that was made.
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': 'stretch'},
+        {'series': series, 'releaseGroup': 'fgt', 'speed': 'stretch'},
         {
           'series': series,
-          'group': '6',
+          'releaseGroup': 'fgt',
           'release': opened.toLowerCase(),
           'shift': 3,
         },
@@ -356,7 +356,7 @@ void main() {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': 'tt0944947', 'group': '6', 'speed': stretch},
+        {'series': 'tt0944947', 'releaseGroup': 'fgt', 'speed': stretch},
       ],
     });
     await prefs.load();
@@ -372,14 +372,14 @@ void main() {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': stretch},
+        {'series': series, 'releaseGroup': 'fgt', 'speed': stretch},
       ],
     });
     await prefs.load();
     final player = await playing(tester, prefs: prefs);
     expect(player.engine.subtitleSpeed, closeTo(25 / 23.976, 1e-9));
 
-    // The other addon's file is not from group 6, so nothing is known
+    // The other addon's file names no release group, so nothing is known
     // about it and it is played exactly as it was written.
     await tester.tap(find.byTooltip('Subtitles (S)'));
     await tester.pumpAndSettle();
@@ -392,7 +392,7 @@ void main() {
     // And the memory is untouched: playing another file is not a
     // judgement about the one that was on.
     expect(
-      prefs.subtitleSync.speedFor(series: series, group: '6'),
+      prefs.subtitleSync.speedFor(series: series, releaseGroup: 'fgt'),
       closeTo(stretch, 1e-9),
     );
   });
@@ -403,7 +403,7 @@ void main() {
     useWideViewport(tester);
     final prefs = prefsWith({
       'subtitleSync': [
-        {'series': series, 'group': '6', 'speed': stretch},
+        {'series': series, 'releaseGroup': 'fgt', 'speed': stretch},
       ],
     });
     await prefs.load();
@@ -444,7 +444,7 @@ void main() {
     expect(
       prefs.subtitleSync.shiftSecondsFor(
         series: series,
-        group: '6',
+        releaseGroup: 'fgt',
         release: opened.toLowerCase(),
       ),
       closeTo(
@@ -456,7 +456,10 @@ void main() {
         1e-9,
       ),
     );
-    expect(client.writes, ['subtitleSync']);
+    // The pick that put the file on screen wrote the show's language
+    // down, which is a different key and a different memory; what
+    // this counts is the writes of the timing.
+    expect(client.writes.where((key) => key == 'subtitleSync'), hasLength(1));
   });
 
   testWidgets('a press just before the file changes is still that file\'s', (
@@ -484,7 +487,7 @@ void main() {
     expect(
       prefs.subtitleSync.shiftSecondsFor(
         series: series,
-        group: '6',
+        releaseGroup: 'fgt',
         release: opened.toLowerCase(),
       ),
       closeTo(SubtitleTiming.shiftStep, 1e-9),
@@ -510,7 +513,7 @@ void main() {
     expect(
       prefs.subtitleSync.shiftSecondsFor(
         series: series,
-        group: '6',
+        releaseGroup: 'fgt',
         release: opened.toLowerCase(),
       ),
       closeTo(SubtitleTiming.shiftStep, 1e-9),
@@ -534,7 +537,9 @@ void main() {
     await tester.pumpAndSettle();
     await pumpEvents(tester);
 
-    expect(client.writes, isEmpty);
+    // Picking and turning off are choices and are remembered as such;
+    // what is not written is the *timing*, which nobody adjusted.
+    expect(client.writes, everyElement('subtitlePicks'));
     expect(player.engine.subtitleSpeed, 1);
   });
 }

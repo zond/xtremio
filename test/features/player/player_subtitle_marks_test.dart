@@ -30,22 +30,16 @@ void main() {
   const plainUrl = 'https://subs.example.org/en-plain.srt';
   const otherUrl = 'https://subs.example.org/en-other.srt';
 
-  Map<String, dynamic> upload(
-    String id,
-    String url,
-    String releaseGroup, {
-    Object? g,
-  }) => {
+  /// The group that cut the release this file was made for is half of
+  /// what a correction is remembered under, so the two uploads name
+  /// different ones: switching to `OTHER` is a file with nothing
+  /// remembered about it, and what a mark does to the file it was made on
+  /// is the whole of what is on screen afterwards.
+  Map<String, dynamic> upload(String id, String url, String releaseGroup) => {
     'id': id,
     'lang': 'eng',
     'url': url,
     'releaseGroup': releaseGroup,
-    // The addon's own grouping of its files, which is half of what a
-    // correction is remembered under. `OTHER` carries none, so switching
-    // to it is a file with nothing remembered about it -- what a mark
-    // does to the file it was made on is the whole of what is on screen
-    // afterwards.
-    'g': ?g,
   };
 
   PlayerHarness harness({AppPrefs? prefs}) {
@@ -65,7 +59,7 @@ void main() {
         'content': {
           'type': 'Ready',
           'content': [
-            upload('en-1', plainUrl, 'PLAIN', g: 6),
+            upload('en-1', plainUrl, 'PLAIN'),
             upload('en-2', otherUrl, 'OTHER'),
           ],
         },
@@ -353,18 +347,18 @@ void main() {
 
     // A press on the panel is a judgement whichever button made it, and
     // a mark's judgement is a multiplier and an offset like any other:
-    // the speed under the series and the group, the shift under the
-    // release as well. What is stored is the two numbers, not the marks
+    // the speed under the series and the release group, the shift under
+    // the video release as well. What is stored is the two numbers, not the marks
     // that produced them -- next episode is a different file and the
     // marks would mean nothing on it.
     expect(
-      prefs.subtitleSync.speedFor(series: series, group: '6'),
+      prefs.subtitleSync.speedFor(series: series, releaseGroup: 'plain'),
       closeTo(600.6 / 600, 1e-9),
     );
     expect(
       prefs.subtitleSync.shiftSecondsFor(
         series: series,
-        group: '6',
+        releaseGroup: 'plain',
         release: opened.toLowerCase(),
       ),
       closeTo(10 - (600.6 / 600) * 10, 1e-9),

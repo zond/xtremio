@@ -1073,23 +1073,21 @@ void main() {
   ) async {
     useWideViewport(tester);
     // The second rank. Nothing here was cut for this release, but one
-    // upload is from a group this show was corrected for on an earlier
-    // episode -- so applying it puts the correction back with it, which
-    // is the whole reason it is worth offering first.
+    // upload is from a release group this show was corrected for on an
+    // earlier episode -- so applying it puts the correction back with it,
+    // which is the whole reason it is worth offering first. The stored
+    // group is lower-cased; the addon spells it however the uploader did.
     final prefs = AppPrefs(
       client: FakePrefsClient({
         'subtitleSync': [
-          {'series': 'tt0063350', 'group': '6', 'speed': 25 / 23.976},
+          {'series': 'tt0063350', 'releaseGroup': 'six', 'speed': 25 / 23.976},
         ],
       }),
     );
     await prefs.load();
     final harness = subtitleHarness([
       upload('en-1', 'eng', 'https://subs.example.org/en-plain.srt', 'PLAIN'),
-      {
-        ...upload('en-2', 'eng', 'https://subs.example.org/en-six.srt', 'SIX'),
-        'g': 6,
-      },
+      upload('en-2', 'eng', 'https://subs.example.org/en-six.srt', 'SIX'),
     ], prefs: prefs);
     harness.torrentStats.response = openedStats;
     await harness.pump(tester);
