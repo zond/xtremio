@@ -160,10 +160,59 @@ CMake and `media_kit_libs_video` supplies libmpv there.
 To judge playback performance by numbers rather than feel, the player has a
 stats OSD (like mpv's): move the mouse over the video to show it, or press
 **Shift+I** (or the stats button in the top bar) to pin it on/off. It lists
-output vs container FPS, dropped
-frames, the **hwdec** in use (or `software` when libmpv is decoding on the
-CPU), codec and resolution, video bitrate, and demuxer cache / buffering
-state, sampled twice a second only while it is on screen.
+output vs container FPS, dropped frames, the **hwdec** in use (or
+`software` when libmpv is decoding on the CPU), codec and resolution, and
+video bitrate, sampled twice a second only while it is on screen.
+
+**The `cache` row is two caches, at two cadences.** The first number is
+mpv's own demuxer cache and buffering state, labelled `mpv` because
+unlabelled it read as though it were the disk. What follows is the
+retention window: what this device's embedded server holds of the stream
+either side of the playhead, each half with the watching it is worth at
+the bitrate on the row above.
+
+```
+cache    2.3s mpv · behind 340.0 MB (2 min) · ahead 512.0 MB (3 min)
+```
+
+mpv's half is sampled twice a second with the rows above it
+(`PlaybackEngine.statsInterval`); the window is asked of the server every
+five seconds (`PlayerScreen.streamNumbersInterval`), the ask costing it a
+listing of the stream's own directories. So one row carries two readings
+of different ages, and a report about it should say which half it means.
+The window is absent altogether where nothing bounds the stream -- a
+torrent the storage budget covers has no retention policy, and an addon's
+direct link is not on this server at all -- and the minutes go missing
+while mpv has answered no bitrate yet, which is the first seconds of every
+file.
+
+**The `sharing` row is a torrent's, and says which stretch it covers.**
+The same answer carries what the torrent has committed to the swarm --
+bytes advertised and promised never to be reclaimed -- and what it has
+moved.
+
+```
+sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live
+```
+
+Those transfer counters belong to the torrent's live state and start at
+zero every time it goes live, so a pause and resume restarts them, and so
+does the idle sweep dropping the engine before a later stream re-adds it.
+`since it last went live` is on the row for that reason, and a report that
+reads the numbers as the torrent's total, or as the evening's, is reading
+them wrong. A ratio against nothing downloaded is left out rather than
+drawn `0.00`, so a torrent seeding a complete file shows both byte counts
+and the period with no ratio between them. A stream that is not a torrent
+is relayed rather than seeded and has no row here at all, and neither has
+a torrent whose counters cannot be read -- paused, checking, stopped for
+space, in error.
+
+Both of those rows are asked for only while the panel is on screen, about
+the URL the player handed mpv, and only when this device's own server is
+the one serving that stream. With a streaming server configured on another
+machine a torrent plays straight off it, so nothing here is asked and
+neither row appears -- what is on screen then is `cache    2.3s mpv` and
+nothing beside it.
 
 Two more rows are about seeking rather than performance: mpv's `seekable`
 and `partially-seekable` on one, the demuxer's own seekable ranges out of
