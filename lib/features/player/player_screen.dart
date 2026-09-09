@@ -1479,13 +1479,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Whether a failed `open` is worth another attempt.
   ///
-  /// Only for a torrent the embedded server is serving, only before the
-  /// media has loaded, and only while the server says the torrent is not
-  /// ready yet -- still resolving its metadata, hash-checking, or filling
-  /// the initial window -- or has not answered about it at all, which is
-  /// where a start-up spends its first seconds. mpv gives up on the first
-  /// refusal; the server, at that moment, has nothing to serve yet and is
-  /// perfectly entitled to say so.
+  /// Only for a torrent, only before the media has loaded, and only while
+  /// the server says the torrent is not ready yet -- still resolving its
+  /// metadata, hash-checking, or filling the initial window -- or has not
+  /// answered about it at all, which is where a start-up spends its first
+  /// seconds. mpv gives up on the first refusal; the server, at that
+  /// moment, has nothing to serve yet and is perfectly entitled to say so.
+  ///
+  /// The kind of stream being played is what decides it, and not whether
+  /// this screen is polling for stats: a torrent on a streaming server on
+  /// another machine is one this device asks nothing about
+  /// ([_startTorrentStats]) and whose start-up is just as slow, so it gets
+  /// the same patience with no stats to consult -- the bounded retries
+  /// alone.
   ///
   /// A direct HTTP stream, a torrent the server has given up on
   /// ([TorrentPhase.error]), a phase we do not recognise, and a `ready`
@@ -1493,7 +1499,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// them will be different in a second.
   bool get _retryableTorrentStart {
     if (!mounted || _handedOver || _mediaLoaded) return false;
-    if (_torrentStatsRequest == null) return false;
+    if (_openState?.selectedStream?.kind != StreamKind.torrent) return false;
     final stats = _torrentStats;
     if (stats == null) return true;
     return switch (stats.phase) {

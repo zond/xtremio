@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/torrent_startup_overlay.dart';
 
+import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// An `open` that fails while the torrent is still starting up.
@@ -160,6 +162,46 @@ void main() {
     await tester.pump();
     expect(harness.engine.opened, hasLength(1));
     expect(find.text('Playback failed: $openFailure'), findsOneWidget);
+  });
+
+  testWidgets('a torrent starting on another machine gets the same wait', (
+    tester,
+  ) async {
+    // A streaming server configured elsewhere is starting the torrent up
+    // exactly as the embedded one would, and refuses the first `open` for
+    // the same reason. This device asks it nothing -- there is no stats
+    // route here that could answer for somebody else's engine -- so the
+    // patience is the bounded retries alone, and what must not happen is
+    // "Playback failed" on a stream that plays a second later.
+    final fixture = loadPlayerFixture();
+    final stream = Map<String, dynamic>.from(fixture['stream'] as Map);
+    final content = List<Object?>.from(stream['content'] as List);
+    final hash = PlayerState.fromJson(fixture).streamingUrl!.pathSegments[0];
+    content[0] = {
+      ...content[0]! as Map<String, dynamic>,
+      'streaming_url': 'http://192.168.7.20:11470/$hash/0',
+    };
+    final harness = PlayerHarness(
+      player: {
+        ...fixture,
+        'stream': {...stream, 'content': content},
+      },
+      configureEngine: (engine) => engine.openError = openFailure,
+    );
+    await tester.pumpWidget(harness.build());
+    await tester.pump();
+    await tester.pump();
+    expect(harness.engine.opened, hasLength(1));
+    expect(failure, findsNothing);
+
+    // The second attempt lands, on the same URL, and nothing was asked of
+    // this device's server along the way.
+    harness.engine.openError = null;
+    await tester.pump(PlayerScreen.torrentOpenRetryBackoff);
+    await tester.pump();
+    expect(harness.engine.opened, hasLength(2));
+    expect(harness.engine.opened.last.$1, harness.engine.opened.first.$1);
+    expect(harness.torrentStats.requests, isEmpty);
   });
 
   testWidgets('a direct URL stream fails at once, as before', (tester) async {
