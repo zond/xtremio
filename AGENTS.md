@@ -768,7 +768,7 @@ and every absence in that answer is one of these:
   `ManagedTorrentState::Live` and nowhere else. So a pause and resume starts
   them over, and so does the idle sweep dropping the engine before a later
   stream re-adds it: the row really does read `↑ 0 B` for a torrent that
-  shared gigabytes twenty minutes ago. `since it went live` is what it says
+  shared gigabytes twenty minutes ago. `since it last went live` is what it says
   for that reason, and `this session` is what it must not say -- a number
   that restarts several times an evening drawn under a word that means the
   whole sitting is the same false claim as a stored counter, made in the

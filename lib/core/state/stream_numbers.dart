@@ -156,8 +156,8 @@ final class SharingNumbers {
       'SharingNumbers(committed: $committedBytes B, transfer: $transfer)';
 }
 
-/// What a torrent has fetched and sent **since it went live**, and the
-/// ratio of the two.
+/// What a torrent has fetched and sent **since it last went live**, and
+/// the ratio of the two.
 ///
 /// **One live period's, and deliberately not the torrent's.** These are
 /// librqbit's own per-torrent counters, which the backend reads out of the

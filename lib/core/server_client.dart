@@ -300,7 +300,7 @@ class ServerClient
   /// What the server holds of the stream at [url] -- the URL handed to the
   /// player (`ServerHandle::stream_numbers`): the cache around the
   /// playhead, and for a torrent the set committed for sharing and what
-  /// it has moved since it went live.
+  /// it has moved since it last went live.
   ///
   /// Null is a complete answer and not a failure: the URL's shape is what
   /// decides which store answers, and a URL neither store holds is a

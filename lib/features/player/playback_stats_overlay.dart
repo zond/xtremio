@@ -453,7 +453,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
         '↑ ${formatBytes(transfer.uploadedBytes)}'
             ' ↓ ${formatBytes(transfer.downloadedBytes)}'
             '${ratio == null ? '' : ' · ${ratio.toStringAsFixed(2)}'}'
-            ' since it went live',
+            ' since it last went live',
     ];
     return parts.isEmpty ? const [] : ['sharing  ${parts.join(' · ')}'];
   }

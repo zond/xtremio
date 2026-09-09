@@ -560,7 +560,7 @@ void main() {
 
       test('committed, both directions, and the ratio said to be a live '
           'period\'s', () {
-        // "since it went live" and not "this session": the counters are
+        // "since it last went live" and not "this session": the counters are
         // the live state's own, so a pause and resume or an idle drop
         // and re-add starts them at zero again. A viewer whose torrent
         // shared gigabytes half an hour ago is looking at ↑ 0 B, and the
@@ -577,7 +577,8 @@ void main() {
             ),
           ),
           [
-            'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live',
+            'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 4.8 GB'
+                ' · 0.44 since it last went live',
           ],
         );
       });
@@ -609,7 +610,7 @@ void main() {
               ),
             ),
           ),
-          ['sharing  ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live'],
+          ['sharing  ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live'],
         );
       });
 
@@ -639,7 +640,7 @@ void main() {
                 ),
               ),
             ),
-            ['sharing  ↑ 2.1 GB ↓ 0 B since it went live'],
+            ['sharing  ↑ 2.1 GB ↓ 0 B since it last went live'],
           );
         },
       );
@@ -661,7 +662,8 @@ void main() {
           ),
         );
         expect(seeding, [
-          'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 0 B since it went live',
+          'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 0 B'
+              ' since it last went live',
         ]);
       });
     },

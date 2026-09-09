@@ -122,7 +122,7 @@ void main() {
     );
     expect(
       row(
-        'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live',
+        'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live',
       ),
       findsOneWidget,
     );
@@ -174,7 +174,7 @@ void main() {
     expect(
       row(
         'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB'
-        ' · 0.44 since it went live',
+        ' · 0.44 since it last went live',
       ),
       findsOneWidget,
     );
@@ -203,7 +203,7 @@ void main() {
       await openPanel(tester, harness);
       expect(
         row(
-          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live',
+          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live',
         ),
         findsOneWidget,
       );
@@ -225,7 +225,7 @@ void main() {
       await pumpEvents(tester);
       expect(
         row(
-          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live',
+          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live',
         ),
         findsOneWidget,
       );
