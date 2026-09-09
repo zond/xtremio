@@ -114,10 +114,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final line
-                    in sample == null
-                        ? const ['stats: collecting…']
-                        : describe(sample, held: held))
+                for (final line in describe(sample, held: held))
                   Text(line, style: style),
                 if (isTorrent) ...[
                   for (final line in describeTorrent(torrent))
@@ -137,33 +134,59 @@ class PlaybackStatsOverlay extends StatelessWidget {
     );
   }
 
+  /// The one row standing in for every reading mpv has not taken yet, in
+  /// the same label column as the rest.
+  ///
+  /// It names mpv, because mpv is what is still collecting: the rows below
+  /// it come from the embedded server, which is answering about a file on
+  /// the disk and has no wait to share. It used to say `stats:` and to be
+  /// the whole panel, which is the bug -- somebody sitting in front of a
+  /// stream that has not started is watching for exactly the rows that
+  /// were being suppressed.
+  static const String collecting = 'mpv      collecting…';
+
   /// One text line per stat, in the order the panel shows them: what mpv
   /// reports about the playback, and -- from [held] -- what this server
   /// holds of the stream feeding it. The two meet on the cache row, which
   /// is why the server's half comes in here rather than as rows of its
   /// own after them.
-  static List<String> describe(PlaybackStats s, {StreamNumbers? held}) => [
-    'fps      ${_fps(s.outputFps)} out / ${_fps(s.containerFps)} container',
-    'dropped  ${s.droppedFrames ?? '-'} vo'
-        '${s.decoderDroppedFrames == null ? '' : ' / ${s.decoderDroppedFrames} decoder'}',
-    // Directly under the drop counts, because it is the line that says
-    // whether they mean anything. Only where mpv answered: on a backend
-    // with no such property there is no rate to report.
-    if (s.displayFps != null) 'display  ${_display(s)}',
-    'hwdec    ${_hwdec(s)}',
-    'video    ${s.videoCodec ?? '-'}'
-        '${s.width != null && s.height != null ? ' ${s.width}x${s.height}' : ''}',
-    'bitrate  ${formatBitrate(s.videoBitrate)}',
-    'cache    ${_cache(s, held?.window)}',
+  ///
+  /// **A null [s] is mpv with no sample yet, not an empty panel.** It
+  /// takes mpv's own rows away and leaves [collecting] in their place, and
+  /// everything from [held] is drawn as usual: neither the window nor the
+  /// sharing row is mpv's to report, and the player asks for them without
+  /// waiting for the media to load, precisely because what is on the disk
+  /// is what somebody watching a stream that has not started yet is
+  /// looking for.
+  static List<String> describe(PlaybackStats? s, {StreamNumbers? held}) => [
+    if (s == null)
+      collecting
+    else ...[
+      'fps      ${_fps(s.outputFps)} out / ${_fps(s.containerFps)} container',
+      'dropped  ${s.droppedFrames ?? '-'} vo'
+          '${s.decoderDroppedFrames == null ? '' : ' / ${s.decoderDroppedFrames} decoder'}',
+      // Directly under the drop counts, because it is the line that says
+      // whether they mean anything. Only where mpv answered: on a backend
+      // with no such property there is no rate to report.
+      if (s.displayFps != null) 'display  ${_display(s)}',
+      'hwdec    ${_hwdec(s)}',
+      'video    ${s.videoCodec ?? '-'}'
+          '${s.width != null && s.height != null ? ' ${s.width}x${s.height}' : ''}',
+      'bitrate  ${formatBitrate(s.videoBitrate)}',
+    ],
+    // Whichever halves of it were measured: mpv's buffer, the server's
+    // window, or -- while mpv is still collecting under an open panel --
+    // the window on its own.
+    if (_cache(s, held?.window) case final cache?) 'cache    $cache',
     // The other half of what the retention policy says, and the row
     // directly under the window it committed for: both are read off the
     // same policy and are meant to be read against each other.
     ...describeSharing(held),
     // Only when mpv answered: on a backend that has no such properties
     // the rows would be three dashes claiming something was measured.
-    if (s.seekable != null || s.partiallySeekable != null)
+    if (s != null && (s.seekable != null || s.partiallySeekable != null))
       'seekable ${_seekable(s)} · partially ${_flag(s.partiallySeekable)}',
-    if (s.seekableRanges case final ranges?) 'ranges   ${_ranges(ranges)}',
+    if (s?.seekableRanges case final ranges?) 'ranges   ${_ranges(ranges)}',
   ];
 
   /// At what rate mpv thinks the screen refreshes.
@@ -337,18 +360,32 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// small enough that the budget covers it, a stream this server is not
   /// holding at all -- and then the row is mpv's number alone rather than
   /// two dashes claiming a cache of nothing was measured.
-  static String _cache(PlaybackStats s, CacheWindow? window) {
+  ///
+  /// Each half stands without the other, so the row is null when neither
+  /// was measured. mpv's is missing before its first sample, which is when
+  /// the server's half is worth the most: the disk is filling for a stream
+  /// that has not started, and the window is the only thing on the panel
+  /// that can say so.
+  static String? _cache(PlaybackStats? s, CacheWindow? window) {
+    final mpv = s == null ? null : _mpvCache(s);
+    if (window == null) return mpv;
+    final held =
+        'behind ${_span(window.behindBytes, s?.videoBitrate)}'
+        ' · ahead ${_span(window.aheadBytes, s?.videoBitrate)}';
+    return mpv == null ? held : '$mpv · $held';
+  }
+
+  /// mpv's half of the cache row: the seconds it has read ahead, and
+  /// whether it has run out and is waiting for more.
+  static String _mpvCache(PlaybackStats s) {
     final duration = s.cacheDuration;
     final seconds = duration == null
         ? '-'
         : '${(duration.inMilliseconds / 1000).toStringAsFixed(1)}s';
-    final mpv = s.pausedForCache == true
+    return s.pausedForCache == true
         ? '$seconds mpv  buffering'
               '${s.cacheBufferingState == null ? '' : ' ${s.cacheBufferingState}%'}'
         : '$seconds mpv';
-    if (window == null) return mpv;
-    return '$mpv · behind ${_span(window.behindBytes, s.videoBitrate)}'
-        ' · ahead ${_span(window.aheadBytes, s.videoBitrate)}';
   }
 
   /// Half the window: its bytes, and how much watching that is.

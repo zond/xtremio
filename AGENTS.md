@@ -780,6 +780,17 @@ and every absence in that answer is one of these:
   nothing downloaded is left out rather than drawn `0.00`, which would
   tell a viewer they have shared nothing while they are seeding.
 
+**mpv's wait is mpv's alone.** Until its first sample the panel drew
+`stats: collecting…` in place of every row it has, which held back both of
+the rows above -- neither of them mpv's, and both asked for without waiting
+for the media to load, precisely because what is on the disk is what
+somebody watching a stream that has not started yet is looking for. The row
+says `mpv      collecting…` and stands for the readings mpv has not taken;
+`PlaybackStatsOverlay.describe` takes a nullable sample and the cache row
+draws whichever of its two halves were measured, so the window can appear
+with no mpv buffer beside it and in bytes alone, the watching it is worth
+being mpv's bitrate over it.
+
 **The ask is the URL the engine was handed, and only when it is ours.**
 `PlayerScreen._heldStreamUrl` is `_engineUrl` -- recorded by `_open`, the
 one place `_mediaUrl` runs -- and not `_opened`, the URL stremio-core

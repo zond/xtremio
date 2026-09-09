@@ -90,7 +90,10 @@ void main() {
     // Visible, and only now is the engine asked for samples.
     expect(overlay, findsOneWidget);
     expect(engine.sampling, isTrue);
-    expect(find.text('stats: collecting…'), findsOneWidget);
+    // Named for mpv, which is what has nothing yet: the rows the server
+    // answers are drawn beside it while it collects (see
+    // player_stats_osd_held_test).
+    expect(find.text(PlaybackStatsOverlay.collecting), findsOneWidget);
 
     engine.emitStats(softwareStats);
     await tester.pump();

@@ -138,6 +138,45 @@ void main() {
     expect(server.requests, hasLength(whileShown));
   });
 
+  testWidgets('what is on the disk is drawn while mpv is still collecting', (
+    tester,
+  ) async {
+    final harness = await pumpPlaying(tester);
+    harness.streamNumbers.response = held;
+
+    // The panel up with no sample on it. mpv reports nothing until it has
+    // opened the media, and a stream that has not started is exactly when
+    // somebody opens this panel -- so the wait was drawn over the whole of
+    // it, including two rows mpv has nothing to do with. The player does
+    // not wait for the media before asking for them, because what they
+    // report is what is on the disk.
+    await pressShiftI(tester);
+    expect(overlay, findsOneWidget);
+    expect(harness.streamNumbers.requests, hasLength(1));
+    expect(row(PlaybackStatsOverlay.collecting), findsOneWidget);
+    // In bytes alone: the watching each half is worth comes from mpv's
+    // bitrate, which is one of the readings still missing.
+    expect(row('cache    behind 1.2 GB · ahead 340.0 MB'), findsOneWidget);
+    expect(
+      row(
+        'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB'
+        ' · 0.44 since it went live',
+      ),
+      findsOneWidget,
+    );
+
+    // mpv's first sample fills in its own rows and joins the cache row,
+    // and the wait is over for the rows that were waiting.
+    harness.engine.emitStats(playing);
+    await pumpEvents(tester);
+    expect(row(PlaybackStatsOverlay.collecting), findsNothing);
+    expect(row('bitrate  8.0 Mbps'), findsOneWidget);
+    expect(
+      row('cache    12.0s mpv · behind 1.2 GB/20 min · ahead 340.0 MB/5 min'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
     'numbers nobody was watching are not what the panel comes back to',
     (tester) async {
