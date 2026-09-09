@@ -415,7 +415,8 @@ pub fn background_traffic() -> anyhow::Result<BackgroundTraffic> {
 /// What this server holds of the stream a player is playing right now
 /// (`ServerHandle::stream_numbers`), asked with the URL that player was
 /// handed: what is on the disk around the playhead, and -- for a torrent --
-/// what has been committed for sharing and what the session has moved.
+/// what has been committed for sharing and what it has moved since it went
+/// live.
 ///
 /// `url` is the whole of the question: its shape decides which store
 /// answers, the piece store for `/{infoHash}/{fileIdx}` (`-1` included, the
