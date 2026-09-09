@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/server_client.dart';
@@ -106,6 +107,98 @@ void main() {
         server.streamNumbers(url.resolve('$_infoHash/0')),
         throwsA(anything),
       );
+    },
+  );
+
+  test(
+    'the numbers of a stream this server is proxying come back as numbers',
+    () async {
+      // Every other question here is answered with an absence, and an
+      // absence is what a `null` on the way out looks like too: this is the
+      // one that has the server really holding a stream, so the JSON it
+      // sends comes back through the client as a reading somebody could
+      // draw a row from.
+      final tmp = await Directory.systemTemp.createTemp('xtremio-proxy-test-');
+      const server = ServerClient();
+      addTearDown(() async {
+        await server.stop();
+        await tmp.delete(recursive: true);
+      });
+
+      // Somebody else's host, which is the whole reason `/proxy` exists.
+      // It answers one file with the three things that make a response one
+      // the cache may file: a length, a validator, and a promise to answer
+      // ranges.
+      final film = Uint8List(8 * 1024 * 1024);
+      final origin = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => origin.close(force: true));
+      origin.listen((request) async {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.set(HttpHeaders.contentTypeHeader, 'video/mp4')
+          ..headers.set(HttpHeaders.acceptRangesHeader, 'bytes')
+          ..headers.set(HttpHeaders.etagHeader, '"film"')
+          ..headers.contentLength = film.length
+          ..add(film);
+        await request.response.close();
+      });
+
+      final url = await server.start(
+        configDir: Directory('${tmp.path}/server'),
+        cacheDir: Directory('${tmp.path}/cache/server'),
+        port: 0,
+      );
+
+      // A cache this film does not fit in, because that is the condition
+      // the window row reports on: where the budget covers the stream
+      // nothing is bounding it, what is on the disk is whatever the
+      // cleaner has not aged out yet -- a different quantity -- and the
+      // server answers no window rather than calling that one. The
+      // cleaner's pass is what publishes the budget, so it is run here
+      // and awaited rather than waited for.
+      await server.updateSettings({'cacheSize': 4 * 1024 * 1024});
+      await server.cleanCacheNow();
+
+      // The URL a player is handed for a stream that is not a torrent: the
+      // origin escaped into `d=`, this player's token beside it, and the
+      // file's own path and query on the outside -- the shape
+      // `proxiedThroughServer` writes, spelled out here because it
+      // (correctly) declines to wrap a loopback origin.
+      final proxied = Uri.parse(
+        '${url.origin}/proxy/'
+        'd=${Uri.encodeComponent('http://127.0.0.1:${origin.port}')}'
+        '&p=player-1/film.mp4?v=7',
+      );
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final response = await (await client.getUrl(proxied)).close();
+      expect(response.statusCode, 200);
+      var received = 0;
+      await for (final bytes in response) {
+        received += bytes.length;
+      }
+      expect(received, film.length);
+
+      // The answer this path exists for, decoded off the wire and not an
+      // absence: a window over a stream this server is holding, asked with
+      // the URL the player was handed and nothing besides. That URL is the
+      // whole of the question -- the query on it is the target's own, so it
+      // is part of the stream's name, and the path alone names no stream at
+      // all.
+      final numbers = await server.streamNumbers(proxied);
+      expect(numbers, isNotNull);
+      final window = numbers!.window;
+      expect(window, isNotNull);
+      // What is on the disk is some of the film and never more than it.
+      // Which chunks are down at this instant is the cleaner's business
+      // and not this call's, so nothing here counts them.
+      expect(
+        window!.behindBytes + window.aheadBytes,
+        lessThanOrEqualTo(film.length),
+      );
+      // And no sharing row: a proxied response is relayed, never seeded,
+      // so there is no committed set and no ratio to draw.
+      expect(numbers.sharing, isNull);
     },
   );
 }
