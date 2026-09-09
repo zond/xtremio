@@ -639,10 +639,31 @@ void main() {
                 ),
               ),
             ),
-            ['sharing  ↑ 2.1 GB ↓ 0 B'],
+            ['sharing  ↑ 2.1 GB ↓ 0 B since it went live'],
           );
         },
       );
+
+      test('the bytes carry the period even with no ratio beside them', () {
+        // The same seeding torrent, said as the rule rather than as the
+        // shape: the period belongs to the counters, so it cannot leave
+        // with the ratio. Uploaded gigabytes under no period at all read
+        // as everything this torrent has ever given back, when they are
+        // one live period's -- and the idle sweep dropping the engine and
+        // a later stream re-adding it starts that period again.
+        final seeding = rows(
+          const SharingNumbers(
+            committedBytes: 859832320,
+            transfer: LiveTransfer(
+              downloadedBytes: 0,
+              uploadedBytes: 2100000000,
+            ),
+          ),
+        );
+        expect(seeding, [
+          'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 0 B since it went live',
+        ]);
+      });
     },
   );
 

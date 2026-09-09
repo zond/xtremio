@@ -431,18 +431,29 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// deliberate: every other client shows a ratio kept per torrent across
   /// restarts, and the alternative here was storing counters something
   /// then has to keep true, which is a claim about a past nothing watched.
+  ///
+  /// So the period is said over the bytes and the ratio together, as one
+  /// part of the row rather than as a tail on the ratio. The ratio is the
+  /// half that goes missing -- a torrent resumed onto a complete file and
+  /// seeded from it has downloaded nothing, so there is no ratio to draw
+  /// -- and a period hung on the ratio alone leaves exactly that torrent
+  /// reading `↑ 2.1 GB ↓ 0 B` with nothing saying which stretch of
+  /// seeding it is. That is the one row where the number needs it most:
+  /// it is the number a viewer reads as everything this torrent has ever
+  /// given back.
   static List<String> describeSharing(StreamNumbers? held) {
     final sharing = held?.sharing;
     if (sharing == null) return const [];
     final transfer = sharing.transfer;
+    final ratio = transfer?.ratio;
     final parts = [
       if (sharing.committedBytes case final committed?)
         '${formatBytes(committed)} committed',
       if (transfer != null)
         '↑ ${formatBytes(transfer.uploadedBytes)}'
-            ' ↓ ${formatBytes(transfer.downloadedBytes)}',
-      if (transfer?.ratio case final ratio?)
-        '${ratio.toStringAsFixed(2)} since it went live',
+            ' ↓ ${formatBytes(transfer.downloadedBytes)}'
+            '${ratio == null ? '' : ' · ${ratio.toStringAsFixed(2)}'}'
+            ' since it went live',
     ];
     return parts.isEmpty ? const [] : ['sharing  ${parts.join(' · ')}'];
   }
