@@ -56,26 +56,21 @@ void main() {
   );
 
   /// A player whose stream is playing, with the engine reporting [playing].
+  ///
+  /// [embeddedServer] false is a build with no server of its own: the same
+  /// playback with nothing of ours to ask, which is the only thing those
+  /// tests want said differently.
   Future<PlayerHarness> pumpPlaying(
     WidgetTester tester, {
     Map<String, dynamic>? player,
     Map<String, dynamic>? stream,
+    bool embeddedServer = true,
   }) async {
-    final harness = PlayerHarness(player: player, stream: stream);
-    harness.torrentStats.response = const TorrentStats(
-      phase: TorrentPhase.ready,
+    final harness = PlayerHarness(
+      player: player,
+      stream: stream,
+      embeddedServer: embeddedServer,
     );
-    await harness.pump(tester);
-    harness.engine.emitDuration(const Duration(minutes: 96));
-    harness.engine.emitPlaying(true);
-    await pumpEvents(tester);
-    return harness;
-  }
-
-  /// The same, on a build with no embedded server: what the player runs
-  /// under where there is nothing of ours to ask.
-  Future<PlayerHarness> pumpPlayingWithoutServer(WidgetTester tester) async {
-    final harness = PlayerHarness(embeddedServer: false);
     harness.torrentStats.response = const TorrentStats(
       phase: TorrentPhase.ready,
     );
@@ -430,7 +425,7 @@ void main() {
     // against a server that was running then -- so the URL alone cannot
     // say there is one now, and the rule that does is "no server here, so
     // nothing here served this".
-    final harness = await pumpPlayingWithoutServer(tester);
+    final harness = await pumpPlaying(tester, embeddedServer: false);
     harness.streamNumbers.response = held;
 
     await openPanel(tester, harness);
