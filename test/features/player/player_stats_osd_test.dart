@@ -92,8 +92,11 @@ void main() {
     expect(engine.sampling, isTrue);
     // Named for mpv, which is what has nothing yet: the rows the server
     // answers are drawn beside it while it collects (see
-    // player_stats_osd_held_test).
-    expect(find.text(PlaybackStatsOverlay.collecting), findsOneWidget);
+    // player_stats_osd_held_test). Spelled out here, and in the label
+    // column the rows below use, because it is a line somebody reads off
+    // the screen: written as the constant it would say whatever the
+    // constant says.
+    expect(find.text('mpv      collecting…'), findsOneWidget);
 
     engine.emitStats(softwareStats);
     await tester.pump();
