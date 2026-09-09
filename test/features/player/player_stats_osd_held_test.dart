@@ -72,6 +72,20 @@ void main() {
     return harness;
   }
 
+  /// The same, on a build with no embedded server: what the player runs
+  /// under where there is nothing of ours to ask.
+  Future<PlayerHarness> pumpPlayingWithoutServer(WidgetTester tester) async {
+    final harness = PlayerHarness(embeddedServer: false);
+    harness.torrentStats.response = const TorrentStats(
+      phase: TorrentPhase.ready,
+    );
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(minutes: 96));
+    harness.engine.emitPlaying(true);
+    await pumpEvents(tester);
+    return harness;
+  }
+
   testWidgets('the panel asks about the stream on screen, and only while up', (
     tester,
   ) async {
@@ -351,6 +365,27 @@ void main() {
     expect(harness.streamNumbers.requests, isEmpty);
     await tester.pump(PlayerScreen.streamNumbersInterval * 3);
     expect(harness.streamNumbers.requests, isEmpty);
+    expect(row('cache    12.0s mpv'), findsOneWidget);
+    expect(find.textContaining('sharing'), findsNothing);
+  });
+
+  testWidgets('a build with no server of its own is asked nothing', (
+    tester,
+  ) async {
+    // No embedded server at all (`CoreInitInfo.serverBaseUrl` null). The
+    // recorded fixture's stream URL is still a loopback one -- it was taken
+    // against a server that was running then -- so the URL alone cannot
+    // say there is one now, and the rule that does is "no server here, so
+    // nothing here served this".
+    final harness = await pumpPlayingWithoutServer(tester);
+    harness.streamNumbers.response = held;
+
+    await openPanel(tester, harness);
+    expect(overlay, findsOneWidget);
+    expect(harness.streamNumbers.requests, isEmpty);
+    await tester.pump(PlayerScreen.streamNumbersInterval * 3);
+    expect(harness.streamNumbers.requests, isEmpty);
+    // mpv's own cache row and nothing else: no window, no sharing.
     expect(row('cache    12.0s mpv'), findsOneWidget);
     expect(find.textContaining('sharing'), findsNothing);
   });

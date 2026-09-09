@@ -1206,6 +1206,35 @@ void main() {
     expect(overlay, findsNothing);
   });
 
+  testWidgets('a build with no server of its own asks nowhere either', (
+    tester,
+  ) async {
+    // No embedded server: `CoreInitInfo.serverBaseUrl` is null, which is
+    // how a build without one reports itself. The recorded fixture's
+    // torrent URL is on a loopback address all the same -- it was taken
+    // against a server, and a URL cannot say whether one is running now --
+    // so "is this ours" has to answer no on the strength of there being no
+    // server here at all. There is nothing to poll, and every number the
+    // card would draw would be about an engine this process does not have.
+    final harness = PlayerHarness(embeddedServer: false)
+      ..torrentStats.response = const TorrentStats(
+        phase: TorrentPhase.buffering,
+      );
+    // By hand rather than through `harness.pump`, as above: with no card up
+    // there is nothing indeterminate to settle.
+    await tester.pumpWidget(harness.build());
+    await tester.pump();
+    await tester.pump();
+    expect(harness.engine.opened.single.$1.host, '127.0.0.1');
+
+    await poll(tester);
+    await poll(tester);
+    expect(harness.torrentStats.requests, isEmpty);
+    expect(harness.calls, isNot(contains('stats')));
+    expect(harness.dhtStatusReads, 0);
+    expect(overlay, findsNothing);
+  });
+
   testWidgets('a playing signal also ends it', (tester) async {
     final harness = PlayerHarness();
     await harness.pump(tester);
