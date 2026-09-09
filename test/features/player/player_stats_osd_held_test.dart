@@ -369,6 +369,53 @@ void main() {
     expect(find.textContaining('sharing'), findsNothing);
   });
 
+  testWidgets('a stream off another server on this host is not ours either', (
+    tester,
+  ) async {
+    // A streaming server configured on this very machine: the standard
+    // `http://127.0.0.1:11470/`, while the embedded server here is on the
+    // ephemeral port it bound at start-up. The host is the same host, and
+    // the stream is still not one this server is serving -- the bytes are
+    // held by that other server, under its own engine for this info hash,
+    // and the embedded one would answer about an engine of its own. So the
+    // port is as much of the answer as the host is.
+    final fixture = loadPlayerFixture();
+    final stream = Map<String, dynamic>.from(fixture['stream'] as Map);
+    final content = List<Object?>.from(stream['content'] as List);
+    final hash = PlayerState.fromJson(fixture).streamingUrl!.pathSegments[0];
+    content[0] = {
+      ...content[0]! as Map<String, dynamic>,
+      'streaming_url': 'http://127.0.0.1:11470/$hash/0',
+    };
+    final harness = await pumpPlaying(
+      tester,
+      player: {
+        ...fixture,
+        'stream': {...stream, 'content': content},
+      },
+    );
+    final opened = harness.engine.opened.last.$1;
+    expect(opened.host, PlayerHarness.recordedServerBaseUrl.host);
+    expect(opened.port, isNot(PlayerHarness.recordedServerBaseUrl.port));
+    harness.streamNumbers.response = held;
+
+    await openPanel(tester, harness);
+    expect(overlay, findsOneWidget);
+    expect(harness.streamNumbers.requests, isEmpty);
+    await tester.pump(PlayerScreen.streamNumbersInterval * 3);
+    expect(harness.streamNumbers.requests, isEmpty);
+    expect(row('cache    12.0s mpv'), findsOneWidget);
+    expect(find.textContaining('sharing'), findsNothing);
+
+    // And nothing asked of the stats route either, which is the half that
+    // does harm by being asked: it takes a bare info hash and creates the
+    // engine it is asked about, so the swarm rows and the start-up card
+    // would be drawn off an add this device started for a film playing off
+    // the other server.
+    await tester.pump(PlayerScreen.torrentStatsInterval * 3);
+    expect(harness.torrentStats.requests, isEmpty);
+  });
+
   testWidgets('a build with no server of its own is asked nothing', (
     tester,
   ) async {
