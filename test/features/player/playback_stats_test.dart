@@ -522,6 +522,25 @@ void main() {
       );
     });
 
+    test('a bitrate of zero is no rate either, and not a division by one', () {
+      // mpv answers `video-bitrate` as 0 rather than leaving it out on
+      // plenty of files -- the panel's own bitrate row has a place for
+      // that reading. Bytes over nothing is not a length of watching: the
+      // seconds come out infinite, and asking for a `Duration` of that
+      // throws out of the panel's build rather than drawing anything at
+      // all. So zero is treated as the absence it is, and the halves go on
+      // in bytes alone.
+      final lines = rows(
+        videoBitrate: 0,
+        window: const CacheWindow(behindBytes: 1288490188, aheadBytes: 0),
+      );
+      expect(lines, contains('bitrate  0 bps'));
+      expect(
+        cacheRow(lines),
+        'cache    294.6s mpv · behind 1.3 GB · ahead 0 B',
+      );
+    });
+
     test('nothing bounding the stream leaves the row mpv\'s alone', () {
       // A torrent the budget covers has no policy and so no window, and a
       // stream this server does not hold has neither. Dashes there would
