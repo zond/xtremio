@@ -647,10 +647,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// until the server answers for this torrent).
   ///
   /// [_torrentStatsRequest] is set for as long as the player is on a
-  /// torrent -- what is polled *for* -- and the timer is what says whether
-  /// anything is waiting on it: every
-  /// [PlayerScreen.torrentStatsInterval] until the media loads, then off
-  /// until something wants the numbers again -- a stall, at
+  /// torrent **this device's server is the one serving** -- what is polled
+  /// *for* -- and the timer is what says whether anything is waiting on
+  /// it: every [PlayerScreen.torrentStatsInterval] until the media loads,
+  /// then off until something wants the numbers again -- a stall, at
   /// [PlayerScreen.torrentStallStatsInterval], or the stats OSD, at the
   /// slower [PlayerScreen.torrentStatsOverlayInterval] ([_syncTorrentStats],
   /// which also owns [_torrentStatsCadence], the period the running timer
@@ -660,6 +660,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// its initial window; when the server has no answer for that (an index
   /// the torrent turns out not to have) a poll asks for the torrent-level
   /// [_torrentStatsFallback] instead.
+  ///
+  /// So null means one of three playbacks, not one: not on a torrent at
+  /// all, on a torrent playing off a streaming server on another machine
+  /// ([_servedHere], which [_startTorrentStats] returns on before it
+  /// records anything), or a build with no embedded server to ask. Read it
+  /// as "there is a torrent here we can ask our own server about", which
+  /// is what everything downstream of it is entitled to assume.
   TorrentStatsClient? _torrentStatsClient;
   TorrentStatsRequest? _torrentStatsRequest;
   TorrentStatsRequest? _torrentStatsFallback;
@@ -3653,9 +3660,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       facts: _streamFacts,
       filename: castFilename(state, serverFilename: _serverFilename),
       stats: _lastStats,
-      // A torrent the server has not named the file of yet: the answer is
-      // "not until it has", and it comes without reopening anything, since
-      // the poll that names it rebuilds this screen.
+      // A torrent *this device's server is serving* and has not named the
+      // file of yet: the answer is "not until it has", and it comes
+      // without reopening anything, since the poll that names it rebuilds
+      // this screen. A torrent playing off another machine records no
+      // request, so it is not pending here and the container is judged
+      // from what there is -- right, because nothing on this device is
+      // ever going to name that file, and "try again in a moment" would
+      // be a wait that never ends.
       containerPending: _torrentStatsRequest != null && _serverFilename == null,
     );
     if (compatibility is CastRefused) {
