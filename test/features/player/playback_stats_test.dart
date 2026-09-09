@@ -551,33 +551,36 @@ void main() {
   });
 
   group(
-    'the sharing row is a torrent\'s promises and this session\'s bytes',
+    'the sharing row is a torrent\'s promises and its live period\'s bytes',
     () {
       List<String> rows(SharingNumbers? sharing) =>
           PlaybackStatsOverlay.describeSharing(
             sharing == null ? null : StreamNumbers(sharing: sharing),
           );
 
-      test(
-        'committed, both directions, and the ratio said to be a session\'s',
-        () {
-          expect(
-            rows(
-              const SharingNumbers(
-                committedBytes: 859832320,
-                transfer: SessionTransfer(
-                  downloadedBytes: 4800000000,
-                  uploadedBytes: 2100000000,
-                  ratio: 0.4375,
-                ),
+      test('committed, both directions, and the ratio said to be a live '
+          'period\'s', () {
+        // "since it went live" and not "this session": the counters are
+        // the live state's own, so a pause and resume or an idle drop
+        // and re-add starts them at zero again. A viewer whose torrent
+        // shared gigabytes half an hour ago is looking at ↑ 0 B, and the
+        // words beside it must be true of that.
+        expect(
+          rows(
+            const SharingNumbers(
+              committedBytes: 859832320,
+              transfer: LiveTransfer(
+                downloadedBytes: 4800000000,
+                uploadedBytes: 2100000000,
+                ratio: 0.4375,
               ),
             ),
-            [
-              'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 this session',
-            ],
-          );
-        },
-      );
+          ),
+          [
+            'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live',
+          ],
+        );
+      });
 
       test('a stream with no swarm has no row at all', () {
         // A proxied response is not seeded: no committed set, no ratio. A
@@ -599,14 +602,14 @@ void main() {
         expect(
           rows(
             const SharingNumbers(
-              transfer: SessionTransfer(
+              transfer: LiveTransfer(
                 downloadedBytes: 4800000000,
                 uploadedBytes: 2100000000,
                 ratio: 0.4375,
               ),
             ),
           ),
-          ['sharing  ↑ 2.1 GB ↓ 4.8 GB · 0.44 this session'],
+          ['sharing  ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live'],
         );
       });
 
@@ -630,7 +633,7 @@ void main() {
           expect(
             rows(
               const SharingNumbers(
-                transfer: SessionTransfer(
+                transfer: LiveTransfer(
                   downloadedBytes: 0,
                   uploadedBytes: 2100000000,
                 ),

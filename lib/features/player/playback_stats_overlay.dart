@@ -381,13 +381,19 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// counters cannot be read (paused, checking, stopped for space, in
   /// error) has moved whatever it moved before that, not nothing.
   ///
-  /// **The transfer is this session's and says so.** These are the
-  /// server's own counters, which begin at zero when the torrent is added
-  /// to the running process and are never written down: what the same
-  /// torrent moved last week is not in them. Every other client shows a
-  /// ratio kept per torrent across restarts, so the word is on the row --
-  /// the alternative was storing counters something then has to keep true,
-  /// which is a claim about a past nothing here watched.
+  /// **The transfer covers this torrent's current live period, and the row
+  /// says which.** These are the server's own counters and they live in
+  /// the torrent's live state (`enginefs::backend::TransferTotals`: they
+  /// start at zero when a torrent goes live and are gone -- not zero --
+  /// when it leaves that state). So a pause and resume starts them again,
+  /// and so does the idle sweep dropping the engine before a later stream
+  /// re-adds it: a torrent that shared gigabytes twenty minutes ago really
+  /// does read `↑ 0 B` here, and `this session` over that number would be
+  /// a claim about a stretch of watching these counters never covered.
+  /// They are not written down either, which is the other half and is
+  /// deliberate: every other client shows a ratio kept per torrent across
+  /// restarts, and the alternative here was storing counters something
+  /// then has to keep true, which is a claim about a past nothing watched.
   static List<String> describeSharing(StreamNumbers? held) {
     final sharing = held?.sharing;
     if (sharing == null) return const [];
@@ -399,7 +405,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
         '↑ ${formatBytes(transfer.uploadedBytes)}'
             ' ↓ ${formatBytes(transfer.downloadedBytes)}',
       if (transfer?.ratio case final ratio?)
-        '${ratio.toStringAsFixed(2)} this session',
+        '${ratio.toStringAsFixed(2)} since it went live',
     ];
     return parts.isEmpty ? const [] : ['sharing  ${parts.join(' · ')}'];
   }

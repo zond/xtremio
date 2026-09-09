@@ -124,9 +124,9 @@ final class SharingNumbers {
   /// promised nothing whatever it announces.
   final int? committedBytes;
 
-  /// What the torrent has moved this session, or null where the backend
-  /// has no counters to read. See [SessionTransfer].
-  final SessionTransfer? transfer;
+  /// What the torrent has moved since it last went live, or null where the
+  /// backend has no counters to read. See [LiveTransfer].
+  final LiveTransfer? transfer;
 
   /// The sharing numbers in a `sharing` value, or null for the null a
   /// proxied stream answers with. A `sharing` with neither half in it is
@@ -135,7 +135,7 @@ final class SharingNumbers {
     if (value is! Map) return null;
     final numbers = SharingNumbers(
       committedBytes: (value['committedBytes'] as num?)?.toInt(),
-      transfer: SessionTransfer.fromJson(value['transfer']),
+      transfer: LiveTransfer.fromJson(value['transfer']),
     );
     return numbers.committedBytes == null && numbers.transfer == null
         ? null
@@ -156,41 +156,48 @@ final class SharingNumbers {
       'SharingNumbers(committed: $committedBytes B, transfer: $transfer)';
 }
 
-/// What a torrent has fetched and sent **in this session**, and the ratio of
-/// the two.
+/// What a torrent has fetched and sent **since it went live**, and the
+/// ratio of the two.
 ///
-/// **The session's, and deliberately not the torrent's.** Conventional
-/// BitTorrent clients keep a ratio per torrent across restarts; that would
-/// mean counters stored on disk which something then has to keep true, and
-/// a stored counter read back as an observation is exactly the claim about
-/// an unseen past this codebase keeps having to unship. These are
-/// librqbit's own per-torrent counters, which begin at zero when the
-/// torrent is added to the running process, so whatever the same torrent
-/// moved last week is not in them and is not pretended to be. Whoever draws
-/// them says so.
+/// **One live period's, and deliberately not the torrent's.** These are
+/// librqbit's own per-torrent counters, which the backend reads out of the
+/// live state and out of nowhere else
+/// (`enginefs::backend::TransferTotals`: "they start at zero when a torrent
+/// goes live and are gone when it leaves that state"). So a pause and
+/// resume starts them over, and so does the idle sweep dropping the engine
+/// before a later stream re-adds it -- whatever the same torrent moved
+/// before that is not in them and is not pretended to be. It is not the
+/// process's lifetime either, which is why nothing here says "session".
+/// Whoever draws them says which period they cover.
+///
+/// Not stored, and that is the other half of it. Conventional BitTorrent
+/// clients keep a ratio per torrent across restarts; that would mean
+/// counters on disk which something then has to keep true, and a stored
+/// counter read back as an observation is exactly the claim about an
+/// unseen past this codebase keeps having to unship.
 ///
 /// The three stand or fall together, which is why they are one value rather
 /// than three fields on [SharingNumbers]: the counters live in a torrent's
 /// live state, so one that is paused, checking, stopped for space or in
 /// error has none to read -- and a torrent that moved gigabytes and then
 /// paused has not moved nothing.
-final class SessionTransfer {
-  const SessionTransfer({
+final class LiveTransfer {
+  const LiveTransfer({
     required this.downloadedBytes,
     required this.uploadedBytes,
     this.ratio,
   });
 
-  /// Bytes fetched from peers since this process added the torrent.
+  /// Bytes fetched from peers since the torrent last went live.
   final int downloadedBytes;
 
-  /// Bytes sent to peers since this process added the torrent.
+  /// Bytes sent to peers since the torrent last went live.
   final int uploadedBytes;
 
   /// Uploaded over downloaded, the form every BitTorrent client shows.
   ///
   /// Null when nothing has been downloaded: a ratio against zero is not
-  /// `0.00`, it is undefined, and a session that has uploaded something
+  /// `0.00`, it is undefined, and a torrent that has uploaded something
   /// must never be drawn as one that has shared nothing.
   final double? ratio;
 
@@ -198,12 +205,12 @@ final class SessionTransfer {
   /// sends where the counters cannot be read. Either byte count missing
   /// drops the whole group, for the same reason the server sends it as a
   /// group.
-  static SessionTransfer? fromJson(Object? value) {
+  static LiveTransfer? fromJson(Object? value) {
     if (value is! Map) return null;
     final downloaded = (value['downloadedBytes'] as num?)?.toInt();
     final uploaded = (value['uploadedBytes'] as num?)?.toInt();
     if (downloaded == null || uploaded == null) return null;
-    return SessionTransfer(
+    return LiveTransfer(
       downloadedBytes: downloaded,
       uploadedBytes: uploaded,
       ratio: (value['ratio'] as num?)?.toDouble(),
@@ -212,7 +219,7 @@ final class SessionTransfer {
 
   @override
   bool operator ==(Object other) =>
-      other is SessionTransfer &&
+      other is LiveTransfer &&
       other.downloadedBytes == downloadedBytes &&
       other.uploadedBytes == uploadedBytes &&
       other.ratio == ratio;
@@ -222,6 +229,6 @@ final class SessionTransfer {
 
   @override
   String toString() =>
-      'SessionTransfer(down: $downloadedBytes B, up: $uploadedBytes B, '
+      'LiveTransfer(down: $downloadedBytes B, up: $uploadedBytes B, '
       'ratio: $ratio)';
 }

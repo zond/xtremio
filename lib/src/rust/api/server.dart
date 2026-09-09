@@ -173,9 +173,11 @@ Future<String> serverBackgroundTraffic() =>
 /// error. A torrent that has moved gigabytes and then paused has not moved
 /// nothing.
 ///
-/// **The transfer totals are this session's** -- librqbit's per-torrent
-/// counters, which begin at zero when the torrent is added to this process
-/// -- and the ratio taken from them must be labelled as one. Nothing is
+/// **The transfer totals cover the torrent's current live period** --
+/// librqbit's per-torrent counters, which live in the live state and start
+/// at zero each time the torrent enters it, so a pause and resume or an
+/// idle drop and re-add starts them over -- and the ratio taken from them
+/// must be labelled as that period and not as the session. Nothing is
 /// persisted, so nothing read back here is a claim about a past this
 /// process never saw.
 ///

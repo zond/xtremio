@@ -426,10 +426,12 @@ pub fn background_traffic() -> anyhow::Result<BackgroundTraffic> {
 ///
 /// **Every number is measured when it is asked for and none of it is
 /// kept.** In particular the transfer totals are librqbit's own per-torrent
-/// counters, which start at zero when the torrent is added to *this*
-/// process: the ratio taken from them is this session's and a caller must
-/// label it as one. Nothing here is read off disk, so nothing here is a
-/// claim about a past this process never saw.
+/// counters, which live in the torrent's live state and start at zero every
+/// time it enters one (`enginefs::backend::TransferTotals`): the ratio
+/// taken from them covers that live period and not the process's lifetime,
+/// since a pause and resume or an idle drop and re-add begins it again, and
+/// a caller must label it as the period it is. Nothing here is read off
+/// disk, so nothing here is a claim about a past this process never saw.
 ///
 /// A peek, like [`background_traffic`]: it creates no engine, starts no
 /// magnet add and touches no idle clock, so a panel asking every few

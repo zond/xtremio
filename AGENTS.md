@@ -760,15 +760,25 @@ and every absence in that answer is one of these:
   checking, stopped for space, in error -- has moved whatever it moved
   before that, so the bytes and the ratio go absent together.
 
-- **The ratio is this session's and the row says so.** The counters begin
-  at zero when the torrent is added to the running process and are never
-  written down, which is deliberate: every other BitTorrent client keeps
-  a ratio per torrent across restarts, and doing that here would mean
-  storing counters something then has to keep true. A stored counter read
-  back as an observation is the bug this codebase keeps shipping. Label
-  it, do not persist it. A ratio against nothing downloaded is left out
-  rather than drawn `0.00`, which would tell a viewer they have shared
-  nothing while they are seeding.
+- **The ratio covers the torrent's current live period, and the row says
+  which.** The counters are the live state's own -- stream-server's
+  `enginefs/src/backend/mod.rs`: "they start at zero when a torrent goes
+  live and are gone when it leaves that state (paused, errored,
+  removed)", and `librqbit.rs` reads them from `ManagedTorrentState::Live`
+  and nowhere else. So a pause and resume starts them over, and so does
+  the idle sweep dropping the engine before a later stream re-adds it: the
+  row really does read `↑ 0 B` for a torrent that shared gigabytes twenty
+  minutes ago. `since it went live` is what it says for that reason, and
+  `this session` is what it must not say -- a number that restarts several
+  times an evening drawn under a word that means the whole sitting is the
+  same false claim as a stored counter, made in the label instead of on
+  disk. Not persisting them is the other half and is deliberate: every
+  other BitTorrent client keeps a ratio per torrent across restarts, and
+  doing that here would mean storing counters something then has to keep
+  true. A stored counter read back as an observation is the bug this
+  codebase keeps shipping. Label it, do not persist it. A ratio against
+  nothing downloaded is left out rather than drawn `0.00`, which would
+  tell a viewer they have shared nothing while they are seeding.
 
 **The ask is the URL the engine was handed, and only when it is ours.**
 `PlayerScreen._heldStreamUrl` is `_engineUrl` -- recorded by `_open`, the

@@ -47,7 +47,7 @@ void main() {
     window: CacheWindow(behindBytes: 1200000000, aheadBytes: 340000000),
     sharing: SharingNumbers(
       committedBytes: 820000000,
-      transfer: SessionTransfer(
+      transfer: LiveTransfer(
         downloadedBytes: 4800000000,
         uploadedBytes: 2100000000,
         ratio: 0.4375,
@@ -108,7 +108,7 @@ void main() {
     );
     expect(
       row(
-        'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 this session',
+        'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live',
       ),
       findsOneWidget,
     );
@@ -150,7 +150,7 @@ void main() {
       await openPanel(tester, harness);
       expect(
         row(
-          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 this session',
+          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live',
         ),
         findsOneWidget,
       );
@@ -172,7 +172,7 @@ void main() {
       await pumpEvents(tester);
       expect(
         row(
-          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 this session',
+          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it went live',
         ),
         findsOneWidget,
       );
