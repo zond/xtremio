@@ -11,6 +11,7 @@ import '../support/fake_core_client.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
+import '../support/player_harness.dart';
 
 void main() {
   Widget harness(
@@ -21,6 +22,14 @@ void main() {
     ResourceRequest? metaRequest,
   }) => CoreScope(
     client: core,
+    // The recorded fixture's streams are on this build's own embedded
+    // server, as they are in the app: what the player asks that server
+    // about is what it is serving, and a fake core reporting no server at
+    // all would put every one of these streams on somebody else's machine.
+    initInfo: CoreInitInfo(
+      serverBaseUrl: PlayerHarness.recordedServerBaseUrl,
+      schemaVersion: core.initInfo.schemaVersion,
+    ),
     child: PlaybackScope(
       createEngine: () => engine,
       torrentStats: FakeTorrentStatsClient(),
@@ -317,7 +326,13 @@ void main() {
       },
     });
     await tester.pumpAndSettle();
-    expect(engine.opened.single.$1.host, 'test-videos.co.uk');
+    // Opened at last -- and through this build's own `/proxy` route, since
+    // the stream is on somebody else's host, which is what that route is
+    // for (stream_proxy_test). What this test is about is that nothing was
+    // opened before the core had resolved something to open.
+    final opened = engine.opened.single.$1;
+    expect(opened.host, PlayerHarness.recordedServerBaseUrl.host);
+    expect(opened.toString(), contains('test-videos.co.uk'));
     expect(find.text('Big Buck Bunny (HTTP, 720p 10s)'), findsOneWidget);
   });
 }

@@ -8,6 +8,7 @@ import 'package:xtremio/features/player/torrent_progress_card.dart';
 import 'package:xtremio/features/player/torrent_stall_overlay.dart';
 import 'package:xtremio/features/player/torrent_startup_overlay.dart';
 
+import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// The pre-playback overlay: what the server's `stats.json` says a torrent
@@ -1012,8 +1013,11 @@ void main() {
             'type': 'Ready',
             'content': [
               {
+                // On the harness's own embedded server: a torrent on any
+                // other host or port is one this device does not ask about.
                 'streaming_url':
-                    'http://127.0.0.1:33759/${DevStreams.bigBuckBunnyTorrent['infoHash']}/-1',
+                    '${PlayerHarness.recordedServerBaseUrl}'
+                    '/${DevStreams.bigBuckBunnyTorrent['infoHash']}/-1',
               },
               DevStreams.bigBuckBunnyTorrent,
             ],
@@ -1117,8 +1121,11 @@ void main() {
           'type': 'Ready',
           'content': [
             {
+              // On the harness's own embedded server: a torrent on any
+              // other host or port is one this device does not ask about.
               'streaming_url':
-                  'http://127.0.0.1:33759/${DevStreams.bigBuckBunnyTorrent['infoHash']}/-1',
+                  '${PlayerHarness.recordedServerBaseUrl}'
+                  '/${DevStreams.bigBuckBunnyTorrent['infoHash']}/-1',
             },
             DevStreams.bigBuckBunnyTorrent,
           ],
@@ -1149,6 +1156,54 @@ void main() {
     await harness.pump(tester);
     expect(harness.calls.first, 'open');
     expect(harness.calls, contains('stats'));
+  });
+
+  testWidgets('a torrent playing off another machine is asked about nowhere', (
+    tester,
+  ) async {
+    // A streaming server configured on another machine. A torrent has an
+    // info hash, so it goes straight there with no proxy, and the server
+    // this device can ask is the embedded one -- which knows nothing about
+    // that playback, and would not say so: the stats route takes a bare
+    // info hash and creates the engine it is asked about. So the ask would
+    // start an add here for a film coming off somebody else's box, and the
+    // card this poll draws would be measuring that add and not the
+    // playback it is over.
+    final fixture = loadPlayerFixture();
+    final stream = Map<String, dynamic>.from(fixture['stream'] as Map);
+    final content = List<Object?>.from(stream['content'] as List);
+    final hash = PlayerState.fromJson(fixture).streamingUrl!.pathSegments[0];
+    content[0] = {
+      ...content[0]! as Map<String, dynamic>,
+      'streaming_url': 'http://192.168.7.20:11470/$hash/0',
+    };
+    final harness =
+        PlayerHarness(
+            player: {
+              ...fixture,
+              'stream': {...stream, 'content': content},
+            },
+          )
+          ..torrentStats.response = const TorrentStats(
+            phase: TorrentPhase.buffering,
+          );
+    // By hand rather than through `harness.pump`: with no card up there is
+    // nothing indeterminate to settle, and a failure here should read as
+    // the ask that was made and not as a settle that timed out.
+    await tester.pumpWidget(harness.build());
+    await tester.pump();
+    await tester.pump();
+    expect(harness.engine.opened.single.$1.host, '192.168.7.20');
+
+    await poll(tester);
+    await poll(tester);
+    expect(harness.torrentStats.requests, isEmpty);
+    expect(harness.calls, isNot(contains('stats')));
+    // Nor the DHT here, which is read for this poll and explains this
+    // device's own trouble finding peers, not another machine's.
+    expect(harness.dhtStatusReads, 0);
+    // And no card either: every number on it would be the local engine's.
+    expect(overlay, findsNothing);
   });
 
   testWidgets('a playing signal also ends it', (tester) async {

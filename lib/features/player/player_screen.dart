@@ -1216,6 +1216,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return proxied;
   }
 
+  /// Whether [url] is a stream this device's embedded server is the one
+  /// serving -- the single rule behind both of the questions this screen
+  /// asks that server about a stream ([_heldStreamUrl] and
+  /// [_startTorrentStats]).
+  ///
+  /// The server answers on the path and the `f=` query alone and says so
+  /// deliberately (`stream_numbers::parse`: the host a caller would have
+  /// to invent to be allowed to ask decides nothing), and the stats route
+  /// takes an info hash with no host in it at all. Neither can tell whose
+  /// stream it is being asked about, so it is whoever asks that has to
+  /// only ask about streams this server serves -- and with a streaming
+  /// server configured on another machine a torrent is not one of them:
+  /// it has an info hash, so [_mediaUrl] sends it straight to that machine
+  /// with `buffer=` and no proxy, while the embedded server here keeps
+  /// running and would answer for the same hash out of *its* own engine.
+  ///
+  /// Which is the milder half of it for the stats route, because asking
+  /// creates that engine (`ServerClient.torrentStats`): a film playing off
+  /// somebody else's box would start an add on this device, and the
+  /// panel's speed, seeds and peers rows -- and the start-up and stall
+  /// cards behind them -- would then be measuring that local add rather
+  /// than the playback they are drawn over.
+  ///
+  /// False with no embedded server at all ([_serverBase] null): there is
+  /// no server here to have served anything.
+  bool _servedHere(Uri? url) {
+    final base = _serverBase;
+    if (url == null || base == null) return false;
+    return url.host == base.host && url.port == base.port;
+  }
+
   /// The viewer changed the buffer for this playback.
   ///
   /// The window itself only reaches the engine through the URL, and libmpv
@@ -1524,10 +1555,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// [TorrentStatsRequest.forStream]); anything else (a direct HTTP stream)
   /// shows no overlay. The first request goes out on the first tick, never
   /// before the engine's `open` has been issued.
+  ///
+  /// A torrent, and one this device's server is the one serving
+  /// ([_servedHere], read off the URL [_open] has just handed the engine).
+  /// A torrent playing off a streaming server on another machine is not
+  /// ours to ask about: this server would answer out of an engine of its
+  /// own for that hash -- and, asked, would start one. No request means no
+  /// polling, and so no swarm rows, no start-up card and no stall card,
+  /// which is right, because every one of them would be describing that
+  /// local engine and not the playback on screen.
   void _startTorrentStats(PlayerState state) {
     _stopTorrentStats();
     final stream = state.selectedStream;
     if (stream?.kind != StreamKind.torrent) return;
+    if (!_servedHere(_engineUrl)) return;
     final request = TorrentStatsRequest.forStream(stream);
     if (request == null) return;
     _torrentStatsRequest = request;
@@ -1718,26 +1759,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// recognises neither store, so the window of every proxied stream would
   /// be missing.
   ///
-  /// And it has to be *our* server's URL. The server dispatches on the
-  /// path and the `f=` query alone and says so deliberately
-  /// (`stream_numbers::parse`: the host a caller would have to invent to
-  /// be allowed to ask decides nothing), which leaves it to whoever asks
-  /// to ask only about streams this server serves. With a streaming server
-  /// configured on another machine a torrent's URL is that machine's --
-  /// [_mediaUrl] sends a torrent straight there, with `buffer=` and no
-  /// proxy -- and the embedded server would answer about *its* engine for
-  /// the same info hash, if it has one from a download or an earlier
-  /// viewing. The sharing row would then be this device's committed set
-  /// and this device's ratio, over a film coming off somebody else's box.
+  /// And it has to be a stream this server is the one serving, which is
+  /// [_servedHere] and is not this row's own rule: the sharing row of a
+  /// film coming off somebody else's box would otherwise be this device's
+  /// committed set and this device's ratio, read out of whatever engine it
+  /// has for that info hash from a download or an earlier viewing.
   ///
   /// `buffer=` on the URL is left on: the server ignores every query key
   /// but `f=`, and stripping it would be a second idea of what the URL is.
   Uri? get _heldStreamUrl {
     final url = _engineUrl;
-    final base = _serverBase;
-    if (url == null || base == null) return null;
-    if (url.host != base.host || url.port != base.port) return null;
-    return url;
+    return _servedHere(url) ? url : null;
   }
 
   /// Drops the last answer and starts again for the stream now open. Called

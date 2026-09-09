@@ -788,6 +788,17 @@ embedded server would answer about *its* engine for the same info hash if
 it has one -- this device's committed set and this device's ratio, over a
 film coming off somebody else's box.
 
+**Both of this screen's asks read that rule from one place**
+(`PlayerScreen._servedHere`), because the swarm poll beside these rows had
+the same hole and a worse consequence. `stats.json` is asked for by info
+hash with no host in it, and `ServerClient.torrentStats` *creates the
+engine it is asked about* -- so a torrent playing off the other machine
+had this device starting an add of its own for it, with the panel's speed,
+seeds and peers rows and the start-up and stall cards then describing that
+add. A torrent this server is not serving gets no stats request, and so
+none of those: `PlayerScreen._startTorrentStats` returns before it records
+one.
+
 Nothing the panel shows outlives the poll that measured it.
 `PlayerScreen._stopStreamNumbers` drops the last answer with the timer,
 because a window and a ratio describe the moment they were read in: kept
