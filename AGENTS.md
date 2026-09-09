@@ -770,14 +770,36 @@ and every absence in that answer is one of these:
   rather than drawn `0.00`, which would tell a viewer they have shared
   nothing while they are seeding.
 
+**The ask is the URL the engine was handed, and only when it is ours.**
+`PlayerScreen._heldStreamUrl` is `_engineUrl` -- recorded by `_open`, the
+one place `_mediaUrl` runs -- and not `_opened`, the URL stremio-core
+published. The two differ for every stream that is not a torrent:
+`_mediaUrl` wraps those in this server's `/proxy` route, which is the
+address their bytes are cached under, and the server decides which of its
+stores a question is about from the path it is asked with. Ask about the
+addon's origin URL and the honest answer is "this server holds nothing of
+that", so half of the cache row would never appear. And the URL has to be
+on `_serverBase`: the server dispatches on the path and the `f=` query
+alone, deliberately (`stream_numbers::parse` -- "the host it would have to
+invent to be allowed to ask decides nothing"), which leaves it to whoever
+asks to ask only about streams this server serves. With a streaming server
+configured on another machine a torrent goes straight there, and the
+embedded server would answer about *its* engine for the same info hash if
+it has one -- this device's committed set and this device's ratio, over a
+film coming off somebody else's box.
+
 Nothing the panel shows outlives the poll that measured it.
 `PlayerScreen._stopStreamNumbers` drops the last answer with the timer,
 because a window and a ratio describe the moment they were read in: kept
 across the panel closing, the app going behind or the next video starting,
 they would come back on screen as a reading of something they were never
-taken from. The poll runs only while the panel is up and the app is in
-front -- nothing else reads these, and the ask costs the server a listing
-of the stream's own directories.
+taken from. An answer already in flight when any of those happens is
+dropped on arrival for the same reason -- the poll checks that the video
+is still the one it asked about (`_opened`, which a re-open for a new
+buffer window does not change, unlike the URL) and that something is still
+polling. The poll runs only while the panel is up and the app is in front
+-- nothing else reads these, and the ask costs the server a listing of the
+stream's own directories.
 
 Units are the panel's own (`formatBitrate`, `formatBytes`, `formatAge`,
 `TorrentProgressCard.formatSpeed`): decimal for anything about a stream,

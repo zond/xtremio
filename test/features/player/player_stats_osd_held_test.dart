@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -7,6 +8,7 @@ import 'package:xtremio/features/player/playback_stats_overlay.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/torrent_stats.dart';
 
+import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// The cache and sharing rows in the stats OSD: what this server holds of
@@ -84,20 +86,21 @@ void main() {
     await tester.pump(PlayerScreen.streamNumbersInterval * 3);
     expect(server.requests, isEmpty);
 
-    // Up: asked at once, about the URL the player was handed -- the whole
-    // of the question this server takes.
+    // Up: asked at once, about the URL the *engine* was handed -- which is
+    // the whole of the question this server takes, because it is the URL
+    // the bytes are held under. Not the one the core published: the player
+    // rewrites that on the way to mpv (`buffer=` here, the `/proxy` route
+    // for anything that is not a torrent), and the server dispatches on
+    // the path and the `f=` filters of the URL it is asked with.
     await openPanel(tester, harness);
     expect(overlay, findsOneWidget);
     expect(server.requests, hasLength(1));
-    // The URL the core published, `tr=` and `f=` filters and all -- which
-    // is what the server dispatches on -- and not the one mpv was handed:
-    // the player adds its own `buffer=` to that, and the file a `-1` URL
-    // names is decided by the filters in the query.
+    expect(server.requests.single, harness.engine.opened.last.$1);
     final published = PlayerState.fromJson(
       harness.core.stateOf(CoreField.player) ?? const {},
     ).streamingUrl;
-    expect(server.requests.single, published);
-    expect(server.requests.single, isNot(harness.engine.opened.last.$1));
+    expect(server.requests.single, isNot(published));
+    expect(server.requests.single.queryParameters['buffer'], 'normal');
 
     expect(
       row('cache    12.0s mpv · behind 1.2 GB/20 min · ahead 340.0 MB/5 min'),
@@ -253,6 +256,16 @@ void main() {
 
     await openPanel(tester, harness);
     expect(harness.streamNumbers.requests, hasLength(1));
+    // Asked about the `/proxy/...` URL mpv was handed and not the addon's
+    // origin URL the core published. This is the whole of why the ask uses
+    // the engine's URL: the bytes of a proxied stream are in this server's
+    // cache under its own route, and the origin URL names a stream it has
+    // never heard of -- which is the answer it would give.
+    final asked = harness.streamNumbers.requests.single;
+    expect(asked, harness.engine.opened.last.$1);
+    expect(asked.host, PlayerHarness.recordedServerBaseUrl.host);
+    expect(asked.pathSegments.first, 'proxy');
+    expect(asked, isNot(Uri.parse(DevStreams.bigBuckBunnyHttp['url']!)));
     expect(
       row('cache    12.0s mpv · behind 60.0 MB/1 min · ahead 30.0 MB/30 s'),
       findsOneWidget,
@@ -260,5 +273,155 @@ void main() {
     expect(find.textContaining('sharing'), findsNothing);
     // Nothing about the swarm either: there is none to describe.
     expect(find.textContaining('speed    '), findsNothing);
+  });
+
+  testWidgets('a stream off another machine is not asked about here', (
+    tester,
+  ) async {
+    // A streaming server configured elsewhere. A torrent goes straight
+    // there -- an info hash needs no proxy -- so the URL the engine is
+    // handed is that machine's, while the server this app can ask is the
+    // embedded one.
+    final fixture = loadPlayerFixture();
+    final stream = Map<String, dynamic>.from(fixture['stream'] as Map);
+    final content = List<Object?>.from(stream['content'] as List);
+    final hash = PlayerState.fromJson(fixture).streamingUrl!.pathSegments[0];
+    content[0] = {
+      ...content[0]! as Map<String, dynamic>,
+      'streaming_url': 'http://192.168.7.20:11470/$hash/0',
+    };
+    final harness = await pumpPlaying(
+      tester,
+      player: {
+        ...fixture,
+        'stream': {...stream, 'content': content},
+      },
+    );
+    expect(harness.engine.opened.last.$1.host, '192.168.7.20');
+    harness.streamNumbers.response = held;
+
+    // The server answers on the path and the `f=` query alone and says so
+    // deliberately: the host is not part of the question, so nothing stops
+    // it answering about *its* engine for this info hash -- one this
+    // device has downloaded, or seeded from an earlier viewing. Those
+    // would be this device's committed set and this device's ratio, drawn
+    // over a film coming off somebody else's box. Not asking is the only
+    // place that can be decided.
+    await openPanel(tester, harness);
+    expect(overlay, findsOneWidget);
+    expect(harness.streamNumbers.requests, isEmpty);
+    await tester.pump(PlayerScreen.streamNumbersInterval * 3);
+    expect(harness.streamNumbers.requests, isEmpty);
+    expect(row('cache    12.0s mpv'), findsOneWidget);
+    expect(find.textContaining('sharing'), findsNothing);
+  });
+
+  testWidgets('an answer that lands after the video changed is dropped', (
+    tester,
+  ) async {
+    final harness = await pumpPlaying(tester);
+    final server = harness.streamNumbers;
+    server.response = held;
+
+    // The panel opens and the first ask goes out, and is still out when
+    // the core publishes the next stream under it -- the up-next
+    // hand-over lands mid-poll far more often than between polls.
+    server.holdAnswers = true;
+    await openPanel(tester, harness);
+    expect(server.heldCount, 1);
+    final askedAbout = server.requests.single;
+
+    final next = Map<String, dynamic>.from(harness.fixture);
+    final stream = Map<String, dynamic>.from(next['stream'] as Map);
+    final content = List<Object?>.from(stream['content'] as List);
+    content[0] = {
+      ...content[0]! as Map<String, dynamic>,
+      'streaming_url': 'http://127.0.0.1:39661/next/0?',
+    };
+    next['stream'] = {...stream, 'content': content};
+    harness.core.setState(CoreField.player, next);
+    await pumpEvents(tester);
+    harness.engine.emitStats(playing);
+    await pumpEvents(tester);
+
+    // The new video restarted the timer, so nothing else says this answer
+    // is stale -- and the ask that was already out kept the poll from
+    // making a fresh one, which leaves the old answer the next thing to
+    // arrive.
+    expect(server.requests.single, askedAbout);
+    server.answer();
+    await pumpEvents(tester);
+
+    // It was a reading of the film that has stopped playing. Drawn here it
+    // would be a window into a cache nobody has read and a ratio for a
+    // torrent nobody is watching.
+    expect(overlay, findsOneWidget);
+    expect(row('cache    12.0s mpv'), findsOneWidget);
+    expect(find.textContaining('sharing'), findsNothing);
+    expect(find.textContaining('behind'), findsNothing);
+  });
+
+  testWidgets('an answer that lands after the panel closed is dropped', (
+    tester,
+  ) async {
+    final harness = await pumpPlaying(tester);
+    final server = harness.streamNumbers;
+    server.response = held;
+
+    // An ask out when the panel goes down -- the ordinary case, since the
+    // panel is closed by a keypress and the ask takes a directory listing.
+    server.holdAnswers = true;
+    await openPanel(tester, harness);
+    expect(server.heldCount, 1);
+    await pressShiftI(tester);
+    expect(overlay, findsNothing);
+    server.answer();
+    await pumpEvents(tester);
+
+    // Nothing was watching when it landed, so there is nothing for it to
+    // have described. Back up, with the new ask still out: the panel draws
+    // mpv's buffer and waits, rather than showing a reading taken while it
+    // was not on screen as the present.
+    await openPanel(tester, harness);
+    expect(overlay, findsOneWidget);
+    expect(server.heldCount, 1);
+    expect(row('cache    12.0s mpv'), findsOneWidget);
+    expect(find.textContaining('sharing'), findsNothing);
+    expect(find.textContaining('behind'), findsNothing);
+  });
+
+  testWidgets('an app behind the others stops asking', (tester) async {
+    final harness = await pumpPlaying(tester);
+    final server = harness.streamNumbers;
+    server.response = held;
+    await openPanel(tester, harness);
+    expect(server.requests, hasLength(1));
+    expect(find.textContaining('sharing'), findsOneWidget);
+
+    // Home, with the panel still pinned. A panel nobody can see is no
+    // reason to list the stream's directories every few seconds.
+    for (final state in const [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+      await tester.pump();
+    }
+    final whileInFront = server.requests.length;
+    await tester.pump(PlayerScreen.streamNumbersInterval * 3);
+    expect(server.requests, hasLength(whileInFront));
+
+    // And back: the panel is where it was left, and asking starts again at
+    // once -- what was drawn on it was dropped when the polling stopped.
+    for (final state in const [
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+      await tester.pump();
+    }
+    await pumpEvents(tester);
+    expect(server.requests.length, greaterThan(whileInFront));
+    expect(find.textContaining('sharing'), findsOneWidget);
   });
 }

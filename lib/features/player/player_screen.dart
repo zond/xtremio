@@ -475,6 +475,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final FocusNode _playNextFocus = FocusNode(debugLabel: 'play next');
 
   Uri? _opened;
+
+  /// The URL the engine was actually handed for [_opened], recorded by
+  /// [_open] rather than derived again later: [_mediaUrl] is not a pure
+  /// function of the core's URL (it reads the buffer window and the proxy
+  /// token, and sets [_proxiedStream] on the way through), and for every
+  /// stream that is not a torrent it wraps the origin in this server's
+  /// `/proxy` route.
+  ///
+  /// That wrapping is why the difference matters. The bytes of a proxied
+  /// stream are in this server's cache under the `/proxy/...` URL, and the
+  /// server decides which of its stores a question is about from the
+  /// *path* it is asked with -- so a question about the core's bare origin
+  /// URL is a question about a stream this server has never heard of.
+  /// [_heldStreamUrl] is what the stats panel asks with, and this is where
+  /// it comes from.
+  ///
+  /// Null until the first `open`, and it is not an identity: a re-open for
+  /// a new buffer window writes a different one for the same video. What
+  /// says which video is playing stays [_opened].
+  Uri? _engineUrl;
+
   Duration _duration = Duration.zero;
   final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
   final ValueNotifier<Duration> _buffer = ValueNotifier(Duration.zero);
@@ -659,9 +680,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String? _serverFilename;
 
   /// What the stats panel's cache and sharing rows read: what the server
-  /// holds of the stream on screen, asked with [_opened] -- the URL the
-  /// player was handed, which is the whole of the question the server
-  /// takes.
+  /// holds of the stream on screen, asked with [_heldStreamUrl] -- the URL
+  /// the engine was handed, which is the whole of the question the server
+  /// takes, and only when that URL is one of ours.
   ///
   /// Polled only while the panel is up and the app is in front, at
   /// [PlayerScreen.streamNumbersInterval]; unlike the swarm above this runs
@@ -1097,13 +1118,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// which is why a retry is this call again and nothing else.
   void _open(Uri url, {required String reason}) {
     final state = _openState;
+    // Once: [_mediaUrl] reads the buffer window and the proxy token and
+    // sets [_proxiedStream], and what is logged, opened and asked about
+    // has to be the one URL rather than three answers that agree today.
+    final media = _mediaUrl(url);
+    _engineUrl = media;
     DiagnosticsLog.info(
       'player',
-      'open ${DiagnosticsLog.url(_mediaUrl(url))} '
+      'open ${DiagnosticsLog.url(media)} '
           'at ${_openStart.inSeconds}s ($reason)',
     );
     _engine
-        ?.open(_mediaUrl(url), start: _openStart)
+        ?.open(media, start: _openStart)
         .then((_) {
           if (state != null) _reportVideoParams(state, url);
           // A re-open is a fresh `loadfile` on the same player, and what
@@ -1680,6 +1706,40 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // --- What the server holds of this stream -------------------------------
 
+  /// The URL the stats panel's rows are asked about, or null where there is
+  /// nothing this server could answer for.
+  ///
+  /// Two things have to be true, and neither of them is "the player has a
+  /// URL". It is [_engineUrl] rather than [_opened] because the URL the
+  /// *engine* was handed is the one the bytes are cached under: for
+  /// everything that is not a torrent [_mediaUrl] wraps the stream in this
+  /// server's `/proxy` route, and the server reads the store to answer
+  /// from off the path -- ask it with the core's bare origin URL and it
+  /// recognises neither store, so the window of every proxied stream would
+  /// be missing.
+  ///
+  /// And it has to be *our* server's URL. The server dispatches on the
+  /// path and the `f=` query alone and says so deliberately
+  /// (`stream_numbers::parse`: the host a caller would have to invent to
+  /// be allowed to ask decides nothing), which leaves it to whoever asks
+  /// to ask only about streams this server serves. With a streaming server
+  /// configured on another machine a torrent's URL is that machine's --
+  /// [_mediaUrl] sends a torrent straight there, with `buffer=` and no
+  /// proxy -- and the embedded server would answer about *its* engine for
+  /// the same info hash, if it has one from a download or an earlier
+  /// viewing. The sharing row would then be this device's committed set
+  /// and this device's ratio, over a film coming off somebody else's box.
+  ///
+  /// `buffer=` on the URL is left on: the server ignores every query key
+  /// but `f=`, and stripping it would be a second idea of what the URL is.
+  Uri? get _heldStreamUrl {
+    final url = _engineUrl;
+    final base = _serverBase;
+    if (url == null || base == null) return null;
+    if (url.host != base.host || url.port != base.port) return null;
+    return url;
+  }
+
   /// Drops the last answer and starts again for the stream now open. Called
   /// where [_startTorrentStats] is, and for the same reason: a window and a
   /// ratio belong to one stream, and the previous video's are not a slower
@@ -1721,15 +1781,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _streamNumbers = null;
   }
 
-  /// One ask, for the URL the player is on. An answer that comes back after
-  /// the stream changed, or after the polling stopped, is not shown: it
-  /// describes a moment nothing on screen is in any more.
+  /// One ask, for [_heldStreamUrl] -- and nothing at all when there is no
+  /// such URL, which is the case for a stream on somebody else's server.
+  /// That decision lives here rather than in [_syncStreamNumbers] because
+  /// what the engine was handed can change under an open panel (a re-open
+  /// for a new buffer window), so it is read again for every ask; the
+  /// timer above ticks either way and costs a returned call.
+  ///
+  /// An answer that comes back after the stream changed, or after the
+  /// polling stopped, is not shown: it describes a moment nothing on
+  /// screen is in any more. [_opened] is what says which video that was,
+  /// not the URL asked with -- the URL is the address the bytes are held
+  /// under and a re-open rewrites it without the film changing.
   ///
   /// Every failure is no rows. The server not running throws here and a
   /// stream it does not hold answers null; both mean there is nothing to
   /// draw, and neither is a fault of the playback the panel is over.
   Future<void> _pollStreamNumbers() async {
-    final url = _opened;
+    final url = _heldStreamUrl;
+    final playing = _opened;
     final reader = _streamNumbersReader;
     if (url == null || reader == null || _streamNumbersFetching) return;
     _streamNumbersFetching = true;
@@ -1741,7 +1811,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } finally {
       _streamNumbersFetching = false;
     }
-    if (!mounted || _opened != url || _streamNumbersTimer == null) return;
+    if (!mounted || _opened != playing || _streamNumbersTimer == null) return;
     if (numbers?.isEmpty ?? false) numbers = null;
     if (numbers == _streamNumbers) return;
     setState(() => _streamNumbers = numbers);

@@ -20,21 +20,23 @@ flutter_rust_bridge = "=2.13.0"
 # features are ON, which links unrar-rs (GPL-3.0-or-later) -- see README.
 # Build with `default-features = false` for an MIT binary without RAR support.
 #
-# UNMERGEABLE PIN. `a600c91` is `stream_numbers` -- what one playing stream's
-# stores hold, which the player's stats panel draws its cache and sharing
-# rows from -- and it exists only in a local checkout: it has not been
-# pushed to zond/stream-server, so the URL below is a working tree on this
-# machine and nothing else can build it. Repoint both entries at
-# `https://github.com/zond/stream-server` and the pushed sha before this
-# merges.
-stream-server = { package = "server", git = "file:///home/zond/projects/strem/alternatives/stream-server", rev = "a600c91f15b1aabc0cfaab6122ead7671f79ed2e" }
+# UNMERGEABLE PIN -- DO NOT MERGE THIS FILE AS IT STANDS. `f1b7f43` is
+# `stream_numbers` -- what one playing stream's stores hold, which the
+# player's stats panel draws its cache and sharing rows from -- and it
+# exists only in a local checkout on the machine this was written on: it
+# has not been pushed to zond/stream-server, so the `file:///` URL below
+# resolves to a working tree and nothing anywhere else can build it. Both
+# entries have to be repointed at `https://github.com/zond/stream-server`
+# and the pushed sha, and `Cargo.lock` regenerated, before this merges.
+# Nothing here can close that: the push is the operator's.
+stream-server = { package = "server", git = "file:///home/zond/projects/strem/alternatives/stream-server", rev = "f1b7f434dbf2bb00367fb4889d496e1cbc6c8f38" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "file:///home/zond/projects/strem/alternatives/stream-server", rev = "a600c91f15b1aabc0cfaab6122ead7671f79ed2e" }
+enginefs = { git = "file:///home/zond/projects/strem/alternatives/stream-server", rev = "f1b7f434dbf2bb00367fb4889d496e1cbc6c8f38" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so

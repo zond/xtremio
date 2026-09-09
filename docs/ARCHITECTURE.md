@@ -166,9 +166,11 @@ what every model field means. The shape of the thing is in the
   `server_cache_usage()` and `server_clean_cache_now()` (see "What the
   server's storage costs"), `server_background_traffic()` (below) and
   `server_stream_numbers(url)` (what the server holds of one playing
-  stream, asked with the URL the player was handed: the cache either side
-  of the playhead and, for a torrent, the set committed for sharing and
-  what this session has moved — the stats panel's cache and sharing rows)
+  stream, asked with the URL the *engine* was handed — the address the
+  bytes are cached under, which for anything but a torrent is this
+  server's own `/proxy` route: the cache either side of the playhead and,
+  for a torrent, the set committed for sharing and what this session has
+  moved — the stats panel's cache and sharing rows)
   —
   wrapped by `ServerClient` in
   `lib/core/server_client.dart`. Nothing logs the token; the header value
