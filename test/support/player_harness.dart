@@ -13,6 +13,7 @@ import 'package:xtremio/shell/tv_density.dart';
 import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
 import 'fake_proxy_streams.dart';
+import 'fake_stream_numbers_client.dart';
 import 'fake_subtitle_match_client.dart';
 import 'fake_torrent_stats_client.dart';
 import 'fixtures.dart';
@@ -104,9 +105,15 @@ class PlayerHarness {
   late final FakeTorrentStatsClient torrentStats = FakeTorrentStatsClient()
     ..callLog = calls;
 
-  /// Engine opens (`'open'`), stats fetches (`'stats'`) and the teardown's
-  /// own calls (`'quit'`, `'close-streams'`, `'dispose'`), in the order
-  /// they happened.
+  /// What the stats panel's cache and sharing rows ask; answers "this
+  /// server holds nothing of that stream" until a test sets
+  /// [FakeStreamNumbersClient.response].
+  late final FakeStreamNumbersClient streamNumbers = FakeStreamNumbersClient()
+    ..callLog = calls;
+
+  /// Engine opens (`'open'`), stats fetches (`'stats'`), asks about what
+  /// the server holds (`'held'`) and the teardown's own calls (`'quit'`,
+  /// `'close-streams'`, `'dispose'`), in the order they happened.
   final List<String> calls = [];
 
   /// Applied to every engine before the screen gets it: how a test makes
@@ -172,6 +179,7 @@ class PlayerHarness {
           return dhtStatus;
         },
         proxyStreams: proxyStreams,
+        streamNumbers: streamNumbers,
         child: MaterialApp(
           navigatorObservers: navigatorObservers,
           // As `XtremioApp` builds it: the television's text scale and

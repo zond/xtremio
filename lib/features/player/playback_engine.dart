@@ -300,6 +300,7 @@ class PlaybackScope extends InheritedWidget {
     this.displayFrameRate,
     this.dhtStatus,
     this.proxyStreams,
+    this.streamNumbers,
     required super.child,
   });
 
@@ -328,6 +329,13 @@ class PlaybackScope extends InheritedWidget {
   /// its way out.
   final ProxyStreamControl? proxyStreams;
 
+  /// What the stats panel asks for the cache and sharing rows: what this
+  /// server holds of the stream on screen. An interface rather than a
+  /// function because a test wants to see which URL was asked about, and
+  /// because every player test would otherwise reach FFI while a panel is
+  /// up.
+  final StreamNumbersReader? streamNumbers;
+
   static PlaybackScope? _maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlaybackScope>();
 
@@ -352,6 +360,9 @@ class PlaybackScope extends InheritedWidget {
   static ProxyStreamControl proxyStreamsOf(BuildContext context) =>
       _maybeOf(context)?.proxyStreams ?? const ServerClient();
 
+  static StreamNumbersReader streamNumbersOf(BuildContext context) =>
+      _maybeOf(context)?.streamNumbers ?? const ServerClient();
+
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
@@ -360,7 +371,8 @@ class PlaybackScope extends InheritedWidget {
       subtitleMatch != oldWidget.subtitleMatch ||
       displayFrameRate != oldWidget.displayFrameRate ||
       dhtStatus != oldWidget.dhtStatus ||
-      proxyStreams != oldWidget.proxyStreams;
+      proxyStreams != oldWidget.proxyStreams ||
+      streamNumbers != oldWidget.streamNumbers;
 }
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever

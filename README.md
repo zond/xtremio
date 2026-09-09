@@ -39,8 +39,9 @@ timing -- is in the document each bullet links.
   Android a foreground service keeps one going after the app is left.
 - **A player rather than a video widget.** Buffered seek bar, keyboard and
   remote shortcuts, audio tracks, embedded and addon subtitles, a stats OSD
-  reporting hwdec and the swarm, and an up-next countdown that hands over to
-  the next episode.
+  reporting hwdec, the swarm, what this device holds of the stream either
+  side of the playhead and what a torrent has committed and moved this
+  session, and an up-next countdown that hands over to the next episode.
 - **Subtitle timing that is nudged or measured, and then remembered.** Shift
   the lines by hand from a panel that survives the controls fading, mark a
   line where it belongs and let two marks give the rate, or have the drift

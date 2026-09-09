@@ -102,7 +102,7 @@ in one of two ways: stremio-core's `StreamingServer` model through
 `ServerHandle`'s library API — `rust/src/api/server.rs`
 (`server_torrent_stats`, `server_settings`, `server_update_settings`,
 `server_storage_report`, `server_cache_usage`, `server_clean_cache_now`,
-`server_background_traffic`) and
+`server_background_traffic`, `server_stream_numbers`) and
 `rust/src/api/downloads.rs` (`downloads_add`, `downloads_remove`,
 `downloads_list`, `downloads_open`, `downloads_events`). A new need goes in
 one of those, as a Rust function returning JSON, not as a `dart:io`
@@ -724,6 +724,65 @@ Three more things that are easy to undo by accident:
   still shown nowhere, and neither is any judgement about a file's
   timing. The request was a list that is right and a button that presses
   the right way, not a number to reason about.
+
+## The stats panel draws a reading or nothing at all
+
+`lib/features/player/playback_stats_overlay.dart` is a panel of readings,
+and its one rule is that **a number that does not exist takes its row (or
+its half of one) away rather than appearing as a dash**. A dash reads as a
+measured zero, which is the opposite of what an absence means, and the
+panel already worked this way for the display, seekable and ranges rows.
+Two rows come from the embedded server (`server_stream_numbers`, above),
+and every absence in that answer is one of these:
+
+- **The cache row is two caches and says which is which.** The first
+  number is mpv's `demuxer-cache-duration`, a few seconds of memory, and
+  it is labelled `mpv` because unlabelled it read as though it were the
+  disk. What follows is the retention window: the bytes this device holds
+  either side of the playhead, each with the watching they are worth --
+  bytes over the panel's own `bitrate` row, which is mpv's video bitrate
+  and so reads a little long. **Nothing bounding the stream, no window**:
+  a torrent the storage budget covers has no retention policy, an addon's
+  direct link is not on this server at all, and what is on the disk
+  without a policy is whatever the cleaner has not aged out -- a
+  different quantity that this row must not carry. **No bitrate, no
+  time**: mpv answers none for the first seconds of every file, which is
+  exactly when someone is reading this row, and the bytes go on their own.
+
+- **The sharing row is a torrent's, and a proxied stream has none.** A
+  proxied response is not seeded: no swarm, no committed set, no ratio,
+  and no row -- never a line of zeroes, which would say it had shared
+  nothing when there was nothing to share. It is drawn from what the
+  server answered and not from the app's own idea of the stream's kind,
+  so the two cannot disagree on the panel. Each half goes on its own
+  terms: a torrent with no policy has promised nothing whatever it
+  announces, and a torrent whose counters cannot be read -- paused,
+  checking, stopped for space, in error -- has moved whatever it moved
+  before that, so the bytes and the ratio go absent together.
+
+- **The ratio is this session's and the row says so.** The counters begin
+  at zero when the torrent is added to the running process and are never
+  written down, which is deliberate: every other BitTorrent client keeps
+  a ratio per torrent across restarts, and doing that here would mean
+  storing counters something then has to keep true. A stored counter read
+  back as an observation is the bug this codebase keeps shipping. Label
+  it, do not persist it. A ratio against nothing downloaded is left out
+  rather than drawn `0.00`, which would tell a viewer they have shared
+  nothing while they are seeding.
+
+Nothing the panel shows outlives the poll that measured it.
+`PlayerScreen._stopStreamNumbers` drops the last answer with the timer,
+because a window and a ratio describe the moment they were read in: kept
+across the panel closing, the app going behind or the next video starting,
+they would come back on screen as a reading of something they were never
+taken from. The poll runs only while the panel is up and the app is in
+front -- nothing else reads these, and the ask costs the server a listing
+of the stream's own directories.
+
+Units are the panel's own (`formatBitrate`, `formatBytes`, `formatAge`,
+`TorrentProgressCard.formatSpeed`): decimal for anything about a stream,
+binary only for piece lengths, which are powers of two. Do not add a
+second ladder.
 
 ## The addon health record keys on a hash, never the URL
 

@@ -22,6 +22,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
     this.isTorrent = false,
     this.torrent,
     this.dht,
+    this.held,
   });
 
   final Stream<PlaybackStats> stats;
@@ -44,6 +45,17 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// when [DhtStatus.unavailable] -- a bootstrapped or disabled DHT is not
   /// news, and this panel is not where it would be worth a row anyway.
   final DhtStatus? dht;
+
+  /// What the embedded server holds of this stream right now, or null when
+  /// it holds nothing of it (an addon's direct link, a debrid URL, a file
+  /// on the device) and while the panel's first ask has not answered.
+  ///
+  /// Its two halves are two different rows: the retention window goes on
+  /// the cache row, beside mpv's own buffer, and the sharing numbers are a
+  /// row of their own that a stream with no swarm does not have. Every
+  /// absence in it takes its row or its half of one away rather than
+  /// drawing a dash -- see [describe] and [describeSharing].
+  final StreamNumbers? held;
 
   static const TextStyle _style = TextStyle(
     color: Colors.white,
@@ -105,7 +117,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
                 for (final line
                     in sample == null
                         ? const ['stats: collecting…']
-                        : describe(sample))
+                        : describe(sample, held: held))
                   Text(line, style: style),
                 if (isTorrent) ...[
                   for (final line in describeTorrent(torrent))
@@ -125,8 +137,12 @@ class PlaybackStatsOverlay extends StatelessWidget {
     );
   }
 
-  /// One text line per stat, in the order the panel shows them.
-  static List<String> describe(PlaybackStats s) => [
+  /// One text line per stat, in the order the panel shows them: what mpv
+  /// reports about the playback, and -- from [held] -- what this server
+  /// holds of the stream feeding it. The two meet on the cache row, which
+  /// is why the server's half comes in here rather than as rows of its
+  /// own after them.
+  static List<String> describe(PlaybackStats s, {StreamNumbers? held}) => [
     'fps      ${_fps(s.outputFps)} out / ${_fps(s.containerFps)} container',
     'dropped  ${s.droppedFrames ?? '-'} vo'
         '${s.decoderDroppedFrames == null ? '' : ' / ${s.decoderDroppedFrames} decoder'}',
@@ -138,7 +154,11 @@ class PlaybackStatsOverlay extends StatelessWidget {
     'video    ${s.videoCodec ?? '-'}'
         '${s.width != null && s.height != null ? ' ${s.width}x${s.height}' : ''}',
     'bitrate  ${formatBitrate(s.videoBitrate)}',
-    'cache    ${_cache(s)}',
+    'cache    ${_cache(s, held?.window)}',
+    // The other half of what the retention policy says, and the row
+    // directly under the window it committed for: both are read off the
+    // same policy and are meant to be read against each other.
+    ...describeSharing(held),
     // Only when mpv answered: on a backend that has no such properties
     // the rows would be three dashes claiming something was measured.
     if (s.seekable != null || s.partiallySeekable != null)
@@ -249,9 +269,11 @@ class PlaybackStatsOverlay extends StatelessWidget {
     return age == null ? counts : '$counts · ${formatAge(age)} ago';
   }
 
-  /// How old a tracker scrape is, in one coarse unit: `12 s`, `4 min`,
-  /// `1 h`. The panel only has to say whether the numbers are current, and
-  /// the server drops anything older than an hour anyway.
+  /// A duration in one coarse unit: `12 s`, `4 min`, `1 h`. The panel's
+  /// only duration format, and both its uses want the same coarseness --
+  /// how old a tracker scrape is (the panel has to say whether the numbers
+  /// are current, and the server drops anything past an hour anyway), and
+  /// how much watching a half of the retention window is.
   static String formatAge(Duration age) {
     if (age.inMinutes < 1) return '${age.inSeconds} s';
     if (age.inHours < 1) return '${age.inMinutes} min';
@@ -301,16 +323,99 @@ class PlaybackStatsOverlay extends StatelessWidget {
     false => s.hwdec!,
   };
 
-  static String _cache(PlaybackStats s) {
+  /// The cache row: mpv's demuxer buffer, then what the server holds of
+  /// this stream on the disk.
+  ///
+  /// **Two different caches, and the row now says which is which.** The
+  /// first number is `demuxer-cache-duration`, a few seconds of memory
+  /// that mpv has read ahead -- it was the whole row and unlabelled, which
+  /// read as though it were ours. `mpv` names it. What follows is the
+  /// retention window: the bytes on this device around the playhead, the
+  /// half a scan back is served from and the half playback has in hand.
+  ///
+  /// The window is absent for a stream nothing is bounding -- a torrent
+  /// small enough that the budget covers it, a stream this server is not
+  /// holding at all -- and then the row is mpv's number alone rather than
+  /// two dashes claiming a cache of nothing was measured.
+  static String _cache(PlaybackStats s, CacheWindow? window) {
     final duration = s.cacheDuration;
     final seconds = duration == null
         ? '-'
         : '${(duration.inMilliseconds / 1000).toStringAsFixed(1)}s';
-    if (s.pausedForCache == true) {
-      final fill = s.cacheBufferingState;
-      return '$seconds  buffering${fill == null ? '' : ' $fill%'}';
+    final mpv = s.pausedForCache == true
+        ? '$seconds mpv  buffering'
+              '${s.cacheBufferingState == null ? '' : ' ${s.cacheBufferingState}%'}'
+        : '$seconds mpv';
+    if (window == null) return mpv;
+    return '$mpv · behind ${_span(window.behindBytes, s.videoBitrate)}'
+        ' · ahead ${_span(window.aheadBytes, s.videoBitrate)}';
+  }
+
+  /// Half the window: its bytes, and how much watching that is.
+  ///
+  /// The time is the bytes over the stream's bitrate -- the panel's own
+  /// `bitrate` row, which is mpv's `video-bitrate`, so it counts the video
+  /// track and not the audio and subtitles beside it and reads a little
+  /// long. It is the only rate anything here has, and minutes are what
+  /// makes a byte count mean something from the sofa. **No rate, no
+  /// time**: the bytes go on their own rather than beside a dash, since
+  /// mpv answers no bitrate at all for the first seconds of every file.
+  static String _span(int bytes, int? bitsPerSecond) {
+    final seconds = bitsPerSecond == null || bitsPerSecond <= 0
+        ? null
+        : bytes * 8 / bitsPerSecond;
+    return seconds == null
+        ? formatBytes(bytes)
+        : '${formatBytes(bytes)}/${formatAge(Duration(seconds: seconds.round()))}';
+  }
+
+  /// The sharing row: what this torrent has promised the swarm and what it
+  /// has moved. One row, or none at all.
+  ///
+  /// **A stream with no swarm has no row here**, and that is the whole of
+  /// the rule: a proxied response is not seeded, so it has no committed
+  /// set and no ratio, and a row of zeroes would say it had shared
+  /// nothing when the truth is that there was nothing to share. The same
+  /// goes for each half on its own -- a torrent with no retention policy
+  /// has promised nothing whatever it announces, and a torrent whose
+  /// counters cannot be read (paused, checking, stopped for space, in
+  /// error) has moved whatever it moved before that, not nothing.
+  ///
+  /// **The transfer is this session's and says so.** These are the
+  /// server's own counters, which begin at zero when the torrent is added
+  /// to the running process and are never written down: what the same
+  /// torrent moved last week is not in them. Every other client shows a
+  /// ratio kept per torrent across restarts, so the word is on the row --
+  /// the alternative was storing counters something then has to keep true,
+  /// which is a claim about a past nothing here watched.
+  static List<String> describeSharing(StreamNumbers? held) {
+    final sharing = held?.sharing;
+    if (sharing == null) return const [];
+    final transfer = sharing.transfer;
+    final parts = [
+      if (sharing.committedBytes case final committed?)
+        '${formatBytes(committed)} committed',
+      if (transfer != null)
+        '↑ ${formatBytes(transfer.uploadedBytes)}'
+            ' ↓ ${formatBytes(transfer.downloadedBytes)}',
+      if (transfer?.ratio case final ratio?)
+        '${ratio.toStringAsFixed(2)} this session',
+    ];
+    return parts.isEmpty ? const [] : ['sharing  ${parts.join(' · ')}'];
+  }
+
+  /// A byte count in human units: `340 MB`, `1.2 GB`. Decimal, on the same
+  /// ladder as [formatBitrate] and `TorrentProgressCard.formatSpeed`, so
+  /// the panel measures a stream one way -- the binary units elsewhere are
+  /// for piece lengths, which are powers of two and would read as
+  /// `16.8 MB` here.
+  static String formatBytes(int bytes) {
+    if (bytes >= 1000000000) {
+      return '${(bytes / 1000000000).toStringAsFixed(1)} GB';
     }
-    return seconds;
+    if (bytes >= 1000000) return '${(bytes / 1000000).toStringAsFixed(1)} MB';
+    if (bytes >= 1000) return '${(bytes / 1000).round()} kB';
+    return '$bytes B';
   }
 
   /// Bits per second in human units: `850 kbps`, `4.2 Mbps`.

@@ -99,7 +99,7 @@ void main() {
     expect(find.text('fps      23.98 out / 23.98 container'), findsOneWidget);
     expect(find.text('video    h264 (High) 1280x720'), findsOneWidget);
     expect(find.text('bitrate  4.2 Mbps'), findsOneWidget);
-    expect(find.text('cache    12.0s'), findsOneWidget);
+    expect(find.text('cache    12.0s mpv'), findsOneWidget);
 
     // Keeps moving: stays up past the timeout measured from the first move.
     await tester.pump(PlayerScreen.statsHoverTimeout ~/ 2);

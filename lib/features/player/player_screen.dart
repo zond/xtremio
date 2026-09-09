@@ -135,6 +135,15 @@ class PlayerScreen extends StatefulWidget {
   /// no frame depends on them.
   static const Duration torrentStatsOverlayInterval = Duration(seconds: 5);
 
+  /// How often the server is asked what it holds of the stream on screen
+  /// (the panel's cache and sharing rows) -- the same slow cadence as the
+  /// swarm rows above, and for the same reason: nothing waits on these,
+  /// they are only worth a poll while somebody is reading them, and the
+  /// ask costs a listing of the stream's own directories. It is a
+  /// constant of its own because it runs for a proxied stream too, which
+  /// has no swarm and so no torrent poll to ride on.
+  static const Duration streamNumbersInterval = Duration(seconds: 5);
+
   /// How long after a seek the position is looked at again to see whether
   /// the seek happened at all, and how far from the target it may land and
   /// still count as having happened.
@@ -649,6 +658,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// under way. It is cleared only with the torrent itself.
   String? _serverFilename;
 
+  /// What the stats panel's cache and sharing rows read: what the server
+  /// holds of the stream on screen, asked with [_opened] -- the URL the
+  /// player was handed, which is the whole of the question the server
+  /// takes.
+  ///
+  /// Polled only while the panel is up and the app is in front, at
+  /// [PlayerScreen.streamNumbersInterval]; unlike the swarm above this runs
+  /// for a proxied stream too, which is why it has a timer of its own.
+  ///
+  /// **[_streamNumbers] is a reading and nothing else.** It is set only
+  /// from an answer to an ask for the URL that is open now, and it is
+  /// dropped the moment nothing is polling it -- the panel going away, the
+  /// app going behind, another video -- because a window and a ratio
+  /// describe a moment, and holding one past its poll would put the past
+  /// on the panel as the present. There is nothing to hold across a start:
+  /// this process has watched nothing, and the server says so by answering
+  /// no window at all.
+  StreamNumbersReader? _streamNumbersReader;
+  Timer? _streamNumbersTimer;
+  bool _streamNumbersFetching = false;
+  StreamNumbers? _streamNumbers;
+
   /// What reads [_dhtStatus] (absent the FFI one). Cheap and synchronous,
   /// so unlike the stats client above this is called directly rather than
   /// awaited.
@@ -873,6 +904,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final displayFrameRate = PlaybackScope.displayFrameRateOf(context);
     _displayFrameRate = displayFrameRate;
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
+    _streamNumbersReader = PlaybackScope.streamNumbersOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
     _proxyStreams = PlaybackScope.proxyStreamsOf(context);
@@ -981,7 +1013,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _engine?.pause();
     }
     if (!_mediaLoaded) _pauseTorrentStats();
-    _syncTorrentStats();
+    _syncStatsPolls();
   }
 
   /// Back in front: whatever was left on screen -- a stall, an open stats
@@ -997,7 +1029,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // polling comes back with it. `_syncTorrentStats` leaves this alone
     // until the media has loaded, and takes over from it then.
     if (!_mediaLoaded && _torrentStatsRequest != null) _startStartupPolling();
-    _syncTorrentStats();
+    _syncStatsPolls();
   }
 
   /// Writes one profile setting: the whole map with [key] changed, as the
@@ -1054,6 +1086,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // a stats request that got there first would create it from the bare
     // hash and trackers, and the stream request would then reuse that.
     _startTorrentStats(state);
+    _startStreamNumbers();
     setState(() => _engineError = null);
     _restartControlsTimer();
   }
@@ -1351,7 +1384,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // the polling back, at once if the media arrived already stalled.
       _pauseTorrentStats();
     });
-    _syncTorrentStats();
+    _syncStatsPolls();
     _maybeAutoPickSubtitles();
   }
 
@@ -1538,6 +1571,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStatsCadence = null;
   }
 
+  /// Both of the player's polls of the server, put back in step with
+  /// whoever is reading them. Every path that changes what wants numbers
+  /// calls this one -- the media loading, a stall starting or ending, the
+  /// app going behind and coming back, the stats panel opening and
+  /// closing -- because the two answer different questions on the same
+  /// occasions: the swarm rows want a torrent, the cache and sharing rows
+  /// want only a stream and a panel to draw them on.
+  void _syncStatsPolls() {
+    _syncTorrentStats();
+    _syncStreamNumbers();
+  }
+
   /// Keeps the polling in step with whoever wants the numbers, from
   /// [_onMediaLoaded], [_onBuffering], the app going to the background and
   /// back, and every change of the stats OSD's visibility. Once the media has loaded a torrent's stats are worth
@@ -1633,6 +1678,75 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
   }
 
+  // --- What the server holds of this stream -------------------------------
+
+  /// Drops the last answer and starts again for the stream now open. Called
+  /// where [_startTorrentStats] is, and for the same reason: a window and a
+  /// ratio belong to one stream, and the previous video's are not a slower
+  /// reading of this one.
+  void _startStreamNumbers() {
+    _stopStreamNumbers();
+    _syncStreamNumbers();
+  }
+
+  /// Polls for as long as the panel that draws these rows is up and the app
+  /// is in front, and not otherwise: nothing else in the player reads them,
+  /// and the ask costs the server a listing of the stream's own
+  /// directories. Unlike the swarm this does not wait for the media to
+  /// load -- what it reports is what is on the disk, which is exactly what
+  /// somebody watching a stream that has not started yet is looking for.
+  void _syncStreamNumbers() {
+    if (_appHidden || !_statsVisible || _opened == null) {
+      _stopStreamNumbers();
+      return;
+    }
+    if (_streamNumbersTimer != null) return;
+    _streamNumbersTimer = Timer.periodic(
+      PlayerScreen.streamNumbersInterval,
+      (_) => _pollStreamNumbers(),
+    );
+    // At once rather than in five seconds: whoever just opened the panel
+    // wants the numbers now.
+    _pollStreamNumbers();
+  }
+
+  /// Stops polling and drops the last answer, which are one act. What was
+  /// on the panel described the moment it was measured in; kept past its
+  /// poll it would come back on screen -- the panel reopened, the app
+  /// brought forward, the next video started -- as a reading of something
+  /// it was never taken from.
+  void _stopStreamNumbers() {
+    _streamNumbersTimer?.cancel();
+    _streamNumbersTimer = null;
+    _streamNumbers = null;
+  }
+
+  /// One ask, for the URL the player is on. An answer that comes back after
+  /// the stream changed, or after the polling stopped, is not shown: it
+  /// describes a moment nothing on screen is in any more.
+  ///
+  /// Every failure is no rows. The server not running throws here and a
+  /// stream it does not hold answers null; both mean there is nothing to
+  /// draw, and neither is a fault of the playback the panel is over.
+  Future<void> _pollStreamNumbers() async {
+    final url = _opened;
+    final reader = _streamNumbersReader;
+    if (url == null || reader == null || _streamNumbersFetching) return;
+    _streamNumbersFetching = true;
+    StreamNumbers? numbers;
+    try {
+      numbers = await reader.streamNumbers(url);
+    } on Object {
+      numbers = null;
+    } finally {
+      _streamNumbersFetching = false;
+    }
+    if (!mounted || _opened != url || _streamNumbersTimer == null) return;
+    if (numbers?.isEmpty ?? false) numbers = null;
+    if (numbers == _streamNumbers) return;
+    setState(() => _streamNumbers = numbers);
+  }
+
   /// The start-up overlay replaces the status text from `open` until the
   /// media loads, for torrents the server streams.
   bool get _startupOverlayShown =>
@@ -1678,7 +1792,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onBuffering(bool buffering) {
     _logStall(buffering);
     setState(() => _buffering = buffering);
-    _syncTorrentStats();
+    _syncStatsPolls();
     _restartControlsTimer();
   }
 
@@ -1779,7 +1893,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           're-opening ($_falseEnds of ${PlayerScreen.falseEndRecoveries})',
     );
     setState(() => _buffering = true);
-    _syncTorrentStats();
+    _syncStatsPolls();
     _showControls();
     _reopenAt(position, reason: 'failBuffer $_falseEnds');
   }
@@ -2202,7 +2316,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _statsPinned = !(_statsPinned ?? false));
     // The panel carries the torrent's numbers: showing it is what asks the
     // server for them, hiding it is what stops.
-    _syncTorrentStats();
+    _syncStatsPolls();
   }
 
   // --- Tracks --------------------------------------------------------------
@@ -3867,6 +3981,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _cancelCastFetch();
     _cancelOpenRetry();
     _stopTorrentStats();
+    _stopStreamNumbers();
     _statsHoverTimer?.cancel();
     _statsHoverTimer = null;
     _seekCheck?.cancel();
@@ -4168,11 +4283,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _statsHoverTimer = Timer(PlayerScreen.statsHoverTimeout, () {
       if (!mounted || !_statsHover) return;
       setState(() => _statsHover = false);
-      _syncTorrentStats();
+      _syncStatsPolls();
     });
     if (!_statsHover) {
       setState(() => _statsHover = true);
-      _syncTorrentStats();
+      _syncStatsPolls();
     }
   }
 
@@ -4181,7 +4296,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _statsHoverTimer = null;
     if (!_statsHover) return;
     setState(() => _statsHover = false);
-    _syncTorrentStats();
+    _syncStatsPolls();
   }
 
   // --- Lifecycle -----------------------------------------------------------
@@ -4512,6 +4627,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             isTorrent: _torrentStatsRequest != null,
                             torrent: _torrentStats,
                             dht: _dhtStatus,
+                            held: _streamNumbers,
                           ),
                         ),
                       ),

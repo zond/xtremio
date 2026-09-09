@@ -87,7 +87,7 @@ void main() {
       'hwdec    vaapi',
       'video    h264 (High) 1920x1080',
       'bitrate  4.2 Mbps',
-      'cache    8.4s  buffering 37%',
+      'cache    8.4s mpv  buffering 37%',
     ]);
     expect(PlaybackStatsOverlay.formatBitrate(850000), '850 kbps');
     expect(PlaybackStatsOverlay.formatBitrate(512), '512 bps');
@@ -453,6 +453,251 @@ void main() {
         findsOneWidget,
       );
     });
+  });
+
+  group('the cache row carries mpv\'s buffer and the retention window', () {
+    const bitrate = 8000000; // 1 MB of video a second, so bytes read as time.
+
+    List<String> rows({
+      CacheWindow? window,
+      int? videoBitrate = bitrate,
+      SharingNumbers? sharing,
+    }) => PlaybackStatsOverlay.describe(
+      PlaybackStats(
+        videoBitrate: videoBitrate,
+        cacheDuration: const Duration(milliseconds: 294600),
+      ),
+      held: window == null && sharing == null
+          ? null
+          : StreamNumbers(window: window, sharing: sharing),
+    );
+
+    String cacheRow(List<String> lines) =>
+        lines.firstWhere((line) => line.startsWith('cache'));
+
+    test('the mpv half is labelled, so it cannot read as ours', () {
+      // It always was mpv's few seconds of memory; unlabelled it read as
+      // the disk, which is the row's other half now.
+      expect(cacheRow(rows()), 'cache    294.6s mpv');
+    });
+
+    test('the window is two halves, in bytes and in watching', () {
+      expect(
+        cacheRow(
+          rows(
+            window: const CacheWindow(
+              behindBytes: 1288490188,
+              aheadBytes: 356515840,
+            ),
+          ),
+        ),
+        'cache    294.6s mpv · behind 1.3 GB/21 min · ahead 356.5 MB/5 min',
+      );
+    });
+
+    test('a half that holds nothing reads as the zero it was measured at', () {
+      // Zero here is not an absence: the window exists, and this side of
+      // the playhead is empty -- which is what a stream that has just
+      // started looks like behind, and what a seek that outran the
+      // read-ahead looks like ahead.
+      expect(
+        cacheRow(
+          rows(window: const CacheWindow(behindBytes: 0, aheadBytes: 0)),
+        ),
+        'cache    294.6s mpv · behind 0 B/0 s · ahead 0 B/0 s',
+      );
+    });
+
+    test('no bitrate, no time -- and never a dash beside the bytes', () {
+      // mpv answers no `video-bitrate` for the first seconds of every
+      // file, which is exactly when someone is watching this row.
+      expect(
+        cacheRow(
+          rows(
+            videoBitrate: null,
+            window: const CacheWindow(behindBytes: 0, aheadBytes: 356515840),
+          ),
+        ),
+        'cache    294.6s mpv · behind 0 B · ahead 356.5 MB',
+      );
+    });
+
+    test('nothing bounding the stream leaves the row mpv\'s alone', () {
+      // A torrent the budget covers has no policy and so no window, and a
+      // stream this server does not hold has neither. Dashes there would
+      // say a cache of nothing was measured.
+      expect(rows(), isNot(contains(contains('behind'))));
+      expect(rows(window: null, sharing: null), isNot(contains(contains('·'))));
+    });
+  });
+
+  group(
+    'the sharing row is a torrent\'s promises and this session\'s bytes',
+    () {
+      List<String> rows(SharingNumbers? sharing) =>
+          PlaybackStatsOverlay.describeSharing(
+            sharing == null ? null : StreamNumbers(sharing: sharing),
+          );
+
+      test(
+        'committed, both directions, and the ratio said to be a session\'s',
+        () {
+          expect(
+            rows(
+              const SharingNumbers(
+                committedBytes: 859832320,
+                transfer: SessionTransfer(
+                  downloadedBytes: 4800000000,
+                  uploadedBytes: 2100000000,
+                  ratio: 0.4375,
+                ),
+              ),
+            ),
+            [
+              'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 this session',
+            ],
+          );
+        },
+      );
+
+      test('a stream with no swarm has no row at all', () {
+        // A proxied response is not seeded: no committed set, no ratio. A
+        // line of zeroes would say it had shared nothing, when the truth is
+        // that there was nothing to share.
+        expect(rows(null), isEmpty);
+        expect(PlaybackStatsOverlay.describeSharing(null), isEmpty);
+        expect(
+          PlaybackStatsOverlay.describeSharing(
+            const StreamNumbers(
+              window: CacheWindow(behindBytes: 1, aheadBytes: 2),
+            ),
+          ),
+          isEmpty,
+        );
+      });
+
+      test('a torrent with no policy has promised nothing, not zero bytes', () {
+        expect(
+          rows(
+            const SharingNumbers(
+              transfer: SessionTransfer(
+                downloadedBytes: 4800000000,
+                uploadedBytes: 2100000000,
+                ratio: 0.4375,
+              ),
+            ),
+          ),
+          ['sharing  ↑ 2.1 GB ↓ 4.8 GB · 0.44 this session'],
+        );
+      });
+
+      test(
+        'counters that cannot be read take the whole transfer with them',
+        () {
+          // Paused, checking, stopped for space, in error: a torrent that has
+          // moved gigabytes and then paused has not moved nothing.
+          expect(rows(const SharingNumbers(committedBytes: 859832320)), [
+            'sharing  859.8 MB committed',
+          ]);
+        },
+      );
+
+      test(
+        'a ratio against nothing downloaded is left out, never drawn 0.00',
+        () {
+          // A torrent resumed onto a complete file and seeded from it: the
+          // ratio is undefined, and 0.00 would tell a viewer they have shared
+          // nothing while they are sharing.
+          expect(
+            rows(
+              const SharingNumbers(
+                transfer: SessionTransfer(
+                  downloadedBytes: 0,
+                  uploadedBytes: 2100000000,
+                ),
+              ),
+            ),
+            ['sharing  ↑ 2.1 GB ↓ 0 B'],
+          );
+        },
+      );
+    },
+  );
+
+  test('bytes are decimal, on the panel\'s own ladder', () {
+    expect(PlaybackStatsOverlay.formatBytes(0), '0 B');
+    expect(PlaybackStatsOverlay.formatBytes(999), '999 B');
+    expect(PlaybackStatsOverlay.formatBytes(340000), '340 kB');
+    expect(PlaybackStatsOverlay.formatBytes(356515840), '356.5 MB');
+    expect(PlaybackStatsOverlay.formatBytes(1288490188), '1.3 GB');
+  });
+
+  testWidgets('a proxied stream draws the window and no sharing row', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: PlaybackStatsOverlay(
+            stats: Stream<PlaybackStats>.value(
+              const PlaybackStats(
+                videoBitrate: 8000000,
+                cacheDuration: Duration(seconds: 12),
+              ),
+            ),
+            // What a proxied stream answers: a window off the proxy cache,
+            // and no sharing at all -- it is not seeded.
+            held: const StreamNumbers(
+              window: CacheWindow(behindBytes: 60000000, aheadBytes: 30000000),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text(
+        'cache    12.0s mpv · behind 60.0 MB/1 min · ahead 30.0 MB/30 s',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('sharing'), findsNothing);
+  });
+
+  testWidgets('the sharing row is the server\'s answer, not the app\'s claim', (
+    tester,
+  ) async {
+    // The row is drawn from what the server said about the stream, above
+    // this player's own idea of what kind of stream it is: the two are
+    // different questions, and only one of them was measured. So it sits
+    // with the cache row it is read against rather than inside the swarm
+    // block, and a panel that was told there is no torrent still shows
+    // what the server says it has committed and moved.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: PlaybackStatsOverlay(
+            stats: Stream<PlaybackStats>.value(
+              const PlaybackStats(cacheDuration: Duration(seconds: 12)),
+            ),
+            isTorrent: false,
+            held: const StreamNumbers(
+              sharing: SharingNumbers(committedBytes: 820000000),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('sharing  820.0 MB committed'), findsOneWidget);
+    // And nothing about a swarm, which is what `isTorrent` decides.
+    expect(find.textContaining('speed    '), findsNothing);
   });
 
   testWidgets('a long error from the server does not take over the frame', (
