@@ -397,13 +397,19 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// makes a byte count mean something from the sofa. **No rate, no
   /// time**: the bytes go on their own rather than beside a dash, since
   /// mpv answers no bitrate at all for the first seconds of every file.
+  ///
+  /// The time goes in brackets after the bytes rather than behind a slash.
+  /// A slash between a size and a time is the shape a rate has, and the
+  /// panel has real ones two rows down (`speed    1.2 MB/s`); this one is
+  /// not a rate but the same quantity said again in the other unit.
   static String _span(int bytes, int? bitsPerSecond) {
     final seconds = bitsPerSecond == null || bitsPerSecond <= 0
         ? null
         : bytes * 8 / bitsPerSecond;
     return seconds == null
         ? formatBytes(bytes)
-        : '${formatBytes(bytes)}/${formatAge(Duration(seconds: seconds.round()))}';
+        : '${formatBytes(bytes)}'
+              ' (${formatAge(Duration(seconds: seconds.round()))})';
   }
 
   /// The sharing row: what this torrent has promised the swarm and what it

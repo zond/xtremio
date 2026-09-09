@@ -117,7 +117,9 @@ void main() {
     expect(server.requests.single.queryParameters['buffer'], 'normal');
 
     expect(
-      row('cache    12.0s mpv · behind 1.2 GB/20 min · ahead 340.0 MB/5 min'),
+      row(
+        'cache    12.0s mpv · behind 1.2 GB (20 min) · ahead 340.0 MB (5 min)',
+      ),
       findsOneWidget,
     );
     expect(
@@ -136,7 +138,9 @@ void main() {
     await tester.pump();
     expect(server.requests, hasLength(2));
     expect(
-      row('cache    12.0s mpv · behind 500.0 MB/8 min · ahead 900.0 MB/15 min'),
+      row(
+        'cache    12.0s mpv · behind 500.0 MB (8 min) · ahead 900.0 MB (15 min)',
+      ),
       findsOneWidget,
     );
     // The counters went unreadable -- the torrent paused, or is checking.
@@ -186,7 +190,9 @@ void main() {
     expect(row(PlaybackStatsOverlay.collecting), findsNothing);
     expect(row('bitrate  8.0 Mbps'), findsOneWidget);
     expect(
-      row('cache    12.0s mpv · behind 1.2 GB/20 min · ahead 340.0 MB/5 min'),
+      row(
+        'cache    12.0s mpv · behind 1.2 GB (20 min) · ahead 340.0 MB (5 min)',
+      ),
       findsOneWidget,
     );
   });
@@ -320,7 +326,7 @@ void main() {
     expect(asked.pathSegments.first, 'proxy');
     expect(asked, isNot(Uri.parse(DevStreams.bigBuckBunnyHttp['url']!)));
     expect(
-      row('cache    12.0s mpv · behind 60.0 MB/1 min · ahead 30.0 MB/30 s'),
+      row('cache    12.0s mpv · behind 60.0 MB (1 min) · ahead 30.0 MB (30 s)'),
       findsOneWidget,
     );
     expect(find.textContaining('sharing'), findsNothing);

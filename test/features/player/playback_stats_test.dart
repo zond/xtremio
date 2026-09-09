@@ -491,7 +491,7 @@ void main() {
             ),
           ),
         ),
-        'cache    294.6s mpv · behind 1.3 GB/21 min · ahead 356.5 MB/5 min',
+        'cache    294.6s mpv · behind 1.3 GB (21 min) · ahead 356.5 MB (5 min)',
       );
     });
 
@@ -504,7 +504,7 @@ void main() {
         cacheRow(
           rows(window: const CacheWindow(behindBytes: 0, aheadBytes: 0)),
         ),
-        'cache    294.6s mpv · behind 0 B/0 s · ahead 0 B/0 s',
+        'cache    294.6s mpv · behind 0 B (0 s) · ahead 0 B (0 s)',
       );
     });
 
@@ -705,7 +705,7 @@ void main() {
 
     expect(
       find.text(
-        'cache    12.0s mpv · behind 60.0 MB/1 min · ahead 30.0 MB/30 s',
+        'cache    12.0s mpv · behind 60.0 MB (1 min) · ahead 30.0 MB (30 s)',
       ),
       findsOneWidget,
     );
