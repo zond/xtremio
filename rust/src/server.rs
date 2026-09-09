@@ -412,6 +412,37 @@ pub fn background_traffic() -> anyhow::Result<BackgroundTraffic> {
     with_handle(|handle| handle.background_traffic().map(Into::into))
 }
 
+/// What this server holds of the stream a player is playing right now
+/// (`ServerHandle::stream_numbers`), asked with the URL that player was
+/// handed: what is on the disk around the playhead, and -- for a torrent --
+/// what has been committed for sharing and what the session has moved.
+///
+/// `url` is the whole of the question: its shape decides which store
+/// answers, the piece store for `/{infoHash}/{fileIdx}` (`-1` included, the
+/// auto-select resolved with the same `f=` filters the stream route uses)
+/// and the proxy cache for `/proxy/...`. `Ok(None)` is a URL neither holds
+/// -- an addon's direct link the player fetched itself, a file:// path, a
+/// debrid stream -- and is a complete answer rather than a failure.
+///
+/// **Every number is measured when it is asked for and none of it is
+/// kept.** In particular the transfer totals are librqbit's own per-torrent
+/// counters, which start at zero when the torrent is added to *this*
+/// process: the ratio taken from them is this session's and a caller must
+/// label it as one. Nothing here is read off disk, so nothing here is a
+/// claim about a past this process never saw.
+///
+/// A peek, like [`background_traffic`]: it creates no engine, starts no
+/// magnet add and touches no idle clock, so a panel asking every few
+/// seconds cannot hold a torrent out of the idle sweep by looking at it.
+/// It is not free, though -- the window is counted from a listing of the
+/// stream's own directories -- so ask it while a panel is open and not for
+/// the life of the process. Errors when the server is not running.
+pub fn stream_numbers(
+    url: &str,
+) -> anyhow::Result<Option<stream_server::stream_numbers::StreamNumbers>> {
+    with_handle(|handle| handle.stream_numbers(url))
+}
+
 /// The mainline DHT's status on this host, exactly the `dht` key of
 /// `GET /stats.json` (`ServerHandle::dht_status`): whether a DHT is
 /// running, how many nodes are in each routing table right now, and

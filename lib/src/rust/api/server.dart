@@ -149,6 +149,44 @@ Future<String> serverCleanCacheNow() =>
 Future<String> serverBackgroundTraffic() =>
     RustLib.instance.api.crateApiServerServerBackgroundTraffic();
 
+/// What this server holds of the stream `url` is playing, as JSON
+/// (`StreamNumbers`: `window` -- `behindBytes`/`aheadBytes` -- and, for a
+/// torrent, `sharing` -- `committedBytes` and a `transfer` group of
+/// `downloadedBytes`/`uploadedBytes`/`ratio`), or null when this server
+/// holds nothing of that stream.
+///
+/// `url` is the URL handed to the player, and its shape is the whole
+/// question: `/{infoHash}/{fileIdx}` (including `-1`, resolved through the
+/// same `f=` filters the stream route uses) reads the piece store,
+/// `/proxy/...` reads the proxy cache, and anything else -- an addon's
+/// direct link, a debrid URL, a file on the device -- is a stream this
+/// server is not holding. **Null there is an answer, not a failure**: a
+/// caller draws no rows and shows no error.
+///
+/// Every `null` inside is "there is no such number", never zero, and a
+/// caller must draw an absent row rather than a dash: no `window` where no
+/// retention policy is bounding the stream (a torrent the budget covers,
+/// or nothing read yet), no `sharing` for a proxied response (it is not
+/// seeded, so it has no committed set and no ratio), no `committedBytes`
+/// for a torrent with no policy, and no `transfer` for a torrent whose
+/// counters cannot be read -- paused, checking, stopped for space, in
+/// error. A torrent that has moved gigabytes and then paused has not moved
+/// nothing.
+///
+/// **The transfer totals are this session's** -- librqbit's per-torrent
+/// counters, which begin at zero when the torrent is added to this process
+/// -- and the ratio taken from them must be labelled as one. Nothing is
+/// persisted, so nothing read back here is a claim about a past this
+/// process never saw.
+///
+/// A peek: it creates no engine and touches no idle clock, so polling it
+/// cannot keep a torrent seeding to report on. It does list the stream's
+/// own directories, so it blocks the FRB worker -- never call it from the
+/// UI thread, and ask it only while a panel wants it. Errors when the
+/// server is not running.
+Future<String?> serverStreamNumbers({required String url}) =>
+    RustLib.instance.api.crateApiServerServerStreamNumbers(url: url);
+
 /// The mainline DHT's status on this host, as JSON (`DhtStatus`: `enabled`,
 /// `nodes`, `nodesV6`, `everBootstrapped`) -- exactly the `dht` key of
 /// `GET /stats.json` (`ServerHandle::dht_status`).

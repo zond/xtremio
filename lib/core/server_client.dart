@@ -5,6 +5,7 @@ import '../src/rust/api/server.dart' as rust;
 import 'state/background_traffic.dart';
 import 'state/dht_status.dart';
 import 'state/server_storage.dart';
+import 'state/stream_numbers.dart';
 
 /// stremio-core's default streaming-server port, preferred so a persisted
 /// profile that points at `http://127.0.0.1:11470` still reaches us.
@@ -102,6 +103,22 @@ abstract interface class ProxyStreamControl {
   int closeProxyStreams(String token);
 }
 
+/// Asking what the server holds of one playing stream, which is the whole
+/// of what the player's stats panel needs from it beyond the swarm.
+///
+/// Behind an interface for the same reason [ProxyStreamControl] is: the
+/// player's widget tests must not reach FFI, and a test wants to see which
+/// URL was asked about -- the panel's rows are only honest if the numbers
+/// belong to the stream on screen.
+abstract interface class StreamNumbersReader {
+  /// What the server holds of the stream at [url] -- the URL handed to the
+  /// player. Null when it holds nothing of it, which is an answer and not
+  /// a failure. **Throws when the server is not running**, which a caller
+  /// draws exactly like null: both mean there are no rows to show, but
+  /// only one of them is worth writing down.
+  Future<StreamNumbers?> streamNumbers(Uri url);
+}
+
 /// Changing something about the embedded server, which is one call: a
 /// patch of settings keys, exactly as `POST /settings` takes it.
 ///
@@ -170,6 +187,7 @@ class ServerClient
         LanMediaControl,
         ServerCacheControl,
         ProxyStreamControl,
+        StreamNumbersReader,
         ServerSettingsAccess,
         ServerSettingsWriter {
   const ServerClient();
@@ -278,6 +296,28 @@ class ServerClient
   /// is not running, which the caller draws as dark.
   Future<BackgroundTraffic> backgroundTraffic() async =>
       BackgroundTraffic.fromJson(_object(await rust.serverBackgroundTraffic()));
+
+  /// What the server holds of the stream at [url] -- the URL handed to the
+  /// player (`ServerHandle::stream_numbers`): the cache around the
+  /// playhead, and for a torrent the set committed for sharing and what
+  /// this session has moved.
+  ///
+  /// Null is a complete answer and not a failure: the URL's shape is what
+  /// decides which store answers, and a URL neither store holds is a
+  /// stream this server never touched -- an addon's direct link, a debrid
+  /// URL, a file on the device. Every absence *inside* the answer means
+  /// "there is no such number" too; see [StreamNumbers].
+  ///
+  /// A peek that creates no engine and touches no idle clock, so polling
+  /// it cannot keep a torrent seeding to report on -- but it lists the
+  /// stream's own directories, so it is a worker call and belongs on a
+  /// panel's cadence rather than the process's. Throws when the server is
+  /// not running.
+  @override
+  Future<StreamNumbers?> streamNumbers(Uri url) async {
+    final json = await rust.serverStreamNumbers(url: url.toString());
+    return json == null ? null : StreamNumbers.fromJson(jsonDecode(json));
+  }
 
   /// A torrent's `stats.json`: the per-file stats when [fileIdx] is set,
   /// the torrent-level ones otherwise. [trackers] is the stream's

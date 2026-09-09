@@ -164,7 +164,12 @@ what every model field means. The shape of the thing is in the
   JSON), `server_settings()` and `server_update_settings(patch_json)`
   (`GET`/`POST /settings`), plus `server_storage_report()`,
   `server_cache_usage()` and `server_clean_cache_now()` (see "What the
-  server's storage costs"), and `server_background_traffic()` (below) —
+  server's storage costs"), `server_background_traffic()` (below) and
+  `server_stream_numbers(url)` (what the server holds of one playing
+  stream, asked with the URL the player was handed: the cache either side
+  of the playhead and, for a torrent, the set committed for sharing and
+  what this session has moved — the stats panel's cache and sharing rows)
+  —
   wrapped by `ServerClient` in
   `lib/core/server_client.dart`. Nothing logs the token; the header value
   is marked sensitive. `media_kit`'s `Media.httpHeaders` could carry it to

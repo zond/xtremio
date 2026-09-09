@@ -25,6 +25,10 @@ void main() {
       expect(server.baseUrl, isNull);
       await expectLater(server.settings(), throwsA(anything));
       await expectLater(server.backgroundTraffic(), throwsA(anything));
+      await expectLater(
+        server.streamNumbers(Uri.parse('https://origin.example/film.mkv')),
+        throwsA(anything),
+      );
 
       final url = await server.start(
         configDir: Directory('${tmp.path}/server'),
@@ -75,9 +79,33 @@ void main() {
         throwsA(predicate((e) => e.toString().contains('file index'))),
       );
 
+      // ... and what this server holds of one playing stream, asked with
+      // the URL a player was handed. A URL it does not hold is a complete
+      // answer of nothing rather than an error: an addon's direct link is
+      // playing perfectly well without us, and a panel over it must not
+      // show a failure.
+      expect(
+        await server.streamNumbers(
+          Uri.parse('https://origin.example/film.mkv'),
+        ),
+        isNull,
+      );
+
+      // Nor does the torrent above have rows yet, and for the sharper
+      // reason: its magnet is still resolving, so there is no engine to
+      // peek at and nothing of it on this device. **That absence is the
+      // whole point.** A window of zero there would be this process
+      // reporting a cache it has never looked in -- a claim about a past
+      // it never saw -- where the truth is that it has not looked.
+      expect(await server.streamNumbers(url.resolve('$_infoHash/0')), isNull);
+
       await server.stop();
       expect(server.baseUrl, isNull);
       await expectLater(server.settings(), throwsA(anything));
+      await expectLater(
+        server.streamNumbers(url.resolve('$_infoHash/0')),
+        throwsA(anything),
+      );
     },
   );
 }
