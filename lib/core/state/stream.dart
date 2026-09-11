@@ -132,7 +132,12 @@ final class StreamInfo {
       return StreamKind.external;
     }
     if (json['playerFrameUrl'] != null) return StreamKind.playerFrame;
-    if (json.keys.any((key) => key.endsWith('Urls') || key == 'nzbUrl')) {
+    // `nzbUrl` is deliberately not here. Stremio's protocol has it -- a
+    // Usenet post the streaming server was to fetch over NNTP -- but this
+    // server no longer serves it, so a stream that names one has nothing to
+    // resolve it and is not playable. Calling it an archive would hand it to
+    // the server for a 404 dressed as a player error.
+    if (json.keys.any((key) => key.endsWith('Urls'))) {
       return StreamKind.archive;
     }
     return StreamKind.unknown;

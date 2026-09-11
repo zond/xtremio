@@ -19,9 +19,11 @@ void main() {
       expect(kindOf({'androidTvUrl': 'intent://x'}), StreamKind.external);
       expect(kindOf({'playerFrameUrl': 'https://x'}), StreamKind.playerFrame);
       expect(kindOf({'rarUrls': <Object>[]}), StreamKind.archive);
+      // A Usenet post: the server no longer resolves these, so it is not a
+      // kind the app can play, however Stremio's protocol spells it.
       expect(
         kindOf({'nzbUrl': 'https://x', 'servers': <Object>[]}),
-        StreamKind.archive,
+        StreamKind.unknown,
       );
       expect(kindOf({}), StreamKind.unknown);
     });
