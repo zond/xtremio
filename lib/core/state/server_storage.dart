@@ -55,14 +55,12 @@ class ServerStorage {
     required this.cacheUsedBytes,
     required this.cacheVolume,
     this.cacheLimitBytes,
-    this.cacheComplete = true,
   });
 
   factory ServerStorage.fromJson(Map<String, dynamic> json) => ServerStorage(
     cacheDir: json['cacheDir'] as String? ?? '',
     cacheUsedBytes: (json['cacheUsedBytes'] as num?)?.toInt() ?? 0,
     cacheLimitBytes: (json['cacheLimitBytes'] as num?)?.toInt(),
-    cacheComplete: json['cacheComplete'] as bool? ?? true,
     cacheVolume: StorageVolume.fromJson(
       (json['cacheVolume'] as Map<String, dynamic>?) ?? const {},
     ),
@@ -73,7 +71,10 @@ class ServerStorage {
   /// session's records and what the proxy cached.
   final String cacheDir;
 
-  /// What is under it, all of it. There is no second tree to leave out.
+  /// What the cache occupies: the server's own count of its piece store
+  /// and its proxy cache, the same figure as [CacheUsage.totalBytes] and
+  /// not a walk of the root. So it is a total and never a floor, and the
+  /// storage screen's two figures cannot disagree by construction.
   final int cacheUsedBytes;
 
   /// The `cacheSize` setting, or null when nobody set one.
@@ -85,10 +86,6 @@ class ServerStorage {
   /// screen can rightly call a cache over its limit while this line says
   /// no size was chosen.
   final int? cacheLimitBytes;
-
-  /// False when part of the tree could not be read, which makes
-  /// [cacheUsedBytes] a floor rather than a total.
-  final bool cacheComplete;
 
   final StorageVolume cacheVolume;
 
@@ -111,10 +108,9 @@ class ServerStorage {
   String get cacheLabel {
     final used = DownloadView.humanSize(cacheUsedBytes);
     final limit = cacheLimitBytes;
-    final prefix = cacheComplete ? used : 'at least $used';
     return limit == null
-        ? '$prefix, no cacheSize set'
-        : '$prefix of ${DownloadView.humanSize(limit)} limit';
+        ? '$used, no cacheSize set'
+        : '$used of ${DownloadView.humanSize(limit)} limit';
   }
 
   /// The lines the diagnostics header carries. Everything a person should
