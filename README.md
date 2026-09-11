@@ -22,22 +22,26 @@ All of this is built and runs today. [docs/STATUS.md](docs/STATUS.md) is the
 screen-by-screen inventory; what it does not reach -- casting, subtitle
 timing -- is in the document each bullet links.
 
-- **Catalogs, search and a library across every addon installed.** A board of
-  continue-watching and a row per catalog that answered, discover over the
-  engine's own filters, a search that asks every addon supporting it — and
-  throughout, a line naming the addons that could *not* answer, so a dead
-  addon is never mistaken for a title nobody has.
+- **Catalogs and search across every addon installed, and a library.** A
+  board of continue-watching and a row per catalog that answered, discover
+  over the engine's own filters, a search that asks every addon supporting it
+  — and on the board, in search and under a title's sources, a line naming
+  the addons that could *not* answer, so a dead addon is never mistaken for a
+  title nobody has.
 - **Torrent streaming with no external binary.** `stream-server` runs
   in-process on loopback: nothing to ship beside the app, launch, or keep
-  alive on mobile. A title's sources are one row per release rather than one
-  per addon offering it, ranked by peers per megabyte, and a torrent starts
-  behind a card that says what it is doing — checking, finding peers,
+  alive on mobile. In the default layout a title's sources are one row per
+  release rather than one per addon offering it, in a section per resolution,
+  ranked by peers per megabyte unless another order is picked; a torrent
+  starts behind a card that says what it is doing — checking, finding peers,
   buffering — instead of a spinner.
-- **Offline downloads.** Pin a file through the embedded server and it is
-  kept, piece by piece, in the one torrent-data root. A finished download
-  plays through the same in-process server off the pieces already on the
-  device: no peer, no tracker, no network. On Android a foreground service
-  keeps one going after the app is left.
+- **Offline downloads.** A download is a file pinned in the embedded server:
+  it is kept, piece by piece, in the one torrent-data root the streaming cache
+  uses, and never exists as a whole file. A finished download plays through
+  the same in-process server off the pieces already on the device — no peer,
+  no tracker, no network — and only once the server answers that it holds the
+  file whole. On Android a foreground service keeps one going after the app
+  is left.
 - **A player rather than a video widget.** Buffered seek bar, keyboard and
   remote shortcuts, audio tracks, embedded and addon subtitles, a stats OSD
   reporting hwdec, the swarm, what this device holds of the stream either
@@ -49,22 +53,34 @@ timing -- is in the document each bullet links.
   measured against another subtitle the viewer says is in sync -- which is
   where a stretch comes from, since nothing here presses a multiplier and no
   declared frame rate decides one. What was fixed is stored against the
-  series and the release, so the next episode starts right
+  series and the subtitle's release group (a shift against the video release
+  too), so the next episode starts right
   ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 - **Android TV and Google TV as their own layout**, not a phone app on a big
   screen: D-pad traversal with a focus memory per tab, a focus ring built to
   read over unknown poster art, remote keys in the player, ten-foot density
-  and overscan. Run on a physical Chromecast with Google TV.
-- **Casting to a Chromecast** where the receiver can decode what the embedded
-  server is already serving — the bytes go over the LAN untouched, and the
-  player screen becomes a remote. What it refuses, why it refuses rather than
-  guesses, and the fact that no real receiver has confirmed it yet are in
-  [docs/CASTING.md](docs/CASTING.md).
+  and overscan. Run on a physical Chromecast with Google TV
+  ([ANDROID.md](ANDROID.md)).
+- **Casting to a Chromecast** from an Android phone, where the receiver can
+  decode what the embedded server is already serving. The bytes go over the
+  LAN untouched, from a second listener on the server that exists only while
+  a cast session does and serves only torrents and archives the app has
+  already opened — no control routes, no `/proxy`. The player screen becomes
+  a remote, and a cast does not binge: the end of an episode on the
+  television never starts the next one. What it refuses, why it refuses
+  rather than guesses, and the fact that no real receiver has confirmed it
+  yet are in [docs/CASTING.md](docs/CASTING.md).
+- **Sharing you can see and stop.** *Share while idle* (Settings, on by
+  default) keeps uploading to other peers when nothing is playing; off, the
+  server chokes every peer until a player reads from it again. A status light
+  on the main screens is lit only while the server measures bytes moving with
+  nothing playing, never because of the setting, and pressing it offers
+  *Not now* (until the next start) or *Stop sharing*.
 - **Addons installed from the web.** An addon site's Install button hands the
-  OS a `stremio://` link; Xtremio registers that scheme and opens that
-  addon's details screen, and nothing is installed until the button waiting
-  there is pressed. The contract in full, and the registration per platform,
-  is in [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md).
+  OS a `stremio://` link; where Xtremio can register that scheme it opens
+  that addon's details screen, and nothing is installed until the button
+  waiting there is pressed. The contract in full, and the registration per
+  platform, is in [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md).
 
 ## Getting it
 
