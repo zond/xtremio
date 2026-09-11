@@ -1171,6 +1171,23 @@ fn resolve_media_file(source: &TorrentSource) -> Result<usize, PinFailure> {
 /// meta/video keeps its `createdAt` and `lastPlayedAt` and takes everything
 /// else from this call, so re-downloading after a failure is one call.
 pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
+    let outcome = add_with(request, crate::server::pin_download, release_replaced)?;
+    if outcome.ok {
+        ensure_ticker();
+    }
+    Ok(outcome)
+}
+
+/// [`add`] with the pin and the releases handed in. The pin blocks for as
+/// long as a magnet takes to resolve, and what the registry does meanwhile
+/// is what decides every write and release after it; this is how a test
+/// changes the registry while the pin is in flight, and sees what `add`
+/// releases once it answers.
+fn add_with(
+    request: AddRequest,
+    pin: impl FnOnce(&str, usize, &[String]) -> anyhow::Result<DownloadInfo>,
+    mut release: impl FnMut(&str, &Replaced),
+) -> anyhow::Result<AddOutcome> {
     let source = torrent_source(&request.stream, request.file_idx)?;
     let TorrentSource {
         info_hash,
@@ -1213,7 +1230,7 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
         ))
     })?;
 
-    let info = match crate::server::pin_download(&info_hash, file_idx, &announce) {
+    let info = match pin(&info_hash, file_idx, &announce) {
         Ok(info) => info,
         Err(error) => {
             let failure = PinFailure::classify(&error);
@@ -1233,7 +1250,7 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
                 ))
             })?;
             if let Some(owed) = owed {
-                release_replaced(&key, &owed);
+                release(&key, &owed);
             }
             return Ok(AddOutcome {
                 ok: false,
@@ -1255,7 +1272,7 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
     // saying it is owed, and outside the file lock, since it is a server
     // call. A kill between the two releases it again at boot, idempotently.
     if let Some(replaced) = &replaces {
-        release_replaced(&key, replaced);
+        release(&key, replaced);
     }
 
     let recorded = update(|registry| {
@@ -1282,7 +1299,7 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
                 "the download's row was taken while its pin was taken"
             );
             if orphaned {
-                release_replaced(
+                release(
                     &key,
                     &Replaced {
                         info_hash: info_hash.clone(),
@@ -1301,7 +1318,6 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
         }
     };
 
-    ensure_ticker();
     Ok(AddOutcome {
         ok: true,
         key: Some(key),
@@ -3110,6 +3126,87 @@ mod tests {
         let mut registry = with(theirs.clone());
         cancel_removal(&mut registry, "tt1:tt1", "abc", 2);
         assert_eq!(registry.items["tt1:tt1"], theirs);
+    }
+
+    /// [`add_with`] for `tt1:tt1` on `("abc", 2)` over a registry holding
+    /// `before`, with `meanwhile` done to the registry while the pin is in
+    /// flight and the pin then answering `answer`. Answers the outcome,
+    /// every release `add` asked for, and the registry it left.
+    fn add_while(
+        before: Vec<(&str, Entry)>,
+        meanwhile: impl FnOnce(&mut Registry),
+        answer: anyhow::Result<DownloadInfo>,
+    ) -> (AddOutcome, Vec<Replaced>, Registry) {
+        crate::env::with_storage_dir(|_| {
+            update(|registry| {
+                for (key, row) in before {
+                    registry.items.insert(key.to_owned(), row);
+                }
+                Ok(())
+            })
+            .expect("the registry going in");
+            let mut released = Vec::new();
+            let outcome = add_with(
+                request("tt1", "tt1"),
+                |_, _, _| {
+                    update(|registry| {
+                        meanwhile(registry);
+                        Ok(())
+                    })
+                    .expect("the write while the pin is in flight");
+                    answer
+                },
+                |_, replaced| released.push(replaced.clone()),
+            )
+            .expect("add");
+            (outcome, released, load().expect("the registry after"))
+        })
+    }
+
+    /// A pin that lands for a row a removal took meanwhile is released:
+    /// nothing names the file any more, and a pin nothing names downloads
+    /// until the next launch sweeps it.
+    #[test]
+    fn a_pin_that_lands_for_a_removed_row_is_released() {
+        let (outcome, released, registry) = add_while(
+            Vec::new(),
+            |registry| {
+                registry.items.remove("tt1:tt1");
+            },
+            Ok(pinned("abc", 2, false)),
+        );
+        assert!(!outcome.ok, "{outcome:?}");
+        assert_eq!(
+            released,
+            vec![Replaced {
+                info_hash: "abc".into(),
+                file_idx: 2,
+            }]
+        );
+        assert!(registry.items.is_empty(), "{registry:?}");
+    }
+
+    /// A refused pin for a row a removal took meanwhile releases the file
+    /// the row replaced: that pin stayed because the new one never came,
+    /// and the row that owed its release is gone.
+    #[test]
+    fn a_refused_pin_for_a_removed_row_releases_what_it_replaced() {
+        let (outcome, released, registry) = add_while(
+            vec![("tt1:tt1", naming("old", 0))],
+            |registry| {
+                registry.items.remove("tt1:tt1");
+            },
+            Err(anyhow::anyhow!("refused")),
+        );
+        assert!(!outcome.ok, "{outcome:?}");
+        assert_eq!(
+            released,
+            vec![Replaced {
+                info_hash: "old".into(),
+                file_idx: 0,
+            }]
+        );
+        assert!(registry.items.is_empty(), "not resurrected: {registry:?}");
     }
 
     /// The two intents survive the file, and a row carrying neither is
