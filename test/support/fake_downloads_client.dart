@@ -140,6 +140,19 @@ class FakeDownloadsClient implements DownloadsClient {
     return registry;
   }
 
+  /// What [startFreshRegistry] does here: records the call, and throws
+  /// `startFreshError` when a test wants the refusal.
+  Object? startFreshError;
+  int startFreshCalls = 0;
+
+  @override
+  Future<void> startFreshRegistry() async {
+    callLog?.add('downloads.startFresh');
+    startFreshCalls++;
+    final error = startFreshError;
+    if (error != null) throw error;
+  }
+
   @override
   Future<DownloadOpenResult> open(String key) async {
     opens.add(key);

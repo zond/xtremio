@@ -315,6 +315,16 @@ abstract interface class DownloadsClient {
   /// the server cannot be asked, so the list still renders offline.
   Future<DownloadsRegistry> list();
 
+  /// Move a downloads list that will not read aside and start an empty one.
+  ///
+  /// Only for [DownloadsRegistry.unreadable]: while that holds, the app
+  /// keeps every file on the device because it cannot say which were asked
+  /// for, and nothing can be added or removed. This gives that up -- the
+  /// files stop being named and are freed at the next launch -- so a caller
+  /// asks the user first. Throws when the list reads, which is what makes
+  /// it a repair rather than a way to delete everything.
+  Future<void> startFreshRegistry();
+
   /// What to play the download [key] off the device with, and a note that
   /// it was played: a finished download answers the embedded server's media
   /// route for its own torrent and file -- there is no whole file to open,
@@ -344,6 +354,7 @@ typedef DownloadsRemoveFn = Future<String> Function({
   required bool deleteFiles,
 });
 typedef DownloadsListFn = Future<String> Function();
+typedef DownloadsStartFreshFn = Future<String> Function();
 typedef DownloadsOpenFn = Future<String> Function({required String key});
 typedef DownloadsEventsFn = Stream<String> Function();
 
@@ -360,6 +371,7 @@ class RustDownloadsClient implements DownloadsClient {
     this.addDownload = rust.downloadsAdd,
     this.removeDownload = rust.downloadsRemove,
     this.listDownloads = rust.downloadsList,
+    this.startFresh = rust.downloadsStartFresh,
     this.openDownload = rust.downloadsOpen,
     this.openEvents = rust.downloadsEvents,
   });
@@ -367,6 +379,7 @@ class RustDownloadsClient implements DownloadsClient {
   final DownloadsAddFn addDownload;
   final DownloadsRemoveFn removeDownload;
   final DownloadsListFn listDownloads;
+  final DownloadsStartFreshFn startFresh;
   final DownloadsOpenFn openDownload;
   final DownloadsEventsFn openEvents;
 
@@ -399,6 +412,9 @@ class RustDownloadsClient implements DownloadsClient {
   @override
   Future<DownloadsRegistry> list() async =>
       DownloadsRegistry.fromJson(_object(await listDownloads()));
+
+  @override
+  Future<void> startFreshRegistry() async => startFresh();
 
   @override
   Future<DownloadOpenResult> open(String key) async =>

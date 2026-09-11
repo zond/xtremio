@@ -20,19 +20,26 @@ flutter_rust_bridge = "=2.13.0"
 # features are ON, which links unrar-rs (GPL-3.0-or-later) -- see README.
 # Build with `default-features = false` for an MIT binary without RAR support.
 #
-# `stream_numbers` -- what one playing stream's stores hold, which the
-# player's stats panel draws its cache and sharing rows from -- plus the
-# proxy retention work that came with it: the cache cleaner's doorbell
-# deadlock, the pass that reclaimed round where playback had been rather
-# than where it was, and the arming chain that spun.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "5e96e8ec15974cdd422b424ca97dd63ccacbc33b" }
+# This rev is where the server stopped keeping its own record of what is
+# pinned and started being told: `ServerConfig::pins`, handed in before its
+# launch sweep runs, from this app's downloads registry -- the list the user
+# sees and acts on. `None` there means "nobody told me" and keeps every
+# torrent's data; an empty map means "nothing is pinned" and deletes it, so
+# `crate::downloads::pins` is careful about which it answers.
+#
+# It also carries the retention redesign that arrived with it: one owner per
+# entity on both the torrent and proxy sides, a window bounded by the budget
+# with the fetch-ahead bounded by the window, liveness that ends on a switch
+# or a restart rather than on a clock, and no cache cleaner at all -- every
+# byte under the root has exactly one thing that deletes it.
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "e71309af7f1e7c21ba607f9678ea4ba172df0ff0" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "5e96e8ec15974cdd422b424ca97dd63ccacbc33b" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "e71309af7f1e7c21ba607f9678ea4ba172df0ff0" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so

@@ -197,6 +197,59 @@ void main() {
       expect(find.text('0 downloads · 0 B on this device'), findsOneWidget);
     });
 
+    testWidgets('an unreadable list says nothing was deleted', (tester) async {
+      useTallViewport(tester);
+      // The list itself will not read. Its items are empty and that is not
+      // an answer about what is downloaded: the files are on the device and
+      // the server is keeping every one of them, because this list is the
+      // only record of which were asked for.
+      final downloads = FakeDownloadsClient(
+        registry: const DownloadsRegistry(unreadable: 'expected value'),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your downloads list could not be read'), findsOneWidget);
+      expect(find.text('Nothing downloaded'), findsNothing);
+      // Nor is it a failed listing: a retry would read the same file the
+      // same way, so it is not offered.
+      expect(find.text('Downloads could not be read'), findsNothing);
+      expect(find.text('0 downloads · 0 B on this device'), findsNothing);
+      expect(find.text('Not known right now'), findsOneWidget);
+    });
+
+    testWidgets('starting fresh is asked for, and says what it costs', (
+      tester,
+    ) async {
+      useTallViewport(tester);
+      final downloads = FakeDownloadsClient(
+        registry: const DownloadsRegistry(unreadable: 'expected value'),
+      );
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(coreWithPlayer(), downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Start fresh'));
+      await tester.pumpAndSettle();
+      // The one thing here that loses something on purpose, so it says so
+      // before it happens and can be backed out of.
+      expect(find.textContaining('removed to free the space'), findsOneWidget);
+      await tester.tap(find.text('Keep waiting'));
+      await tester.pumpAndSettle();
+      expect(
+        downloads.startFreshCalls,
+        0,
+        reason: 'backing out does nothing',
+      );
+
+      await tester.tap(find.text('Start fresh'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start fresh').last);
+      await tester.pumpAndSettle();
+      expect(downloads.startFreshCalls, 1);
+    });
+
     testWidgets('a listing that failed says so, and retries', (tester) async {
       useTallViewport(tester);
       // A broken bridge: the registry is on disk, the app just cannot read

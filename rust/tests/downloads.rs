@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use xtremio_core::api::core::{core_init, core_shutdown, CoreConfig};
 use xtremio_core::api::downloads::{
-    downloads_add, downloads_list, downloads_open, downloads_remove,
+    downloads_add, downloads_list, downloads_open, downloads_remove, downloads_start_fresh,
 };
 use xtremio_core::api::server::{
     server_settings, server_start, server_update_settings, ServerConfig,
@@ -990,28 +990,60 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         "the registry holds entries and a version, and nothing else: {on_disk}"
     );
 
-    // A registry the app cannot read must not take the app down with it: the
-    // list is empty rather than an error, and the next write starts over --
-    // but the file itself is moved aside first, not overwritten, so its
-    // bytes are still there to recover a pin from.
+    // A registry the app cannot read must not take the app down with it, and
+    // must not be mistaken for an empty one either: it is the only record of
+    // what the user asked to keep, and the server is told the pin set from
+    // it, so "no downloads" is the answer that deletes them all. The list
+    // says why instead, the file is left exactly where it is -- moved aside,
+    // the condition would last one launch, and the launch after it would
+    // name an empty pin set and sweep every download -- and nothing can be
+    // written while it stands.
     let good = std::fs::read_to_string(&registry_file)?;
     std::fs::write(&registry_file, b"{ this is not JSON")?;
+    let listed = list();
+    assert_eq!(listed["items"], serde_json::json!({}));
+    assert!(
+        listed["registryUnreadable"].is_string(),
+        "the list says it could not be read: {listed}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&registry_file)?,
+        "{ this is not JSON",
+        "and the file stands, so the condition outlives this launch"
+    );
+    let corrupt_aside = |storage: &std::path::Path| -> Vec<std::path::PathBuf> {
+        std::fs::read_dir(storage)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("downloads.json.corrupt-"))
+            })
+            .collect()
+    };
+    assert!(
+        corrupt_aside(&storage).is_empty(),
+        "nothing was moved aside on its own"
+    );
+
+    // The way out is the user's, and only from here: a repair refuses while
+    // the list reads, which is what keeps it from being a delete-everything
+    // button.
+    downloads_start_fresh()?;
+    let aside = corrupt_aside(&storage);
+    assert_eq!(aside.len(), 1, "{aside:?}");
+    assert_eq!(std::fs::read_to_string(&aside[0])?, "{ this is not JSON");
     assert_eq!(
         list()["items"],
         serde_json::json!({}),
-        "corrupt reads empty"
+        "and a fresh, readable, empty list stands in its place"
     );
-    let aside: Vec<std::path::PathBuf> = std::fs::read_dir(&storage)?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("downloads.json.corrupt-"))
-        })
-        .collect();
-    assert_eq!(aside.len(), 1, "{aside:?}");
-    assert_eq!(std::fs::read_to_string(&aside[0])?, "{ this is not JSON");
-    assert!(!registry_file.exists(), "and the unreadable file is gone");
+    assert!(
+        downloads_start_fresh().is_err(),
+        "a list that reads is not something to repair"
+    );
 
     // An entry a *newer* build wrote is kept as it is, not dropped and then
     // erased by the next write: the server is still pinning it.

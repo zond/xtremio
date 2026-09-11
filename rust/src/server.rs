@@ -95,6 +95,14 @@ fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
         config_dir: Some(config.config_dir.clone()),
         cache_dir: Some(config.cache_dir.clone()),
         lan_media_addr: Some(LAN_MEDIA_ADDR),
+        // **What the user asked to keep, and the only record of it.** The
+        // server keeps none: it sweeps everything this set does not claim
+        // before its session opens, which is the one moment early enough to
+        // spare it hash-checking data that is about to go. `None` -- a
+        // registry that would not read -- names nothing and is not an empty
+        // set: the server then keeps every torrent's data for that boot.
+        // See `crate::downloads::pins`.
+        pins: crate::downloads::pins(),
         ..stream_server::ServerConfig::embedded()
     })
 }

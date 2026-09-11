@@ -315,7 +315,11 @@ final class DownloadsListingUpdate extends DownloadsUpdate {
 /// `downloads.json` as a whole: what `downloads_list` answers and what a
 /// progress event carries.
 final class DownloadsRegistry {
-  const DownloadsRegistry({this.version = 1, this.items = const {}});
+  const DownloadsRegistry({
+    this.version = 1,
+    this.items = const {},
+    this.unreadable,
+  });
 
   /// The file format's version, so a payload from a newer build is
   /// recognisable as one.
@@ -324,6 +328,16 @@ final class DownloadsRegistry {
   /// Every download, by [DownloadView.key].
   final Map<String, DownloadView> items;
 
+  /// Why the list on this device could not be read, when it could not.
+  ///
+  /// **An empty [items] beside this is not "nothing is downloaded".** The
+  /// file is the only record of what the user asked to keep, and the server
+  /// is told the pin set from it, so a read that fails means the app cannot
+  /// say what is kept -- not that nothing is. The files stay on the device
+  /// and the server keeps them for as long as this holds, which is why the
+  /// screen has to say so rather than draw an empty list.
+  final String? unreadable;
+
   /// Nothing downloaded, and what a failed read falls back to.
   static const DownloadsRegistry empty = DownloadsRegistry();
 
@@ -331,6 +345,7 @@ final class DownloadsRegistry {
     final items = json['items'] as Map<String, dynamic>? ?? const {};
     return DownloadsRegistry(
       version: (json['version'] as num?)?.toInt() ?? 1,
+      unreadable: json['registryUnreadable'] as String?,
       items: {
         for (final entry in items.entries)
           if (entry.value is Map<String, dynamic>)

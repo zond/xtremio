@@ -187,6 +187,51 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     }
   }
 
+  /// Give up on a list that will not read, and start an empty one.
+  ///
+  /// Asked for plainly, because it is the only thing here that loses
+  /// something on purpose: the list goes, so the files it named stop being
+  /// named, and the server -- which is keeping them precisely because we
+  /// cannot say what is pinned -- takes them at the next launch. The old
+  /// file is kept beside the new one for anyone who can still get something
+  /// out of it.
+  Future<void> _startFresh() async {
+    final client = _client;
+    final downloads = _downloads;
+    if (client == null || downloads == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start a fresh list?'),
+        content: const Text(
+          'The list of what you downloaded cannot be read, so the app is '
+          'keeping every file on this device rather than guessing. Starting '
+          'a fresh list gives that up: the files stay until you next open '
+          'the app, and are then removed to free the space.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep waiting'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Start fresh'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await client.startFreshRegistry();
+    } catch (_) {
+      if (mounted) _tell('The list could not be replaced.');
+      return;
+    }
+    await downloads.refresh();
+    if (mounted) _tell('Started a fresh list of downloads.');
+  }
+
   Future<void> _delete(DownloadView view) async {
     final client = _client;
     final downloads = _downloads;
@@ -243,15 +288,22 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     // The header counts a listing, so it only speaks when there is one:
     // "0 downloads · 0 B" over a listing that failed is the same lie the
     // empty state below stopped telling.
+    // The list this device keeps could not be read. Its items are empty and
+    // that is not an answer about what is downloaded, so nothing below
+    // counts them or calls them nothing.
+    final unreadable = registry.unreadable;
     final counted =
-        downloads != null && downloads.isLoaded && downloads.error == null;
+        downloads != null &&
+        downloads.isLoaded &&
+        downloads.error == null &&
+        unreadable == null;
     return Scaffold(
       appBar: AppBar(title: const Text('Downloads')),
       body: ListView(
         children: [
           _StorageHeader(
             registry: counted ? registry : null,
-            failed: downloads?.error != null,
+            failed: downloads?.error != null || unreadable != null,
           ),
           const Divider(height: 1),
           // A listing that failed is not an empty one: saying "nothing
@@ -259,8 +311,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           // and there would be nothing to do about it.
           if (downloads != null && downloads.error != null)
             _ListingFailed(onRetry: downloads.refresh),
+          if (unreadable != null)
+            _RegistryUnreadable(
+              reason: unreadable,
+              onStartFresh: () => _startFresh(),
+            ),
           if (downloads != null &&
               downloads.error == null &&
+              unreadable == null &&
               downloads.isLoaded &&
               items.isEmpty)
             const _NothingDownloaded(),
@@ -441,6 +499,42 @@ class _ListingFailed extends StatelessWidget {
     trailing: TextButton(
       onPressed: () => onRetry(),
       child: const Text(retryLabel),
+    ),
+  );
+}
+
+/// **The list could not be read, and that is not an empty list.**
+///
+/// It is the only record of what the user asked to keep, and the server is
+/// told the pin set from it -- so while it will not read, the server names
+/// nothing and keeps every file it has. Nothing is lost, nothing can be
+/// added or removed either, and a retry will not help: the file will read
+/// the same way next time. The way out is deliberate and costs something,
+/// which is why it is a button and not something the app did quietly.
+class _RegistryUnreadable extends StatelessWidget {
+  const _RegistryUnreadable({required this.reason, required this.onStartFresh});
+
+  final String reason;
+  final Future<void> Function() onStartFresh;
+
+  static const String message = 'Your downloads list could not be read';
+  static const String startFreshLabel = 'Start fresh';
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    isThreeLine: true,
+    leading: Icon(
+      Icons.warning_amber_outlined,
+      color: Theme.of(context).colorScheme.error,
+    ),
+    title: const Text(message),
+    subtitle: const Text(
+      'Nothing has been deleted: every file is being kept on this device '
+      'until the list can be read. New downloads cannot be added until then.',
+    ),
+    trailing: TextButton(
+      onPressed: () => onStartFresh(),
+      child: const Text(startFreshLabel),
     ),
   );
 }

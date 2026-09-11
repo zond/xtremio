@@ -636,6 +636,21 @@ static REGISTRY_READS: std::sync::atomic::AtomicUsize = std::sync::atomic::Atomi
 
 /// Reads and parses the file at `path`, forgivingly (see [`Registry::parse`]),
 /// moving aside one that cannot be read as JSON at all.
+///
+/// **A file that will not read is an error, not an empty registry, and it
+/// stays where it is.** This list is the only record of what the user asked
+/// to keep -- the server keeps none of its own and is told the pin set from
+/// here ([`pins`]) -- so answering "no downloads" for a truncated flush is
+/// answering "delete them all", and the first thing to act on it would be
+/// the server's launch sweep.
+///
+/// It used to be moved aside and the read answered with an empty registry.
+/// Both halves were wrong once the server stopped keeping its own record:
+/// the empty answer is the delete-everything answer, and moving the file
+/// aside made the condition last exactly one launch -- that boot would keep
+/// the bytes, and the next, reading no file at all, would name an empty pin
+/// set and sweep every download. Left in place, the condition holds across
+/// launches and the disk keeps what it held until the file reads again.
 fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
     #[cfg(test)]
     REGISTRY_READS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -653,28 +668,98 @@ fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
                 .err()
                 .map(|error| error.to_string())
                 .unwrap_or_else(|| "the file is not a JSON object".to_owned());
-            move_aside(path, &reason);
-            Ok(Registry::default())
+            Err(anyhow::anyhow!(
+                "downloads registry is unreadable: {reason}"
+            ))
         }
     }
 }
 
-/// Renames a registry the app cannot read at all to
-/// `downloads.json.corrupt-<seconds>`, so the next write starts a fresh file
-/// instead of overwriting the one a human (or a later build) might still get
-/// something out of.
-fn move_aside(path: &std::path::Path, reason: &str) {
-    match crate::env::move_aside(path) {
-        Ok(_) => tracing::warn!(
-            reason,
-            "downloads registry is unreadable; moved aside and starting empty"
-        ),
-        Err(error) => tracing::warn!(
-            reason,
-            %error,
-            "downloads registry is unreadable and could not be moved aside; starting empty"
-        ),
+/// The pin set to hand the server at startup: every download this registry
+/// names, as `info hash -> file indices`.
+///
+/// **This is the authority on what is kept.** The server keeps no record of
+/// its own; it sweeps everything the set does not claim before its session
+/// opens, so this function's answer is what survives a launch. `None` --
+/// which is what a registry that would not read produces -- names nothing
+/// and is not an empty set: the server keeps every torrent's data for that
+/// boot and reports the condition, rather than deleting the downloads whose
+/// list we just failed to read.
+///
+/// Rows on their way out are left out: a removal that has begun is a
+/// download the user has already said goodbye to, and re-pinning it here
+/// would be the launch undoing the removal.
+pub fn pins_in(registry: &Registry) -> stream_server::PinSet {
+    let mut pins: stream_server::PinSet = Default::default();
+    for entry in registry.items.values() {
+        if entry.is_leaving() {
+            continue;
+        }
+        pins.entry(entry.info_hash.to_lowercase())
+            .or_default()
+            .push(entry.file_idx);
     }
+    for indices in pins.values_mut() {
+        indices.sort_unstable();
+        indices.dedup();
+    }
+    pins
+}
+
+/// [`pins_in`] of the registry on disk, or `None` when it would not read --
+/// see [`read_registry`]. Called once, by [`crate::server::start`], before
+/// the server opens its session.
+pub fn pins() -> Option<stream_server::PinSet> {
+    match load() {
+        Ok(registry) => Some(pins_in(&registry)),
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "cannot say what is pinned; the server will keep every torrent's data this boot"
+            );
+            None
+        }
+    }
+}
+
+/// Move an unreadable registry aside and start a fresh, empty one.
+///
+/// **The way out of a registry that will not read, and it is deliberately
+/// the user's to take.** While the file stands, [`pins`] names nothing and
+/// the server keeps every torrent's data -- which is what stops a bad read
+/// deleting downloads -- but every write goes through the same load, so
+/// nothing can be pinned or removed either. The app is safe and stuck, and
+/// only somebody who knows what they are giving up should end that.
+///
+/// What they give up: the list is gone, so the kept files stop being named
+/// at the next launch and the server's sweep takes them. The bytes are on
+/// the disk until then. The old file is renamed
+/// `downloads.json.corrupt-<seconds>` rather than removed, so a later build
+/// or a person can still get something out of it.
+///
+/// Refuses while the registry reads: this is a repair, not a "delete
+/// everything" button, and the difference is exactly whether the list can
+/// be shown before it is discarded.
+pub fn start_fresh_registry() -> anyhow::Result<()> {
+    let app = crate::state::state();
+    let mut file = app.downloads.file();
+    let path = registry_path()?;
+    if load_locked(&mut file).is_ok() {
+        anyhow::bail!("the downloads registry reads; there is nothing to repair");
+    }
+    crate::env::move_aside(&path)
+        .map_err(|error| anyhow::anyhow!("move the unreadable registry aside: {error}"))?;
+    // The cache described the file that has just been renamed away.
+    file.cached = None;
+    let bytes = serde_json::to_vec(&Registry::default())?;
+    crate::env::write_atomically(&path, &bytes)
+        .map_err(|error| anyhow::anyhow!("write a fresh downloads registry: {error}"))?;
+    tracing::warn!(
+        path = %path.display(),
+        "the downloads registry was moved aside and a fresh one started; \
+         the files it named are kept until the next launch"
+    );
+    Ok(())
 }
 
 /// The registry as it is on disk.

@@ -70,8 +70,46 @@ pub fn downloads_remove(key: String, delete_files: bool) -> anyhow::Result<Strin
 /// disk is answered instead, so the list still renders offline. An entry
 /// this build cannot parse stays in the file but is left out here — the
 /// caller could not read it either.
+///
+/// A registry that will not read at all answers
+/// `{"version":1,"items":{},"registryUnreadable":"<why>"}` rather than
+/// raising. **An empty list is not the honest answer there and a thrown
+/// error is not a useful one**: this file is the only record of what the
+/// user asked to keep, so what the caller has to be able to say is "your
+/// downloads are still on this device and I cannot list them", which needs
+/// the reason and an otherwise well-formed payload. The bytes are kept --
+/// the server is told no pin set at all this boot
+/// (`crate::downloads::pins`) -- and the file is left where it is, so the
+/// condition holds until it reads again rather than lasting one launch.
 pub fn downloads_list() -> anyhow::Result<String> {
-    guarded(|| serde_json::to_string(&crate::downloads::list()?).map_err(Into::into))
+    guarded(|| match crate::downloads::list() {
+        Ok(registry) => serde_json::to_string(&registry).map_err(Into::into),
+        Err(error) => serde_json::to_string(&serde_json::json!({
+            "version": crate::downloads::VERSION,
+            "items": {},
+            "registryUnreadable": format!("{error:#}"),
+        }))
+        .map_err(Into::into),
+    })
+}
+
+/// Move an unreadable downloads registry aside and start an empty one.
+///
+/// The way out of the state `downloads_list` reports as
+/// `registryUnreadable`: while the file stands, nothing can be pinned or
+/// removed, because every write reads the list first. Answers `{}` on
+/// success and raises when the registry reads -- this is a repair, not a
+/// "delete everything" button.
+///
+/// **Say what it costs before calling it.** The list is discarded, so the
+/// files it named stop being named: the server keeps them for the rest of
+/// this launch and its sweep takes them at the next one. The old file is
+/// renamed `downloads.json.corrupt-<seconds>`, not removed.
+pub fn downloads_start_fresh() -> anyhow::Result<String> {
+    guarded(|| {
+        crate::downloads::start_fresh_registry()?;
+        Ok("{}".to_owned())
+    })
 }
 
 /// What to play the download `key` off the device with, and a note that it
