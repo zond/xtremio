@@ -46,8 +46,8 @@ should read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
 everything a torrent puts on this device is under (the server's
 `cacheRoot`: the piece store the streaming cache and the kept downloads
 share, the session's records, the proxy cache), and answers the question a
-misbehaving playback raises first: is the cache over the limit its cleaner
-is supposed to hold it to. The same number is in the copied diagnostics
+misbehaving playback raises first: is the cache over the limit the server
+sizes it against. The same number is in the copied diagnostics
 header too (alongside the device's free space, which lives only there),
 since it is what a person should look at before reading a single log line.
 
@@ -70,25 +70,27 @@ that next start.
 
 The cache-vs-limit number comes straight from the pinned server
 (`ServerHandle::cache_usage()`, `rust/src/server.rs`
-`cache_usage()`/`server_cache_usage()`): a read-only walk in the cleaner's
-own occupancy accounting (allocated blocks, not apparent length), reporting
-`totalBytes`/`limitBytes` and, separately, `protectedBytes`/
-`protectedFiles` — what a live engine is writing or a pinned download keeps
-right now, which a clean pass can never touch. The device's free/total
+`cache_usage()`/`server_cache_usage()`): counted from what the piece store
+and the proxy cache say they hold, not from a walk, in allocated blocks
+rather than apparent length, reporting `totalBytes`/`limitBytes` and,
+separately, `protectedBytes`/`protectedFiles` — what a pinned download or
+the window of the title played last keeps right now, which a clean can
+never take. The device's free/total
 space (a different concern — is the disk full, not is the cache over its
 limit) is still measured on the Rust side, in `rust/src/storage.rs`
 (`server_storage_report()`), and shown beside the root on that screen and
 in the diagnostics header.
 
 "Clean cache now" runs `ServerHandle::clean_cache_now()`
-(`server_clean_cache_now()`) — the exact function the server's own
-scheduled sweep calls (`server/src/cache_cleaner.rs`, on a debounce after
-cache writes and hourly otherwise), only on demand. **Nothing here stops
-playback**: unlike restarting the server, which was the only way to ask for
-a sweep before the server exposed this call, the running server keeps
-answering throughout. The same protections apply as ever — nothing a live
-engine is writing or a pin keeps is ever evicted — so a clean that leaves
-the cache still over its limit is not a failure: the screen names what
+(`server_clean_cache_now()`). There is no scheduled sweep for it to run
+early: the torrent engine and the proxy cache each own their bytes and give
+back what nobody is playing and nobody kept as they go, and a clean asks
+both for that slack at once (`server/src/cache_cleaner.rs`, which keeps its
+old name and no cleaner). **Nothing here stops playback**: the running
+server keeps answering throughout. A pin and the window of the title played
+last (kept with the player closed, until something else is played) are
+never taken, so a clean that leaves the cache still over its limit is not a
+failure: the screen names what
 `protectedBytes`/`protectedFiles` (or the report's `protected`/
 `protectedFiles`) are holding, rather than saying the clean failed.
 
@@ -203,7 +205,7 @@ reads the numbers as the torrent's total, or as the evening's, is reading
 them wrong. A ratio against nothing downloaded is left out rather than
 drawn `0.00`, so a torrent seeding a complete file shows both byte counts
 and the period with no ratio between them. A stream that is not a torrent
-is relayed rather than seeded and has no row here at all, and neither has
+is proxied rather than seeded and has no row here at all, and neither has
 a torrent whose counters cannot be read -- paused, checking, stopped for
 space, in error.
 

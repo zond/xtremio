@@ -435,14 +435,14 @@ class MediaKitEngine implements PlaybackEngine {
   /// media_kit 1.2.6 starts libmpv with `cache-on-disk=yes`
   /// (`player/native/player/real.dart`), and what that buys is a cache file
   /// mpv unlinks the moment it creates it: no name in the directory, so no
-  /// `du`, no `dumpsys diskstats` and no walk the server's own cleaner
-  /// performs can see it, and the blocks come back only when the fd closes.
+  /// `du`, no `dumpsys diskstats` and nothing the server counts can see it,
+  /// and the blocks come back only when the fd closes.
   /// On the owner's Chromecast one 90-second title held 928 MB that way
   /// while three separate instruments reported the app was using 46 MB.
   ///
   /// There is one cache on this device now and it is the server's: named
-  /// files, a configured limit, a free-space floor, a cleaner that evicts,
-  /// and survival across a crash. Every stream reaches the player through
+  /// files, a configured limit, a free-space floor, owners that give back
+  /// what nobody is playing and nobody kept, and survival across a crash. Every stream reaches the player through
   /// it ([proxiedThroughServer]), so a second copy in a file nobody can see
   /// buys nothing that the first one does not already do better. It is set
   /// here, once per player and never again, because it is a property of
@@ -628,7 +628,7 @@ class MediaKitEngine implements PlaybackEngine {
   /// stream.** Every remote stream now arrives at the loopback address
   /// ([proxiedThroughServer]), which is exactly the address this method
   /// used to read as "our torrent reader, which waits rather than refuses".
-  /// It is not: the route relays a host we know nothing about, so the claim
+  /// It is not: the route fronts a host we know nothing about, so the claim
   /// that could be made about the addon's own URL is the claim to make
   /// about the proxy of it -- and that claim was no.
   static bool forcesSeekable(Uri url) {
@@ -695,11 +695,12 @@ class MediaKitEngine implements PlaybackEngine {
   /// the same window at a worse price, in the one place nothing can reclaim
   /// it from.
   ///
-  /// And the number is not the bottleneck yet. `/proxy` relays without
-  /// caching today (`server/tests/proxy.rs`), so the honest next move if
-  /// two minutes proves too thin is to make the server's side of the hop
-  /// keep what it fetched -- which helps a re-watch, a backward seek and a
-  /// second player, none of which a bigger heap here helps at all.
+  /// And the number is not the bottleneck. `/proxy` keeps what it fetched
+  /// around the play head (`server/src/proxy_cache.rs`), as the torrent
+  /// store does, so a backward seek, a re-watch and a second player are
+  /// answered off this device's disk -- none of which a bigger heap here
+  /// helps at all. If two minutes proves too thin, the window the server
+  /// keeps is the number to look at, not this one.
   ///
   /// It is written out rather than inherited because it is now the player's
   /// only buffer, and the only buffer should not be somebody else's

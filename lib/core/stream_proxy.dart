@@ -31,29 +31,30 @@ import 'dart:io';
 /// read-ahead, a window kept around the play head -- has to be added
 /// somewhere both kinds of stream pass through.
 ///
-/// **What it is not, today.** `/proxy` relays: it opens the target with
-/// reqwest and streams the answer back, writing nothing to the cache the
-/// cleaner walks and fetching again whatever is asked for twice
-/// (`server/tests/proxy.rs`, in the stream-server tree `rust/Cargo.toml`
-/// pins). A backward seek past the player's memory cache therefore goes
-/// back out to the origin. That is the accepted first step rather than the
-/// end state, and it is already better than what it replaces: a re-fetch is
-/// bounded network, where the old answer was an unbounded, unnameable file
-/// on a 4 GB television.
+/// **What the server keeps of it.** `/proxy` caches by byte range
+/// (`server/src/proxy_cache.rs`, in the stream-server tree
+/// `rust/Cargo.toml` pins): the part of a range it holds is answered off
+/// the disk, the origin is asked only for the rest, and a miss streams to
+/// the player as it fills. What it holds is kept around the play head by
+/// the same retention that keeps a torrent's pieces, which is why the stats
+/// panel's cache row has a window for a proxied stream too. So a backward
+/// seek past the player's memory cache is answered from this device inside
+/// that window, and only a read outside it goes back out to the origin.
 ///
 /// **Left alone:**
 ///
 /// - Anything that is not `http` or `https` -- a `magnet:` the core has not
 ///   resolved. There is nothing for a proxy to fetch.
-/// - A loopback URL. That is the embedded server itself, whatever port it
-///   ended up on: a recorded profile says `11470` and the server takes
-///   whatever it can bind, so the port is no part of the test. Proxying it
-///   would be the server fetching from itself. A kept download's URL is
-///   one of these -- the server's own media route, off the pieces already
-///   on the device.
-/// - A URL already on [serverBase]. The loopback case again, said in terms
-///   of the server we were handed rather than of the address family: a
-///   stream this server is already serving is not one to give back to it.
+/// - A loopback URL. That is the embedded server itself or another server
+///   on this device. Proxying the first would be the server fetching from
+///   itself, and the second already serves the bytes off this device, so a
+///   proxied copy would be a second one of them on the same disk. A kept
+///   download's URL is one of these -- the server's own media route, off
+///   the pieces already on the device.
+/// - A URL on the embedded server by any name ([isEmbeddedServer]). The
+///   loopback case again, said in terms of the server we were handed
+///   rather than of the address family: a stream this server is already
+///   serving is not one to give back to it.
 /// - Everything, when [serverBase] is null -- a build that started no
 ///   embedded server. No server means no proxy, and a stream that plays
 ///   direct is better than one that does not play. Note that a viewer who
@@ -129,7 +130,7 @@ Uri proxiedThroughServer(
 /// Whether [url] is one this app's server is serving through its `/proxy`
 /// route, which is a different claim from being on the server.
 ///
-/// The route relays somebody else's host, so what can be said about the
+/// The route fronts somebody else's host, so what can be said about the
 /// stream behind it is what could be said about that host, and nothing that
 /// is true of the server's own torrent reader. `MediaKitEngine.forcesSeekable`
 /// is the one that matters: a torrent read through the server waits for a

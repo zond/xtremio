@@ -30,9 +30,10 @@ final class StreamNumbers {
   /// where nothing is bounding the stream: no retention policy (the
   /// budget covers the whole file, or none has been published yet) and no
   /// reader that has been anywhere inside it in this process. What is on
-  /// the disk without a policy is not a window -- it is whatever the
-  /// cleaner has not aged out yet, a different quantity -- so the row is
-  /// absent rather than carrying both meanings.
+  /// the disk without a policy is not a window -- it is whatever of the
+  /// file has been fetched, with nothing holding it to the play head, a
+  /// different quantity -- so the row is absent rather than carrying both
+  /// meanings.
   final CacheWindow? window;
 
   /// The sharing numbers: torrents only. Null for a proxied response,

@@ -323,7 +323,8 @@ what every model field means. The shape of the thing is in the
   `cacheRoot`: the piece store the streaming cache and the kept downloads
   share (`<cacheRoot>/rqbit-downloads/.pieces/<infoHash>/<bucket>/<piece>`,
   one file per whole piece), the session's own records beside it, and what
-  `/proxy` cached. It is the only tree the cleaner walks. A pin decides
+  `/proxy` cached. Nothing else on the device is the server's to reclaim,
+  and each part of it has one owner that does. A pin decides
   that bytes are *kept*, never where they go, so a `downloadsDir` distinct
   from the cache had nothing left to hold and is gone -- an unknown key the
   server ignores on write and does not answer with. So is the app's whole
@@ -516,21 +517,22 @@ what every model field means. The shape of the thing is in the
   excludes
   `/proxy` for the same reason it always excluded a remote host: the
   promise that a seek will wait rather than be refused is about the
-  *server's own* torrent reader, and the route relays a host we know
+  *server's own* torrent reader, and the route fronts a host we know
   nothing about.
 - **There is one cache on the device and it is the server's.** The player
   is started with `cache-on-disk=no`, once per player, for every stream,
   and nothing ever writes that property again. media_kit's own default is
   `yes`, and what that buys is a file mpv unlinks the moment it creates
-  it: no name in the directory, so no `du`, no `dumpsys diskstats` and no
-  walk the server's cleaner performs can find it, and the blocks come back
+  it: no name in the directory, so no `du`, no `dumpsys diskstats` and
+  nothing the server counts can find it, and the blocks come back
   only when the fd closes. On the owner's Chromecast one 90-second title
   held 928 MB that way while three separate instruments reported the app
   was using 46 MB. The server's cache is everything that is not -- named
   files, a configured limit (`min(cacheSize, occupied + available -
   512 MiB)`, the `CACHE_FREE_SPACE_FLOOR` below which
-  `ensure_download_disk_ready` has already given up on the disk), a
-  cleaner that evicts, and survival across a crash -- and now that every
+  `ensure_download_disk_ready` has already given up on the disk), owners
+  that give back what nobody is playing and nobody kept, and survival
+  across a crash -- and now that every
   stream goes through it, it is the only local copy there is. There is no
   shared budget to keep any more, because there is nothing to share it
   with.
@@ -551,15 +553,16 @@ what every model field means. The shape of the thing is in the
   245 MB PSS with a player up, the embedded server and its torrent engine
   share that process, and the cushion this design wants is the server's
   rather than a bigger heap here.
-- **What the proxy does not do yet.** `/proxy` relays: it opens the target
-  with reqwest and streams the answer back, caching nothing and fetching
-  twice what is asked for twice (pinned in `server/tests/proxy.rs` in the
-  stream-server tree). `Range` is forwarded and the origin's `206`,
-  `Content-Range` and `Accept-Ranges` come back untouched, so a backward
-  seek past the memory cache works -- by asking the origin again. For a
-  torrent the file is on disk anyway and that seek is local. Making the
-  proxied half local too is the next stage, and it belongs on the server's
-  side of the hop rather than in the player's heap.
+- **What the proxy keeps.** `/proxy` caches by byte range
+  (`server/src/proxy_cache.rs` in the stream-server tree): the part of a
+  range it holds is answered off the disk, the origin is asked only for the
+  rest, and a miss streams to the player as it fills. What it holds is kept
+  around the play head by the same retention that keeps a torrent's
+  pieces, so `server_stream_numbers` answers a window for a proxied stream
+  as it does for a torrent, and a backward seek past the memory cache is
+  local inside that window. Only a read outside it goes back to the
+  origin. That is the cushion this design wants, on the server's side of
+  the hop rather than in the player's heap.
 - **A player that is left ends its own reads first.** Each player screen
   mints a token (`player-1`, `player-2`, ...), writes it into the `/proxy`
   URLs it hands the engine as `p=`, and on the way out calls

@@ -33,10 +33,11 @@ timing -- is in the document each bullet links.
   per addon offering it, ranked by peers per megabyte, and a torrent starts
   behind a card that says what it is doing — checking, finding peers,
   buffering — instead of a spinner.
-- **Offline downloads.** Pin a file through the embedded server, keep it
-  where the platform will not purge it, and play it back as a `file://`
-  stream: a finished download needs no server, no network and no torrent. On
-  Android a foreground service keeps one going after the app is left.
+- **Offline downloads.** Pin a file through the embedded server and it is
+  kept, piece by piece, in the one torrent-data root. A finished download
+  plays through the same in-process server off the pieces already on the
+  device: no peer, no tracker, no network. On Android a foreground service
+  keeps one going after the app is left.
 - **A player rather than a video widget.** Buffered seek bar, keyboard and
   remote shortcuts, audio tracks, embedded and addon subtitles, a stats OSD
   reporting hwdec, the swarm, what this device holds of the stream either

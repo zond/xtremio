@@ -744,8 +744,9 @@ and every absence in that answer is one of these:
   and so reads a little long. **Nothing bounding the stream, no window**:
   a torrent the storage budget covers has no retention policy, an addon's
   direct link is not on this server at all, and what is on the disk
-  without a policy is whatever the cleaner has not aged out -- a
-  different quantity that this row must not carry. **No bitrate, no
+  without a policy is whatever of the file has been fetched, with nothing
+  holding it to the playhead -- a different quantity that this row must
+  not carry. **No bitrate, no
   time**: mpv answers none for the first seconds of every file, which is
   exactly when someone is reading this row, and the bytes go on their own.
 
