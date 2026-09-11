@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../core/core.dart';
+import 'downloads_listings.dart';
 
 /// The offline downloads as a screen sees them: one full listing when the
 /// screen comes up, every progress event folded into it, and a fresh
@@ -29,6 +30,7 @@ class DownloadsController extends ChangeNotifier {
   final DownloadsClient client;
 
   StreamSubscription<DownloadsUpdate>? _updates;
+  final DownloadsListings _listings = DownloadsListings();
   bool _disposed = false;
 
   /// Every download known, newest listing merged with the progress since.
@@ -60,8 +62,8 @@ class DownloadsController extends ChangeNotifier {
     // one on the next look at `updates`, and nothing else would ever look.
     _listen();
     try {
-      final listing = await client.list();
-      if (_disposed) return;
+      final listing = await _listings.take(client.list);
+      if (_disposed || listing == null) return;
       registry = listing;
       error = null;
     } catch (failure) {
@@ -85,6 +87,7 @@ class DownloadsController extends ChangeNotifier {
 
   void _onUpdate(DownloadsUpdate update) {
     if (_disposed) return;
+    _listings.heard(update);
     registry = update.applyTo(registry);
     notifyListeners();
   }

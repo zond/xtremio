@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
+import 'downloads_listings.dart';
 
 /// What is being fetched right now, as the notification puts it: how many
 /// entries are on their way and how far they have got between them.
@@ -200,6 +201,7 @@ class DownloadsForegroundService {
 
   StreamSubscription<DownloadsUpdate>? _updates;
   DownloadsRegistry _registry = DownloadsRegistry.empty;
+  final DownloadsListings _listings = DownloadsListings();
 
   /// What the notification currently says, so an unchanged tick is not sent
   /// over the channel once a second for nothing.
@@ -252,14 +254,17 @@ class DownloadsForegroundService {
   /// notification stays, and the next one decides.
   Future<void> refresh() async {
     if (!isSupported || _disposed) return;
+    DownloadsRegistry? listing;
     try {
-      _registry = await client.list();
+      listing = await _listings.take(client.list);
     } catch (error) {
       if (kDebugMode) {
         debugPrint('downloads listing for the notification: $error');
       }
       return;
     }
+    if (listing == null) return;
+    _registry = listing;
     await _sync();
   }
 
@@ -302,6 +307,7 @@ class DownloadsForegroundService {
 
   void _onUpdate(DownloadsUpdate update) {
     if (_disposed) return;
+    _listings.heard(update);
     _registry = update.applyTo(_registry);
     if (update is DownloadsProgressUpdate &&
         update.rows.any((row) => !_registry.items.containsKey(row.key))) {

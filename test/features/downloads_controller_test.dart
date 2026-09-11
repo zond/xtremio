@@ -89,6 +89,50 @@ void main() {
     expect(controller.registry['tt1:tt1']?.downloaded, 90);
   });
 
+  test('a row heard while a listing is taken is laid over it', () async {
+    // The listing answers the registry as it was when it was asked for; a
+    // row that lands before the answer is newer, and nothing sends it again
+    // unless the download moves.
+    final client = FakeDownloadsClient(registry: registryAt(10));
+    addTearDown(client.dispose);
+    final listed = Completer<void>();
+    client.listPending = listed.future;
+    final controller = DownloadsController(client);
+    addTearDown(controller.dispose);
+    await pumpEventQueue();
+
+    client.emitProgress(progressAt(100).rows.map((row) => row.json));
+    await pumpEventQueue();
+    listed.complete();
+    await pumpEventQueue();
+
+    expect(controller.isLoaded, isTrue);
+    expect(controller.registry['tt1:tt1']?.downloaded, 100);
+    expect(controller.registry['tt1:tt1']?.state, DownloadState.complete);
+  });
+
+  test('a listing that lands after a newer one is dropped', () async {
+    // Two listings in flight answer in either order; the older one put
+    // back an entry the newer one no longer had.
+    final client = FakeDownloadsClient(registry: registryAt(10));
+    addTearDown(client.dispose);
+    final first = Completer<void>();
+    client.listPending = first.future;
+    final controller = DownloadsController(client);
+    addTearDown(controller.dispose);
+    await pumpEventQueue();
+
+    client
+      ..registry = DownloadsRegistry.empty
+      ..listPending = null;
+    await controller.refresh();
+    expect(controller.registry.isEmpty, isTrue);
+    first.complete();
+    await pumpEventQueue();
+
+    expect(controller.registry.isEmpty, isTrue);
+  });
+
   test('a narrow row is laid over the entry, not put in its place', () async {
     final client = ReopeningFeedClient(registry: registryAt(10));
     addTearDown(client.dispose);

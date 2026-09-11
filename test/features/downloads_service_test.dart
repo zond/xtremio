@@ -263,6 +263,28 @@ void main() {
       },
     );
 
+    test('a completion heard while a listing is taken is not lost', () async {
+      // A listing is a round trip, and the ticker's last row can land
+      // inside it. Put in the registry's place, the listing threw that row
+      // away, and nothing sends it again: the Rust side sends a row only
+      // when it changes, and stops once nothing is unfinished. The
+      // service stayed up at 25 % until the process died.
+      final service = await running();
+      final listed = Completer<void>();
+      client.listPending = listed.future;
+      final refreshing = service.refresh();
+      await settle();
+
+      client.emitProgress([rowOf(viewAt('tt1', 100))]);
+      await settle();
+      listed.complete();
+      await refreshing;
+      await settle();
+
+      expect(serviceMethods().last, 'stop');
+      expect(service.isRunning, isFalse);
+    });
+
     test('a tick that moves nothing is not sent again', () async {
       await running();
       final before = serviceMethods().length;

@@ -47,6 +47,11 @@ class FakeDownloadsClient implements DownloadsClient {
   /// a test about a late answer is about.
   Future<void>? pending;
 
+  /// Holds [list] open until it completes, answering the registry as it
+  /// was when the call was made: a listing is a snapshot taken over a
+  /// round trip, and what the feed says during it is the test.
+  Future<void>? listPending;
+
   /// Thrown by the matching call when set, for the failure paths.
   Object? addError;
   Object? openError;
@@ -137,7 +142,9 @@ class FakeDownloadsClient implements DownloadsClient {
     callLog?.add('downloads.list');
     final error = listError;
     if (error != null) throw error;
-    return registry;
+    final snapshot = registry;
+    if (listPending != null) await listPending;
+    return snapshot;
   }
 
   /// What [startFreshRegistry] does here: records the call, and throws
