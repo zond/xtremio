@@ -252,6 +252,23 @@ void main() {
       );
     });
 
+    test('a list that could not be read stays unreadable through a copy', () {
+      const unreadable = DownloadsRegistry(unreadable: 'truncated JSON');
+      final row = DownloadProgress(const {'key': 'a:b', 'downloaded': 1});
+
+      expect(unreadable.withProgress([row]).unreadable, 'truncated JSON');
+      expect(unreadable.without(['a:b']).unreadable, 'truncated JSON');
+      expect(
+        DownloadsRegistry.empty.merge(unreadable).unreadable,
+        'truncated JSON',
+      );
+      expect(
+        unreadable.merge(DownloadsRegistry.empty).unreadable,
+        isNull,
+        reason: 'a merge takes the newer reading',
+      );
+    });
+
     /// The keys a build with a downloads folder of its own wrote are not
     /// read and not carried: there is one torrent-data root, the server
     /// owns it, and a second answer here could only contradict it.

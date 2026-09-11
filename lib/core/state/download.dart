@@ -336,6 +336,10 @@ final class DownloadsRegistry {
   /// say what is kept -- not that nothing is. The files stay on the device
   /// and the server keeps them for as long as this holds, which is why the
   /// screen has to say so rather than draw an empty list.
+  ///
+  /// So every copy below carries it on, and a merge takes the update's,
+  /// the newer reading of the file. A copy that dropped it turned a list
+  /// that could not be read into an empty one at the first progress row.
   final String? unreadable;
 
   /// Nothing downloaded, and what a failed read falls back to.
@@ -393,7 +397,11 @@ final class DownloadsRegistry {
       if (entry == null) continue;
       merged[row.key] = DownloadView({...entry.json, ...row.changes});
     }
-    return DownloadsRegistry(version: version, items: merged);
+    return DownloadsRegistry(
+      version: version,
+      items: merged,
+      unreadable: unreadable,
+    );
   }
 
   /// This registry without the entries [keys] name. A key nothing holds
@@ -403,7 +411,11 @@ final class DownloadsRegistry {
     for (final key in keys) {
       kept.remove(key);
     }
-    return DownloadsRegistry(version: version, items: kept);
+    return DownloadsRegistry(
+      version: version,
+      items: kept,
+      unreadable: unreadable,
+    );
   }
 
   /// This registry with [update]'s entries laid over it. A listing update
@@ -413,6 +425,7 @@ final class DownloadsRegistry {
   DownloadsRegistry merge(DownloadsRegistry update) => DownloadsRegistry(
     version: update.version,
     items: {...items, ...update.items},
+    unreadable: update.unreadable,
   );
 
   @override
