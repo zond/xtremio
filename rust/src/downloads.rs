@@ -703,6 +703,12 @@ fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
 /// download the user has already said goodbye to, and re-pinning it here
 /// would be the launch undoing the removal. So are [`State::Gone`] rows
 /// (see [`Entry::wants_pin`]).
+///
+/// A row mid-swap names two files, and both are in: the one it names and
+/// the one it [`Entry::replaces`]. The old file is the title's until the
+/// new pin is in, and [`release_replaced_in`] lets it go only then; the
+/// launch runs first, and a set without it would sweep the old file before
+/// that check could keep it.
 pub fn pins_in(registry: &Registry) -> stream_server::PinSet {
     let mut pins: stream_server::PinSet = Default::default();
     for entry in registry.items.values() {
@@ -712,6 +718,11 @@ pub fn pins_in(registry: &Registry) -> stream_server::PinSet {
         pins.entry(entry.info_hash.to_lowercase())
             .or_default()
             .push(entry.file_idx);
+        if let Some(old) = &entry.replaces {
+            pins.entry(old.info_hash.to_lowercase())
+                .or_default()
+                .push(old.file_idx);
+        }
     }
     for indices in pins.values_mut() {
         indices.sort_unstable();
@@ -1694,8 +1705,9 @@ fn finish_pending_removals_in(app: &Arc<AppState>) {
 /// Releases the pin every swapped row still owes, where the row's own pin is
 /// in. Run at boot after the re-pin, which is what puts a swap's new pin in
 /// place when the kill came before it; a row whose own pin the server does
-/// not hold keeps the debt for the next boot, since releasing the old file
-/// ahead of the new one being wanted would leave the title with neither.
+/// not hold keeps the debt for the next boot, whose launch pins the old file
+/// again ([`pins_in`]), since releasing the old file ahead of the new one
+/// being wanted would leave the title with neither.
 fn release_replaced_in(app: &Arc<AppState>) {
     let (registry, live) = match (load_in(app), crate::server::downloads()) {
         (Ok(registry), Ok(live)) => (registry, live),
@@ -2788,6 +2800,24 @@ mod tests {
             pins_in(&registry),
             stream_server::PinSet::from([("abc".to_owned(), vec![2])]),
             "the row that is staying is still pinned"
+        );
+    }
+
+    /// A row mid-swap keeps both files through a launch: the one it names,
+    /// and the one it replaces, which the boot releases only once the new
+    /// pin is in. Left out of the set, the old file is swept before that.
+    #[test]
+    fn a_swap_the_launch_interrupts_keeps_both_files() {
+        let mut swapping = entry("tt1", "tt1");
+        swapping.replaces = Some(Replaced {
+            info_hash: "DEF".into(),
+            file_idx: 0,
+        });
+        let mut registry = Registry::default();
+        registry.items.insert("tt1:tt1".into(), swapping);
+        assert_eq!(
+            pins_in(&registry),
+            stream_server::PinSet::from([("abc".to_owned(), vec![2]), ("def".to_owned(), vec![0])])
         );
     }
 
