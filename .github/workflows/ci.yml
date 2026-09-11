@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Nothing here writes to the repository: it checks out, builds and tests.
+# Said explicitly so the token every step can reach is a read-only one,
+# whatever the repository's default is.
+permissions:
+  contents: read
+
 env:
   FLUTTER_VERSION: 3.47.1
   FRB_VERSION: 2.13.0
@@ -81,7 +87,10 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
 
-      - uses: cargo-bins/cargo-binstall@main
+      # A release tag, not `main`: the action runs with this job's token and
+      # installs binaries the next steps execute, so what it is has to be
+      # something a person chose, not whatever was pushed to a branch last.
+      - uses: cargo-bins/cargo-binstall@v1.23.0
 
       # Codegen, Dart package and Rust crate must be the same FRB version.
       # `generate` shells out to `cargo expand`, so install that too.
