@@ -530,6 +530,31 @@ void main() {
       expect(lan.running, isFalse);
     });
 
+    testWidgets('a stream off another server on this device is not rebuilt', (
+      tester,
+    ) async {
+      // The LAN listener serves the embedded server's routes. A stream off
+      // another server on this machine -- the standard one on 11470, say --
+      // was rebuilt on the listener anyway, and the receiver was handed a
+      // path on a server that does not serve it.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final fixture = playerWithFilename('clip.mp4');
+      final content =
+          (fixture['stream'] as Map<String, dynamic>)['content'] as List;
+      (content[0] as Map<String, dynamic>)['streaming_url'] =
+          'http://127.0.0.1:11470/11ea02584fa6351956f35671962ab46354d99060/0';
+      final harness = castHarness(cast: cast, lanMedia: lan, player: fixture);
+      await harness.pump(tester);
+
+      await castTo(tester, livingRoom);
+
+      expect(cast.loads, isEmpty);
+      expect(lan.toggles, isEmpty);
+      expect(find.byType(CastRefusedDialog), findsOneWidget);
+    });
+
     testWidgets('a second receiver with no route ends the cast it replaced', (
       tester,
     ) async {

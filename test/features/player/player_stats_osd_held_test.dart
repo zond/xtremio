@@ -417,6 +417,36 @@ void main() {
     expect(harness.torrentStats.requests, isEmpty);
   });
 
+  testWidgets('the embedded server under the name localhost is ours', (
+    tester,
+  ) async {
+    // A streaming server typed as `localhost` on the embedded server's own
+    // port is the embedded server. The host was compared as a string, and
+    // `localhost` is not `127.0.0.1`, so its streams drew no rows.
+    final fixture = loadPlayerFixture();
+    final stream = Map<String, dynamic>.from(fixture['stream'] as Map);
+    final content = List<Object?>.from(stream['content'] as List);
+    final hash = PlayerState.fromJson(fixture).streamingUrl!.pathSegments[0];
+    final port = PlayerHarness.recordedServerBaseUrl.port;
+    content[0] = {
+      ...content[0]! as Map<String, dynamic>,
+      'streaming_url': 'http://localhost:$port/$hash/0',
+    };
+    final harness = await pumpPlaying(
+      tester,
+      player: {
+        ...fixture,
+        'stream': {...stream, 'content': content},
+      },
+    );
+    expect(harness.engine.opened.last.$1.host, 'localhost');
+    harness.streamNumbers.response = held;
+
+    await openPanel(tester, harness);
+
+    expect(harness.streamNumbers.requests, isNotEmpty);
+  });
+
   testWidgets('a build with no server of its own is asked nothing', (
     tester,
   ) async {

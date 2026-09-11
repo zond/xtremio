@@ -333,4 +333,42 @@ void main() {
       expect(opened.queryParameters['buffer'], 'normal');
     });
   });
+
+  group('what counts as the embedded server', () {
+    final base = Uri.parse('http://127.0.0.1:39661/');
+
+    test('its port on any name for this device, and nothing else', () {
+      expect(
+        isEmbeddedServer(Uri.parse('http://127.0.0.1:39661/a/0'), base),
+        isTrue,
+      );
+      expect(
+        isEmbeddedServer(Uri.parse('http://localhost:39661/a/0'), base),
+        isTrue,
+      );
+      expect(
+        isEmbeddedServer(Uri.parse('http://[::1]:39661/a/0'), base),
+        isTrue,
+      );
+      expect(
+        isEmbeddedServer(Uri.parse('http://127.0.0.1:11470/a/0'), base),
+        isFalse,
+        reason: 'another server on this machine',
+      );
+      expect(
+        isEmbeddedServer(Uri.parse('http://192.168.7.20:39661/a/0'), base),
+        isFalse,
+        reason: 'the same port on another machine',
+      );
+      expect(
+        isEmbeddedServer(Uri.parse('file://127.0.0.1:39661/a/0'), base),
+        isFalse,
+        reason: 'not something any server answers',
+      );
+      expect(
+        isEmbeddedServer(Uri.parse('http://127.0.0.1:39661/'), null),
+        isFalse,
+      );
+    });
+  });
 }

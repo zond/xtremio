@@ -1256,11 +1256,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ///
   /// False with no embedded server at all ([_serverBase] null): there is
   /// no server here to have served anything.
-  bool _servedHere(Uri? url) {
-    final base = _serverBase;
-    if (url == null || base == null) return false;
-    return url.host == base.host && url.port == base.port;
-  }
+  bool _servedHere(Uri? url) =>
+      url != null && isEmbeddedServer(url, _serverBase);
 
   /// The viewer changed the buffer for this playback.
   ///
@@ -3941,10 +3938,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ///
   /// A stream served from somewhere else on the internet is handed over as
   /// it is; the receiver has a network connection of its own. Only a URL on
-  /// this device needs the server's LAN media listener, which is therefore
-  /// the only case that starts one.
+  /// the embedded server needs the server's LAN media listener, which is
+  /// therefore the only case that starts one.
   Future<Uri?> _castUrl(Uri local, CastDevice device) async {
-    if (!isLoopbackHost(local.host)) return local;
+    // The LAN listener serves the embedded server's routes and nothing
+    // else, so a URL on another server on this device has no address a
+    // receiver could use: rebuilt on the listener, it asked this server for
+    // a path another one serves.
+    if (!isEmbeddedServer(local, _serverBase)) {
+      return isLoopbackHost(local.host) ? null : local;
+    }
     final lan = _lanMedia;
     if (lan == null) return null;
     try {

@@ -99,8 +99,9 @@ Uri proxiedThroughServer(
 }) {
   if (serverBase == null) return url;
   if (!url.isScheme('http') && !url.isScheme('https')) return url;
-  if (isLoopbackHost(url.host)) return url;
-  if (url.host == serverBase.host && url.port == serverBase.port) return url;
+  if (isLoopbackHost(url.host) || isEmbeddedServer(url, serverBase)) {
+    return url;
+  }
 
   final target = url.removeFragment();
   final origin = '${target.scheme}://${target.authority}';
@@ -140,8 +141,28 @@ bool isProxiedByServer(Uri url) {
   return segments.isNotEmpty && segments.first == 'proxy';
 }
 
-/// Whether [host] names this device, and so the embedded server -- whatever
-/// port it managed to bind.
+/// Whether [url] is on this app's embedded server at [serverBase]: the
+/// server's own port, on the server's own host or on any name for this
+/// device. False with no embedded server.
+///
+/// The one rule for "ours", which the player, the proxy and the cast all
+/// ask. It used to be spelled per caller, as an exact host and port in
+/// one place and as any loopback host in others, and the two disagreed
+/// about the same URL: a streaming server typed as `localhost` is the
+/// embedded one when the port is, but `localhost` is not `127.0.0.1` as a
+/// string, so its streams drew no stats cards. The port is what separates
+/// this server from another on the same machine (the standard Stremio
+/// server on 11470, say); the host cannot.
+bool isEmbeddedServer(Uri url, Uri? serverBase) {
+  if (serverBase == null) return false;
+  if (!url.isScheme('http') && !url.isScheme('https')) return false;
+  if (url.port != serverBase.port) return false;
+  return url.host == serverBase.host ||
+      (isLoopbackHost(url.host) && isLoopbackHost(serverBase.host));
+}
+
+/// Whether [host] names this device -- which is not the same as naming the
+/// embedded server: another server can run here too ([isEmbeddedServer]).
 bool isLoopbackHost(String host) =>
     host == 'localhost' ||
     (InternetAddress.tryParse(host)?.isLoopback ?? false);
