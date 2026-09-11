@@ -441,13 +441,14 @@ class MediaKitEngine implements PlaybackEngine {
   /// while three separate instruments reported the app was using 46 MB.
   ///
   /// There is one cache on this device now and it is the server's: named
-  /// files, a configured limit, a free-space floor, owners that give back
-  /// what nobody is playing and nobody kept, and survival across a crash. Every stream reaches the player through
-  /// it ([proxiedThroughServer]), so a second copy in a file nobody can see
-  /// buys nothing that the first one does not already do better. It is set
-  /// here, once per player and never again, because it is a property of
-  /// this app rather than of any one media -- there is no condition under
-  /// which it comes back on, and nothing left that would turn it off.
+  /// files, a configured limit, a free-space floor, and owners that give
+  /// back what nobody is playing and nobody kept. Every stream reaches the
+  /// player through it ([proxiedThroughServer]), so a second copy in a file
+  /// nobody can see buys nothing that the first one does not already do
+  /// better. It is set here, once per player and never again, because it
+  /// is a property of this app rather than of any one media -- there is no
+  /// condition under which it comes back on, and nothing left that would
+  /// turn it off.
   ///
   /// `force-seekable` is not here: it is a claim about the stream being
   /// opened rather than about the player, so [forcesSeekable] decides it
@@ -689,18 +690,20 @@ class MediaKitEngine implements PlaybackEngine {
   /// the least of it, taken from the engine that is feeding the playback.
   ///
   /// The cushion is not supposed to be here. This is the design that moved
-  /// the read-ahead into the server's cache, where it is bounded, named,
-  /// swept and survives a crash. Growing the player's memory instead is the
-  /// two-cache thinking that was just removed, one storey up: it would buy
-  /// the same window at a worse price, in the one place nothing can reclaim
-  /// it from.
+  /// the read-ahead into the server's cache, where it is bounded, named and
+  /// given back once nobody needs it. Growing the player's memory instead
+  /// is the two-cache thinking that was just removed, one storey up: it
+  /// would buy the same window at a worse price, in the one place nothing
+  /// can reclaim it from.
   ///
   /// And the number is not the bottleneck. `/proxy` keeps what it fetched
   /// around the play head (`server/src/proxy_cache.rs`), as the torrent
-  /// store does, so a backward seek, a re-watch and a second player are
-  /// answered off this device's disk -- none of which a bigger heap here
-  /// helps at all. If two minutes proves too thin, the window the server
-  /// keeps is the number to look at, not this one.
+  /// store does, so a backward seek and a second player are answered off
+  /// this device's disk -- neither of which a bigger heap here helps at
+  /// all. Not a re-watch: what a proxied stream leaves is the first thing
+  /// given back once nobody reads it, and nothing of it outlives the
+  /// process. If two minutes proves too thin, the window the server keeps
+  /// is the number to look at, not this one.
   ///
   /// It is written out rather than inherited because it is now the player's
   /// only buffer, and the only buffer should not be somebody else's

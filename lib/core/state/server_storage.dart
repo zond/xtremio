@@ -80,9 +80,10 @@ class ServerStorage {
   ///
   /// The *setting*, not the limit in force: with no `cacheSize` the
   /// server still caps the cache at what the volume can give above its
-  /// free-space floor, and [CacheUsage.limitBytes] is that number. So a null here means "unconfigured", never "unbounded", and
-  /// the storage screen can rightly call a cache over its limit while this
-  /// line says no size was chosen.
+  /// free-space floor, and [CacheUsage.limitBytes] is that number. So a
+  /// null here means "unconfigured", never "unbounded", and the storage
+  /// screen can rightly call a cache over its limit while this line says
+  /// no size was chosen.
   final int? cacheLimitBytes;
 
   /// False when part of the tree could not be read, which makes

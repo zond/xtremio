@@ -530,12 +530,11 @@ what every model field means. The shape of the thing is in the
   was using 46 MB. The server's cache is everything that is not -- named
   files, a configured limit (`min(cacheSize, occupied + available -
   512 MiB)`, the `CACHE_FREE_SPACE_FLOOR` below which
-  `ensure_download_disk_ready` has already given up on the disk), owners
-  that give back what nobody is playing and nobody kept, and survival
-  across a crash -- and now that every
-  stream goes through it, it is the only local copy there is. There is no
-  shared budget to keep any more, because there is nothing to share it
-  with.
+  `ensure_download_disk_ready` has already given up on the disk), and
+  owners that give back what nobody is playing and nobody kept -- and now
+  that every stream goes through it, it is the only local copy there is.
+  There is no shared budget to keep any more, because there is nothing to
+  share it with.
 - **What the player still holds is memory, and it is deliberately small.**
   `MediaKitEngine.memoryCacheBytes` is 32 MiB, written out rather than
   inherited from media_kit's `bufferSize`. media_kit sets that on both
