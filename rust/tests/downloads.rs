@@ -918,6 +918,69 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         assert!(Instant::now() < deadline, "the ticker never stopped");
         std::thread::sleep(Duration::from_millis(100));
     }
+
+    // A finished row the server still pins but does not hold whole -- a
+    // piece lost or corrupt -- is gone as well, and its pin goes with it:
+    // left standing, the file stays wanted, the server fetches the film back
+    // whole, and the merge turns the row `downloading` again. The ticker is
+    // stopped, so nothing merges the live reading over the row first.
+    std::fs::write(
+        &registry_file,
+        format!(
+            r#"{{"version":1,"items":{{"lost:lost":{{"metaId":"lost","videoId":"lost",
+               "infoHash":"{info_hash}","fileIdx":{missing_idx},"state":"complete",
+               "size":{MISSING_LEN},"downloaded":{MISSING_LEN}}}}}}}"#
+        ),
+    )?;
+    assert!(
+        xtremio_core::server::downloads()?
+            .iter()
+            .any(|pin| pin.file_idx == missing_idx),
+        "the file is pinned going in"
+    );
+    xtremio_core::downloads::reconcile_pins();
+    let lost = xtremio_core::downloads::load()?.items["lost:lost"].clone();
+    assert_eq!(lost.state, xtremio_core::downloads::State::Gone, "{lost:?}");
+    let pins = xtremio_core::server::downloads()?;
+    assert!(
+        pins.iter().all(|pin| pin.file_idx != missing_idx),
+        "and the pin went with it: {pins:?}"
+    );
+    assert_eq!(
+        xtremio_core::downloads::pins_in(&xtremio_core::downloads::load()?),
+        stream_server::PinSet::default(),
+        "nor is the next launch told to pin it"
+    );
+    // Unless another row still wants the file: the pin is that row's too,
+    // and dropping it would leave a download nothing pins. `a-wanted` sorts
+    // first, so the boot has re-pinned it before it gets to `lost`.
+    xtremio_core::server::pin_download(&info_hash, missing_idx, &[])?;
+    std::fs::write(
+        &registry_file,
+        format!(
+            r#"{{"version":1,"items":{{
+               "a-wanted:a-wanted":{{"metaId":"a-wanted","videoId":"a-wanted",
+               "infoHash":"{info_hash}","fileIdx":{missing_idx},"state":"queued"}},
+               "lost:lost":{{"metaId":"lost","videoId":"lost",
+               "infoHash":"{info_hash}","fileIdx":{missing_idx},"state":"complete",
+               "size":{MISSING_LEN},"downloaded":{MISSING_LEN}}}}}}}"#
+        ),
+    )?;
+    xtremio_core::downloads::reconcile_pins();
+    let lost = xtremio_core::downloads::load()?.items["lost:lost"].clone();
+    assert_eq!(lost.state, xtremio_core::downloads::State::Gone, "{lost:?}");
+    let pins = xtremio_core::server::downloads()?;
+    assert!(
+        pins.iter().any(|pin| pin.file_idx == missing_idx),
+        "the pin the other row wants stays: {pins:?}"
+    );
+    // Stopped again, so the re-arm below is the listing's doing.
+    std::fs::write(&registry_file, br#"{"version":1,"items":{}}"#)?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while xtremio_core::downloads::is_ticking() {
+        assert!(Instant::now() < deadline, "the ticker never stopped");
+        std::thread::sleep(Duration::from_millis(100));
+    }
     std::fs::write(
         &registry_file,
         format!(

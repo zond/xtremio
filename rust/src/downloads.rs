@@ -356,6 +356,19 @@ impl Entry {
         self.pending_removal.is_some()
     }
 
+    /// Whether this row is a reason for the server to hold its pin: the set
+    /// the launch is handed ([`pins_in`]) and the owners a shared pin is
+    /// kept for ([`pin_is_shared`]) are both made of these.
+    ///
+    /// A [`State::Gone`] row is not one. Named as a pin, its file is wanted
+    /// again, so the server fetches the whole film back over whatever
+    /// connection the device is on -- the re-download that state exists to
+    /// prevent -- and the merge then reads that pin's progress back into
+    /// the row and turns it `downloading` again.
+    fn wants_pin(&self) -> bool {
+        !self.is_leaving() && self.state != State::Gone
+    }
+
     /// Folds one live `DownloadInfo` into this entry: progress, path, size,
     /// the server's error, and the state they imply. `completed_at` is set
     /// the first time the file is whole and cleared only when the server
@@ -688,11 +701,12 @@ fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
 ///
 /// Rows on their way out are left out: a removal that has begun is a
 /// download the user has already said goodbye to, and re-pinning it here
-/// would be the launch undoing the removal.
+/// would be the launch undoing the removal. So are [`State::Gone`] rows
+/// (see [`Entry::wants_pin`]).
 pub fn pins_in(registry: &Registry) -> stream_server::PinSet {
     let mut pins: stream_server::PinSet = Default::default();
     for entry in registry.items.values() {
-        if entry.is_leaving() {
+        if !entry.wants_pin() {
             continue;
         }
         pins.entry(entry.info_hash.to_lowercase())
@@ -1182,67 +1196,11 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
     // pin no row names. The row this one replaces is remembered under
     // `replaces` rather than dropped, for the same reason at the other end.
     let now = Utc::now();
-    let previous = update(|registry| {
-        let previous = registry.items.get(&key).cloned();
-        // Re-adding the *same* file is a retry, not a new download, and only
-        // a reading that counted bytes may move its numbers. `pin_download`
-        // can answer `checking` while it relocates the torrent, which
-        // `apply_live` treats as saying nothing at all -- so a row rebuilt
-        // from zero here would sit at `queued, 0 B` until the hash check
-        // ends, and its `completedAt` would be gone for good, that date
-        // being set once and never recomputed.
-        let same = previous.as_ref().filter(|entry| {
-            entry.info_hash.eq_ignore_ascii_case(&info_hash) && entry.file_idx == file_idx
-        });
-        // A different file: the old pin stays the server's until the new one
-        // is in, and the row says so. Unless another row names that file,
-        // in which case the pin is theirs and there is nothing to release.
-        let replaces = previous
-            .as_ref()
-            .filter(|_| same.is_none())
-            .filter(|old| !pin_is_shared(registry, &key, &old.info_hash, old.file_idx))
-            .map(|old| Replaced {
-                info_hash: old.info_hash.clone(),
-                file_idx: old.file_idx,
-            })
-            // A swap interrupted before this one: the pin it was to release
-            // is still owed, and this row carries the debt on.
-            .or_else(|| previous.as_ref().and_then(|old| old.replaces.clone()));
-        let entry = Entry {
-            meta_id: request.meta_id.clone(),
-            video_id: request.video_id.clone(),
-            kind: request.kind.clone(),
-            name: request.name.clone(),
-            poster: request.poster.clone(),
-            stream: request.stream.clone(),
-            info_hash: info_hash.clone(),
-            file_idx,
-            announce: announce.clone(),
-            path: same.and_then(|entry| entry.path.clone()),
-            size: same.map(|entry| entry.size).unwrap_or_default(),
-            downloaded: same.map(|entry| entry.downloaded).unwrap_or_default(),
-            state: same.map(|entry| entry.state).unwrap_or_default(),
-            error: None,
-            created_at: previous
-                .as_ref()
-                .and_then(|entry| entry.created_at)
-                .or(Some(now)),
-            completed_at: same.and_then(|entry| entry.completed_at),
-            last_played_at: previous.as_ref().and_then(|entry| entry.last_played_at),
-            meta: request.meta.clone(),
-            stream_request: request.stream_request.clone(),
-            meta_request: request.meta_request.clone(),
-            replaces: replaces.clone(),
-            pending_removal: None,
-            extra: previous
-                .as_ref()
-                .map(|entry| entry.extra.clone())
-                .unwrap_or_default(),
-        };
-        registry.items.insert(key.clone(), entry);
-        Ok((previous, replaces))
+    let (previous, replaces) = update(|registry| {
+        Ok(stage_add(
+            registry, &key, &request, &info_hash, file_idx, &announce, now,
+        ))
     })?;
-    let (previous, replaces) = previous;
 
     let info = match crate::server::pin_download(&info_hash, file_idx, &announce) {
         Ok(info) => info,
@@ -1330,6 +1288,84 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
     })
 }
 
+/// [`add`]'s first write: the row naming the file about to be pinned, put
+/// under `key`. Answers the row it replaced, and the pin the new row owes a
+/// release once its own is in.
+fn stage_add(
+    registry: &mut Registry,
+    key: &str,
+    request: &AddRequest,
+    info_hash: &str,
+    file_idx: usize,
+    announce: &[String],
+    now: DateTime<Utc>,
+) -> (Option<Entry>, Option<Replaced>) {
+    let previous = registry.items.get(key).cloned();
+    // Re-adding the *same* file is a retry, not a new download, and only
+    // a reading that counted bytes may move its numbers. `pin_download`
+    // can answer `checking` while it relocates the torrent, which
+    // `apply_live` treats as saying nothing at all -- so a row rebuilt
+    // from zero here would sit at `queued, 0 B` until the hash check
+    // ends, and its `completedAt` would be gone for good, that date
+    // being set once and never recomputed.
+    let same = previous.as_ref().filter(|entry| {
+        entry.info_hash.eq_ignore_ascii_case(info_hash) && entry.file_idx == file_idx
+    });
+    // A different file: the old pin stays the server's until the new one
+    // is in, and the row says so. Unless another row names that file,
+    // in which case the pin is theirs and there is nothing to release.
+    let replaces = previous
+        .as_ref()
+        .filter(|_| same.is_none())
+        .filter(|old| !pin_is_shared(registry, key, &old.info_hash, old.file_idx))
+        .map(|old| Replaced {
+            info_hash: old.info_hash.clone(),
+            file_idx: old.file_idx,
+        })
+        // A swap interrupted before this one: the pin it was to release
+        // is still owed, and this row carries the debt on.
+        .or_else(|| previous.as_ref().and_then(|old| old.replaces.clone()));
+    let entry = Entry {
+        meta_id: request.meta_id.clone(),
+        video_id: request.video_id.clone(),
+        kind: request.kind.clone(),
+        name: request.name.clone(),
+        poster: request.poster.clone(),
+        stream: request.stream.clone(),
+        info_hash: info_hash.to_owned(),
+        file_idx,
+        announce: announce.to_vec(),
+        path: same.and_then(|entry| entry.path.clone()),
+        size: same.map(|entry| entry.size).unwrap_or_default(),
+        downloaded: same.map(|entry| entry.downloaded).unwrap_or_default(),
+        // Not `gone`: that row is left out of the launch's pin set, so a
+        // kill before [`add`]'s pin would leave the press on Download as a
+        // row nothing ever pins.
+        state: same
+            .map(|entry| entry.state)
+            .filter(|state| *state != State::Gone)
+            .unwrap_or_default(),
+        error: None,
+        created_at: previous
+            .as_ref()
+            .and_then(|entry| entry.created_at)
+            .or(Some(now)),
+        completed_at: same.and_then(|entry| entry.completed_at),
+        last_played_at: previous.as_ref().and_then(|entry| entry.last_played_at),
+        meta: request.meta.clone(),
+        stream_request: request.stream_request.clone(),
+        meta_request: request.meta_request.clone(),
+        replaces: replaces.clone(),
+        pending_removal: None,
+        extra: previous
+            .as_ref()
+            .map(|entry| entry.extra.clone())
+            .unwrap_or_default(),
+    };
+    registry.items.insert(key.to_owned(), entry);
+    (previous, replaces)
+}
+
 /// Whether an entry other than `key` names the same `(infoHash, fileIdx)` --
 /// one torrent that is a stream of two metas (a Cinemeta id and an anime id
 /// for the same film), downloaded from both.
@@ -1338,10 +1374,11 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
 /// unpin serves every entry naming that file: dropping one of them has to
 /// leave the pin, and the bytes, to the others. A row on its way out does
 /// not count as another: its own removal will ask about the pin in turn.
+/// Nor does a [`State::Gone`] row, which holds no pin to share.
 fn pin_is_shared(registry: &Registry, key: &str, info_hash: &str, file_idx: usize) -> bool {
     registry.items.iter().any(|(other, entry)| {
         other != key
-            && !entry.is_leaving()
+            && entry.wants_pin()
             && entry.info_hash.eq_ignore_ascii_case(info_hash)
             && entry.file_idx == file_idx
     })
@@ -2036,6 +2073,13 @@ pub const GONE_MESSAGE: &str = "the downloaded data is not on this device any mo
 /// registry can have been written by an `add`, a `remove` or the ticker in
 /// between. Only a row still saying `complete` is changed, so a download the
 /// user started again while this ran keeps what that start wrote.
+///
+/// The pin goes too, unless another row still wants the file. "Not whole"
+/// is also what a server that still pins the file says -- a piece lost or
+/// corrupt, a torrent short of what the row recorded -- and a pin left
+/// standing keeps that file wanted: the server fetches it back whole, and
+/// the next merge turns the row `downloading` again. Its leftover pieces
+/// are not deleted here; unpinned, they are the server's to reclaim.
 fn mark_gone_in(app: &Arc<AppState>, key: &str) {
     let marked = update_in(app, |registry| {
         let Some(entry) = registry
@@ -2043,18 +2087,32 @@ fn mark_gone_in(app: &Arc<AppState>, key: &str) {
             .get_mut(key)
             .filter(|entry| entry.state == State::Complete && !entry.is_leaving())
         else {
-            return Ok(false);
+            return Ok(None);
         };
         entry.state = State::Gone;
         entry.error = Some(GONE_MESSAGE.to_owned());
         entry.downloaded = 0;
         entry.completed_at = None;
-        Ok(true)
+        let (info_hash, file_idx) = (entry.info_hash.clone(), entry.file_idx);
+        let shared = pin_is_shared(registry, key, &info_hash, file_idx);
+        Ok(Some((info_hash, file_idx, shared)))
     });
-    match marked {
-        Ok(true) => tracing::warn!(key, "a finished download's pieces are gone"),
-        Ok(false) => {}
-        Err(error) => tracing::warn!(key, %error, "could not record a download as gone"),
+    let (info_hash, file_idx) = match marked {
+        Ok(Some((info_hash, file_idx, shared))) => {
+            tracing::warn!(key, "a finished download's pieces are gone");
+            if shared {
+                return;
+            }
+            (info_hash, file_idx)
+        }
+        Ok(None) => return,
+        Err(error) => {
+            tracing::warn!(key, %error, "could not record a download as gone");
+            return;
+        }
+    };
+    if let Err(error) = crate::server::unpin_download(&info_hash, file_idx, false) {
+        tracing::warn!(key, %error, "could not drop the pin of a download that is gone");
     }
 }
 
@@ -2581,6 +2639,76 @@ mod tests {
         assert!(
             pin_is_shared(&registry, "tt2:tt2", "abc", 2),
             "a row that is staying does"
+        );
+    }
+
+    /// A row marked gone names no pin: not to the launch, which would want
+    /// the file again and fetch the film back whole, and not to a removal
+    /// deciding whether another row still needs the pin it drops.
+    #[test]
+    fn a_gone_row_is_neither_pinned_at_launch_nor_another_owner() {
+        let mut gone = entry("tt1", "tt1");
+        gone.state = State::Gone;
+        let mut registry = Registry::default();
+        registry.items.insert("tt1:tt1".into(), gone);
+        assert_eq!(pins_in(&registry), stream_server::PinSet::default());
+
+        registry.items.insert("tt2:tt2".into(), entry("tt2", "tt2"));
+        assert!(
+            !pin_is_shared(&registry, "tt2:tt2", "abc", 2),
+            "the gone row does not keep the pin for tt2"
+        );
+        assert_eq!(
+            pins_in(&registry),
+            stream_server::PinSet::from([("abc".to_owned(), vec![2])]),
+            "the row that is staying is still pinned"
+        );
+    }
+
+    fn request(meta: &str, video: &str) -> AddRequest {
+        AddRequest {
+            meta_id: meta.into(),
+            video_id: video.into(),
+            kind: "movie".into(),
+            name: "A Film".into(),
+            poster: None,
+            stream: serde_json::json!({"infoHash": "abc", "fileIdx": 2}),
+            file_idx: None,
+            meta: None,
+            stream_request: None,
+            meta_request: None,
+        }
+    }
+
+    /// Pressing Download on a gone title stages a row the launch pins: the
+    /// row is written before the pin is asked for, and a kill between the
+    /// two must leave a download the next boot takes up, not a `gone` row
+    /// that [`pins_in`] leaves out and nothing ever pins.
+    #[test]
+    fn downloading_a_gone_title_again_stages_a_row_the_launch_pins() {
+        let mut gone = entry("tt1", "tt1");
+        gone.state = State::Gone;
+        gone.error = Some(GONE_MESSAGE.to_owned());
+        let mut registry = Registry::default();
+        registry.items.insert("tt1:tt1".into(), gone);
+
+        let (previous, replaces) = stage_add(
+            &mut registry,
+            "tt1:tt1",
+            &request("tt1", "tt1"),
+            "abc",
+            2,
+            &[],
+            Utc::now(),
+        );
+        assert_eq!(previous.map(|entry| entry.state), Some(State::Gone));
+        assert_eq!(replaces, None, "the same file: nothing to release");
+        let staged = &registry.items["tt1:tt1"];
+        assert_eq!(staged.state, State::Queued);
+        assert_eq!(staged.error, None);
+        assert_eq!(
+            pins_in(&registry),
+            stream_server::PinSet::from([("abc".to_owned(), vec![2])])
         );
     }
 
