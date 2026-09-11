@@ -88,6 +88,10 @@ void main() {
     expect(Map.of(sent)..remove(key), Map.of(expected)..remove(key));
   }
 
+  /// What the switch of [key] shows.
+  bool switchValue(WidgetTester tester, String key) =>
+      tester.widget<SwitchListTile>(find.byKey(settingKey(key))).value;
+
   /// Picks [label] from the dropdown of the [setting] tile.
   Future<void> pick(WidgetTester tester, String setting, String label) async {
     await tester.tap(find.byKey(settingKey(setting)));
@@ -140,31 +144,71 @@ void main() {
         ProfileSettings.pauseOnMinimizeKey: true,
       });
       // The controls show what was sent…
-      expect(
-        tester
-            .widget<SwitchListTile>(
-              find.byKey(settingKey(ProfileSettings.bingeWatchingKey)),
-            )
-            .value,
-        isFalse,
-      );
-      // …until the next `ctx` pull, which is the authority again.
+      expect(switchValue(tester, ProfileSettings.bingeWatchingKey), isFalse);
+      // …through a `ctx` pull asked for before the engine handled it, which
+      // answers the settings from before the change: taken as the
+      // authority, it snapped the control back and had the next change
+      // send the old value again.
       core.setState(CoreField.ctx, loadCtxLoggedOutFixture());
       await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<SwitchListTile>(
-              find.byKey(settingKey(ProfileSettings.bingeWatchingKey)),
-            )
-            .value,
-        isTrue,
-      );
+      expect(switchValue(tester, ProfileSettings.bingeWatchingKey), isFalse);
       await tester.tap(find.byKey(settingKey(ProfileSettings.hideSpoilersKey)));
       await tester.pump();
       expect(core.dispatched.last.action['args']['args'], {
         ...fixtureSettings(),
+        ProfileSettings.bingeWatchingKey: false,
+        ProfileSettings.pauseOnMinimizeKey: true,
         ProfileSettings.hideSpoilersKey: true,
       });
+    });
+
+    testWidgets(
+      'a change waiting to be shown hides nothing else a pull brings',
+      (tester) async {
+        // Only the value sent is held; the rest of the map is the engine's.
+        // Held whole, the map sent hid what the pull had for every other key
+        // and the next write sent those back as they were.
+        final core = await pumpSettings(tester);
+        await tester.tap(
+          find.byKey(settingKey(ProfileSettings.bingeWatchingKey)),
+        );
+        await tester.pump();
+
+        core.setState(
+          CoreField.ctx,
+          ctxWith({ProfileSettings.hideSpoilersKey: true}),
+        );
+        await tester.pumpAndSettle();
+
+        expect(switchValue(tester, ProfileSettings.bingeWatchingKey), isFalse);
+        expect(switchValue(tester, ProfileSettings.hideSpoilersKey), isTrue);
+      },
+    );
+
+    testWidgets('a pull that shows a change hands that setting back', (
+      tester,
+    ) async {
+      final core = await pumpSettings(tester);
+      await tester.tap(
+        find.byKey(settingKey(ProfileSettings.bingeWatchingKey)),
+      );
+      await tester.pump();
+
+      // The engine took it; the pull says so.
+      core.setState(
+        CoreField.ctx,
+        ctxWith({ProfileSettings.bingeWatchingKey: false}),
+      );
+      await tester.pumpAndSettle();
+      // And from then on the engine is the authority for it again: a later
+      // change to it -- another device, a sync -- is what is shown.
+      core.setState(
+        CoreField.ctx,
+        ctxWith({ProfileSettings.bingeWatchingKey: true}),
+      );
+      await tester.pumpAndSettle();
+
+      expect(switchValue(tester, ProfileSettings.bingeWatchingKey), isTrue);
     });
   });
 

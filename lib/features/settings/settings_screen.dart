@@ -54,10 +54,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// rather than an error.
   DhtStatus? _dht;
 
-  /// The settings map of the last `UpdateSettings` sent, until the next
-  /// `ctx` pull: what the controls show and what the next write builds on,
-  /// so two changes in a row do not send the pre-first-change map.
-  Map<String, dynamic>? _pending;
+  /// Every value a control has sent in `UpdateSettings` that no `ctx` pull
+  /// has shown yet, by key. Laid over the settings the pull brought, it is
+  /// what the controls show and what the next write builds on, so two
+  /// changes in a row do not send the pre-first-change map.
+  ///
+  /// A value goes when a pull shows it, and not merely when a pull lands:
+  /// a pull asked for before the `UpdateSettings` was handled answers the
+  /// settings from before it, and taken as the authority it snapped the
+  /// control back and had the next change send the old value again.
+  final Map<String, Object?> _unconfirmed = {};
 
   /// The app's own preferences, for "Buffer ahead". From the [PrefsScope]
   /// the app puts above every screen; a screen mounted without one (a widget
@@ -94,9 +100,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
-  /// A `ctx` pull landed: the engine's settings are the authority again.
+  /// A `ctx` pull landed: what it shows of the values sent is confirmed,
+  /// and the engine is the authority for those again.
   void _onCtx() {
-    if (mounted && _pending != null) setState(() => _pending = null);
+    if (!mounted || _unconfirmed.isEmpty) return;
+    final landed = _settingsOf(_ctx?.value)?.json;
+    if (landed == null) return;
+    final confirmed = [
+      for (final MapEntry(:key, :value) in _unconfirmed.entries)
+        if (landed[key] == value) key,
+    ];
+    if (confirmed.isEmpty) return;
+    setState(() => confirmed.forEach(_unconfirmed.remove));
   }
 
   /// The streaming-server field pulled (or failed to): piggyback the DHT
@@ -130,11 +145,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// One setting changed: `UpdateSettings` with the whole map, as the
-  /// engine has no per-field defaults; the map sent is [_pending] until
-  /// the engine reports back.
+  /// engine has no per-field defaults; the value is [_unconfirmed] until a
+  /// pull shows it.
   void _updateSetting(ProfileSettings settings, String key, Object? value) {
     final next = settings.withValue(key, value);
-    setState(() => _pending = next);
+    setState(() => _unconfirmed[key] = value);
     CoreScope.of(context).dispatch(CoreActions.updateSettings(next));
   }
 
@@ -145,11 +160,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ) => ValueListenableBuilder<Map<String, dynamic>?>(
     valueListenable: _ctx!,
     builder: (context, ctx, _) {
-      final pending = _pending;
-      final settings = pending == null
-          ? _settingsOf(ctx)
-          : ProfileSettings(pending);
-      if (settings == null) return const _SettingsPending();
+      final landed = _settingsOf(ctx);
+      if (landed == null) return const _SettingsPending();
+      final settings = _unconfirmed.isEmpty
+          ? landed
+          : ProfileSettings({...landed.json, ..._unconfirmed});
       return build(
         settings,
         (key, value) => _updateSetting(settings, key, value),
