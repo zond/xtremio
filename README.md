@@ -90,27 +90,36 @@ dev machine wants, is in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 ## How it works
 
 ```
-┌────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────┐
 │  Flutter UI (this repo) — screens, navigation, playback UI   │
-├────────────────────────────────────────────────────────────┤
-│  Dart ⇄ Rust FFI                                             │
+├──────────────────────────────────────────────────────────────┤
+│  Dart ⇄ Rust FFI (flutter_rust_bridge), crate in rust/       │
 │   • stremio-core   → addons, catalogs, search, library,      │
 │                      account, playback state (the "brain")   │
-│   • stream-server  → torrent/archive bytes over local HTTP   │
-├────────────────────────────────────────────────────────────┤
-│  media_kit / libmpv — decodes & renders the video the        │
-│  server streams (direct play; codecs & subtitles on-device)  │
-└────────────────────────────────────────────────────────────┘
+│   • stream-server  → embedded: settings, stats, storage and  │
+│                      downloads as FFI calls                  │
+├──────────────────────────────────────────────────────────────┤
+│  media_kit / libmpv — fetches the media over loopback HTTP,  │
+│  decodes and renders it (direct play; codecs and subtitles   │
+│  on-device)                                                  │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 The UI stays thin: discovery/library/addon logic lives in `stremio-core`, the
 bytes come from `stream-server`, and the client's job is presentation plus
 driving libmpv. `stream-server` runs **in-process**: the Rust crate in `rust/`
-links it as a library and starts it on its own thread (loopback only,
-port 11470 with an ephemeral fallback), so there is no sidecar binary to
-ship, launch, or keep alive on mobile. Because a capable on-device player handles codecs and
-subtitles, the server never transcodes — it just gets bytes onto an HTTP
-connection.
+links it as a library and starts it on its own thread with its own runtime,
+bound to `127.0.0.1` on port 11470 (stremio-core's default) and on an
+ephemeral port when that one is taken, so there is no sidecar binary to ship,
+launch, or keep alive on mobile. The Dart side never speaks HTTP to it: libmpv
+fetches the media routes, the app's own questions — settings, a torrent's
+stats, storage, downloads — are FFI calls into the server's library API, and
+stremio-core's requests to it carry a per-launch bearer token that only the
+Rust side holds. The only HTTP it serves beyond loopback is the media listener
+a cast session turns on and off. Because a capable on-device player handles
+codecs and subtitles, the server never transcodes — it just gets bytes onto an
+HTTP connection. Settings can point stremio-core at a remote streaming server
+by URL instead; the embedded one is the default.
 
 How that bridge is built, what crosses it and what every field of the state
 means is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
