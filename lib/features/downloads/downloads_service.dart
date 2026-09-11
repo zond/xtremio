@@ -279,17 +279,24 @@ class DownloadsForegroundService {
   /// on — a half-cancelled list is worse than a noisy one.
   Future<void> cancelAll() async {
     if (_disposed) return;
-    DownloadsRegistry listing;
+    DownloadsRegistry? listing;
     try {
-      listing = await client.list();
+      listing = await _listings.take(client.list);
     } catch (error) {
       if (kDebugMode) debugPrint('downloads listing to cancel: $error');
       return;
     }
-    for (final view in listing.items.values) {
-      if (!view.isUnfinished) continue;
+    if (listing != null) _registry = listing;
+    for (final key in [..._registry.items.keys]) {
+      // Asked of the registry the feed keeps current, just before each
+      // removal, and not of the listing: every removal is a round trip, and
+      // a download that finished during an earlier one was deleted with
+      // its files -- a film on the device, gone off a button that says it
+      // cancels what is still coming.
+      final view = _registry[key];
+      if (view == null || !view.isUnfinished) continue;
       try {
-        await client.remove(view.key, deleteFiles: true);
+        await client.remove(key, deleteFiles: true);
       } catch (error) {
         if (kDebugMode) debugPrint('cancelling a download: $error');
       }

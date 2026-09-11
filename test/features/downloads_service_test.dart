@@ -628,5 +628,27 @@ void main() {
         expect(service.isRunning, isFalse);
       },
     );
+
+    test('a download that finishes during the cancel is kept', () async {
+      client.registry = registryOf([viewAt('tt1', 25), viewAt('tt2', 99)]);
+      final service = build();
+      await service.start();
+      await settle();
+      // The second one's last piece lands while the first is being
+      // removed.
+      client.onRemove = (key, deleteFiles) {
+        if (key == 'tt1:tt1') client.emitProgress([rowOf(viewAt('tt2', 100))]);
+        return DownloadRemoveResult(
+          removed: true,
+          unpinned: true,
+          deletedFiles: deleteFiles,
+        );
+      };
+
+      await fromPlatform('cancelAll');
+      await settle();
+
+      expect(client.removed, [(key: 'tt1:tt1', deleteFiles: true)]);
+    });
   });
 }
