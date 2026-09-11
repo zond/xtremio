@@ -337,6 +337,12 @@ void main() {
 
       expect(find.text(ServerStorageScreen.refusedMessage), findsOneWidget);
       expect(find.text('/data/cache/server'), findsWidgets);
+      // What was typed stays in the field to be corrected. The read after
+      // the refusal put the old root back over it, typo and all.
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        '/root/nope',
+      );
     });
   });
 

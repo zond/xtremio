@@ -151,9 +151,15 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
       final storage = await widget.client.storage();
       if (!mounted) return;
       setState(() {
+        // The field follows the root when the root moves, not on every
+        // read: the read after a refused root put the old one back over
+        // the path the viewer typed, and the mistake they were about to
+        // correct went with it.
+        if (storage.cacheDir != _storage?.cacheDir) {
+          _typed.text = storage.cacheDir;
+        }
         _usage = usage;
         _storage = storage;
-        _typed.text = storage.cacheDir;
         _error = null;
         _busy = false;
       });
