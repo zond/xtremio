@@ -4451,7 +4451,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       case LogicalKeyboardKey.keyN:
       case LogicalKeyboardKey.mediaTrackNext:
-        if (event is KeyDownEvent && _state?.nextVideo != null) _playNext();
+        // Not while casting, like the top bar's Next: moving on would
+        // start the next episode here while the receiver plays this one.
+        if (event is KeyDownEvent && _state?.nextVideo != null && !_casting) {
+          _playNext();
+        }
       case LogicalKeyboardKey.mediaTrackPrevious:
         // There is no previous episode in the player's state; the remote's
         // previous-track key starts this one over, as music players do.

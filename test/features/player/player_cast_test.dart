@@ -1199,6 +1199,38 @@ void main() {
       expect(harness.engines, hasLength(1));
       expect(cast.loads, hasLength(1));
     });
+
+    testWidgets('the next-episode keys do nothing while casting, like the '
+        'button', (tester) async {
+      // The top bar's Next is disabled while a cast runs; N and the remote's
+      // next-track key used to go round it and move on anyway.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast);
+      harness.fixture['nextVideo'] = {
+        'id': 'tt0063350:1:2',
+        'title': 'The Cellar',
+        'season': 1,
+        'episode': 2,
+      };
+      harness.fixture['nextStream'] = {
+        'url': 'https://x.example/e2.mp4',
+        'name': 'Direct',
+      };
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+
+      for (final key in [
+        LogicalKeyboardKey.keyN,
+        LogicalKeyboardKey.mediaTrackNext,
+      ]) {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+      expect(harness.playerActions(), isNot(contains('NextVideo')));
+      expect(harness.engines, hasLength(1));
+      expect(cast.loads, hasLength(1));
+    });
   });
 
   group('ending a session', () {
