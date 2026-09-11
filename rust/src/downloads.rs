@@ -1211,15 +1211,19 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
                 message = failure.message(),
                 "could not pin the download"
             );
-            // A refused pin leaves the registry as it found it: the row
-            // that was there before, or no row.
-            update(|registry| {
-                match previous {
-                    Some(previous) => registry.items.insert(key.clone(), previous),
-                    None => registry.items.remove(&key),
-                };
-                Ok(())
+            let owed = update(|registry| {
+                Ok(unstage_add(
+                    registry,
+                    &key,
+                    &info_hash,
+                    file_idx,
+                    previous,
+                    replaces.as_ref(),
+                ))
             })?;
+            if let Some(owed) = owed {
+                release_replaced(&key, &owed);
+            }
             return Ok(AddOutcome {
                 ok: false,
                 key: Some(key),
@@ -1244,39 +1248,46 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
     }
 
     let recorded = update(|registry| {
-        let Some(entry) = registry.items.get_mut(&key) else {
-            return Ok(None);
-        };
-        entry.replaces = None;
-        if path.is_some() {
-            entry.path = path.clone();
-        }
-        entry.apply_live(&info, Utc::now());
-        Ok(Some(entry.clone()))
-    })?;
-    let Some(entry) = recorded else {
-        // Removed while the pin was being taken -- a magnet takes as long as
-        // its tracker does -- so the pin just taken is one no row names, and
-        // it goes the way the row went.
-        tracing::info!(
-            key,
-            "the download was removed while its pin was taken; releasing it"
-        );
-        release_replaced(
+        Ok(record_pin(
+            registry,
             &key,
-            &Replaced {
-                info_hash: info_hash.clone(),
-                file_idx,
-            },
-        );
-        return Ok(AddOutcome {
-            ok: false,
-            key: Some(key),
-            entry: None,
-            error: Some(PinFailure::Unavailable {
-                message: "the download was removed before it was pinned".to_owned(),
-            }),
-        });
+            &info_hash,
+            file_idx,
+            replaces.as_ref(),
+            path,
+            &info,
+            Utc::now(),
+        ))
+    })?;
+    let entry = match recorded {
+        Ok(entry) => entry,
+        Err(orphaned) => {
+            // The row was taken while the pin was being taken -- a magnet
+            // takes as long as its tracker does -- so the pin just taken
+            // goes the way the row went, unless another row wants the file.
+            tracing::info!(
+                key,
+                orphaned,
+                "the download's row was taken while its pin was taken"
+            );
+            if orphaned {
+                release_replaced(
+                    &key,
+                    &Replaced {
+                        info_hash: info_hash.clone(),
+                        file_idx,
+                    },
+                );
+            }
+            return Ok(AddOutcome {
+                ok: false,
+                key: Some(key),
+                entry: None,
+                error: Some(PinFailure::Unavailable {
+                    message: "the download was removed before it was pinned".to_owned(),
+                }),
+            });
+        }
     };
 
     ensure_ticker();
@@ -1308,9 +1319,9 @@ fn stage_add(
     // from zero here would sit at `queued, 0 B` until the hash check
     // ends, and its `completedAt` would be gone for good, that date
     // being set once and never recomputed.
-    let same = previous.as_ref().filter(|entry| {
-        entry.info_hash.eq_ignore_ascii_case(info_hash) && entry.file_idx == file_idx
-    });
+    let same = previous
+        .as_ref()
+        .filter(|entry| names(entry, info_hash, file_idx));
     // A different file: the old pin stays the server's until the new one
     // is in, and the row says so. Unless another row names that file,
     // in which case the pin is theirs and there is nothing to release.
@@ -1366,6 +1377,94 @@ fn stage_add(
     (previous, replaces)
 }
 
+/// Whether `entry` names the file `(info_hash, file_idx)`. It is how
+/// [`add`] and [`remove`] know, after blocking on the server, that the row
+/// under their key is still the one they left there: each blocks for as
+/// long as a magnet takes, and meanwhile the other can take the key -- a
+/// removal finishing, a second add staging another file -- so their later
+/// writes go only to a row that still names their file.
+fn names(entry: &Entry, info_hash: &str, file_idx: usize) -> bool {
+    entry.info_hash.eq_ignore_ascii_case(info_hash) && entry.file_idx == file_idx
+}
+
+/// Whether any row wants the pin on `(info_hash, file_idx)`.
+fn pin_is_wanted(registry: &Registry, info_hash: &str, file_idx: usize) -> bool {
+    registry
+        .items
+        .values()
+        .any(|entry| entry.wants_pin() && names(entry, info_hash, file_idx))
+}
+
+/// [`add`]'s write once the server refused the pin: what was under `key`
+/// goes back, the row before or no row, so a refusal leaves the registry as
+/// it found it. Answers the pin to release, if any.
+///
+/// Only over the row `add` staged. A removal can take it while the pin is
+/// asked for, and putting `previous` back then resurrects the title as an
+/// ordinary row the next boot re-pins; a second add can stage another file
+/// there, and overwriting it leaves that add's pin with no row. Taken, the
+/// row it replaced goes with it: its file, still pinned because the new
+/// pin never came, is released unless another row wants it.
+fn unstage_add(
+    registry: &mut Registry,
+    key: &str,
+    info_hash: &str,
+    file_idx: usize,
+    previous: Option<Entry>,
+    replaces: Option<&Replaced>,
+) -> Option<Replaced> {
+    let staged = registry
+        .items
+        .get(key)
+        .is_some_and(|entry| !entry.is_leaving() && names(entry, info_hash, file_idx));
+    if staged {
+        match previous {
+            Some(previous) => registry.items.insert(key.to_owned(), previous),
+            None => registry.items.remove(key),
+        };
+        return None;
+    }
+    replaces
+        .filter(|old| !pin_is_wanted(registry, &old.info_hash, old.file_idx))
+        .cloned()
+}
+
+/// [`add`]'s write once the pin is in: the server's reading onto the row it
+/// staged. Answers that row, or -- when it was taken meanwhile (see
+/// [`unstage_add`]) -- whether the pin just taken is one no row wants.
+/// Folding the reading into whatever row now holds the key would give a
+/// second add's row this file's path and state, and a removed title's key
+/// nothing at all.
+#[allow(clippy::too_many_arguments)]
+fn record_pin(
+    registry: &mut Registry,
+    key: &str,
+    info_hash: &str,
+    file_idx: usize,
+    replaces: Option<&Replaced>,
+    path: Option<String>,
+    info: &DownloadInfo,
+    now: DateTime<Utc>,
+) -> Result<Entry, bool> {
+    let staged = registry
+        .items
+        .get_mut(key)
+        .filter(|entry| !entry.is_leaving() && names(entry, info_hash, file_idx));
+    let Some(entry) = staged else {
+        return Err(!pin_is_wanted(registry, info_hash, file_idx));
+    };
+    // Only the debt this call has paid: a retry that staged the same file
+    // meanwhile carries its own.
+    if entry.replaces.as_ref() == replaces {
+        entry.replaces = None;
+    }
+    if path.is_some() {
+        entry.path = path;
+    }
+    entry.apply_live(info, now);
+    Ok(entry.clone())
+}
+
 /// Whether an entry other than `key` names the same `(infoHash, fileIdx)` --
 /// one torrent that is a stream of two metas (a Cinemeta id and an anime id
 /// for the same film), downloaded from both.
@@ -1377,10 +1476,7 @@ fn stage_add(
 /// Nor does a [`State::Gone`] row, which holds no pin to share.
 fn pin_is_shared(registry: &Registry, key: &str, info_hash: &str, file_idx: usize) -> bool {
     registry.items.iter().any(|(other, entry)| {
-        other != key
-            && entry.wants_pin()
-            && entry.info_hash.eq_ignore_ascii_case(info_hash)
-            && entry.file_idx == file_idx
+        other != key && entry.wants_pin() && names(entry, info_hash, file_idx)
     })
 }
 
@@ -1498,16 +1594,14 @@ pub fn remove(key: &str, delete_files: bool) -> anyhow::Result<RemoveOutcome> {
             // The server could not be asked (it is not running), so the row
             // stays, and stays an ordinary row: nothing was removed.
             update(|registry| {
-                if let Some(entry) = registry.items.get_mut(key) {
-                    entry.pending_removal = None;
-                }
+                cancel_removal(registry, key, &info_hash, file_idx);
                 Ok(())
             })?;
             return Err(error);
         }
     };
     update(|registry| {
-        registry.items.remove(key);
+        forget_removed(registry, key, &info_hash, file_idx);
         Ok(())
     })?;
     Ok(RemoveOutcome {
@@ -1515,6 +1609,38 @@ pub fn remove(key: &str, delete_files: bool) -> anyhow::Result<RemoveOutcome> {
         unpinned: outcome.unpinned,
         deleted_files: outcome.deleted_files,
     })
+}
+
+/// The row [`remove`] marked, if it is still under `key` (see [`names`]).
+/// An add while the unpin was asked for stages a row with no mark on it,
+/// and that is a download the user asked for after the removal.
+fn marked_for_removal<'a>(
+    registry: &'a mut Registry,
+    key: &str,
+    info_hash: &str,
+    file_idx: usize,
+) -> Option<&'a mut Entry> {
+    registry
+        .items
+        .get_mut(key)
+        .filter(|entry| entry.is_leaving() && names(entry, info_hash, file_idx))
+}
+
+/// [`remove`]'s write when the server could not be asked: the mark comes
+/// off the row it marked, and off nothing else.
+fn cancel_removal(registry: &mut Registry, key: &str, info_hash: &str, file_idx: usize) {
+    if let Some(entry) = marked_for_removal(registry, key, info_hash, file_idx) {
+        entry.pending_removal = None;
+    }
+}
+
+/// [`remove`]'s last write, once the pin is dropped: the row it marked
+/// goes. A row an add staged under the key meanwhile stays -- dropping it
+/// would leave that add's pin with no row naming it.
+fn forget_removed(registry: &mut Registry, key: &str, info_hash: &str, file_idx: usize) {
+    if marked_for_removal(registry, key, info_hash, file_idx).is_some() {
+        registry.items.remove(key);
+    }
 }
 
 /// Carries out every removal a kill interrupted: the row said the pin was
@@ -2710,6 +2836,249 @@ mod tests {
             pins_in(&registry),
             stream_server::PinSet::from([("abc".to_owned(), vec![2])])
         );
+    }
+
+    /// A row for `tt1:tt1` naming `(info_hash, file_idx)`.
+    fn naming(info_hash: &str, file_idx: usize) -> Entry {
+        Entry {
+            info_hash: info_hash.into(),
+            file_idx,
+            ..entry("tt1", "tt1")
+        }
+    }
+
+    /// `tt1:tt1` as [`add`] leaves it while it waits for the pin on
+    /// `("abc", 2)`, having replaced a row on `("old", 0)`.
+    fn staged_over_old() -> (Registry, Option<Entry>, Option<Replaced>) {
+        let mut registry = Registry::default();
+        registry.items.insert("tt1:tt1".into(), naming("old", 0));
+        let (previous, replaces) = stage_add(
+            &mut registry,
+            "tt1:tt1",
+            &request("tt1", "tt1"),
+            "abc",
+            2,
+            &[],
+            Utc::now(),
+        );
+        (registry, previous, replaces)
+    }
+
+    /// A refused pin puts back the row it replaced -- but only over the row
+    /// the add staged. The pin can take as long as a magnet does, and in
+    /// that time the title can be removed or another file staged for it.
+    #[test]
+    fn a_refused_pin_puts_back_only_the_row_it_staged() {
+        let old = Replaced {
+            info_hash: "old".into(),
+            file_idx: 0,
+        };
+
+        let (mut registry, previous, replaces) = staged_over_old();
+        assert_eq!(replaces.as_ref(), Some(&old));
+        let owed = unstage_add(
+            &mut registry,
+            "tt1:tt1",
+            "abc",
+            2,
+            previous.clone(),
+            replaces.as_ref(),
+        );
+        assert_eq!(owed, None, "the old row is back, and its pin is its own");
+        assert_eq!(registry.items["tt1:tt1"], naming("old", 0));
+
+        // Removed while the pin was asked for: putting the old row back
+        // would resurrect the title as a row the next boot re-pins. Its
+        // file is nobody's now, so its pin is released.
+        let (mut registry, previous, replaces) = staged_over_old();
+        registry.items.remove("tt1:tt1");
+        let owed = unstage_add(
+            &mut registry,
+            "tt1:tt1",
+            "abc",
+            2,
+            previous.clone(),
+            replaces.as_ref(),
+        );
+        assert_eq!(registry.items.get("tt1:tt1"), None, "not resurrected");
+        assert_eq!(owed.as_ref(), Some(&old));
+
+        // Mid-removal: the row is marked, and stays marked.
+        let (mut registry, previous, replaces) = staged_over_old();
+        registry
+            .items
+            .get_mut("tt1:tt1")
+            .expect("staged")
+            .pending_removal = Some(PendingRemoval { delete_files: true });
+        unstage_add(
+            &mut registry,
+            "tt1:tt1",
+            "abc",
+            2,
+            previous.clone(),
+            replaces.as_ref(),
+        );
+        assert!(
+            registry.items["tt1:tt1"].is_leaving(),
+            "still on its way out"
+        );
+
+        // Another file staged under the key: that add's row stays.
+        let (mut registry, previous, replaces) = staged_over_old();
+        stage_add(
+            &mut registry,
+            "tt1:tt1",
+            &request("tt1", "tt1"),
+            "def",
+            5,
+            &[],
+            Utc::now(),
+        );
+        unstage_add(
+            &mut registry,
+            "tt1:tt1",
+            "abc",
+            2,
+            previous.clone(),
+            replaces.as_ref(),
+        );
+        assert_eq!(registry.items["tt1:tt1"].info_hash, "def");
+
+        // And the old file is not released while another row wants it.
+        let (mut registry, previous, replaces) = staged_over_old();
+        registry.items.remove("tt1:tt1");
+        registry.items.insert(
+            "tt9:tt9".into(),
+            Entry {
+                info_hash: "old".into(),
+                file_idx: 0,
+                ..entry("tt9", "tt9")
+            },
+        );
+        let owed = unstage_add(
+            &mut registry,
+            "tt1:tt1",
+            "abc",
+            2,
+            previous,
+            replaces.as_ref(),
+        );
+        assert_eq!(owed, None);
+    }
+
+    /// The pin's reading lands on the row the add staged, or on nothing: a
+    /// row taken meanwhile is answered with whether the pin just taken is
+    /// one nobody wants.
+    #[test]
+    fn a_pin_is_recorded_only_on_the_row_it_was_taken_for() {
+        let now = Utc::now();
+        let info = pinned("abc", 2, true);
+        let record = |registry: &mut Registry, replaces: Option<&Replaced>| {
+            record_pin(registry, "tt1:tt1", "abc", 2, replaces, None, &info, now)
+        };
+
+        let (mut registry, _, replaces) = staged_over_old();
+        let recorded = record(&mut registry, replaces.as_ref()).expect("the staged row");
+        assert_eq!(recorded.state, State::Complete);
+        assert_eq!(recorded.path, info.path);
+        assert_eq!(recorded.replaces, None, "the debt is paid");
+        assert_eq!(registry.items["tt1:tt1"], recorded);
+
+        // A retry staged the same file meanwhile, carrying a debt of its
+        // own: that one is its to pay.
+        let (mut registry, _, replaces) = staged_over_old();
+        let other = Replaced {
+            info_hash: "other".into(),
+            file_idx: 1,
+        };
+        registry.items.get_mut("tt1:tt1").expect("staged").replaces = Some(other.clone());
+        let recorded = record(&mut registry, replaces.as_ref()).expect("same file");
+        assert_eq!(recorded.replaces, Some(other));
+
+        // Removed meanwhile: nobody wants the pin.
+        let (mut registry, _, replaces) = staged_over_old();
+        registry.items.remove("tt1:tt1");
+        assert_eq!(record(&mut registry, replaces.as_ref()), Err(true));
+
+        // Mid-removal: the removal may have asked for the unpin before this
+        // pin landed, so the pin is not the row's to keep.
+        let (mut registry, _, replaces) = staged_over_old();
+        registry
+            .items
+            .get_mut("tt1:tt1")
+            .expect("staged")
+            .pending_removal = Some(PendingRemoval { delete_files: true });
+        assert_eq!(record(&mut registry, replaces.as_ref()), Err(true));
+
+        // Removed, but another title names the file: the pin is theirs.
+        let (mut registry, _, replaces) = staged_over_old();
+        registry.items.remove("tt1:tt1");
+        registry.items.insert(
+            "tt9:tt9".into(),
+            Entry {
+                info_hash: "abc".into(),
+                file_idx: 2,
+                ..entry("tt9", "tt9")
+            },
+        );
+        assert_eq!(record(&mut registry, replaces.as_ref()), Err(false));
+
+        // Another file staged under the key: its row is not given this
+        // file's reading.
+        let (mut registry, _, replaces) = staged_over_old();
+        stage_add(
+            &mut registry,
+            "tt1:tt1",
+            &request("tt1", "tt1"),
+            "def",
+            5,
+            &[],
+            now,
+        );
+        let before = registry.items["tt1:tt1"].clone();
+        assert_eq!(record(&mut registry, replaces.as_ref()), Err(true));
+        assert_eq!(registry.items["tt1:tt1"], before);
+    }
+
+    /// A removal's later writes touch the row it marked and nothing else: a
+    /// download staged under the key while the unpin was asked for is one
+    /// the user asked for afterwards.
+    #[test]
+    fn a_removal_forgets_and_unmarks_only_the_row_it_marked() {
+        let marked = Entry {
+            pending_removal: Some(PendingRemoval {
+                delete_files: false,
+            }),
+            ..naming("abc", 2)
+        };
+        let with = |row: Entry| {
+            let mut registry = Registry::default();
+            registry.items.insert("tt1:tt1".into(), row);
+            registry
+        };
+
+        let mut registry = with(marked.clone());
+        forget_removed(&mut registry, "tt1:tt1", "abc", 2);
+        assert!(registry.items.is_empty());
+
+        for restaged in [naming("abc", 2), naming("def", 5)] {
+            let mut registry = with(restaged.clone());
+            forget_removed(&mut registry, "tt1:tt1", "abc", 2);
+            assert_eq!(registry.items["tt1:tt1"], restaged, "re-added: kept");
+        }
+
+        let mut registry = with(marked);
+        cancel_removal(&mut registry, "tt1:tt1", "abc", 2);
+        assert_eq!(registry.items["tt1:tt1"], naming("abc", 2));
+
+        // Another removal's mark, on another file, is that removal's.
+        let theirs = Entry {
+            pending_removal: Some(PendingRemoval { delete_files: true }),
+            ..naming("def", 5)
+        };
+        let mut registry = with(theirs.clone());
+        cancel_removal(&mut registry, "tt1:tt1", "abc", 2);
+        assert_eq!(registry.items["tt1:tt1"], theirs);
     }
 
     /// The two intents survive the file, and a row carrying neither is
