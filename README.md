@@ -2,7 +2,7 @@
 
 ![xtremio](assets/branding/xtremio-logo.png)
 
-A native, cross-platform **Stremio client** built on a pure-Rust core with a
+A native, cross-platform **Stremio client** built on a Rust core with a
 Flutter UI.
 
 [![CI](https://github.com/zond/xtremio/actions/workflows/ci.yml/badge.svg)](https://github.com/zond/xtremio/actions/workflows/ci.yml)
@@ -10,9 +10,9 @@ Flutter UI.
 [![binaries: GPL-3.0-or-later](https://img.shields.io/badge/binaries-GPL--3.0--or--later-blue)](#license)
 
 Xtremio is the client half of a two-part project. The other half is
-[`zond/stream-server`](https://github.com/zond/stream-server) — a pure-Rust,
-headless, zero-external-binary torrent-streaming server, which Xtremio embeds
-in its own process. Xtremio pairs that with
+[`zond/stream-server`](https://github.com/zond/stream-server) — a headless,
+zero-external-binary torrent-streaming server written in Rust, which Xtremio
+embeds in its own process. Xtremio pairs that with
 [`stremio-core`](https://github.com/Stremio/stremio-core) (the official Rust
 engine for addons, catalogs, library, and playback state, built here from a
 fork — see [Pinned forks](#pinned-forks)) and
@@ -194,7 +194,7 @@ What is genuinely not built:
 - **Media3 remuxing for casting**, which is what would let a receiver play a
   stream it cannot decode as it stands. It would happen on the sending device
   with its platform hardware codec (Android MediaCodec first) — never ffmpeg,
-  never software transcoding in the pure-Rust core. Until then such a stream
+  never software transcoding in the Rust core. Until then such a stream
   is refused rather than mangled.
 
 ## What is written down where
