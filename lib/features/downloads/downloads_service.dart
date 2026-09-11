@@ -122,7 +122,7 @@ class DownloadsSummary {
 /// The only action on the notification, and the only one the registry can
 /// really carry out: there is no pause for a pinned file, so what is left
 /// is dropping every unfinished download and the part-file with it — what
-/// "Delete the file" on the Downloads screen does, for all of them at once.
+/// deleting one on the Downloads screen does, for all of them at once.
 const String kDownloadsCancelAllAction = 'Cancel all';
 
 /// Keeps Android's downloads foreground service in step with the registry.

@@ -691,9 +691,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     _tell('Downloading ${request.name}');
   }
 
-  /// Drops the download of [entry] once the user has said what should
-  /// happen to the file -- the Downloads list's own question, asked here so
-  /// the tile that started a download is the tile that undoes it.
+  /// Drops the download of [entry], and its bytes, once the user has
+  /// confirmed -- the Downloads list's own question, asked here so the tile
+  /// that started a download is the tile that undoes it.
   ///
   /// The dialog is modal, so it is the guard against a second press while
   /// it stands, and a dismissed one removes nothing.
@@ -701,11 +701,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final client = _downloadsClient;
     final downloads = _downloads;
     if (client == null || downloads == null) return;
-    final deleteFiles = await askToRemoveDownload(context, entry);
-    if (deleteFiles == null || !mounted) return;
+    if (!await askToRemoveDownload(context, entry) || !mounted) return;
     DownloadRemoveResult? result;
     try {
-      result = await client.remove(entry.key, deleteFiles: deleteFiles);
+      result = await client.remove(entry.key, deleteFiles: true);
     } catch (_) {
       if (mounted) _tell('This download could not be removed.');
     }

@@ -549,35 +549,12 @@ void main() {
       );
     });
 
-    testWidgets('deleting from the tile keeps the file when asked to', (
-      tester,
-    ) async {
+    testWidgets('deleting from the tile takes the bytes', (tester) async {
       final downloads = await pumpWith(tester, 'complete', done: 1000000);
 
       await tester.tap(onStreamTile(kDownloadDeleteTooltip));
       await tester.pumpAndSettle();
-      expect(find.text('Remove Night of the Living Dead?'), findsOneWidget);
-      await tester.tap(find.text(RemoveDownloadDialog.keepLabel));
-      await tester.pumpAndSettle();
-
-      expect(downloads.removed, [
-        (key: '$movieId:$movieId', deleteFiles: false),
-      ]);
-      expect(
-        find.text('Removed Night of the Living Dead from downloads.'),
-        findsOneWidget,
-      );
-      // The registry no longer has it, so the tile offers a download again.
-      expect(onStreamTile(kDownloadTooltip), findsOneWidget);
-    });
-
-    testWidgets('deleting from the tile takes the bytes when asked to', (
-      tester,
-    ) async {
-      final downloads = await pumpWith(tester, 'complete', done: 1000000);
-
-      await tester.tap(onStreamTile(kDownloadDeleteTooltip));
-      await tester.pumpAndSettle();
+      expect(find.text('Delete Night of the Living Dead?'), findsOneWidget);
       await tester.tap(find.text(RemoveDownloadDialog.deleteLabel));
       await tester.pumpAndSettle();
 
@@ -585,6 +562,8 @@ void main() {
         (key: '$movieId:$movieId', deleteFiles: true),
       ]);
       expect(find.text('Deleted Night of the Living Dead.'), findsOneWidget);
+      // The registry no longer has it, so the tile offers a download again.
+      expect(onStreamTile(kDownloadTooltip), findsOneWidget);
     });
 
     testWidgets('a dismissed question removes nothing', (tester) async {
@@ -772,7 +751,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Remove Breaking Bad: S1E1 · Pilot?'), findsOneWidget);
+      expect(find.text('Delete Breaking Bad: S1E1 · Pilot?'), findsOneWidget);
       await tester.tap(find.text(RemoveDownloadDialog.deleteLabel));
       await tester.pumpAndSettle();
 

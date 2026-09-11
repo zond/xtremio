@@ -25,10 +25,11 @@ import 'remove_download_dialog.dart';
 ///
 /// The rows come from the registry the Rust side owns, with live progress
 /// merged in ([DownloadsController]); every action here is one call on the
-/// [DownloadsClient], never HTTP. Deleting asks first, and asks the
-/// question that matters -- whether the file goes with the entry -- because
-/// the two are separable: the pin can be dropped and the bytes left where
-/// they are.
+/// [DownloadsClient], never HTTP. Deleting asks first, and says that the
+/// bytes go with the entry: a dropped pin with its bytes left behind is a
+/// torrent nobody kept and nobody plays, which the server gives back at
+/// its next pass, so there is no keeping them to offer
+/// ([RemoveDownloadDialog]).
 ///
 /// Play goes through the embedded server (`offline_play.dart`), because
 /// that is the only reader the pieces have: the row is handed the server's
@@ -236,11 +237,10 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final client = _client;
     final downloads = _downloads;
     if (client == null || downloads == null) return;
-    final deleteFiles = await askToRemoveDownload(context, view);
-    if (deleteFiles == null || !mounted) return;
+    if (!await askToRemoveDownload(context, view) || !mounted) return;
     DownloadRemoveResult? result;
     try {
-      result = await client.remove(view.key, deleteFiles: deleteFiles);
+      result = await client.remove(view.key, deleteFiles: true);
     } catch (_) {
       if (mounted) _tell('This download could not be removed.');
     }

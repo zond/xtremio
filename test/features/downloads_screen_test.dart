@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
+import 'package:xtremio/features/downloads/remove_download_dialog.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
@@ -646,7 +647,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await openDelete(tester);
-      expect(find.text('Remove Night of the Living Dead?'), findsOneWidget);
+      expect(find.text('Delete Night of the Living Dead?'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
@@ -654,7 +655,13 @@ void main() {
       expect(find.text('Night of the Living Dead'), findsOneWidget);
     });
 
-    testWidgets('keeping the file drops the pin only', (tester) async {
+    testWidgets('the question says the bytes go, and offers no keeping them', (
+      tester,
+    ) async {
+      // "Keep the file" dropped the pin and nothing else, and a torrent
+      // nobody kept and nobody plays is what the server gives back at its
+      // next pass: the bytes went anyway, under a message saying they had
+      // stayed.
       useTallViewport(tester);
       final downloads = FakeDownloadsClient(registry: recorded());
       addTearDown(downloads.dispose);
@@ -662,15 +669,22 @@ void main() {
       await tester.pumpAndSettle();
 
       await openDelete(tester);
-      await tester.tap(find.text('Keep the file'));
-      await tester.pumpAndSettle();
 
-      expect(downloads.removed, [(key: movieKey, deleteFiles: false)]);
       expect(
-        find.text('Removed Night of the Living Dead from downloads.'),
+        find.textContaining('is deleted from this device'),
         findsOneWidget,
       );
-      expect(find.text('2 downloads · 32.8 kB on this device'), findsOneWidget);
+      expect(find.textContaining('Keep'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is ButtonStyleButton,
+          ),
+        ),
+        findsNWidgets(2),
+        reason: 'Cancel, and Delete',
+      );
     });
 
     testWidgets('deleting the file takes the bytes too', (tester) async {
@@ -681,7 +695,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await openDelete(tester);
-      await tester.tap(find.text('Delete the file'));
+      await tester.tap(find.text(RemoveDownloadDialog.deleteLabel).last);
       await tester.pumpAndSettle();
 
       expect(downloads.removed, [(key: movieKey, deleteFiles: true)]);
@@ -703,7 +717,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await openDelete(tester);
-      await tester.tap(find.text('Delete the file'));
+      await tester.tap(find.text(RemoveDownloadDialog.deleteLabel).last);
       await tester.pumpAndSettle();
 
       expect(
@@ -723,7 +737,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await openDelete(tester);
-      await tester.tap(find.text('Delete the file'));
+      await tester.tap(find.text(RemoveDownloadDialog.deleteLabel).last);
       await tester.pumpAndSettle();
 
       expect(find.text('This download could not be removed.'), findsOneWidget);

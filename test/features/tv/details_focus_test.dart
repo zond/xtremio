@@ -763,7 +763,7 @@ void main() {
       await hold(tester, LogicalKeyboardKey.select, RemotePress.holdDuration);
 
       expect(find.byType(PlayerScreen), findsNothing, reason: 'not a tap');
-      expect(find.text('Remove Night of the Living Dead?'), findsOneWidget);
+      expect(find.text('Delete Night of the Living Dead?'), findsOneWidget);
       await tester.tap(find.text(RemoveDownloadDialog.deleteLabel));
       await tester.pumpAndSettle();
       expect(downloads.removed, [

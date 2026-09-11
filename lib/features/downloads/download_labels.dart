@@ -68,8 +68,7 @@ String _percentSuffix(DownloadView view) {
 
 /// What to say once a removal has come back. The entry is gone either
 /// way, so what is worth reporting is what happened to the bytes: they
-/// went, they stayed because they are another download's too, or they were
-/// left as ordinary cache on purpose.
+/// went, or they stayed because they are another download's too.
 String downloadRemovedMessage(DownloadRemoveResult result, DownloadView view) =>
     switch (result) {
       // One torrent offered under two titles: the row goes, the bytes belong
