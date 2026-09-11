@@ -140,8 +140,12 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
   }
 
   /// Reads [CacheUsage]. Called on open, after a clean and on an explicit
-  /// refresh -- never on a timer: it is two worker calls into the server,
-  /// and nothing on this screen moves fast enough to need more.
+  /// refresh. Cheap, but not free: `cacheUsage` counts what the server's
+  /// owners say they hold plus one listing of the store root -- no walk of
+  /// the tree -- and `storage` counts it again beside the settings and one
+  /// `statvfs`. Nothing caches the answer, so it is not something to poll on
+  /// a sub-second timer, and nothing on this screen moves fast enough to
+  /// want a timer at all.
   Future<void> _read() async {
     setState(() => _busy = true);
     try {
