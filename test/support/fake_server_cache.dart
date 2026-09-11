@@ -89,8 +89,8 @@ const CacheUsage overLimitEvictable = CacheUsage(
   protectedFiles: 0,
 );
 
-/// A cache over its limit where everything left is a live stream or a kept
-/// download: cleaning cannot help.
+/// A cache over its limit where everything left is a kept download or the
+/// title played last: cleaning cannot help.
 const CacheUsage overLimitNothingEvictable = CacheUsage(
   totalBytes: 12000000000,
   limitBytes: 10000000000,

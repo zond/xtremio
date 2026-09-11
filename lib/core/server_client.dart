@@ -165,10 +165,11 @@ abstract interface class ServerCacheControl implements ServerSettingsWriter {
   /// anything. Throws when the server is not running.
   Future<CacheUsage> cacheUsage();
 
-  /// Runs one eviction pass now and reports what it freed. Nothing here
-  /// stops playback -- the same protections the server's own scheduled
-  /// sweep uses apply, so a live stream or a pinned download is never
-  /// touched. Throws when the server is not running.
+  /// Asks the server for its slack now and reports what that freed.
+  /// Nothing here stops playback: the server's owners give back only what
+  /// nobody is playing and nobody kept, so a pinned download and the
+  /// window of the title played last are never touched. Throws when the
+  /// server is not running.
   Future<EvictionReport> cleanCacheNow();
 }
 
@@ -261,11 +262,13 @@ class ServerClient
   Future<CacheUsage> cacheUsage() async =>
       CacheUsage.fromJson(_object(await rust.serverCacheUsage()));
 
-  /// Runs one eviction pass now and reports what it freed
-  /// (`ServerHandle::clean_cache_now`) -- the exact function the server's
-  /// own scheduled sweep calls, so the same protections apply: nothing a
-  /// live engine is writing or a pin keeps is ever touched. Nothing here
-  /// stops playback. Throws when the server is not running.
+  /// Asks the server for its slack now and reports what that freed
+  /// (`ServerHandle::clean_cache_now`). There is no scheduled sweep for
+  /// this to run early: the torrent engine and the proxy cache each own
+  /// their bytes and give back what nobody is playing and nobody kept, and
+  /// this asks both for that at once. A pin and the window of the title
+  /// played last are never touched, and nothing here stops playback.
+  /// Throws when the server is not running.
   @override
   Future<EvictionReport> cleanCacheNow() async =>
       EvictionReport.fromJson(_object(await rust.serverCleanCacheNow()));

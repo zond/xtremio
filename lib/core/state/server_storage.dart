@@ -47,7 +47,7 @@ class StorageVolume {
 /// The first question about a playback that misbehaves is whether the
 /// device is full -- bytes arriving with no verified progress is what
 /// failing writes look like -- and the second is whether the cache is over
-/// the limit its cleaner is supposed to hold it to. Both are read over FFI
+/// the limit the server sizes it against. Both are read over FFI
 /// (`server_storage_report`); the app never asks the server over HTTP.
 class ServerStorage {
   const ServerStorage({
@@ -78,10 +78,9 @@ class ServerStorage {
 
   /// The `cacheSize` setting, or null when nobody set one.
   ///
-  /// The *setting*, not the limit the cleaner enforces: with no
-  /// `cacheSize` the server still caps the cache at what the volume can
-  /// give above its free-space floor, and [CacheUsage.limitBytes] is that
-  /// number. So a null here means "unconfigured", never "unbounded", and
+  /// The *setting*, not the limit in force: with no `cacheSize` the
+  /// server still caps the cache at what the volume can give above its
+  /// free-space floor, and [CacheUsage.limitBytes] is that number. So a null here means "unconfigured", never "unbounded", and
   /// the storage screen can rightly call a cache over its limit while this
   /// line says no size was chosen.
   final int? cacheLimitBytes;
@@ -139,18 +138,18 @@ class ServerStorage {
 /// (`ServerHandle::cache_usage`/`GET /cache.json`).
 ///
 /// [totalBytes] and [limitBytes] are occupancy, not apparent length -- the
-/// server counts allocated blocks, the same accounting its cleaner uses --
-/// so this is the number to hold against the limit, and the one a
-/// part-streamed film's apparent length would badly overstate.
-/// [protectedBytes]/[protectedFiles] are what a live engine is writing or a
-/// pinned download keeps right now, which a clean pass can never touch:
-/// when they account for all of [totalBytes] and the cache is still over
-/// [limitBytes], cleaning cannot help until playback stops or something is
-/// unpinned.
+/// server counts allocated blocks -- so this is the number to hold against
+/// the limit, and the one a part-streamed film's apparent length would
+/// badly overstate. [protectedBytes]/[protectedFiles] are what a pinned
+/// download or the window of the title played last keeps right now, which
+/// a clean can never take: when they account for all of [totalBytes] and
+/// the cache is still over [limitBytes], cleaning cannot help until
+/// something else is played or something is unpinned.
 ///
-/// The walk behind this call costs one `stat` per file currently in the
-/// cache and is not bounded server-side, so it belongs on screen-open, on
-/// an explicit refresh, and after a clean -- never on a timer.
+/// The server answers from what its piece store and proxy cache say they
+/// hold, not from a walk, so a read is cheap; it is still a worker call,
+/// and it belongs on screen-open, on an explicit refresh, and after a
+/// clean -- never on a timer.
 class CacheUsage {
   const CacheUsage({
     required this.totalBytes,
@@ -169,11 +168,11 @@ class CacheUsage {
   /// Occupancy of the cache right now.
   final int totalBytes;
 
-  /// The limit the server's cleaner will actually enforce, in the same
-  /// accounting: the smaller of the `cacheSize` setting and what the
-  /// volume can give while keeping its free-space floor
-  /// (`CACHE_FREE_SPACE_FLOOR`, 512 MiB) clear -- so on a device with no
-  /// `cacheSize` set this is still a number, and the number is the
+  /// The limit in force, the one the server's owners size the cache
+  /// against, in the same accounting: the smaller of the `cacheSize`
+  /// setting and what the volume can give while keeping its free-space
+  /// floor (`CACHE_FREE_SPACE_FLOOR`, 512 MiB) clear -- so on a device with
+  /// no `cacheSize` set this is still a number, and the number is the
   /// device's.
   ///
   /// Null only when neither caps anything: `cacheSize` unset *and* the
@@ -188,22 +187,22 @@ class CacheUsage {
   /// having happened to the cache.
   final int? limitBytes;
 
-  /// How much of [totalBytes] a clean pass may never touch: a live engine
-  /// is writing it, or a pinned download keeps it.
+  /// How much of [totalBytes] a clean may never take: a pinned download
+  /// keeps it, or it is the window of the title played last.
   final int protectedBytes;
 
   /// How many files that is.
   final int protectedFiles;
 
-  /// Whether the cache is bigger than the limit that will be enforced --
-  /// which on a device with no `cacheSize` set is the device's own.
+  /// Whether the cache is bigger than the limit in force -- which on a
+  /// device with no `cacheSize` set is the device's own.
   bool get overLimit {
     final limit = limitBytes;
     return limit != null && totalBytes > limit;
   }
 
   /// Whether cleaning cannot help right now: everything over the limit is
-  /// what a live stream or a kept download is holding.
+  /// what a kept download or the title played last is holding.
   bool get nothingEvictable => overLimit && protectedBytes >= totalBytes;
 
   /// `17.0 GB of 10.0 GB limit`, or `17.0 GB, no limit set`.
@@ -216,10 +215,12 @@ class CacheUsage {
   }
 }
 
-/// What one on-demand clean pass found and did
-/// (`ServerHandle::clean_cache_now`/`POST /cache/clean`) -- the exact
-/// function the server's own scheduled sweep runs, so it respects exactly
-/// the same protections. Occupancy throughout, like [CacheUsage].
+/// What one on-demand clean found and did
+/// (`ServerHandle::clean_cache_now`/`POST /cache/clean`): the server asked
+/// its torrent engine and its proxy cache for their slack, the passes they
+/// run on their own as they go, so a pin and the window of the title
+/// played last are never touched. Occupancy throughout, like
+/// [CacheUsage].
 class EvictionReport {
   const EvictionReport({
     required this.total,
@@ -242,8 +243,8 @@ class EvictionReport {
   /// Occupancy of the cache once this pass finished.
   final int total;
 
-  /// How much of [total] this pass could never touch: a live engine or a
-  /// pin.
+  /// How much of [total] this pass could never touch: a pin, or the
+  /// window of the title played last.
   final int protected;
 
   /// How many files that is.
@@ -268,7 +269,7 @@ class EvictionReport {
   final int? limit;
 
   /// Whether the run ended still over the limit. Not a failure: what is
-  /// left belongs to a live stream or a kept download, named by
+  /// left belongs to a kept download or the title played last, named by
   /// [protected]/[protectedFiles].
   bool get stillOverLimit {
     final limit = this.limit;

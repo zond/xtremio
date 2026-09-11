@@ -51,9 +51,43 @@ void main() {
     expect(
       find.textContaining('Over its limit'),
       findsOneWidget,
-      reason: 'a cleaner reclaiming nothing is the thing to notice',
+      reason: 'a cache the server cannot bring under is the thing to notice',
     );
     expect(client.cleans, 0, reason: 'nothing was asked of the server yet');
+  });
+
+  testWidgets('says what is kept the way the server keeps it', (tester) async {
+    // There is no scheduled sweep any more, and what a clean never takes
+    // is a kept download and the title played last -- kept with the player
+    // closed, which is exactly when a clean that frees nothing needs
+    // explaining. "A live stream" sent the viewer looking for one.
+    final client = FakeServerCache(
+      usage: overLimitNothingEvictable,
+      cleanResult: const EvictionReport(
+        total: 12000000000,
+        protected: 12000000000,
+        protectedFiles: 3,
+        freed: 0,
+        deleted: 0,
+        limit: 10000000000,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: ServerStorageScreen(client: client)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('hourly'), findsNothing);
+    expect(find.textContaining('live stream'), findsNothing);
+    expect(find.textContaining('the title played last'), findsOneWidget);
+    expect(find.textContaining('the title you played last'), findsOneWidget);
+
+    await tester.tap(find.text('Clean cache now'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('a download you kept or the title you played last'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('cleaning runs immediately and reports what it freed', (

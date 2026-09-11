@@ -270,8 +270,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
-          // Where the bytes go, what they cost and the sweep that holds
-          // them to it -- one root and one screen for all of it, which is
+          // Where the bytes go, what they cost and the one way to ask for
+          // room back -- one root and one screen for all of it, which is
           // why this is here and not among the developer tools it used to
           // sit with: moving it is an ordinary thing to want.
           ListTile(
