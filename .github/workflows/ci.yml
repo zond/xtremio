@@ -40,6 +40,55 @@ jobs:
       - run: cargo test
         working-directory: rust
 
+  # The core for the 32-bit Android userspace a Chromecast with Google TV
+  # has (`make apk-tv`). The job above compiles for a 64-bit host only, where
+  # `off_t`, `usize` and `c_long` are all 64 bits, so a length or offset
+  # squeezed into one of them builds there and breaks on armv7, and nothing
+  # else that runs per push compiles for armv7 (build.yml does, weekly). A
+  # check, not a build: the type errors are what this is for, and linking an
+  # APK is build.yml's job.
+  #
+  # The environment is what cargokit exports for the same target when Gradle
+  # builds it (rust_builder/cargokit/build_tool/lib/src/android_environment.dart),
+  # from the NDK the runner image ships. armv7 has no pregenerated aws-lc-sys
+  # bindings, so bindgen runs, which wants libclang on the host and the NDK
+  # sysroot for its headers (ANDROID.md, "Prerequisites"), and the cc builder
+  # rather than CMake, as rust/cargokit.yaml forces for the app build.
+  rust-armv7-android:
+    name: Rust (check, armv7-linux-androideabi)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: sudo apt-get update && sudo apt-get install -y libclang-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-linux-androideabi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Point the target at the NDK's clang
+        run: |
+          toolchain="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          # minSdk 24, as the app's Gradle build targets.
+          clang="$toolchain/bin/armv7a-linux-androideabi24-clang"
+          test -x "$clang"
+          {
+            echo "CC_armv7_linux_androideabi=$clang"
+            echo "CXX_armv7_linux_androideabi=$clang++"
+            echo "AR_armv7_linux_androideabi=$toolchain/bin/llvm-ar"
+            echo "RANLIB_armv7_linux_androideabi=$toolchain/bin/llvm-ranlib"
+            echo "CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER=$clang"
+            echo "BINDGEN_EXTRA_CLANG_ARGS_armv7_linux_androideabi=--target=armv7a-linux-androideabi24 --sysroot=$toolchain/sysroot"
+            echo "AWS_LC_SYS_CMAKE_BUILDER=0"
+          } >> "$GITHUB_ENV"
+
+      - run: cargo check --target armv7-linux-androideabi
+        working-directory: rust
+
   flutter:
     name: Flutter (format, analyze, test)
     runs-on: ubuntu-latest
