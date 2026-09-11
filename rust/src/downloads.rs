@@ -1360,9 +1360,17 @@ fn stage_add(
     // A different file: the old pin stays the server's until the new one
     // is in, and the row says so. Unless another row names that file,
     // in which case the pin is theirs and there is nothing to release.
+    //
+    // Nor when the row it replaces wanted no pin: a gone row's pin was
+    // dropped when it was marked, and a removal in flight is dropping its
+    // own. A debt is also a pin the next launch holds (see [`pins_in`]), so
+    // a kill before this row's pin lands would have the server want that
+    // file again -- fetching back the film the device had lost, or the
+    // one the user had just removed.
     let replaces = previous
         .as_ref()
         .filter(|_| same.is_none())
+        .filter(|old| old.wants_pin())
         .filter(|old| !pin_is_shared(registry, key, &old.info_hash, old.file_idx))
         .map(|old| Replaced {
             info_hash: old.info_hash.clone(),
@@ -3276,6 +3284,42 @@ mod tests {
         );
         assert!(outcome.ok, "{outcome:?}");
         assert_eq!(released, Vec::new(), "tt9 wants the old file");
+    }
+
+    /// A row that wanted no pin leaves the row replacing it nothing to
+    /// release. A debt is a pin the next launch holds, so a kill before the
+    /// new pin landed would have the server fetch back a film the device
+    /// had lost, or one the user had just removed.
+    #[test]
+    fn replacing_a_row_that_wants_no_pin_owes_no_release() {
+        let mut gone = naming("old", 0);
+        gone.state = State::Gone;
+        gone.error = Some(GONE_MESSAGE.to_owned());
+        let leaving = Entry {
+            pending_removal: Some(PendingRemoval {
+                delete_files: false,
+            }),
+            ..naming("old", 0)
+        };
+        for previous in [gone, leaving] {
+            let mut registry = Registry::default();
+            registry.items.insert("tt1:tt1".into(), previous.clone());
+            let (_, replaces) = stage_add(
+                &mut registry,
+                "tt1:tt1",
+                &request("tt1", "tt1"),
+                "abc",
+                2,
+                &[],
+                Utc::now(),
+            );
+            assert_eq!(replaces, None, "over {previous:?}");
+            assert_eq!(
+                pins_in(&registry),
+                stream_server::PinSet::from([("abc".to_owned(), vec![2])]),
+                "the launch holds only the new file, over {previous:?}"
+            );
+        }
     }
 
     /// The two intents survive the file, and a row carrying neither is
