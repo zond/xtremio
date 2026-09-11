@@ -123,15 +123,15 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 | Platform | Support | Notes |
 |---|---|---|
 | **Linux (desktop)** | ✅ First-class | The easiest target; video is software-rendered until media_kit's Linux renderer lands ([docs/OPERATIONS.md](docs/OPERATIONS.md#linux-video-is-software-rendered-for-now)). |
-| **Windows (desktop)** | ✅ First-class | Flutter desktop, media_kit and native Rust, as on Linux; registering `stremio://` needs an installer and there is none ([docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). |
-| **macOS (desktop)** | ✅ First-class | Native Rust + media_kit; built in CI, unsigned, and needs a Mac to build yourself. |
+| **Windows (desktop)** | ✅ Built in CI | Flutter desktop, media_kit and native Rust, as on Linux; registering `stremio://` needs an installer and there is none ([docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). |
+| **macOS (desktop)** | ✅ Built in CI | Native Rust + media_kit; unsigned, and needs a Mac to build yourself — there is none in the project. |
 | **Android** | ✅ Supported | Rust cross-compiles to the NDK and is embedded as a native lib; the primary mobile target ([ANDROID.md](ANDROID.md)). |
-| **Android TV / Google TV** | ✅ Supported | One build covers the boxes, given the ABI the box reports — a Chromecast with Google TV is 32-bit ([ANDROID.md](ANDROID.md)). |
-| **iOS** | ⚠️ With effort | Background execution is throttled, the App Store is out on GPL-3 (see [License](#license)), and the build is blocked on an upstream crate today. Sideload only. |
+| **Android TV / Google TV** | ✅ Supported | The same app, not a separate build; install the APK for the ABI the box reports — a Chromecast with Google TV is 32-bit, `make apk-tv` ([ANDROID.md](ANDROID.md)). |
+| **iOS** | ❌ Does not build today | CI compiles it and it fails in an upstream crate (`librqbit-dualstack-sockets` 0.7.0 calls a socket2 method iOS does not have). Past that, there is no signing identity here, the App Store is out on GPL-3 (see [License](#license)), and iOS throttles background work. |
 | **Web** | ❌ Not possible | A browser cannot do BitTorrent — no raw sockets, no local server, no libmpv. A thin client onto a separate server is a different architecture, not this app. |
 
-**Short version:** desktop and Android are the real targets, iOS works if you
-sideload and accept the background limits, and web is fundamentally off the
+**Short version:** desktop and Android are the real targets, iOS does not
+build until an upstream crate is fixed, and web is fundamentally off the
 table for a self-contained streaming client.
 
 ## What is next
