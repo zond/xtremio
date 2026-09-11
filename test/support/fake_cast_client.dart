@@ -210,9 +210,14 @@ class FakeLanMediaControl implements LanMediaControl {
   /// taking the reset away is something a test can now see.
   int requestsServed = 0;
 
+  /// Holds a start open until it completes, as the round trip to the
+  /// server does: what a Stop pressed during it finds is the test.
+  Future<void>? enablePending;
+
   @override
   Future<String?> setLanMedia({required bool enabled}) async {
     toggles.add(enabled);
+    if (enabled && enablePending != null) await enablePending;
     // Above the failure below because the server resets above its own: a
     // start that cannot bind has still ended the last session's count.
     requestsServed = 0;

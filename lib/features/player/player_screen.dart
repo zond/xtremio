@@ -800,6 +800,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// receiver the media; see [_onCastSession].
   int _castStarts = 0;
 
+  /// How many times [_stopCast] has ended a cast: how a start that is still
+  /// under way learns that the viewer pressed Stop during it.
+  int _castStops = 0;
+
   bool _controlsVisible = true;
   Timer? _controlsTimer;
   bool _menuOpen = false;
@@ -3731,6 +3735,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     PlayerState? state,
     CastReady compatibility,
   ) async {
+    // Stop stays on the bar while a second receiver is being picked, and
+    // pressing it ends the cast. What this call has started by then --
+    // the new session, the listener it switched on -- is what that Stop
+    // was for, so every step below that finds one has happened unwinds
+    // like a leave does. Carrying on sent the film to the new receiver
+    // after the viewer had asked for it back. The unwinding is also what
+    // settles the listener: a Stop during the enable sends its disable
+    // while the enable is in flight, the two land in either order, and
+    // `_lanMediaOn` is written from the enable's answer -- so the disable
+    // that counts is the one the unwinding sends after that answer.
+    final stops = _castStops;
+    bool abandoned() => !_stillOurs || _castStops != stops;
     // What comes back, not the row that was tapped: the platform is asked
     // where the receiver is as a session starts and never during discovery,
     // so the answer is the only one of the two that can carry an address.
@@ -3744,7 +3760,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // so a leave stops here, and takes the session this call has just
     // started with it: it is the one thing that must not outlive the
     // screen, and nothing else knows about it yet.
-    if (!_stillOurs) {
+    if (abandoned()) {
       await _teardownCast();
       return null;
     }
@@ -3771,7 +3787,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           'never fetch would only look like it worked.';
     }
     // The LAN listener is up by now, so this takes that with it too.
-    if (!_stillOurs) {
+    if (abandoned()) {
       await _teardownCast();
       return null;
     }
@@ -3789,7 +3805,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // below clears `_castingTo` without a `setState`. Measured: the
     // surface gone from the frame, and the film handed to the receiver on
     // the way past.
-    if (!_stillOurs) {
+    if (abandoned()) {
       await _teardownCast();
       return null;
     }
@@ -3839,7 +3855,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         'player',
         'the receiver did not take the media: $error',
       );
-      if (!_stillOurs) {
+      if (abandoned()) {
         await _teardownCast();
         return null;
       }
@@ -3850,7 +3866,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // it, the wait below would be a timer armed after [_detach] ran, and
     // the receiver would be left playing a stream off a device whose
     // listener is about to go.
-    if (!_stillOurs) {
+    if (abandoned()) {
       await _teardownCast();
       return null;
     }
@@ -3954,6 +3970,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// elsewhere) and there is nothing left to end.
   Future<void> _stopCast({bool disconnect = true}) async {
     if (!_casting) return;
+    _castStops++;
     _cancelCastFetch();
     final position = _castStatus.position;
     _castingTo = null;

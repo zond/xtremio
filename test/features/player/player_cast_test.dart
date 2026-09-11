@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -630,6 +632,98 @@ void main() {
       expect(lan.running, isFalse);
       expect(harness.engine.seeks, [const Duration(minutes: 9)]);
       expect(harness.engine.playCalls, 1);
+    });
+
+    testWidgets('Stop pressed while the listener starts ends it all', (
+      tester,
+    ) async {
+      // Stop is still on the bar while the second receiver is being set
+      // up. Pressed while the listener was being switched on for it, the
+      // switch carried on regardless: the film went to the new receiver
+      // after the viewer had asked for it back.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom, kitchen]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.playing,
+          position: Duration(minutes: 11),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final enabled = Completer<void>();
+      lan.enablePending = enabled.future;
+      await castTo(tester, kitchen);
+      await tester.tap(find.byKey(const ValueKey('cast-stop-button')));
+      await tester.pumpAndSettle();
+      enabled.complete();
+      await tester.pumpAndSettle();
+
+      expect(cast.loads, hasLength(1));
+      expect(find.byType(CastRemotePanel), findsNothing);
+      // The session the switch started goes, and the listener with it,
+      // whichever order the Stop's disable and the enable ran in.
+      expect(lan.toggles.last, isFalse);
+      expect(lan.running, isFalse);
+      expect(harness.engine.seeks, [const Duration(minutes: 11)]);
+      expect(harness.engine.playCalls, 1);
+    });
+
+    testWidgets('Stop pressed while the session starts ends it all', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom, kitchen]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+
+      final connected = Completer<void>();
+      cast.connectPending = connected.future;
+      await castTo(tester, kitchen);
+      await tester.tap(find.byKey(const ValueKey('cast-stop-button')));
+      await tester.pumpAndSettle();
+      connected.complete();
+      await tester.pumpAndSettle();
+
+      expect(cast.loads, hasLength(1));
+      expect(find.byType(CastRemotePanel), findsNothing);
+      // The Stop's own disconnect, and the one for the session the switch
+      // had started behind it.
+      expect(cast.disconnects, 2);
+      expect(lan.toggles, [true, false]);
+    });
+
+    testWidgets('a load refused after Stop is not explained', (tester) async {
+      // The viewer asked for the film back; a dialog saying the receiver
+      // would not take it answers a question nobody is asking any more.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom, kitchen]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+
+      cast
+        ..loadDelay = const Duration(seconds: 2)
+        ..loadError = PlatformException(code: 'loadMedia');
+      await tester.tap(castButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('cast-device-${kitchen.id}')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const ValueKey('cast-stop-button')));
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CastRefusedDialog), findsNothing);
+      expect(find.byType(CastRemotePanel), findsNothing);
+      expect(lan.running, isFalse);
     });
 
     testWidgets('a session moved to another receiver ends the cast here', (
