@@ -2772,7 +2772,7 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "localsearch"
 version = "0.1.0"
-source = "git+https://github.com/Stremio/local-search?branch=main#74fefe1da2fa17d2b4ef7e3e629da00f3946ee72"
+source = "git+https://github.com/Stremio/local-search?rev=74fefe1da2fa17d2b4ef7e3e629da00f3946ee72#74fefe1da2fa17d2b4ef7e3e629da00f3946ee72"
 dependencies = [
  "fst",
  "fxhash",
@@ -4669,7 +4669,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "stremio-core"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=cfd27a7b3a8dbda2feea406a441ffd3dda798ce4#cfd27a7b3a8dbda2feea406a441ffd3dda798ce4"
+source = "git+https://github.com/zond/stremio-core?rev=b4c92f33c68bf73b9abb13b7503b1a529454c228#b4c92f33c68bf73b9abb13b7503b1a529454c228"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4715,7 +4715,7 @@ dependencies = [
 [[package]]
 name = "stremio-derive"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=cfd27a7b3a8dbda2feea406a441ffd3dda798ce4#cfd27a7b3a8dbda2feea406a441ffd3dda798ce4"
+source = "git+https://github.com/zond/stremio-core?rev=b4c92f33c68bf73b9abb13b7503b1a529454c228#b4c92f33c68bf73b9abb13b7503b1a529454c228"
 dependencies = [
  "case",
  "proc-macro-crate",
@@ -4930,7 +4930,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

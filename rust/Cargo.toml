@@ -49,13 +49,16 @@ enginefs = { git = "https://github.com/zond/stream-server", rev = "e5accc8bbd1f6
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
 # the Runtime can live on a multithreaded host.
 #
-# Pinned to our fork: upstream 0.62.1 plus one commit that keeps the
-# addon-specific properties of a subtitle (`fpsMilli`, `subtitleFileName`,
-# `releaseGroup`, ...) in a flattened `other` map instead of letting serde
-# drop them, which is what lets the app name and frame-rate-filter the
-# thirty-odd files OpenSubtitles answers with. Upstream PR:
-# Stremio/stremio-core#1045; drop the fork once it lands.
-stremio-core = { git = "https://github.com/zond/stremio-core", rev = "cfd27a7b3a8dbda2feea406a441ffd3dda798ce4", features = ["derive", "env-future-send"] }
+# Pinned to our fork's `pinned` branch: upstream 0.62.1 plus one commit
+# that keeps the addon-specific properties of a subtitle (`fpsMilli`,
+# `subtitleFileName`, `releaseGroup`, ...) in a flattened `other` map
+# instead of letting serde drop them, which is what lets the app name and
+# frame-rate-filter the thirty-odd files OpenSubtitles answers with
+# (upstream PR Stremio/stremio-core#1045, from the fork's
+# subtitles-preserve-addon-fields branch) -- and one more that pins its
+# `localsearch` dependency by rev rather than `branch = "main"`, which
+# stays on `pinned` so the PR carries only its own change.
+stremio-core = { git = "https://github.com/zond/stremio-core", rev = "b4c92f33c68bf73b9abb13b7503b1a529454c228", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
 chrono = "0.4"
