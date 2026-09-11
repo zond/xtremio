@@ -2,7 +2,11 @@
 name = "xtremio_core"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.88"
+# What the dependency graph needs, checked with `cargo +1.97.1 check --locked
+# --all-targets`: reedsolomon-rs (stream-server -> unrar-rs) declares 1.97.1, the
+# highest in the lock. The 1.88 this said before was refused outright, with
+# five dependencies naming newer compilers. Bump it with the pins.
+rust-version = "1.97.1"
 publish = false
 
 [lib]
