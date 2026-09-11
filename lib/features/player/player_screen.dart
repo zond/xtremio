@@ -3598,6 +3598,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _reportPlaying(status.state.isPlaying);
     // A receiver keeps repeating "idle, finished" once it is done; the core
     // is told the once, as mpv's own completion tells it once.
+    //
+    // And that is all a finished cast does. Casts do not binge, by decision
+    // and not by omission: no up-next card, no hand-over to the next
+    // episode, whatever `bingeWatching` says. [_onCompleted]'s countdown
+    // assumes someone at this screen who can press Cancel, and a viewer
+    // watching the television is not at the phone to confirm anything; a
+    // TV that goes on playing by itself into the next episode, or the one
+    // after, is the thing to avoid. Moving on stays a press the viewer
+    // makes.
     if (status.ended && !_castEnded) {
       _castEnded = true;
       _client?.dispatch(CoreActions.playerEnded());

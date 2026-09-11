@@ -145,6 +145,11 @@ same three actions local playback dispatches — `TimeChanged`, `PausedChanged`,
 `Ended` — so the library and continue-watching do not notice which device the
 pixels were on.
 
+Casts do not binge, by decision: `Ended` from the receiver shows no up-next
+card and never hands over to the next episode, whatever `bingeWatching` says —
+the viewer is at the television, not at the phone to cancel a countdown, and a
+TV that plays on by itself is the thing to avoid.
+
 The button is never built on Android TV: a TV is a receiver, not a sender.
 
 The pieces: `lib/features/cast/` (`cast_client.dart` — the interface,

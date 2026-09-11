@@ -7,6 +7,7 @@ import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/cast_widgets.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
+import 'package:xtremio/features/player/up_next_card.dart';
 
 import '../../support/diagnostics_capture.dart';
 import '../../support/fake_cast_client.dart';
@@ -1151,6 +1152,52 @@ void main() {
         harness.playerActions().where((name) => name == 'Ended'),
         hasLength(1),
       );
+    });
+
+    testWidgets('an episode that ends on the receiver does not move on', (
+      tester,
+    ) async {
+      // Casts do not binge, by decision: the viewer is at the television,
+      // not at the phone to cancel a countdown, and a TV that plays on by
+      // itself is the thing to avoid. With a next episode, a stream for it
+      // and `bingeWatching` on -- everything local playback moves on for.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast);
+      harness.fixture['nextVideo'] = {
+        'id': 'tt0063350:1:2',
+        'title': 'The Cellar',
+        'season': 1,
+        'episode': 2,
+      };
+      harness.fixture['nextStream'] = {
+        'url': 'https://x.example/e2.mp4',
+        'name': 'Direct',
+      };
+      await harness.pump(tester);
+      expect(harness.settings.bingeWatching, isTrue);
+      harness.engine.emitDuration(const Duration(minutes: 90));
+      await pumpEvents(tester);
+      await castTo(tester, livingRoom);
+
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.idle,
+          position: Duration(minutes: 90),
+          duration: Duration(minutes: 90),
+          ended: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(harness.playerActions(), contains('Ended'));
+      expect(find.byType(UpNextCard), findsNothing);
+
+      // Past the longest countdown there is.
+      await tester.pump(const Duration(seconds: 100));
+      await tester.pumpAndSettle();
+      expect(harness.playerActions(), isNot(contains('NextVideo')));
+      expect(harness.engines, hasLength(1));
+      expect(cast.loads, hasLength(1));
     });
   });
 
