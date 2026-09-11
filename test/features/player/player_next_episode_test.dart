@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
 
+import '../../support/fake_cast_client.dart';
 import '../../support/fake_downloads_client.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
@@ -32,8 +34,11 @@ void main() {
   PlayerHarness harnessWithNext({
     bool withStream = true,
     DownloadsClient? downloads,
+    FakeCastClient? cast,
   }) {
     final harness = PlayerHarness(
+      cast: cast,
+      lanMedia: cast == null ? null : FakeLanMediaControl(),
       ctx: ctxWithTenSeconds(),
       subtitlesPath: const ResourcePath(
         resource: 'subtitles',
@@ -153,6 +158,29 @@ void main() {
       ),
       isEmpty,
     );
+  });
+
+  testWidgets('the next episode\'s player keeps looking for receivers', (
+    tester,
+  ) async {
+    // The successor is built, and starts discovery, while this screen is
+    // still on its way out; a stop from this screen's dispose then ended
+    // the discovery the new player had just started, and the cast button
+    // stayed off the bar for as long as the next episode played.
+    useWideViewport(tester);
+    final cast = FakeCastClient(
+      devices: const [CastDevice(id: 'd', name: 'Living Room TV')],
+    );
+    final harness = harnessWithNext(cast: cast);
+    await harness.pump(tester);
+    expect(cast.discovering, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.pumpAndSettle();
+
+    expect(harness.engines, hasLength(2));
+    expect(cast.discoveryStarts, 2);
+    expect(cast.discovering, isTrue);
   });
 
   testWidgets('without a stream for it, hands the episode back to the caller', (

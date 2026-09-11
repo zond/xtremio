@@ -95,11 +95,20 @@ class FakeCastClient implements CastClient {
   @override
   List<CastDevice> get currentDevices => _devices;
 
-  @override
-  Future<void> startDiscovery() async => discoveryStarts++;
+  /// Whether discovery is running now: the last of a start and a stop.
+  bool discovering = false;
 
   @override
-  Future<void> stopDiscovery() async => discoveryStops++;
+  Future<void> startDiscovery() async {
+    discoveryStarts++;
+    discovering = true;
+  }
+
+  @override
+  Future<void> stopDiscovery() async {
+    discoveryStops++;
+    discovering = false;
+  }
 
   @override
   Stream<CastDevice?> get session async* {

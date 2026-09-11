@@ -4492,11 +4492,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // `pushReplacement`, a route dismantled from above -- where this is
     // still the moment nothing may act on the player any more.
     _detach();
+    // Discovery is the process's, not this screen's, and a hand-over's
+    // successor has started it again by now: `pushReplacement` builds the
+    // new player before this one goes, so a stop from here ended the
+    // search the next episode's cast button was waiting on.
+    if (!_handedOver) _cast?.stopDiscovery().ignore();
     // Whatever else is true when this screen goes, nothing of ours is left
     // on the LAN: the session ends and the listener with it. Everything
     // that could report back was cancelled above, so nothing lands in a
     // disposed screen while this runs.
-    _cast?.stopDiscovery().ignore();
     if (_casting || _lanMediaOn) unawaited(_teardownCast());
     // A television gives the system its bars back when the player is
     // really over, not when it hands over to the next episode: the
