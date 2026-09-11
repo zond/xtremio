@@ -191,8 +191,27 @@ class GoogleCastClient implements CastClient {
 
   @override
   Stream<CastDevice?> get session => isSupported
-      ? GoogleCastSessionManager.instance.currentSessionStream.map(_deviceOf)
+      ? sessionsOf(GoogleCastSessionManager.instance.currentSessionStream)
       : const Stream.empty();
+
+  /// The SDK's session reports as [session] tells them.
+  ///
+  /// The plugin reports every step of a session's life -- starting,
+  /// started, ending, ended -- and a session on its way up is not one on
+  /// its way out. Reported as a null, a receiver still connecting read as
+  /// a session that had ended, so the one starting in place of a live one
+  /// told the player that the cast was over while it was being handed on.
+  /// A session connecting is therefore not reported at all: it is either
+  /// connected next, which is reported, or it fails, and the session that
+  /// is then current (none) is reported as it is.
+  @visibleForTesting
+  Stream<CastDevice?> sessionsOf(Stream<GoogleCastSession?> sessions) =>
+      sessions
+          .where(
+            (session) =>
+                session?.connectionState != GoogleCastConnectState.connecting,
+          )
+          .map(_deviceOf);
 
   @override
   CastDevice? get connectedDevice => isSupported && _initialised

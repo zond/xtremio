@@ -1,5 +1,6 @@
 import 'package:flutter_chrome_cast/entities.dart';
 import 'package:flutter_chrome_cast/enums.dart';
+import 'package:flutter_chrome_cast/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/google_cast_client.dart';
@@ -72,6 +73,49 @@ void main() {
     await client.load(media);
 
     expect(client.lastStatus.position, Duration.zero);
+    client.dispose();
+  });
+
+  test('a session connecting is not reported as one that ended', () async {
+    // Picking a second receiver starts its session while the first one's
+    // is live, and a null for the new one still connecting read, in the
+    // player, as the cast having ended elsewhere.
+    final client = GoogleCastClient();
+    final device = GoogleCastAndroidDevice(
+      deviceID: 'device-2',
+      friendlyName: 'Kitchen Display',
+      modelName: 'Nest Hub',
+      statusText: null,
+      deviceVersion: '1',
+      isOnLocalNetwork: true,
+      category: '',
+      uniqueID: 'device-2',
+    );
+    GoogleCastSession session(GoogleCastConnectState state) =>
+        GoogleCastSessionAndroid(
+          device: device,
+          sessionID: 'session',
+          connectionState: state,
+          currentDeviceMuted: false,
+          currentDeviceVolume: 1,
+          deviceStatusText: '',
+        );
+
+    final reported = await client
+        .sessionsOf(
+          Stream.fromIterable([
+            session(GoogleCastConnectState.connecting),
+            session(GoogleCastConnectState.connected),
+            session(GoogleCastConnectState.disconnecting),
+            session(GoogleCastConnectState.disconnected),
+            null,
+          ]),
+        )
+        .toList();
+
+    expect(reported, hasLength(4));
+    expect(reported.first?.id, 'device-2');
+    expect(reported.skip(1), everyElement(isNull));
     client.dispose();
   });
 }

@@ -78,6 +78,14 @@ class FakeCastClient implements CastClient {
   /// One report from the receiver.
   void emitStatus(CastStatus status) => _statusController.add(status);
 
+  /// The platform reporting the session as [device] (null: ending, or
+  /// gone), without anything here having asked for it: the session moved by
+  /// the system's own output switcher, or ended from the receiver.
+  void emitSession(CastDevice? device) {
+    _connected = device;
+    _sessionController.add(device);
+  }
+
   @override
   Stream<List<CastDevice>> get devices async* {
     yield _devices;
@@ -113,6 +121,14 @@ class FakeCastClient implements CastClient {
       model: device.model,
       address: addresses[device.id] ?? device.address,
     );
+    // As the SDK does: a session on another receiver is ended before the
+    // new one comes up, and the platform reports that end -- twice, ending
+    // and then gone -- exactly as it reports one nobody here asked for.
+    if (_connected != null && _connected != receiver) {
+      _sessionController
+        ..add(null)
+        ..add(null);
+    }
     _connected = receiver;
     _sessionController.add(receiver);
     return receiver;

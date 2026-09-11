@@ -564,6 +564,104 @@ void main() {
     });
   });
 
+  group('switching receivers', () {
+    testWidgets('the first session\'s end does not undo the second', (
+      tester,
+    ) async {
+      // Starting a session on the second receiver ends the first, and the
+      // platform reports that end the way it reports one from the
+      // receiver's own remote. Taken for that, it closed the listener, put
+      // the film back on this screen and then cast it anyway.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom, kitchen]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.playing,
+          position: Duration(minutes: 7),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await castTo(tester, kitchen);
+
+      expect(find.text('Casting to ${kitchen.name}'), findsOneWidget);
+      expect(cast.loads, hasLength(2));
+      expect(cast.loads.last.$2, const Duration(minutes: 7));
+      // The listener was started on top of itself, and never stopped.
+      expect(lan.toggles, [true, true]);
+      expect(lan.running, isTrue);
+      // And the film never came back here in between.
+      expect(harness.engine.seeks, isEmpty);
+      expect(harness.engine.playCalls, 0);
+      expect(cast.disconnects, 0);
+    });
+
+    testWidgets('an end while a refusal is on screen is still heard', (
+      tester,
+    ) async {
+      // What a switch ignores is its own doing, and only while it runs. A
+      // dialog saying the second receiver would not start stays up for as
+      // long as the viewer leaves it, and the first session ending from its
+      // own remote meanwhile is an end like any other.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom, kitchen]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.playing,
+          position: Duration(minutes: 9),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      cast.connectFails = true;
+      await castTo(tester, kitchen);
+      expect(find.byType(CastRefusedDialog), findsOneWidget);
+      cast.emitSession(null);
+      await tester.pumpAndSettle();
+
+      expect(lan.running, isFalse);
+      expect(harness.engine.seeks, [const Duration(minutes: 9)]);
+      expect(harness.engine.playCalls, 1);
+    });
+
+    testWidgets('a session moved to another receiver ends the cast here', (
+      tester,
+    ) async {
+      // The system's own output switcher can move the session without this
+      // screen picking anything. The receiver that had the stream is no
+      // longer the one connected, and the screen went on naming it.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom, kitchen]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      final harness = castHarness(cast: cast, lanMedia: lan);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.playing,
+          position: Duration(minutes: 5),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      cast.emitSession(kitchen);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CastRemotePanel), findsNothing);
+      expect(lan.running, isFalse);
+      expect(harness.engine.seeks, [const Duration(minutes: 5)]);
+      expect(harness.engine.playCalls, 1);
+    });
+  });
+
   group('a load the platform throws out of', () {
     testWidgets('ends the session and puts the film back here', (tester) async {
       // Nothing awaits `_startCast`, so an error out of `load` used to land

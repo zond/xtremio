@@ -156,6 +156,11 @@ abstract interface class CastClient {
 
   /// The connected receiver, or null; re-emitted as the session changes.
   /// Emits the current value to a new listener.
+  ///
+  /// A null is a session ending or gone, and a session still connecting is
+  /// not reported until it has connected. Picking a second receiver while
+  /// one has the stream ends the first session before the second is up, so
+  /// the nulls of that switch arrive while the switch is under way.
   Stream<CastDevice?> get session;
 
   /// The connected receiver, without waiting for an event.

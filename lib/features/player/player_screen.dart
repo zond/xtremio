@@ -796,6 +796,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   bool get _casting => _castingTo != null;
 
+  /// How many [_startCast]s are between asking for a session and handing the
+  /// receiver the media; see [_onCastSession].
+  int _castStarts = 0;
+
   bool _controlsVisible = true;
   Timer? _controlsTimer;
   bool _menuOpen = false;
@@ -3556,8 +3560,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// is casting means the session ended somewhere else -- the receiver's
   /// own remote, the system notification, another phone -- and playback
   /// comes back to this device exactly as if Stop had been pressed here.
+  ///
+  /// **Except while a receiver is being picked in its place.** Starting a
+  /// session ends the one running first, and the platform reports that end
+  /// as it reports every other, in the middle of the switch: taken for the
+  /// viewer's own Stop, it closed the listener the new session was being
+  /// handed, put the film back on this screen under the receiver about to
+  /// get it, and left the switch to finish on top of that ([_castStarts]).
+  ///
+  /// A session on some *other* receiver, reported while no switch here is
+  /// under way, is a session this screen did not hand anything to -- the
+  /// system's own output switcher moving the session, say -- and the
+  /// receiver that had the stream is no longer the one connected. That is
+  /// the same ending, and it gets the same answer rather than a screen
+  /// still naming a receiver it has no session with.
   void _onCastSession(CastDevice? device) {
-    if (!mounted || device != null || !_casting) return;
+    if (!mounted || !_casting || _castStarts > 0) return;
+    if (device != null && device == _castingTo) return;
     unawaited(_stopCast(disconnect: false));
   }
 
@@ -3682,13 +3701,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // end a session that has had no chance to fetch anything. The next
     // wait is armed after the load, by [_watchCastFetch].
     _cancelCastFetch();
+    // A session the switch itself ends is not one that ended elsewhere, and
+    // the platform reports it the same way: see [_onCastSession]. Counted
+    // down before any dialog, since a dialog can stay up for as long as the
+    // viewer leaves it, and a session that really does end meanwhile is one
+    // the screen has to hear about.
+    _castStarts++;
+    String? refusal;
+    try {
+      refusal = await _handToReceiver(
+        cast,
+        device,
+        local,
+        state,
+        compatibility as CastReady,
+      );
+    } finally {
+      _castStarts--;
+    }
+    if (refusal != null) await _explainCast(refusal);
+  }
+
+  /// [_startCast] from the session on: the steps a switch of receivers
+  /// runs through, answering why the cast did not happen when it did not.
+  Future<String?> _handToReceiver(
+    CastClient cast,
+    CastDevice device,
+    Uri local,
+    PlayerState? state,
+    CastReady compatibility,
+  ) async {
     // What comes back, not the row that was tapped: the platform is asked
     // where the receiver is as a session starts and never during discovery,
     // so the answer is the only one of the two that can carry an address.
     final receiver = await cast.connect(device);
     if (receiver == null) {
-      await _explainCast('Could not start a session with ${device.name}.');
-      return;
+      return 'Could not start a session with ${device.name}.';
     }
     // Starting a session is a round trip to the platform and then to the
     // receiver, and the viewer can leave the player during it. Every step
@@ -3698,7 +3746,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // screen, and nothing else knows about it yet.
     if (!_stillOurs) {
       await _teardownCast();
-      return;
+      return null;
     }
     final url = await _castUrl(local, receiver);
     if (url == null) {
@@ -3718,17 +3766,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // listener closed -- for as long as the platform takes to say so. A
       // no-op when nothing was casting, which is every other way in here.
       await _stopCast(disconnect: false);
-      await _explainCast(
-        '${device.name} cannot reach this device over the network, so there '
-        'is no address to give it. Casting a loopback URL it could never '
-        'fetch would only look like it worked.',
-      );
-      return;
+      return '${device.name} cannot reach this device over the network, so '
+          'there is no address to give it. Casting a loopback URL it could '
+          'never fetch would only look like it worked.';
     }
     // The LAN listener is up by now, so this takes that with it too.
     if (!_stillOurs) {
       await _teardownCast();
-      return;
+      return null;
     }
     final position = _position.value;
     // Local playback stops here, before the receiver starts: two copies of
@@ -3746,7 +3791,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // the way past.
     if (!_stillOurs) {
       await _teardownCast();
-      return;
+      return null;
     }
     setState(() {
       _castingTo = device;
@@ -3772,7 +3817,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await cast.load(
         CastMedia(
           url: url,
-          contentType: (compatibility as CastReady).contentType,
+          contentType: compatibility.contentType,
           title: state?.title ?? '',
         ),
         start: position,
@@ -3796,11 +3841,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
       if (!_stillOurs) {
         await _teardownCast();
-        return;
+        return null;
       }
       await _stopCast();
-      await _explainCast('${device.name} did not accept the stream.');
-      return;
+      return '${device.name} did not accept the stream.';
     }
     // A receiver accepting the media is another round trip. Left during
     // it, the wait below would be a timer armed after [_detach] ran, and
@@ -3808,9 +3852,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // listener is about to go.
     if (!_stillOurs) {
       await _teardownCast();
-      return;
+      return null;
     }
     _watchCastFetch();
+    return null;
   }
 
   /// Starts the wait that asks, once, whether the receiver ever came back
