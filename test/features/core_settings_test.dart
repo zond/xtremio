@@ -657,6 +657,42 @@ void main() {
       );
     });
 
+    testWidgets('a saved URL is let go once a pull shows it with the slash', (
+      tester,
+    ) async {
+      // stremio-core keeps the server as a `Url`, which puts a slash on a
+      // URL typed without a path. Held until a pull showed the very string
+      // sent, the URL typed was never let go: the screen went on showing
+      // it over whatever the engine held from then on, and every later
+      // change sent it back.
+      final core = await pumpSettings(tester);
+      await tester.tap(find.byKey(StreamingServerSection.remoteKey));
+      await tester.pumpAndSettle();
+      final field = find.byKey(StreamingServerSection.remoteUrlFieldKey);
+      await tester.enterText(field, 'http://192.168.1.10:11470');
+      await tester.tap(find.byKey(StreamingServerSection.saveRemoteUrlKey));
+      await tester.pump();
+
+      core.setState(
+        CoreField.ctx,
+        ctxWith({'streamingServerUrl': 'http://192.168.1.10:11470/'}),
+      );
+      await tester.pumpAndSettle();
+      // Then another device moves it.
+      const moved = 'https://server.example.com/';
+      core.setState(CoreField.ctx, ctxWith({'streamingServerUrl': moved}));
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<TvTextField>(field).controller.text, moved);
+      await tester.tap(find.byKey(settingKey(ProfileSettings.hideSpoilersKey)));
+      await tester.pump();
+      expect(
+        (core.dispatched.last.action['args']['args']
+            as Map<String, dynamic>)[ProfileSettings.streamingServerUrlKey],
+        moved,
+      );
+    });
+
     testWidgets('without an embedded server only Remote can be chosen', (
       tester,
     ) async {

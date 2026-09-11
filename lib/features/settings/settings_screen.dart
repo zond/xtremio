@@ -108,10 +108,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (landed == null) return;
     final confirmed = [
       for (final MapEntry(:key, :value) in _unconfirmed.entries)
-        if (landed[key] == value) key,
+        if (_shows(key, landed[key], value)) key,
     ];
     if (confirmed.isEmpty) return;
     setState(() => confirmed.forEach(_unconfirmed.remove));
+  }
+
+  /// Whether a pull's [landed] value for [key] is the [sent] one, as the
+  /// engine keeps it. The server URL comes back as stremio-core's `Url`,
+  /// with a slash on one typed without a path: compared as strings, the
+  /// URL sent was never let go, so the screen showed it over whatever the
+  /// engine held from then on and every later change sent it back.
+  static bool _shows(String key, Object? landed, Object? sent) {
+    if (landed == sent) return true;
+    return key == ProfileSettings.streamingServerUrlKey &&
+        landed is String &&
+        sent is String &&
+        StreamingServerSection.sameUrl(landed, sent);
   }
 
   /// The streaming-server field pulled (or failed to): piggyback the DHT

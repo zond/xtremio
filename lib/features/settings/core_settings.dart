@@ -484,6 +484,18 @@ class StreamingServerSection extends StatefulWidget {
   static String _normalize(Uri url) =>
       url.replace(path: url.path.isEmpty ? '/' : url.path).toString();
 
+  /// Whether [a] and [b] are one server URL as stremio-core keeps it: the
+  /// same up to the trailing slash its `Url` serialisation adds. What is
+  /// sent is what was typed, and what a pull shows back is the engine's
+  /// `Url`, so the two strings differ for every URL typed without a path.
+  static bool sameUrl(String a, String b) {
+    final left = Uri.tryParse(a);
+    final right = Uri.tryParse(b);
+    return left != null &&
+        right != null &&
+        _normalize(left) == _normalize(right);
+  }
+
   /// Why [text] is not a usable server URL, or null when it is.
   static String? validateRemoteUrl(String text) {
     final url = Uri.tryParse(text.trim());
