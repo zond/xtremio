@@ -45,6 +45,10 @@ void main() {
   /// Whether the platform answers `requestNotificationPermission` yes.
   var notificationsGranted = true;
 
+  /// Holds that answer until it completes: the question is a dialog, and
+  /// it stays up for as long as the viewer leaves it.
+  Completer<void>? permissionPending;
+
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
@@ -71,12 +75,16 @@ void main() {
 
   setUp(() {
     notificationsGranted = true;
+    permissionPending = null;
     client = FakeDownloadsClient();
     calls = [];
     messenger.setMockMethodCallHandler(
       DownloadsForegroundService.defaultChannel,
       (call) async {
         calls.add(call);
+        if (call.method == 'requestNotificationPermission') {
+          await permissionPending?.future;
+        }
         return switch (call.method) {
           'takePendingOpen' => false,
           'requestNotificationPermission' => notificationsGranted,
@@ -236,6 +244,10 @@ void main() {
               'the rows are the truth about progress; a listing every few '
               'seconds on top of them parsed every meta snapshot for nothing',
         );
+        // Let go of inside the clock it was built under: its futures belong
+        // to this zone, and one awaited from outside it never completes.
+        unawaited(service.dispose());
+        async.flushMicrotasks();
       });
     });
 
@@ -284,6 +296,52 @@ void main() {
       expect(serviceMethods().last, 'stop');
       expect(service.isRunning, isFalse);
     });
+
+    test(
+      'a download finishing while the permission is asked stops it',
+      () async {
+        final service = build();
+        await service.start();
+        await settle();
+        permissionPending = Completer<void>();
+        final added = viewAt('tt1', 0);
+        client.registry = registryOf([added]);
+        client.emitProgress([rowOf(added)]);
+        await settle();
+        expect(serviceMethods(), ['requestNotificationPermission']);
+
+        // Finished before the viewer answered: the question is still on
+        // screen and the start has not gone out.
+        client.emitProgress([rowOf(viewAt('tt1', 100))]);
+        await settle();
+        permissionPending!.complete();
+        await settle();
+
+        expect(serviceMethods().last, 'stop');
+        expect(service.isRunning, isFalse);
+      },
+    );
+
+    test(
+      'letting go while the permission is asked still takes it down',
+      () async {
+        final service = build();
+        await service.start();
+        await settle();
+        permissionPending = Completer<void>();
+        final added = viewAt('tt1', 0);
+        client.registry = registryOf([added]);
+        client.emitProgress([rowOf(added)]);
+        await settle();
+
+        final disposing = service.dispose();
+        await settle();
+        permissionPending!.complete();
+        await disposing;
+
+        expect(serviceMethods().last, 'stop');
+      },
+    );
 
     test('a tick that moves nothing is not sent again', () async {
       await running();

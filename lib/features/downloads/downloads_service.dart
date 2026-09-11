@@ -209,6 +209,12 @@ class DownloadsForegroundService {
 
   bool _running = false;
   bool _available = true;
+
+  /// The last [_sync] queued. Each runs once the one before has finished:
+  /// one can wait on the notification question for as long as the viewer
+  /// leaves it on screen, and another running meanwhile decided from a
+  /// service the first had not started yet.
+  Future<void> _syncs = Future<void>.value();
   bool _asked = false;
   bool _disposed = false;
 
@@ -300,6 +306,9 @@ class DownloadsForegroundService {
     _updates = null;
     if (!isSupported) return;
     channel.setMethodCallHandler(null);
+    // A start still waiting on the notification question sends its start
+    // when the answer comes; a stop sent before that leaves the service up.
+    await _syncs;
     if (!_running) return;
     _running = false;
     await _invoke('stop');
@@ -327,7 +336,15 @@ class DownloadsForegroundService {
     if (kDebugMode) debugPrint('downloads feed for the notification: $error');
   }
 
-  Future<void> _sync() async {
+  /// Brings the service into line with [_registry], after every [_sync]
+  /// before it. Taken out of turn, a download finishing while the first
+  /// start waited on the notification question found the service marked
+  /// running and stopped it, and the start went out after the stop: the
+  /// service stayed up with nothing to hold it for, and every later sync
+  /// took it for already stopped.
+  Future<void> _sync() => _syncs = _syncs.then((_) => _syncNow());
+
+  Future<void> _syncNow() async {
     if (_disposed || !_available) return;
     final summary = DownloadsSummary.of(_registry);
     if (summary.isIdle) {
