@@ -210,17 +210,30 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     assert!(traffic["bytesUploaded"].is_u64(), "{traffic}");
     assert_eq!(traffic["windowSecs"], 5, "{traffic}");
 
-    // What the storage costs: the cache root the server was given, the
-    // bytes under it (a fresh server has written a little), the limit from
-    // its own `cacheSize`, and the volume it is on.
+    // What the storage costs: the cache root the server was given, what the
+    // cache occupies, the limit from its own `cacheSize`, and the volume it
+    // is on. The occupancy is the server's own count, the same figure the
+    // usage call answers, and not a walk of the root: a file under it that
+    // no owner holds is in a walk and in neither count.
+    let stray = tmp.path().join("cache/server/stray/film.mkv");
+    std::fs::create_dir_all(stray.parent().expect("a parent"))?;
+    std::fs::write(&stray, vec![1u8; 1 << 20])?;
     let report = json(&tokio::task::spawn_blocking(server_storage_report).await??);
     assert_eq!(
         report["cacheDir"],
         tmp.path().join("cache/server").display().to_string(),
         "{report}"
     );
-    assert!(report["cacheUsedBytes"].is_u64(), "{report}");
-    assert_eq!(report["cacheComplete"], true, "{report}");
+    let counted = json(&tokio::task::spawn_blocking(server_cache_usage).await??);
+    assert_eq!(
+        report["cacheUsedBytes"], counted["totalBytes"],
+        "one figure for one cache: {report} {counted}"
+    );
+    assert!(
+        report.get("cacheComplete").is_none(),
+        "no walk to be short: {report}"
+    );
+    std::fs::remove_dir_all(stray.parent().expect("a parent"))?;
     assert!(
         report["cacheVolume"]["totalBytes"].as_u64().unwrap_or(0) > 0,
         "{report}"

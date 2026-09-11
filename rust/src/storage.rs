@@ -2,26 +2,19 @@
 //!
 //! The first question about a playback that misbehaves is whether the
 //! device is full: bytes arriving with no verified progress is what failing
-//! writes look like, and a cache well over its limit is what a cleaner that
+//! writes look like, and a cache well over its limit is what a server that
 //! reclaims nothing looks like. Neither was anywhere in a report.
 //!
 //! The numbers are read here rather than in Dart because the app never
 //! speaks HTTP to the server and has no business walking its directories
 //! from the other side of the FFI (`AGENTS.md`, "The app never speaks HTTP
-//! to the embedded server"). The cache root and the limit come from the
-//! server's own settings over its library API; the size on disk and the
-//! free space are this crate's own measurements, since stream-server
-//! exposes neither today.
+//! to the embedded server"). The cache root, the limit and what the cache
+//! occupies come from the server over its library API; the free and total
+//! space of the volume are this crate's own measurements.
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-
-/// How deep the walk goes. The torrent data root is
-/// `<root>/rqbit-downloads/.pieces/<info hash>/<piece>` plus the session's
-/// own records beside it, which is shallow; a bound keeps a symlinked loop
-/// or a surprising layout from turning a report into a filesystem crawl.
-const MAX_DEPTH: usize = 8;
 
 /// One filesystem's room, as `statvfs` sees it. `None` for a path that
 /// cannot be asked about (it is gone, or the platform will not say), which
@@ -57,33 +50,38 @@ pub struct StorageReport {
     /// streaming cache and the kept downloads share, the session's own
     /// records, and what `/proxy` cached.
     pub cache_dir: String,
-    /// What is under it, in bytes. All of it: there is no second tree to
-    /// leave out any more, and the cleaner walks exactly this one.
+    /// What the cache occupies, in bytes: the server's own figure, the
+    /// `totalBytes` of `server_cache_usage` taken on this call. The storage
+    /// screen shows the two side by side, and two counts of one cache that
+    /// disagree by construction are a contradiction on the one screen that
+    /// exists to explain it.
     pub cache_used_bytes: u64,
     /// The `cacheSize` setting, or null for "no limit". Bytes.
     pub cache_limit_bytes: Option<u64>,
-    /// Whether the walk saw everything it meant to. False when something
-    /// could not be read, which makes `cache_used_bytes` a floor rather
-    /// than a total.
-    pub cache_complete: bool,
     /// The volume the root is on. There is one, so there is one line.
     pub cache_volume: Volume,
 }
 
-/// Reads the report. Blocks: it asks the server for its settings and walks
-/// the cache directory, so it belongs on an FRB worker, never on the UI
-/// thread. Errors only when the server is not running -- there is no cache
-/// root to name then, and inventing one would be a lie about which
-/// directory the numbers are from.
+/// Reads the report. Blocks: it asks the server for its settings and its
+/// usage, so it belongs on an FRB worker, never on the UI thread. Errors
+/// only when the server is not running -- there is no cache root to name
+/// then, and inventing one would be a lie about which directory the
+/// numbers are from.
+///
+/// The size is not walked for. The server counts what its owners hold
+/// without listing the tree, and a walk here was a `stat` of every piece
+/// file -- tens of thousands on a phone -- to arrive at a second figure
+/// that could not agree with the first: it counted apparent lengths where
+/// the server counts allocated blocks, and whatever lies under the root
+/// that no owner holds.
 pub fn report() -> anyhow::Result<StorageReport> {
     let settings = crate::server::settings()?;
+    let usage = crate::server::cache_usage()?;
     let cache_dir = PathBuf::from(&settings.cache_root);
-    let (cache_used_bytes, cache_complete) = directory_size(&cache_dir);
     Ok(StorageReport {
         cache_dir: cache_dir.to_string_lossy().to_string(),
-        cache_used_bytes,
+        cache_used_bytes: usage.total_bytes,
         cache_limit_bytes: cache_limit_bytes(settings.cache_size),
-        cache_complete,
         cache_volume: Volume::of(&cache_dir),
     })
 }
@@ -95,70 +93,6 @@ fn cache_limit_bytes(cache_size: Option<f64>) -> Option<u64> {
     match cache_size {
         Some(bytes) if bytes.is_finite() && bytes >= 0.0 => Some(bytes as u64),
         _ => None,
-    }
-}
-
-/// The bytes under `root`, and whether the whole tree could be read.
-///
-/// Nothing is skipped. A kept download is pieces in the same store as the
-/// streaming cache, under the same root, so a walk that left a subtree out
-/// would be reporting on a tree the server does not have.
-///
-/// Sizes are the files' own lengths, not their allocated blocks: it is the
-/// same number the server's cleaner compares against `cacheSize`, which is
-/// what makes "17 GB against a 10 GB limit" a statement about the same two
-/// things. Symlinks are not followed and not counted, so nothing outside
-/// the cache is ever attributed to it and no loop can be walked.
-fn directory_size(root: &Path) -> (u64, bool) {
-    let mut total = 0;
-    let mut complete = true;
-    let mut stack = vec![(root.to_path_buf(), 0usize)];
-    while let Some((dir, depth)) = stack.pop() {
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            // A root that is not there yet costs nothing and is not a
-            // failure; anything else read the tree short.
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound && dir == root => continue,
-            Err(_) => {
-                complete = false;
-                continue;
-            }
-        };
-        for entry in entries {
-            let Ok(entry) = entry else {
-                complete = false;
-                continue;
-            };
-            let Ok(metadata) = entry.metadata_no_follow() else {
-                complete = false;
-                continue;
-            };
-            if metadata.is_symlink() {
-                continue;
-            }
-            if metadata.is_dir() {
-                if depth + 1 > MAX_DEPTH {
-                    complete = false;
-                    continue;
-                }
-                stack.push((entry.path(), depth + 1));
-            } else if metadata.is_file() {
-                total += metadata.len();
-            }
-        }
-    }
-    (total, complete)
-}
-
-/// `symlink_metadata` on a directory entry, spelled as an extension so the
-/// walk reads as one thing.
-trait EntryMetadata {
-    fn metadata_no_follow(&self) -> std::io::Result<std::fs::Metadata>;
-}
-
-impl EntryMetadata for std::fs::DirEntry {
-    fn metadata_no_follow(&self) -> std::io::Result<std::fs::Metadata> {
-        std::fs::symlink_metadata(self.path())
     }
 }
 
@@ -175,13 +109,12 @@ impl EntryMetadata for std::fs::DirEntry {
 /// different places would drift apart on the one screen that exists to
 /// explain a device with no room left.
 ///
-/// **It answers a different question from a directory walk.**
-/// [`directory_size`] adds up named files; this counts allocated blocks,
-/// so a file that was unlinked while some process still holds it open has
-/// blocks here and no name there. Measured rather than assumed
-/// (`free_space_counts_a_file_no_directory_can_see`), because it used to
-/// be the whole point: mpv unlinked its demuxer cache the instant it
-/// created it (`demuxer-cache-unlink-files=immediate`), and 256 MiB
+/// **It sees what no directory can.** It counts the volume's free blocks,
+/// so a file that was unlinked while some process still holds it open
+/// costs room here and has no name under any directory. Measured rather
+/// than assumed (`free_space_counts_a_file_no_directory_can_see`), because
+/// it used to be the whole point: mpv unlinked its demuxer cache the
+/// instant it created it (`demuxer-cache-unlink-files=immediate`), and 256 MiB
 /// written through such an fd moved `f_frsize * f_bavail` by 268439552
 /// bytes, every one of which came back when the fd closed. **That writer
 /// is gone.** The player keeps no disk cache at all now, so there is one
@@ -216,31 +149,6 @@ fn existing_ancestor(path: &Path) -> Option<&Path> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Everything under the root counts, whatever it is for. A kept
-    /// download and a streamed film are pieces in one store now, so a walk
-    /// that held any subtree back would be measuring a tree the server
-    /// does not have -- and would report a root well under its limit while
-    /// the disk filled up.
-    #[test]
-    fn sums_every_file_under_the_one_root() {
-        let root = tempfile::tempdir().unwrap();
-        let data = root.path().join("data");
-        std::fs::create_dir_all(data.join("rqbit-downloads/.pieces/abc")).unwrap();
-        std::fs::write(data.join("rqbit-downloads/.pieces/abc/0"), vec![0u8; 1000]).unwrap();
-        std::fs::write(data.join("session.db"), vec![0u8; 24]).unwrap();
-        let kept = data.join("downloads");
-        std::fs::create_dir_all(&kept).unwrap();
-        std::fs::write(kept.join("film.mkv"), vec![0u8; 5000]).unwrap();
-
-        assert_eq!(directory_size(&data), (6024, true));
-    }
-
-    #[test]
-    fn a_root_that_is_not_there_costs_nothing_and_is_not_a_failure() {
-        let root = tempfile::tempdir().unwrap();
-        assert_eq!(directory_size(&root.path().join("gone")), (0, true));
-    }
 
     #[test]
     fn the_limit_is_the_setting_and_none_means_no_limit() {

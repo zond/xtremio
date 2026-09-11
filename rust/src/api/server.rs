@@ -96,20 +96,20 @@ pub fn server_update_settings(patch_json: String) -> anyhow::Result<String> {
 }
 
 /// What the server's storage costs right now, as JSON: the one torrent-data
-/// root, every byte under it, the `cacheSize` limit, and the free and total
-/// space of the volume it is on. One root and one volume: the streaming
-/// cache and everything kept offline are the same pieces in the same store,
-/// so there is no second tree to leave out and no second volume to report.
+/// root, what the cache under it occupies, the `cacheSize` limit, and the
+/// free and total space of the volume it is on. One root and one volume:
+/// the streaming cache and everything kept offline are the same pieces in
+/// the same store, so there is no second tree and no second volume.
 ///
 /// The first question about a playback that misbehaves is whether the
 /// device is full -- bytes arriving with no verified progress is what
 /// failing writes look like -- and the second is whether the cache is over
-/// its limit. stream-server answers neither today: its cleaner is private
-/// and there is no route or library call for either number, so this walks
-/// the cache root itself and asks the filesystem for the rest.
+/// its limit. The occupancy is the server's own figure, the `totalBytes`
+/// of `server_cache_usage`, so the two calls cannot disagree about it; the
+/// volume's room is asked of the filesystem.
 ///
-/// Blocks the FRB worker (a settings call and a directory walk); never
-/// call it from the UI thread. Errors when the server is not running.
+/// Blocks the FRB worker (two calls into the server and a `statvfs`);
+/// never call it from the UI thread. Errors when the server is not running.
 pub fn server_storage_report() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::storage::report()?).map_err(Into::into))
 }
