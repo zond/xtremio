@@ -75,9 +75,12 @@ timing -- is in the document each bullet links.
 - **Sharing you can see and stop.** *Share while idle* (Settings, on by
   default) keeps uploading to other peers when nothing is playing; off, the
   server chokes every peer until a player reads from it again. A status light
-  on the main screens is lit only while the server measures bytes moving with
-  nothing playing, never because of the setting, and pressing it offers
-  *Not now* (until the next start) or *Stop sharing*.
+  on the main screens is lit only while the server measures bytes moving to
+  or from peers with nothing playing, never because of the setting: an arrow
+  up for uploading, down for bytes coming in (an offline download filling in,
+  or the title played last fetching what it keeps). Pressed while it shows an
+  upload, it offers *Not now* (until the next start) or *Stop sharing*; while
+  it shows bytes coming in, a *Cancel* for each offline download on its way.
 - **Addons installed from the web.** An addon site's Install button hands the
   OS a `stremio://` link; where Xtremio can register that scheme it opens
   that addon's details screen, and nothing is installed until the button
