@@ -32,14 +32,14 @@ flutter_rust_bridge = "=2.13.0"
 # with the fetch-ahead bounded by the window, liveness that ends on a switch
 # or a restart rather than on a clock, and no cache cleaner at all -- every
 # byte under the root has exactly one thing that deletes it.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "e71309af7f1e7c21ba607f9678ea4ba172df0ff0" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "e5accc8bbd1f69d57dd7b30bd434714503299bc3" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "e71309af7f1e7c21ba607f9678ea4ba172df0ff0" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "e5accc8bbd1f69d57dd7b30bd434714503299bc3" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
@@ -146,15 +146,10 @@ tempfile = "3"
 flate2 = "1"
 # Real .torrent fixtures for tests/downloads.rs (`librqbit::create_torrent`),
 # so the offline-downloads test needs no network and no peer. Pinned by rev
-# on zond/rqbit, like stream-server's own enginefs pins it: cfd11fb9 is the
-# rev enginefs moves to next (stream-server master is at 5aeab776 as this is
-# written), so until the stream-server pin above follows, the graph carries
-# two librqbits -- the crate compiled twice, nothing else -- and one once it
-# does. It used to name `branch = "feat/configurable-stream-lookahead"`, a
-# branch that no longer exists (renamed `pinned`); the build only worked
-# because Cargo.lock held the orphaned sha, and the next `cargo update`
-# would have failed to find the branch.
-librqbit = { git = "https://github.com/zond/rqbit", rev = "1ba6468a2ce00e238ba307a4d710c3da03f8a27b", default-features = false, features = [
+# on zond/rqbit, and always the rev the stream-server pin above uses for
+# its enginefs: a different one puts two librqbits in the graph, the crate
+# compiled twice. Bump the two together.
+librqbit = { git = "https://github.com/zond/rqbit", rev = "292a6084900718936645552e777db823e756d8fb", default-features = false, features = [
     "rust-tls",
     "http-api-client",
 ] }
