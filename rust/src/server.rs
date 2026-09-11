@@ -12,7 +12,8 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::time::Duration;
 
 use anyhow::Context;
 use enginefs::backend::DhtStatus;
@@ -31,36 +32,55 @@ pub const DEFAULT_PORT: u16 = stream_server::DEFAULT_HTTP_PORT;
 /// The embedded server's half of [`AppState`]: the running handle, or
 /// nothing.
 ///
-/// A `RwLock`, not a `Mutex`: [`with_handle`]'s blocking library calls
-/// (`engine_stats`, `file_stats`, `settings`, `update_settings`) and
-/// [`token_for`] (called from `Env::fetch` on stremio-core's tokio workers,
-/// including the single-worker sequential runtime) all just need to observe
-/// the running handle, so they take a read lock and run concurrently with
-/// each other; only `start`/`stop`, which replace the handle, take the
-/// write lock. A slow stats poll must never stall an addon/catalog fetch
-/// waiting on `token_for`, which is what
-/// `with_handle_readers_run_concurrently_with_token_for` holds us to.
+/// **The handle's lock is held for a look and never across a call.** The
+/// sync exports read it on the UI isolate (`server_base_url`), and
+/// [`token_for`] reads it from `Env::fetch` on stremio-core's tokio workers,
+/// including the single-worker sequential runtime. [`with_handle`]'s library
+/// calls block for as long as the server takes -- a pin waits out a magnet's
+/// metadata, up to ninety seconds -- so they clone the `Arc` out and call
+/// through that. Held across such a call, the read lock queued the next
+/// `start`/`stop` behind it, and a queued writer holds up every new reader:
+/// the UI isolate and the engine's fetches waited on a pin they had nothing
+/// to do with. The boot is the same story on the write side, which is why
+/// `start`/`stop` serialize on `lifecycle` instead and take the handle's lock
+/// only to install or take the handle.
 ///
 /// The same reasoning is why this is a lock of its own inside `AppState`
 /// rather than one lock around the whole of it.
 #[derive(Default)]
 pub struct ServerState {
-    handle: RwLock<Option<ServerHandle>>,
+    handle: RwLock<Option<Arc<ServerHandle>>>,
+    /// Held by [`start_in`] and [`stop_in`] for their whole length: two
+    /// starts must not both spawn a server, and a stop that lands during a
+    /// boot must stop what that boot installs rather than find nothing and
+    /// leave it running.
+    lifecycle: Mutex<()>,
 }
 
 impl ServerState {
     /// A poisoned lock only means a previous holder panicked; the Option is
     /// still a valid value.
-    fn read(&self) -> RwLockReadGuard<'_, Option<ServerHandle>> {
+    fn read(&self) -> RwLockReadGuard<'_, Option<Arc<ServerHandle>>> {
         self.handle
             .read()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    fn write(&self) -> RwLockWriteGuard<'_, Option<ServerHandle>> {
+    fn write(&self) -> RwLockWriteGuard<'_, Option<Arc<ServerHandle>>> {
         self.handle
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn lifecycle(&self) -> MutexGuard<'_, ()> {
+        self.lifecycle
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// The running handle, to call through without holding the lock.
+    fn running(&self) -> Option<Arc<ServerHandle>> {
+        self.read().clone()
     }
 }
 
@@ -143,10 +163,20 @@ pub fn start(config: StartConfig) -> anyhow::Result<Url> {
 /// of booting and passes the state it is building, so both halves are the
 /// same instance even if a shutdown lands in between.
 pub(crate) fn start_in(app: &AppState, config: StartConfig) -> anyhow::Result<Url> {
+    start_with(app, config, spawn)
+}
+
+/// [`start_in`] with the spawn handed in, which is how a test holds a boot
+/// open for as long as it takes to look at what else waits on it.
+fn start_with(
+    app: &AppState,
+    config: StartConfig,
+    spawn: impl Fn(&StartConfig, u16) -> anyhow::Result<ServerHandle>,
+) -> anyhow::Result<Url> {
     crate::logging::init();
-    let mut guard = app.server.write();
-    if let Some(handle) = guard.as_ref() {
-        return url_of(handle);
+    let _lifecycle = app.server.lifecycle();
+    if let Some(handle) = app.server.running() {
+        return url_of(&handle);
     }
     std::fs::create_dir_all(&config.config_dir)
         .with_context(|| format!("create server config dir {:?}", config.config_dir))?;
@@ -178,7 +208,7 @@ pub(crate) fn start_in(app: &AppState, config: StartConfig) -> anyhow::Result<Ur
         tracing::warn!(%error, "could not clear the lanMediaEnabled setting");
     }
     tracing::info!(%url, "embedded stream-server started");
-    *guard = Some(handle);
+    *app.server.write() = Some(Arc::new(handle));
     Ok(url)
 }
 
@@ -207,6 +237,7 @@ pub fn stop() -> anyhow::Result<()> {
 /// [`stop`] against a given state, which is how `core::shutdown` stops the
 /// server it already took out of the process.
 pub(crate) fn stop_in(app: &AppState) -> anyhow::Result<()> {
+    let _lifecycle = app.server.lifecycle();
     let handle = app.server.write().take();
     if let Some(handle) = handle {
         // Before the shutdown, not instead of it: the server closes the LAN
@@ -217,10 +248,27 @@ pub(crate) fn stop_in(app: &AppState) -> anyhow::Result<()> {
         handle
             .shutdown()
             .context("signal embedded server shutdown")?;
-        handle.join().context("join embedded server thread")?;
+        sole(handle).join().context("join embedded server thread")?;
         tracing::info!("embedded stream-server stopped");
     }
     Ok(())
+}
+
+/// The handle once no call holds a clone of it, so its thread can be
+/// joined. A call holds one for its own length only, and after the
+/// shutdown each ends as soon as the server's runtime does, so this waits
+/// for about as long as the old write lock waited for its readers -- but
+/// without holding anything that a reader would queue behind.
+fn sole(mut handle: Arc<ServerHandle>) -> ServerHandle {
+    loop {
+        match Arc::try_unwrap(handle) {
+            Ok(handle) => return handle,
+            Err(shared) => {
+                handle = shared;
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    }
 }
 
 /// Base URL of the running server, if any.
@@ -238,10 +286,8 @@ pub(crate) fn base_url_in(app: &AppState) -> Option<Url> {
 
 /// Runs `f` against the running server's handle. The handle's library calls
 /// block the calling thread until the server's runtime answers, so callers
-/// stay off the UI thread (FRB's worker pool is fine). Only a read lock is
-/// held: concurrent `with_handle`/`token_for` calls (e.g. a stats poll
-/// alongside `Env::fetch`) run in parallel instead of serialising on each
-/// other; only `start`/`stop` exclude them.
+/// stay off the UI thread (FRB's worker pool is fine). No lock is held
+/// while `f` runs (see [`ServerState`]).
 fn with_handle<T>(f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>) -> anyhow::Result<T> {
     let app = crate::state::current().ok_or_else(not_running)?;
     with_handle_in(&app, f)
@@ -252,9 +298,8 @@ fn with_handle_in<T>(
     app: &AppState,
     f: impl FnOnce(&ServerHandle) -> anyhow::Result<T>,
 ) -> anyhow::Result<T> {
-    let guard = app.server.read();
-    let handle = guard.as_ref().ok_or_else(not_running)?;
-    f(handle)
+    let handle = app.server.running().ok_or_else(not_running)?;
+    f(&handle)
 }
 
 fn not_running() -> anyhow::Error {
@@ -636,11 +681,10 @@ mod tests {
     /// only need to observe the running handle, so they must run
     /// concurrently rather than serialise on `ServerState`'s lock: a slow
     /// stats poll must never stall an addon/catalog fetch waiting on its
-    /// bearer token. Holds a read lock in one thread via `with_handle`'s
-    /// closure (blocked on a barrier then a sleep) and asserts `token_for`
-    /// returns from another thread almost immediately, well inside the
-    /// sleep — with a `Mutex` instead of a `RwLock` this would take as long
-    /// as the sleep.
+    /// bearer token. Runs a call in one thread via `with_handle`'s closure
+    /// (blocked on a barrier then a sleep) and asserts `token_for` returns
+    /// from another thread almost immediately, well inside the sleep -- with
+    /// a `Mutex` held across the call it would take as long as the sleep.
     ///
     /// Against a state of its own, so it neither takes the process's
     /// embedded server away from another test nor has to be serialized
@@ -692,6 +736,183 @@ mod tests {
             elapsed < Duration::from_millis(250),
             "token_for waited on with_handle's in-flight call: {elapsed:?}"
         );
+    }
+
+    fn config(tmp: &std::path::Path) -> StartConfig {
+        StartConfig {
+            config_dir: tmp.join("server"),
+            cache_dir: tmp.join("cache"),
+            port: 0,
+            fallback_to_ephemeral: true,
+        }
+    }
+
+    /// How long `f` takes on this thread.
+    fn timed<T>(f: impl FnOnce() -> T) -> (T, Duration) {
+        let started = Instant::now();
+        let value = f();
+        (value, started.elapsed())
+    }
+
+    /// A stop has to wait for a call in flight before it can join the
+    /// server's thread, and nobody else may wait with it: `server_base_url`
+    /// is answered on the UI isolate and `token_for` on the engine's fetch
+    /// workers. With the lock held across the call, the stop queued behind
+    /// it as a writer and every new reader queued behind the stop.
+    #[test]
+    fn a_stop_waiting_on_a_call_in_flight_holds_up_no_reader() {
+        let app = Arc::new(AppState::default());
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let url = start_in(&app, config(tmp.path())).expect("server start");
+
+        let barrier = Arc::new(Barrier::new(2));
+        let in_flight = std::thread::spawn({
+            let (app, barrier) = (Arc::clone(&app), Arc::clone(&barrier));
+            move || {
+                with_handle_in(&app, |_handle| {
+                    barrier.wait();
+                    std::thread::sleep(Duration::from_millis(800));
+                    Ok(())
+                })
+            }
+        });
+        barrier.wait();
+        let stopping = std::thread::spawn({
+            let app = Arc::clone(&app);
+            move || stop_in(&app)
+        });
+        // Long enough for the stop to be waiting on the call.
+        std::thread::sleep(Duration::from_millis(200));
+        let (_, base_url_took) = timed(|| base_url_in(&app));
+        let (_, token_took) = timed(|| token_for_in(&app, &url));
+
+        in_flight.join().expect("call thread").expect("the call");
+        stopping.join().expect("stop thread").expect("server stop");
+        assert!(
+            base_url_took < Duration::from_millis(250),
+            "base_url waited on the stop: {base_url_took:?}"
+        );
+        assert!(
+            token_took < Duration::from_millis(250),
+            "token_for waited on the stop: {token_took:?}"
+        );
+        assert_eq!(base_url_in(&app), None, "and the stop did stop it");
+    }
+
+    /// A spawn that says when it has been entered and then waits to be let
+    /// through: a boot held open for as long as a test needs it.
+    fn held_spawn() -> (
+        impl Fn(&StartConfig, u16) -> anyhow::Result<ServerHandle> + Send + 'static,
+        std::sync::mpsc::Receiver<()>,
+        std::sync::mpsc::Sender<()>,
+    ) {
+        let (entered_tx, entered) = std::sync::mpsc::channel();
+        let (release, release_rx) = std::sync::mpsc::channel::<()>();
+        let release_rx = std::sync::Mutex::new(release_rx);
+        let held = move |config: &StartConfig, port: u16| {
+            entered_tx.send(()).ok();
+            release_rx.lock().unwrap().recv().ok();
+            spawn(config, port)
+        };
+        (held, entered, release)
+    }
+
+    /// A boot is not a reason to wait either: until it installs a handle,
+    /// the server is not running, and that is the answer. On a device the
+    /// boot is seconds of launch sweep and session restore, and the UI
+    /// isolate asks for the base URL throughout.
+    #[test]
+    fn a_boot_holds_up_no_reader() {
+        let app = Arc::new(AppState::default());
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (held, entered, release) = held_spawn();
+        let booting = std::thread::spawn({
+            let (app, config) = (Arc::clone(&app), config(tmp.path()));
+            move || start_with(&app, config, held)
+        });
+        entered.recv().expect("the boot reached its spawn");
+
+        let (answer_tx, answer) = std::sync::mpsc::channel();
+        std::thread::spawn({
+            let app = Arc::clone(&app);
+            move || answer_tx.send(base_url_in(&app)).ok()
+        });
+        let answered = answer.recv_timeout(Duration::from_secs(2));
+        release.send(()).expect("let the boot through");
+        booting.join().expect("boot thread").expect("server start");
+        stop_in(&app).expect("server stop");
+        assert_eq!(answered, Ok(None), "answered while the boot ran");
+    }
+
+    /// A start during a boot waits for it and answers the server it
+    /// started, rather than finding none yet and spawning a second one.
+    #[test]
+    fn a_start_during_a_boot_is_the_same_server() {
+        let app = Arc::new(AppState::default());
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let spawned = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = |spawned: &Arc<std::sync::atomic::AtomicUsize>| {
+            let spawned = Arc::clone(spawned);
+            move || {
+                spawned.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+        };
+        let (held, entered, release) = held_spawn();
+        let first = std::thread::spawn({
+            let (app, config, count) = (Arc::clone(&app), config(tmp.path()), counted(&spawned));
+            move || {
+                start_with(&app, config, move |config: &StartConfig, port| {
+                    count();
+                    held(config, port)
+                })
+            }
+        });
+        entered.recv().expect("the boot reached its spawn");
+        let second = std::thread::spawn({
+            let (app, config, count) = (Arc::clone(&app), config(tmp.path()), counted(&spawned));
+            move || {
+                start_with(&app, config, move |config: &StartConfig, port| {
+                    count();
+                    spawn(config, port)
+                })
+            }
+        });
+        // Long enough for the second start to have spawned, had it not
+        // waited.
+        std::thread::sleep(Duration::from_millis(200));
+        release.send(()).expect("let the boot through");
+        let first = first.join().expect("start thread").expect("server start");
+        let second = second.join().expect("start thread").expect("server start");
+        stop_in(&app).expect("server stop");
+        assert_eq!(spawned.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(first, second, "one server, not two");
+    }
+
+    /// A stop during a boot waits for it and stops what it started, rather
+    /// than finding nothing yet and leaving the boot's server running.
+    #[test]
+    fn a_stop_during_a_boot_stops_what_it_starts() {
+        let app = Arc::new(AppState::default());
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (held, entered, release) = held_spawn();
+        let booting = std::thread::spawn({
+            let (app, config) = (Arc::clone(&app), config(tmp.path()));
+            move || start_with(&app, config, held)
+        });
+        entered.recv().expect("the boot reached its spawn");
+        let stopping = std::thread::spawn({
+            let app = Arc::clone(&app);
+            move || stop_in(&app)
+        });
+        std::thread::sleep(Duration::from_millis(200));
+        let stopped_early = stopping.is_finished();
+        release.send(()).expect("let the boot through");
+        booting.join().expect("boot thread").expect("server start");
+        stopping.join().expect("stop thread").expect("server stop");
+        let left = base_url_in(&app);
+        stop_in(&app).expect("server stop");
+        assert!(!stopped_early, "the stop did not wait for the boot");
+        assert_eq!(left, None, "and left its server running");
     }
 
     #[test]
