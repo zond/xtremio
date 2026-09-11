@@ -1295,3 +1295,19 @@ what every model field means. The shape of the thing is in the
   `rust/vendor/stremio-watched-bitfield` from the new stremio-core rev
   when that crate changed (it carries a one-line `flate2` relaxation the
   combined graph needs; see `rust/vendor/README.md`).
+
+## Pinned forks
+
+`rust/Cargo.toml` pins every git dependency to a rev, with the reason beside
+it:
+
+| Dependency | Pinned to | Why |
+|---|---|---|
+| `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | A rev, for reproducibility, that has what the app uses: the server keeps no record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry; it switches uploading off while nothing plays (*Share while idle*); and it has the LAN media listener a cast turns on. Default features are on, which is RAR support — see [the README](../README.md#license). |
+| `librqbit` | [`zond/rqbit`](https://github.com/zond/rqbit) | Only a dev-dependency here, for the real `.torrent` fixtures in `rust/tests/downloads.rs`. It is always the rev stream-server's `enginefs` uses; any other puts two librqbits in the graph. The fork is stream-server's: it follows upstream and adds what a bounded streaming cache needs from the engine. |
+| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.62.1 plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) instead of letting serde drop them — upstream PR Stremio/stremio-core#1045 — and one that pins its `localsearch` dependency by rev rather than by branch. |
+
+Beside those, `stremio-watched-bitfield` is vendored with one line changed so
+the graph resolves ([../rust/vendor/README.md](../rust/vendor/README.md)), and
+`flutter_rust_bridge` is exactly 2.13.0 in `pubspec.yaml`, `rust/Cargo.toml`
+and the codegen.

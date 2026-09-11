@@ -5,17 +5,15 @@
 A native, cross-platform **Stremio client** built on a Rust core with a
 Flutter UI.
 
-[![CI](https://github.com/zond/xtremio/actions/workflows/ci.yml/badge.svg)](https://github.com/zond/xtremio/actions/workflows/ci.yml)
-[![source: MIT](https://img.shields.io/badge/source-MIT-blue)](#license)
-[![binaries: GPL-3.0-or-later](https://img.shields.io/badge/binaries-GPL--3.0--or--later-blue)](#license)
+[![CI](https://github.com/zond/xtremio/actions/workflows/ci.yml/badge.svg)](https://github.com/zond/xtremio/actions/workflows/ci.yml) [![source: MIT](https://img.shields.io/badge/source-MIT-blue)](#license) [![binaries: GPL-3.0-or-later](https://img.shields.io/badge/binaries-GPL--3.0--or--later-blue)](#license)
 
 Xtremio is the client half of a two-part project. The other half is
-[`zond/stream-server`](https://github.com/zond/stream-server) — a headless,
-zero-external-binary torrent-streaming server written in Rust, which Xtremio
-embeds in its own process. Xtremio pairs that with
-[`stremio-core`](https://github.com/Stremio/stremio-core) (the official Rust
-engine for addons, catalogs, library, and playback state, built here from a
-fork — see [Pinned forks](#pinned-forks)) and
+[`zond/stream-server`](https://github.com/zond/stream-server), a headless
+torrent-streaming server written in Rust, which Xtremio embeds in its own
+process. It pairs that with
+[`stremio-core`](https://github.com/Stremio/stremio-core) — the official Rust
+engine for addons, catalogs, library and playback state, built here from a
+[fork](docs/ARCHITECTURE.md#pinned-forks) — and
 [`media_kit`](https://pub.dev/packages/media_kit)/libmpv for playback.
 
 ## What it does
@@ -154,21 +152,9 @@ the default.
 How that bridge is built, what crosses it and what every field of the state
 means is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-### Pinned forks
-
-`rust/Cargo.toml` pins every git dependency to a rev, with the reason beside
-it:
-
-| Dependency | Pinned to | Why |
-|---|---|---|
-| `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | A rev, for reproducibility, that has what the app uses: the server keeps no record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry; it switches uploading off while nothing plays (*Share while idle*); and it has the LAN media listener a cast turns on. Default features are on, which is RAR support — see [License](#license). |
-| `librqbit` | [`zond/rqbit`](https://github.com/zond/rqbit) | Only a dev-dependency here, for the real `.torrent` fixtures in `rust/tests/downloads.rs`. It is always the rev stream-server's `enginefs` uses; any other puts two librqbits in the graph. The fork is stream-server's: it follows upstream and adds what a bounded streaming cache needs from the engine. |
-| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.62.1 plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) instead of letting serde drop them — upstream PR Stremio/stremio-core#1045 — and one that pins its `localsearch` dependency by rev rather than by branch. |
-
-Beside those, `stremio-watched-bitfield` is vendored with one line changed so
-the graph resolves ([rust/vendor/README.md](rust/vendor/README.md)), and
-`flutter_rust_bridge` is exactly 2.13.0 in `pubspec.yaml`, `rust/Cargo.toml`
-and the codegen.
+Every git dependency in `rust/Cargo.toml` is pinned to a rev with its
+reason beside it: the three forks and the one vendored crate are listed in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#pinned-forks).
 
 ## Platform support
 
@@ -185,55 +171,42 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 | **iOS** | ❌ Does not build today | CI compiles it and it fails in an upstream crate (`librqbit-dualstack-sockets` 0.7.0 calls a socket2 method iOS does not have). Past that, there is no signing identity here, the App Store is out on GPL-3 (see [License](#license)), and iOS throttles background work. |
 | **Web** | ❌ Not possible | A browser cannot do BitTorrent — no raw sockets, no local server, no libmpv. A thin client onto a separate server is a different architecture, not this app. |
 
-**Short version:** desktop and Android are the real targets, iOS does not
-build until an upstream crate is fixed, and web is fundamentally off the
-table for a self-contained streaming client.
-
 ## What is next
 
 What is genuinely not built:
 
-- **Cloud storage sources** (e.g. Google Drive) — stream from a personal cloud
-  drive, most naturally via a Stremio addon that resolves cloud files to
-  playable URLs. Provider OAuth / API-key setup is the fiddly part.
-- **Media3 remuxing for casting**, which is what would let a receiver play a
-  stream it cannot decode as it stands. It would happen on the sending device
-  with its platform hardware codec (Android MediaCodec first) — never ffmpeg,
-  never software transcoding in the Rust core. Until then such a stream
-  is refused rather than mangled.
+- **Cloud storage sources** (e.g. Google Drive) — most naturally via a Stremio
+  addon that resolves cloud files to playable URLs; the provider's OAuth or
+  API-key setup is the fiddly part.
+- **Media3 remuxing for casting**, to let a receiver play a stream it cannot
+  decode as it stands. It would run on the sending device with its platform
+  hardware codec (Android MediaCodec first) — never ffmpeg, never software
+  transcoding in the Rust core. Until then such a stream is refused rather
+  than mangled.
 
 ## What is written down where
 
 | Document | What is in it |
 |---|---|
 | [docs/STATUS.md](docs/STATUS.md) | What is built today, screen by screen: phase 3 complete on top of phase 2. |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the Rust core is wired in: the bridge, what crosses it as JSON, every model field, and what the app reads from the settings. |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the Rust core is wired in: the bridge, what crosses it as JSON, every model field, the pinned forks, and what the app reads from the settings. Its design notes are [docs/phase3-design.md](docs/phase3-design.md). |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | What to run before a commit, how to see video play, what the server's storage costs, and getting a log off a device. |
 | [ANDROID.md](ANDROID.md) | Building, running and verifying on Android and Android TV: prerequisites, the APK, the manifest decisions, the emulators, a real box. |
 | [docs/CASTING.md](docs/CASTING.md) | The cast button: what it hands a receiver untouched, and every rule it refuses on. |
 | [docs/ADDONS.md](docs/ADDONS.md) | How each installed addon has been answering, and the verdict the Installed tab reads off that record. |
 | [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md) | What a `stremio://` link may and may not do, and how the scheme is registered on each platform. |
 | [AGENTS.md](AGENTS.md) | How changes are made here: commits, verification, the rules a real device taught us. |
-| [docs/phase3-design.md](docs/phase3-design.md) | The design notes behind phase 3 -- action JSON, state shapes, the engine's surprises. |
 
 ## Contributing
 
 [AGENTS.md](AGENTS.md) is what a change has to satisfy here: single-concept
 commits, the verification that gates them, and the rules a real television
-taught us. Read it before opening a pull request. CI runs, on every push to
-`main` and every pull request against it:
-
-```bash
-dart format --set-exit-if-changed .
-flutter analyze
-# the FFI-backed Dart tests load rust/target/debug/libxtremio_core.*
-cargo build --manifest-path rust/Cargo.toml
-flutter test
-(cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test)
-```
-
-plus a `cargo check` of the core for 32-bit Android, and a check that the
-`flutter_rust_bridge` bindings regenerate to what is committed.
+taught us. Read it before opening a pull request. CI runs the same checks on every push
+to `main` and every pull request: formatting, analysis, the Flutter and Rust
+suites, `cargo clippy -D warnings`, a `cargo check` of the core for 32-bit
+Android, and a check that the `flutter_rust_bridge` bindings regenerate to
+what is committed ([AGENTS.md](AGENTS.md#verification-with-real-exit-codes)
+has the commands).
 
 ## License
 
