@@ -24,10 +24,9 @@ flutter_rust_bridge = "=2.13.0"
 # features are ON, which links unrar-rs (GPL-3.0-or-later) -- see README.
 # Build with `default-features = false` for an MIT binary without RAR support.
 #
-# This rev is where the server stopped keeping its own record of what is
-# pinned and started being told: `ServerConfig::pins`, handed in before its
-# launch sweep runs, from this app's downloads registry -- the list the user
-# sees and acts on. `None` there means "nobody told me" and keeps every
+# The server keeps no record of what is pinned; it is told, every launch:
+# `ServerConfig::pins`, handed in before its launch sweep runs, from this
+# app's downloads registry -- the list the user sees and acts on. `None` there means "nobody told me" and keeps every
 # torrent's data; an empty map means "nothing is pinned" and deletes it, so
 # `crate::downloads::pins` is careful about which it answers.
 #
@@ -36,14 +35,14 @@ flutter_rust_bridge = "=2.13.0"
 # with the fetch-ahead bounded by the window, liveness that ends on a switch
 # or a restart rather than on a clock, and no cache cleaner at all -- every
 # byte under the root has exactly one thing that deletes it.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "1434a9c46da849e157ad15e356bd3130bef32368" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "44d564717b3601c1b3e56b52fa9e8e4ade3d0a33" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "1434a9c46da849e157ad15e356bd3130bef32368" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "44d564717b3601c1b3e56b52fa9e8e4ade3d0a33" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
