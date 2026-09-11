@@ -126,8 +126,8 @@ class AppPrefs extends ChangeNotifier {
   /// `profile.settings`.
   static const String focusEmphasisKey = 'focusEmphasis';
 
-  /// The `shareWhileIdle` key: whether the embedded server may go on
-  /// sharing a title with the swarm after playback ends (`IdleSharing`).
+  /// The `shareWhileIdle` key: whether the embedded server goes on
+  /// uploading to other people when nothing is playing (`IdleSharing`).
   ///
   /// **On until the viewer turns it off**, which is why it is a plain
   /// `bool` and not a `bool?`. It used to be the third state: the default

@@ -4,22 +4,21 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/core.dart';
 
-/// Whether the embedded server may go on sharing a title after the viewer
-/// has finished watching it: what the choice means, what it defaults to and
-/// where the answer goes.
+/// Whether the embedded server uploads to other people while nothing is
+/// playing: what the choice means, what it defaults to and where the answer
+/// goes.
 ///
-/// **What the server already offers, and what the app adds.** The server
-/// has had this setting all along: `seedingEnabled` in its `ServerSettings`
-/// (`server/src/routes/system.rs`, "when true, torrents continue seeding
-/// after download completes"), true by default, merged and persisted by
+/// **What the server offers, and what the app adds.** The setting is the
+/// server's: `seedingEnabled` in its `ServerSettings`
+/// (`server/src/routes/system.rs`), true by default, merged and persisted by
 /// `POST /settings` -- which the app reaches as
 /// `ServerClient.updateSettings`, over `server_update_settings`, the same
-/// function that route runs. So nothing new was needed on the wire and
-/// nothing here speaks HTTP: what was missing was somebody deciding what to
-/// put in it, which is [IdleSharingPolicy] below. A title kept offline is
-/// not governed by it either way -- a pinned download keeps downloading
-/// whatever this says, and stops being shared when it is unpinned like
-/// anything else.
+/// function that route runs. On, the server uploads all the time; off, only
+/// while a player is reading from it. Nothing here speaks HTTP: what the app
+/// adds is somebody deciding what to put in it, which is [IdleSharingPolicy]
+/// below. It governs uploading and nothing else, and all of it: a title kept
+/// offline goes on downloading whatever this says, and is shared on the same
+/// terms as everything else.
 ///
 /// **It is on everywhere, and the switch is the whole of the control.**
 /// There used to be a default per device -- a television shares, a phone
@@ -61,34 +60,25 @@ class IdleSharing {
   /// What the switch is called in Settings.
   static const String title = 'Share while idle';
 
-  /// What turning it on buys, on the tile rather than in a help page --
-  /// and what it buys is a few minutes, which is what this says.
+  /// What turning it on buys, on the tile rather than in a help page.
   ///
-  /// It used to promise "until the next stream starts", and the pinned
-  /// server does no such thing: nothing stops sharing when the next stream
-  /// begins, and an engine nothing is streaming is removed once it has been
-  /// idle for `INACTIVE_TORRENT_REMOVE_TIMEOUT` -- 300 seconds, swept every
-  /// 15, whatever `seedingEnabled` says (`enginefs/src/lib.rs` at the rev
-  /// `rust/Cargo.toml` pins; a pinned download is the exception and is
-  /// exempt from the sweep). What the setting really changes is the few
-  /// minutes before that: with it off the torrent is paused
-  /// `INACTIVE_TORRENT_PAUSE_GRACE` -- 15 seconds -- after the last stream
-  /// ends, and with it on those minutes are spent in the swarm. A live
-  /// torrent both uploads to peers and goes on fetching the rest of the file
-  /// it was streamed from, and a pause stops both, so the sentence names
-  /// both: the light in the corner shows either as its own arrow, and a tile
-  /// that mentioned only the uploading would leave the down arrow
-  /// unexplained.
+  /// The server uploads while a player is reading whatever this says, and
+  /// with it on goes on uploading when nothing is: `seedingEnabled`, which
+  /// the server turns into the torrent session's choke, so nothing is
+  /// paused and nothing stops downloading. What the tile names is therefore
+  /// what is left once playback stops -- uploading, and only uploading --
+  /// and where to see it happen.
   ///
-  /// A longer lifecycle is the server's keep/share policy, which is being
-  /// built there and is not in the pinned rev. **This sentence describes
-  /// what the app causes today and changes when that lands**, because a
-  /// tile describing a future is the same defect as a comment describing an
-  /// intention.
+  /// It used to promise "about five minutes after playback stops", and
+  /// before that "until the next stream starts". The server did neither:
+  /// the setting was copied into the reconciler's conditions and read by no
+  /// rule, so the switch was drawn and did nothing. **This sentence says
+  /// what the server does at the rev `rust/Cargo.toml` pins**, and changes
+  /// when that does.
   static const String description =
-      'Keeps what you watched in the swarm for about five minutes after '
-      'playback stops: uploading it to other people, and finishing its own '
-      'file. The light in the corner shows when either is happening.';
+      'Keeps uploading to other people when nothing is playing. Off, '
+      'Xtremio shares only while you watch. The light in the corner shows '
+      'when it is happening.';
 
   /// The gentler of the two stops the status light offers, and what it
   /// costs: nothing is written down, so the next start of the app shares
@@ -98,7 +88,8 @@ class IdleSharing {
   /// "session" would be a timer somebody had to choose the length of.
   static const String pauseTitle = 'Not now';
   static const String pauseDescription =
-      'Stops sharing until you next start Xtremio. The setting stays on.';
+      'Stops sharing while nothing is playing, until you next start '
+      'Xtremio. The setting stays on.';
 
   /// The other stop: the switch below, from the other end of the app.
   static const String stopTitle = 'Stop sharing';
@@ -106,34 +97,30 @@ class IdleSharing {
       'Turns this setting off for good, the same switch as in Settings.';
 
   /// What the popup offers instead of those two when the light is lit with
-  /// the setting already off, which is a state the light can honestly be
-  /// in: it is drawn from bytes the server measured moving and never from
-  /// the setting, and a few things move bytes with the switch off -- a
-  /// torrent takes its idle grace to stop, and a title kept offline is not
-  /// governed by the switch either way (above). Neither stop has anything
+  /// the setting already off, which it can honestly be for a few seconds:
+  /// the light is drawn from bytes the server measured moving and never
+  /// from the setting, the server stops uploading at its first pass after
+  /// playback ends -- they run every two seconds -- and the light's sample
+  /// can still hold the bytes from before that. Neither stop has anything
   /// to do then. One would pause a setting that is already off, and the
   /// other would turn off a switch that is already off, so the popup says
   /// so and offers only the way out of itself.
   static const String alreadyOffTitle = 'Sharing is already off';
   static const String alreadyOffDescription =
-      'A title takes a few seconds to stop after the switch goes off, and '
-      'one you are keeping offline is shared until you remove it. There is '
-      'nothing left here to switch off.';
+      'Xtremio shares only while you watch, and this stops a few seconds '
+      'after playback does. There is nothing left here to switch off.';
 
   /// What the popup says while a "Not now" is in force and the light is
-  /// still lit, which it can be: the pause tells the server to stop, and
-  /// the same things that move bytes with the switch off go on moving them
-  /// under a pause -- the torrent takes its idle grace to stop, and a title
-  /// kept offline is not governed either way. The "Not now" row would then
-  /// be a row drawn and dead, since [IdleSharingPolicy.pauseUntilRestart]
-  /// takes no second pause, so the popup says the pause is in force and
-  /// offers the one stop that still does something: the switch, which is
-  /// the longer of the two. "Moving" rather than "going out", since the
-  /// same row is drawn under a down arrow.
+  /// still lit, which it can be for the same few seconds as above: the
+  /// pause tells the server to stop, and the server stops at its next pass.
+  /// The "Not now" row would then be a row drawn and dead, since
+  /// [IdleSharingPolicy.pauseUntilRestart] takes no second pause, so the
+  /// popup says the pause is in force and offers the one stop that still
+  /// does something: the switch, which is the longer of the two.
   static const String pausedTitle = 'Paused until you next start Xtremio';
   static const String pausedDescription =
-      'What is still moving is a title taking a few seconds to stop, or '
-      'one you are keeping offline. The setting is still on.';
+      'What is still going out stops within a few seconds. The setting is '
+      'still on.';
 
   /// What the settings tile adds while a "Not now" is in force. Without it
   /// the tile would show the switch on while nothing is being shared, which

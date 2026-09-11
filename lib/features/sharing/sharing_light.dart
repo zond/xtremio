@@ -22,7 +22,7 @@ import 'sharing_activity.dart';
 ///
 /// **One slot, three glyphs.** An up arrow while bytes go out (serving other
 /// people), a down arrow while they come in (an offline download filling
-/// in, or a title you watched finishing its own file), and one glyph with
+/// in, or the title you last played fetching what it keeps), and one glyph with
 /// both arrows while both are true -- never two lights, because two pulsing
 /// things fight the brief of a discreet status light. What is lit is the
 /// server's own halves ([BackgroundTraffic.uploading] and
@@ -324,30 +324,30 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
 ///
 /// - **Bytes going out** are what "Share while idle" governs, so the
 ///   sharing rows are drawn: "Not now" ([IdleSharingPolicy.pauseUntilRestart])
-///   and "Stop sharing" (the setting). Things upload that neither governs
-///   -- a torrent serving out its idle grace, a title kept offline -- so
-///   the light is honestly lit in two states where a stop has no answer.
-///   With the switch already off both rows would be dead (a pause of a
-///   setting that is off, a switch turned off that is off), so the dialog
-///   says that ([IdleSharing.alreadyOffTitle]) and offers neither; with a
-///   "Not now" already in force the pause row alone is dead, since the
-///   policy takes no second pause, so the dialog says the pause is in force
-///   ([IdleSharing.pausedTitle]) and offers only the switch. The pause is
-///   read from [IdleSharingPolicy.pausedForRun], not inferred from the
-///   light, which cannot tell.
-/// - **Bytes coming in** are either an offline download filling in or a
-///   title you watched finishing its own file. The first is governed by the
+///   and "Stop sharing" (the setting). The server obeys either at its next
+///   pass, every two seconds, and the light's sample can still hold bytes
+///   from before that, so it is honestly lit for a moment in two states
+///   where a stop has no answer. With the switch already off both rows
+///   would be dead (a pause of a setting that is off, a switch turned off
+///   that is off), so the dialog says that ([IdleSharing.alreadyOffTitle])
+///   and offers neither; with a "Not now" already in force the pause row
+///   alone is dead, since the policy takes no second pause, so the dialog
+///   says the pause is in force ([IdleSharing.pausedTitle]) and offers only
+///   the switch. The pause is read from [IdleSharingPolicy.pausedForRun],
+///   not inferred from the light, which cannot tell.
+/// - **Bytes coming in** are either an offline download filling in or the
+///   title you last played fetching what it keeps. The first is governed by the
 ///   downloads: one "Cancel" row per download still on its way
 ///   ([downloads], listed by the light as it opened), each of which drops
 ///   that download and its part-file through [DownloadsClient.remove] --
 ///   what "Cancel all" on the downloads notification does, since there is
 ///   no pause for a pinned file. With no offline download in flight the
-///   bytes are the second thing, and that is governed by "Share while idle"
-///   like the uploading is: a torrent nothing is streaming is paused when
-///   the setting is off, and a pause stops its downloading with its
-///   uploading. So the dialog says no download is in flight
-///   ([noDownloadTitle]) and draws the sharing rows, which are the stop
-///   that works.
+///   bytes are the second thing, which nothing here governs: the sharing
+///   setting switches uploading only, and the title stops fetching by
+///   itself once it holds what it keeps, or when something else is played.
+///   So the dialog says so ([noDownloadTitle]) and draws no stop at all --
+///   the sharing rows beside it would read as the way to stop bytes they
+///   do not touch.
 /// - **Both** draws both groups, each under a heading, so the viewer can
 ///   tell which row is about which arrow.
 ///
@@ -391,13 +391,14 @@ class SharingStopDialog extends StatelessWidget {
 
   /// What the download group says when bytes are coming in and no offline
   /// download is on its way: the only other thing the server downloads with
-  /// nothing playing is a title that was watched, finishing the file it was
-  /// streamed from, and that is under the sharing setting -- so the sharing
-  /// rows are drawn beside this and this says why.
+  /// nothing playing is the title last played, which stays the live one
+  /// until something else is and fetches what the server keeps of it for a
+  /// resume. Nothing in the app stops that, and nothing needs to, so this
+  /// says what it is and that it ends.
   static const String noDownloadTitle = 'No offline download is in flight';
   static const String noDownloadDescription =
-      'What is arriving is a title you watched, finishing its own file. '
-      '"Share while idle" governs that as it governs the uploading.';
+      'What is arriving is the title you last played, fetching what it '
+      'keeps for you to carry on watching. It stops by itself.';
 
   /// What the "Cancel" row costs, on the row: the download stops being kept
   /// and its part-file goes, the same as the downloads notification's
@@ -418,9 +419,8 @@ class SharingStopDialog extends StatelessWidget {
     final prefs = PrefsScope.maybeOf(context);
     final downloadsClient = DownloadsScope.maybeOf(context);
     // Both the preference and the policy's pause, because the light answers
-    // neither: it is lit by measured bytes, and a torrent's idle grace and a
-    // pinned title go on moving bytes with the switch off and under a pause
-    // alike. A pause is a state of a switch that is on (the policy holds
+    // neither: it is lit by measured bytes, which can outlast either for a
+    // moment. A pause is a state of a switch that is on (the policy holds
     // that from both ends), so `paused` implies `sharing`.
     final sharing = prefs?.shareWhileIdle ?? false;
     final paused = sharing && (scope?.policy.pausedForRun ?? false);
@@ -431,10 +431,10 @@ class SharingStopDialog extends StatelessWidget {
         : downloads;
     final uploading = traffic.uploading;
     final downloading = traffic.downloading;
-    // The sharing rows govern the uploading, and the downloading too when
-    // no offline download accounts for it (see the class comment).
-    final showSharing = uploading || (downloading && cancellable.isEmpty);
-    final both = showSharing && downloading;
+    // The sharing rows govern the uploading and nothing else (see the class
+    // comment).
+    final showSharing = uploading;
+    final both = uploading && downloading;
 
     final sharingRows = <Widget>[
       if (!sharing)
@@ -505,18 +505,11 @@ class SharingStopDialog extends StatelessWidget {
         children: [
           const Text(SharingLight.summary),
           const SizedBox(height: 12),
-          // With no offline download to cancel, the statement about the
-          // downloading comes first and the sharing rows it points at
-          // follow; with both arrows lit each group has its heading.
-          if (downloading && cancellable.isEmpty && !uploading) ...[
-            ...downloadRows,
-            ...sharingRows,
-          ] else ...[
-            if (both) _heading(context, uploadingHeading),
-            if (showSharing) ...sharingRows,
-            if (both) _heading(context, downloadingHeading),
-            if (downloading) ...downloadRows,
-          ],
+          // With both arrows lit each group has its heading.
+          if (both) _heading(context, uploadingHeading),
+          if (showSharing) ...sharingRows,
+          if (both) _heading(context, downloadingHeading),
+          if (downloading) ...downloadRows,
         ],
       ),
       actions: [

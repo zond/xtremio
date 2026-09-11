@@ -468,13 +468,13 @@ void main() {
     testWidgets('offers no stop at all while the setting is already off', (
       tester,
     ) async {
-      // A state the light is honestly in, since it is drawn from bytes
-      // measured leaving the device and never from the setting: the switch
-      // is off and something the switch does not govern is still uploading
-      // -- a torrent serving out its idle grace, a title kept offline. Both
-      // stops are about that setting, so both would be actions with nothing
-      // to do: a "Not now" that pauses a setting already off, and a "Stop
-      // sharing" that turns off a switch already off.
+      // A state the light is honestly in for a moment, since it is drawn
+      // from bytes measured leaving the device and never from the setting:
+      // the switch is off, and the server stops uploading at its next pass
+      // after playback ends. Both stops are about that setting, so both
+      // would be actions with nothing to do: a "Not now" that pauses a
+      // setting already off, and a "Stop sharing" that turns off a switch
+      // already off.
       final s = await openPopup(tester, sharing: false);
 
       expect(find.byKey(SharingStopDialog.notNowKey), findsNothing);
@@ -518,9 +518,9 @@ void main() {
         'do nothing', (tester) async {
       // The reported shape: light lit, switch on, "Not now" taken. The
       // server is told to stop, but the light answers measured bytes and
-      // not the server's belief -- the torrent serves out its idle grace, a
-      // pinned title keeps going -- so it stays lit, and the light is
-      // pressed again.
+      // not the server's belief -- the server stops at its next pass, and
+      // the sample can hold bytes from before it -- so it stays lit, and
+      // the light is pressed again.
       final s = await openPopup(tester);
       await tester.tap(find.byKey(SharingStopDialog.notNowKey));
       await tester.pumpAndSettle();
@@ -666,12 +666,14 @@ void main() {
     });
 
     testWidgets('while downloading with no offline download in flight, says '
-        'so and offers the sharing stops, which govern it', (tester) async {
-      // The other thing the server downloads with nothing playing: a title
-      // that was watched, finishing the file it was streamed from. That
-      // torrent is paused when the setting is off, so the sharing rows are
-      // the stop that works, and the statement says why they are there.
-      final s = await openPopup(
+        'so and offers no stop, since the sharing stops do not govern it', (
+      tester,
+    ) async {
+      // The other thing the server downloads with nothing playing: the
+      // title last played, fetching what the server keeps of it. The
+      // sharing setting switches uploading only, so its rows here would
+      // read as the way to stop bytes they do not touch.
+      await openPopup(
         tester,
         reading: traffic(down: true),
         downloads: downloadsOf([
@@ -685,28 +687,17 @@ void main() {
         find.text(SharingStopDialog.noDownloadDescription),
         findsOneWidget,
       );
-      expect(find.byKey(SharingStopDialog.notNowKey), findsOneWidget);
-      expect(find.byKey(SharingStopDialog.stopKey), findsOneWidget);
-      expect(
-        find.byWidgetPredicate(
-          (w) => w is ListTile && w.key.toString().contains('sharing-cancel'),
-        ),
-        findsNothing,
-      );
-      expect(pressableRows(), findsNWidgets(2));
-
-      await tester.tap(find.byKey(SharingStopDialog.notNowKey));
-      await tester.pumpAndSettle();
-      await s.policy.settled;
-      expect(s.settings.patches.last, {IdleSharing.seedingEnabledKey: false});
-      expect(s.policy.pausedForRun, isTrue);
+      expect(find.byKey(SharingStopDialog.notNowKey), findsNothing);
+      expect(find.byKey(SharingStopDialog.stopKey), findsNothing);
+      expect(find.byKey(SharingStopDialog.alreadyOffKey), findsNothing);
+      expect(pressableRows(), findsNothing);
+      expect(find.byKey(SharingStopDialog.closeKey), findsOneWidget);
     });
 
     testWidgets('a downloads listing that fails reads as no download in '
         'flight', (tester) async {
-      // All the app knows then is that bytes are coming in; it says that
-      // and offers the stops it can stand behind, rather than a Cancel for
-      // a download it could not see.
+      // All the app knows then is that bytes are coming in; it says that,
+      // rather than offering a Cancel for a download it could not see.
       final downloads = downloadsOf([download('tt1', 'Alien')])
         ..listError = StateError('server is not running');
       await openPopup(
@@ -717,7 +708,7 @@ void main() {
 
       expect(find.byKey(SharingStopDialog.noDownloadKey), findsOneWidget);
       expect(find.byKey(SharingStopDialog.cancelKey('tt1:tt1')), findsNothing);
-      expect(find.byKey(SharingStopDialog.notNowKey), findsOneWidget);
+      expect(pressableRows(), findsNothing);
     });
 
     testWidgets('while both, offers both groups under headings', (

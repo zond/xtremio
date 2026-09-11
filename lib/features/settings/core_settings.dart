@@ -233,9 +233,8 @@ class FocusEmphasisSection extends StatelessWidget {
 }
 
 /// Settings → Streaming server → "Share while idle": whether the embedded
-/// server may keep a title in the swarm after playback ends -- uploading it
-/// to other people and finishing its own file, for the few minutes before
-/// the idle sweep (see [IdleSharing], which holds the rule and the strings).
+/// server goes on uploading to other people when nothing is playing (see
+/// [IdleSharing], which holds the rule and the strings).
 ///
 /// The app's own preference and not a `profile.settings` field, for the
 /// reason "Buffer ahead" and "Bold focus" are: it is about this device's

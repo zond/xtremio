@@ -8,9 +8,9 @@ import '../support/fake_core_client.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fake_sharing.dart';
 
-/// Whether the embedded server may keep a title in the swarm after the
-/// viewer has finished with it: the default a device gets, and the choice
-/// reaching the server.
+/// Whether the embedded server goes on uploading to other people when
+/// nothing is playing: the default a device gets, and the choice reaching
+/// the server.
 void main() {
   const tv = DeviceProfile(isTv: true, hasTouch: false);
 
