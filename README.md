@@ -11,9 +11,11 @@ Flutter UI.
 
 Xtremio is the client half of a two-part project. The other half is
 [`zond/stream-server`](https://github.com/zond/stream-server) — a pure-Rust,
-headless, zero-external-binary torrent-streaming server. Xtremio pairs that
-with [`stremio-core`](https://github.com/Stremio/stremio-core) (the official
-Rust engine for addons, catalogs, library, and playback state) and
+headless, zero-external-binary torrent-streaming server, which Xtremio embeds
+in its own process. Xtremio pairs that with
+[`stremio-core`](https://github.com/Stremio/stremio-core) (the official Rust
+engine for addons, catalogs, library, and playback state, built here from a
+fork — see [Pinned forks](#pinned-forks)) and
 [`media_kit`](https://pub.dev/packages/media_kit)/libmpv for playback.
 
 ## What it does
@@ -95,13 +97,20 @@ unsigned.
 
 ```bash
 flutter pub get
-flutter run -d linux      # or -d windows, -d macos, or an Android device
+make run DEVICE=linux   # flutter run -d linux, stamped with version and commit
+make linux              # a release build; also apk, apk-tv, macos, ios
 ```
 
-Linux desktop needs `clang`, `cmake`, `ninja`, GTK 3 dev libraries, and
+The Makefile only adds two `--dart-define`s, so the Diagnostics screen can say
+which build it is; plain `flutter run -d <device>` works too and reports
+`app: unknown` (the Windows CI job, whose runner has no `make`, spells the two
+defines out instead). A build needs Flutter stable (CI uses 3.47.1) and a Rust
+toolchain no older than `rust-version` in `rust/Cargo.toml` (1.97.1): the Rust
+crate is compiled by the build itself, through cargokit. Linux desktop also
+needs `clang`, `cmake`, `ninja`, `pkg-config`, GTK 3 dev libraries, and
 `libmpv-dev` (media_kit links libmpv); Android has a document of its own,
-[ANDROID.md](ANDROID.md). What to run before a commit, and everything else a
-dev machine wants, is in [docs/OPERATIONS.md](docs/OPERATIONS.md).
+[ANDROID.md](ANDROID.md). Everything else a dev machine wants is in
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## How it works
 
@@ -139,6 +148,22 @@ by URL instead; the embedded one is the default.
 
 How that bridge is built, what crosses it and what every field of the state
 means is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+### Pinned forks
+
+`rust/Cargo.toml` pins every git dependency to a rev, with the reason beside
+it:
+
+| Dependency | Pinned to | Why |
+|---|---|---|
+| `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | The rev where the server stopped keeping its own record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry, with the retention redesign that arrived with it. Default features are on, which is RAR support — see [License](#license). |
+| `librqbit` | [`zond/rqbit`](https://github.com/zond/rqbit) | Only a dev-dependency here, for the real `.torrent` fixtures in `rust/tests/downloads.rs`. It is always the rev stream-server's `enginefs` uses; any other puts two librqbits in the graph. The fork is stream-server's: it follows upstream and adds what a bounded streaming cache needs from the engine. |
+| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.62.1 plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) instead of letting serde drop them — upstream PR Stremio/stremio-core#1045 — and one that pins its `localsearch` dependency by rev rather than by branch. |
+
+Beside those, `stremio-watched-bitfield` is vendored with one line changed so
+the graph resolves ([rust/vendor/README.md](rust/vendor/README.md)), and
+`flutter_rust_bridge` is exactly 2.13.0 in `pubspec.yaml`, `rust/Cargo.toml`
+and the codegen.
 
 ## Platform support
 
@@ -190,7 +215,20 @@ What is genuinely not built:
 
 [AGENTS.md](AGENTS.md) is what a change has to satisfy here: single-concept
 commits, the verification that gates them, and the rules a real television
-taught us. Read it before opening a pull request.
+taught us. Read it before opening a pull request. CI runs, on every push to
+`main` and every pull request against it:
+
+```bash
+dart format --set-exit-if-changed .
+flutter analyze
+# the FFI-backed Dart tests load rust/target/debug/libxtremio_core.*
+cargo build --manifest-path rust/Cargo.toml
+flutter test
+(cd rust && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test)
+```
+
+plus a `cargo check` of the core for 32-bit Android, and a check that the
+`flutter_rust_bridge` bindings regenerate to what is committed.
 
 ## License
 
@@ -198,5 +236,6 @@ The **source** in this repository is MIT (see [LICENSE](LICENSE)). Note that a
 **compiled** Xtremio binary that embeds the default build of `stream-server`
 links `unrar-rs` (GPL-3.0-or-later), so distributed binaries are covered by
 GPL-3.0-or-later. This is intentional and fine for open distribution; it is
-also why the iOS App Store is not a target. (A build without RAR support keeps
-the binary MIT.)
+also why the iOS App Store is not a target. (`rust/Cargo.toml` notes the way
+out: `stream-server` with `default-features = false` drops RAR support and
+unrar-rs with it.)
