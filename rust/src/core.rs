@@ -326,12 +326,22 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
         });
     }
 
+    // Storage first, server second, and the order is load-bearing: the
+    // server is handed the pin set at startup (`server::spawn` ->
+    // `downloads::pins`), and that set is read off the downloads registry
+    // under `storage_dir`. Started before the directory was set, every real
+    // boot read no registry, named no pins, and the server kept every
+    // torrent's data for the life of the process -- the launch sweep
+    // skipped, `PinsUnknown` set, no owner ever reclaiming a byte. The
+    // integration test that covered pins set the directory itself before
+    // calling in here, which is exactly the step the app does not take.
+    env::set_storage_dir(&config.storage_dir)?;
+
     let server_base_url = match config.server {
         Some(server_config) => Some(server::start_in(&app, server_config)?),
         None => None,
     };
 
-    env::set_storage_dir(&config.storage_dir)?;
     std::fs::create_dir_all(&config.cache_dir)
         .with_context(|| format!("create core cache dir {:?}", config.cache_dir))?;
 
