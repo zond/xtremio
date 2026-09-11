@@ -1271,8 +1271,16 @@ fn add_with(
     // The new pin is in, so the old one may go -- before the row stops
     // saying it is owed, and outside the file lock, since it is a server
     // call. A kill between the two releases it again at boot, idempotently.
+    //
+    // Unless a row wants the old file now. The debt was decided when the
+    // row was staged, and the pin can take as long as a magnet does: the
+    // user can go back to the stream they had, or another title can name
+    // that file, and releasing it then drops the pin of a row that is
+    // counting on it, and deletes its bytes under it.
     if let Some(replaced) = &replaces {
-        release(&key, replaced);
+        if !pin_is_wanted(&load()?, &replaced.info_hash, replaced.file_idx) {
+            release(&key, replaced);
+        }
     }
 
     let recorded = update(|registry| {
@@ -1517,8 +1525,9 @@ fn pin_is_shared(registry: &Registry, key: &str, info_hash: &str, file_idx: usiz
 /// and [`remove`] cannot reach it, ever.
 ///
 /// Whether another entry names the same file was decided when
-/// [`Entry::replaces`] was written, under the lock; the bytes go with the
-/// pin, since nothing references them any more. Idempotent at the server: a
+/// [`Entry::replaces`] was written, under the lock, and asked again by
+/// whoever calls this once the new pin is in; the bytes go with the pin,
+/// since nothing references them any more. Idempotent at the server: a
 /// boot that finishes an interrupted swap may release a pin that already
 /// went, and gets `unpinned: false` for it.
 fn release_replaced(key: &str, replaced: &Replaced) {
@@ -3207,6 +3216,66 @@ mod tests {
             }]
         );
         assert!(registry.items.is_empty(), "not resurrected: {registry:?}");
+    }
+
+    /// The file a row replaced is released once the new pin is in -- but
+    /// only if no row wants it by then. The pin can take as long as a
+    /// magnet does, and meanwhile the user can go back to the stream they
+    /// had, or another title can name that file.
+    #[test]
+    fn a_replaced_file_a_row_wants_again_is_not_released() {
+        let old = Replaced {
+            info_hash: "old".into(),
+            file_idx: 0,
+        };
+        let new = Replaced {
+            info_hash: "abc".into(),
+            file_idx: 2,
+        };
+
+        // Nothing changed meanwhile: the old file goes.
+        let (outcome, released, registry) = add_while(
+            vec![("tt1:tt1", naming("old", 0))],
+            |_| {},
+            Ok(pinned("abc", 2, false)),
+        );
+        assert!(outcome.ok, "{outcome:?}");
+        assert_eq!(released, vec![old.clone()]);
+        assert_eq!(registry.items["tt1:tt1"].replaces, None);
+
+        // The user went back to the old stream: its row wants the old file,
+        // and the pin just taken is the one nobody wants.
+        let (_, released, registry) = add_while(
+            vec![("tt1:tt1", naming("old", 0))],
+            |registry| {
+                let back = AddRequest {
+                    stream: serde_json::json!({"infoHash": "old", "fileIdx": 0}),
+                    ..request("tt1", "tt1")
+                };
+                stage_add(registry, "tt1:tt1", &back, "old", 0, &[], Utc::now());
+            },
+            Ok(pinned("abc", 2, false)),
+        );
+        assert_eq!(released, vec![new], "the old file is the row's again");
+        assert!(names(&registry.items["tt1:tt1"], "old", 0));
+
+        // Another title staged the old file: the pin is its now.
+        let (outcome, released, _) = add_while(
+            vec![("tt1:tt1", naming("old", 0))],
+            |registry| {
+                registry.items.insert(
+                    "tt9:tt9".into(),
+                    Entry {
+                        info_hash: "old".into(),
+                        file_idx: 0,
+                        ..entry("tt9", "tt9")
+                    },
+                );
+            },
+            Ok(pinned("abc", 2, false)),
+        );
+        assert!(outcome.ok, "{outcome:?}");
+        assert_eq!(released, Vec::new(), "tt9 wants the old file");
     }
 
     /// The two intents survive the file, and a row carrying neither is
