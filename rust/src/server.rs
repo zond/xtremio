@@ -243,7 +243,11 @@ pub(crate) fn stop_in(app: &AppState) -> anyhow::Result<()> {
         // Before the shutdown, not instead of it: the server closes the LAN
         // listener as part of going down anyway, but this is also what puts
         // the `lanMediaEnabled` veto back on disk, so a process that is
-        // killed after this point leaves nothing permitted behind.
+        // killed after this point leaves nothing permitted behind. Nothing
+        // but a grant already in flight: a `set_lan_media(true)` that took
+        // its handle before this stop did is not waited for, and can write
+        // the permission back after this. The next boot's `start_in` takes
+        // it away again before anything could use it.
         lan_media_off(&handle);
         handle
             .shutdown()
@@ -711,7 +715,7 @@ mod tests {
             let app = Arc::clone(&app);
             move || {
                 with_handle_in(&app, |_handle| {
-                    // Reached only once `with_handle`'s read guard is held.
+                    // Reached once the call has its handle.
                     barrier.wait();
                     std::thread::sleep(Duration::from_millis(500));
                     Ok(())
