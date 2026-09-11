@@ -147,7 +147,9 @@ Rust side holds. The only HTTP it serves beyond loopback is the media listener
 a cast session turns on and off. Because a capable on-device player handles
 codecs and subtitles, the server never transcodes — it just gets bytes onto an
 HTTP connection. Settings can point stremio-core at a remote streaming server
-by URL instead; the embedded one is the default.
+by URL, and torrents then play straight off that one; the embedded server
+still starts and still fronts an addon's direct links. The embedded one is
+the default.
 
 How that bridge is built, what crosses it and what every field of the state
 means is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
