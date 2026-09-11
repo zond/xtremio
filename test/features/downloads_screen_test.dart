@@ -210,7 +210,10 @@ void main() {
       await tester.pumpWidget(harness(coreWithPlayer(), downloads));
       await tester.pumpAndSettle();
 
-      expect(find.text('Your downloads list could not be read'), findsOneWidget);
+      expect(
+        find.text('Your downloads list could not be read'),
+        findsOneWidget,
+      );
       expect(find.text('Nothing downloaded'), findsNothing);
       // Nor is it a failed listing: a retry would read the same file the
       // same way, so it is not offered.
@@ -237,11 +240,7 @@ void main() {
       expect(find.textContaining('removed to free the space'), findsOneWidget);
       await tester.tap(find.text('Keep waiting'));
       await tester.pumpAndSettle();
-      expect(
-        downloads.startFreshCalls,
-        0,
-        reason: 'backing out does nothing',
-      );
+      expect(downloads.startFreshCalls, 0, reason: 'backing out does nothing');
 
       await tester.tap(find.text('Start fresh'));
       await tester.pumpAndSettle();
