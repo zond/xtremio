@@ -117,6 +117,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // The Downloads screen says nothing about where; Server storage does.
+    expect(find.text('Titles kept on this device'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(ListTile, 'Downloads'));
     await tester.pumpAndSettle();

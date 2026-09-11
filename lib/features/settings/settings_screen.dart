@@ -205,7 +205,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.download_outlined),
             title: const Text('Downloads'),
-            subtitle: const Text('Titles kept on this device, and where'),
+            // Not "and where": a download has no place of its own, and the
+            // one root every torrent byte is under is named and moved in
+            // Server storage below.
+            subtitle: const Text('Titles kept on this device'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(DownloadsScreen.route()),
           ),
