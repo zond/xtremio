@@ -458,13 +458,14 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
 
     *app.core.runtime_mut() = Some(runtime);
 
-    // The server persists its own pin set, but a registry entry can outlive
-    // it (a torrent-data root that was moved, or one the system reclaimed),
-    // so the two are put back into agreement: every unfinished download is
-    // pinned again, and every finished one the server does not hold whole is
-    // marked as gone rather than left claiming a film that is not there. Off
-    // the boot path: a pin blocks while a magnet resolves its metadata, and
-    // nothing on screen waits for it.
+    // The server keeps no pin record of its own -- the launch handed it the
+    // registry's set -- but a pin can name a torrent whose bytes went with a
+    // torrent-data root that was moved or that the system reclaimed, so the
+    // two are put back into agreement: every unfinished download is pinned
+    // again with its trackers, and every finished one the server does not
+    // hold whole is marked as gone rather than left claiming a film that is
+    // not there. Off the boot path: a pin blocks while a magnet resolves its
+    // metadata, and nothing on screen waits for it.
     if server_base_url.is_some() {
         // Against the state this boot built, not whatever the process holds
         // when it gets there: a pin blocks until the tracker answers, so a

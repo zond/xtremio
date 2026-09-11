@@ -114,9 +114,9 @@ pub fn server_storage_report() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::storage::report()?).map_err(Into::into))
 }
 
-/// What the server's cache currently occupies against the limit its cleaner
-/// will enforce, as JSON (`CacheUsage`: `totalBytes`, `limitBytes`,
-/// `protectedBytes`, `protectedFiles`).
+/// What the server's cache currently occupies against the limit in force,
+/// as JSON (`CacheUsage`: `totalBytes`, `limitBytes`, `protectedBytes`,
+/// `protectedFiles`).
 ///
 /// `limitBytes` is the smaller of the `cacheSize` setting and what the
 /// volume can give while keeping the server's 512 MiB free-space floor
@@ -125,38 +125,39 @@ pub fn server_storage_report() -> anyhow::Result<String> {
 /// and it is null only when neither caps anything. It is a different
 /// question from `server_storage_report`'s `cacheLimitBytes`, which is the
 /// setting itself.
-/// `protectedBytes`/`protectedFiles` are what a live engine or a pinned
-/// download is holding right now, which a clean pass can never take: when
-/// they equal `totalBytes` and the cache is still over `limitBytes`,
-/// cleaning cannot help until playback stops or something is unpinned.
+/// `protectedBytes`/`protectedFiles` are what a pinned download or the
+/// window of the stream being played holds right now, which a clean can
+/// never take: when they equal `totalBytes` and the cache is still over
+/// `limitBytes`, cleaning cannot help until playback moves on or something
+/// is unpinned.
 ///
-/// Costs one `stat` per file currently in the cache -- the same walk the
-/// server's own cleaner already runs on every debounced or hourly pass --
-/// so one call per screen open or manual refresh is cheap, but it is not
-/// bounded or cached on the server side: do not poll it on a timer. Blocks
-/// the FRB worker; never call from the UI thread. Errors when the server is
-/// not running.
+/// Counted from what the server's two owners say they hold -- the piece
+/// store and the proxy cache -- plus one listing of the store root, not a
+/// walk of the tree, so a call per screen open or manual refresh is cheap.
+/// Nothing caches the answer, so do not poll it on a sub-second timer.
+/// Blocks the FRB worker; never call from the UI thread. Errors when the
+/// server is not running.
 pub fn server_cache_usage() -> anyhow::Result<String> {
     guarded(|| serde_json::to_string(&crate::server::cache_usage()?).map_err(Into::into))
 }
 
-/// Runs one eviction pass on the server's cache right now and answers what
-/// it did, as JSON (`EvictionReport`: `total`, `protected`,
-/// `protectedFiles`, `freed`, `deleted`, `limit`). `freed`/`deleted` count
-/// both eviction rules, the 30-day sweep and the size cap; `limit` is the
-/// cap this pass enforced, on the same terms as `server_cache_usage`'s
-/// `limitBytes` -- null for no cap, and 0 for a volume with no room to
-/// give, which is a cap and not the absence of one.
+/// Gives back everything nobody is playing and nobody is reading, now, and
+/// answers what is left, as JSON (`EvictionReport`: `total`, `protected`,
+/// `protectedFiles`, `freed`, `deleted`, `limit`, `overLimit`).
+/// `freed`/`deleted` are what the call took off the volume; `limit` is the
+/// cap in force, on the same terms as `server_cache_usage`'s `limitBytes`
+/// -- null for no cap, and 0 for a volume with no room to give, which is a
+/// cap and not the absence of one.
 ///
-/// This is the exact function the server's own scheduled sweep calls, so it
-/// respects exactly the same protections: nothing a live engine is writing
-/// or a pin keeps is ever touched, however far over the limit the cache is.
-/// **Nothing here stops playback** -- unlike the restart this replaces,
-/// which was the only way to ask stream-server's cleaner for a sweep before
-/// it exposed this call. When `total` is still over `limit` afterwards,
-/// that is not a failure: `protected`/`protectedFiles` name what is
-/// currently unreachable, and the fix is to stop the stream or unpin the
-/// download, not to run this again.
+/// Nothing is picked as a victim: the server asks the owners of the piece
+/// store and the proxy cache for their slack, the same passes its own
+/// reconciler runs, so a pinned download and the window of the stream being
+/// played are never touched however far over the limit the cache is.
+/// **Nothing here stops playback.** Freeing nothing is the ordinary answer
+/// on a device with one film playing and one pinned; when `overLimit` is
+/// not zero, `protected`/`protectedFiles` name what holds the cache there,
+/// and the fix is to stop the stream or unpin the download, not to run
+/// this again.
 ///
 /// Blocks the FRB worker; never call from the UI thread. Errors when the
 /// server is not running.

@@ -1495,8 +1495,8 @@ fn pin_is_shared(registry: &Registry, key: &str, info_hash: &str, file_idx: usiz
 /// its own pin is in (the user pressed Download on a second stream for the
 /// same title, or retried at another index). The registry is keyed by meta
 /// and video, the server's pin registry by `(infoHash, fileIdx)`, so
-/// without this the replaced torrent stays wanted, exempt from the idle
-/// sweeper and the cache cleaner, and downloading -- with nothing in
+/// without this the replaced torrent stays wanted, exempt from everything
+/// that reclaims space, and downloading -- with nothing in
 /// `downloads.json` naming it any more, which means the list cannot show it
 /// and [`remove`] cannot reach it, ever.
 ///
@@ -2256,15 +2256,16 @@ fn mark_gone_in(app: &Arc<AppState>, key: &str) {
 
 /// Puts the registry and the server's pin set back into agreement, which is
 /// the one moment either of them can be checked against the other: the
-/// server has just finished restoring its own pins (live or dormant) and
-/// nothing has been asked of it yet.
+/// server has just applied the pin set the launch handed it ([`pins`]),
+/// live or dormant, and nothing has been asked of it yet.
 ///
 /// Two halves, because a row can be wrong in two directions:
 ///
-/// - **An unfinished row with no pin behind it** is re-pinned. The server
-///   persists its pin set, but a registry entry outlives a torrent-data root
-///   that was moved or purged, and without this the download would sit at
-///   whatever it last read for ever.
+/// - **An unfinished row** is pinned again, with its own trackers. The
+///   launch named it, but a pin whose torrent the session does not have --
+///   its bytes went with a torrent-data root that was moved or purged -- is
+///   dormant, with nothing to fetch by, and without this the download would
+///   sit at whatever it last read for ever.
 /// - **A finished row the server does not hold whole** is marked
 ///   [`State::Gone`]. Its pieces were under that same root, and with them
 ///   gone there is nothing on the device to play: the row said `complete`

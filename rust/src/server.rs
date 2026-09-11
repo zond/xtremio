@@ -373,23 +373,22 @@ pub fn update_settings(patch: serde_json::Value) -> anyhow::Result<ServerSetting
     with_handle(|handle| handle.update_settings(patch))
 }
 
-/// What the cache currently occupies against its `cacheSize` limit, without
-/// evicting anything: `totalBytes`/`limitBytes` in the cleaner's own
-/// occupancy accounting, and `protectedBytes`/`protectedFiles` for what a
-/// live engine or a pinned download is holding right now, which a clean
-/// pass can never take. One `stat` per file currently in the cache -- the
-/// same walk the cleaner itself runs on every debounced or hourly pass --
-/// so it is cheap to call once, but stream-server's own docs say not to
-/// poll it on a tight timer.
+/// What the cache currently occupies against the limit in force, taking
+/// nothing: `totalBytes`/`limitBytes` in the server's occupancy accounting
+/// (allocated blocks), and `protectedBytes`/`protectedFiles` for what a
+/// pinned download or the window of the stream being played holds right
+/// now, which a clean can never take. Counted from what the piece store and
+/// the proxy cache say they hold, not from a walk, so it is cheap for a
+/// screen open; nothing caches it, so not for a sub-second timer.
 pub fn cache_usage() -> anyhow::Result<CacheUsage> {
     with_handle(|handle| handle.cache_usage())
 }
 
-/// Runs one eviction pass right now and reports what it freed -- the exact
-/// function the server's own scheduled sweep calls, so it can never be less
-/// careful: nothing a live engine is writing or a pin protects is touched,
-/// however far over the limit the cache is. Replaces restarting the server
-/// to make its start-up tick fire a sweep; nothing here stops playback.
+/// Asks the server's owners for their slack right now and reports what is
+/// left -- the same passes the server's own reconciler runs, so it is never
+/// less careful: a pinned download and the window of the stream being
+/// played are not touched, however far over the limit the cache is, and
+/// nothing here stops playback.
 pub fn clean_cache_now() -> anyhow::Result<EvictionReport> {
     with_handle(|handle| handle.clean_cache_now())
 }
