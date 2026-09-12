@@ -1101,7 +1101,7 @@ dependencies = [
 [[package]]
 name = "enginefs"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=4e92cc2d9613d0fb1281007e31ad5cfdd8045ac9#4e92cc2d9613d0fb1281007e31ad5cfdd8045ac9"
+source = "git+https://github.com/zond/stream-server?rev=b47f033d4e50d24fff5e3ce23865ecb2db2d12aa#b47f033d4e50d24fff5e3ce23865ecb2db2d12aa"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3754,7 +3754,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=4e92cc2d9613d0fb1281007e31ad5cfdd8045ac9#4e92cc2d9613d0fb1281007e31ad5cfdd8045ac9"
+source = "git+https://github.com/zond/stream-server?rev=b47f033d4e50d24fff5e3ce23865ecb2db2d12aa#b47f033d4e50d24fff5e3ce23865ecb2db2d12aa"
 dependencies = [
  "anyhow",
  "async-trait",
