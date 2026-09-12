@@ -319,28 +319,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-server"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1df331683d982a0b9492b38127151e6453639cd34926eb9c07d4cd8c6d22bfc"
-dependencies = [
- "arc-swap",
- "bytes",
- "either",
- "fs-err",
- "http",
- "http-body",
- "hyper",
- "hyper-util",
- "pin-project-lite",
- "rustls",
- "rustls-pki-types",
- "tokio",
- "tokio-rustls",
- "tower-service",
-]
-
-[[package]]
 name = "backon"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1123,7 +1101,7 @@ dependencies = [
 [[package]]
 name = "enginefs"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=44d564717b3601c1b3e56b52fa9e8e4ade3d0a33#44d564717b3601c1b3e56b52fa9e8e4ade3d0a33"
+source = "git+https://github.com/zond/stream-server?rev=6c1e33570f06415f6c83d0ca943be343787a4fb3#6c1e33570f06415f6c83d0ca943be343787a4fb3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1295,16 +1273,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs-err"
-version = "3.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91aa448ca50d7e79433bdf3ee8d99215430d2ec02ade5aefab2a073a1822e8a"
-dependencies = [
- "autocfg",
- "tokio",
-]
-
-[[package]]
 name = "fs4"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1319,16 +1287,6 @@ name = "fs_extra"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
-
-[[package]]
-name = "fslock"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04412b8935272e3a9bae6f48c7bfff74c2911f60525404edfdd28e49884c3bfb"
-dependencies = [
- "libc",
- "winapi",
-]
 
 [[package]]
 name = "fst"
@@ -1457,22 +1415,6 @@ checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
 dependencies = [
  "byteorder",
 ]
-
-[[package]]
-name = "genawaiter"
-version = "0.99.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c86bd0361bcbde39b13475e6e36cb24c329964aa2611be285289d1e4b751c1a0"
-dependencies = [
- "futures-core",
- "genawaiter-macro",
-]
-
-[[package]]
-name = "genawaiter-macro"
-version = "0.99.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b32dfe1fdfc0bbde1f22a5da25355514b5e450c33a6af6770884c8750aedfbc"
 
 [[package]]
 name = "generic-array"
@@ -3812,13 +3754,12 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=44d564717b3601c1b3e56b52fa9e8e4ade3d0a33#44d564717b3601c1b3e56b52fa9e8e4ade3d0a33"
+source = "git+https://github.com/zond/stream-server?rev=6c1e33570f06415f6c83d0ca943be343787a4fb3#6c1e33570f06415f6c83d0ca943be343787a4fb3"
 dependencies = [
  "anyhow",
  "async-trait",
  "async_zip",
  "axum",
- "axum-server",
  "bytes",
  "chrono",
  "dashmap 6.2.1",
@@ -3826,23 +3767,18 @@ dependencies = [
  "enginefs",
  "flate2",
  "fs4",
- "fslock",
  "futures-util",
  "getrandom 0.4.3",
  "hex",
  "if-addrs",
- "jni",
  "lz-str",
- "mimalloc",
  "mime_guess",
  "regex",
  "reqwest",
- "rustls-platform-verifier",
  "serde",
  "serde_json",
  "sevenz-rust2",
  "sha2 0.11.0",
- "ssdp-client",
  "subtle",
  "sysinfo",
  "tar",
@@ -3859,7 +3795,6 @@ dependencies = [
  "uuid",
  "walkdir",
  "windows",
- "winres",
 ]
 
 [[package]]
@@ -4011,18 +3946,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d96d2d1d716fb500937168cc09353ffdc7a012be8475ac7308e1bdf0e3923300"
 dependencies = [
  "lock_api",
-]
-
-[[package]]
-name = "ssdp-client"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04f4048b05716cdb270e1e5960d9dd4d428e7ceaa939ee5348a84f6e43d52df1"
-dependencies = [
- "futures-core",
- "genawaiter",
- "log",
- "tokio",
 ]
 
 [[package]]
@@ -4469,15 +4392,6 @@ dependencies = [
  "libc",
  "pin-project-lite",
  "tokio",
-]
-
-[[package]]
-name = "toml"
-version = "0.5.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -5158,15 +5072,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "winres"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b68db261ef59e9e52806f688020631e987592bd83619edccda9c47d42cde4f6c"
-dependencies = [
- "toml",
 ]
 
 [[package]]
