@@ -1492,8 +1492,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// costs the freshness of a hint.
   Future<void> _reportPlayhead() async {
     final request = _torrentStatsRequest;
-    final fileIdx = request?.fileIdx;
-    if (request == null || fileIdx == null || fileIdx < 0) return;
+    final fileIdx = _openedFileIdx;
+    if (request == null || fileIdx == null) return;
     if (_reportingPlayhead || _handedOver || _casting) return;
     _reportingPlayhead = true;
     try {
@@ -1562,11 +1562,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _maybeAutoPickSubtitles();
   }
 
+  /// **Which file of the torrent the player is actually reading**, taken
+  /// from the URL it was opened with.
+  ///
+  /// Not from `TorrentStatsRequest.fileIdx`, which is the *addon's* -- and
+  /// an addon frequently does not say, which the server handles by picking
+  /// the largest file and answering with the index it chose. So the stream
+  /// carries no index while the URL the core built carries the resolved
+  /// one, and a report keyed off the addon's is a report that never
+  /// happens: every field log of this feature shows the server placing the
+  /// window from reads, because nothing was ever told.
+  ///
+  /// The URL is what the player is reading, so it is the answer to the
+  /// question actually being asked.
+  int? get _openedFileIdx {
+    final segments = _opened?.pathSegments;
+    if (segments == null || segments.length < 2) return null;
+    final index = int.tryParse(segments[1]);
+    return index == null || index < 0 ? null : index;
+  }
+
   /// Tells the server how long the film is; see [_onCastStatus].
   Future<void> _reportDuration(Duration duration) async {
     final request = _torrentStatsRequest;
-    final fileIdx = request?.fileIdx;
-    if (request == null || fileIdx == null || fileIdx < 0) return;
+    final fileIdx = _openedFileIdx;
+    if (request == null || fileIdx == null) return;
     try {
       await _playheadReporter?.noteDuration(
         infoHash: request.infoHash,

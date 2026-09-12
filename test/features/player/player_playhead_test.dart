@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 
+import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
 
 /// **Telling the server where the player is.**
@@ -47,6 +48,42 @@ void main() {
       6669,
       reason: "the film's length, which with the file's size is its bitrate",
     );
+  });
+
+  testWidgets('reports for a stream whose addon named no file index', (
+    tester,
+  ) async {
+    // **The case every field log was.** An addon often does not say which
+    // file of the torrent its stream is; the server then picks the largest
+    // and answers with the index it chose, and the URL the core builds
+    // carries that resolved index. Keyed off the addon's own `fileIdx`,
+    // reporting simply never happened -- which is why the server placed the
+    // window from reads in every log of this feature.
+    final fixture = loadPlayerFixture();
+    final stream =
+        (fixture['selected'] as Map<String, dynamic>)['stream']
+            as Map<String, dynamic>;
+    stream.remove('fileIdx');
+    expect(stream['fileIdx'], isNull, reason: 'the addon named no file');
+
+    final harness = PlayerHarness(
+      player: fixture,
+      configureEngine: (engine) => engine.playheadReport = const PlayheadReport(
+        streamPos: 3304543293,
+        film: Duration(seconds: 939),
+      ),
+    );
+    await harness.pump(tester);
+    harness.engine.emitPlaying(true);
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      harness.playhead.reports,
+      isNotEmpty,
+      reason: 'the URL the player is reading says which file it is',
+    );
+    expect(harness.playhead.reports.last.fileIdx, 0);
   });
 
   testWidgets('it keeps reporting while the position is not moving', (
