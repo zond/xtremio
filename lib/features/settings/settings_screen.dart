@@ -321,6 +321,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
               initInfo == null ? 'unknown' : 'v${initInfo.schemaVersion}',
             ),
           ),
+          const _SectionHeader('About'),
+          ListTile(
+            key: const ValueKey('setting-licences'),
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('Open source licences'),
+            // What a compiled Xtremio is under, and why: the embedded
+            // server links unrar-rs (GPL-3.0-or-later) so a RAR archive in
+            // a torrent can be played, and unrar-rs asks that a binary
+            // reproduce its licence. See lib/core/bundled_licenses.dart.
+            subtitle: const Text(
+              'The source is MIT; a built Xtremio is GPL-3.0-or-later',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showLicensePage(
+              context: context,
+              applicationName: 'Xtremio',
+              applicationLegalese:
+                  'Source MIT. Binaries GPL-3.0-or-later, through unrar-rs '
+                  'in the embedded streaming server.',
+            ),
+          ),
           const _SectionHeader('Developer'),
           ListTile(
             leading: const Icon(Icons.bug_report_outlined),

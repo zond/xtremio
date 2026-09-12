@@ -75,6 +75,14 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # The licences a compiled binary has to carry with it; see
+  # lib/core/bundled_licenses.dart. unrar-rs asks that a binary
+  # redistribution reproduce its licence file, so the file travels in the
+  # build rather than only in the repository.
+  assets:
+    - LICENSE-GPL-3.0
+    - LICENSE-unrar-rs
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

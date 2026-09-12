@@ -210,10 +210,10 @@ has the commands).
 
 ## License
 
-The **source** in this repository is MIT (see [LICENSE](LICENSE)). Note that a
-**compiled** Xtremio binary that embeds the default build of `stream-server`
-links `unrar-rs` (GPL-3.0-or-later), so distributed binaries are covered by
-GPL-3.0-or-later. This is intentional and fine for open distribution; it is
-also why the iOS App Store is not a target. (`rust/Cargo.toml` notes the way
-out: `stream-server` with `default-features = false` drops RAR support and
-unrar-rs with it.)
+The **source** here is MIT ([LICENSE](LICENSE)). A **compiled** Xtremio embeds
+`stream-server`, which links `unrar-rs` (GPL-3.0-or-later) so a RAR archive in
+a torrent plays: **distributed binaries are GPL-3.0-or-later**
+([LICENSE-GPL-3.0](LICENSE-GPL-3.0)). unrar-rs asks that a binary reproduce its
+licence file, the unRAR restriction included, so that text ships in the app too
+([LICENSE-unrar-rs](LICENSE-unrar-rs); Settings → About → Open source
+licences). `stream-server` with `default-features = false` drops both.

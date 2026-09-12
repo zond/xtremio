@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
+import 'core/bundled_licenses.dart';
 import 'core/core.dart';
 import 'features/addons/addon_health_client.dart';
 import 'features/cast/cast_client.dart';
@@ -19,6 +20,9 @@ Future<void> main() async {
   // report most needs, and until the core is up there is nowhere to put it
   // (`DiagnosticsLog` drops what it cannot write).
   captureUnhandledErrors();
+  // Registered, not read: the texts are loaded the first time somebody
+  // opens the licence page, and a compiled binary has to carry them.
+  registerBundledLicenses();
   // libmpv must be loaded before the first Player is constructed.
   MediaKit.ensureInitialized();
   // Once, before the first frame: whether this is a TV decides the layout
