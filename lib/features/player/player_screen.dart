@@ -1503,8 +1503,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         infoHash: request.infoHash,
         fileIdx: fileIdx,
         offset: at.streamPos,
-        filmSeconds: at.film.inMicroseconds / Duration.microsecondsPerSecond,
-        playing: _playing,
+        durationSeconds:
+            _duration.inMicroseconds / Duration.microsecondsPerSecond,
       );
     } catch (_) {
       // A hint the server never hears is a hint it goes without; it has an

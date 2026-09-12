@@ -17,7 +17,9 @@ import '../../support/player_harness.dart';
 /// byte offset, and its own position in the picture. Nothing here is about
 /// what the server does with them.
 void main() {
-  testWidgets('the player says where it is, in both units', (tester) async {
+  testWidgets('the player says where it is and how long the film is', (
+    tester,
+  ) async {
     final harness = PlayerHarness(
       configureEngine: (engine) => engine.playheadReport = const PlayheadReport(
         streamPos: 3304543293,
@@ -28,6 +30,7 @@ void main() {
     // No position has been reported and none needs to be: reporting runs on
     // a clock from the moment the media is open, because start-up is when
     // the server most needs to be told and when a player says least.
+    harness.engine.emitDuration(const Duration(seconds: 6669));
     harness.engine.emitPlaying(true);
     await tester.pump();
     await tester.pump();
@@ -39,7 +42,11 @@ void main() {
       3304543293,
       reason: 'the demuxer own byte offset, not one derived from the time',
     );
-    expect(report.filmSeconds, 939);
+    expect(
+      report.durationSeconds,
+      6669,
+      reason: "the film's length, which with the file's size is its bitrate",
+    );
   });
 
   testWidgets('it keeps reporting while the position is not moving', (

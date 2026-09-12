@@ -75,45 +75,43 @@ pub fn server_torrent_stats(
 }
 
 /// **Tells the server where the player is.** `offset` is the player's own
-/// byte offset into the file (mpv's `stream-pos`), `film_seconds` its
-/// position in the picture (`time-pos`), and `playing` whether it is
-/// actually advancing rather than paused, stalled or buffering.
+/// byte offset into the file (mpv's `stream-pos`), and `duration_seconds`
+/// how long the film is (zero or negative for "the player does not know").
 ///
-/// The server infers all of this from byte ranges otherwise, and a byte
+/// The server infers the playhead from byte ranges otherwise, and a byte
 /// range does not carry it: mpv reads the container index with the same
 /// kind of request it seeks with, and keeps a second reader crawling that
 /// index while it plays. Told directly, the retention window sits on the
-/// film, and the bitrate that sizes it is bytes-of-file over
-/// seconds-of-film rather than something measured through delivery.
+/// film.
+///
+/// The duration is the other half and is not a hint about position at all:
+/// with the file's own size it *is* the film's bitrate, which is what sizes
+/// a window measured in seconds. The server used to estimate that from how
+/// fast bytes left it, and produced three bytes a second and then seventeen
+/// on two successive field runs, each of which collapsed the window onto
+/// its floor and stopped playback. Size over duration is arithmetic.
 ///
 /// Call it about once a second while a film is open. **It never errors and
 /// never blocks on the network**: a server that is not running, a torrent
-/// this process is not streaming, a nonsensical `film_seconds` -- all are
-/// nothing to say, said silently. Stop calling and the hint goes stale in
-/// fifteen seconds.
+/// this process is not streaming, a nonsensical number -- all are nothing
+/// to say, said silently. Stop calling and the hint goes stale in fifteen
+/// seconds and the server's own inference answers again.
 pub fn server_note_playhead(
     info_hash: String,
     file_idx: i64,
     offset: i64,
-    film_seconds: f64,
-    playing: bool,
+    duration_seconds: f64,
 ) -> anyhow::Result<()> {
     guarded_ok(move || {
         let (Ok(file_idx), Ok(offset)) = (usize::try_from(file_idx), u64::try_from(offset)) else {
             return;
         };
         // `Duration::from_secs_f64` panics on a negative or a NaN, and this
-        // number comes from a player through Dart.
-        if !film_seconds.is_finite() || film_seconds < 0.0 {
-            return;
-        }
-        crate::server::note_playhead(
-            &info_hash,
-            file_idx,
-            offset,
-            std::time::Duration::from_secs_f64(film_seconds),
-            playing,
-        );
+        // number comes from a player through Dart. A film whose length the
+        // player does not know yet arrives as zero.
+        let duration = (duration_seconds.is_finite() && duration_seconds > 0.0)
+            .then(|| std::time::Duration::from_secs_f64(duration_seconds));
+        crate::server::note_playhead(&info_hash, file_idx, offset, duration);
     })
 }
 

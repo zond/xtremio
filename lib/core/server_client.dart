@@ -122,18 +122,20 @@ abstract interface class StreamNumbersReader {
 /// answers nothing, and the server has its own answer without it.
 abstract interface class PlayheadReporter {
   /// Where the player is in `fileIdx` of `infoHash`: [offset] its own byte
-  /// offset into the file, [filmSeconds] its position in the picture, and
-  /// [playing] whether it is advancing rather than paused or stalled.
+  /// offset into the file, and [durationSeconds] how long the film is (zero
+  /// where the player does not know yet).
   ///
-  /// The server infers all of this from byte ranges otherwise, and cannot
-  /// do it reliably -- a container-index read and a seek into the tail are
-  /// the same request. Call it about once a second while a film is open.
+  /// The server infers the playhead from byte ranges otherwise and cannot do
+  /// it reliably -- a container-index read and a seek into the tail are the
+  /// same request. The duration is not about position at all: with the
+  /// file's size it is the film's bitrate, which is what sizes a window
+  /// measured in seconds, and it is arithmetic where measuring it was three
+  /// rounds of guesswork. Call it about once a second while a film is open.
   Future<void> notePlayhead({
     required String infoHash,
     required int fileIdx,
     required int offset,
-    required double filmSeconds,
-    required bool playing,
+    required double durationSeconds,
   });
 }
 
@@ -240,14 +242,12 @@ class ServerClient
     required String infoHash,
     required int fileIdx,
     required int offset,
-    required double filmSeconds,
-    required bool playing,
+    required double durationSeconds,
   }) => rust.serverNotePlayhead(
     infoHash: infoHash,
     fileIdx: fileIdx,
     offset: offset,
-    filmSeconds: filmSeconds,
-    playing: playing,
+    durationSeconds: durationSeconds,
   );
 
   /// Base URL of the running server, or null when stopped.

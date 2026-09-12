@@ -18,8 +18,7 @@ class FakePlayheadReporter implements PlayheadReporter {
     required String infoHash,
     required int fileIdx,
     required int offset,
-    required double filmSeconds,
-    required bool playing,
+    required double durationSeconds,
   }) async {
     callLog?.add('playhead');
     reports.add(
@@ -27,8 +26,7 @@ class FakePlayheadReporter implements PlayheadReporter {
         infoHash: infoHash,
         fileIdx: fileIdx,
         offset: offset,
-        filmSeconds: filmSeconds,
-        playing: playing,
+        durationSeconds: durationSeconds,
       ),
     );
   }
@@ -40,13 +38,11 @@ class PlayheadCall {
     required this.infoHash,
     required this.fileIdx,
     required this.offset,
-    required this.filmSeconds,
-    required this.playing,
+    required this.durationSeconds,
   });
 
   final String infoHash;
   final int fileIdx;
   final int offset;
-  final double filmSeconds;
-  final bool playing;
+  final double durationSeconds;
 }

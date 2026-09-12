@@ -323,10 +323,11 @@ pub fn torrent_stats(
 /// follows the film rather than a guess made from byte ranges.
 ///
 /// `offset` is the player's own byte offset into the file (mpv's
-/// `stream-pos`) and `film` its position in the picture (`time-pos`).
-/// Together they are the playhead and the film's bitrate, neither inferred:
-/// the server otherwise has to tell a container-index read from a seek by
-/// the shape of a `Range` header, and cannot.
+/// `stream-pos`), which is where the retention window belongs -- the server
+/// otherwise has to tell a container-index read from a seek by the shape of
+/// a `Range` header, and cannot. `duration` is how long the film is, which
+/// with the file's own size is its bitrate, and that is what sizes a window
+/// measured in seconds. Neither is inferred and neither is measured.
 ///
 /// **A hint, and silent when there is nothing to hint to.** No error when
 /// the server is not running, the torrent is not this process's, or nothing
@@ -334,15 +335,14 @@ pub fn torrent_stats(
 /// film is open, and a caller that had to handle "not yet" every second
 /// would handle it by ignoring it. A hint that stops arriving goes stale at
 /// the server in fifteen seconds and the inference answers again.
-pub fn note_playhead(info_hash: &str, file_idx: usize, offset: u64, film: Duration, playing: bool) {
+pub fn note_playhead(info_hash: &str, file_idx: usize, offset: u64, duration: Option<Duration>) {
     let Some(app) = crate::state::current() else {
         return;
     };
     let Some(handle) = app.server.running() else {
         return;
     };
-    crate::env::CONCURRENT
-        .block_on(handle.note_playhead(info_hash, file_idx, offset, film, playing));
+    crate::env::CONCURRENT.block_on(handle.note_playhead(info_hash, file_idx, offset, duration));
 }
 
 /// Pins `file_idx` of `info_hash` as an offline download: the engine is
