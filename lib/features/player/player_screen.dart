@@ -1502,7 +1502,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _playheadReporter?.notePlayhead(
         infoHash: request.infoHash,
         fileIdx: fileIdx,
-        offset: at.streamPos,
+        filmSeconds: at.film.inMicroseconds / Duration.microsecondsPerSecond,
         durationSeconds:
             _duration.inMicroseconds / Duration.microsecondsPerSecond,
       );

@@ -39,15 +39,23 @@ Future<String> serverTorrentStats({
   trackers: trackers,
 );
 
-/// **Tells the server where the player is.** `offset` is the player's own
-/// byte offset into the file (mpv's `stream-pos`), and `duration_seconds`
-/// how long the film is (zero or negative for "the player does not know").
+/// **Tells the server where the player is.** `film_seconds` is where the
+/// player is in the *picture* -- mpv's `time-pos`, the number the progress
+/// bar draws -- and `duration_seconds` how long the picture is (zero or
+/// negative for "the player does not know").
 ///
 /// The server infers the playhead from byte ranges otherwise, and a byte
 /// range does not carry it: mpv reads the container index with the same
 /// kind of request it seeks with, and keeps a second reader crawling that
 /// index while it plays. Told directly, the retention window sits on the
 /// film.
+///
+/// Deliberately not the player's own byte offset. `stream-pos` is where
+/// the demuxer has *read* to, and it reads that index as readily as the
+/// film, so reporting it faithfully puts the window at the end of the file
+/// while the viewer is sixteen minutes in -- the same failure being told
+/// was meant to fix. There is only one `time-pos`. The server converts it
+/// at the film's average rate and lets a nearby read correct the drift.
 ///
 /// The duration is the other half and is not a hint about position at all:
 /// with the file's own size it *is* the film's bitrate, which is what sizes
@@ -64,12 +72,12 @@ Future<String> serverTorrentStats({
 Future<void> serverNotePlayhead({
   required String infoHash,
   required PlatformInt64 fileIdx,
-  required PlatformInt64 offset,
+  required double filmSeconds,
   required double durationSeconds,
 }) => RustLib.instance.api.crateApiServerServerNotePlayhead(
   infoHash: infoHash,
   fileIdx: fileIdx,
-  offset: offset,
+  filmSeconds: filmSeconds,
   durationSeconds: durationSeconds,
 );
 

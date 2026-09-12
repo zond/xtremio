@@ -398,18 +398,17 @@ class PlaybackScope extends InheritedWidget {
 /// [hardwareDecoding] (`profile.settings.hardwareDecoding`) is fixed at
 /// creation: media_kit takes it as the video controller's configuration
 /// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
-/// Where a player is, in both of the units that matter.
+/// Where a player is in the picture.
 ///
-/// Two numbers rather than one because they answer different questions and
-/// neither derives from the other on a variable-bitrate film: [streamPos]
-/// is where the retention window belongs, and [streamPos] over [film] is
-/// the film's bitrate, which is what sizes it.
+/// The position the progress bar draws, and the only one there is: mpv also
+/// has a byte offset (`stream-pos`), but that is where its demuxer has
+/// *read* to and it reads the container index as readily as the film, so
+/// reporting it faithfully put the retention window at the end of the file
+/// while the viewer was sixteen minutes in. The server converts this one at
+/// the film's average rate, which it gets from the length, and lets a read
+/// sitting near the result correct it.
 final class PlayheadReport {
-  const PlayheadReport({required this.streamPos, required this.film});
-
-  /// The demuxer's byte offset into the file it is reading (mpv's
-  /// `stream-pos`).
-  final int streamPos;
+  const PlayheadReport({required this.film});
 
   /// The position in the picture (mpv's `time-pos`).
   final Duration film;
@@ -1110,13 +1109,9 @@ class MediaKitEngine implements PlaybackEngine {
     final native = _player.platform;
     if (native is! NativePlayer || _disposed) return null;
     try {
-      final at = int.tryParse(await native.getProperty('stream-pos'));
       final film = double.tryParse(await native.getProperty('time-pos'));
-      if (at == null || film == null || at < 0 || film < 0 || !film.isFinite) {
-        return null;
-      }
+      if (film == null || film < 0 || !film.isFinite) return null;
       return PlayheadReport(
-        streamPos: at,
         film: Duration(microseconds: (film * 1000000).round()),
       );
     } catch (_) {

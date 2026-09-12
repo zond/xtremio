@@ -14,16 +14,15 @@ import '../../support/player_harness.dart';
 /// window off the film and takes the pieces the viewer is waiting on with
 /// it, which is what the field log of 2026-09-12 is.
 ///
-/// So these are about the two numbers leaving the app: the player's own
-/// byte offset, and its own position in the picture. Nothing here is about
-/// what the server does with them.
+/// So these are about the two numbers leaving the app: where the player is
+/// in the picture, and how long the picture is. Nothing here is about what
+/// the server does with them.
 void main() {
   testWidgets('the player says where it is and how long the film is', (
     tester,
   ) async {
     final harness = PlayerHarness(
       configureEngine: (engine) => engine.playheadReport = const PlayheadReport(
-        streamPos: 3304543293,
         film: Duration(seconds: 939),
       ),
     );
@@ -39,9 +38,10 @@ void main() {
     expect(harness.playhead.reports, isNotEmpty);
     final report = harness.playhead.reports.last;
     expect(
-      report.offset,
-      3304543293,
-      reason: 'the demuxer own byte offset, not one derived from the time',
+      report.filmSeconds,
+      939,
+      reason: 'where the player is in the picture, which is the only '
+          'position it has one of',
     );
     expect(
       report.durationSeconds,
@@ -69,7 +69,6 @@ void main() {
     final harness = PlayerHarness(
       player: fixture,
       configureEngine: (engine) => engine.playheadReport = const PlayheadReport(
-        streamPos: 3304543293,
         film: Duration(seconds: 939),
       ),
     );
@@ -95,7 +94,6 @@ void main() {
     // seconds of the one thing that was still true.
     final harness = PlayerHarness(
       configureEngine: (engine) => engine.playheadReport = const PlayheadReport(
-        streamPos: 3304543293,
         film: Duration(seconds: 939),
       ),
     );

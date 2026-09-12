@@ -164,7 +164,7 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiServerServerNotePlayhead({
     required String infoHash,
     required PlatformInt64 fileIdx,
-    required PlatformInt64 offset,
+    required double filmSeconds,
     required double durationSeconds,
   });
 
@@ -1057,7 +1057,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<void> crateApiServerServerNotePlayhead({
     required String infoHash,
     required PlatformInt64 fileIdx,
-    required PlatformInt64 offset,
+    required double filmSeconds,
     required double durationSeconds,
   }) {
     return handler.executeNormal(
@@ -1066,7 +1066,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(infoHash, serializer);
           sse_encode_i_64(fileIdx, serializer);
-          sse_encode_i_64(offset, serializer);
+          sse_encode_f_64(filmSeconds, serializer);
           sse_encode_f_64(durationSeconds, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -1080,7 +1080,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_AnyhowException,
         ),
         constMeta: kCrateApiServerServerNotePlayheadConstMeta,
-        argValues: [infoHash, fileIdx, offset, durationSeconds],
+        argValues: [infoHash, fileIdx, filmSeconds, durationSeconds],
         apiImpl: this,
       ),
     );
@@ -1089,7 +1089,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiServerServerNotePlayheadConstMeta =>
       const TaskConstMeta(
         debugName: "server_note_playhead",
-        argNames: ["infoHash", "fileIdx", "offset", "durationSeconds"],
+        argNames: ["infoHash", "fileIdx", "filmSeconds", "durationSeconds"],
       );
 
   @override

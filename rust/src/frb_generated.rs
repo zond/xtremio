@@ -1126,7 +1126,7 @@ fn wire__crate__api__server__server_note_playhead_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_info_hash = <String>::sse_decode(&mut deserializer);
             let api_file_idx = <i64>::sse_decode(&mut deserializer);
-            let api_offset = <i64>::sse_decode(&mut deserializer);
+            let api_film_seconds = <f64>::sse_decode(&mut deserializer);
             let api_duration_seconds = <f64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
@@ -1135,7 +1135,7 @@ fn wire__crate__api__server__server_note_playhead_impl(
                         let output_ok = crate::api::server::server_note_playhead(
                             api_info_hash,
                             api_file_idx,
-                            api_offset,
+                            api_film_seconds,
                             api_duration_seconds,
                         )?;
                         std::result::Result::Ok(output_ok)

@@ -74,15 +74,23 @@ pub fn server_torrent_stats(
     })
 }
 
-/// **Tells the server where the player is.** `offset` is the player's own
-/// byte offset into the file (mpv's `stream-pos`), and `duration_seconds`
-/// how long the film is (zero or negative for "the player does not know").
+/// **Tells the server where the player is.** `film_seconds` is where the
+/// player is in the *picture* -- mpv's `time-pos`, the number the progress
+/// bar draws -- and `duration_seconds` how long the picture is (zero or
+/// negative for "the player does not know").
 ///
 /// The server infers the playhead from byte ranges otherwise, and a byte
 /// range does not carry it: mpv reads the container index with the same
 /// kind of request it seeks with, and keeps a second reader crawling that
 /// index while it plays. Told directly, the retention window sits on the
 /// film.
+///
+/// Deliberately not the player's own byte offset. `stream-pos` is where
+/// the demuxer has *read* to, and it reads that index as readily as the
+/// film, so reporting it faithfully puts the window at the end of the file
+/// while the viewer is sixteen minutes in -- the same failure being told
+/// was meant to fix. There is only one `time-pos`. The server converts it
+/// at the film's average rate and lets a nearby read correct the drift.
 ///
 /// The duration is the other half and is not a hint about position at all:
 /// with the file's own size it *is* the film's bitrate, which is what sizes
@@ -99,19 +107,24 @@ pub fn server_torrent_stats(
 pub fn server_note_playhead(
     info_hash: String,
     file_idx: i64,
-    offset: i64,
+    film_seconds: f64,
     duration_seconds: f64,
 ) -> anyhow::Result<()> {
     guarded_ok(move || {
-        let (Ok(file_idx), Ok(offset)) = (usize::try_from(file_idx), u64::try_from(offset)) else {
+        let Ok(file_idx) = usize::try_from(file_idx) else {
             return;
         };
-        // `Duration::from_secs_f64` panics on a negative or a NaN, and this
-        // number comes from a player through Dart. A film whose length the
-        // player does not know yet arrives as zero.
+        // `Duration::from_secs_f64` panics on a negative or a NaN, and both
+        // numbers come from a player through Dart. A position of zero is the
+        // start of the film and is meant; a length of zero is a film whose
+        // length the player does not know yet, and is not.
+        if !film_seconds.is_finite() || film_seconds < 0.0 {
+            return;
+        }
+        let film = std::time::Duration::from_secs_f64(film_seconds);
         let duration = (duration_seconds.is_finite() && duration_seconds > 0.0)
             .then(|| std::time::Duration::from_secs_f64(duration_seconds));
-        crate::server::note_playhead(&info_hash, file_idx, offset, duration);
+        crate::server::note_playhead(&info_hash, file_idx, film, duration);
     })
 }
 

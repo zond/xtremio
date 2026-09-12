@@ -4,8 +4,7 @@ import 'package:xtremio/core/server_client.dart';
 ///
 /// What a test reads it for is the thing the server cannot work out on its
 /// own: that the app said where the player was, for the film on screen, and
-/// with the player's own two numbers rather than a guess derived from one
-/// of them.
+/// in the picture rather than in the file.
 class FakePlayheadReporter implements PlayheadReporter {
   final List<PlayheadCall> reports = [];
 
@@ -30,7 +29,7 @@ class FakePlayheadReporter implements PlayheadReporter {
   Future<void> notePlayhead({
     required String infoHash,
     required int fileIdx,
-    required int offset,
+    required double filmSeconds,
     required double durationSeconds,
   }) async {
     callLog?.add('playhead');
@@ -38,7 +37,7 @@ class FakePlayheadReporter implements PlayheadReporter {
       PlayheadCall(
         infoHash: infoHash,
         fileIdx: fileIdx,
-        offset: offset,
+        filmSeconds: filmSeconds,
         durationSeconds: durationSeconds,
       ),
     );
@@ -50,12 +49,12 @@ class PlayheadCall {
   const PlayheadCall({
     required this.infoHash,
     required this.fileIdx,
-    required this.offset,
+    required this.filmSeconds,
     required this.durationSeconds,
   });
 
   final String infoHash;
   final int fileIdx;
-  final int offset;
+  final double filmSeconds;
   final double durationSeconds;
 }

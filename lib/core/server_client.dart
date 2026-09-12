@@ -121,9 +121,9 @@ abstract interface class StreamNumbersReader {
 /// tests, and because it is the one call in here that is a *hint*: it
 /// answers nothing, and the server has its own answer without it.
 abstract interface class PlayheadReporter {
-  /// Where the player is in `fileIdx` of `infoHash`: [offset] its own byte
-  /// offset into the file, and [durationSeconds] how long the film is (zero
-  /// where the player does not know yet).
+  /// Where the player is in `fileIdx` of `infoHash`: [filmSeconds] where it
+  /// is in the *picture*, and [durationSeconds] how long the picture is
+  /// (zero where the player does not know yet).
   ///
   /// The server infers the playhead from byte ranges otherwise and cannot do
   /// it reliably -- a container-index read and a seek into the tail are the
@@ -131,10 +131,16 @@ abstract interface class PlayheadReporter {
   /// file's size it is the film's bitrate, which is what sizes a window
   /// measured in seconds, and it is arithmetic where measuring it was three
   /// rounds of guesswork. Call it about once a second while a film is open.
+  ///
+  /// In the picture and not in the file, because the player's byte offset is
+  /// where its demuxer has *read* to and it reads the container index as
+  /// readily as the film -- which put the window at the end of the file
+  /// while the viewer was sixteen minutes in. There is only one position in
+  /// the picture, and it is the one the progress bar draws.
   Future<void> notePlayhead({
     required String infoHash,
     required int fileIdx,
-    required int offset,
+    required double filmSeconds,
     required double durationSeconds,
   });
 
@@ -252,12 +258,12 @@ class ServerClient
   Future<void> notePlayhead({
     required String infoHash,
     required int fileIdx,
-    required int offset,
+    required double filmSeconds,
     required double durationSeconds,
   }) => rust.serverNotePlayhead(
     infoHash: infoHash,
     fileIdx: fileIdx,
-    offset: offset,
+    filmSeconds: filmSeconds,
     durationSeconds: durationSeconds,
   );
 
