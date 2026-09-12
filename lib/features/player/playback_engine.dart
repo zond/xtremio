@@ -542,6 +542,19 @@ class MediaKitEngine implements PlaybackEngine {
     // media_kit puts [memoryCacheBytes] on both, and [backCacheBytes] says
     // why the two are not the same number.
     'demuxer-max-back-bytes': '$backCacheBytes',
+    // **TEMPORARY, with the `logLevel` above and stream-server's
+    // `stage="stream_request"` line.**
+    //
+    // Something reopened a read once a second for a whole session at
+    // `file_size - 25,961,713` -- about 41 kB each time, advancing some
+    // sixty bytes. That offset is 15.2 MB before this file's `moov`, so it
+    // is inside `mdat`: media data, not the container index the retention
+    // code has been calling it and sizing two constants around.
+    //
+    // The server can say what was asked for, and now does. What it cannot
+    // say is which part of a player wanted it, because a player sends a
+    // byte range and nothing else. This is that half.
+    'msg-level': 'all=info,demux=v,stream=v,cache=v',
   };
 
   /// What tells mpv the rate a display is refreshing at, in hertz, and an
@@ -779,6 +792,13 @@ class MediaKitEngine implements PlaybackEngine {
   /// media_kit's own defaults with [memoryCacheBytes] named.
   static const PlayerConfiguration playerConfiguration = PlayerConfiguration(
     bufferSize: memoryCacheBytes,
+    // **TEMPORARY, to answer one question.** media_kit gates mpv's log at
+    // `error` by default, so nothing below that reaches [engineLog] whatever
+    // `msg-level` says. `info` is the level mpv's demuxer announces seeks,
+    // stream opens and cache state at; `debug` and `trace` log per packet
+    // and would evict the whole diagnostics ring in seconds, taking the
+    // server's own lines -- the ones we actually need -- with them.
+    logLevel: MPVLogLevel.info,
   );
 
   /// The controller configuration for a `hardwareDecoding` setting.
@@ -889,7 +909,14 @@ class MediaKitEngine implements PlaybackEngine {
 
   @override
   Stream<String> get engineLog => _player.stream.log
-      .where((entry) => entry.level == 'error')
+      .where(
+        (entry) =>
+            entry.level == 'error' ||
+            // TEMPORARY, with `msg-level` in [mpvOverrides]: the subsystems
+            // that say why a read happened, and only those -- everything
+            // else at this level is noise that would evict the ring.
+            const {'demux', 'stream', 'cache'}.contains(entry.prefix),
+      )
       .map((entry) => '${entry.prefix}: ${entry.text}');
 
   @override
