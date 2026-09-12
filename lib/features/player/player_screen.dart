@@ -97,6 +97,21 @@ class PlayerScreen extends StatefulWidget {
   /// Minimum spacing of `TimeChanged` reports to the core.
   static const Duration timeReportInterval = Duration(seconds: 1);
 
+  /// How long the position may stand still, with the player saying it is
+  /// playing and not buffering, before the viewer is told it is waiting.
+  ///
+  /// mpv reports a position at least once a second while it is decoding,
+  /// so five missed reports is unambiguous -- and still a fraction of the
+  /// 26 to 51 seconds a starved read really took in the field. Above
+  /// [controlsTimeout] deliberately: a hiccup shorter than the controls
+  /// take to fade is not worth putting a card over the picture for.
+  static const Duration stuckAfter = Duration(seconds: 5);
+
+  /// How often that is checked. A position that has stopped produces no
+  /// events at all, which is exactly why it needs a clock and not a
+  /// listener.
+  static const Duration stuckInterval = Duration(seconds: 1);
+
   /// How long the stats OSD stays up after the pointer stops moving.
   static const Duration statsHoverTimeout = Duration(seconds: 3);
 
@@ -516,6 +531,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Set once the next episode's screen has been pushed in our place: this
   /// screen then neither unloads the core's player nor reacts to its state.
   bool _handedOver = false;
+
+  /// **Whether the viewer is waiting**, which is not the same question as
+  /// whether mpv says it is buffering.
+  ///
+  /// mpv's flag means its demuxer cache ran dry *during playback*. It does
+  /// not cover a read that is blocked in the server while mpv is seeking,
+  /// and on 2026-09-12 that is what happened: the flag cleared when the
+  /// container index arrived, the overlay came down, and nothing played
+  /// for three and a half minutes with reads blocking 26, 34, 44 and 51
+  /// seconds. There is no second stall in that log, because by mpv's
+  /// reckoning there was not one.
+  ///
+  /// A position that is not moving while the player says it is playing is
+  /// the signal that cannot be fooled, so it is the one the overlay adds.
+  /// Counted in ticks of [PlayerScreen.stuckInterval] rather than measured
+  /// against a clock: a position that has stopped is only observable by
+  /// looking, so the looking may as well be the unit.
+  Timer? _stuckTimer;
+  int _stillTicks = 0;
+  bool _positionStuck = false;
+
+  /// Whether the player has reported a position at all yet.
+  ///
+  /// A position cannot have *stopped* moving before it has moved: until the
+  /// first report there is nothing to compare against, and a player that is
+  /// still opening is not one that is stuck. It is also what keeps a
+  /// backend that reports no positions at all -- which is every fake -- from
+  /// looking stuck forever.
+  bool _positionSeen = false;
 
   /// One [_reportPlayhead] in flight at a time, and when the last one went.
   PlayheadReporter? _playheadReporter;
@@ -1412,6 +1456,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onPosition(Duration position) {
     if (_handedOver || _casting) return;
+    _positionSeen = true;
+    if (position != _position.value) {
+      _stillTicks = 0;
+      if (_positionStuck) {
+        DiagnosticsLog.info(
+          'player',
+          'playing again at ${position.inSeconds}s, after the position stood '
+              'still with mpv reporting no stall',
+        );
+        setState(() => _positionStuck = false);
+      }
+    }
     _reportedPosition = position;
     _position.value = position;
     _reportTime(position);
@@ -1508,8 +1564,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // the polling back, at once if the media arrived already stalled.
       _pauseTorrentStats();
     });
+    _startStuckWatch();
     _syncStatsPolls();
     _maybeAutoPickSubtitles();
+  }
+
+  /// Watches for a position that has stopped moving while the player says
+  /// it is playing; see [_positionStuck].
+  void _startStuckWatch() {
+    _stuckTimer?.cancel();
+    _stillTicks = 0;
+    _positionSeen = false;
+    _stuckTimer = Timer.periodic(
+      PlayerScreen.stuckInterval,
+      (_) => _checkStuck(),
+    );
+  }
+
+  void _checkStuck() {
+    // Paused is not waiting, mpv's own flag is already drawn, and while a
+    // receiver has the stream the local position is not the viewer's.
+    if (!mounted ||
+        !_playing ||
+        !_positionSeen ||
+        _buffering ||
+        _casting ||
+        _handedOver) {
+      _stillTicks = 0;
+      return;
+    }
+    if (_positionStuck) return;
+    _stillTicks++;
+    final still = PlayerScreen.stuckInterval * _stillTicks;
+    if (still < PlayerScreen.stuckAfter) return;
+    DiagnosticsLog.warn(
+      'player',
+      'the position has not moved for '
+          '${still.inSeconds}s at '
+          '${_position.value.inSeconds}s, and mpv reports no stall',
+    );
+    setState(() => _positionStuck = true);
+    _syncStatsPolls();
   }
 
   /// mpv's own error log. Not shown, only recorded: this is where the
@@ -1735,7 +1830,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!_mediaLoaded || _torrentStatsRequest == null) return;
     final cadence = _appHidden
         ? null
-        : _buffering
+        : _waiting
         ? PlayerScreen.torrentStallStatsInterval
         : _statsVisible
         ? PlayerScreen.torrentStatsOverlayInterval
@@ -1932,8 +2027,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// server can still be asked about. Everything the status text puts
   /// before buffering (a failure, an unplayable stream, a stream not
   /// resolved yet) is not a stall and keeps its own presentation.
+  /// Either of the two ways of waiting; see [_positionStuck].
+  bool get _waiting => _buffering || _positionStuck;
+
   bool _stallOverlayShown(PlayerState? state) =>
-      _buffering &&
+      _waiting &&
       _mediaLoaded &&
       _engineError == null &&
       _opened != null &&
@@ -4238,6 +4336,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _pauseUpNext();
     _controlsTimer?.cancel();
     _controlsTimer = null;
+    _stuckTimer?.cancel();
+    _stuckTimer = null;
   }
 
   /// Stops the player, waits for it, and only then leaves the screen.
@@ -5085,7 +5185,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final unplayable = state.unplayableReason;
     if (unplayable != null) return unplayable;
     if (_opened == null) return 'Resolving stream…';
-    if (_buffering) {
+    if (_waiting) {
       // For a torrent this is what the stall card says with nothing from
       // the server yet, and the whole of what a stall says without one.
       return state.selectedStream?.kind == StreamKind.torrent

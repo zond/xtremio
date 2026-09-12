@@ -12,7 +12,34 @@ import '../../support/tv.dart';
 /// Our own controls over the video: visibility, transport, seek bar, time,
 /// volume, fullscreen and the keyboard.
 void main() {
+  /// Where [pumpWatching] has got to, so a test's pumps keep advancing it.
+  var watched = const Duration(seconds: 65);
+
   const total = Duration(minutes: 96);
+
+  /// Pumps [duration] as a player that is really *watching*: the position
+  /// advances while the clock does.
+  ///
+  /// A fixture that says "playing" and leaves the position where it was is
+  /// a player that has stalled, and since the buffering card learned to
+  /// notice that ([PlayerScreen.stuckAfter]) it is drawn over the picture
+  /// and holds the controls open -- correctly, and not what these tests are
+  /// about.
+  Future<void> pumpWatching(
+    WidgetTester tester,
+    PlayerHarness harness,
+    Duration duration,
+  ) async {
+    for (
+      var elapsed = Duration.zero;
+      elapsed < duration;
+      elapsed += PlayerScreen.stuckInterval
+    ) {
+      watched += PlayerScreen.stuckInterval;
+      harness.engine.emitPosition(watched);
+      await tester.pump(PlayerScreen.stuckInterval);
+    }
+  }
 
   Future<PlayerHarness> pumpPlaying(WidgetTester tester) async {
     useWideViewport(tester);
@@ -77,7 +104,7 @@ void main() {
     // resting fraction of the height.
     engine.emitPlaying(true);
     await pumpEvents(tester);
-    await tester.pump(PlayerScreen.controlsTimeout);
+    await pumpWatching(tester, harness, PlayerScreen.controlsTimeout);
     await tester.pumpAndSettle();
     expect(controlsOpacity(tester), 0);
     expect(
@@ -98,12 +125,12 @@ void main() {
     await mouse.moveTo(tester.getCenter(find.text('video surface')));
     await tester.pumpAndSettle();
     expect(controlsOpacity(tester), 1);
-    await tester.pump(PlayerScreen.controlsTimeout ~/ 2);
+    await pumpWatching(tester, harness, PlayerScreen.controlsTimeout ~/ 2);
     await mouse.moveBy(const Offset(5, 0));
-    await tester.pump(PlayerScreen.controlsTimeout ~/ 2);
+    await pumpWatching(tester, harness, PlayerScreen.controlsTimeout ~/ 2);
     await tester.pumpAndSettle();
     expect(controlsOpacity(tester), 1);
-    await tester.pump(PlayerScreen.controlsTimeout);
+    await pumpWatching(tester, harness, PlayerScreen.controlsTimeout);
     await tester.pumpAndSettle();
     expect(controlsOpacity(tester), 0);
 
