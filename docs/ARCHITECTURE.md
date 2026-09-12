@@ -1251,13 +1251,13 @@ what every model field means. The shape of the thing is in the
   sourced from `AddonInstalled`/`AddonUninstalled`/`AddonUpgraded`) show
   as a SnackBar.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
-  of the `zond/stremio-core` fork (`cfd27a7`: release 0.62.1 plus one
+  of the `zond/stremio-core` fork (`b4c92f3`: release 0.62.1 plus one
   commit that keeps an addon's own subtitle properties -- `fpsMilli`,
   `subtitleFileName`, `releaseGroup` and the rest -- in a flattened
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`78d91cb`: generated
+  features, `zond/stream-server` at a fixed rev (`aa50134`: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
   counts, the buffer profiles behind `?buffer=`, cache usage and
