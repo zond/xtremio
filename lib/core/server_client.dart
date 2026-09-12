@@ -7,10 +7,6 @@ import 'state/dht_status.dart';
 import 'state/server_storage.dart';
 import 'state/stream_numbers.dart';
 
-/// stremio-core's default streaming-server port, preferred so a persisted
-/// profile that points at `http://127.0.0.1:11470` still reaches us.
-const int kDefaultServerPort = 11470;
-
 /// Control over the server's LAN media listener, which is what a cast
 /// session needs and the only thing that ever turns it on.
 ///
@@ -195,20 +191,19 @@ class ServerClient
 
   /// Starts the server (idempotent) and returns its base URL.
   ///
-  /// [port] 0 asks for an ephemeral port; with [fallbackToEphemeral] a busy
-  /// preferred port falls back to an ephemeral one instead of failing.
+  /// The port is the OS's choice and the returned URL is the only place it
+  /// is known; nothing downstream assumes a number. It used to ask for
+  /// 11470 -- stremio-core's default -- and fall back when that was taken,
+  /// which only ever bought a collision with a desktop Stremio or a second
+  /// instance of this app.
   Future<Uri> start({
     required Directory configDir,
     required Directory cacheDir,
-    int port = kDefaultServerPort,
-    bool fallbackToEphemeral = true,
   }) async {
     final url = await rust.serverStart(
       config: rust.ServerConfig(
         configDir: configDir.path,
         cacheDir: cacheDir.path,
-        port: port,
-        fallbackToEphemeral: fallbackToEphemeral,
       ),
     );
     return Uri.parse(url);

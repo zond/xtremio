@@ -306,8 +306,6 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     let base_url = url::Url::parse(&server_start(ServerConfig {
         config_dir: tmp.path().join("server").display().to_string(),
         cache_dir: cache_root.display().to_string(),
-        port: 0,
-        fallback_to_ephemeral: true,
     })?)?;
     // After the server is up, not before: a start-up sweep deletes the
     // pieces of every torrent the session does not know about yet, and
@@ -892,8 +890,6 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: cache_root.display().to_string(),
-            port: 0,
-            fallback_to_ephemeral: true,
         }),
     })?;
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -1257,8 +1253,6 @@ fn record_registry_fixture() -> anyhow::Result<()> {
     let base_url = url::Url::parse(&server_start(ServerConfig {
         config_dir: tmp.path().join("server").display().to_string(),
         cache_dir: cache_root.display().to_string(),
-        port: 0,
-        fallback_to_ephemeral: true,
     })?)?;
     // After the server is up: its start-up sweep takes the pieces of any
     // torrent the session does not know about.

@@ -135,9 +135,9 @@ The UI stays thin: discovery/library/addon logic lives in `stremio-core`, the
 bytes come from `stream-server`, and the client's job is presentation plus
 driving libmpv. `stream-server` runs **in-process**: the Rust crate in `rust/`
 links it as a library and starts it on its own thread with its own runtime,
-bound to `127.0.0.1` on port 11470 (stremio-core's default) and on an
-ephemeral port when that one is taken, so there is no sidecar binary to ship,
-launch, or keep alive on mobile. The Dart side never speaks HTTP to it: libmpv
+bound to `127.0.0.1` on a port the OS picks and retargeting stremio-core at
+the address it reads back, so no sidecar binary ships and no fixed port is
+lost to a desktop Stremio. The Dart side never speaks HTTP to it: libmpv
 fetches the media routes, the app's own questions — settings, a torrent's
 stats, storage, downloads — are FFI calls into the server's library API, and
 stremio-core's requests to it carry a per-launch bearer token that only the

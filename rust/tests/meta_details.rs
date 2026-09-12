@@ -43,8 +43,6 @@ fn meta_details_and_player_for_a_public_domain_torrent() -> anyhow::Result<()> {
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: tmp.path().join("cache/server").display().to_string(),
-            port: 0,
-            fallback_to_ephemeral: true,
         }),
     })?;
 
@@ -246,8 +244,6 @@ fn meta_details_for_a_series_and_a_selected_episode() -> anyhow::Result<()> {
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: tmp.path().join("cache/server").display().to_string(),
-            port: 0,
-            fallback_to_ephemeral: true,
         }),
     })?;
 

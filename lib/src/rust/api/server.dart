@@ -9,8 +9,9 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`
 
-/// Starts the embedded server (idempotent) and returns its base URL, e.g.
-/// `http://127.0.0.1:11470/`.
+/// Starts the embedded server (idempotent) and returns its base URL --
+/// `http://127.0.0.1:<port the OS picked>/`, which is the only place that
+/// port is ever known.
 Future<String> serverStart({required ServerConfig config}) =>
     RustLib.instance.api.crateApiServerServerStart(config: config);
 
@@ -317,8 +318,15 @@ PlatformInt64 serverLanMediaRequestsServed() =>
 Future<String?> serverLanMediaBaseUrl({String? peerIp}) =>
     RustLib.instance.api.crateApiServerServerLanMediaBaseUrl(peerIp: peerIp);
 
-/// Where and how the embedded server runs. Directories are decided by Dart
+/// Where the embedded server runs. Directories are decided by Dart
 /// (path_provider) and created by Rust if missing.
+///
+/// No port: the server binds an ephemeral loopback one and the app reads the
+/// address back off the handle (`server_start` returns it, and `core_init`
+/// retargets stremio-core at it). There used to be `port` and
+/// `fallback_to_ephemeral` here, defaulting to 11470 because that is what
+/// stremio-core's default profile points at -- but nothing downstream reads
+/// the number, so all a preferred port could do was collide.
 class ServerConfig {
   /// App-support directory for settings.json, logs/, localFiles/.
   final String configDir;
@@ -326,25 +334,10 @@ class ServerConfig {
   /// App-cache directory for the torrent piece cache.
   final String cacheDir;
 
-  /// Port on 127.0.0.1; 11470 is stremio-core's default, 0 = ephemeral.
-  final int port;
-
-  /// Retry with an ephemeral port if `port` is taken.
-  final bool fallbackToEphemeral;
-
-  const ServerConfig({
-    required this.configDir,
-    required this.cacheDir,
-    required this.port,
-    required this.fallbackToEphemeral,
-  });
+  const ServerConfig({required this.configDir, required this.cacheDir});
 
   @override
-  int get hashCode =>
-      configDir.hashCode ^
-      cacheDir.hashCode ^
-      port.hashCode ^
-      fallbackToEphemeral.hashCode;
+  int get hashCode => configDir.hashCode ^ cacheDir.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -352,7 +345,5 @@ class ServerConfig {
       other is ServerConfig &&
           runtimeType == other.runtimeType &&
           configDir == other.configDir &&
-          cacheDir == other.cacheDir &&
-          port == other.port &&
-          fallbackToEphemeral == other.fallbackToEphemeral;
+          cacheDir == other.cacheDir;
 }

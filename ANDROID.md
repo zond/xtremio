@@ -783,14 +783,16 @@ adb logcat -d | grep -E "flutter|xtremio|stream_server|rustls"
 # should show the embedded server starting, and no
 # "Expect rustls-platform-verifier to be initialized"
 
-adb forward tcp:11470 tcp:11470
-curl -si http://127.0.0.1:11470/heartbeat
+# The HTTP port is whatever the OS gave it, so read it out of logcat first:
+#   adb logcat -d | grep "embedded stream-server started"
+#   ... url=http://127.0.0.1:<port>/
+PORT=<the port from that line>
+adb forward tcp:$PORT tcp:$PORT
+curl -si http://127.0.0.1:$PORT/heartbeat
 # HTTP/1.1 401 Unauthorized — the control API wants the per-launch bearer
 # token only the Rust side holds; the 401 itself proves the server is up.
-# If 11470 was taken the app fell back to an ephemeral port; read the real
-# one from logcat instead. The BitTorrent listener (librqbit) is always on
-# an ephemeral UDP/TCP port for the embedded server, so nothing needs
-# forwarding or a fixed firewall rule for it.
+# The BitTorrent listener (librqbit) is on its own ephemeral UDP/TCP port,
+# so nothing needs forwarding or a fixed firewall rule for it either.
 
 # Discover showing Cinemeta posters proves HTTPS end to end
 ```

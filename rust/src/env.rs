@@ -775,8 +775,6 @@ mod tests {
         let url = crate::server::start(crate::server::StartConfig {
             config_dir: tmp.path().join("server"),
             cache_dir: tmp.path().join("cache"),
-            port: 0,
-            fallback_to_ephemeral: true,
         })
         .expect("server start");
 

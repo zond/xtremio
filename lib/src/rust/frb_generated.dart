@@ -1419,13 +1419,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ServerConfig dco_decode_server_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
     return ServerConfig(
       configDir: dco_decode_String(arr[0]),
       cacheDir: dco_decode_String(arr[1]),
-      port: dco_decode_u_16(arr[2]),
-      fallbackToEphemeral: dco_decode_bool(arr[3]),
     );
   }
 
@@ -1443,12 +1441,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       referenceCues: dco_decode_u_32(arr[4]),
       convincing: dco_decode_bool(arr[5]),
     );
-  }
-
-  @protected
-  int dco_decode_u_16(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as int;
   }
 
   @protected
@@ -1648,14 +1640,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_configDir = sse_decode_String(deserializer);
     var var_cacheDir = sse_decode_String(deserializer);
-    var var_port = sse_decode_u_16(deserializer);
-    var var_fallbackToEphemeral = sse_decode_bool(deserializer);
-    return ServerConfig(
-      configDir: var_configDir,
-      cacheDir: var_cacheDir,
-      port: var_port,
-      fallbackToEphemeral: var_fallbackToEphemeral,
-    );
+    return ServerConfig(configDir: var_configDir, cacheDir: var_cacheDir);
   }
 
   @protected
@@ -1675,12 +1660,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       referenceCues: var_referenceCues,
       convincing: var_convincing,
     );
-  }
-
-  @protected
-  int sse_decode_u_16(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint16();
   }
 
   @protected
@@ -1890,8 +1869,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.configDir, serializer);
     sse_encode_String(self.cacheDir, serializer);
-    sse_encode_u_16(self.port, serializer);
-    sse_encode_bool(self.fallbackToEphemeral, serializer);
   }
 
   @protected
@@ -1903,12 +1880,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.cues, serializer);
     sse_encode_u_32(self.referenceCues, serializer);
     sse_encode_bool(self.convincing, serializer);
-  }
-
-  @protected
-  void sse_encode_u_16(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint16(self);
   }
 
   @protected

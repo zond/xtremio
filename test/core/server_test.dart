@@ -34,7 +34,6 @@ void main() {
       final url = await server.start(
         configDir: Directory('${tmp.path}/server'),
         cacheDir: Directory('${tmp.path}/cache/server'),
-        port: 0,
       );
       expect(url.scheme, 'http');
       expect(url.host, '127.0.0.1');
@@ -146,7 +145,6 @@ void main() {
       final url = await server.start(
         configDir: Directory('${tmp.path}/server'),
         cacheDir: Directory('${tmp.path}/cache/server'),
-        port: 0,
       );
 
       // A cache this film does not fit in, because that is the condition

@@ -49,7 +49,6 @@ class FakeCoreClient implements CoreClient {
     required Directory support,
     required Directory cache,
     bool embeddedServer = true,
-    int serverPort = kDefaultServerPort,
   }) async {
     _initialized = true;
     return initInfo;

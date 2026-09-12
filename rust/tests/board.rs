@@ -99,8 +99,6 @@ fn board_and_search_over_the_default_addons() -> anyhow::Result<()> {
         server: Some(ServerConfig {
             config_dir: tmp.path().join("server").display().to_string(),
             cache_dir: tmp.path().join("cache/server").display().to_string(),
-            port: 0,
-            fallback_to_ephemeral: true,
         }),
     })?;
 

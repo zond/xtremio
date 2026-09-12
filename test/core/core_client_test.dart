@@ -33,7 +33,6 @@ void main() {
       final info = await client.init(
         support: Directory('${tmp.path}/support'),
         cache: Directory('${tmp.path}/cache'),
-        serverPort: 0,
       );
       expect(client.isInitialized, isTrue);
       expect(info.schemaVersion, 25);

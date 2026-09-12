@@ -8,7 +8,6 @@ import 'actions.dart';
 import 'core_events.dart';
 import 'diagnostics_log.dart';
 import 'fields.dart';
-import 'server_client.dart';
 
 /// What `core_init` reported.
 final class CoreInitInfo {
@@ -45,7 +44,6 @@ abstract interface class CoreClient {
     required Directory support,
     required Directory cache,
     bool embeddedServer = true,
-    int serverPort = kDefaultServerPort,
   });
 
   Future<void> dispatch(CoreAction action);
@@ -161,7 +159,6 @@ final class RustCoreClient implements CoreClient {
     required Directory support,
     required Directory cache,
     bool embeddedServer = true,
-    int serverPort = kDefaultServerPort,
   }) async {
     _pulls.clear();
     // Subscribe before init so the Rust side has a sink from the first
@@ -181,8 +178,6 @@ final class RustCoreClient implements CoreClient {
             ? rust_server.ServerConfig(
                 configDir: '${support.path}/server',
                 cacheDir: '${cache.path}/server',
-                port: serverPort,
-                fallbackToEphemeral: true,
               )
             : null,
       ),

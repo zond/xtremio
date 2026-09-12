@@ -25,10 +25,6 @@ use url::Url;
 
 use crate::state::AppState;
 
-/// stremio-core's default `streaming_server_url` port; preferred so a
-/// previously persisted profile keeps pointing at the embedded server.
-pub const DEFAULT_PORT: u16 = stream_server::DEFAULT_HTTP_PORT;
-
 /// The embedded server's half of [`AppState`]: the running handle, or
 /// nothing.
 ///
@@ -84,18 +80,14 @@ impl ServerState {
     }
 }
 
-/// How to start the embedded server.
+/// How to start the embedded server. Two directories, and nothing else to
+/// decide: the port is always ephemeral (see [`spawn`]).
 #[derive(Clone, Debug)]
 pub struct StartConfig {
     /// settings.json, logs/, localFiles/ live here (app support dir).
     pub config_dir: PathBuf,
     /// Torrent piece cache (app cache dir; may be purged by the OS).
     pub cache_dir: PathBuf,
-    /// Port to bind on 127.0.0.1; `0` picks an ephemeral one.
-    pub port: u16,
-    /// If binding `port` fails (another Stremio server is running), retry
-    /// with an ephemeral port instead of failing.
-    pub fallback_to_ephemeral: bool,
 }
 
 fn url_of(handle: &ServerHandle) -> anyhow::Result<Url> {
@@ -107,9 +99,19 @@ fn url_of(handle: &ServerHandle) -> anyhow::Result<Url> {
 /// from them, and nothing on its startup path fails without `HOME`/`XDG_*`,
 /// which Android app processes do not have. (It may still glance at the
 /// environment for defaults these directories override.)
-fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
+///
+/// **Port 0: the OS picks.** This used to ask for 11470 and fall back to an
+/// ephemeral port when that was taken, because stremio-core's default
+/// profile points `streaming_server_url` at `http://127.0.0.1:11470`. It
+/// does not have to: `start_with` reads the bound address back and
+/// `core::retarget_loopback_server` rewrites *any* loopback URL in the
+/// profile to it, whatever the port. So the preferred port only ever bought
+/// a collision -- with a desktop Stremio, with another instance of this app,
+/// with whatever else holds 11470 -- and the fallback that handled it was a
+/// second bind attempt for a number nothing reads.
+fn spawn(config: &StartConfig) -> anyhow::Result<ServerHandle> {
     stream_server::start(stream_server::ServerConfig {
-        http_addr: SocketAddr::from((Ipv4Addr::LOCALHOST, port)),
+        http_addr: SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
         config_dir: Some(config.config_dir.clone()),
         cache_dir: Some(config.cache_dir.clone()),
         lan_media_addr: Some(LAN_MEDIA_ADDR),
@@ -169,7 +171,7 @@ pub(crate) fn start_in(app: &AppState, config: StartConfig) -> anyhow::Result<Ur
 fn start_with(
     app: &AppState,
     config: StartConfig,
-    spawn: impl Fn(&StartConfig, u16) -> anyhow::Result<ServerHandle>,
+    spawn: impl Fn(&StartConfig) -> anyhow::Result<ServerHandle>,
 ) -> anyhow::Result<Url> {
     crate::logging::init();
     let _lifecycle = app.server.lifecycle();
@@ -181,18 +183,7 @@ fn start_with(
     std::fs::create_dir_all(&config.cache_dir)
         .with_context(|| format!("create server cache dir {:?}", config.cache_dir))?;
 
-    let handle = match spawn(&config, config.port) {
-        Ok(handle) => handle,
-        Err(error) if config.fallback_to_ephemeral && config.port != 0 => {
-            tracing::warn!(
-                port = config.port,
-                %error,
-                "embedded server could not bind its preferred port; retrying with an ephemeral one"
-            );
-            spawn(&config, 0).context("start embedded server on an ephemeral port")?
-        }
-        Err(error) => return Err(error.context("start embedded server")),
-    };
+    let handle = spawn(&config).context("start embedded server")?;
     let url = url_of(&handle)?;
     // A cast grants the server's `lanMediaEnabled` permission and the server
     // persists it; a process killed mid-cast never takes it back, and the
@@ -701,8 +692,6 @@ mod tests {
             StartConfig {
                 config_dir: tmp.path().join("server"),
                 cache_dir: tmp.path().join("cache"),
-                port: 0,
-                fallback_to_ephemeral: true,
             },
         )
         .expect("server start");
@@ -743,8 +732,6 @@ mod tests {
         StartConfig {
             config_dir: tmp.join("server"),
             cache_dir: tmp.join("cache"),
-            port: 0,
-            fallback_to_ephemeral: true,
         }
     }
 
@@ -803,17 +790,17 @@ mod tests {
     /// A spawn that says when it has been entered and then waits to be let
     /// through: a boot held open for as long as a test needs it.
     fn held_spawn() -> (
-        impl Fn(&StartConfig, u16) -> anyhow::Result<ServerHandle> + Send + 'static,
+        impl Fn(&StartConfig) -> anyhow::Result<ServerHandle> + Send + 'static,
         std::sync::mpsc::Receiver<()>,
         std::sync::mpsc::Sender<()>,
     ) {
         let (entered_tx, entered) = std::sync::mpsc::channel();
         let (release, release_rx) = std::sync::mpsc::channel::<()>();
         let release_rx = std::sync::Mutex::new(release_rx);
-        let held = move |config: &StartConfig, port: u16| {
+        let held = move |config: &StartConfig| {
             entered_tx.send(()).ok();
             release_rx.lock().unwrap().recv().ok();
-            spawn(config, port)
+            spawn(config)
         };
         (held, entered, release)
     }
@@ -862,9 +849,9 @@ mod tests {
         let first = std::thread::spawn({
             let (app, config, count) = (Arc::clone(&app), config(tmp.path()), counted(&spawned));
             move || {
-                start_with(&app, config, move |config: &StartConfig, port| {
+                start_with(&app, config, move |config: &StartConfig| {
                     count();
-                    held(config, port)
+                    held(config)
                 })
             }
         });
@@ -872,9 +859,9 @@ mod tests {
         let second = std::thread::spawn({
             let (app, config, count) = (Arc::clone(&app), config(tmp.path()), counted(&spawned));
             move || {
-                start_with(&app, config, move |config: &StartConfig, port| {
+                start_with(&app, config, move |config: &StartConfig| {
                     count();
-                    spawn(config, port)
+                    spawn(config)
                 })
             }
         });

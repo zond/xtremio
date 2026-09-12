@@ -1548,13 +1548,9 @@ impl SseDecode for crate::api::server::ServerConfig {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_configDir = <String>::sse_decode(deserializer);
         let mut var_cacheDir = <String>::sse_decode(deserializer);
-        let mut var_port = <u16>::sse_decode(deserializer);
-        let mut var_fallbackToEphemeral = <bool>::sse_decode(deserializer);
         return crate::api::server::ServerConfig {
             config_dir: var_configDir,
             cache_dir: var_cacheDir,
-            port: var_port,
-            fallback_to_ephemeral: var_fallbackToEphemeral,
         };
     }
 }
@@ -1576,13 +1572,6 @@ impl SseDecode for crate::api::subtitles::SubtitleMatch {
             reference_cues: var_referenceCues,
             convincing: var_convincing,
         };
-    }
-}
-
-impl SseDecode for u16 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u16::<NativeEndian>().unwrap()
     }
 }
 
@@ -1791,8 +1780,6 @@ impl flutter_rust_bridge::IntoDart for crate::api::server::ServerConfig {
         [
             self.config_dir.into_into_dart().into_dart(),
             self.cache_dir.into_into_dart().into_dart(),
-            self.port.into_into_dart().into_dart(),
-            self.fallback_to_ephemeral.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1969,8 +1956,6 @@ impl SseEncode for crate::api::server::ServerConfig {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.config_dir, serializer);
         <String>::sse_encode(self.cache_dir, serializer);
-        <u16>::sse_encode(self.port, serializer);
-        <bool>::sse_encode(self.fallback_to_ephemeral, serializer);
     }
 }
 
@@ -1983,13 +1968,6 @@ impl SseEncode for crate::api::subtitles::SubtitleMatch {
         <u32>::sse_encode(self.cues, serializer);
         <u32>::sse_encode(self.reference_cues, serializer);
         <bool>::sse_encode(self.convincing, serializer);
-    }
-}
-
-impl SseEncode for u16 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_u16::<NativeEndian>(self).unwrap();
     }
 }
 

@@ -36,8 +36,6 @@ fn config(root: &std::path::Path) -> ServerConfig {
     ServerConfig {
         config_dir: root.join("server").display().to_string(),
         cache_dir: root.join("cache").join("server").display().to_string(),
-        port: 0,
-        fallback_to_ephemeral: true,
     }
 }
 

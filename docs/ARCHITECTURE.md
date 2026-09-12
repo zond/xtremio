@@ -141,14 +141,15 @@ what every model field means. The shape of the thing is in the
 - **The server is in-process**: `stream_server::start` runs on its own
   thread and runtime; the core's `streaming_server_url` is retargeted to it
   when the persisted profile points at loopback (a remote server URL set by
-  the user is left alone). Port 11470 is preferred, ephemeral is the
-  fallback; the BitTorrent listener itself is on an ephemeral port
-  (`ServerConfig::embedded()`). Login and logout reset the profile's
+  the user is left alone). Both ports are ephemeral -- the HTTP listener and
+  the BitTorrent one -- because the retarget reads the bound address back, so
+  nothing downstream needs a number and asking for 11470 could only collide
+  with a desktop Stremio. Login and logout reset the profile's
   settings to stremio-core's defaults (`http://127.0.0.1:11470/`), so the
   event pump re-applies the retarget on `UserAuthenticated` /
   `UserLoggedOut`.
 - **The server's control API requires a bearer token; only Rust has it.**
-  `ServerConfig::embedded()` generates a token per launch, and every
+  `ServerConfig::default()` generates a token per launch, and every
   non-media route (`/settings`, `/network-info`, `/device-info`,
   `/casting`, `/create`, the `stats.json` routes, `/heartbeat`) answers
   401 without `Authorization: Bearer <token>`; the media routes libmpv

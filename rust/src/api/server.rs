@@ -7,17 +7,20 @@ use flutter_rust_bridge::frb;
 
 use crate::guard::{guarded, guarded_ok};
 
-/// Where and how the embedded server runs. Directories are decided by Dart
+/// Where the embedded server runs. Directories are decided by Dart
 /// (path_provider) and created by Rust if missing.
+///
+/// No port: the server binds an ephemeral loopback one and the app reads the
+/// address back off the handle (`server_start` returns it, and `core_init`
+/// retargets stremio-core at it). There used to be `port` and
+/// `fallback_to_ephemeral` here, defaulting to 11470 because that is what
+/// stremio-core's default profile points at -- but nothing downstream reads
+/// the number, so all a preferred port could do was collide.
 pub struct ServerConfig {
     /// App-support directory for settings.json, logs/, localFiles/.
     pub config_dir: String,
     /// App-cache directory for the torrent piece cache.
     pub cache_dir: String,
-    /// Port on 127.0.0.1; 11470 is stremio-core's default, 0 = ephemeral.
-    pub port: u16,
-    /// Retry with an ephemeral port if `port` is taken.
-    pub fallback_to_ephemeral: bool,
 }
 
 impl From<ServerConfig> for crate::server::StartConfig {
@@ -25,14 +28,13 @@ impl From<ServerConfig> for crate::server::StartConfig {
         Self {
             config_dir: config.config_dir.into(),
             cache_dir: config.cache_dir.into(),
-            port: config.port,
-            fallback_to_ephemeral: config.fallback_to_ephemeral,
         }
     }
 }
 
-/// Starts the embedded server (idempotent) and returns its base URL, e.g.
-/// `http://127.0.0.1:11470/`.
+/// Starts the embedded server (idempotent) and returns its base URL --
+/// `http://127.0.0.1:<port the OS picked>/`, which is the only place that
+/// port is ever known.
 pub fn server_start(config: ServerConfig) -> anyhow::Result<String> {
     guarded(|| crate::server::start(config.into()).map(|url| url.to_string()))
 }

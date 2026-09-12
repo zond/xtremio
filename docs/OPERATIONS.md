@@ -38,7 +38,8 @@ Then either **Discover → a title → a stream**, or **Settings → Developer �
 "Play test torrent"** (Big Buck Bunny from a public torrent through the
 embedded server; "Play test HTTP stream" is the direct-play path). The
 stats OSD (Shift+I) ends with the URL libmpv is playing, so a torrent
-should read `http://127.0.0.1:11470/dd8255ec…/-1?tr=…`.
+should read `http://127.0.0.1:<port>/dd8255ec…/-1?tr=…`, on whatever port
+the embedded server bound this launch.
 
 ## Where torrent data lives, and what it costs
 

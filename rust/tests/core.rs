@@ -19,8 +19,6 @@ fn config(root: &std::path::Path) -> CoreConfig {
         server: Some(ServerConfig {
             config_dir: root.join("server").display().to_string(),
             cache_dir: root.join("cache").join("server").display().to_string(),
-            port: 0,
-            fallback_to_ephemeral: true,
         }),
     }
 }
