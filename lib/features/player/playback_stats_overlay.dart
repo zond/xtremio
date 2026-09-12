@@ -183,6 +183,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
     // directly under the window it committed for: both are read off the
     // same policy and are meant to be read against each other.
     ...describeSharing(held),
+    ...describeWaste(held),
     // Only when mpv answered: on a backend that has no such properties
     // the rows would be three dashes claiming something was measured.
     if (s != null && (s.seekable != null || s.partiallySeekable != null))
@@ -463,6 +464,29 @@ class PlaybackStatsOverlay extends StatelessWidget {
             ' since it last went live',
     ];
     return parts.isEmpty ? const [] : ['sharing  ${parts.join(' · ')}'];
+  }
+
+  /// The waste row: bytes fetched that never became a piece the server
+  /// kept, and pieces the cache asked the torrent backend to forget and was
+  /// refused.
+  ///
+  /// **Both are zero on a healthy stream, and both stay on the panel.**
+  /// They are what made a phone fetching 1.6 GB to play a hundred
+  /// megabytes legible: the cache was ordering pieces its own next pass
+  /// deleted, and the refusals were the ones it could not even delete,
+  /// because an open stream was still reading ahead over them. Absent
+  /// rather than zero where the server has nothing to say -- a proxied
+  /// stream, or a torrent whose counters cannot be read.
+  static List<String> describeWaste(StreamNumbers? held) {
+    final sharing = held?.sharing;
+    if (sharing == null) return const [];
+    final parts = [
+      if (sharing.transfer case final transfer?)
+        '${formatBytes(transfer.wastedBytes)} fetched and dropped',
+      if (sharing.refusedReclaims case final refused?)
+        '$refused ${refused == 1 ? 'reclaim' : 'reclaims'} refused',
+    ];
+    return parts.isEmpty ? const [] : ['waste  ${parts.join(' · ')}'];
   }
 
   /// A byte count in human units: `340 MB`, `1.2 GB`. Decimal, on the same

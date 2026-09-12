@@ -49,6 +49,7 @@ void main() {
       committedBytes: 820000000,
       transfer: LiveTransfer(
         downloadedBytes: 4800000000,
+        wastedBytes: 0,
         uploadedBytes: 2100000000,
         ratio: 0.4375,
       ),

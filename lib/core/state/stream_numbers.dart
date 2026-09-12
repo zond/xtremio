@@ -118,7 +118,11 @@ final class CacheWindow {
 
 /// What a torrent stream has committed to the swarm and moved over it.
 final class SharingNumbers {
-  const SharingNumbers({this.committedBytes, this.transfer});
+  const SharingNumbers({
+    this.committedBytes,
+    this.transfer,
+    this.refusedReclaims,
+  });
 
   /// Bytes advertised and promised never to be reclaimed -- the retention
   /// policy's committed set. Null for a torrent with no policy, which has
@@ -129,6 +133,16 @@ final class SharingNumbers {
   /// backend has no counters to read. See [LiveTransfer].
   final LiveTransfer? transfer;
 
+  /// How many pieces the server's retention passes asked the torrent
+  /// backend to forget and were refused, over the life of the engine.
+  ///
+  /// **Zero is the only healthy value.** A refusal is the backend keeping a
+  /// piece an open stream is still reading ahead over while the retention
+  /// window has moved off it: the cache cannot come back under its budget
+  /// while that stream lives. Null for a proxied stream, which has no
+  /// engine and no passes.
+  final int? refusedReclaims;
+
   /// The sharing numbers in a `sharing` value, or null for the null a
   /// proxied stream answers with. A `sharing` with neither half in it is
   /// no sharing row either.
@@ -137,8 +151,11 @@ final class SharingNumbers {
     final numbers = SharingNumbers(
       committedBytes: (value['committedBytes'] as num?)?.toInt(),
       transfer: LiveTransfer.fromJson(value['transfer']),
+      refusedReclaims: (value['refusedReclaims'] as num?)?.toInt(),
     );
-    return numbers.committedBytes == null && numbers.transfer == null
+    return numbers.committedBytes == null &&
+            numbers.transfer == null &&
+            numbers.refusedReclaims == null
         ? null
         : numbers;
   }
@@ -147,14 +164,16 @@ final class SharingNumbers {
   bool operator ==(Object other) =>
       other is SharingNumbers &&
       other.committedBytes == committedBytes &&
-      other.transfer == transfer;
+      other.transfer == transfer &&
+      other.refusedReclaims == refusedReclaims;
 
   @override
-  int get hashCode => Object.hash(committedBytes, transfer);
+  int get hashCode => Object.hash(committedBytes, transfer, refusedReclaims);
 
   @override
   String toString() =>
-      'SharingNumbers(committed: $committedBytes B, transfer: $transfer)';
+      'SharingNumbers(committed: $committedBytes B, transfer: $transfer, '
+      'refused: $refusedReclaims)';
 }
 
 /// What a torrent has fetched and sent **since it last went live**, and
@@ -185,12 +204,21 @@ final class SharingNumbers {
 final class LiveTransfer {
   const LiveTransfer({
     required this.downloadedBytes,
+    required this.wastedBytes,
     required this.uploadedBytes,
     this.ratio,
   });
 
   /// Bytes fetched from peers since the torrent last went live.
   final int downloadedBytes;
+
+  /// Of those, the bytes that never became a piece the server kept.
+  ///
+  /// A few per cent is the end of a download duplicating its last pieces
+  /// and is normal. A multiple of what has been watched is the cache
+  /// fetching what it is about to delete, which is what this figure exists
+  /// to show.
+  final int wastedBytes;
 
   /// Bytes sent to peers since the torrent last went live.
   final int uploadedBytes;
@@ -213,6 +241,7 @@ final class LiveTransfer {
     if (downloaded == null || uploaded == null) return null;
     return LiveTransfer(
       downloadedBytes: downloaded,
+      wastedBytes: (value['wastedBytes'] as num?)?.toInt() ?? 0,
       uploadedBytes: uploaded,
       ratio: (value['ratio'] as num?)?.toDouble(),
     );
@@ -222,14 +251,16 @@ final class LiveTransfer {
   bool operator ==(Object other) =>
       other is LiveTransfer &&
       other.downloadedBytes == downloadedBytes &&
+      other.wastedBytes == wastedBytes &&
       other.uploadedBytes == uploadedBytes &&
       other.ratio == ratio;
 
   @override
-  int get hashCode => Object.hash(downloadedBytes, uploadedBytes, ratio);
+  int get hashCode =>
+      Object.hash(downloadedBytes, wastedBytes, uploadedBytes, ratio);
 
   @override
   String toString() =>
-      'LiveTransfer(down: $downloadedBytes B, up: $uploadedBytes B, '
-      'ratio: $ratio)';
+      'LiveTransfer(down: $downloadedBytes B, wasted: $wastedBytes B, '
+      'up: $uploadedBytes B, ratio: $ratio)';
 }

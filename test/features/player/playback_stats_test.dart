@@ -550,6 +550,62 @@ void main() {
     });
   });
 
+  group('the waste row is what the cache fetched and threw away', () {
+    List<String> rows(SharingNumbers? sharing) =>
+        PlaybackStatsOverlay.describeWaste(
+          sharing == null ? null : StreamNumbers(sharing: sharing),
+        );
+
+    test('bytes dropped and reclaims refused, both of them', () {
+      // The two numbers that made the 1.6 GB open legible: pieces the
+      // cache fetched and its own next pass deleted, and pieces it asked
+      // the backend to forget and could not, because an open stream was
+      // still reading ahead over them.
+      expect(
+        rows(
+          const SharingNumbers(
+            transfer: LiveTransfer(
+              downloadedBytes: 1600000000,
+              wastedBytes: 1500000000,
+              uploadedBytes: 0,
+            ),
+            refusedReclaims: 33,
+          ),
+        ),
+        ['waste  1.5 GB fetched and dropped · 33 reclaims refused'],
+      );
+    });
+
+    test('a healthy stream still draws the row, at zero', () {
+      // Zero is the reading, not an absence: a viewer looking for this is
+      // looking for whether it is climbing.
+      expect(
+        rows(
+          const SharingNumbers(
+            transfer: LiveTransfer(
+              downloadedBytes: 100,
+              wastedBytes: 0,
+              uploadedBytes: 0,
+            ),
+            refusedReclaims: 0,
+          ),
+        ),
+        ['waste  0 B fetched and dropped · 0 reclaims refused'],
+      );
+    });
+
+    test(
+      'one refusal is singular, and a stream with no numbers has no row',
+      () {
+        expect(rows(const SharingNumbers(refusedReclaims: 1)), [
+          'waste  1 reclaim refused',
+        ]);
+        expect(rows(null), isEmpty);
+        expect(PlaybackStatsOverlay.describeWaste(null), isEmpty);
+      },
+    );
+  });
+
   group(
     'the sharing row is a torrent\'s promises and its live period\'s bytes',
     () {
@@ -571,6 +627,7 @@ void main() {
               committedBytes: 859832320,
               transfer: LiveTransfer(
                 downloadedBytes: 4800000000,
+                wastedBytes: 0,
                 uploadedBytes: 2100000000,
                 ratio: 0.4375,
               ),
@@ -605,6 +662,7 @@ void main() {
             const SharingNumbers(
               transfer: LiveTransfer(
                 downloadedBytes: 4800000000,
+                wastedBytes: 0,
                 uploadedBytes: 2100000000,
                 ratio: 0.4375,
               ),
@@ -636,6 +694,7 @@ void main() {
               const SharingNumbers(
                 transfer: LiveTransfer(
                   downloadedBytes: 0,
+                  wastedBytes: 0,
                   uploadedBytes: 2100000000,
                 ),
               ),
@@ -657,6 +716,7 @@ void main() {
             committedBytes: 859832320,
             transfer: LiveTransfer(
               downloadedBytes: 0,
+              wastedBytes: 0,
               uploadedBytes: 2100000000,
             ),
           ),
