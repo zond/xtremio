@@ -111,7 +111,6 @@ fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
     stream_server::start(stream_server::ServerConfig {
         http_addr: SocketAddr::from((Ipv4Addr::LOCALHOST, port)),
         https_addr: None,
-        public_base_url: None,
         config_dir: Some(config.config_dir.clone()),
         cache_dir: Some(config.cache_dir.clone()),
         lan_media_addr: Some(LAN_MEDIA_ADDR),
@@ -123,7 +122,7 @@ fn spawn(config: &StartConfig, port: u16) -> anyhow::Result<ServerHandle> {
         // set: the server then keeps every torrent's data for that boot.
         // See `crate::downloads::pins`.
         pins: crate::downloads::pins(),
-        ..stream_server::ServerConfig::embedded()
+        ..stream_server::ServerConfig::default()
     })
 }
 
