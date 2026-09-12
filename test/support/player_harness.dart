@@ -13,6 +13,7 @@ import 'package:xtremio/shell/tv_density.dart';
 import 'fake_core_client.dart';
 import 'fake_playback_engine.dart';
 import 'fake_proxy_streams.dart';
+import 'fake_playhead_reporter.dart';
 import 'fake_stream_numbers_client.dart';
 import 'fake_subtitle_match_client.dart';
 import 'fake_torrent_stats_client.dart';
@@ -111,6 +112,11 @@ class PlayerHarness {
   late final FakeStreamNumbersClient streamNumbers = FakeStreamNumbersClient()
     ..callLog = calls;
 
+  /// Where the app told the server the player was; see
+  /// [FakePlayheadReporter].
+  late final FakePlayheadReporter playhead = FakePlayheadReporter()
+    ..callLog = calls;
+
   /// Engine opens (`'open'`), stats fetches (`'stats'`), asks about what
   /// the server holds (`'held'`) and the teardown's own calls (`'quit'`,
   /// `'close-streams'`, `'dispose'`), in the order they happened.
@@ -180,6 +186,7 @@ class PlayerHarness {
         },
         proxyStreams: proxyStreams,
         streamNumbers: streamNumbers,
+        playhead: playhead,
         child: MaterialApp(
           navigatorObservers: navigatorObservers,
           // As `XtremioApp` builds it: the television's text scale and

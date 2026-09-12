@@ -33,6 +33,14 @@ abstract interface class PlaybackEngine {
   Stream<bool> get playing;
   Stream<bool> get buffering;
 
+  /// Where the player is, in the file and in the picture, or null where the
+  /// backend cannot say.
+  ///
+  /// The server needs this because it cannot work it out: it sees byte
+  /// ranges, and a container-index read and a seek into the tail are the
+  /// same request. See `serverNotePlayhead`.
+  Future<PlayheadReport?> playhead();
+
   /// Fires once when the media reaches its end.
   Stream<bool> get completed;
   Stream<String> get errors;
@@ -301,6 +309,7 @@ class PlaybackScope extends InheritedWidget {
     this.dhtStatus,
     this.proxyStreams,
     this.streamNumbers,
+    this.playhead,
     required super.child,
   });
 
@@ -336,6 +345,10 @@ class PlaybackScope extends InheritedWidget {
   /// up.
   final StreamNumbersReader? streamNumbers;
 
+  /// Where the player is, told to the server. Injectable so a test can see
+  /// what was reported without reaching FFI.
+  final PlayheadReporter? playhead;
+
   static PlaybackScope? _maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlaybackScope>();
 
@@ -363,6 +376,9 @@ class PlaybackScope extends InheritedWidget {
   static StreamNumbersReader streamNumbersOf(BuildContext context) =>
       _maybeOf(context)?.streamNumbers ?? const ServerClient();
 
+  static PlayheadReporter playheadOf(BuildContext context) =>
+      _maybeOf(context)?.playhead ?? const ServerClient();
+
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
@@ -372,7 +388,8 @@ class PlaybackScope extends InheritedWidget {
       displayFrameRate != oldWidget.displayFrameRate ||
       dhtStatus != oldWidget.dhtStatus ||
       proxyStreams != oldWidget.proxyStreams ||
-      streamNumbers != oldWidget.streamNumbers;
+      streamNumbers != oldWidget.streamNumbers ||
+      playhead != oldWidget.playhead;
 }
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever
@@ -381,6 +398,23 @@ class PlaybackScope extends InheritedWidget {
 /// [hardwareDecoding] (`profile.settings.hardwareDecoding`) is fixed at
 /// creation: media_kit takes it as the video controller's configuration
 /// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
+/// Where a player is, in both of the units that matter.
+///
+/// Two numbers rather than one because they answer different questions and
+/// neither derives from the other on a variable-bitrate film: [streamPos]
+/// is where the retention window belongs, and [streamPos] over [film] is
+/// the film's bitrate, which is what sizes it.
+final class PlayheadReport {
+  const PlayheadReport({required this.streamPos, required this.film});
+
+  /// The demuxer's byte offset into the file it is reading (mpv's
+  /// `stream-pos`).
+  final int streamPos;
+
+  /// The position in the picture (mpv's `time-pos`).
+  final Duration film;
+}
+
 class MediaKitEngine implements PlaybackEngine {
   MediaKitEngine({bool hardwareDecoding = true})
     : _player = Player(configuration: playerConfiguration) {
@@ -1042,6 +1076,27 @@ class MediaKitEngine implements PlaybackEngine {
   void _stopStats() {
     _statsTimer?.cancel();
     _statsTimer = null;
+  }
+
+  @override
+  Future<PlayheadReport?> playhead() async {
+    final native = _player.platform;
+    if (native is! NativePlayer || _disposed) return null;
+    try {
+      final at = int.tryParse(await native.getProperty('stream-pos'));
+      final film = double.tryParse(await native.getProperty('time-pos'));
+      if (at == null || film == null || at < 0 || film < 0 || !film.isFinite) {
+        return null;
+      }
+      return PlayheadReport(
+        streamPos: at,
+        film: Duration(microseconds: (film * 1000000).round()),
+      );
+    } catch (_) {
+      // Unavailable before the demuxer exists, and while one is being torn
+      // down. Saying nothing is what the server expects of a hint.
+      return null;
+    }
   }
 
   Future<void> _sampleStats(NativePlayer native) async {

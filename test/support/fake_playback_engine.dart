@@ -7,6 +7,19 @@ import 'package:xtremio/shell/display_frame_rate.dart';
 /// [PlaybackEngine] for widget tests: records every call and lets the test
 /// feed position/playing/tracks/... events. No libmpv.
 class FakePlaybackEngine implements PlaybackEngine {
+  /// What [playhead] answers; null (the default) is a backend that cannot
+  /// say where it is.
+  PlayheadReport? playheadReport;
+
+  /// Every [playhead] call, in order.
+  int playheadCalls = 0;
+
+  @override
+  Future<PlayheadReport?> playhead() async {
+    playheadCalls++;
+    return playheadReport;
+  }
+
   final _position = StreamController<Duration>.broadcast();
   final _duration = StreamController<Duration>.broadcast();
   final _buffer = StreamController<Duration>.broadcast();

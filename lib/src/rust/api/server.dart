@@ -39,6 +39,37 @@ Future<String> serverTorrentStats({
   trackers: trackers,
 );
 
+/// **Tells the server where the player is.** `offset` is the player's own
+/// byte offset into the file (mpv's `stream-pos`), `film_seconds` its
+/// position in the picture (`time-pos`), and `playing` whether it is
+/// actually advancing rather than paused, stalled or buffering.
+///
+/// The server infers all of this from byte ranges otherwise, and a byte
+/// range does not carry it: mpv reads the container index with the same
+/// kind of request it seeks with, and keeps a second reader crawling that
+/// index while it plays. Told directly, the retention window sits on the
+/// film, and the bitrate that sizes it is bytes-of-file over
+/// seconds-of-film rather than something measured through delivery.
+///
+/// Call it about once a second while a film is open. **It never errors and
+/// never blocks on the network**: a server that is not running, a torrent
+/// this process is not streaming, a nonsensical `film_seconds` -- all are
+/// nothing to say, said silently. Stop calling and the hint goes stale in
+/// fifteen seconds.
+Future<void> serverNotePlayhead({
+  required String infoHash,
+  required PlatformInt64 fileIdx,
+  required PlatformInt64 offset,
+  required double filmSeconds,
+  required bool playing,
+}) => RustLib.instance.api.crateApiServerServerNotePlayhead(
+  infoHash: infoHash,
+  fileIdx: fileIdx,
+  offset: offset,
+  filmSeconds: filmSeconds,
+  playing: playing,
+);
+
 /// The embedded server's settings as JSON (the `values` of `GET /settings`:
 /// `cacheSize`, `btMaxConnections`, ...). Errors when it is not running.
 Future<String> serverSettings() =>

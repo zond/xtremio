@@ -115,6 +115,28 @@ abstract interface class StreamNumbersReader {
   Future<StreamNumbers?> streamNumbers(Uri url);
 }
 
+/// Telling the server where the player is.
+///
+/// Named on its own so the player screen can be handed a recorder in
+/// tests, and because it is the one call in here that is a *hint*: it
+/// answers nothing, and the server has its own answer without it.
+abstract interface class PlayheadReporter {
+  /// Where the player is in `fileIdx` of `infoHash`: [offset] its own byte
+  /// offset into the file, [filmSeconds] its position in the picture, and
+  /// [playing] whether it is advancing rather than paused or stalled.
+  ///
+  /// The server infers all of this from byte ranges otherwise, and cannot
+  /// do it reliably -- a container-index read and a seek into the tail are
+  /// the same request. Call it about once a second while a film is open.
+  Future<void> notePlayhead({
+    required String infoHash,
+    required int fileIdx,
+    required int offset,
+    required double filmSeconds,
+    required bool playing,
+  });
+}
+
 /// Changing something about the embedded server, which is one call: a
 /// patch of settings keys, exactly as `POST /settings` takes it.
 ///
@@ -186,7 +208,8 @@ class ServerClient
         ProxyStreamControl,
         StreamNumbersReader,
         ServerSettingsAccess,
-        ServerSettingsWriter {
+        ServerSettingsWriter,
+        PlayheadReporter {
   const ServerClient();
 
   /// Starts the server (idempotent) and returns its base URL.
@@ -211,6 +234,21 @@ class ServerClient
 
   /// Stops the server and waits for its thread. No-op when not running.
   Future<void> stop() => rust.serverStop();
+
+  @override
+  Future<void> notePlayhead({
+    required String infoHash,
+    required int fileIdx,
+    required int offset,
+    required double filmSeconds,
+    required bool playing,
+  }) => rust.serverNotePlayhead(
+    infoHash: infoHash,
+    fileIdx: fileIdx,
+    offset: offset,
+    filmSeconds: filmSeconds,
+    playing: playing,
+  );
 
   /// Base URL of the running server, or null when stopped.
   Uri? get baseUrl {

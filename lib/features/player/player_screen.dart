@@ -517,6 +517,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// screen then neither unloads the core's player nor reacts to its state.
   bool _handedOver = false;
 
+  /// One [_reportPlayhead] in flight at a time, and when the last one went.
+  PlayheadReporter? _playheadReporter;
+  bool _reportingPlayhead = false;
+  DateTime? _playheadReportedAt;
+
   /// The app's preferences, for [AppPrefs.bufferAhead]. From the
   /// [PrefsScope] the app puts above every screen; a player mounted without
   /// one (a widget test that does not care where the choice goes) gets
@@ -941,6 +946,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _displayFrameRate = displayFrameRate;
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     _streamNumbersReader = PlaybackScope.streamNumbersOf(context);
+    _playheadReporter = PlaybackScope.playheadOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
     _proxyStreams = PlaybackScope.proxyStreamsOf(context);
@@ -1409,6 +1415,55 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _reportedPosition = position;
     _position.value = position;
     _reportTime(position);
+    unawaited(_reportPlayhead());
+  }
+
+  /// **Tells the server where the player is**, which is the one fact about
+  /// a viewing the server cannot work out for itself.
+  ///
+  /// It sees byte ranges, and a container-index read and a seek into the
+  /// tail arrive as the same request -- so it has guessed, and the guesses
+  /// have moved the retention window off the film and taken the pieces the
+  /// viewer was waiting on with it. The player holds the answer exactly:
+  /// `stream-pos` for where the window belongs, and `time-pos` with it so
+  /// the bitrate that sizes the window is bytes-of-file over
+  /// seconds-of-film rather than something measured through delivery.
+  ///
+  /// Throttled to [PlayerScreen.timeReportInterval] and never overlapping,
+  /// because `getProperty` awaits the player's own initialisation: a
+  /// position stream firing faster than mpv answers would otherwise queue
+  /// reports behind each other for as long as the film is open. Silent
+  /// about every failure -- it is a hint, and one that does not arrive
+  /// costs the freshness of a hint.
+  Future<void> _reportPlayhead() async {
+    final request = _torrentStatsRequest;
+    final fileIdx = request?.fileIdx;
+    if (request == null || fileIdx == null || fileIdx < 0) return;
+    if (_reportingPlayhead || _handedOver || _casting) return;
+    final last = _playheadReportedAt;
+    final now = DateTime.now();
+    if (last != null &&
+        now.difference(last) < PlayerScreen.timeReportInterval) {
+      return;
+    }
+    _reportingPlayhead = true;
+    try {
+      final at = await _engine?.playhead();
+      if (at == null || !mounted || _handedOver) return;
+      _playheadReportedAt = now;
+      await _playheadReporter?.notePlayhead(
+        infoHash: request.infoHash,
+        fileIdx: fileIdx,
+        offset: at.streamPos,
+        filmSeconds: at.film.inMicroseconds / Duration.microsecondsPerSecond,
+        playing: _playing,
+      );
+    } catch (_) {
+      // A hint the server never hears is a hint it goes without; it has an
+      // answer of its own underneath for exactly that.
+    } finally {
+      _reportingPlayhead = false;
+    }
   }
 
   /// Tells the core where playback has got to, no more often than
