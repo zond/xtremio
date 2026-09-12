@@ -8,20 +8,37 @@
 /// `bufferProfile` setting, which this app does not use: the choice is the
 /// viewer's, per playback, not the server's).
 ///
+/// **The first three are measured in seconds of the film, not in bytes.**
+/// The server measures the rate bytes are really going out at and buys that
+/// many seconds of buffer, so the same choice means the same thing on a
+/// 2 Mbps documentary and a 4K feature. It used to be a fraction of the
+/// device's cache size, which meant a viewer who gave the app more storage
+/// silently bought a bigger mobile-data bill.
+///
+/// [maximum] is the exception: it asks for no cap at all, so where the cache
+/// has room it keeps the whole film while you are watching it.
+///
 /// The last option is not a window at all. Past a point a bigger buffer stops
 /// being an answer, and the honest one is to keep the file: [wholeFile] pins
 /// the stream as an offline download — the same mechanism the Downloads
-/// screen lists and deletes — while it plays.
+/// screen lists and deletes — while it plays. **That is the difference
+/// between it and [maximum]**: maximum's bytes are cache, taken back as soon
+/// as you watch something else or the disk needs the room; a pin survives
+/// closing the app.
 library;
 
 enum BufferAhead {
-  /// The server's own default, and this app's.
+  /// About a minute and a half of the film in hand. The server's own
+  /// default, and this app's.
   normal,
 
-  /// Twice the read-ahead.
+  /// About four minutes in hand, and twice the read-ahead cap.
   large,
 
-  /// Four times the read-ahead.
+  /// No time cap at all: as much of the film as the cache will hold, which
+  /// is the whole of it where there is room. Four times the read-ahead cap.
+  ///
+  /// Cache, not a download — see [wholeFile] for the difference.
   maximum,
 
   /// Four times the read-ahead *and* the whole file kept on the device.
@@ -49,10 +66,12 @@ enum BufferAhead {
   /// One line on what it costs — every option here trades data and storage
   /// for smoothness, and the viewer is the one paying.
   String get description => switch (this) {
-    BufferAhead.normal => 'Reads a little ahead. Least data used.',
-    BufferAhead.large => 'Reads twice as far ahead. Uses more data.',
+    BufferAhead.normal => 'Keeps about 90 seconds ahead. Least data used.',
+    BufferAhead.large => 'Keeps about 4 minutes ahead. Uses more data.',
     BufferAhead.maximum =>
-      'Reads four times as far ahead. Uses much more data and disk.',
+      'Keeps as much of the film as fits, which may be all of it. '
+          'Downloads the whole thing over your connection, mobile data '
+          'included, and frees it when you stop.',
     BufferAhead.wholeFile =>
       'Downloads and stores the whole file while you watch. '
           'It appears in Downloads, where you can delete it.',
