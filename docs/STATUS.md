@@ -156,7 +156,8 @@ Material's tint. **Downloads**
 keeps a torrent stream on the device: the download button on a stream tile
 pins the file through the embedded server and becomes a delete button once
 the file is whole, so the tile that took a download is the tile that undoes
-it -- asking, as the list does, whether the bytes go with the entry. On a
+it -- asking first, as the list does, and saying that the bytes go with
+the entry. On a
 television that button cannot be focused (directional traversal skips a
 node inside the focused one's rect, and it is inside the stream tile), so
 the tile's long press -- hold select, or the remote's menu key -- does
@@ -169,13 +170,18 @@ screen -- from the details app bar, the running player's menu, the
 "Downloaded" chip in the Library or Settings, so the list is one tap from
 whatever the downloads are of -- lists
 everything with its progress, plays a finished one, retries a stopped one,
-deletes one with or without its bytes, and says where the files go --
-a folder to pick on Android, a path to type elsewhere. Opened from the
+deletes one -- always with its bytes, since a pin dropped with the file
+left behind is a torrent nobody kept and nobody plays, which the server
+gives back at its next pass -- and says how much room it all takes.
+**Not where it goes**: torrent data has one root, shared by the streaming
+cache and the kept downloads, so there is no downloads folder to pick and
+nothing to move a download to; the root is named where the rest of its
+business is (Settings, "Server storage"). Opened from the
 player it offers no play of its own: a second player over the running one
-would load the same shared `player` field and start an engine beside it. On Android the
-app picks that folder itself on a first run: its own external files
-directory, which the system leaves alone, rather than the cache it may
-reclaim mid-download. On Android a download goes on
+would load the same shared `player` field and start an engine beside it.
+On Android that root is the app's own external files directory, which the
+system leaves alone, rather than the cache it may reclaim mid-download.
+On Android a download goes on
 after the user leaves the app: a `dataSync` foreground service holds the
 process up with an ongoing notification -- how many titles, how far
 along, tappable to the Downloads screen, with a Cancel all on it -- for

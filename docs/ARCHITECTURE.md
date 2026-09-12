@@ -178,19 +178,22 @@ what every model field means. The shape of the thing is in the
   is marked sensitive. `media_kit`'s `Media.httpHeaders` could carry it to
   mpv should a media route ever need it; none does.
 - **Whether the server shares between sessions is the app's decision, and
-  it is one settings key.** The server keeps a torrent in the swarm after
-  playback ends when its `seedingEnabled` setting is true (its own default);
-  when it is false a torrent nothing is streaming is paused once its idle
-  grace is up (15 s) — paused in both directions, so it stops uploading to
-  peers and stops fetching the rest of its own file alike — and a pinned
-  download is exempt either way: it keeps downloading, and stops being
-  shared when it is unpinned. **What it buys is minutes, not sessions**: an
-  unpinned engine nothing is streaming is removed 300 s after it went idle
-  whatever the setting says, and nothing stops sharing when the next stream
-  begins, so the setting's real effect is whether those five minutes are
-  spent in the swarm (both constants are `enginefs/src/lib.rs` at the
-  pinned rev). The setting's subtitle says that and says nothing else; a
-  longer lifecycle is the server's keep/share policy, being built there.
+  it is one settings key.** The server keeps uploading after playback ends
+  when its `seedingEnabled` setting is true (its own default); when it is
+  false it uploads only while a player is reading from it. **It is one
+  choke on the whole session, not a rule about torrents**: the setting and
+  the liveness cell are read together on every reconciler pass
+  (`EngineFS::apply_upload_switch`, `enginefs/src/lib.rs`), and the answer
+  is a single `set_upload_enabled` on the backend — so nothing is paused,
+  no peer is dropped, and what any torrent *downloads* is untouched. A
+  title kept offline is not exempt and does not need to be: it goes on
+  downloading whatever the switch says, and while the switch is on it is
+  shared on the same terms as everything else. **What it buys is minutes,
+  not sessions**: an unpinned engine nothing is streaming is removed 300 s
+  after it went idle whatever the setting says
+  (`INACTIVE_TORRENT_REMOVE_TIMEOUT`, same file), so the setting's real
+  effect is whether those five minutes are spent uploading. The setting's
+  subtitle says that and says nothing else.
   The app decides
   the value and writes it through `ServerClient.updateSettings`
   (`server_update_settings`, the same function `POST /settings` runs), which
@@ -244,11 +247,12 @@ what every model field means. The shape of the thing is in the
   node is skipped by traversal so it cannot swallow a press meant for a
   poster. **Pressing it offers a stop for the arrow that is lit, and only
   rows that do something.** While bytes go out, the sharing rows: "Not
-  now" (`pauseUntilRestart`) and "Stop sharing" (the setting) — but things
-  upload that neither governs, a torrent serving out its idle grace or a
-  title kept offline, so with the switch off the popup says that and offers
-  neither, and under a pause it says so and offers only the switch, since
-  the policy takes no second pause. The pause is read from `pausedForRun`,
+  now" (`pauseUntilRestart`) and "Stop sharing" (the setting) — but the
+  light is lit by bytes the server measured and the choke takes a pass or
+  two to land, so it can honestly be lit with the switch already off; the
+  popup then says there is nothing left to switch off and offers neither
+  row, and under a pause it says so and offers only the switch, since the
+  policy takes no second pause. The pause is read from `pausedForRun`,
   not from the light, which cannot tell. While bytes come in, the offline
   downloads: the light lists them before opening the popup and draws one
   "Cancel <name>" row per download still on its way, each dropping that
@@ -1304,7 +1308,7 @@ it:
 
 | Dependency | Pinned to | Why |
 |---|---|---|
-| `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | A rev, for reproducibility, that has what the app uses: the server keeps no record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry; it switches uploading off while nothing plays (*Share while idle*); and it has the LAN media listener a cast turns on. Default features are on, which is RAR support — see [the README](../README.md#license). |
+| `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | A rev, for reproducibility, that has what the app uses: the server keeps no record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry; it chokes the session's uploading while nothing plays if *Share while idle* is off; and it has the LAN media listener a cast turns on. Default features are on, which is RAR support — see [the README](../README.md#license). |
 | `librqbit` | [`zond/rqbit`](https://github.com/zond/rqbit) | Only a dev-dependency here, for the real `.torrent` fixtures in `rust/tests/downloads.rs`. It is always the rev stream-server's `enginefs` uses; any other puts two librqbits in the graph. The fork is stream-server's: it follows upstream and adds what a bounded streaming cache needs from the engine. |
 | `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.62.1 plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) instead of letting serde drop them — upstream PR Stremio/stremio-core#1045 — and one that pins its `localsearch` dependency by rev rather than by branch. |
 

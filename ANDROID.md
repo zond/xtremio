@@ -279,10 +279,12 @@ before it sets `display-sync-active`, so playback stays on the default
 `video-sync=audio`; mpv's own estimate cannot start it either, because it
 samples vsyncs only from frames that are already display-synced.
 
-**It is told, and the section below this one is how.** The rate ask that
-follows was made first, on the theory that removing the cadence beats
-resampling around it, and the reading says that was necessary and not
-sufficient: see *Telling mpv when the screen refreshes*.
+**It is told, and the section below this one is how.** The rate ask here
+was made first, on the theory that removing the cadence beats resampling
+around it, and the reading bore that out twice over: resampling never
+started, and when it was set anyway it drifted the audio. It also says the
+ask alone was not enough — what was still dropping frames afterwards was
+the decoder, not the timing. See *Telling mpv when the screen refreshes*.
 
 So while a film is playing the player asks for one, and gives it back when
 it stops. `DisplayFrameRate` (`lib/shell/display_frame_rate.dart`) is the
@@ -377,7 +379,7 @@ again once it is not.
 
 ## Telling mpv when the screen refreshes
 
-The section above removes the cadence; it does not stop the drops. With the
+The section above removes the cadence; it did not stop the drops. With the
 projector confirmed at the film's own rate — `mActiveSfDisplayMode` id 1418,
 `mActiveRenderFrameRate=23.976025`, SurfaceFlinger `activeMode=23.98 Hz` —
 the owner's 23.976 fps H.264 film still read:
@@ -390,30 +392,51 @@ video    h264 1920x816   bitrate 3.5 Mbps
 ```
 
 Roughly one frame in five, every one of them decoded on time (`0 decoder`)
-and thrown away at presentation. Matching the rate is what *exposed* it; at
-59.94 the 3:2 cadence had somewhere to hide the misses. It is the blind-VO
-case above: mpv is timing every frame against the audio clock with no idea
-when the screen refreshes.
+and thrown away at presentation. That looked like a timing fault, so
+display sync was set against it, on the standard that it had to start and
+had to beat 2779.
 
-So it is given the number Android already has, and display sync runs.
-`MediaKitEngine.displaySyncProperties` is the pair —
-**`override-display-fps`** at the display's live rate and
-**`video-sync=display-resample`** — and neither is any use alone:
-`update_display_fps` takes the override ahead of the rate the VO reports and
-a non-zero value there is the only display-rate gate in
-`handle_display_sync_frame`, while `video-sync` is what asks for display
-sync at all. Both names, and the two below, were read out of the very
-`libmpv.so` this app ships (`mpv v0.36.0-549-g78d43740f5`). The rate is
-written first: resampling asked for while the override is still 0 is display
-sync with no display rate, which is the state being escaped.
+**It did neither, and the diagnosis was wrong.** `display-sync-active` read
+`no` in every capture ever taken — the override below is enough for mpv to
+*have* a rate, not enough for the mode to engage — so display sync never
+ran and the 2779 were never its to fix. The answer was in the same capture,
+one row down: `hwdec mediacodec-copy` reads every decoded frame back into a
+ByteBuffer on the CPU, which on this box was 86% of a core and frames
+delivered late (`hevc_mediacodec: Both surface and native_window are NULL`
+in logcat says it outright). Asking for the direct decoder instead —
+`hwdec=mediacodec,mediacodec-copy`, `MediaKitEngine.configurationFor` —
+took the process from 224% of a core to 45% and the drops to `1 vo / 0
+decoder`. The full reading is in
+`lib/features/player/playback_engine.dart`.
+
+**And `video-sync=display-resample` was not free while it was here.** It
+puts the audio on a correction loop against a rate mpv cannot verify, and
+the sound drew audibly ahead of the picture over a few minutes — on a 720p
+HEVC episode and on a 1080p H.264 film alike. Removing it cost no cadence:
+SurfaceFlinger presents 126 consecutive frames at 41.70–41.71 ms, which is
+23.975 fps on a panel asked for 23.976. The two faults were independent,
+which is why fixing the decoder did not fix the drift. Stremio's own
+Android app reaches the same place the same way: match the panel to the
+film, and do no display sync at all.
+
+**So what is left is the rate, and only the rate.**
+`MediaKitEngine.displayRateProperties` writes one property —
+**`override-display-fps`**, at the display's live rate — and `video-sync`
+stays at mpv's own default (`audio`). The name was read out of the very
+`libmpv.so` this app ships (`mpv v0.36.0-549-g78d43740f5`):
+`update_display_fps` takes the override *ahead* of the rate the VO reports,
+and on Android, where that VO answers `VO_NOTIMPL` to
+`VOCTRL_GET_DISPLAY_FPS` (see the section above), it is the only way mpv
+learns the display rate at all. It buys mpv a number to reason with and the
+stats OSD a row to be read against; it does not turn display sync on.
 
 **The rate is measured, not assumed.** The ask above is a vote on Android 12
 and up and a window attribute below it; neither reports back, both are
 asynchronous, and a set can land on a neighbouring mode or move the display
 nowhere at all. A rate we asked for and did not get is exactly the wrong
-number to hand mpv — it swaps one wrong cadence for another and hides it
-behind a `display-sync-active` reading yes. So `MainActivity` reports what
-the display actually did, on the `xtremio/display` **event** channel: a
+number to hand mpv — a measured-looking claim about a display that is on
+some other mode. So `MainActivity` reports what the display actually did,
+on the `xtremio/display` **event** channel: a
 `DisplayManager.DisplayListener` registered for as long as Dart is
 subscribed, pushing once at subscription (a display already on the right
 mode fires no event) and again on every `onDisplayChanged` for this
@@ -427,58 +450,53 @@ the mode does not. On the box this was measured on the two agree
 **Android only.** Every other VO measures the rate itself and is right about
 it, so an override there replaces a true number with one of ours — which is
 the whole of what this does. The gate is in
-`MediaKitEngine.displaySyncProperties`, which answers with nothing off
+`MediaKitEngine.displayRateProperties`, which answers with an empty map off
 Android whatever it is handed.
 
-**Both come back off.** `PlayerScreen` sets the pair while it is holding a
-rate on the display and writes `MediaKitEngine.displaySyncOff` —
-`override-display-fps` to `0`, `video-sync` to mpv's own `audio` — on every
-path that gives that rate back, which is the same list as above and reached
-through the same call. An override outliving the mode it described is worse
-than no override: the platform takes the mode back at the same moment, so a
-stale one is a measured-looking claim about a display nobody is watching.
+**It comes back off.** `PlayerScreen` holds the override while it is holding
+a rate on the display and writes `MediaKitEngine.displayRateOff` —
+`override-display-fps` to `0` — on every path that gives that rate back,
+which is the same list as above and reached through the same call. An
+override outliving the mode it described is worse than no override: the
+platform takes the mode back at the same moment, so a stale one is a
+measured-looking claim about a display nobody is watching.
 
-**And the stats OSD says whether any of it took.** `display-sync-active` and
-`display-fps` are polled with the rest of `PlaybackStats` and drawn directly
-under the drop counts:
+**And the stats OSD says whether any of it took.** `display-fps` is polled
+with the rest of `PlaybackStats` and drawn between the drop counts and the
+decoder:
 
 ```
-dropped  2779 vo / 0 decoder
-sync     yes · display 23.976 Hz
+dropped  1 vo / 0 decoder
+display  23.976 Hz
+hwdec    mediacodec
 ```
 
-That row is not decoration and the change is not worth having without it. A
-feature that silently does nothing has shipped from this repo before, and
-this one has exactly that failure mode — the override does not take, display
-sync never starts, and the picture looks the same as it did. The standard is
-the baseline above, on the same film on the same box: `sync` must read
-**yes**, and the vo count must be near zero and stop climbing. If display
-sync does not start, or the count is no better than 2779, the pair comes out
-again rather than being defended on the theory.
+Neither row is decoration. The display row keeps the drop count honest: a
+rate there that is not the one the display settled on is a set that went
+nowhere, and the drops below belong to something else. The `hwdec` row is
+the check for the drops themselves — `mediacodec` beside a vo count that has
+stopped climbing is the fixed state, and `mediacodec-copy` is the fault this
+section began with, which is why the row exists at all. There is no `sync`
+row: `display-sync-active` was read here while `display-resample` was set,
+answered `no` on every capture, and went out with it.
 
-**That reading has not been taken yet.** Everything above is verified where
-it can be: the four property names against the shipped `libmpv.so`'s own
+**That reading has been taken**, on the owner's Chromecast with Google TV
+driving the Acer projector: `1 vo / 0 decoder` with the hwdec row reading
+`mediacodec`, 45% of a core where the copying decoder took 224%, and 126
+consecutive SurfaceFlinger presents at 41.70–41.71 ms. What is verified off
+the box is the rest: the property name against the shipped `libmpv.so`'s own
 strings, the platform gate and the reset against unit tests, and the rate
 reaching mpv from the display rather than from the ask against widget tests.
-The device half — that `onDisplayChanged` fires with the settled rate, that
-`Display.getRefreshRate()` is the number this box means, and that display
-sync actually starts and the count actually falls — needs the box, the
-projector and the film. It is one screencap of the OSD with the film ten
-minutes in, next to:
 
-```bash
-adb shell dumpsys display | grep -E 'mActiveModeId|mActiveRenderFrameRate'
-```
-
-What is *not* in scope, and is only worth raising if this fails: rendering
-into a real `Surface` instead of a Flutter texture. That is the structural
-difference from the libVLC and Media3 players the official Android app
-ships (verified in the installed APK's armeabi-v7a split: `libvlc.so`,
-`libvlcjni.so`, `libmedia3ext.so`, and no libmpv at all — only their desktop
-shell uses mpv, where a Qt GL context reports the rate honestly and display
-sync works by itself). Both of those render into a real Surface and align
-frame release to `Choreographer` vsync. It is a platform view rather than a
-texture, and a much larger change than this one.
+What is *not* in scope, and is only worth raising if the drops come back:
+rendering into a real `Surface` instead of a Flutter texture. That is the
+structural difference from the libVLC and Media3 players the official
+Android app ships (verified in the installed APK's armeabi-v7a split:
+`libvlc.so`, `libvlcjni.so`, `libmedia3ext.so`, and no libmpv at all — only
+their desktop shell uses mpv, where a Qt GL context reports the rate
+honestly and display sync works by itself). Both of those render into a real
+Surface and align frame release to `Choreographer` vsync. It is a platform
+view rather than a texture, and a much larger change than this one.
 
 ## Where torrent data goes, and when downloads run
 
