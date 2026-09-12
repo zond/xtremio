@@ -35,14 +35,14 @@ flutter_rust_bridge = "=2.13.0"
 # with the fetch-ahead bounded by the window, liveness that ends on a switch
 # or a restart rather than on a clock, and no cache cleaner at all -- every
 # byte under the root has exactly one thing that deletes it.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "f9ce544757e804d06afb0591e10fc5c13d2e42b4" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "4e92cc2d9613d0fb1281007e31ad5cfdd8045ac9" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "f9ce544757e804d06afb0591e10fc5c13d2e42b4" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "4e92cc2d9613d0fb1281007e31ad5cfdd8045ac9" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so

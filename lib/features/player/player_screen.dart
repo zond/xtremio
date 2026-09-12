@@ -563,8 +563,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// One [_reportPlayhead] in flight at a time, and when the last one went.
   PlayheadReporter? _playheadReporter;
+  Timer? _playheadTimer;
   bool _reportingPlayhead = false;
-  DateTime? _playheadReportedAt;
 
   /// The app's preferences, for [AppPrefs.bufferAhead]. From the
   /// [PrefsScope] the app puts above every screen; a player mounted without
@@ -1471,7 +1471,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _reportedPosition = position;
     _position.value = position;
     _reportTime(position);
-    unawaited(_reportPlayhead());
   }
 
   /// **Tells the server where the player is**, which is the one fact about
@@ -1496,17 +1495,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final fileIdx = request?.fileIdx;
     if (request == null || fileIdx == null || fileIdx < 0) return;
     if (_reportingPlayhead || _handedOver || _casting) return;
-    final last = _playheadReportedAt;
-    final now = DateTime.now();
-    if (last != null &&
-        now.difference(last) < PlayerScreen.timeReportInterval) {
-      return;
-    }
     _reportingPlayhead = true;
     try {
       final at = await _engine?.playhead();
       if (at == null || !mounted || _handedOver) return;
-      _playheadReportedAt = now;
       await _playheadReporter?.notePlayhead(
         infoHash: request.infoHash,
         fileIdx: fileIdx,
@@ -1565,8 +1557,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _pauseTorrentStats();
     });
     _startStuckWatch();
+    _startPlayheadReports();
     _syncStatsPolls();
     _maybeAutoPickSubtitles();
+  }
+
+  /// Tells the server where the player is, once a second, for as long as
+  /// the media is open.
+  ///
+  /// **On a clock and not on the position stream**, which is the difference
+  /// between a hint that helps and one that arrives too late to. Positions
+  /// are reported only once playback is running, so hanging this off them
+  /// leaves the server guessing through the whole of start-up -- which is
+  /// when the window matters most, and when the field logs show it sitting
+  /// at half the cache round piece zero while the player waited on the tail.
+  /// They also stop during a stall, so the one thing the server was told
+  /// would go stale exactly when it was still true. `stream-pos` answers as
+  /// soon as there is a demuxer, well before the first frame.
+  void _startPlayheadReports() {
+    _playheadTimer?.cancel();
+    _playheadTimer = Timer.periodic(
+      PlayerScreen.timeReportInterval,
+      (_) => unawaited(_reportPlayhead()),
+    );
+    unawaited(_reportPlayhead());
   }
 
   /// Watches for a position that has stopped moving while the player says
@@ -4338,6 +4352,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controlsTimer = null;
     _stuckTimer?.cancel();
     _stuckTimer = null;
+    _playheadTimer?.cancel();
+    _playheadTimer = null;
   }
 
   /// Stops the player, waits for it, and only then leaves the screen.
