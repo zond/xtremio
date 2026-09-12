@@ -73,6 +73,22 @@ Future<void> serverNotePlayhead({
   durationSeconds: durationSeconds,
 );
 
+/// **Tells the server how long the film is**, with no position: what a cast
+/// can state, the receiver reporting seconds that do not convert to a byte
+/// offset. The length is what sizes the retention window.
+///
+/// Never errors and never blocks on the network, exactly as
+/// `server_note_playhead` does not.
+Future<void> serverNoteDuration({
+  required String infoHash,
+  required PlatformInt64 fileIdx,
+  required double durationSeconds,
+}) => RustLib.instance.api.crateApiServerServerNoteDuration(
+  infoHash: infoHash,
+  fileIdx: fileIdx,
+  durationSeconds: durationSeconds,
+);
+
 /// The embedded server's settings as JSON (the `values` of `GET /settings`:
 /// `cacheSize`, `btMaxConnections`, ...). Errors when it is not running.
 Future<String> serverSettings() =>

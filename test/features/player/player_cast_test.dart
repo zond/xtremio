@@ -73,6 +73,7 @@ Future<void> castTo(WidgetTester tester, CastDevice device) async {
 }
 
 void main() {
+  _durationDuringACast();
   group('the cast button', () {
     testWidgets('is not on the bar until a receiver answers', (tester) async {
       useWideViewport(tester);
@@ -1315,6 +1316,41 @@ void main() {
       expect(cast.disconnects, 1);
       expect(lan.toggles, [true, false]);
       expect(lan.running, isFalse);
+    });
+  });
+}
+
+void _durationDuringACast() {
+  group("the film's length during a cast", () {
+    testWidgets('is reported, although its position is not', (tester) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+
+      cast.emitStatus(
+        const CastStatus(
+          state: CastPlayerState.playing,
+          position: Duration(minutes: 7),
+          duration: Duration(seconds: 6669),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        harness.playhead.durations,
+        contains(6669),
+        reason: "the length is the bitrate, and it is what sizes the window",
+      );
+      expect(
+        harness.playhead.reports,
+        isEmpty,
+        reason:
+            'a receiver reports seconds, and seconds do not convert to a '
+            'byte offset without a constant bitrate -- guessing one would '
+            'place the window off the film',
+      );
     });
   });
 }

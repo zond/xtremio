@@ -13,6 +13,19 @@ class FakePlayheadReporter implements PlayheadReporter {
   /// shared with the other fakes.
   List<String>? callLog;
 
+  /// Every duration-only report, in order: what a cast sends.
+  final List<double> durations = [];
+
+  @override
+  Future<void> noteDuration({
+    required String infoHash,
+    required int fileIdx,
+    required double durationSeconds,
+  }) async {
+    callLog?.add('duration');
+    durations.add(durationSeconds);
+  }
+
   @override
   Future<void> notePlayhead({
     required String infoHash,

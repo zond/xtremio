@@ -137,6 +137,17 @@ abstract interface class PlayheadReporter {
     required int offset,
     required double durationSeconds,
   });
+
+  /// How long the film is, with no position -- what a cast can say and
+  /// nothing else: a receiver reports seconds, and seconds do not convert
+  /// to a byte offset without a constant bitrate. The length *is* the
+  /// bitrate, so the window is sized correctly throughout a cast even
+  /// though where it sits is left to the receiver's own reads.
+  Future<void> noteDuration({
+    required String infoHash,
+    required int fileIdx,
+    required double durationSeconds,
+  });
 }
 
 /// Changing something about the embedded server, which is one call: a
@@ -247,6 +258,17 @@ class ServerClient
     infoHash: infoHash,
     fileIdx: fileIdx,
     offset: offset,
+    durationSeconds: durationSeconds,
+  );
+
+  @override
+  Future<void> noteDuration({
+    required String infoHash,
+    required int fileIdx,
+    required double durationSeconds,
+  }) => rust.serverNoteDuration(
+    infoHash: infoHash,
+    fileIdx: fileIdx,
     durationSeconds: durationSeconds,
   );
 

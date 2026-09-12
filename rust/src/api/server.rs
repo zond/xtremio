@@ -115,6 +115,32 @@ pub fn server_note_playhead(
     })
 }
 
+/// **Tells the server how long the film is**, with no position: what a cast
+/// can state, the receiver reporting seconds that do not convert to a byte
+/// offset. The length is what sizes the retention window.
+///
+/// Never errors and never blocks on the network, exactly as
+/// `server_note_playhead` does not.
+pub fn server_note_duration(
+    info_hash: String,
+    file_idx: i64,
+    duration_seconds: f64,
+) -> anyhow::Result<()> {
+    guarded_ok(move || {
+        let Ok(file_idx) = usize::try_from(file_idx) else {
+            return;
+        };
+        if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
+            return;
+        }
+        crate::server::note_duration(
+            &info_hash,
+            file_idx,
+            std::time::Duration::from_secs_f64(duration_seconds),
+        );
+    })
+}
+
 /// The embedded server's settings as JSON (the `values` of `GET /settings`:
 /// `cacheSize`, `btMaxConnections`, ...). Errors when it is not running.
 pub fn server_settings() -> anyhow::Result<String> {

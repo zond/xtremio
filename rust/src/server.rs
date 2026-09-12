@@ -345,6 +345,26 @@ pub fn note_playhead(info_hash: &str, file_idx: usize, offset: u64, duration: Op
     crate::env::CONCURRENT.block_on(handle.note_playhead(info_hash, file_idx, offset, duration));
 }
 
+/// **Tells the server how long the film is**, without saying where the
+/// player is in it.
+///
+/// What a cast can say and nothing else: the receiver does the reading and
+/// reports its position in seconds, which do not convert to a byte offset
+/// without a constant bitrate. The length *is* the bitrate, so the window
+/// is sized correctly throughout a cast even though where it sits is left
+/// to the receiver's own (plainly sequential) reads.
+///
+/// Silent about everything, exactly as [`note_playhead`] is.
+pub fn note_duration(info_hash: &str, file_idx: usize, duration: Duration) {
+    let Some(app) = crate::state::current() else {
+        return;
+    };
+    let Some(handle) = app.server.running() else {
+        return;
+    };
+    crate::env::CONCURRENT.block_on(handle.note_duration(info_hash, file_idx, duration));
+}
+
 /// Pins `file_idx` of `info_hash` as an offline download: the engine is
 /// created with `trackers` when the hash is new, the file is kept wanted
 /// whatever else the torrent streams, and the torrent stops being evictable.

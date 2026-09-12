@@ -1562,6 +1562,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _maybeAutoPickSubtitles();
   }
 
+  /// Tells the server how long the film is; see [_onCastStatus].
+  Future<void> _reportDuration(Duration duration) async {
+    final request = _torrentStatsRequest;
+    final fileIdx = request?.fileIdx;
+    if (request == null || fileIdx == null || fileIdx < 0) return;
+    try {
+      await _playheadReporter?.noteDuration(
+        infoHash: request.infoHash,
+        fileIdx: fileIdx,
+        durationSeconds:
+            duration.inMicroseconds / Duration.microsecondsPerSecond,
+      );
+    } catch (_) {
+      // A hint, like the playhead: one that does not arrive costs the
+      // freshness of a hint.
+    }
+  }
+
   /// Tells the server where the player is, once a second, for as long as
   /// the media is open.
   ///
@@ -3759,7 +3777,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _castStatus = status);
     if (!_casting || _opened == null) return;
     final duration = status.duration;
-    if (duration != null && duration > Duration.zero) _duration = duration;
+    if (duration != null && duration > Duration.zero) {
+      _duration = duration;
+      // **What a cast can tell the server, and all of it.** The receiver
+      // does the reading and says where it is in seconds; seconds do not
+      // convert to a byte offset without a constant bitrate, and on a 23 GB
+      // film a two-percent error is wider than the whole retention window,
+      // so a window placed from a converted position would miss the film.
+      // The length, though, *is* the bitrate -- so the window is sized
+      // exactly, and where it sits is left to the receiver's own reads,
+      // which unlike mpv's are plainly sequential.
+      unawaited(_reportDuration(duration));
+    }
     _position.value = status.position;
     _reportTime(status.position);
     _reportPlaying(status.state.isPlaying);
