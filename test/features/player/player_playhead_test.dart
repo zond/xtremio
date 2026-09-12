@@ -40,7 +40,8 @@ void main() {
     expect(
       report.filmSeconds,
       939,
-      reason: 'where the player is in the picture, which is the only '
+      reason:
+          'where the player is in the picture, which is the only '
           'position it has one of',
     );
     expect(
