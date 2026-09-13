@@ -1495,7 +1495,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onDuration(Duration duration) {
     setState(() => _duration = duration);
-    if (duration > Duration.zero) _onMediaLoaded();
+    if (duration > Duration.zero) {
+      // **The one number the server cannot work out for itself.** A film's
+      // length with its size is its bitrate, and the bitrate is what every
+      // stream's lookahead is sized from: a player that is behind asks for
+      // more the instant it is answered, so its reads measure the server's
+      // delivery and not its own consumption. Without this the server has
+      // no honest absolute number at all.
+      //
+      // Here rather than on a timer, because it is stated once and does not
+      // go stale. A cast reports it separately ([_onCastStatus]), since a
+      // receiver does the reading and this stream never fires.
+      unawaited(_reportDuration(duration));
+      _onMediaLoaded();
+    }
   }
 
   /// The first sign from the engine that the opened media is in: what the
