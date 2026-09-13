@@ -1343,14 +1343,6 @@ void _durationDuringACast() {
         contains(6669),
         reason: "the length is the bitrate, and it is what sizes the window",
       );
-      expect(
-        harness.playhead.reports,
-        isEmpty,
-        reason:
-            'a receiver reports seconds, and seconds do not convert to a '
-            'byte offset without a constant bitrate -- guessing one would '
-            'place the window off the film',
-      );
     });
   });
 }

@@ -561,10 +561,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// looking stuck forever.
   bool _positionSeen = false;
 
-  /// One [_reportPlayhead] in flight at a time, and when the last one went.
+  /// Where the server is told how long the film is, which is what its
+  /// retention sizes a stream's lookahead from. Not where it is told where
+  /// the viewer is: it works that out from what the reads do.
   PlayheadReporter? _playheadReporter;
-  Timer? _playheadTimer;
-  bool _reportingPlayhead = false;
 
   /// The app's preferences, for [AppPrefs.bufferAhead]. From the
   /// [PrefsScope] the app puts above every screen; a player mounted without
@@ -1473,47 +1473,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _reportTime(position);
   }
 
-  /// **Tells the server where the player is**, which is the one fact about
-  /// a viewing the server cannot work out for itself.
-  ///
-  /// It sees byte ranges, and a container-index read and a seek into the
-  /// tail arrive as the same request -- so it has guessed, and the guesses
-  /// have moved the retention window off the film and taken the pieces the
-  /// viewer was waiting on with it. The player holds the answer exactly:
-  /// `stream-pos` for where the window belongs, and `time-pos` with it so
-  /// the bitrate that sizes the window is bytes-of-file over
-  /// seconds-of-film rather than something measured through delivery.
-  ///
-  /// Throttled to [PlayerScreen.timeReportInterval] and never overlapping,
-  /// because `getProperty` awaits the player's own initialisation: a
-  /// position stream firing faster than mpv answers would otherwise queue
-  /// reports behind each other for as long as the film is open. Silent
-  /// about every failure -- it is a hint, and one that does not arrive
-  /// costs the freshness of a hint.
-  Future<void> _reportPlayhead() async {
-    final request = _torrentStatsRequest;
-    final fileIdx = _openedFileIdx;
-    if (request == null || fileIdx == null) return;
-    if (_reportingPlayhead || _handedOver || _casting) return;
-    _reportingPlayhead = true;
-    try {
-      final at = await _engine?.playhead();
-      if (at == null || !mounted || _handedOver) return;
-      await _playheadReporter?.notePlayhead(
-        infoHash: request.infoHash,
-        fileIdx: fileIdx,
-        filmSeconds: at.film.inMicroseconds / Duration.microsecondsPerSecond,
-        durationSeconds:
-            _duration.inMicroseconds / Duration.microsecondsPerSecond,
-      );
-    } catch (_) {
-      // A hint the server never hears is a hint it goes without; it has an
-      // answer of its own underneath for exactly that.
-    } finally {
-      _reportingPlayhead = false;
-    }
-  }
-
   /// Tells the core where playback has got to, no more often than
   /// [PlayerScreen.timeReportInterval]. Shared by the local engine and the
   /// receiver, so continue-watching is kept the same way either way.
@@ -1557,7 +1516,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _pauseTorrentStats();
     });
     _startStuckWatch();
-    _startPlayheadReports();
     _syncStatsPolls();
     _maybeAutoPickSubtitles();
   }
@@ -1598,27 +1556,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // A hint, like the playhead: one that does not arrive costs the
       // freshness of a hint.
     }
-  }
-
-  /// Tells the server where the player is, once a second, for as long as
-  /// the media is open.
-  ///
-  /// **On a clock and not on the position stream**, which is the difference
-  /// between a hint that helps and one that arrives too late to. Positions
-  /// are reported only once playback is running, so hanging this off them
-  /// leaves the server guessing through the whole of start-up -- which is
-  /// when the window matters most, and when the field logs show it sitting
-  /// at half the cache round piece zero while the player waited on the tail.
-  /// They also stop during a stall, so the one thing the server was told
-  /// would go stale exactly when it was still true. `stream-pos` answers as
-  /// soon as there is a demuxer, well before the first frame.
-  void _startPlayheadReports() {
-    _playheadTimer?.cancel();
-    _playheadTimer = Timer.periodic(
-      PlayerScreen.timeReportInterval,
-      (_) => unawaited(_reportPlayhead()),
-    );
-    unawaited(_reportPlayhead());
   }
 
   /// Watches for a position that has stopped moving while the player says
@@ -4401,8 +4338,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controlsTimer = null;
     _stuckTimer?.cancel();
     _stuckTimer = null;
-    _playheadTimer?.cancel();
-    _playheadTimer = null;
   }
 
   /// Stops the player, waits for it, and only then leaves the screen.

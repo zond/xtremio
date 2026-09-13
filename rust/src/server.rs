@@ -319,36 +319,6 @@ pub fn torrent_stats(
     })
 }
 
-/// **Tells the server where the player is**, so the retention window
-/// follows the film rather than a guess made from byte ranges.
-///
-/// `film` is where the player is in the *picture* -- mpv's `time-pos`, the
-/// number the progress bar draws -- which is where the retention window
-/// belongs: the server otherwise has to tell a container-index read from a
-/// seek by the shape of a `Range` header, and cannot. `duration` is how
-/// long the film is, which with the file's own size is its bitrate, and
-/// that is what sizes a window measured in seconds. Neither is inferred and
-/// neither is measured.
-///
-/// Not the player's own byte offset: `stream-pos` is where the demuxer has
-/// *read* to, and it reads the index as readily as the film. There is only
-/// one `time-pos`.
-///
-/// **A hint, and silent when there is nothing to hint to.** No error when
-/// the server is not running, the torrent is not this process's, or nothing
-/// is bounding the file -- this runs about once a second for as long as a
-/// film is open, and a caller that had to handle "not yet" every second
-/// would handle it by ignoring it. A hint that stops arriving goes stale at
-/// the server in fifteen seconds and the inference answers again.
-pub fn note_playhead(info_hash: &str, file_idx: usize, film: Duration, duration: Option<Duration>) {
-    let Some(app) = crate::state::current() else {
-        return;
-    };
-    let Some(handle) = app.server.running() else {
-        return;
-    };
-    crate::env::CONCURRENT.block_on(handle.note_playhead(info_hash, file_idx, film, duration));
-}
 
 /// **Tells the server how long the film is**, without saying where the
 /// player is in it.
@@ -359,7 +329,8 @@ pub fn note_playhead(info_hash: &str, file_idx: usize, film: Duration, duration:
 /// is sized correctly throughout a cast even though where it sits is left
 /// to the receiver's own (plainly sequential) reads.
 ///
-/// Silent about everything, exactly as [`note_playhead`] is.
+/// Silent about everything: a hint that does not arrive costs the
+/// freshness of a hint.
 pub fn note_duration(info_hash: &str, file_idx: usize, duration: Duration) {
     let Some(app) = crate::state::current() else {
         return;

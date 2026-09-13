@@ -121,29 +121,6 @@ abstract interface class StreamNumbersReader {
 /// tests, and because it is the one call in here that is a *hint*: it
 /// answers nothing, and the server has its own answer without it.
 abstract interface class PlayheadReporter {
-  /// Where the player is in `fileIdx` of `infoHash`: [filmSeconds] where it
-  /// is in the *picture*, and [durationSeconds] how long the picture is
-  /// (zero where the player does not know yet).
-  ///
-  /// The server infers the playhead from byte ranges otherwise and cannot do
-  /// it reliably -- a container-index read and a seek into the tail are the
-  /// same request. The duration is not about position at all: with the
-  /// file's size it is the film's bitrate, which is what sizes a window
-  /// measured in seconds, and it is arithmetic where measuring it was three
-  /// rounds of guesswork. Call it about once a second while a film is open.
-  ///
-  /// In the picture and not in the file, because the player's byte offset is
-  /// where its demuxer has *read* to and it reads the container index as
-  /// readily as the film -- which put the window at the end of the file
-  /// while the viewer was sixteen minutes in. There is only one position in
-  /// the picture, and it is the one the progress bar draws.
-  Future<void> notePlayhead({
-    required String infoHash,
-    required int fileIdx,
-    required double filmSeconds,
-    required double durationSeconds,
-  });
-
   /// How long the film is, with no position -- what a cast can say and
   /// nothing else: a receiver reports seconds, and seconds do not convert
   /// to a byte offset without a constant bitrate. The length *is* the
@@ -253,19 +230,6 @@ class ServerClient
 
   /// Stops the server and waits for its thread. No-op when not running.
   Future<void> stop() => rust.serverStop();
-
-  @override
-  Future<void> notePlayhead({
-    required String infoHash,
-    required int fileIdx,
-    required double filmSeconds,
-    required double durationSeconds,
-  }) => rust.serverNotePlayhead(
-    infoHash: infoHash,
-    fileIdx: fileIdx,
-    filmSeconds: filmSeconds,
-    durationSeconds: durationSeconds,
-  );
 
   @override
   Future<void> noteDuration({

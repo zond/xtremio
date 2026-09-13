@@ -39,54 +39,14 @@ Future<String> serverTorrentStats({
   trackers: trackers,
 );
 
-/// **Tells the server where the player is.** `film_seconds` is where the
-/// player is in the *picture* -- mpv's `time-pos`, the number the progress
-/// bar draws -- and `duration_seconds` how long the picture is (zero or
-/// negative for "the player does not know").
-///
-/// The server infers the playhead from byte ranges otherwise, and a byte
-/// range does not carry it: mpv reads the container index with the same
-/// kind of request it seeks with, and keeps a second reader crawling that
-/// index while it plays. Told directly, the retention window sits on the
-/// film.
-///
-/// Deliberately not the player's own byte offset. `stream-pos` is where
-/// the demuxer has *read* to, and it reads that index as readily as the
-/// film, so reporting it faithfully puts the window at the end of the file
-/// while the viewer is sixteen minutes in -- the same failure being told
-/// was meant to fix. There is only one `time-pos`. The server converts it
-/// at the film's average rate and lets a nearby read correct the drift.
-///
-/// The duration is the other half and is not a hint about position at all:
-/// with the file's own size it *is* the film's bitrate, which is what sizes
-/// a window measured in seconds. The server used to estimate that from how
-/// fast bytes left it, and produced three bytes a second and then seventeen
-/// on two successive field runs, each of which collapsed the window onto
-/// its floor and stopped playback. Size over duration is arithmetic.
-///
-/// Call it about once a second while a film is open. **It never errors and
-/// never blocks on the network**: a server that is not running, a torrent
-/// this process is not streaming, a nonsensical number -- all are nothing
-/// to say, said silently. Stop calling and the hint goes stale in fifteen
-/// seconds and the server's own inference answers again.
-Future<void> serverNotePlayhead({
-  required String infoHash,
-  required PlatformInt64 fileIdx,
-  required double filmSeconds,
-  required double durationSeconds,
-}) => RustLib.instance.api.crateApiServerServerNotePlayhead(
-  infoHash: infoHash,
-  fileIdx: fileIdx,
-  filmSeconds: filmSeconds,
-  durationSeconds: durationSeconds,
-);
-
 /// **Tells the server how long the film is**, with no position: what a cast
 /// can state, the receiver reporting seconds that do not convert to a byte
 /// offset. The length is what sizes the retention window.
 ///
-/// Never errors and never blocks on the network, exactly as
-/// `server_note_playhead` does not.
+/// Never errors and never blocks on the network. A duration is not a
+/// position, and it is the only one of the two the server is told: what a
+/// stream is fetched at is the file's own bitrate, which is its size over
+/// this.
 Future<void> serverNoteDuration({
   required String infoHash,
   required PlatformInt64 fileIdx,
