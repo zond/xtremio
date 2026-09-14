@@ -74,7 +74,6 @@ pub fn server_torrent_stats(
     })
 }
 
-
 /// **Tells the server how long the film is**, with no position: what a cast
 /// can state, the receiver reporting seconds that do not convert to a byte
 /// offset. The length is what sizes the retention window.
