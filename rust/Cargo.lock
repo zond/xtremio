@@ -1101,7 +1101,7 @@ dependencies = [
 [[package]]
 name = "enginefs"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=fb85c49#fb85c49fdc34b85cbe9a3cac149cd77cf4834302"
+source = "git+https://github.com/zond/stream-server?rev=457dfab00f40a1a77ed6320355fff4e2af0a6392#457dfab00f40a1a77ed6320355fff4e2af0a6392"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1110,8 +1110,8 @@ dependencies = [
  "fs4",
  "futures",
  "hex",
- "librqbit 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "memmap2",
  "moka",
  "parking_lot",
@@ -2152,7 +2152,7 @@ dependencies = [
 [[package]]
 name = "librqbit"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2172,17 +2172,17 @@ dependencies = [
  "http",
  "intervaltree",
  "itertools 0.15.0",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-dht 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-dht 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "librqbit-dualstack-sockets",
- "librqbit-lsd 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-peer-protocol 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-sha1-wrapper 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-tracker-comms 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-upnp 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit-lsd 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-peer-protocol 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-sha1-wrapper 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-tracker-comms 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-upnp 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "librqbit-utp",
  "memmap2",
  "mime_guess",
@@ -2216,7 +2216,7 @@ dependencies = [
 [[package]]
 name = "librqbit"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2236,17 +2236,17 @@ dependencies = [
  "http",
  "intervaltree",
  "itertools 0.15.0",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-dht 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-dht 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "librqbit-dualstack-sockets",
- "librqbit-lsd 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-peer-protocol 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-sha1-wrapper 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-tracker-comms 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-upnp 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit-lsd 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-peer-protocol 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-sha1-wrapper 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-tracker-comms 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-upnp 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "librqbit-utp",
  "memmap2",
  "mime_guess",
@@ -2280,14 +2280,14 @@ dependencies = [
 [[package]]
 name = "librqbit-bencode"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "arrayvec",
  "atoi",
  "bytes",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "serde",
  "serde_derive",
  "thiserror 2.0.20",
@@ -2296,14 +2296,14 @@ dependencies = [
 [[package]]
 name = "librqbit-bencode"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "arrayvec",
  "atoi",
  "bytes",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "serde",
  "serde_derive",
  "thiserror 2.0.20",
@@ -2312,10 +2312,10 @@ dependencies = [
 [[package]]
 name = "librqbit-buffers"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "bytes",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "serde",
  "serde_derive",
 ]
@@ -2323,10 +2323,10 @@ dependencies = [
 [[package]]
 name = "librqbit-buffers"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "bytes",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "serde",
  "serde_derive",
 ]
@@ -2334,7 +2334,7 @@ dependencies = [
 [[package]]
 name = "librqbit-clone-to-owned"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "bytes",
 ]
@@ -2342,7 +2342,7 @@ dependencies = [
 [[package]]
 name = "librqbit-clone-to-owned"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "bytes",
 ]
@@ -2350,7 +2350,7 @@ dependencies = [
 [[package]]
 name = "librqbit-core"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2360,10 +2360,10 @@ dependencies = [
  "encoding_rs",
  "hex",
  "itertools 0.15.0",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-sha1-wrapper 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-sha1-wrapper 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "memchr",
  "parking_lot",
  "rand 0.10.2",
@@ -2379,7 +2379,7 @@ dependencies = [
 [[package]]
 name = "librqbit-core"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2389,10 +2389,10 @@ dependencies = [
  "encoding_rs",
  "hex",
  "itertools 0.15.0",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-sha1-wrapper 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-sha1-wrapper 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "memchr",
  "parking_lot",
  "rand 0.10.2",
@@ -2408,7 +2408,7 @@ dependencies = [
 [[package]]
 name = "librqbit-dht"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "backon",
@@ -2418,10 +2418,10 @@ dependencies = [
  "futures",
  "indexmap 2.14.1",
  "leaky-bucket",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "librqbit-dualstack-sockets",
  "parking_lot",
  "rand 0.10.2",
@@ -2438,7 +2438,7 @@ dependencies = [
 [[package]]
 name = "librqbit-dht"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "backon",
@@ -2448,10 +2448,10 @@ dependencies = [
  "futures",
  "indexmap 2.14.1",
  "leaky-bucket",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "librqbit-dualstack-sockets",
  "parking_lot",
  "rand 0.10.2",
@@ -2485,14 +2485,14 @@ dependencies = [
 [[package]]
 name = "librqbit-lsd"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "atoi",
  "bstr",
  "futures",
  "httparse",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "librqbit-dualstack-sockets",
  "parking_lot",
  "rand 0.10.2",
@@ -2504,14 +2504,14 @@ dependencies = [
 [[package]]
 name = "librqbit-lsd"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "atoi",
  "bstr",
  "futures",
  "httparse",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "librqbit-dualstack-sockets",
  "parking_lot",
  "rand 0.10.2",
@@ -2523,17 +2523,17 @@ dependencies = [
 [[package]]
 name = "librqbit-peer-protocol"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "bitvec",
  "byteorder",
  "bytes",
  "itertools 0.15.0",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "serde",
  "serde_derive",
  "thiserror 2.0.20",
@@ -2543,17 +2543,17 @@ dependencies = [
 [[package]]
 name = "librqbit-peer-protocol"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "bitvec",
  "byteorder",
  "bytes",
  "itertools 0.15.0",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-clone-to-owned 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "serde",
  "serde_derive",
  "thiserror 2.0.20",
@@ -2563,7 +2563,7 @@ dependencies = [
 [[package]]
 name = "librqbit-sha1-wrapper"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "assert_cfg",
  "aws-lc-rs",
@@ -2572,7 +2572,7 @@ dependencies = [
 [[package]]
 name = "librqbit-sha1-wrapper"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "assert_cfg",
  "aws-lc-rs",
@@ -2581,7 +2581,7 @@ dependencies = [
 [[package]]
 name = "librqbit-tracker-comms"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2589,9 +2589,9 @@ dependencies = [
  "byteorder",
  "futures",
  "itertools 0.15.0",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb)",
  "librqbit-dualstack-sockets",
  "parking_lot",
  "rand 0.10.2",
@@ -2609,7 +2609,7 @@ dependencies = [
 [[package]]
 name = "librqbit-tracker-comms"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2617,9 +2617,9 @@ dependencies = [
  "byteorder",
  "futures",
  "itertools 0.15.0",
- "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
- "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=9897615c)",
+ "librqbit-bencode 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-buffers 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
+ "librqbit-core 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "librqbit-dualstack-sockets",
  "parking_lot",
  "rand 0.10.2",
@@ -2637,7 +2637,7 @@ dependencies = [
 [[package]]
 name = "librqbit-upnp"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9#975bf4f39e99deacd21c174acd8a6cb5dbd68db9"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "bstr",
@@ -2659,7 +2659,7 @@ dependencies = [
 [[package]]
 name = "librqbit-upnp"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=9897615c#9897615c1e180e5d0b11ee66c365428c5f9997f3"
+source = "git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2#fca522eb60376edc184e0ca8526015cd45b1afc2"
 dependencies = [
  "anyhow",
  "bstr",
@@ -4034,7 +4034,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=fb85c49#fb85c49fdc34b85cbe9a3cac149cd77cf4834302"
+source = "git+https://github.com/zond/stream-server?rev=457dfab00f40a1a77ed6320355fff4e2af0a6392#457dfab00f40a1a77ed6320355fff4e2af0a6392"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5420,7 +5420,7 @@ dependencies = [
  "futures",
  "http",
  "jni",
- "librqbit 9.0.1 (git+https://github.com/zond/rqbit?rev=975bf4f39e99deacd21c174acd8a6cb5dbd68db9)",
+ "librqbit 9.0.1 (git+https://github.com/zond/rqbit?rev=fca522eb60376edc184e0ca8526015cd45b1afc2)",
  "log",
  "mimalloc",
  "regex",
