@@ -572,7 +572,7 @@ void main() {
             refusedReclaims: 33,
           ),
         ),
-        ['unverified 1.5 GB fetched, not hash-checked · 33 reclaims refused'],
+        ['unver.   1.5 GB fetched, not hash-checked · 33 reclaims refused'],
       );
     });
 
@@ -590,7 +590,7 @@ void main() {
             refusedReclaims: 0,
           ),
         ),
-        ['unverified 0 B fetched, not hash-checked · 0 reclaims refused'],
+        ['unver.   0 B fetched, not hash-checked · 0 reclaims refused'],
       );
     });
 
@@ -598,7 +598,7 @@ void main() {
       'one refusal is singular, and a stream with no numbers has no row',
       () {
         expect(rows(const SharingNumbers(refusedReclaims: 1)), [
-          'unverified 1 reclaim refused',
+          'unver.   1 reclaim refused',
         ]);
         expect(rows(null), isEmpty);
         expect(PlaybackStatsOverlay.describeUnverified(null), isEmpty);

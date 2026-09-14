@@ -493,7 +493,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
       if (sharing.refusedReclaims case final refused?)
         '$refused ${refused == 1 ? 'reclaim' : 'reclaims'} refused',
     ];
-    return parts.isEmpty ? const [] : ['unverified ${parts.join(' · ')}'];
+    return parts.isEmpty ? const [] : ['unver.   ${parts.join(' · ')}'];
   }
 
   /// A byte count in human units: `340 MB`, `1.2 GB`. Decimal, on the same
