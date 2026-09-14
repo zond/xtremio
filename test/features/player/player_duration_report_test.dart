@@ -46,10 +46,8 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await pumpEvents(tester);
 
-    expect(
-      harness.playhead.durations,
-      [6669],
-      reason: 'a length does not go stale, so repeating it buys nothing',
-    );
+    expect(harness.playhead.durations, [
+      6669,
+    ], reason: 'a length does not go stale, so repeating it buys nothing');
   });
 }
