@@ -550,15 +550,15 @@ void main() {
     });
   });
 
-  group('the waste row is what the cache fetched and threw away', () {
+  group('the unverified row is what no piece hash has vouched for', () {
     List<String> rows(SharingNumbers? sharing) =>
-        PlaybackStatsOverlay.describeWaste(
+        PlaybackStatsOverlay.describeUnverified(
           sharing == null ? null : StreamNumbers(sharing: sharing),
         );
 
-    test('bytes dropped and reclaims refused, both of them', () {
-      // The two numbers that made the 1.6 GB open legible: pieces the
-      // cache fetched and its own next pass deleted, and pieces it asked
+    test('unverified bytes and reclaims refused, both of them', () {
+      // The two numbers that made the 1.6 GB open legible: bytes fetched
+      // that no piece hash ever vouched for, and pieces the cache asked
       // the backend to forget and could not, because an open stream was
       // still reading ahead over them.
       expect(
@@ -566,13 +566,13 @@ void main() {
           const SharingNumbers(
             transfer: LiveTransfer(
               downloadedBytes: 1600000000,
-              wastedBytes: 1500000000,
+              unverifiedBytes: 1500000000,
               uploadedBytes: 0,
             ),
             refusedReclaims: 33,
           ),
         ),
-        ['waste  1.5 GB fetched and dropped · 33 reclaims refused'],
+        ['unverified 1.5 GB fetched, not hash-checked · 33 reclaims refused'],
       );
     });
 
@@ -584,13 +584,13 @@ void main() {
           const SharingNumbers(
             transfer: LiveTransfer(
               downloadedBytes: 100,
-              wastedBytes: 0,
+              unverifiedBytes: 0,
               uploadedBytes: 0,
             ),
             refusedReclaims: 0,
           ),
         ),
-        ['waste  0 B fetched and dropped · 0 reclaims refused'],
+        ['unverified 0 B fetched, not hash-checked · 0 reclaims refused'],
       );
     });
 
@@ -598,10 +598,10 @@ void main() {
       'one refusal is singular, and a stream with no numbers has no row',
       () {
         expect(rows(const SharingNumbers(refusedReclaims: 1)), [
-          'waste  1 reclaim refused',
+          'unverified 1 reclaim refused',
         ]);
         expect(rows(null), isEmpty);
-        expect(PlaybackStatsOverlay.describeWaste(null), isEmpty);
+        expect(PlaybackStatsOverlay.describeUnverified(null), isEmpty);
       },
     );
   });
@@ -627,7 +627,7 @@ void main() {
               committedBytes: 859832320,
               transfer: LiveTransfer(
                 downloadedBytes: 4800000000,
-                wastedBytes: 0,
+                unverifiedBytes: 0,
                 uploadedBytes: 2100000000,
                 ratio: 0.4375,
               ),
@@ -662,7 +662,7 @@ void main() {
             const SharingNumbers(
               transfer: LiveTransfer(
                 downloadedBytes: 4800000000,
-                wastedBytes: 0,
+                unverifiedBytes: 0,
                 uploadedBytes: 2100000000,
                 ratio: 0.4375,
               ),
@@ -694,7 +694,7 @@ void main() {
               const SharingNumbers(
                 transfer: LiveTransfer(
                   downloadedBytes: 0,
-                  wastedBytes: 0,
+                  unverifiedBytes: 0,
                   uploadedBytes: 2100000000,
                 ),
               ),
@@ -716,7 +716,7 @@ void main() {
             committedBytes: 859832320,
             transfer: LiveTransfer(
               downloadedBytes: 0,
-              wastedBytes: 0,
+              unverifiedBytes: 0,
               uploadedBytes: 2100000000,
             ),
           ),

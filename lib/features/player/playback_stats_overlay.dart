@@ -183,7 +183,7 @@ class PlaybackStatsOverlay extends StatelessWidget {
     // directly under the window it committed for: both are read off the
     // same policy and are meant to be read against each other.
     ...describeSharing(held),
-    ...describeWaste(held),
+    ...describeUnverified(held),
     // Only when mpv answered: on a backend that has no such properties
     // the rows would be three dashes claiming something was measured.
     if (s != null && (s.seekable != null || s.partiallySeekable != null))
@@ -466,27 +466,34 @@ class PlaybackStatsOverlay extends StatelessWidget {
     return parts.isEmpty ? const [] : ['sharing  ${parts.join(' · ')}'];
   }
 
-  /// The waste row: bytes fetched that never became a piece the server
-  /// kept, and pieces the cache asked the torrent backend to forget and was
-  /// refused.
+  /// The unverified row: bytes fetched from peers that no piece hash has
+  /// vouched for, and pieces the cache asked the torrent backend to forget
+  /// and was refused.
   ///
-  /// **Both are zero on a healthy stream, and both stay on the panel.**
-  /// They are what made a phone fetching 1.6 GB to play a hundred
-  /// megabytes legible: the cache was ordering pieces its own next pass
-  /// deleted, and the refusals were the ones it could not even delete,
-  /// because an open stream was still reading ahead over them. Absent
-  /// rather than zero where the server has nothing to say -- a proxied
-  /// stream, or a torrent whose counters cannot be read.
-  static List<String> describeWaste(StreamNumbers? held) {
+  /// **A level, not a verdict.** The first figure is what the server
+  /// fetched less what it downloaded and checked, and the subtraction
+  /// cannot say whose bytes those are: chunks of a piece still in flight
+  /// leave the number when that piece checks, the second copy of a chunk
+  /// asked of a fast peer on purpose to get a piece out from under a
+  /// stalled one sits in it, and so does what really was thrown away. A
+  /// few per cent of what was played is that ordinary duplication; a
+  /// multiple of it, beside refusals that are never healthy above zero, is
+  /// what made a phone fetching 1.6 GB to play a hundred megabytes
+  /// legible -- the cache was ordering pieces its own next pass deleted,
+  /// and the refusals were the ones it could not even delete, because an
+  /// open stream was still reading ahead over them. Absent rather than
+  /// zero where the server has nothing to say -- a proxied stream, or a
+  /// torrent whose counters cannot be read.
+  static List<String> describeUnverified(StreamNumbers? held) {
     final sharing = held?.sharing;
     if (sharing == null) return const [];
     final parts = [
       if (sharing.transfer case final transfer?)
-        '${formatBytes(transfer.wastedBytes)} fetched and dropped',
+        '${formatBytes(transfer.unverifiedBytes)} fetched, not hash-checked',
       if (sharing.refusedReclaims case final refused?)
         '$refused ${refused == 1 ? 'reclaim' : 'reclaims'} refused',
     ];
-    return parts.isEmpty ? const [] : ['waste  ${parts.join(' · ')}'];
+    return parts.isEmpty ? const [] : ['unverified ${parts.join(' · ')}'];
   }
 
   /// A byte count in human units: `340 MB`, `1.2 GB`. Decimal, on the same

@@ -204,7 +204,7 @@ final class SharingNumbers {
 final class LiveTransfer {
   const LiveTransfer({
     required this.downloadedBytes,
-    required this.wastedBytes,
+    required this.unverifiedBytes,
     required this.uploadedBytes,
     this.ratio,
   });
@@ -212,13 +212,19 @@ final class LiveTransfer {
   /// Bytes fetched from peers since the torrent last went live.
   final int downloadedBytes;
 
-  /// Of those, the bytes that never became a piece the server kept.
+  /// Of those, the bytes no piece hash has vouched for: what the server
+  /// fetched, less what it has downloaded and checked.
   ///
-  /// A few per cent is the end of a download duplicating its last pieces
-  /// and is normal. A multiple of what has been watched is the cache
-  /// fetching what it is about to delete, which is what this figure exists
-  /// to show.
-  final int wastedBytes;
+  /// **Not "wasted", because the subtraction cannot tell.** Chunks of a
+  /// piece still in flight sit in it and leave it when that piece checks;
+  /// so does the second copy of a chunk the server asked a fast peer for
+  /// on purpose, to get a piece out from under a stalled one; and so does
+  /// what really was thrown away. Read it as a level rather than as loss:
+  /// a few per cent of what was played is the ordinary cost of
+  /// duplication in flight, and a multiple of it is the cache fetching
+  /// what it is about to delete, which is what this figure exists to
+  /// show.
+  final int unverifiedBytes;
 
   /// Bytes sent to peers since the torrent last went live.
   final int uploadedBytes;
@@ -241,7 +247,7 @@ final class LiveTransfer {
     if (downloaded == null || uploaded == null) return null;
     return LiveTransfer(
       downloadedBytes: downloaded,
-      wastedBytes: (value['wastedBytes'] as num?)?.toInt() ?? 0,
+      unverifiedBytes: (value['unverifiedBytes'] as num?)?.toInt() ?? 0,
       uploadedBytes: uploaded,
       ratio: (value['ratio'] as num?)?.toDouble(),
     );
@@ -251,16 +257,17 @@ final class LiveTransfer {
   bool operator ==(Object other) =>
       other is LiveTransfer &&
       other.downloadedBytes == downloadedBytes &&
-      other.wastedBytes == wastedBytes &&
+      other.unverifiedBytes == unverifiedBytes &&
       other.uploadedBytes == uploadedBytes &&
       other.ratio == ratio;
 
   @override
   int get hashCode =>
-      Object.hash(downloadedBytes, wastedBytes, uploadedBytes, ratio);
+      Object.hash(downloadedBytes, unverifiedBytes, uploadedBytes, ratio);
 
   @override
   String toString() =>
-      'LiveTransfer(down: $downloadedBytes B, wasted: $wastedBytes B, '
+      'LiveTransfer(down: $downloadedBytes B, '
+      'unverified: $unverifiedBytes B, '
       'up: $uploadedBytes B, ratio: $ratio)';
 }
