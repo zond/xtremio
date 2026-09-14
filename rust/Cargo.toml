@@ -35,14 +35,14 @@ flutter_rust_bridge = "=2.13.0"
 # with the fetch-ahead bounded by the window, liveness that ends on a switch
 # or a restart rather than on a clock, and no cache cleaner at all -- every
 # byte under the root has exactly one thing that deletes it.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "bbc7398af2f1911037cefef510b6d4d1bdce9dcd" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "8a32c7670ad7aa22c57cd6867da6da924b4e2559" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "bbc7398af2f1911037cefef510b6d4d1bdce9dcd" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "8a32c7670ad7aa22c57cd6867da6da924b4e2559" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
@@ -155,7 +155,7 @@ flate2 = "1"
 # on zond/rqbit, and always the rev the stream-server pin above uses for
 # its enginefs: a different one puts two librqbits in the graph, the crate
 # compiled twice. Bump the two together.
-librqbit = { git = "https://github.com/zond/rqbit", rev = "fca522eb60376edc184e0ca8526015cd45b1afc2", default-features = false, features = [
+librqbit = { git = "https://github.com/zond/rqbit", rev = "bb6bad9b1ebd5e8c1dccba1af1938cc75318d3fc", default-features = false, features = [
     "rust-tls",
     "http-api-client",
 ] }
