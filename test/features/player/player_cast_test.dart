@@ -1344,5 +1344,30 @@ void _durationDuringACast() {
         reason: "the length is the bitrate, and it is what sizes the window",
       );
     });
+
+    testWidgets('and once, not on every status the receiver repeats', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+
+      for (final minutes in [7, 8, 9]) {
+        cast.emitStatus(
+          CastStatus(
+            state: CastPlayerState.playing,
+            position: Duration(minutes: minutes),
+            duration: const Duration(seconds: 6669),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      expect(harness.playhead.durations, [
+        6669,
+      ], reason: 'a length does not go stale, so repeating it buys nothing');
+    });
   });
 }

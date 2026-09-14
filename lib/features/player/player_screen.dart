@@ -3754,7 +3754,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() => _castStatus = status);
     if (!_casting || _opened == null) return;
     final duration = status.duration;
-    if (duration != null && duration > Duration.zero) {
+    // Once per length, not per status: a receiver repeats its status every
+    // second or so, and a length does not go stale.
+    if (duration != null && duration > Duration.zero && duration != _duration) {
       _duration = duration;
       // **What a cast can tell the server, and all of it.** The receiver
       // does the reading and says where it is in seconds; seconds do not
