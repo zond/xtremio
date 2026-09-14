@@ -168,9 +168,10 @@ class CacheUsage {
   /// The limit in force, the one the server's owners size the cache
   /// against, in the same accounting: the smaller of the `cacheSize`
   /// setting and what the volume can give while keeping its free-space
-  /// floor (`CACHE_FREE_SPACE_FLOOR`, 512 MiB) clear -- so on a device with
-  /// no `cacheSize` set this is still a number, and the number is the
-  /// device's.
+  /// floor clear (`enginefs::free_space_floor`: a thirty-second of the
+  /// volume, clamped to 128-512 MiB, and 512 MiB when the volume's size
+  /// is unreadable) -- so on a device with no `cacheSize` set this is
+  /// still a number, and the number is the device's.
   ///
   /// Null only when neither caps anything: `cacheSize` unset *and* the
   /// volume's free space unreadable. That makes it a different question

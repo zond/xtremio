@@ -101,10 +101,12 @@ Future<String> serverStorageReport() =>
 /// `protectedFiles`).
 ///
 /// `limitBytes` is the smaller of the `cacheSize` setting and what the
-/// volume can give while keeping the server's 512 MiB free-space floor
-/// clear, so it is a number even with no `cacheSize` set, it is derived
-/// from free space and so moves when anything else on the device writes,
-/// and it is null only when neither caps anything. It is a different
+/// volume can give while keeping the server's free-space floor clear
+/// (`enginefs::free_space_floor`: a thirty-second of the volume, clamped
+/// to 128-512 MiB; 512 MiB when the volume's size is unreadable), so it is
+/// a number even with no `cacheSize` set, it is derived from free space
+/// and so moves when anything else on the device writes, and it is null
+/// only when neither caps anything. It is a different
 /// question from `server_storage_report`'s `cacheLimitBytes`, which is the
 /// setting itself.
 /// `protectedBytes`/`protectedFiles` are what a pinned download or the

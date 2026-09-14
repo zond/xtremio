@@ -431,14 +431,17 @@ fn newest(kinds: &BTreeMap<ResourceKind, Record>) -> Option<DateTime<Utc>> {
 /// Whether `base` is this app's own stub rather than an addon on the
 /// network: the embedded server, or the profile's built-in local addon.
 ///
-/// Two rules, because the bound-authority check alone is not enough. The
-/// local addon keeps the transport URL it was born with,
+/// Two rules, because the bound-authority check never catches the local
+/// addon. It keeps the transport URL it was born with,
 /// `http://127.0.0.1:11470/local-addon/manifest.json`, and nothing
 /// retargets it -- `crate::core::retarget_loopback_server` rewrites the
-/// streaming server URL in the settings and not the addon -- so as soon as
-/// 11470 is taken by another Stremio and the embedded server falls back to
-/// an ephemeral port, or no server is running at all, the local addon stops
-/// looking embedded while still being ours.
+/// streaming server URL in the settings and not the addon -- while the
+/// embedded server is always on a port the OS picked (`server::spawn`
+/// binds port 0; it has not asked for 11470 since the fallback that
+/// handled a taken port went). So the ports never match, on every boot and
+/// not only when no server is running at all: the by-name rule is the one
+/// that applies to the local addon, and dropping it as an edge case would
+/// count its loopback answer as network evidence every time.
 ///
 /// Skipping it is not only about refusing to judge a protected addon. A
 /// loopback answer is not evidence that the network is up, and
@@ -1076,9 +1079,9 @@ mod tests {
 
     #[test]
     fn the_local_addon_is_skipped_wherever_the_embedded_server_bound() {
-        // 11470 was taken by another Stremio, so the embedded server fell
-        // back to an ephemeral port -- but the profile's local addon still
-        // carries the transport URL it was born with.
+        // The embedded server is on the port the OS picked, as it always
+        // is -- but the profile's local addon still carries the 11470
+        // transport URL it was born with, so the two never share a port.
         let embedded = url("http://127.0.0.1:40503/");
         let local_addon = url("http://127.0.0.1:11470/local-addon/manifest.json");
         let remote = url("https://cinemeta.example.com/manifest.json");

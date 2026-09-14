@@ -103,8 +103,10 @@ fn cache_limit_bytes(cache_size: Option<f64>) -> Option<u64> {
 /// `fs4::available_space` is `statvfs`'s `f_frsize * f_bavail` -- `df`'s
 /// Available column, root's reserve excluded -- which is the same call and
 /// the same crate the embedded server sizes its cache cap with, holding
-/// `enginefs::CACHE_FREE_SPACE_FLOOR` free (stream-server's
-/// `cache_budget`). Deliberately the same one: a report puts this number
+/// `enginefs::free_space_floor` free -- a thirty-second of the volume,
+/// clamped to 128-512 MiB, and 512 MiB when the volume's size is
+/// unreadable (stream-server's `cache_budget`). Deliberately the same one:
+/// a report puts this number
 /// next to the floor the server keeps, and two answers to "how much room is
 /// left" taken from different places would drift apart on the one screen
 /// that exists to explain a device with no room left.

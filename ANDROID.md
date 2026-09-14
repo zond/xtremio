@@ -887,7 +887,9 @@ bottom of `ci.yml` — verified manually instead):
   no `FATAL` or uncaught-exception lines for the run.
 - `adb forward tcp:11470 tcp:11470 && curl http://127.0.0.1:11470/heartbeat`
   returned `{"success":true}` (HTTP 200). (That was before the server's
-  control API took a bearer token; today the same probe answers 401.)
+  control API took a bearer token, and before it moved to an OS-picked
+  port; today read the port from logcat as in *Verify* above, forward that,
+  and the same probe answers 401.)
 - The app booted straight into **Board**; navigating to **Discover** loaded
   and rendered the Cinemeta catalog with poster images over HTTPS (confirmed
   visually via `adb shell screencap`), proving the TLS-verifier hook,
@@ -982,8 +984,9 @@ Verified on a headless `xtremio_tv36` AVD
   slider nor the fullscreen button — the remote's controls only. The centre
   key and `KEYCODE_MEDIA_PLAY_PAUSE` toggled play/pause, the centre key woke
   the faded controls, and back popped the player (`route pop: player`).
-- The embedded server reached **Ready** at `http://127.0.0.1:11470/`; no
-  `FATAL`/`AndroidRuntime` lines for the whole run.
+- The embedded server reached **Ready** at `http://127.0.0.1:11470/` (it
+  still asked for 11470 then; today the port is the OS's, read from
+  logcat); no `FATAL`/`AndroidRuntime` lines for the whole run.
 - **Two things this run turned up.** The row header overflowed by 6 px under
   the TV's 1.15x text scale — fixed (the header now grows with the text
   scale, and the widget test reproduces the same 6 px). And on Settings the

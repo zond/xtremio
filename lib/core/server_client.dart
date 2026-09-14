@@ -115,7 +115,14 @@ abstract interface class StreamNumbersReader {
   Future<StreamNumbers?> streamNumbers(Uri url);
 }
 
-/// Telling the server where the player is.
+/// Telling the server how long the film is.
+///
+/// The name is from when it also told the server where the player was.
+/// It does not any more: where the player *is* the server works out from
+/// what the reads do (the read-pattern detector), and the length is the
+/// one thing about the playback it cannot -- the film's bitrate, and with
+/// it the seconds a buffer profile asks for, are the length divided into
+/// the file's size.
 ///
 /// Named on its own so the player screen can be handed a recorder in
 /// tests, and because it is the one call in here that is a *hint*: it

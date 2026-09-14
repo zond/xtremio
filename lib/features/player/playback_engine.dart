@@ -33,14 +33,6 @@ abstract interface class PlaybackEngine {
   Stream<bool> get playing;
   Stream<bool> get buffering;
 
-  /// Where the player is, in the file and in the picture, or null where the
-  /// backend cannot say.
-  ///
-  /// The server needs this because it cannot work it out: it sees byte
-  /// ranges, and a container-index read and a seek into the tail are the
-  /// same request. See `serverNotePlayhead`.
-  Future<PlayheadReport?> playhead();
-
   /// Fires once when the media reaches its end.
   Stream<bool> get completed;
   Stream<String> get errors;
@@ -345,8 +337,9 @@ class PlaybackScope extends InheritedWidget {
   /// up.
   final StreamNumbersReader? streamNumbers;
 
-  /// Where the player is, told to the server. Injectable so a test can see
-  /// what was reported without reaching FFI.
+  /// How long the film is, told to the server -- the one thing about the
+  /// playback it cannot work out from the reads. Injectable so a test can
+  /// see what was reported without reaching FFI.
   final PlayheadReporter? playhead;
 
   static PlaybackScope? _maybeOf(BuildContext context) =>
@@ -398,22 +391,6 @@ class PlaybackScope extends InheritedWidget {
 /// [hardwareDecoding] (`profile.settings.hardwareDecoding`) is fixed at
 /// creation: media_kit takes it as the video controller's configuration
 /// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
-/// Where a player is in the picture.
-///
-/// The position the progress bar draws, and the only one there is: mpv also
-/// has a byte offset (`stream-pos`), but that is where its demuxer has
-/// *read* to and it reads the container index as readily as the film, so
-/// reporting it faithfully put the retention window at the end of the file
-/// while the viewer was sixteen minutes in. The server converts this one at
-/// the film's average rate, which it gets from the length, and lets a read
-/// sitting near the result correct it.
-final class PlayheadReport {
-  const PlayheadReport({required this.film});
-
-  /// The position in the picture (mpv's `time-pos`).
-  final Duration film;
-}
-
 class MediaKitEngine implements PlaybackEngine {
   MediaKitEngine({bool hardwareDecoding = true})
     : _player = Player(configuration: playerConfiguration) {
@@ -1102,23 +1079,6 @@ class MediaKitEngine implements PlaybackEngine {
   void _stopStats() {
     _statsTimer?.cancel();
     _statsTimer = null;
-  }
-
-  @override
-  Future<PlayheadReport?> playhead() async {
-    final native = _player.platform;
-    if (native is! NativePlayer || _disposed) return null;
-    try {
-      final film = double.tryParse(await native.getProperty('time-pos'));
-      if (film == null || film < 0 || !film.isFinite) return null;
-      return PlayheadReport(
-        film: Duration(microseconds: (film * 1000000).round()),
-      );
-    } catch (_) {
-      // Unavailable before the demuxer exists, and while one is being torn
-      // down. Saying nothing is what the server expects of a hint.
-      return null;
-    }
   }
 
   Future<void> _sampleStats(NativePlayer native) async {

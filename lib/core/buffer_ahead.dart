@@ -15,8 +15,10 @@
 /// device's cache size, which meant a viewer who gave the app more storage
 /// silently bought a bigger mobile-data bill.
 ///
-/// [maximum] is the exception: it asks for no cap at all, so where the cache
-/// has room it keeps the whole film while you are watching it.
+/// [maximum] is the exception only in degree: it asks for a day of film,
+/// which no film reaches, so where the cache has room it keeps the whole
+/// film while you are watching it, and the cache budget is all that bounds
+/// it.
 ///
 /// The last option is not a window at all. Past a point a bigger buffer stops
 /// being an answer, and the honest one is to keep the file: [wholeFile] pins
@@ -28,20 +30,23 @@
 library;
 
 enum BufferAhead {
-  /// About a minute and a half of the film in hand. The server's own
-  /// default, and this app's.
+  /// About a minute and a half of the film in hand: 90 s of it, at the
+  /// film's bitrate, read ahead and kept. The server's own default, and
+  /// this app's.
   normal,
 
-  /// About four minutes in hand, and twice the read-ahead cap.
+  /// About four minutes of the film in hand: 240 s of it, at the film's
+  /// bitrate.
   large,
 
-  /// No time cap at all: as much of the film as the cache will hold, which
-  /// is the whole of it where there is room. Four times the read-ahead cap.
+  /// No time cap a film can reach -- the server asks for a day of it -- so
+  /// as much of the film as the cache budget will hold, which is the whole
+  /// of it where there is room.
   ///
   /// Cache, not a download — see [wholeFile] for the difference.
   maximum,
 
-  /// Four times the read-ahead *and* the whole file kept on the device.
+  /// [maximum]'s window *and* the whole file kept on the device.
   wholeFile;
 
   /// The value the stream URL's `buffer=` parameter carries.

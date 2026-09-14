@@ -119,8 +119,15 @@ what every model field means. The shape of the thing is in the
   connection and a patient player; a spotty link, or a receiver with a
   shallower buffer than mpv's, wants more, and a fast link on mobile data
   wants less. The server takes that as `?buffer=normal|large|maximum` on
-  the stream URL (x1, x2, x4 on the playback read-ahead; the startup window
-  is the same under all three, so nothing starts more slowly). The app adds
+  the stream URL: seconds of the film held and read ahead, at the film's
+  own bitrate -- 90 s for `normal`, four minutes for `large`, and a day
+  for `maximum`, which no film reaches, so the cache budget alone bounds
+  it. The seconds are convertible only once the server knows the film's
+  length, which the app tells it (`_reportDuration` in the player screen
+  -> `PlayheadReporter.noteDuration` -> `server_note_duration`); until it
+  has, every profile reads ahead by the same 4 MiB fallback, so the
+  startup window is the same under all three and nothing starts more
+  slowly. The app adds
   it in `withBufferAhead` (`lib/core/buffer_ahead.dart`) to the URL
   stremio-core resolved, and only for a torrent served over http(s) -- an
   addon's own host knows nothing about it, and a kept download's URL is
@@ -534,8 +541,10 @@ what every model field means. The shape of the thing is in the
   held 928 MB that way while three separate instruments reported the app
   was using 46 MB. The server's cache is everything that is not -- named
   files, a configured limit (`min(cacheSize, occupied + available -
-  512 MiB)`, the `CACHE_FREE_SPACE_FLOOR` below which
-  `ensure_download_disk_ready` has already given up on the disk), and
+  floor)`, the floor being `enginefs::free_space_floor` -- a thirty-second
+  of the volume, clamped to 128-512 MiB, and 512 MiB when the volume's
+  size is unreadable -- below which `ensure_download_disk_ready` has
+  already given up on the disk), and
   owners that give back what nobody is playing and nobody kept -- and now
   that every stream goes through it, it is the only local copy there is.
   There is no shared budget to keep any more, because there is nothing to
@@ -1257,7 +1266,11 @@ what every model field means. The shape of the thing is in the
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`3e70deb`: generated
+  features, `zond/stream-server` at a fixed rev (`8317203` as this is
+  written; the pin itself lives in `rust/Cargo.toml`, twice, for `server`
+  and its `enginefs`, and the `Pin stream-server at ...` commits move it
+  there and not here, so read the current one from the file. What the pin
+  buys: generated
   bearer token, library API on `ServerHandle`, ephemeral torrent port,
   `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
   counts, the buffer profiles behind `?buffer=`, cache usage and
@@ -1271,8 +1284,11 @@ what every model field means. The shape of the thing is in the
   sitting on,
   `ServerHandle::dht_status` for the diagnostics screen, a cache cap that
   is the smaller of `cacheSize` and what `statvfs` says the volume can
-  give above a 512 MiB free-space floor -- so a television with no
-  `cacheSize` set is capped by its own disk rather than by `u64::MAX` --
+  give above a free-space floor sized to the volume
+  (`enginefs::free_space_floor`: a thirty-second of it, clamped to
+  128-512 MiB, and 512 MiB when the size is unreadable -- so a television
+  with a 4 GB partition keeps 128 MiB and can play, and one with no
+  `cacheSize` set is capped by its own disk rather than by `u64::MAX`) --
   and an ENOSPC that stops a torrent being classified as a full disk and
   answered with an eviction pass and a restart instead of a dead playback
   -- with that pass allowed to evict a file larger than the whole cap when
@@ -1292,7 +1308,17 @@ what every model field means. The shape of the thing is in the
   device -- which is all the count knows about it -- the count belonging to
   the session that asks about it:
   start and stop both reset it, so a second receiver picked mid-cast does
-  not inherit the first one's). To
+  not inherit the first one's), and -- the last sixteen pins -- a retention
+  that keeps what the reads say is being watched rather than what a range
+  header looked like (a detector over the reads decides which reader is
+  the viewer, and a pass per owner answers its own file against its own
+  listing), buffer profiles sized in seconds of the film at its bitrate
+  (90 s, four minutes, a day) once `note_duration` has told the server the
+  length, with the film named the way the player URL spells it, `-1`
+  included, one allowance shared across the files being read, a reclaim
+  the backend refuses -- a hash check running, a piece it will not forget
+  -- noticed by the pass rather than counted as room made, and the
+  free-space floor sized to the volume above. To
   bump: change the rev, `cargo update -p <crate>`, run
   `cargo test`, re-record any fixture whose shape moved, move the
   `[patch]` key along if the source URL changed (it names the URL being
