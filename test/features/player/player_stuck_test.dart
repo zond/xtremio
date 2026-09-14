@@ -17,6 +17,10 @@ void main() {
   ) async {
     final harness = PlayerHarness();
     await harness.pump(tester);
+    // The file is open and known, so the start-up overlay's own polling
+    // is over: what polls from here is the stall's.
+    harness.engine.emitDuration(const Duration(seconds: 6669));
+    await pumpEvents(tester);
 
     // Playing, with mpv perfectly happy: no buffering flag at all.
     harness.engine.emitPlaying(true);
@@ -33,12 +37,37 @@ void main() {
     await tester.pump(PlayerScreen.stuckAfter + PlayerScreen.stuckInterval);
     expect(find.textContaining(TorrentStallOverlay.waiting), findsOneWidget);
 
+    // While it is stuck the stats are polled at the stall cadence.
+    final beforeStuck = harness.calls.where((c) => c == 'stats').length;
+    await tester.pump(const Duration(seconds: 10));
+    final whileStuck =
+        harness.calls.where((c) => c == 'stats').length - beforeStuck;
+    expect(
+      whileStuck,
+      greaterThan(0),
+      reason: 'a stuck player polls the torrent for what it is waiting on',
+    );
+
     // Moving again takes it away. Twice, because the engine's event lands
     // in one frame and the rebuild it asks for happens in the next.
     harness.engine.emitPosition(const Duration(seconds: 940));
     await tester.pump();
     await tester.pump();
     expect(find.textContaining(TorrentStallOverlay.waiting), findsNothing);
+
+    // And the stall cadence with it: whatever polls while a film plays
+    // untroubled polls less often than the stall's two seconds.
+    final beforeRecovered = harness.calls.where((c) => c == 'stats').length;
+    await tester.pump(const Duration(seconds: 10));
+    final recovered =
+        harness.calls.where((c) => c == 'stats').length - beforeRecovered;
+    expect(
+      recovered,
+      lessThan(whileStuck),
+      reason:
+          'the stats poll kept the stall cadence after the position moved on: '
+          '$recovered polls in ten seconds against $whileStuck while stuck',
+    );
   });
 
   testWidgets('a paused player is not waiting', (tester) async {

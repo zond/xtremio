@@ -28,6 +28,25 @@ void main() {
     expect(numbers.isEmpty, isFalse);
   });
 
+  test('the bytes fetched and not hash-checked ride the transfer', () {
+    final numbers = StreamNumbers.fromJson(const {
+      'window': {'behindBytes': 0, 'aheadBytes': 0},
+      'sharing': {
+        'committedBytes': 0,
+        'transfer': {
+          'downloadedBytes': 4800,
+          'unverifiedBytes': 400,
+          'uploadedBytes': 2100,
+        },
+      },
+    });
+    expect(
+      numbers?.sharing?.transfer?.unverifiedBytes,
+      400,
+      reason: 'the wire key is `unverifiedBytes`, the second name it has had',
+    );
+  });
+
   test('a proxied stream has a window and no sharing', () {
     final numbers = StreamNumbers.fromJson(const {
       'window': {'behindBytes': 60000000, 'aheadBytes': 30000000},

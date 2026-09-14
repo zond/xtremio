@@ -82,24 +82,52 @@ pub fn server_torrent_stats(
 /// position, and it is the only one of the two the server is told: what a
 /// stream is fetched at is the file's own bitrate, which is its size over
 /// this.
+///
+/// `file_idx` and `filters` are the player URL's own -- the `{fileIdx}`
+/// segment as the core wrote it, `-1` for a file the server picks, and the
+/// `f=` values that narrow the pick -- and the server resolves them by its
+/// stream route's rule.
 pub fn server_note_duration(
     info_hash: String,
     file_idx: i64,
+    filters: Vec<String>,
     duration_seconds: f64,
 ) -> anyhow::Result<()> {
     guarded_ok(move || {
-        let Ok(file_idx) = usize::try_from(file_idx) else {
-            return;
-        };
         if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
             return;
         }
         crate::server::note_duration(
             &info_hash,
             file_idx,
+            &filters,
             std::time::Duration::from_secs_f64(duration_seconds),
         );
     })
+}
+
+#[cfg(test)]
+mod note_duration_tests {
+    use super::server_note_duration;
+
+    /// **A length that is not a length is dropped, not thrown.** The
+    /// contract is "never errors": a NaN, an infinity or a non-positive
+    /// number would panic in `Duration::from_secs_f64`, and the guard that
+    /// turns a panic into an `Err` would hand the player an error for a
+    /// hint. With no server running every case returns at once.
+    #[test]
+    fn a_duration_that_is_not_one_is_dropped_without_an_error() {
+        for duration in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -1.0, 0.0] {
+            assert!(
+                server_note_duration("a".repeat(40), 0, Vec::new(), duration).is_ok(),
+                "{duration} was not dropped quietly"
+            );
+        }
+        assert!(
+            server_note_duration("a".repeat(40), -1, vec!["mkv".into()], 5_400.0).is_ok(),
+            "a file the server picks, with nothing running, is a quiet no-op"
+        );
+    }
 }
 
 /// The embedded server's settings as JSON (the `values` of `GET /settings`:

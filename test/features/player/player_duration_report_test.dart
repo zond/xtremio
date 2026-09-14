@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/features/dev/dev_streams.dart';
 
 import '../../support/player_harness.dart';
 
@@ -49,5 +50,48 @@ void main() {
     expect(harness.playhead.durations, [
       6669,
     ], reason: 'a length does not go stale, so repeating it buys nothing');
+  });
+
+  testWidgets('and says it for a stream whose addon named no file', (
+    tester,
+  ) async {
+    // The core writes `-1` when the addon gave no fileIdx and the server
+    // picks the file, narrowed by the URL's `f=` filters. That is most
+    // streams, and a report that treated `-1` as "no file" never reached
+    // the server for any of them.
+    final harness = PlayerHarness(
+      player: {
+        'selected': {'stream': DevStreams.bigBuckBunnyTorrent},
+        'stream': {
+          'type': 'Ready',
+          'content': [
+            {
+              'streaming_url':
+                  '${PlayerHarness.recordedServerBaseUrl}'
+                  '/${DevStreams.bigBuckBunnyTorrent['infoHash']}/-1'
+                  '?f=mkv&f=mp4',
+            },
+            DevStreams.bigBuckBunnyTorrent,
+          ],
+        },
+      },
+      stream: DevStreams.bigBuckBunnyTorrent,
+    );
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(seconds: 6669));
+    await pumpEvents(tester);
+
+    expect(
+      harness.playhead.durations,
+      contains(6669),
+      reason: 'the length was dropped because the URL says -1',
+    );
+    final file = harness.playhead.files.single;
+    expect(
+      file.fileIdx,
+      -1,
+      reason: "the URL's own spelling, for the server to resolve",
+    );
+    expect(file.filters, ['mkv', 'mp4'], reason: 'and its filters, in order');
   });
 }

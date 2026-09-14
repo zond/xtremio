@@ -126,9 +126,16 @@ abstract interface class PlayheadReporter {
   /// to a byte offset without a constant bitrate. The length *is* the
   /// bitrate, so the window is sized correctly throughout a cast even
   /// though where it sits is left to the receiver's own reads.
+  ///
+  /// [fileIdx] and [filters] are the player URL's own: the `{fileIdx}`
+  /// segment as the core wrote it, `-1` included, and its `f=` values.
+  /// An addon that names no file leaves the choice to the server, which
+  /// resolves the two the way the stream route does; a length keyed to a
+  /// resolved index the app guessed at never arrived for those streams.
   Future<void> noteDuration({
     required String infoHash,
     required int fileIdx,
+    required List<String> filters,
     required double durationSeconds,
   });
 }
@@ -235,10 +242,12 @@ class ServerClient
   Future<void> noteDuration({
     required String infoHash,
     required int fileIdx,
+    required List<String> filters,
     required double durationSeconds,
   }) => rust.serverNoteDuration(
     infoHash: infoHash,
     fileIdx: fileIdx,
+    filters: filters,
     durationSeconds: durationSeconds,
   );
 

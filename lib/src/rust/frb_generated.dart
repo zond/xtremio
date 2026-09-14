@@ -158,6 +158,7 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiServerServerNoteDuration({
     required String infoHash,
     required PlatformInt64 fileIdx,
+    required List<String> filters,
     required double durationSeconds,
   });
 
@@ -1013,6 +1014,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<void> crateApiServerServerNoteDuration({
     required String infoHash,
     required PlatformInt64 fileIdx,
+    required List<String> filters,
     required double durationSeconds,
   }) {
     return handler.executeNormal(
@@ -1021,6 +1023,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(infoHash, serializer);
           sse_encode_i_64(fileIdx, serializer);
+          sse_encode_list_String(filters, serializer);
           sse_encode_f_64(durationSeconds, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -1034,7 +1037,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_AnyhowException,
         ),
         constMeta: kCrateApiServerServerNoteDurationConstMeta,
-        argValues: [infoHash, fileIdx, durationSeconds],
+        argValues: [infoHash, fileIdx, filters, durationSeconds],
         apiImpl: this,
       ),
     );
@@ -1043,7 +1046,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiServerServerNoteDurationConstMeta =>
       const TaskConstMeta(
         debugName: "server_note_duration",
-        argNames: ["infoHash", "fileIdx", "durationSeconds"],
+        argNames: ["infoHash", "fileIdx", "filters", "durationSeconds"],
       );
 
   @override

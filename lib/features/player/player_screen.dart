@@ -1466,6 +1466,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               'still with mpv reporting no stall',
         );
         setState(() => _positionStuck = false);
+        // The card going leaves the stall cadence behind otherwise: the
+        // stats poll picks its interval only when asked to, as
+        // [_onBuffering] asks.
+        _syncStatsPolls();
       }
     }
     _reportedPosition = position;
@@ -1533,25 +1537,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _maybeAutoPickSubtitles();
   }
 
-  /// **Which file of the torrent the player is actually reading**, taken
-  /// from the URL it was opened with.
+  /// **Which file of the torrent the player is reading, as its URL spells
+  /// it** -- the `{fileIdx}` segment the core wrote, `-1` included.
   ///
   /// Not from `TorrentStatsRequest.fileIdx`, which is the *addon's* -- and
-  /// an addon frequently does not say, which the server handles by picking
-  /// the largest file and answering with the index it chose. So the stream
-  /// carries no index while the URL the core built carries the resolved
-  /// one, and a report keyed off the addon's is a report that never
-  /// happens: every field log of this feature shows the server placing the
-  /// window from reads, because nothing was ever told.
-  ///
-  /// The URL is what the player is reading, so it is the answer to the
-  /// question actually being asked.
+  /// an addon frequently does not say. The core then writes `-1` and the
+  /// *server* picks the file (the largest video, narrowed by the URL's
+  /// `f=` filters, [_openedFilters]); nothing on this side knows which.
+  /// So the segment is passed through as it is, filters beside it, and the
+  /// server resolves the two by the rule its stream route uses. Treating
+  /// `-1` as "no file" here meant a length was never reported for exactly
+  /// the streams whose addon named no file, which is most of them.
   int? get _openedFileIdx {
     final segments = _opened?.pathSegments;
     if (segments == null || segments.length < 2) return null;
-    final index = int.tryParse(segments[1]);
-    return index == null || index < 0 ? null : index;
+    return int.tryParse(segments[1]);
   }
+
+  /// The `f=` filters of the URL the player was opened with, which is what
+  /// narrows a `-1` to a file; see [_openedFileIdx].
+  List<String> get _openedFilters =>
+      _opened?.queryParametersAll['f'] ?? const [];
 
   /// Tells the server how long the film is; see [_onCastStatus].
   Future<void> _reportDuration(Duration duration) async {
@@ -1562,6 +1568,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _playheadReporter?.noteDuration(
         infoHash: request.infoHash,
         fileIdx: fileIdx,
+        filters: _openedFilters,
         durationSeconds:
             duration.inMicroseconds / Duration.microsecondsPerSecond,
       );

@@ -13,13 +13,19 @@ class FakePlayheadReporter implements PlayheadReporter {
   /// Every duration-only report, in order: what a cast sends.
   final List<double> durations = [];
 
+  /// Which file each report named, as the player URL spelled it: the
+  /// segment (`-1` for a file the server picks) and the `f=` filters.
+  final List<({int fileIdx, List<String> filters})> files = [];
+
   @override
   Future<void> noteDuration({
     required String infoHash,
     required int fileIdx,
+    required List<String> filters,
     required double durationSeconds,
   }) async {
     callLog?.add('duration');
     durations.add(durationSeconds);
+    files.add((fileIdx: fileIdx, filters: filters));
   }
 }

@@ -47,13 +47,20 @@ Future<String> serverTorrentStats({
 /// position, and it is the only one of the two the server is told: what a
 /// stream is fetched at is the file's own bitrate, which is its size over
 /// this.
+///
+/// `file_idx` and `filters` are the player URL's own -- the `{fileIdx}`
+/// segment as the core wrote it, `-1` for a file the server picks, and the
+/// `f=` values that narrow the pick -- and the server resolves them by its
+/// stream route's rule.
 Future<void> serverNoteDuration({
   required String infoHash,
   required PlatformInt64 fileIdx,
+  required List<String> filters,
   required double durationSeconds,
 }) => RustLib.instance.api.crateApiServerServerNoteDuration(
   infoHash: infoHash,
   fileIdx: fileIdx,
+  filters: filters,
   durationSeconds: durationSeconds,
 );
 

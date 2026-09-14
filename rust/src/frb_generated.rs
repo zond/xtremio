@@ -1085,6 +1085,7 @@ fn wire__crate__api__server__server_note_duration_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_info_hash = <String>::sse_decode(&mut deserializer);
             let api_file_idx = <i64>::sse_decode(&mut deserializer);
+            let api_filters = <Vec<String>>::sse_decode(&mut deserializer);
             let api_duration_seconds = <f64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
@@ -1093,6 +1094,7 @@ fn wire__crate__api__server__server_note_duration_impl(
                         let output_ok = crate::api::server::server_note_duration(
                             api_info_hash,
                             api_file_idx,
+                            api_filters,
                             api_duration_seconds,
                         )?;
                         std::result::Result::Ok(output_ok)

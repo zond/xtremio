@@ -330,14 +330,23 @@ pub fn torrent_stats(
 ///
 /// Silent about everything: a hint that does not arrive costs the
 /// freshness of a hint.
-pub fn note_duration(info_hash: &str, file_idx: usize, duration: Duration) {
+///
+/// `file_idx` is the player URL's `{fileIdx}` segment: an index, or `-1`
+/// for a file the server picks, narrowed by the URL's `f=` `filters`. Any
+/// negative number is that spelling; the server resolves it.
+pub fn note_duration(info_hash: &str, file_idx: i64, filters: &[String], duration: Duration) {
     let Some(app) = crate::state::current() else {
         return;
     };
     let Some(handle) = app.server.running() else {
         return;
     };
-    crate::env::CONCURRENT.block_on(handle.note_duration(info_hash, file_idx, duration));
+    let spelling = if file_idx < 0 {
+        "-1".to_owned()
+    } else {
+        file_idx.to_string()
+    };
+    crate::env::CONCURRENT.block_on(handle.note_duration(info_hash, &spelling, filters, duration));
 }
 
 /// Pins `file_idx` of `info_hash` as an offline download: the engine is
