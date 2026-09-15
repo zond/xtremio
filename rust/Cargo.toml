@@ -54,10 +54,15 @@ enginefs = { git = "https://github.com/zond/stream-server", rev = "7d13a881131d3
 # instead of letting serde drop them, which is what lets the app name and
 # frame-rate-filter the thirty-odd files OpenSubtitles answers with
 # (upstream PR Stremio/stremio-core#1045, from the fork's
-# subtitles-preserve-addon-fields branch) -- and one more that pins its
-# `localsearch` dependency by rev rather than `branch = "main"`, which
-# stays on `pinned` so the PR carries only its own change.
-stremio-core = { git = "https://github.com/zond/stremio-core", rev = "b4c92f33c68bf73b9abb13b7503b1a529454c228", features = ["derive", "env-future-send"] }
+# subtitles-preserve-addon-fields branch) -- and two more that stay on
+# `pinned` so the PR carries only its own change: one pins its
+# `localsearch` dependency by rev rather than `branch = "main"`, and one
+# relaxes its `stremio-watched-bitfield` member's `flate2 = "1.0.*"` to
+# `"1"`. stream-server's tree (zip, async-compression) needs flate2 >= 1.1
+# and Cargo will not pick two 1.x versions, so without that commit this
+# graph does not resolve at all; it used to be a vendored copy of the
+# crate wired in with `[patch]`.
+stremio-core = { git = "https://github.com/zond/stremio-core", rev = "efe8e582e095b83ef797c4f230b295390505d1a1", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
 chrono = "0.4"
@@ -146,9 +151,9 @@ aws-lc-sys = { version = "0.45", features = ["bindgen"] }
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 tempfile = "3"
 # Gzips one test body for `env::tests`, the shape of an addon answer that is
-# small on the wire and enormous inflated. Already in the graph (the vendored
-# stremio-watched-bitfield and stream-server's tree both pull it), so
-# nothing new is compiled.
+# small on the wire and enormous inflated. Already in the graph
+# (stremio-core's stremio-watched-bitfield and stream-server's tree both
+# pull it), so nothing new is compiled.
 flate2 = "1"
 # Real .torrent fixtures for tests/downloads.rs (`librqbit::create_torrent`),
 # so the offline-downloads test needs no network and no peer. Pinned by rev
@@ -159,17 +164,6 @@ librqbit = { git = "https://github.com/zond/rqbit", rev = "cc969c7b12b12417b812f
     "rust-tls",
     "http-api-client",
 ] }
-
-# REQUIRED: stremio-core's workspace member stremio-watched-bitfield pins
-# `flate2 = "1.0.*"` (< 1.1) while stream-server's tree (zip, async-compression
-# via async_zip/librqbit) needs flate2 >= 1.1. Cargo cannot pick two 1.x
-# versions, so the graph does not resolve without relaxing that pin. See
-# vendor/README.md for how to drop this once upstream relaxes it.
-# The key is the source URL being patched, so it follows the dependency to
-# the fork above -- left on the upstream URL it matches nothing, silently
-# unpatching stremio-watched-bitfield and bringing the flate2 conflict back.
-[patch."https://github.com/zond/stremio-core"]
-stremio-watched-bitfield = { path = "vendor/stremio-watched-bitfield" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

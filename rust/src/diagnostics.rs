@@ -52,9 +52,8 @@ mod tests {
             assert_eq!(rev.len(), 40, "{rev}");
             assert!(rev.chars().all(|c| c.is_ascii_hexdigit()), "{rev}");
         }
-        // The patch section's own `stremio-watched-bitfield` is a path
-        // dependency with no rev, and naming it must not find one.
-        assert_eq!(pinned_rev(MANIFEST, "stremio-watched-bitfield"), None);
+        // A registry dependency has no rev, and naming it must not find one.
+        assert_eq!(pinned_rev(MANIFEST, "anyhow"), None);
         assert_eq!(pinned_rev(MANIFEST, "not-a-dependency"), None);
     }
 }
