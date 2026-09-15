@@ -19,8 +19,7 @@ engine for addons, catalogs, library and playback state, built here from a
 ## What it does
 
 All of this is built and runs today. [docs/STATUS.md](docs/STATUS.md) is the
-screen-by-screen inventory, and where a feature has a design document of its
-own, its bullet links it.
+screen-by-screen inventory; a feature with a design document links it.
 
 - **Catalogs and search across every addon installed, and a library.** A
   board of continue-watching and a row per catalog that answered, discover
@@ -103,17 +102,15 @@ make linux              # a release build; also apk, apk-tv, apk-split, macos, i
 ```
 
 The Makefile adds two `--dart-define`s so the Diagnostics screen can say which
-build it is, and its APK targets also pick the ABI and a version code: a plain
-`flutter build apk` stamps version code 1, which Android refuses to install
-over an APK from `make apk-split`. Plain `flutter run -d <device>` works too and
-reports `app: unknown`; the Windows job of the weekly build workflow, whose
-runner has no `make`, spells the two defines out. A build needs Flutter stable (CI uses 3.47.1) and a Rust
-toolchain no older than `rust-version` in `rust/Cargo.toml` (1.97.1): the Rust
-crate is compiled by the build itself, through cargokit. Linux desktop also
-needs `clang`, `cmake`, `ninja`, `pkg-config`, GTK 3 dev libraries, and
-`libmpv-dev` (media_kit links libmpv); Android has a document of its own,
-[ANDROID.md](ANDROID.md). Everything else a dev machine wants is in
-[docs/OPERATIONS.md](docs/OPERATIONS.md).
+build it is, and its APK targets also set the ABI and a version code that
+Android installs over an APK from `make apk-split`. Plain
+`flutter run -d <device>` works too and reports `app: unknown`. A build needs
+Flutter stable (CI uses 3.47.1) and a Rust toolchain no older than
+`rust-version` in `rust/Cargo.toml` (1.97.1): the Rust crate is compiled by
+the build itself, through cargokit. Linux desktop also needs `clang`, `cmake`,
+`ninja`, `pkg-config`, GTK 3 dev libraries, and `libmpv-dev` (media_kit links
+libmpv); Android has a document of its own, [ANDROID.md](ANDROID.md).
+Everything else a dev machine wants is in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## How it works
 
