@@ -1101,7 +1101,7 @@ dependencies = [
 [[package]]
 name = "enginefs"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=0fc8b1f769b403fc30a8323f3c11d4e0461a7111#0fc8b1f769b403fc30a8323f3c11d4e0461a7111"
+source = "git+https://github.com/zond/stream-server?rev=7f61b5a47e8c08d992b700e530edca50a312b5cb#7f61b5a47e8c08d992b700e530edca50a312b5cb"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2152,7 +2152,7 @@ dependencies = [
 [[package]]
 name = "librqbit"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2216,7 +2216,7 @@ dependencies = [
 [[package]]
 name = "librqbit-bencode"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -2232,7 +2232,7 @@ dependencies = [
 [[package]]
 name = "librqbit-buffers"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "bytes",
  "librqbit-clone-to-owned",
@@ -2243,7 +2243,7 @@ dependencies = [
 [[package]]
 name = "librqbit-clone-to-owned"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "bytes",
 ]
@@ -2251,7 +2251,7 @@ dependencies = [
 [[package]]
 name = "librqbit-core"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2280,7 +2280,7 @@ dependencies = [
 [[package]]
 name = "librqbit-dht"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "anyhow",
  "backon",
@@ -2327,7 +2327,7 @@ dependencies = [
 [[package]]
 name = "librqbit-lsd"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "anyhow",
  "atoi",
@@ -2346,7 +2346,7 @@ dependencies = [
 [[package]]
 name = "librqbit-peer-protocol"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "anyhow",
  "bitvec",
@@ -2366,7 +2366,7 @@ dependencies = [
 [[package]]
 name = "librqbit-sha1-wrapper"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "assert_cfg",
  "aws-lc-rs",
@@ -2375,7 +2375,7 @@ dependencies = [
 [[package]]
 name = "librqbit-tracker-comms"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2403,7 +2403,7 @@ dependencies = [
 [[package]]
 name = "librqbit-upnp"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=d40209032e08980def23d69930a976d32696d7b5#d40209032e08980def23d69930a976d32696d7b5"
+source = "git+https://github.com/zond/rqbit?rev=a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051#a27fa9cd9c825a6a8c9e1e9d5ea0e25a7cbbc051"
 dependencies = [
  "anyhow",
  "bstr",
@@ -3778,7 +3778,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=0fc8b1f769b403fc30a8323f3c11d4e0461a7111#0fc8b1f769b403fc30a8323f3c11d4e0461a7111"
+source = "git+https://github.com/zond/stream-server?rev=7f61b5a47e8c08d992b700e530edca50a312b5cb#7f61b5a47e8c08d992b700e530edca50a312b5cb"
 dependencies = [
  "anyhow",
  "async-trait",
