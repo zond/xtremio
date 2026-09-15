@@ -35,14 +35,14 @@ flutter_rust_bridge = "=2.13.0"
 # with the fetch-ahead bounded by the window, liveness that ends on a switch
 # or a restart rather than on a clock, and no cache cleaner at all -- every
 # byte under the root has exactly one thing that deletes it.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "7d13a881131d3325f82cd2bbe0c3f9428660323f" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "702aa290354c9b288d3a4f52c82aa9f059636cf5" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "7d13a881131d3325f82cd2bbe0c3f9428660323f" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "702aa290354c9b288d3a4f52c82aa9f059636cf5" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
@@ -62,7 +62,7 @@ enginefs = { git = "https://github.com/zond/stream-server", rev = "7d13a881131d3
 # and Cargo will not pick two 1.x versions, so without that commit this
 # graph does not resolve at all; it used to be a vendored copy of the
 # crate wired in with `[patch]`.
-stremio-core = { git = "https://github.com/zond/stremio-core", rev = "efe8e582e095b83ef797c4f230b295390505d1a1", features = ["derive", "env-future-send"] }
+stremio-core = { git = "https://github.com/zond/stremio-core", rev = "b915e735bbaf81e8a18ac769648c57c48603eb04", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
 chrono = "0.4"
@@ -115,19 +115,16 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 log = "0.4"
 
 # The process allocator (`src/lib.rs`), on every target the app builds for
-# except wasm, where the crate has no allocator to replace. The same crate
-# and the same features as the standalone stream-server binary
-# (`server/src/main.rs`: `default-features = false`, no `secure`, no
-# `override`), plus `local_dynamic_tls`: that binary owns its process, and
-# this crate is a shared library Dart `dlopen`s, which is the case mimalloc
-# documents `-ftls-model=local-dynamic` for -- initial-exec TLS in a
-# library loaded after start-up is a "cannot allocate memory in static TLS
-# block" waiting on a loader with no surplus left. Purging is not a Cargo
+# except wasm, where the crate has no allocator to replace.
+# `default-features = false` (no `secure`, no `override`), plus
+# `local_dynamic_tls`: this crate is a shared library Dart `dlopen`s, which
+# is the case mimalloc documents `-ftls-model=local-dynamic` for --
+# initial-exec TLS in a library loaded after start-up is a "cannot allocate
+# memory in static TLS block" waiting on a loader with no surplus left. Purging is not a Cargo
 # feature: mimalloc returns freed pages to the OS on its own
 # (`MIMALLOC_PURGE_DELAY`, 10 ms by default); tuning that at run time is
 # `mi_option_set` behind the `extended` feature, which nothing here needs
-# yet. Already in the graph through stream-server, so nothing new is
-# compiled.
+# yet.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 mimalloc = { version = "0.1.52", default-features = false, features = ["local_dynamic_tls"] }
 
@@ -160,7 +157,7 @@ flate2 = "1"
 # on zond/rqbit, and always the rev the stream-server pin above uses for
 # its enginefs: a different one puts two librqbits in the graph, the crate
 # compiled twice. Bump the two together.
-librqbit = { git = "https://github.com/zond/rqbit", rev = "cc969c7b12b12417b812f988859a8a854b84c39a", default-features = false, features = [
+librqbit = { git = "https://github.com/zond/rqbit", rev = "cd4d660a9ede70d2484d9d5930ff19c126edc048", default-features = false, features = [
     "rust-tls",
     "http-api-client",
 ] }

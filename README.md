@@ -11,21 +11,21 @@ Xtremio is the client half of a two-part project. The other half is
 [`zond/stream-server`](https://github.com/zond/stream-server), a headless
 torrent-streaming server written in Rust, which Xtremio embeds in its own
 process. It pairs that with
-[`stremio-core`](https://github.com/Stremio/stremio-core) — the official Rust
+[`stremio-core`](https://github.com/Stremio/stremio-core) -- the official Rust
 engine for addons, catalogs, library and playback state, built here from a
-[fork](docs/ARCHITECTURE.md#pinned-forks) — and
+[fork](docs/ARCHITECTURE.md#pinned-forks) -- and
 [`media_kit`](https://pub.dev/packages/media_kit)/libmpv for playback.
 
 ## What it does
 
 All of this is built and runs today. [docs/STATUS.md](docs/STATUS.md) is the
-screen-by-screen inventory; what it does not reach -- casting, subtitle
-timing -- is in the document each bullet links.
+screen-by-screen inventory, and where a feature has a design document of its
+own, its bullet links it.
 
 - **Catalogs and search across every addon installed, and a library.** A
   board of continue-watching and a row per catalog that answered, discover
   over the engine's own filters, a search that asks every addon supporting it
-  — and on the board, in search and under a title's sources, a line naming
+  -- and on the board, in search and under a title's sources, a line naming
   the addons that could *not* answer, so a dead addon is never mistaken for a
   title nobody has.
 - **Torrent streaming with no external binary.** `stream-server` runs
@@ -33,13 +33,13 @@ timing -- is in the document each bullet links.
   alive on mobile. In the default layout a title's sources are one row per
   release rather than one per addon offering it, in a section per resolution,
   ranked by peers per megabyte unless another order is picked; a torrent
-  starts behind a card that says what it is doing — checking, finding peers,
-  buffering — instead of a spinner.
+  starts behind a card that says what it is doing -- checking, finding peers,
+  buffering -- instead of a spinner.
 - **Offline downloads.** A download is a file pinned in the embedded server:
   it is kept, piece by piece, in the one torrent-data root the streaming cache
   uses, and never exists as a whole file. A finished download plays through
-  the same in-process server off the pieces already on the device — no peer,
-  no tracker, no network — and only once the server answers that it holds the
+  the same in-process server off the pieces already on the device -- no peer,
+  no tracker, no network -- and only once the server answers that it holds the
   file whole. On Android a foreground service keeps one going after the app
   is left.
 - **A player rather than a video widget.** Buffered seek bar, keyboard and
@@ -65,7 +65,7 @@ timing -- is in the document each bullet links.
   decode what the embedded server is already serving. The bytes go over the
   LAN untouched, from a second listener on the server that exists only while
   a cast session does and serves only torrents and archives the app has
-  already opened — no control routes, no `/proxy`. The player screen becomes
+  already opened -- no control routes, no `/proxy`. The player screen becomes
   a remote, and a cast does not binge: the end of an episode on the
   television never starts the next one. What it refuses, why it refuses
   rather than guesses, and the fact that no real receiver has confirmed it
@@ -89,7 +89,7 @@ timing -- is in the document each bullet links.
 
 Every version tag builds Linux, Windows, macOS and both Android ABIs and
 attaches them to a
-[GitHub Release](https://github.com/zond/xtremio/releases) — that is where a
+[GitHub Release](https://github.com/zond/xtremio/releases) -- that is where a
 build comes from. Nothing is tagged yet, so until the first one that page is
 empty and building it yourself is the only way. Two things about those builds
 are worth knowing before installing, and the release notes say both: the APKs
@@ -99,13 +99,15 @@ unsigned.
 ```bash
 flutter pub get
 make run DEVICE=linux   # flutter run -d linux, stamped with version and commit
-make linux              # a release build; also apk, apk-tv, macos, ios
+make linux              # a release build; also apk, apk-tv, apk-split, macos, ios (compile check)
 ```
 
-The Makefile only adds two `--dart-define`s, so the Diagnostics screen can say
-which build it is; plain `flutter run -d <device>` works too and reports
-`app: unknown` (the Windows CI job, whose runner has no `make`, spells the two
-defines out instead). A build needs Flutter stable (CI uses 3.47.1) and a Rust
+The Makefile adds two `--dart-define`s so the Diagnostics screen can say which
+build it is, and its APK targets also pick the ABI and a version code: a plain
+`flutter build apk` stamps version code 1, which Android refuses to install
+over an APK from `make apk-split`. Plain `flutter run -d <device>` works too and
+reports `app: unknown`; the Windows job of the weekly build workflow, whose
+runner has no `make`, spells the two defines out. A build needs Flutter stable (CI uses 3.47.1) and a Rust
 toolchain no older than `rust-version` in `rust/Cargo.toml` (1.97.1): the Rust
 crate is compiled by the build itself, through cargokit. Linux desktop also
 needs `clang`, `cmake`, `ninja`, `pkg-config`, GTK 3 dev libraries, and
@@ -138,12 +140,12 @@ links it as a library and starts it on its own thread with its own runtime,
 bound to `127.0.0.1` on a port the OS picks and retargeting stremio-core at
 the address it reads back, so no sidecar binary ships and no fixed port is
 lost to a desktop Stremio. The Dart side never speaks HTTP to it: libmpv
-fetches the media routes, the app's own questions — settings, a torrent's
-stats, storage, downloads — are FFI calls into the server's library API, and
+fetches the media routes, the app's own questions -- settings, a torrent's
+stats, storage, downloads -- are FFI calls into the server's library API, and
 stremio-core's requests to it carry a per-launch bearer token that only the
 Rust side holds. The only HTTP it serves beyond loopback is the media listener
 a cast session turns on and off. Because a capable on-device player handles
-codecs and subtitles, the server never transcodes — it just gets bytes onto an
+codecs and subtitles, the server never transcodes -- it just gets bytes onto an
 HTTP connection. Settings can point stremio-core at a remote streaming server
 by URL, and torrents then play straight off that one; the embedded server
 still starts and still fronts an addon's direct links. The embedded one is
@@ -153,7 +155,7 @@ How that bridge is built, what crosses it and what every field of the state
 means is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Every git dependency in `rust/Cargo.toml` is pinned to a rev with its
-reason beside it: the three forks and the one vendored crate are listed in
+reason beside it: the three forks are listed in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#pinned-forks).
 
 ## Platform support
@@ -164,23 +166,23 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 | Platform | Support | Notes |
 |---|---|---|
 | **Linux (desktop)** | ✅ First-class | The easiest target; video is software-rendered until media_kit's Linux renderer lands ([docs/OPERATIONS.md](docs/OPERATIONS.md#linux-video-is-software-rendered-for-now)). |
-| **Windows (desktop)** | ✅ Built in CI | Flutter desktop, media_kit and native Rust, as on Linux; registering `stremio://` needs an installer and there is none ([docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). |
-| **macOS (desktop)** | ✅ Built in CI | Native Rust + media_kit; unsigned, and needs a Mac to build yourself — there is none in the project. |
+| **Windows (desktop)** | ✅ Built weekly in CI (`build.yml`) | Flutter desktop, media_kit and native Rust, as on Linux; registering `stremio://` needs an installer and there is none ([docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). |
+| **macOS (desktop)** | ✅ Built weekly in CI (`build.yml`) | Native Rust + media_kit; unsigned, and needs a Mac to build yourself -- there is none in the project. |
 | **Android** | ✅ Supported | Rust cross-compiles to the NDK and is embedded as a native lib; the primary mobile target ([ANDROID.md](ANDROID.md)). |
-| **Android TV / Google TV** | ✅ Supported | The same app, not a separate build; install the APK for the ABI the box reports — a Chromecast with Google TV is 32-bit, `make apk-tv` ([ANDROID.md](ANDROID.md)). |
+| **Android TV / Google TV** | ✅ Supported | The same app, not a separate build; install the APK for the ABI the box reports -- a Chromecast with Google TV is 32-bit, `make apk-tv` ([ANDROID.md](ANDROID.md)). |
 | **iOS** | ❌ Does not build today | CI compiles it and it fails in an upstream crate (`librqbit-dualstack-sockets` 0.7.0 calls a socket2 method iOS does not have). Past that, there is no signing identity here, the App Store is out on GPL-3 (see [License](#license)), and iOS throttles background work. |
-| **Web** | ❌ Not possible | A browser cannot do BitTorrent — no raw sockets, no local server, no libmpv. A thin client onto a separate server is a different architecture, not this app. |
+| **Web** | ❌ Not possible | A browser cannot do BitTorrent -- no raw sockets, no local server, no libmpv. A thin client onto a separate server is a different architecture, not this app. |
 
 ## What is next
 
 What is genuinely not built:
 
-- **Cloud storage sources** (e.g. Google Drive) — most naturally via a Stremio
+- **Cloud storage sources** (e.g. Google Drive) -- most naturally via a Stremio
   addon that resolves cloud files to playable URLs; the provider's OAuth or
   API-key setup is the fiddly part.
 - **Media3 remuxing for casting**, to let a receiver play a stream it cannot
   decode as it stands. It would run on the sending device with its platform
-  hardware codec (Android MediaCodec first) — never ffmpeg, never software
+  hardware codec (Android MediaCodec first) -- never ffmpeg, never software
   transcoding in the Rust core. Until then such a stream is refused rather
   than mangled.
 
@@ -188,14 +190,14 @@ What is genuinely not built:
 
 | Document | What is in it |
 |---|---|
-| [docs/STATUS.md](docs/STATUS.md) | What is built today, screen by screen: phase 3 complete on top of phase 2. |
+| [docs/STATUS.md](docs/STATUS.md) | What is built today, screen by screen. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the Rust core is wired in: the bridge, what crosses it as JSON, every model field, the pinned forks, and what the app reads from the settings. Its design notes are [docs/phase3-design.md](docs/phase3-design.md). |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | What to run before a commit, how to see video play, what the server's storage costs, and getting a log off a device. |
 | [ANDROID.md](ANDROID.md) | Building, running and verifying on Android and Android TV: prerequisites, the APK, the manifest decisions, the emulators, a real box. |
 | [docs/CASTING.md](docs/CASTING.md) | The cast button: what it hands a receiver untouched, and every rule it refuses on. |
 | [docs/ADDONS.md](docs/ADDONS.md) | How each installed addon has been answering, and the verdict the Installed tab reads off that record. |
 | [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md) | What a `stremio://` link may and may not do, and how the scheme is registered on each platform. |
-| [AGENTS.md](AGENTS.md) | How changes are made here: commits, verification, the rules a real device taught us. |
+| [AGENTS.md](AGENTS.md) | What a change has to satisfy here; see [Contributing](#contributing). |
 
 ## Contributing
 

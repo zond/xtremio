@@ -1101,7 +1101,7 @@ dependencies = [
 [[package]]
 name = "enginefs"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=7d13a881131d3325f82cd2bbe0c3f9428660323f#7d13a881131d3325f82cd2bbe0c3f9428660323f"
+source = "git+https://github.com/zond/stream-server?rev=702aa290354c9b288d3a4f52c82aa9f059636cf5#702aa290354c9b288d3a4f52c82aa9f059636cf5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2152,7 +2152,7 @@ dependencies = [
 [[package]]
 name = "librqbit"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2216,7 +2216,7 @@ dependencies = [
 [[package]]
 name = "librqbit-bencode"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -2232,7 +2232,7 @@ dependencies = [
 [[package]]
 name = "librqbit-buffers"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "bytes",
  "librqbit-clone-to-owned",
@@ -2243,7 +2243,7 @@ dependencies = [
 [[package]]
 name = "librqbit-clone-to-owned"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "bytes",
 ]
@@ -2251,7 +2251,7 @@ dependencies = [
 [[package]]
 name = "librqbit-core"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2280,7 +2280,7 @@ dependencies = [
 [[package]]
 name = "librqbit-dht"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "anyhow",
  "backon",
@@ -2327,7 +2327,7 @@ dependencies = [
 [[package]]
 name = "librqbit-lsd"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "anyhow",
  "atoi",
@@ -2346,7 +2346,7 @@ dependencies = [
 [[package]]
 name = "librqbit-peer-protocol"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "anyhow",
  "bitvec",
@@ -2366,7 +2366,7 @@ dependencies = [
 [[package]]
 name = "librqbit-sha1-wrapper"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "assert_cfg",
  "aws-lc-rs",
@@ -2375,7 +2375,7 @@ dependencies = [
 [[package]]
 name = "librqbit-tracker-comms"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2403,7 +2403,7 @@ dependencies = [
 [[package]]
 name = "librqbit-upnp"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=cc969c7b12b12417b812f988859a8a854b84c39a#cc969c7b12b12417b812f988859a8a854b84c39a"
+source = "git+https://github.com/zond/rqbit?rev=cd4d660a9ede70d2484d9d5930ff19c126edc048#cd4d660a9ede70d2484d9d5930ff19c126edc048"
 dependencies = [
  "anyhow",
  "bstr",
@@ -3778,7 +3778,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=7d13a881131d3325f82cd2bbe0c3f9428660323f#7d13a881131d3325f82cd2bbe0c3f9428660323f"
+source = "git+https://github.com/zond/stream-server?rev=702aa290354c9b288d3a4f52c82aa9f059636cf5#702aa290354c9b288d3a4f52c82aa9f059636cf5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3985,7 +3985,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "stremio-core"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=efe8e582e095b83ef797c4f230b295390505d1a1#efe8e582e095b83ef797c4f230b295390505d1a1"
+source = "git+https://github.com/zond/stremio-core?rev=b915e735bbaf81e8a18ac769648c57c48603eb04#b915e735bbaf81e8a18ac769648c57c48603eb04"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4031,7 +4031,7 @@ dependencies = [
 [[package]]
 name = "stremio-derive"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=efe8e582e095b83ef797c4f230b295390505d1a1#efe8e582e095b83ef797c4f230b295390505d1a1"
+source = "git+https://github.com/zond/stremio-core?rev=b915e735bbaf81e8a18ac769648c57c48603eb04#b915e735bbaf81e8a18ac769648c57c48603eb04"
 dependencies = [
  "case",
  "proc-macro-crate",
@@ -4061,7 +4061,7 @@ dependencies = [
 [[package]]
 name = "stremio-watched-bitfield"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=efe8e582e095b83ef797c4f230b295390505d1a1#efe8e582e095b83ef797c4f230b295390505d1a1"
+source = "git+https://github.com/zond/stremio-core?rev=b915e735bbaf81e8a18ac769648c57c48603eb04#b915e735bbaf81e8a18ac769648c57c48603eb04"
 dependencies = [
  "base64 0.13.1",
  "flate2",
