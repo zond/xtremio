@@ -36,14 +36,23 @@ void main() {
   /// Every `hardwareDecoding` the app asked an engine to be built with.
   late List<bool> built;
 
-  setUp(() => built = []);
+  /// And every `verboseLog`, in the same order.
+  late List<bool> verbose;
 
-  Widget app(FakeCoreClient core) => XtremioApp(
+  setUp(() {
+    built = [];
+    verbose = [];
+  });
+
+  Widget app(FakeCoreClient core, {AppPrefs? prefs}) => XtremioApp(
     core: core,
-    engineBuilder: ({required bool hardwareDecoding}) {
-      built.add(hardwareDecoding);
-      return FakePlaybackEngine();
-    },
+    prefs: prefs,
+    engineBuilder:
+        ({required bool hardwareDecoding, required bool verboseLog}) {
+          built.add(hardwareDecoding);
+          verbose.add(verboseLog);
+          return FakePlaybackEngine();
+        },
     sharingActivity: FakeSharingActivity(),
   );
 
@@ -82,5 +91,18 @@ void main() {
 
     openPlayer(tester);
     expect(built, [true]);
+  });
+
+  testWidgets('a player follows "Verbose diagnostics" as it stands when it '
+      'opens', (tester) async {
+    final prefs = AppPrefs.inMemory();
+    await tester.pumpWidget(app(coreWith(const {}), prefs: prefs));
+    await tester.pumpAndSettle();
+    openPlayer(tester);
+
+    await prefs.setVerboseDiagnostics(true);
+    await tester.pumpAndSettle();
+    openPlayer(tester);
+    expect(verbose, [false, true]);
   });
 }

@@ -57,10 +57,12 @@ void main() {
     // rather than inherited: it is the only buffer the player has now, and
     // the only buffer should not be a dependency's default.
     expect(MediaKitEngine.memoryCacheBytes, 32 * 1024 * 1024);
-    expect(
-      MediaKitEngine.playerConfiguration.bufferSize,
-      MediaKitEngine.memoryCacheBytes,
-    );
+    for (final verbose in [false, true]) {
+      expect(
+        MediaKitEngine.playerConfigurationFor(verboseLog: verbose).bufferSize,
+        MediaKitEngine.memoryCacheBytes,
+      );
+    }
   });
 
   test('and 16 MiB behind it, set apart from the 32 media_kit would copy '

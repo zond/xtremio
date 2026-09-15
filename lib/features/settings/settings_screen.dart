@@ -343,6 +343,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const _SectionHeader('Developer'),
+          // The app's own preference, so it is outside `_withSettings` like
+          // "Share while idle": what it feeds is the embedded server's
+          // `diagnosticsTrace` and the next player's log level.
+          VerboseDiagnosticsSection(prefs: _prefs),
           ListTile(
             leading: const Icon(Icons.bug_report_outlined),
             title: const Text('Diagnostics'),

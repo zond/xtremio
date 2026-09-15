@@ -8,6 +8,7 @@ import '../../widgets/tv_text_field.dart';
 import '../player/language_names.dart';
 import '../player/playback_engine.dart';
 import '../player/subtitle_color_chips.dart';
+import '../diagnostics/diagnostics_trace.dart';
 import '../sharing/idle_sharing.dart';
 import '../sharing/sharing_activity.dart';
 
@@ -301,6 +302,33 @@ class IdleSharingSection extends StatelessWidget {
     ),
     value: prefs.shareWhileIdle,
     onChanged: (on) => prefs.setShareWhileIdle(on),
+  );
+}
+
+/// Settings → Developer → "Verbose diagnostics": whether the Diagnostics
+/// log carries the streaming server's retention trace and mpv's demuxer,
+/// stream and cache lines (see [AppPrefs.verboseDiagnosticsKey]).
+///
+/// The app's own preference, like "Share while idle" above it: what it
+/// feeds is the embedded server's `diagnosticsTrace` and the next player's
+/// log level, not a `profile.settings` field. It sits with the Diagnostics
+/// tile it changes the contents of, rather than with the server settings
+/// -- somebody who turns it on is about to copy a report.
+class VerboseDiagnosticsSection extends StatelessWidget {
+  const VerboseDiagnosticsSection({super.key, required this.prefs});
+
+  final AppPrefs prefs;
+
+  @override
+  Widget build(BuildContext context) => SwitchListTile(
+    // The same key shape a `profile.settings` control gets, so a test
+    // finds this one the same way.
+    key: settingKey(AppPrefs.verboseDiagnosticsKey),
+    secondary: const Icon(Icons.manage_search_outlined),
+    title: const Text(DiagnosticsTraceSync.title),
+    subtitle: const Text(DiagnosticsTraceSync.description),
+    value: prefs.verboseDiagnostics,
+    onChanged: (on) => prefs.setVerboseDiagnostics(on),
   );
 }
 

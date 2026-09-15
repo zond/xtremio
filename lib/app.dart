@@ -13,6 +13,7 @@ import 'features/downloads/downloads_screen.dart';
 import 'features/downloads/downloads_service.dart';
 import 'features/player/playback_engine.dart';
 import 'features/player/player_screen.dart';
+import 'features/diagnostics/diagnostics_trace.dart';
 import 'features/sharing/idle_sharing.dart';
 import 'features/sharing/sharing_activity.dart';
 import 'shell/deep_link.dart';
@@ -24,9 +25,12 @@ import 'shell/tv_density.dart';
 import 'widgets/focusable_tile.dart';
 
 /// Builds a [PlaybackEngine] for a player with the profile's
-/// `hardwareDecoding`; [MediaKitEngine.new] fits.
+/// `hardwareDecoding` and this device's "Verbose diagnostics"
+/// ([AppPrefs.verboseDiagnostics], read as the player opens);
+/// [MediaKitEngine.new] fits.
 typedef PlaybackEngineBuilder = PlaybackEngine Function({
   required bool hardwareDecoding,
+  required bool verboseLog,
 });
 
 /// Root of the Xtremio application.
@@ -216,6 +220,7 @@ class _XtremioAppState extends State<XtremioApp> {
   /// nobody else, since what it reads (the preferences, the device) is the
   /// app's own.
   late final IdleSharingPolicy _sharing;
+  late final DiagnosticsTraceSync _trace;
 
   /// The one activity monitor, on the same terms: one server to ask, so one
   /// thing asking it. The shell turns it on and off with what is on screen.
@@ -248,11 +253,17 @@ class _XtremioAppState extends State<XtremioApp> {
     _ownsPrefs = widget.prefs == null;
     _prefs = widget.prefs ?? AppPrefs(client: const RustPrefsClient());
     _sharing = IdleSharingPolicy(prefs: _prefs, server: widget.serverSettings);
+    _trace = DiagnosticsTraceSync(prefs: _prefs, server: widget.serverSettings);
     _activity = SharingActivityMonitor(client: widget.sharingActivity);
     // After the load, not beside it: a stored choice arriving a moment
     // later would otherwise be preceded by a push of the default it was
     // made to override, and the server would hear both.
-    unawaited(_prefs.load().whenComplete(_sharing.start));
+    unawaited(
+      _prefs.load().whenComplete(() {
+        _sharing.start();
+        _trace.start();
+      }),
+    );
     _lifecycle = AppLifecycleListener(
       onExitRequested: _onExitRequested,
       onResume: _onResume,
@@ -420,6 +431,7 @@ class _XtremioAppState extends State<XtremioApp> {
   PlaybackEngine _createEngine() =>
       (widget.engineBuilder ?? MediaKitEngine.new)(
         hardwareDecoding: _settings.hardwareDecoding,
+        verboseLog: _prefs.verboseDiagnostics,
       );
 
   Future<bool> _isLoggedIn() async {
@@ -470,6 +482,7 @@ class _XtremioAppState extends State<XtremioApp> {
     // anything: the app going away is what ends the sharing, and it ends
     // it by taking the server with it.
     _sharing.dispose();
+    _trace.dispose();
     // Stops the polling with it; nothing else holds the timer.
     _activity.dispose();
     if (_ownsPrefs) _prefs.dispose();

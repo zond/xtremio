@@ -139,6 +139,16 @@ class AppPrefs extends ChangeNotifier {
   /// which is all the storage ever had to do.
   static const String shareWhileIdleKey = 'shareWhileIdle';
 
+  /// The `verboseDiagnostics` key: whether the Diagnostics log carries the
+  /// streaming server's retention trace -- what its cache decided about
+  /// each file and why -- and mpv's demuxer, stream and cache lines
+  /// (`DiagnosticsTraceSync`, `MediaKitEngine.verboseLog`). Off by default:
+  /// both are what a report is read by when playback misbehaves, and noise
+  /// the rest of the time, filling the ring the report copies. This
+  /// device's, like the other preferences here, since it is about what
+  /// this device's log holds.
+  static const String verboseDiagnosticsKey = 'verboseDiagnostics';
+
   /// The `subtitleSync` key: every subtitle adjustment the viewer has
   /// made that is still remembered (see [SubtitleSyncMemory]), most
   /// recent first.
@@ -191,6 +201,10 @@ class AppPrefs extends ChangeNotifier {
   /// [shareWhileIdleKey], which is also where the default lives.
   bool get shareWhileIdle => _shareWhileIdle;
   bool _shareWhileIdle = true;
+
+  /// Whether the log is verbose -- see [verboseDiagnosticsKey].
+  bool get verboseDiagnostics => _verboseDiagnostics;
+  bool _verboseDiagnostics = false;
 
   SubtitleSyncMemory _subtitleSync = SubtitleSyncMemory.empty;
 
@@ -266,6 +280,11 @@ class AppPrefs extends ChangeNotifier {
       _shareWhileIdle = shareWhileIdle;
       changed = true;
     }
+    final verbose = stored[verboseDiagnosticsKey];
+    if (verbose is bool && verbose != _verboseDiagnostics) {
+      _verboseDiagnostics = verbose;
+      changed = true;
+    }
     // Rows this build cannot read are dropped rather than failing the
     // load; an adjustment forgotten is the failure this whole store is
     // built to accept.
@@ -322,6 +341,13 @@ class AppPrefs extends ChangeNotifier {
     _shareWhileIdle = value;
     notifyListeners();
     await _write(shareWhileIdleKey, value);
+  }
+
+  Future<void> setVerboseDiagnostics(bool value) async {
+    if (_verboseDiagnostics == value) return;
+    _verboseDiagnostics = value;
+    notifyListeners();
+    await _write(verboseDiagnosticsKey, value);
   }
 
   /// Stores [value], or removes the key entirely once nothing is

@@ -392,9 +392,15 @@ class PlaybackScope extends InheritedWidget {
 /// creation: media_kit takes it as the video controller's configuration
 /// (`hwdec=auto` vs `no`), and a controller cannot be reconfigured.
 class MediaKitEngine implements PlaybackEngine {
-  MediaKitEngine({bool hardwareDecoding = true})
-    : _player = Player(configuration: playerConfiguration) {
-    _overrides = _applyOverrides(_player.platform);
+  MediaKitEngine({bool hardwareDecoding = true, bool verboseLog = false})
+    : _verboseLog = verboseLog,
+      _player = Player(
+        configuration: playerConfigurationFor(verboseLog: verboseLog),
+      ) {
+    _overrides = _applyOverrides(
+      _player.platform,
+      overridesFor(verboseLog: verboseLog),
+    );
     _controller = VideoController(
       _player,
       configuration: configurationFor(hardwareDecoding: hardwareDecoding),
@@ -417,6 +423,14 @@ class MediaKitEngine implements PlaybackEngine {
   }
 
   final Player _player;
+
+  /// "Verbose diagnostics" as it stood when this player opened
+  /// ([AppPrefs.verboseDiagnostics]): whether mpv's demuxer, stream and
+  /// cache lines reach [engineLog], and whether mpv is asked to produce
+  /// them at all ([playerConfigurationFor], [verboseMpvOverrides]). Fixed
+  /// at creation like `hardwareDecoding`: the log level is the player's
+  /// configuration, and a player cannot be reconfigured.
+  final bool _verboseLog;
 
   late final VideoController _controller;
   bool _disposed = false;
@@ -518,20 +532,28 @@ class MediaKitEngine implements PlaybackEngine {
     // media_kit puts [memoryCacheBytes] on both, and [backCacheBytes] says
     // why the two are not the same number.
     'demuxer-max-back-bytes': '$backCacheBytes',
-    // **TEMPORARY, with the `logLevel` above and stream-server's
-    // `stage="stream_request"` line.**
-    //
-    // Something reopened a read once a second for a whole session at
-    // `file_size - 25,961,713` -- about 41 kB each time, advancing some
-    // sixty bytes. That offset is 15.2 MB before this file's `moov`, so it
-    // is inside `mdat`: media data, not the container index the retention
-    // code has been calling it and sizing two constants around.
-    //
-    // The server can say what was asked for, and now does. What it cannot
-    // say is which part of a player wanted it, because a player sends a
-    // byte range and nothing else. This is that half.
+  };
+
+  /// The overrides "Verbose diagnostics" adds, with the `logLevel` of
+  /// [playerConfigurationFor] and stream-server's `stage="stream_request"`
+  /// line: mpv saying which of its parts wanted a read.
+  ///
+  /// Something once reopened a read once a second for a whole session at
+  /// `file_size - 25,961,713` -- about 41 kB each time, advancing some
+  /// sixty bytes. That offset was 15.2 MB before the file's `moov`, so it
+  /// was inside `mdat`: media data, not the container index the retention
+  /// code had been calling it and sizing two constants around. The server
+  /// can say what was asked for, and does. What it cannot say is which part
+  /// of a player wanted it, because a player sends a byte range and nothing
+  /// else. This is that half, on when somebody is about to read a report.
+  static const Map<String, String> verboseMpvOverrides = {
     'msg-level': 'all=info,demux=v,stream=v,cache=v',
   };
+
+  /// [mpvOverrides], with [verboseMpvOverrides] on top under
+  /// "Verbose diagnostics".
+  static Map<String, String> overridesFor({required bool verboseLog}) =>
+      verboseLog ? {...mpvOverrides, ...verboseMpvOverrides} : mpvOverrides;
 
   /// What tells mpv the rate a display is refreshing at, in hertz, and an
   /// empty map where there is nothing to say.
@@ -661,12 +683,16 @@ class MediaKitEngine implements PlaybackEngine {
     return isLoopbackHost(url.host);
   }
 
-  /// Sets [mpvOverrides] on the native backend. Only libmpv has
-  /// properties; any other backend keeps its own behaviour, and a player
-  /// torn down before it initialised is not an error worth surfacing.
-  static Future<void> _applyOverrides(PlatformPlayer? platform) async {
+  /// Sets [overrides] ([overridesFor]) on the native backend. Only libmpv
+  /// has properties; any other backend keeps its own behaviour, and a
+  /// player torn down before it initialised is not an error worth
+  /// surfacing.
+  static Future<void> _applyOverrides(
+    PlatformPlayer? platform,
+    Map<String, String> overrides,
+  ) async {
     if (platform is! NativePlayer) return;
-    for (final MapEntry(:key, :value) in mpvOverrides.entries) {
+    for (final MapEntry(:key, :value) in overrides.entries) {
       await _write(platform, key, value);
     }
   }
@@ -765,16 +791,21 @@ class MediaKitEngine implements PlaybackEngine {
   /// is 16 MiB of that for a cost nobody watching forwards ever pays.
   static const int backCacheBytes = 16 * 1024 * 1024;
 
-  /// media_kit's own defaults with [memoryCacheBytes] named.
-  static const PlayerConfiguration playerConfiguration = PlayerConfiguration(
+  /// media_kit's own defaults with [memoryCacheBytes] named, and the log
+  /// level "Verbose diagnostics" asks for.
+  ///
+  /// media_kit gates mpv's log at `error` by default, so nothing below that
+  /// reaches [engineLog] whatever `msg-level` says. `info` is the level
+  /// mpv's demuxer announces seeks, stream opens and cache state at;
+  /// `debug` and `trace` log per packet and would evict the whole
+  /// diagnostics ring in seconds, taking the server's own lines -- the
+  /// ones a report is read by -- with them. So verbose is `info`, and off
+  /// is media_kit's own `error`.
+  static PlayerConfiguration playerConfigurationFor({
+    required bool verboseLog,
+  }) => PlayerConfiguration(
     bufferSize: memoryCacheBytes,
-    // **TEMPORARY, to answer one question.** media_kit gates mpv's log at
-    // `error` by default, so nothing below that reaches [engineLog] whatever
-    // `msg-level` says. `info` is the level mpv's demuxer announces seeks,
-    // stream opens and cache state at; `debug` and `trace` log per packet
-    // and would evict the whole diagnostics ring in seconds, taking the
-    // server's own lines -- the ones we actually need -- with them.
-    logLevel: MPVLogLevel.info,
+    logLevel: verboseLog ? MPVLogLevel.info : MPVLogLevel.error,
   );
 
   /// The controller configuration for a `hardwareDecoding` setting.
@@ -886,14 +917,25 @@ class MediaKitEngine implements PlaybackEngine {
   @override
   Stream<String> get engineLog => _player.stream.log
       .where(
-        (entry) =>
-            entry.level == 'error' ||
-            // TEMPORARY, with `msg-level` in [mpvOverrides]: the subsystems
-            // that say why a read happened, and only those -- everything
-            // else at this level is noise that would evict the ring.
-            const {'demux', 'stream', 'cache'}.contains(entry.prefix),
+        (entry) => engineLogCarries(
+          prefix: entry.prefix,
+          level: entry.level,
+          verboseLog: _verboseLog,
+        ),
       )
       .map((entry) => '${entry.prefix}: ${entry.text}');
+
+  /// Whether an mpv log line reaches [engineLog]: every error, and under
+  /// "Verbose diagnostics" the subsystems that say why a read happened --
+  /// demuxer, stream and cache -- and only those. Everything else at that
+  /// level is noise that would evict the diagnostics ring.
+  static bool engineLogCarries({
+    required String prefix,
+    required String level,
+    required bool verboseLog,
+  }) =>
+      level == 'error' ||
+      (verboseLog && const {'demux', 'stream', 'cache'}.contains(prefix));
 
   @override
   Stream<double> get volume => _player.stream.volume;

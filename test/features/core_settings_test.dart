@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/diagnostics/diagnostics_trace.dart';
 import 'package:xtremio/features/settings/core_settings.dart';
 import 'package:xtremio/features/sharing/idle_sharing.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
@@ -712,6 +713,41 @@ void main() {
     });
   });
 
+  group('verbose diagnostics', () {
+    Finder theSwitch() =>
+        find.byKey(settingKey(AppPrefs.verboseDiagnosticsKey));
+
+    testWidgets('starts off, under Developer, and says what it does', (
+      tester,
+    ) async {
+      await pumpSettings(tester, prefs: AppPrefs.inMemory());
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
+      expect(find.text(DiagnosticsTraceSync.description), findsOneWidget);
+      // With the Diagnostics tile whose contents it changes, not with the
+      // server settings.
+      final developer = tester.getTopLeft(find.text('Developer'));
+      final diagnostics = tester.getTopLeft(find.text('Diagnostics'));
+      final tile = tester.getTopLeft(theSwitch());
+      expect(tile.dy, greaterThan(developer.dy));
+      expect(tile.dy, lessThan(diagnostics.dy));
+    });
+
+    testWidgets('writes the choice to the preferences, not the core', (
+      tester,
+    ) async {
+      final stored = FakePrefsClient();
+      final prefs = AppPrefs(client: stored);
+      final core = await pumpSettings(tester, prefs: prefs);
+      await tester.tap(theSwitch());
+      await tester.pump();
+
+      expect(prefs.verboseDiagnostics, isTrue);
+      expect(stored.stored[AppPrefs.verboseDiagnosticsKey], isTrue);
+      expect(tester.widget<SwitchListTile>(theSwitch()).value, isTrue);
+      expect(core.dispatched, isEmpty);
+    });
+  });
+
   testWidgets('no control is offered until the settings are known', (
     tester,
   ) async {
@@ -720,10 +756,14 @@ void main() {
     final core = await pumpSettings(tester, ctx: {});
     expect(find.text('Loading settings…'), findsWidgets);
     // Every switch over a `profile.settings` key is behind that pending
-    // tile. The one that is drawn is the app's own preference, which does
+    // tile. The two that are drawn are the app's own preferences, which do
     // not come out of `ctx` and must not wait for it.
-    expect(find.byType(SwitchListTile), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsNWidgets(2));
     expect(find.byKey(settingKey(AppPrefs.shareWhileIdleKey)), findsOneWidget);
+    expect(
+      find.byKey(settingKey(AppPrefs.verboseDiagnosticsKey)),
+      findsOneWidget,
+    );
     expect(find.byType(RadioGroup<bool>), findsNothing);
     expect(core.dispatched, isEmpty);
 

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/diagnostics/diagnostics_trace.dart';
 import 'package:xtremio/features/sharing/idle_sharing.dart';
 import 'package:xtremio/shell/device_profile.dart';
 
@@ -325,9 +326,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(server.patches, [
-        {IdleSharing.seedingEnabledKey: false},
-      ]);
+      // Beside it, the one other setting the app pushes at start.
+      expect(
+        server.patches,
+        unorderedEquals([
+          {IdleSharing.seedingEnabledKey: false},
+          {DiagnosticsTraceSync.serverKey: false},
+        ]),
+      );
     });
   });
 }
