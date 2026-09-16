@@ -24,6 +24,13 @@ class PosterTile extends StatelessWidget {
   /// Height of the caption under the image ([PosterImage] gets the rest).
   static const double captionHeight = 38;
 
+  /// How far the name is held off the tile's edges: [FocusRing.textInset],
+  /// because the ring is drawn over these bounds and the bold one lands on
+  /// the words. The poster above pays for it -- the row keeps the height
+  /// the board picked for it, and eight pixels off a poster is nothing
+  /// anyone can see, while eight pixels across a title is the title.
+  static const double captionInset = FocusRing.textInset;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -36,11 +43,19 @@ class PosterTile extends StatelessWidget {
         children: [
           Expanded(child: PosterImage(url: item.poster)),
           const SizedBox(height: 6),
-          Text(
-            item.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              captionInset,
+              0,
+              captionInset,
+              captionInset,
+            ),
+            child: Text(
+              item.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
+            ),
           ),
         ],
       ),

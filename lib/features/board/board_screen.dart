@@ -402,8 +402,15 @@ class _RowLayout {
 
   double get stripHeight => extent - headerHeight - bottomPadding;
 
+  /// The poster's box: the strip less the room a focused tile grows into,
+  /// the caption's own box, and the inset that keeps the ring off the
+  /// words ([PosterTile.captionInset], which is a constant and so is not
+  /// scaled with the text the way the caption box is).
   double get imageHeight =>
-      stripHeight - focusSlack * 2 - PosterTile.captionHeight * textFactor;
+      stripHeight -
+      focusSlack * 2 -
+      PosterTile.captionInset -
+      PosterTile.captionHeight * textFactor;
 
   double tileWidthFor(String posterShape) =>
       (imageHeight * PosterImage.aspectRatioFor(posterShape)).roundToDouble();
@@ -615,7 +622,11 @@ class _SeeAllTile extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: PosterTile.captionHeight),
+          // Stands in for a tile's caption, so this box lines up with the
+          // posters beside it: the inset below their words is part of it.
+          const SizedBox(
+            height: PosterTile.captionHeight + PosterTile.captionInset,
+          ),
         ],
       ),
     );

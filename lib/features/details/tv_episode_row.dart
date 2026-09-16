@@ -114,7 +114,7 @@ class TvEpisodeRow extends StatefulWidget {
   /// first letter of the title. The picture can carry a ring across its
   /// edge; a line of text cannot, so the words are inset by the widest the
   /// ring ever is and the card is that much taller for it.
-  static const double captionInset = FocusRing.boldWidth;
+  static const double captionInset = FocusRing.textInset;
 
   /// The box the title and the date are drawn in, at text scale 1: two
   /// lines of title over one of date.

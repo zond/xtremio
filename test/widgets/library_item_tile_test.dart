@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/library_item_tile.dart';
 
 const tv = DeviceProfile(isTv: true, hasTouch: false);
@@ -33,6 +34,32 @@ Color? episodeColour(WidgetTester tester) =>
     tester.widget<Text>(find.text('S2E3')).style?.color;
 
 void main() {
+  testWidgets('the caption clears the bold focus ring, both lines of it', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness());
+
+    final tile = tester.getRect(find.byType(LibraryItemTile));
+    for (final line in ['Lanterns', 'S2E3']) {
+      final text = tester.getRect(find.text(line));
+      expect(
+        text.left - tile.left,
+        greaterThanOrEqualTo(FocusRing.boldWidth),
+        reason: line,
+      );
+      expect(
+        tile.right - text.right,
+        greaterThanOrEqualTo(FocusRing.boldWidth),
+        reason: line,
+      );
+    }
+    expect(
+      tile.bottom - tester.getRect(find.text('S2E3')).bottom,
+      greaterThanOrEqualTo(FocusRing.boldWidth),
+      reason: 'the last line, which the ring runs under',
+    );
+  });
+
   testWidgets('the focused tile lifts its episode line to full strength', (
     tester,
   ) async {

@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/state/meta_item_preview.dart';
+import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 
 /// An `HttpClient` that answers every request with one image, so the
@@ -152,6 +154,41 @@ void main() {
     },
     timeout: const Timeout(Duration(seconds: 60)),
   );
+
+  testWidgets('the name clears the bold focus ring on every side it can '
+      'be drawn over', (tester) async {
+    // The ring is painted on the tile's own bounds, so at
+    // [FocusRing.boldWidth] it lands on the caption unless the caption is
+    // held off the edges by at least that much.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 130,
+              height: 195 + PosterTile.captionHeight + PosterTile.captionInset,
+              child: PosterTile(
+                item: MetaItemPreview(const {
+                  'id': 'tt0063350',
+                  'type': 'movie',
+                  'name': 'Night of the Living Dead',
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final tile = tester.getRect(find.byType(PosterTile));
+    final name = tester.getRect(find.text('Night of the Living Dead'));
+    expect(name.left - tile.left, greaterThanOrEqualTo(FocusRing.boldWidth));
+    expect(tile.right - name.right, greaterThanOrEqualTo(FocusRing.boldWidth));
+    expect(
+      tile.bottom - name.bottom,
+      greaterThanOrEqualTo(FocusRing.boldWidth),
+    );
+  });
 
   testWidgets('no poster is the fallback box, at the tile\'s size', (
     tester,

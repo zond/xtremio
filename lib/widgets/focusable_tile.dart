@@ -553,6 +553,18 @@ class FocusRing extends StatelessWidget {
   /// Both strokes together in [FocusEmphasis.bold].
   static const double boldWidth = 8;
 
+  /// How far text inside a focusable has to be held off its edges.
+  ///
+  /// The ring is drawn on the tile's own bounds and over whatever is under
+  /// them, and under [FocusEmphasis.bold] that is eight logical pixels of
+  /// it -- the first letter of a caption, or the bottom of the line under
+  /// it. A picture can carry a ring across its edge and still read; a line
+  /// of text cannot.
+  ///
+  /// Always the bold width, whatever the setting currently says, so that
+  /// flipping it re-paints the ring without reflowing the screen under it.
+  static const double textInset = boldWidth;
+
   /// The outer stroke: near-black, so it reads against a bright poster and
   /// against a bright room's washed-out whites.
   static const Color outerColor = Color(0xE6000000);
