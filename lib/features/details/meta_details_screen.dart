@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -231,6 +233,29 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// selected episode) chooses one.
   int? _season;
 
+  /// The season pills, so an up press from the episode row can hand the
+  /// remote to the pill of the season on screen; see [TvEpisodeRow.onUp].
+  final GlobalKey<_SeasonSelectorState> _seasonKey =
+      GlobalKey<_SeasonSelectorState>();
+
+  /// The load a walk along the episode row is waiting to make; see
+  /// [_focusVideo].
+  Timer? _focusSelect;
+
+  /// The episode the last build drew as the selected one, so resting on it
+  /// again is recognised as choosing nothing; see [_focusVideo].
+  String? _shownVideoId;
+
+  /// How long the remote has to stand still on an episode before its
+  /// sources are asked for.
+  ///
+  /// Walking a season is one focus change per press, and each one would
+  /// otherwise be a `Load` of that episode's streams: every addon asked
+  /// about every episode the remote passed over. A wait is what tells
+  /// passing through from arriving, and it is short enough that a viewer
+  /// who has stopped does not notice it.
+  static const Duration _focusSelectDelay = Duration(milliseconds: 350);
+
   /// The episode a tap asked for while the engine has not answered with its
   /// streams yet. The field still describes the previous selection, so
   /// until it catches up the screen follows this instead: the tile is the
@@ -271,6 +296,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// which re-section the list under it, cannot silently move the mark to
   /// another group.
   String? _openSourceGroup;
+
+  /// The group whose row Back has just put away, which the card it was
+  /// opened from must not reopen when focus lands back on it.
+  ///
+  /// Closing the row takes the card the remote was on off the screen, and
+  /// the scope hands focus back to the group card above -- a gain of
+  /// focus like any other, which would otherwise reopen the very row the
+  /// press had just closed and leave Back looking broken. It is cleared
+  /// the moment focus reaches any other card, or the viewer presses this
+  /// one again.
+  String? _reopenSuppressed;
 
   /// Whether the build now in progress has actually drawn a row for
   /// [_openSourceGroup]: a rung the last state offered and this one does
@@ -355,6 +391,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   @override
   void dispose() {
     releaseField();
+    _focusSelect?.cancel();
     _narrowScroll.dispose();
     _details?.dispose();
     _ctx
@@ -432,9 +469,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   void _load(String? videoId) {
     _requestedVideoId = videoId;
     _awaitingVideoId = null;
-    // Another video's sources are another set of groups; the row that was
-    // open was about the last one.
-    _openSourceGroup = null;
+    // The open row is left where it is. Choosing a new season, episode or
+    // group refreshes what is *below* it; it does not put away a row the
+    // viewer has already chosen, because the move that asked for this is
+    // usually a step along a path they picked -- the same resolution of
+    // the next episode, say. A label the new answer has no group for draws
+    // no row anyway ([_openSourceRowDrawn]), so nothing has to be cleared
+    // for that either.
     claimField();
     _client?.dispatch(
       CoreActions.loadMetaDetails(
@@ -467,11 +508,48 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// of the screen's own would take the card the press was made on out
   /// from under the focus that is still on it.
   void _selectVideo(VideoInfo video, {bool reveal = false}) {
+    // A press answers for itself: whatever the walk was about to ask for,
+    // this is the episode the viewer means.
+    _focusSelect?.cancel();
     _load(video.id);
     final acknowledge = reveal && !_isWide && !_isTv;
     if (acknowledge) _awaitingVideoId = video.id;
     if (mounted) setState(() => _season = video.season);
     if (acknowledge) _revealStreams(atEnd: true);
+  }
+
+  /// The remote has come to rest on a group card: open its sources,
+  /// unless this is the card Back has just closed one from (see
+  /// [_reopenSuppressed]).
+  void _focusSourceGroup(String label) {
+    if (_reopenSuppressed == label) {
+      _reopenSuppressed = null;
+      return;
+    }
+    setState(() {
+      _openSourceGroup = label;
+      _reopenSuppressed = null;
+    });
+  }
+
+  /// The remote has come to rest on [video] in the episode row: show its
+  /// sources, once it has stood there for [_focusSelectDelay].
+  ///
+  /// The highlight is what says which episode the rows below are about, so
+  /// walking the row updates them and select is left to mean "play this",
+  /// one press deeper. Nothing is asked for an episode already loaded --
+  /// walking away and back costs nothing.
+  void _focusVideo(VideoInfo video) {
+    // Nothing has been chosen: this is the episode whose sources are
+    // already on screen, which the remote passes back over on its way
+    // along the row (and lands on when it first arrives from below).
+    // Asking again would re-ask every addon and refresh rows that are
+    // already right.
+    if (video.id == _requestedVideoId || video.id == _shownVideoId) return;
+    _focusSelect?.cancel();
+    _focusSelect = Timer(_focusSelectDelay, () {
+      if (mounted) _selectVideo(video);
+    });
   }
 
   /// Brings the stream section into view when it is not already beside the
@@ -834,7 +912,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     return PopScope(
       canPop: !_openSourceRowDrawn,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) setState(() => _openSourceGroup = null);
+        if (!didPop) {
+          setState(() {
+            _reopenSuppressed = _openSourceGroup;
+            _openSourceGroup = null;
+          });
+        }
       },
       child: Scaffold(
         body: TvBackdrop(
@@ -871,6 +954,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         state.initialVideo(preferred: widget.videoId)?.season ??
         (seasons.isEmpty ? null : seasons.first);
     final episodes = season == null ? meta.videos : meta.videosOfSeason(season);
+    _shownVideoId = _selectedVideoId(state);
     final now = DateTime.now().toUtc();
     return [
       SliverAppBar(
@@ -932,6 +1016,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               child: _SeasonSelector(
+                key: _seasonKey,
                 seasons: seasons,
                 selected: season,
                 onChanged: (season) => setState(() => _season = season),
@@ -949,6 +1034,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               downloadOf: (video) => _downloads?.forVideo(widget.id, video.id),
               onSelect: (video) => _selectVideo(video, reveal: true),
               onToggleWatched: (video) => _toggleWatched(state, video),
+              onFocus: _focusVideo,
+              onUp: seasons.length > 1 && season != null
+                  ? () => _seasonKey.currentState?.focusSelected()
+                  : null,
             ),
           )
         else
@@ -1448,7 +1537,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         child: TvSourceRows(
           groups: groups,
           openLabel: _openSourceGroup,
-          onOpen: (label) => setState(() => _openSourceGroup = label),
+          onOpen: (label) => setState(() {
+            _openSourceGroup = label;
+            _reopenSuppressed = null;
+          }),
+          onFocusGroup: _focusSourceGroup,
           defaultFocus: lastUsedStream == null,
         ),
       ),
@@ -2016,10 +2109,16 @@ class _ExpandableTextState extends State<_ExpandableText> {
 ///   directional traversal only considers widgets that have been built, so
 ///   a lazily built row silently stops the D-pad at the last realised pill
 ///   however many seasons the series has.
-/// - **The pills fill the row** whenever they fit, an even share of the
-///   width each. Directional focus prefers what overlaps it horizontally,
-///   so a short row packed at the left is stepped over by anything coming
-///   down the right-hand side of the header.
+/// - **A pill is as wide as it needs to be**, up to an even share of the
+///   row. Two seasons stretched across a television read as two buttons
+///   for something else entirely, so the even share is a ceiling now and
+///   [_SeasonSelector._maxPillWidth] is the other one; the row is packed
+///   at the left like every other row on the screen. What that costs is
+///   that directional focus, which prefers whatever overlaps the press
+///   horizontally, no longer finds the pills from anywhere along the row
+///   below -- so the episode row hands an up press here itself
+///   ([TvEpisodeRow.onUp], [_SeasonSelectorState.focusSelected]) rather
+///   than leaving it to geometry.
 /// - **The selected pill is scrolled into view** when the season changes or
 ///   the row is built for another title, so season 12 does not open with
 ///   the row parked at 1. Only the row moves: [ScrollPosition.ensureVisible]
@@ -2027,6 +2126,7 @@ class _ExpandableTextState extends State<_ExpandableText> {
 ///   would drag the page's vertical scroll along with it.
 class _SeasonSelector extends StatefulWidget {
   const _SeasonSelector({
+    super.key,
     required this.seasons,
     required this.selected,
     required this.onChanged,
@@ -2045,6 +2145,10 @@ class _SeasonSelector extends StatefulWidget {
   /// The space between two pills.
   static const double _gap = 8;
 
+  /// The widest a pill is drawn, however few seasons share the row. Enough
+  /// for `Specials` and the padding a chip puts around it.
+  static const double _maxPillWidth = 120;
+
   /// Rounds the focus ring around a pill. A chip is stadium-shaped, and a
   /// radius this side of half its height is drawn as one (the radii are
   /// scaled down to fit the box, never up).
@@ -2059,6 +2163,21 @@ class _SeasonSelectorState extends State<_SeasonSelector> {
 
   /// One key per season, so the reveal below can find the pill's box.
   final Map<int, GlobalKey> _pills = {};
+
+  /// One focus node per season, kept for as long as this row is on screen.
+  ///
+  /// A node per *season* rather than one for "the selected pill": focusing
+  /// a pill is what changes the season here, so a node that followed the
+  /// selection would be taken off the chip the remote had just landed on
+  /// and handed to another, which is focus disappearing mid-press.
+  final Map<int, FocusNode> _nodes = {};
+
+  FocusNode _nodeFor(int season) =>
+      _nodes.putIfAbsent(season, () => FocusNode(debugLabel: 'season $season'));
+
+  /// Puts the remote on the pill of the season on screen: what an up press
+  /// from the episode row is answered with.
+  void focusSelected() => _nodeFor(widget.selected).requestFocus();
 
   @override
   void initState() {
@@ -2078,6 +2197,9 @@ class _SeasonSelectorState extends State<_SeasonSelector> {
   @override
   void dispose() {
     _controller.dispose();
+    for (final node in _nodes.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -2111,13 +2233,11 @@ class _SeasonSelectorState extends State<_SeasonSelector> {
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // An even share of the row each, as a *minimum*: seasons that
-              // fit spread over the whole width, and a series with too many
-              // keeps them at their own width and scrolls. Filling the row
-              // is what keeps the pills reachable on a television, where
-              // directional focus coming down from the header prefers
-              // whatever overlaps it horizontally -- a short row packed at
-              // the left is stepped straight over into the episode list.
+              // An even share of the row each as a *minimum*, and never
+              // wider than [_SeasonSelector._maxPillWidth]: a series with
+              // two seasons draws two ordinary pills at the left rather
+              // than two halves of a television, and one with thirty keeps
+              // them at their own width and scrolls.
               //
               // Never below zero: past about thirty pills the gaps alone
               // are wider than the row, and a negative minimum is not a
@@ -2129,7 +2249,11 @@ class _SeasonSelectorState extends State<_SeasonSelector> {
                   (constraints.maxWidth -
                       _SeasonSelector._gap * (widget.seasons.length - 1)) /
                   widget.seasons.length;
-              final share = even > 0 ? even : 0.0;
+              final share = even > 0
+                  ? (even < _SeasonSelector._maxPillWidth
+                        ? even
+                        : _SeasonSelector._maxPillWidth)
+                  : 0.0;
               return SingleChildScrollView(
                 controller: _controller,
                 scrollDirection: Axis.horizontal,
@@ -2147,6 +2271,12 @@ class _SeasonSelectorState extends State<_SeasonSelector> {
                         // takes away.
                         child: FocusHighlighted(
                           borderRadius: _SeasonSelector._pillRadius,
+                          focusNode: _nodeFor(season),
+                          // The remote landing on a pill is the viewer
+                          // asking to see that season: the episodes below
+                          // follow the highlight, and select is left to
+                          // mean the press that goes down into them.
+                          onFocused: () => widget.onChanged(season),
                           builder: (context, node) => ChoiceChip(
                             focusNode: node,
                             label: Text(_SeasonSelector.label(season)),

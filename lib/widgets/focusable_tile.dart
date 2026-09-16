@@ -39,6 +39,7 @@ class FocusableTile extends StatefulWidget {
     this.focusNode,
     this.memoryId,
     this.defaultFocus = false,
+    this.onFocused,
     this.borderRadius = const BorderRadius.all(Radius.circular(8)),
   });
 
@@ -46,6 +47,20 @@ class FocusableTile extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onSecondaryTap;
+
+  /// The remote has come to rest on this tile (a television only).
+  ///
+  /// For a tile that is also a choice of what the row below it shows -- a
+  /// season, an episode, a group of sources -- so that walking the row
+  /// updates what is under it and select is kept for going deeper. It is
+  /// beside [onTap], never instead of it.
+  ///
+  /// **The autofocus that puts the remote here on arrival does not call
+  /// it.** Where focus starts is the screen's choice, not the viewer's, and
+  /// a card that answered it by opening its row would have every arrival
+  /// open a row nobody asked for -- which Back then spends a press closing
+  /// before it will leave the screen.
+  final VoidCallback? onFocused;
 
   /// The node the tile focuses with; one is created when null.
   final FocusNode? focusNode;
@@ -86,10 +101,17 @@ class _FocusableTileState extends State<FocusableTile> {
     return widget.memoryId != null && remembered == widget.memoryId;
   }
 
+  /// Whether the next gain of focus is this tile's own autofocus; see
+  /// [FocusableTile.onFocused].
+  late bool _autofocusPending = _autofocus;
+
   void _onFocusChange(bool focused) {
     if (!mounted) return;
     setState(() => _focused = focused);
     if (!focused) return;
+    final wasAutofocus = _autofocusPending;
+    _autofocusPending = false;
+    if (!wasAutofocus) widget.onFocused?.call();
     final id = widget.memoryId;
     if (id != null) FocusMemory.maybeOf(context)?.lastFocused = id;
     Scrollable.ensureVisible(
@@ -358,7 +380,18 @@ class FocusHighlighted extends StatefulWidget {
     required this.borderRadius,
     required this.builder,
     this.treatment = FocusTreatment.tile,
+    this.focusNode,
+    this.onFocused,
   });
+
+  /// The node to hand [builder] instead of one of this widget's own: for a
+  /// control that something else has to be able to move the remote onto.
+  /// Its owner creates and disposes of it.
+  final FocusNode? focusNode;
+
+  /// The remote has come to rest on this control (a television only, like
+  /// every other part of this indicator).
+  final VoidCallback? onFocused;
 
   /// Rounds the ring; a stadium-shaped control wants a radius of at least
   /// half its height (the radii are scaled down to fit, never up).
@@ -375,19 +408,31 @@ class FocusHighlighted extends StatefulWidget {
 }
 
 class _FocusHighlightedState extends State<FocusHighlighted> {
-  late final FocusNode _node = FocusNode()..addListener(_onFocusChange);
+  /// This widget's own node, made only when the caller supplied none.
+  FocusNode? _owned;
   bool _focused = false;
 
+  FocusNode get _node => widget.focusNode ?? (_owned ??= FocusNode());
+
+  @override
+  void initState() {
+    super.initState();
+    _node.addListener(_onFocusChange);
+  }
+
   void _onFocusChange() {
-    if (mounted && _node.hasFocus != _focused) {
-      setState(() => _focused = _node.hasFocus);
-    }
+    if (!mounted || _node.hasFocus == _focused) return;
+    setState(() => _focused = _node.hasFocus);
+    // Off a television this widget draws nothing and says nothing: focus
+    // there follows a pointer or Tab, and a Tab through a row of chips is
+    // not a viewer choosing what the row below should show.
+    if (_focused && DeviceScope.isTv(context)) widget.onFocused?.call();
   }
 
   @override
   void dispose() {
     _node.removeListener(_onFocusChange);
-    _node.dispose();
+    _owned?.dispose();
     super.dispose();
   }
 

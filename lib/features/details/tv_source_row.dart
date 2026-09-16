@@ -27,9 +27,12 @@ import '../../widgets/focusable_tile.dart';
 ///
 /// Three things about it are not cosmetic:
 ///
-/// - **The group row stays put when a group is chosen.** The second row
-///   opens under it with the chosen card marked, so the next group is one
-///   sideways press away rather than a press back and a press down.
+/// - **Walking the group row opens what the remote lands on.** A group is
+///   a choice of what the second row shows, and a highlight says as much
+///   as a press does: the row under the remote is always the row for the
+///   card it is on, and select is left to go down into it. The group row
+///   itself stays put, so the next group is one sideways press away rather
+///   than a press back and a press down.
 /// - **Both rows are built all at once.** Directional focus only
 ///   considers widgets that have been built, so a lazily built strip hands
 ///   the D-pad back at the last realised card. Each row is a
@@ -53,6 +56,7 @@ class TvSourceRows extends StatelessWidget {
     required this.groups,
     required this.openLabel,
     required this.onOpen,
+    this.onFocusGroup,
     this.defaultFocus = false,
   });
 
@@ -65,6 +69,13 @@ class TvSourceRows extends StatelessWidget {
 
   /// Opens that group, or closes the open one (null).
   final ValueChanged<String?> onOpen;
+
+  /// The remote has come to rest on a group card, which is the viewer
+  /// asking for that group's sources. Separate from [onOpen] because the
+  /// screen answers it differently: a row the viewer has just put away
+  /// with Back must not come straight back when focus returns to the card
+  /// it was opened from. Falls back to [onOpen] when nobody is listening.
+  final ValueChanged<String>? onFocusGroup;
 
   /// Whether the first group card is where the remote starts on this
   /// screen. False when something above it (the last-used source) is.
@@ -131,8 +142,13 @@ class TvSourceRows extends StatelessWidget {
                     group: group,
                     chosen: group.label == openLabel,
                     defaultFocus: defaultFocus && index == 0,
-                    onTap: () =>
-                        onOpen(group.label == openLabel ? null : group.label),
+                    // Opening, not toggling: the remote standing here is
+                    // already what opened this row, so a press that closed
+                    // it again would make select mean the opposite of what
+                    // it means everywhere else on the screen. Back is what
+                    // closes a row.
+                    onTap: () => onOpen(group.label),
+                    onFocused: () => (onFocusGroup ?? onOpen)(group.label),
                   ),
                 ),
             ],
@@ -245,6 +261,7 @@ class TvSourceGroupCard extends StatelessWidget {
     required this.group,
     required this.chosen,
     required this.onTap,
+    this.onFocused,
     this.defaultFocus = false,
   });
 
@@ -254,6 +271,11 @@ class TvSourceGroupCard extends StatelessWidget {
   final bool chosen;
 
   final VoidCallback onTap;
+
+  /// The remote has come to rest on this card, which opens its sources
+  /// (see [TvSourceRows]).
+  final VoidCallback? onFocused;
+
   final bool defaultFocus;
 
   @override
@@ -262,6 +284,7 @@ class TvSourceGroupCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     return FocusableTile(
       onTap: onTap,
+      onFocused: onFocused,
       defaultFocus: defaultFocus,
       borderRadius: _cardRadius,
       child: _CardBox(

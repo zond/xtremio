@@ -5,10 +5,12 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/episode_thumbnail.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_episode_row.dart';
+import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/download_badge.dart';
+import 'package:xtremio/widgets/focusable_tile.dart';
 
 import '../../support/fake_core_client.dart';
 import '../../support/fake_downloads_client.dart';
@@ -384,10 +386,16 @@ void main() {
     // screen is a card per addon until one of them is chosen.
     await press(tester, LogicalKeyboardKey.select);
     await stepOntoTheRow(tester);
+
+    // Walking the row asks for the episode it comes to rest on, and that
+    // refresh leaves the chosen group where it is: a step along the row is
+    // a move inside a path the viewer already picked, not a reason to put
+    // their sources away.
     await press(tester, LogicalKeyboardKey.arrowRight);
     await press(tester, LogicalKeyboardKey.arrowRight);
     final left = focusedEpisode();
     expect(left, isNot(seasonOne(series()).first.title));
+    expect(find.byType(TvSourceCard), findsWidgets, reason: 'the row stayed');
 
     // A pointer tap on the source, so nothing but the player moves focus
     // (scrolling it back into view does not).
@@ -404,6 +412,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PlayerScreen), findsNothing);
     expect(focusedEpisode(), left);
+  });
+
+  testWidgets('the caption is held clear of the focus ring', (tester) async {
+    // The ring is drawn on the card's own bounds and over whatever is
+    // under them, and in bold it is eight logical pixels of it. A picture
+    // can carry that across its edge; the title and the air date cannot,
+    // and on a television they are the only words saying which episode
+    // this is.
+    final fixture = series();
+    await mount(tester, fixture);
+    final pilot = seasonOne(fixture).first;
+
+    final card = tester.getRect(cardOf(pilot.id));
+    final title = tester.getRect(
+      inCard(pilot.id, find.text(TvEpisodeCard.title(pilot))),
+    );
+    final date = tester.getRect(
+      inCard(
+        pilot.id,
+        find.text(TvEpisodeCard.subtitle(pilot, isReleased: true)),
+      ),
+    );
+
+    expect(title.left - card.left, greaterThanOrEqualTo(FocusRing.boldWidth));
+    expect(card.right - title.right, greaterThanOrEqualTo(FocusRing.boldWidth));
+    expect(
+      card.bottom - date.bottom,
+      greaterThanOrEqualTo(FocusRing.boldWidth),
+    );
   });
 
   testWidgets('off a television the episodes are still a vertical list', (

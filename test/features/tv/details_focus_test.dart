@@ -388,7 +388,8 @@ void main() {
       await mountSectioned(tester);
 
       // Nothing is chosen, so there is no second row at all yet: the
-      // resolutions themselves are what the remote starts on.
+      // resolutions themselves are what the remote starts on, and the
+      // autofocus that put it there opens nothing.
       expect(focusIn<TvSourceGroupCard>(), isTrue);
       expect(focusedLabel(tester), '2160p');
       expect(find.byType(TvSourceCard), findsNothing);
@@ -401,6 +402,15 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowLeft);
       await press(tester, LogicalKeyboardKey.arrowLeft);
       expect(focusedLabel(tester), '2160p');
+      // Each of those steps opened the row for the card it landed on, so
+      // what is under the remote now is this card's own sources.
+      expect(
+        tester
+            .widgetList<TvSourceGroupCard>(find.byType(TvSourceGroupCard))
+            .where((card) => card.chosen)
+            .map((card) => card.group.label),
+        ['2160p'],
+      );
     });
 
     testWidgets('the sections a phone remembers open do not open a row here', (
@@ -416,13 +426,19 @@ void main() {
       expect(focusedLabel(tester), '2160p');
     });
 
-    testWidgets('select opens that group beneath the row, which stays put '
-        'with the card marked by more than a colour', (tester) async {
+    testWidgets('walking onto a group opens it beneath the row, which stays '
+        'put with the card marked by more than a colour', (tester) async {
       await mountSectioned(tester);
-      await press(tester, LogicalKeyboardKey.arrowRight);
-      expect(focusedLabel(tester), '1080p');
       expect(find.text('Beta 1080p'), findsNothing);
 
+      // The highlight is the choice: the row under the remote is the row
+      // for the card it is on, and no press was needed to say so.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedLabel(tester), '1080p');
+      expect(find.text('Beta 1080p'), findsOneWidget);
+
+      // And select on the card that is already open leaves it open, rather
+      // than toggling the row away under the remote.
       await press(tester, LogicalKeyboardKey.select);
 
       expect(find.text('Beta 1080p'), findsOneWidget);
@@ -462,6 +478,10 @@ void main() {
       tester,
     ) async {
       await mountSectioned(tester);
+      // The first card holds the remote on arrival and its row is shut:
+      // where focus starts is the screen's choice, not the viewer's, so
+      // nothing is open until the remote is walked somewhere.
+      expect(find.byType(TvSourceCard), findsNothing);
       await press(tester, LogicalKeyboardKey.select);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), 'Alpha 2160p');
@@ -476,6 +496,10 @@ void main() {
       // and a dead D-pad.
       expect(focusedLabel(tester), '2160p');
       expect(focusIn<TvSourceGroupCard>(), isTrue);
+      // And it stays shut: the card the remote has just been handed back
+      // is the one the press closed, so reopening it here would make Back
+      // look like it did nothing at all.
+      expect(find.byType(TvSourceCard), findsNothing);
     });
 
     testWidgets('the order chips take the D-pad, and select picks one', (
@@ -620,15 +644,12 @@ void main() {
       expect(core.dispatched, hasLength(loads + 1), reason: 'no Load');
     });
 
-    testWidgets('the season pills take the D-pad and select switches', (
-      tester,
-    ) async {
+    testWidgets('walking the season pills switches the season, with no '
+        'press', (tester) async {
       await mountSeries(tester);
       final meta = MetaDetailsState.fromJson(seriesWithTorrent()).meta!;
       expect(find.text('Pilot'), findsOneWidget);
 
-      // Up from the sources reaches the row at all only because the pills
-      // fill the panel's width; packed at the left they are stepped over.
       await stepUpTo<ChoiceChip>(tester);
       // The row is one focus stop per season, walked with left and right.
       for (var i = 0; i < 8 && focusedLabel(tester) != '2'; i++) {
@@ -637,9 +658,71 @@ void main() {
       expect(focusedLabel(tester), '2');
       expect(focusIn<ChoiceChip>(), isTrue);
 
-      await press(tester, LogicalKeyboardKey.select);
+      // The episodes under it are already season 2's: the highlight is
+      // what says which season the row below shows, and select is left to
+      // mean the press that goes down into it.
       expect(find.text('Pilot'), findsNothing);
       expect(find.text(meta.videosOfSeason(2).first.title), findsOneWidget);
+
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text(meta.videosOfSeason(2).first.title), findsOneWidget);
+      expect(focusedLabel(tester), '2', reason: 'focus stayed on the pill');
+    });
+
+    testWidgets('an up press from the episode row reaches the pills, '
+        'however narrow they are', (tester) async {
+      // Two or three pills do not fill a television, and directional focus
+      // prefers whatever overlaps the press horizontally -- so a card
+      // further along the row would step over a short row of pills into
+      // the header. The row hands the press up itself instead.
+      await mountSeries(tester);
+      await stepUpTo<TvEpisodeCard>(tester);
+      for (var i = 0; i < 6 && focusedEpisodeTitle() != 'Pilot'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+
+      expect(focusIn<ChoiceChip>(), isTrue);
+      expect(
+        focusedLabel(tester),
+        '1',
+        reason: 'the pill of the season on screen, not the first of the row',
+      );
+    });
+
+    testWidgets('the sources follow the episode the remote stops on, and '
+        'not the ones it passes over', (tester) async {
+      final core = await mountSeries(tester);
+      final meta = MetaDetailsState.fromJson(seriesWithTorrent()).meta!;
+      final season1 = meta.videosOfSeason(1);
+      await stepUpTo<TvEpisodeCard>(tester);
+
+      // Raw presses: `press` settles, and settling runs the clock past the
+      // wait this test is about.
+      final before = innerActions(core).length;
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(
+        innerActions(core).length,
+        before,
+        reason: 'walking through a card asks no addon anything',
+      );
+
+      final stopped = focusedEpisodeTitle();
+      final video = season1.singleWhere((v) => v.title == stopped);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      final load = core.dispatched.last;
+      expect(load.action['action'], 'Load');
+      expect(
+        (innerArgs(load) as Map<String, dynamic>)['streamPath']['id'],
+        video.id,
+        reason: 'the sources are the ones of the card it came to rest on',
+      );
     });
 
     testWidgets('a focused pill wears the same indicator the posters do', (

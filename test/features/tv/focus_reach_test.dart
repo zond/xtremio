@@ -1240,8 +1240,19 @@ void main() {
       FocusMark.stroke,
       FocusMark.fill,
     });
-    // And the app bar's button, which is the floor alone.
-    expect(await marksOn('Back'), {FocusMark.stroke, FocusMark.fill});
+    // And the app bar's button, which is the floor alone -- asked with the
+    // page at the top, because on a television the bar is not pinned. Every
+    // stop the walk above passed through scrolled itself into view, and a
+    // bar that has scrolled under is restyled by Material with an icon
+    // theme of its own: the floor's fill is a property of the bar this
+    // test is about, not of how far the walk happened to travel.
+    await marksOn('Back');
+    tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position
+        .jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(focusMarks(), {FocusMark.stroke, FocusMark.fill});
   });
 
   testWidgets('and a text field keeps the fill although it owns its ink', (

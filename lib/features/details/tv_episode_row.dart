@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
 import '../../shell/tv_density.dart';
@@ -49,6 +50,8 @@ class TvEpisodeRow extends StatefulWidget {
     required this.downloadOf,
     required this.onSelect,
     required this.onToggleWatched,
+    this.onFocus,
+    this.onUp,
   });
 
   /// The episodes of the season on screen, in order.
@@ -76,6 +79,22 @@ class TvEpisodeRow extends StatefulWidget {
   /// Toggle watched (a long press, the remote's menu key, a held select).
   final ValueChanged<VideoInfo> onToggleWatched;
 
+  /// The remote has come to rest on this episode, so its sources are what
+  /// the rows below should be showing. Separate from [onSelect] because it
+  /// is not a press: the screen decides what a walk along the row costs
+  /// (it waits for the walk to stop before it asks an addon anything).
+  final ValueChanged<VideoInfo>? onFocus;
+
+  /// An up press from a card, where the row above is the season pills.
+  ///
+  /// Directional focus takes the nearest node that overlaps the direction
+  /// pressed, so which row an up press reaches is a question about where
+  /// things happen to be drawn: a row of two narrow pills at the left is
+  /// stepped straight over into the header by a press made from a card
+  /// further along. The pills are the row above this one whatever their
+  /// width, so that is what this says, and geometry does not get a vote.
+  final VoidCallback? onUp;
+
   /// How wide one card is. Three of them and the edge of a fourth fit the
   /// info column of a 720p panel, which is what says the row scrolls.
   static const double cardWidth = 208;
@@ -99,6 +118,16 @@ class TvEpisodeRow extends StatefulWidget {
   /// Between the still and the words under it.
   static const double captionGap = 6;
 
+  /// What the caption is held clear of the card's own edges by.
+  ///
+  /// The focus ring is drawn on the tile's bounds and over whatever is
+  /// under them ([FocusRing]), and in [FocusEmphasis.bold] it is eight
+  /// logical pixels of it -- which is the bottom of the air date and the
+  /// first letter of the title. The picture can carry a ring across its
+  /// edge; a line of text cannot, so the words are inset by the widest the
+  /// ring ever is and the card is that much taller for it.
+  static const double captionInset = FocusRing.boldWidth;
+
   /// The box the title and the date are drawn in, at text scale 1: two
   /// lines of title over one of date.
   static const double captionHeight = 64;
@@ -118,6 +147,7 @@ class TvEpisodeRow extends StatefulWidget {
       focusSlack * 2 +
       thumbnailHeight +
       captionGap +
+      captionInset +
       captionHeight * math.max(1, TvDensity.textFactorOf(context));
 
   @override
@@ -172,39 +202,60 @@ class _TvEpisodeRowState extends State<TvEpisodeRow> {
     });
   }
 
+  /// Hands an up press to [TvEpisodeRow.onUp], when there is one.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final up = widget.onUp;
+    if (up == null ||
+        event is KeyUpEvent ||
+        event.logicalKey != LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.ignored;
+    }
+    up();
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ids = _ids.toSet();
     _cards.removeWhere((id, _) => !ids.contains(id));
     return SizedBox(
       height: TvEpisodeRow.heightOf(context),
-      child: SingleChildScrollView(
-        controller: _controller,
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(
-          horizontal: TvEpisodeRow.sidePadding,
-          vertical: TvEpisodeRow.focusSlack,
-        ),
-        child: Row(
-          spacing: TvEpisodeRow.gap,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final video in widget.episodes)
-              SizedBox(
-                key: _cards.putIfAbsent(video.id, GlobalKey.new),
-                width: TvEpisodeRow.cardWidth,
-                child: TvEpisodeCard(
-                  video: video,
-                  isSelected: video.id == widget.selectedVideoId,
-                  isWatched: widget.isWatched(video),
-                  isReleased: video.isReleased(widget.now),
-                  progress: widget.resumeProgress(video),
-                  download: widget.downloadOf(video),
-                  onTap: () => widget.onSelect(video),
-                  onLongPress: () => widget.onToggleWatched(video),
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        includeSemantics: false,
+        onKeyEvent: _onKey,
+        child: SingleChildScrollView(
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(
+            horizontal: TvEpisodeRow.sidePadding,
+            vertical: TvEpisodeRow.focusSlack,
+          ),
+          child: Row(
+            spacing: TvEpisodeRow.gap,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final video in widget.episodes)
+                SizedBox(
+                  key: _cards.putIfAbsent(video.id, GlobalKey.new),
+                  width: TvEpisodeRow.cardWidth,
+                  child: TvEpisodeCard(
+                    video: video,
+                    isSelected: video.id == widget.selectedVideoId,
+                    isWatched: widget.isWatched(video),
+                    isReleased: video.isReleased(widget.now),
+                    progress: widget.resumeProgress(video),
+                    download: widget.downloadOf(video),
+                    onTap: () => widget.onSelect(video),
+                    onLongPress: () => widget.onToggleWatched(video),
+                    onFocused: widget.onFocus == null
+                        ? null
+                        : () => widget.onFocus!(video),
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -230,6 +281,7 @@ class TvEpisodeCard extends StatelessWidget {
     required this.onLongPress,
     this.progress,
     this.download,
+    this.onFocused,
   });
 
   final VideoInfo video;
@@ -249,6 +301,9 @@ class TvEpisodeCard extends StatelessWidget {
   final DownloadView? download;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+
+  /// The remote has come to rest here; see [TvEpisodeRow.onFocus].
+  final VoidCallback? onFocused;
 
   /// How tall the resume bar across the foot of the still is.
   static const double resumeBarHeight = 4;
@@ -276,6 +331,7 @@ class TvEpisodeCard extends StatelessWidget {
     return FocusableTile(
       onTap: isReleased ? onTap : null,
       onLongPress: isReleased ? onLongPress : null,
+      onFocused: isReleased ? onFocused : null,
       memoryId: 'details/episode/${video.id}',
       borderRadius: radius,
       child: Column(
@@ -284,33 +340,41 @@ class TvEpisodeCard extends StatelessWidget {
           _still(theme),
           const SizedBox(height: TvEpisodeRow.captionGap),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Flexible(
-                  child: Text(
-                    title(video),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: isSelected ? theme.colorScheme.primary : null,
-                      // Never colour alone: a tint is the first cue a
-                      // bright room takes away, and which episode is
-                      // showing is the one thing this row has to say.
-                      fontWeight: isSelected ? FontWeight.w700 : null,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                TvEpisodeRow.captionInset,
+                0,
+                TvEpisodeRow.captionInset,
+                TvEpisodeRow.captionInset,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title(video),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: isSelected ? theme.colorScheme.primary : null,
+                        // Never colour alone: a tint is the first cue a
+                        // bright room takes away, and which episode is
+                        // showing is the one thing this row has to say.
+                        fontWeight: isSelected ? FontWeight.w700 : null,
+                      ),
                     ),
                   ),
-                ),
-                if (line.isNotEmpty)
-                  Text(
-                    line,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  if (line.isNotEmpty)
+                    Text(
+                      line,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

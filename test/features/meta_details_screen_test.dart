@@ -840,6 +840,46 @@ void main() {
       expect(find.text('Pilot'), findsNothing);
     });
 
+    testWidgets('the pills stay pill-sized and packed at the left', (
+      tester,
+    ) async {
+      // Six seasons on a wide layout would be six very wide buttons if the
+      // row shared itself out evenly: a pill says "season 3", and a pill
+      // that spans a sixth of a television does not read as one. The even
+      // share is a ceiling now, and the row starts at the left like every
+      // other row on the screen.
+      useWideViewport(tester);
+      await mountSeries(tester);
+
+      final rects = [
+        for (final pill in seasonPills().evaluate())
+          tester.getRect(find.byWidget(pill.widget)),
+      ];
+      expect(rects, hasLength(6));
+      // Each pill is the width of its own label, not a share of the row:
+      // the five numbered ones are identical, and `Specials` is wider
+      // because the word is. An even share of this viewport would be
+      // nearly two hundred apiece.
+      final evenShare = tester.getRect(seasonPills().first).width;
+      expect(rects.take(5).map((r) => r.width).toSet(), hasLength(1));
+      expect(evenShare, lessThan(120));
+      for (final rect in rects) {
+        expect(rect.width, lessThan(160));
+      }
+      // Packed: each pill begins where the last ended, bar the gap.
+      for (var i = 1; i < rects.length; i++) {
+        expect(rects[i].left - rects[i - 1].right, closeTo(8, 0.5));
+      }
+      // And the row is not centred or spread: the first pill is at its
+      // left edge, beside the "Season" label.
+      final row = tester.getRect(
+        find
+            .ancestor(of: find.text('Season'), matching: find.byType(Row))
+            .first,
+      );
+      expect(rects.first.left - row.left, lessThan(row.width / 2));
+    });
+
     testWidgets('switching season shows its episodes', (tester) async {
       useWideViewport(tester);
       await mountSeries(tester);
