@@ -4,6 +4,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addon_details_screen.dart';
 import 'package:xtremio/features/addons/addon_tile.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
+import 'package:xtremio/features/addons/remote_addon_sort.dart';
 import 'package:xtremio/shell/external_link.dart';
 
 import '../support/fake_core_client.dart';
@@ -488,7 +489,15 @@ void main() {
       CoreActions.loadRemoteAddons(movies.request).action,
     );
 
-    await tester.tap(find.byType(DropdownMenu<int>));
+    // By name: the tab has a Sort menu beside this one now.
+    await tester.tap(
+      find
+          .ancestor(
+            of: find.text('Catalog'),
+            matching: find.byType(DropdownMenu<int>),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(
       find
@@ -507,6 +516,41 @@ void main() {
       core.dispatched.last.action,
       CoreActions.loadRemoteAddons(official.request).action,
     );
+  });
+
+  testWidgets('community: the list can be put in name order', (tester) async {
+    // The catalogue's own order is a ranking we did not compute and cannot
+    // reproduce, so it stays the default; what a name order buys is a list
+    // of several hundred addons a viewer can find a known name in.
+    useTallScreen(tester);
+    final core = fakeCore();
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+    await openCommunity(tester);
+
+    String first() => tester
+        .widgetList<AddonTile>(find.byType(AddonTile))
+        .first
+        .addon
+        .manifest
+        .name;
+    expect(first(), 'Anime Kitsu', reason: 'the order the catalog sent');
+
+    final menu = find.ancestor(
+      of: find.text(AddonsScreen.sortLabel),
+      matching: find.byType(DropdownMenu<int>),
+    );
+    await tester.tap(menu.first);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .widgetWithText(MenuItemButton, RemoteAddonSort.name.label)
+          .hitTestable()
+          .last,
+    );
+    await tester.pumpAndSettle();
+
+    expect(first(), 'AfterCredits', reason: 'A before Anime');
   });
 
   testWidgets('community: a failed catalog shows the error and retries', (

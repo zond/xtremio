@@ -11,6 +11,7 @@ import 'addon_details_screen.dart';
 import 'addon_health.dart';
 import 'addon_health_client.dart';
 import 'addon_health_view.dart';
+import 'remote_addon_sort.dart';
 import 'addon_tile.dart';
 import 'addon_widgets.dart';
 
@@ -52,6 +53,11 @@ class AddonsScreen extends StatefulWidget {
   /// entries.
   static const String allTypesLabel = 'All';
 
+  /// What both tabs call the menu that orders their list. One label,
+  /// because it is one idea: the tabs order different things by different
+  /// keys, and a viewer looking for the order looks in the same place.
+  static const String sortLabel = 'Sort';
+
   /// Display name of a type option: [allTypesLabel] for the "everything"
   /// entry, else the plural the rest of the app uses.
   static String typeLabel(String? type) => switch (type) {
@@ -72,6 +78,10 @@ class _AddonsScreenState extends State<AddonsScreen> {
   int _nextPageRequestedAt = -1;
   AddonHealthNotifier? _health;
   AddonHealthSort _sort = AddonHealthSort.profileOrder;
+
+  /// How the Community list is ordered. Kept here rather than in the tab,
+  /// which is rebuilt on every answer from the engine.
+  RemoteAddonSort _remoteSort = RemoteAddonSort.catalogOrder;
 
   @override
   void initState() {
@@ -255,6 +265,9 @@ class _AddonsScreenState extends State<AddonsScreen> {
                                 : RemoteAddonsState.fromJson(remoteJson),
                             profile: profile,
                             search: _search,
+                            sort: _remoteSort,
+                            onSort: (sort) =>
+                                setState(() => _remoteSort = sort),
                             onSelect: _selectRemote,
                             onScroll: _onRemoteScroll,
                             onInstall: (addon) => _client?.dispatch(
@@ -393,7 +406,6 @@ class _InstalledTab extends StatelessWidget {
   final ValueChanged<AddonDescriptor> onConfigure;
   final ValueChanged<AddonDescriptor> onOpen;
 
-  static const String sortLabel = 'Sort';
   static const String forgetLabel = 'Forget this addon\'s history';
 
   @override
@@ -437,7 +449,7 @@ class _InstalledTab extends StatelessWidget {
                 // guess.
                 if (report != null)
                   FilterMenu<AddonHealthSort>(
-                    label: sortLabel,
+                    label: AddonsScreen.sortLabel,
                     options: [
                       for (final option in AddonHealthSort.values)
                         FilterOption(
@@ -520,6 +532,8 @@ class _CommunityTab extends StatelessWidget {
     required this.state,
     required this.profile,
     required this.search,
+    required this.sort,
+    required this.onSort,
     required this.onSelect,
     required this.onScroll,
     required this.onInstall,
@@ -530,6 +544,8 @@ class _CommunityTab extends StatelessWidget {
   final RemoteAddonsState? state;
   final ProfileState profile;
   final TextEditingController search;
+  final RemoteAddonSort sort;
+  final ValueChanged<RemoteAddonSort> onSort;
   final ValueChanged<ResourceRequest> onSelect;
   final bool Function(ScrollNotification, RemoteAddonsState) onScroll;
   final ValueChanged<AddonDescriptor> onInstall;
@@ -576,7 +592,7 @@ class _CommunityTab extends StatelessWidget {
           request: type.request,
         ),
     ];
-    final addons = filter(state.addons, search.text);
+    final addons = sortedRemoteAddons(filter(state.addons, search.text), sort);
     final error = state.lastError;
     return Column(
       children: [
@@ -595,6 +611,21 @@ class _CommunityTab extends StatelessWidget {
                 ),
               if (types.isNotEmpty)
                 _TypeFilter(options: types, onSelect: onSelect),
+              // Ordering what is on screen, which is a different question
+              // from the catalogue filters beside it: those ask the addon
+              // for another list, this one rearranges the list we have.
+              FilterMenu<RemoteAddonSort>(
+                label: AddonsScreen.sortLabel,
+                options: [
+                  for (final option in RemoteAddonSort.values)
+                    FilterOption(
+                      label: option.label,
+                      selected: option == sort,
+                      request: option,
+                    ),
+                ],
+                onSelect: onSort,
+              ),
             ],
           ),
         ),
