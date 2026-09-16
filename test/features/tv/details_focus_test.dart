@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_episode_row.dart';
+import 'package:xtremio/features/details/tv_meta_header.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
@@ -172,6 +173,26 @@ Future<void> stepUpTo<T extends Widget>(
     await press(tester, LogicalKeyboardKey.arrowUp);
   }
   expect(focusIn<T>(), isTrue);
+}
+
+/// Presses up until the remote is on a season pill.
+///
+/// The pills are chips, and so are the heading's two rows now -- the
+/// layout pair and the order chips -- so `stepUpTo<ChoiceChip>` stops at
+/// whichever comes first from below, which is never the pills. The labels
+/// are what tell them apart.
+Future<void> stepUpToPills(WidgetTester tester, {int limit = 8}) async {
+  final heading = {
+    kStreamsSectionedLabel,
+    kStreamsGroupedLabel,
+    for (final order in StreamOrder.values) order.label,
+  };
+  bool onPill() =>
+      focusIn<ChoiceChip>() && !heading.contains(focusedLabel(tester));
+  for (var i = 0; i < limit && !onPill(); i++) {
+    await press(tester, LogicalKeyboardKey.arrowUp);
+  }
+  expect(onPill(), isTrue, reason: 'the remote reached the season pills');
 }
 
 /// The same walk the other way, for coming back down to the sources.
@@ -505,12 +526,16 @@ void main() {
       expect(focusIn<TvSourceGroupCard>(), isTrue);
 
       await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(focusIn<ChoiceChip>(), isTrue, reason: 'the order chips');
+      expect(focusedLabel(tester), StreamOrder.peersPerSize.label);
       await press(tester, LogicalKeyboardKey.arrowUp);
-      expect(focusedTooltip(), kStreamsSectionedTooltip);
+      expect(focusedLabel(tester), kStreamsSectionedLabel);
 
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusIn<ChoiceChip>(), isTrue, reason: 'and back down');
+      expect(
+        focusedLabel(tester),
+        StreamOrder.peersPerSize.label,
+        reason: 'and back down',
+      );
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusIn<TvSourceGroupCard>(), isTrue);
     });
@@ -597,21 +622,47 @@ void main() {
       );
     });
 
-    testWidgets('the remote reaches the toggle, says which layout is on '
-        'screen, and select groups them', (tester) async {
+    testWidgets('the remote reaches the layout chips, which say which one '
+        'is on screen, and select picks the other', (tester) async {
       final stored = FakePrefsClient();
       final prefs = AppPrefs(client: stored);
       addTearDown(prefs.dispose);
       await mountSectioned(tester, prefs: prefs);
 
-      // Sectioned is what is on screen, so that is what the tooltip says.
-      await pressUpToTooltip(tester, kStreamsSectionedTooltip);
+      // Sectioned is what is on screen, so that is the chip wearing the
+      // selection when the remote arrives.
+      for (
+        var i = 0;
+        i < 6 && focusedLabel(tester) != kStreamsSectionedLabel;
+        i++
+      ) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      expect(focusedLabel(tester), kStreamsSectionedLabel);
+      expect(
+        tester
+            .widget<ChoiceChip>(
+              find.widgetWithText(ChoiceChip, kStreamsSectionedLabel),
+            )
+            .selected,
+        isTrue,
+      );
 
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedLabel(tester), kStreamsGroupedLabel);
       await press(tester, LogicalKeyboardKey.select);
       expect(
-        focusedTooltip(),
-        kStreamsGroupedTooltip,
-        reason: 'focus stayed, and the tooltip now says the new layout',
+        focusedLabel(tester),
+        kStreamsGroupedLabel,
+        reason: 'focus stayed on the chip that was pressed',
+      );
+      expect(
+        tester
+            .widget<ChoiceChip>(
+              find.widgetWithText(ChoiceChip, kStreamsGroupedLabel),
+            )
+            .selected,
+        isTrue,
       );
       expect(stored.stored, {'streamsSectioned': false});
       // Grouped again: the group row is one card per addon now, and what
@@ -705,7 +756,7 @@ void main() {
       final meta = MetaDetailsState.fromJson(seriesWithTorrent()).meta!;
       expect(find.text('Pilot'), findsOneWidget);
 
-      await stepUpTo<ChoiceChip>(tester);
+      await stepUpToPills(tester);
       // The row is one focus stop per season, walked with left and right.
       for (var i = 0; i < 8 && focusedLabel(tester) != '2'; i++) {
         await press(tester, LogicalKeyboardKey.arrowRight);
@@ -722,6 +773,39 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       expect(find.text(meta.videosOfSeason(2).first.title), findsOneWidget);
       expect(focusedLabel(tester), '2', reason: 'focus stayed on the pill');
+    });
+
+    testWidgets('the walk down from the title reaches the pills, and the '
+        'episode row is where it was left', (tester) async {
+      // Both halves of one report from the sofa. A press down from the
+      // title stepped over the season pills -- they are narrow and packed
+      // at the left, which is what directional focus punishes -- and the
+      // episode row, arrived at sideways rather than through the ladder,
+      // lost its memory of the card the viewer had been standing on,
+      // because whatever the press landed on was written over it.
+      await mountSeries(tester);
+      await stepUpToPills(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      final chosen = focusedEpisodeTitle();
+      expect(chosen, isNotNull, reason: 'standing on an episode');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<ChoiceChip>(), isTrue, reason: 'the pills');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<TvMetaHeader>(), isTrue, reason: 'the title block');
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<ChoiceChip>(), isTrue, reason: 'not stepped over');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      expect(
+        focusedEpisodeTitle(),
+        chosen,
+        reason: 'the card the remote left, not the one nearest the press',
+      );
     });
 
     testWidgets('the walk up from the group row comes back to the episode '
@@ -793,7 +877,14 @@ void main() {
       // Grouped by addon here, which is the layout with no order to
       // choose and so no chips drawn: the toggle is the whole of the
       // heading's controls, and the walk stops on it.
-      expect(stops, contains(kStreamsGroupedTooltip));
+      expect(
+        stops.any(
+          (stop) =>
+              stop == kStreamsSectionedLabel || stop == kStreamsGroupedLabel,
+        ),
+        isTrue,
+        reason: 'the layout chips are a stop on the way down',
+      );
     });
 
     testWidgets('the sources follow the episode the remote stops on, and '
@@ -836,7 +927,7 @@ void main() {
       // The row must not grow a highlight of its own: a chip's built-in
       // one is a tint, which is the cue a bright room takes away first.
       await mountSeries(tester);
-      await stepUpTo<ChoiceChip>(tester);
+      await stepUpToPills(tester);
 
       final onPill = FocusManager.instance.primaryFocus!.context!
           .findAncestorWidgetOfExactType<FocusHighlight>();
@@ -881,7 +972,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await stepUpTo<ChoiceChip>(tester);
+      await stepUpToPills(tester);
       for (var i = 0; i < 30 && focusedLabel(tester) != '1'; i++) {
         await press(tester, LogicalKeyboardKey.arrowLeft);
       }

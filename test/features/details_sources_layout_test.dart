@@ -201,9 +201,23 @@ void main() {
     },
   );
 
-  Future<void> flip(WidgetTester tester, String tooltip) async {
-    await tester.tap(find.byTooltip(tooltip));
+  /// Taps the layout chip reading [label]; the selected one ignores taps,
+  /// so this is always a move to the other layout.
+  Future<void> choose(WidgetTester tester, String label) async {
+    await tester.tap(find.widgetWithText(ChoiceChip, label));
     await tester.pumpAndSettle();
+  }
+
+  /// Which layout the header's chips say is on screen.
+  String? chosenLayout(WidgetTester tester) {
+    for (final label in [kStreamsSectionedLabel, kStreamsGroupedLabel]) {
+      final chip = find.widgetWithText(ChoiceChip, label);
+      if (chip.evaluate().isNotEmpty &&
+          tester.widget<ChoiceChip>(chip).selected) {
+        return label;
+      }
+    }
+    return null;
   }
 
   /// [AppPrefs.inMemory] plus a widget rebuild, so the streams pane keeps
@@ -255,9 +269,7 @@ void main() {
         // The toggle says where it is and what tapping it does, both in
         // its tooltip and, with room in the header, right next to the
         // heading.
-        expect(find.byTooltip(kStreamsSectionedTooltip), findsOneWidget);
-        expect(find.byTooltip(kStreamsGroupedTooltip), findsNothing);
-        expect(find.text(kStreamsSectionedLabel), findsOneWidget);
+        expect(chosenLayout(tester), kStreamsSectionedLabel);
       },
     );
 
@@ -267,7 +279,7 @@ void main() {
       await tester.pumpWidget(harness(coreWith(twoAddons())));
       await tester.pumpAndSettle();
 
-      await flip(tester, kStreamsSectionedTooltip);
+      await choose(tester, kStreamsGroupedLabel);
 
       // A heading per addon, once each, above its own streams: what this
       // list looked like before the sectioned layout existed.
@@ -278,17 +290,15 @@ void main() {
       expect(topOf('Alpha 720p'), lessThan(topOf('Alpha 2160p')));
       expect(topOf('Alpha 2160p'), lessThan(topOf('Beta 1080p')));
       expect(topOf('Beta 1080p'), lessThan(topOf('Beta mystery release')));
-      expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
-      expect(find.byTooltip(kStreamsSectionedTooltip), findsNothing);
-      expect(find.text(kStreamsGroupedLabel), findsOneWidget);
+      expect(chosenLayout(tester), kStreamsGroupedLabel);
 
-      await flip(tester, kStreamsGroupedTooltip);
+      await choose(tester, kStreamsSectionedLabel);
 
       // Sectioned again, and flipping the layout did not open anything
       // on its own.
       expect(find.text('alpha.example'), findsNothing);
       expect(find.text('Alpha 2160p'), findsNothing);
-      expect(find.byTooltip(kStreamsSectionedTooltip), findsOneWidget);
+      expect(chosenLayout(tester), kStreamsSectionedLabel);
     });
 
     testWidgets(
@@ -306,7 +316,7 @@ void main() {
 
         expect(find.text('alpha.example'), findsOneWidget);
         expect(topOf('Alpha 720p'), lessThan(topOf('Alpha 2160p')));
-        expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
+        expect(chosenLayout(tester), kStreamsGroupedLabel);
       },
     );
 
@@ -552,9 +562,15 @@ void main() {
       await tester.pumpAndSettle();
 
       // Grouped is each addon's own ranking, which is the point of it.
-      expect(find.byType(ChoiceChip), findsNothing);
-      await flip(tester, kStreamsGroupedTooltip);
-      expect(find.byType(ChoiceChip), findsNWidgets(StreamOrder.values.length));
+      // By label and not by type: the two layout chips are chips too, and
+      // they are drawn in both layouts.
+      for (final order in StreamOrder.values) {
+        expect(find.widgetWithText(ChoiceChip, order.label), findsNothing);
+      }
+      await choose(tester, kStreamsSectionedLabel);
+      for (final order in StreamOrder.values) {
+        expect(find.widgetWithText(ChoiceChip, order.label), findsOneWidget);
+      }
     });
   });
 
@@ -667,7 +683,7 @@ void main() {
       addTearDown(prefs.dispose);
       await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
       await tester.pumpAndSettle();
-      await flip(tester, kStreamsSectionedTooltip);
+      await choose(tester, kStreamsGroupedLabel);
       expect(prefs.streamsSectioned, isFalse);
 
       // A second title, a whole new screen, the same preference above it.
@@ -676,7 +692,7 @@ void main() {
         harness(coreWith(twoAddons()), prefs: prefs, id: 'tt0063350'),
       );
 
-      expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
+      expect(chosenLayout(tester), kStreamsGroupedLabel);
       expect(find.text('alpha.example'), findsOneWidget);
       expect(topOf('Alpha 720p'), lessThan(topOf('Alpha 2160p')));
     });
@@ -689,7 +705,7 @@ void main() {
       addTearDown(first.dispose);
       await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: first));
       await tester.pumpAndSettle();
-      await flip(tester, kStreamsSectionedTooltip);
+      await choose(tester, kStreamsGroupedLabel);
       expect(stored.stored['streamsSectioned'], isFalse);
 
       // The app comes up again: a new AppPrefs over the same file, loaded
@@ -701,7 +717,7 @@ void main() {
       await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: restarted));
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
+      expect(chosenLayout(tester), kStreamsGroupedLabel);
       expect(find.text('alpha.example'), findsOneWidget);
     });
 
@@ -736,13 +752,13 @@ void main() {
       await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
       await tester.pumpAndSettle();
       // Not loaded yet, so still the in-memory default: sectioned.
-      expect(find.byTooltip(kStreamsSectionedTooltip), findsOneWidget);
+      expect(chosenLayout(tester), kStreamsSectionedLabel);
 
       await prefs.load();
       await tester.pumpAndSettle();
 
       // The stored choice -- grouped -- has caught up.
-      expect(find.byTooltip(kStreamsGroupedTooltip), findsOneWidget);
+      expect(chosenLayout(tester), kStreamsGroupedLabel);
       expect(find.text('alpha.example'), findsOneWidget);
     });
 

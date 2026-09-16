@@ -242,6 +242,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// no seasons or episodes, a title nobody has played has no last-used
   /// source, and the row of sources only exists while a group is open.
   /// Only what is drawn is registered, and a press walks past the rest.
+  /// The block above the pills: on a television that is the title, its
+  /// facts and the bookmark. A rung, so a press down from the bookmark
+  /// reaches the pills instead of whatever geometry finds below a narrow
+  /// row packed at the left -- which was the episode row on a good day and
+  /// the heading's controls on a bad one, and either way left the episode
+  /// row arrived at sideways, with its memory of where the viewer was
+  /// overwritten by wherever the press landed.
+  static const int _ladderInfo = 0;
   static const int _ladderSeasons = 10;
   static const int _ladderEpisodes = 20;
   static const int _ladderStreamControls = 30;
@@ -1009,11 +1017,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       ),
       SliverToBoxAdapter(
         child: isTv
-            ? TvMetaHeader(
-                meta: meta,
-                isInLibrary: state.isInLibrary,
-                downloads: _downloads?.ofMeta(widget.id) ?? const [],
-                onToggleLibrary: () => _toggleLibrary(state, meta),
+            ? TvLadderRow(
+                level: _ladderInfo,
+                child: TvMetaHeader(
+                  meta: meta,
+                  isInLibrary: state.isInLibrary,
+                  downloads: _downloads?.ofMeta(widget.id) ?? const [],
+                  onToggleLibrary: () => _toggleLibrary(state, meta),
+                ),
               )
             : _MetaHeader(
                 meta: meta,
@@ -1501,7 +1512,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           order: order,
           onOrderChanged: _setStreamsOrder,
           withSpinner: !waiting,
-          headingLevel: _ladderStreamControls,
+          layoutLevel: _ladderStreamControls,
           orderLevel: _ladderStreamOrder,
         ),
       ),
@@ -2541,19 +2552,12 @@ const String kNothingCameBack = 'Nothing came back';
 /// episode, for this title -- are on the card that opens the row.
 const String kAddonHadNothing = 'Had nothing to offer';
 
-/// What the toggle in the section header says the layout on screen right
-/// now is, as its own short label (drawn beside it, when there is room)
-/// and as the state half of its tooltip, so it reads as "here is where you
-/// are" rather than as an action that only points one way.
+/// What each of the header's two layout chips reads. The selected one is
+/// the layout on screen, which is why both are worded as states rather
+/// than as actions: a chip that says what it would do reads as a lie the
+/// moment it is the one already chosen.
 const String kStreamsSectionedLabel = 'Sectioned by resolution';
 const String kStreamsGroupedLabel = 'Grouped by addon';
-
-/// The toggle's tooltip: the layout on screen right now, and what tapping
-/// it switches to.
-const String kStreamsSectionedTooltip =
-    '$kStreamsSectionedLabel — tap to group by addon';
-const String kStreamsGroupedTooltip =
-    '$kStreamsGroupedLabel — tap to section by resolution';
 
 /// The key on one resolution section's header.
 ///
@@ -2575,18 +2579,17 @@ class _StreamsHeader extends StatelessWidget {
     this.order = StreamOrder.peersPerSize,
     this.onOrderChanged,
     this.withSpinner = true,
-    this.headingLevel,
+    this.layoutLevel,
     this.orderLevel,
   });
 
-  /// Which rungs of the screen's [TvLadder] this heading's two lines are,
-  /// or null off a television and in the layouts that have no ladder.
+  /// Which rungs of the screen's [TvLadder] the heading's two chip rows
+  /// are, or null off a television and in the layouts that have no ladder.
   ///
-  /// Two rungs and not one: the toggle is drawn on the heading's line and
-  /// the order chips below it, so a single rung would mean a press down
-  /// from the toggle left the heading entirely and neither could be
-  /// reached from the other.
-  final int? headingLevel;
+  /// Two rungs and not one: they are drawn one above the other, so a
+  /// single rung would mean a press down from the layout chips left the
+  /// heading entirely and neither row could be reached from the other.
+  final int? layoutLevel;
   final int? orderLevel;
 
   /// Puts one line of the heading on a rung, when there is a ladder.
@@ -2604,7 +2607,7 @@ class _StreamsHeader extends StatelessWidget {
   /// rather than one section per addon.
   final bool sectioned;
 
-  /// Flips the layout; null draws no toggle at all.
+  /// Picks the layout; null draws no layout chips at all.
   final ValueChanged<bool>? onSectionedChanged;
 
   /// What order the streams inside each section are in. Only the sectioned
@@ -2642,58 +2645,57 @@ class _StreamsHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _rung(
-            headingLevel,
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Streams',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.primary,
-                        ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Streams',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.colorScheme.primary,
                       ),
-                      // States which of the two layouts is on screen, right
-                      // next to the heading -- the toggle's tooltip says the
-                      // same thing, for when there is no room to read this.
-                      if (onSectionedChanged != null)
-                        Text(
-                          sectioned
-                              ? kStreamsSectionedLabel
-                              : kStreamsGroupedLabel,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      if (subtitle != null)
-                        Text(subtitle, style: theme.textTheme.bodySmall),
-                    ],
-                  ),
-                ),
-                if (onSectionedChanged != null)
-                  IconButton(
-                    tooltip: sectioned
-                        ? kStreamsSectionedTooltip
-                        : kStreamsGroupedTooltip,
-                    icon: Icon(
-                      sectioned ? Icons.view_agenda_outlined : Icons.sort,
                     ),
-                    onPressed: () => onSectionedChanged!(!sectioned),
-                  ),
-                if (withSpinner && (isLoading || state.isLoadingStreams))
-                  const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              ],
-            ),
+                    if (subtitle != null)
+                      Text(subtitle, style: theme.textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              if (withSpinner && (isLoading || state.isLoadingStreams))
+                const SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
           ),
-          // A Wrap rather than a row of segments: three labels have to fit
-          // a phone's width and a 480 dp pane on a television, and the
-          // chips are each a focus stop a remote can reach.
+          // How the list is cut, as a choice rather than as a switch: two
+          // chips reading the two layouts, the selected one being what is
+          // on screen. Above the order chips because it is the larger
+          // decision of the two -- an order only exists inside the
+          // sectioned layout -- and packed left like every other row here.
+          if (onSectionedChanged != null)
+            _rung(
+              layoutLevel,
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: FilterChips<bool>(
+                  options: [
+                    FilterOption(
+                      label: kStreamsSectionedLabel,
+                      selected: sectioned,
+                      request: true,
+                    ),
+                    FilterOption(
+                      label: kStreamsGroupedLabel,
+                      selected: !sectioned,
+                      request: false,
+                    ),
+                  ],
+                  onSelect: onSectionedChanged!,
+                ),
+              ),
+            ),
           if (sectioned && onOrderChanged != null)
             _rung(
               orderLevel,
