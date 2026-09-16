@@ -1013,9 +1013,9 @@ dependencies = [
 
 [[package]]
 name = "dirs"
-version = "6.0.0"
+version = "7.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
+checksum = "8d57d423b3c82e89b9a24ca3091fee61f456a26edbd28d26c65906f4bc1dcd8f"
 dependencies = [
  "dirs-sys",
 ]
@@ -1101,7 +1101,7 @@ dependencies = [
 [[package]]
 name = "enginefs"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=ca4373a6ff43aedd1f6a7e5203a7dc7b103fada1#ca4373a6ff43aedd1f6a7e5203a7dc7b103fada1"
+source = "git+https://github.com/zond/stream-server?rev=6b18141dfc6b0966e4b1419fc2530037f75baa26#6b18141dfc6b0966e4b1419fc2530037f75baa26"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3277,9 +3277,9 @@ dependencies = [
 
 [[package]]
 name = "reedsolomon-rs"
-version = "0.4.3"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9884b16620acba60129b537d7853b864293fbcd17080749f81a8662f3e72061"
+checksum = "04bd2b18265c8b055ea65a86fe8c0e95a91ad2cbe8fb845b0ba8ffc214931084"
 dependencies = [
  "memmap2",
  "rayon",
@@ -3778,7 +3778,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=ca4373a6ff43aedd1f6a7e5203a7dc7b103fada1#ca4373a6ff43aedd1f6a7e5203a7dc7b103fada1"
+source = "git+https://github.com/zond/stream-server?rev=6b18141dfc6b0966e4b1419fc2530037f75baa26#6b18141dfc6b0966e4b1419fc2530037f75baa26"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3985,7 +3985,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "stremio-core"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=b915e735bbaf81e8a18ac769648c57c48603eb04#b915e735bbaf81e8a18ac769648c57c48603eb04"
+source = "git+https://github.com/zond/stremio-core?rev=2330930f4f7e1ca7b71b30750c3f443ada89d502#2330930f4f7e1ca7b71b30750c3f443ada89d502"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4031,7 +4031,7 @@ dependencies = [
 [[package]]
 name = "stremio-derive"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=b915e735bbaf81e8a18ac769648c57c48603eb04#b915e735bbaf81e8a18ac769648c57c48603eb04"
+source = "git+https://github.com/zond/stremio-core?rev=2330930f4f7e1ca7b71b30750c3f443ada89d502#2330930f4f7e1ca7b71b30750c3f443ada89d502"
 dependencies = [
  "case",
  "proc-macro-crate",
@@ -4061,7 +4061,7 @@ dependencies = [
 [[package]]
 name = "stremio-watched-bitfield"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=b915e735bbaf81e8a18ac769648c57c48603eb04#b915e735bbaf81e8a18ac769648c57c48603eb04"
+source = "git+https://github.com/zond/stremio-core?rev=2330930f4f7e1ca7b71b30750c3f443ada89d502#2330930f4f7e1ca7b71b30750c3f443ada89d502"
 dependencies = [
  "base64 0.13.1",
  "flate2",
@@ -4243,7 +4243,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -4654,9 +4654,9 @@ dependencies = [
 
 [[package]]
 name = "unrar-rs"
-version = "0.7.0"
+version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f10f5e3974352e1f2d37b980fd38c3f408f858771ac369edeaf7a6c500eb91a"
+checksum = "fcf5a0ba5a6c1afdac0d595af74cdb31195b7a4aaed3de0352b519b3b5dc92bb"
 dependencies = [
  "aes",
  "blake2s_simd",

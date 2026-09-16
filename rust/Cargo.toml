@@ -35,14 +35,14 @@ flutter_rust_bridge = "=2.13.0"
 # with the fetch-ahead bounded by the window, liveness that ends on a switch
 # or a restart rather than on a clock, and no cache cleaner at all -- every
 # byte under the root has exactly one thing that deletes it.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "ca4373a6ff43aedd1f6a7e5203a7dc7b103fada1" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "6b18141dfc6b0966e4b1419fc2530037f75baa26" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "ca4373a6ff43aedd1f6a7e5203a7dc7b103fada1" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "6b18141dfc6b0966e4b1419fc2530037f75baa26" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
@@ -62,7 +62,7 @@ enginefs = { git = "https://github.com/zond/stream-server", rev = "ca4373a6ff43a
 # and Cargo will not pick two 1.x versions, so without that commit this
 # graph does not resolve at all; it used to be a vendored copy of the
 # crate wired in with `[patch]`.
-stremio-core = { git = "https://github.com/zond/stremio-core", rev = "b915e735bbaf81e8a18ac769648c57c48603eb04", features = ["derive", "env-future-send"] }
+stremio-core = { git = "https://github.com/zond/stremio-core", rev = "2330930f4f7e1ca7b71b30750c3f443ada89d502", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
 chrono = "0.4"
