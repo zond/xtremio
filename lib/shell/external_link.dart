@@ -1,5 +1,5 @@
 import 'package:flutter/services.dart' show PlatformException;
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 /// Opens a URL outside the app (the system browser): addon configuration
@@ -51,6 +51,18 @@ class UrlLauncherLinkOpener implements ExternalLinkOpener {
 /// Provides the [ExternalLinkOpener] to the widget tree. Without a scope
 /// the real [UrlLauncherLinkOpener] is used, so the app needs none; tests
 /// wrap the widget under test in one with a fake.
+/// Opens [url] in the system browser through the [ExternalLinkScope] — never
+/// an in-app web view, which would hide the address bar; a SnackBar when
+/// nothing could open it.
+Future<void> openInBrowser(BuildContext context, String url) async {
+  final opener = ExternalLinkScope.of(context);
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final opened = await opener.open(Uri.parse(url));
+  if (!opened) {
+    messenger?.showSnackBar(SnackBar(content: Text('Could not open $url')));
+  }
+}
+
 class ExternalLinkScope extends InheritedWidget {
   const ExternalLinkScope({
     super.key,

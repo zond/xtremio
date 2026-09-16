@@ -194,18 +194,6 @@ class _AddonErrorSnackBarsState extends State<AddonErrorSnackBars> {
   Widget build(BuildContext context) => widget.child;
 }
 
-/// Opens [url] in the system browser through the [ExternalLinkScope] — never
-/// an in-app web view, which would hide the address bar; a SnackBar when
-/// nothing could open it.
-Future<void> openInBrowser(BuildContext context, String url) async {
-  final opener = ExternalLinkScope.of(context);
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  final opened = await opener.open(Uri.parse(url));
-  if (!opened) {
-    messenger?.showSnackBar(SnackBar(content: Text('Could not open $url')));
-  }
-}
-
 /// Opens [addon]'s configuration page (`…/configure`) in the system
 /// browser. Nothing happens for an addon without one.
 Future<void> openAddonConfiguration(

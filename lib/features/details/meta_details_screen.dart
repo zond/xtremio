@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
+import '../../shell/external_link.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/download_badge.dart';
 import '../../widgets/filter_controls.dart';
@@ -1924,6 +1925,71 @@ class _Backdrop extends StatelessWidget {
   }
 }
 
+/// The IMDb rating, and the way to the page it came from.
+///
+/// A link only when the addon sent the rating with an address
+/// ([MetaItem.imdbLink]); without one the rating is the plain line it has
+/// always been, since the address is never built here out of an id.
+///
+/// The television has none of this. This is the phone's and the desktop's
+/// header ([TvMetaHeader] is the other one), which is where a browser can
+/// be relied on: a set-top box usually has nothing to hand the address to,
+/// and the remote would gain a stop whose whole answer is "could not open".
+class _ImdbRating extends StatelessWidget {
+  const _ImdbRating({required this.rating, this.url});
+
+  final String rating;
+
+  /// The title's page on IMDb; null leaves the rating unclickable.
+  final String? url;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final url = this.url;
+    final line = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.star_rounded, size: 18, color: Colors.amber.shade400),
+        const SizedBox(width: 4),
+        Text(rating, style: theme.textTheme.labelLarge),
+        const SizedBox(width: 4),
+        Text(
+          'IMDb',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        if (url != null) ...[
+          const SizedBox(width: 4),
+          Icon(
+            Icons.open_in_new,
+            size: 13,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ],
+      ],
+    );
+    if (url == null) return line;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        // Hugging the words rather than the column's width: a tap lands
+        // where the thing it opens is drawn.
+        onTap: () => openInBrowser(context, url),
+        borderRadius: BorderRadius.circular(6),
+        child: Semantics(
+          link: true,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: line,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MetaHeader extends StatelessWidget {
   const _MetaHeader({
     required this.meta,
@@ -1984,20 +2050,7 @@ class _MetaHeader extends StatelessWidget {
         ],
         if (rating != null) ...[
           const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(Icons.star_rounded, size: 18, color: Colors.amber.shade400),
-              const SizedBox(width: 4),
-              Text(rating, style: theme.textTheme.labelLarge),
-              const SizedBox(width: 4),
-              Text(
-                'IMDb',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+          _ImdbRating(rating: rating, url: meta.imdbUrl),
         ],
         if (genres.isNotEmpty) ...[
           const SizedBox(height: 8),

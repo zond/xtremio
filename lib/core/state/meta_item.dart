@@ -35,13 +35,28 @@ final class MetaItem extends MetaItemPreview {
       if (link.category == genresCategory) link,
   ];
 
-  /// `7.8`-style IMDb rating, when the addon sends one.
-  String? get imdbRating {
+  /// The addon's IMDb entry: the rating as its name, the title's page on
+  /// IMDb as its url.
+  ///
+  /// One accessor for the pair because they have to come from the same
+  /// link. A rating shown with some other entry's address is worse than a
+  /// rating with no address at all, and nothing here builds that address
+  /// out of an id: `tt`-shaped ids are Cinemeta's habit, not a rule, and an
+  /// addon that numbers its titles some other way would send the viewer to
+  /// a stranger's page.
+  MetaLink? get imdbLink {
     for (final link in links) {
-      if (link.category == imdbCategory) return link.name;
+      if (link.category == imdbCategory) return link;
     }
     return null;
   }
+
+  /// `7.8`-style IMDb rating, when the addon sends one.
+  String? get imdbRating => imdbLink?.name;
+
+  /// Where that rating is from; null when the addon sent a rating with no
+  /// link, which is allowed and means the rating is not clickable.
+  String? get imdbUrl => imdbLink?.url;
 
   /// Sorted by (season, episode) with season 0 (specials) last, as the
   /// engine serializes them.

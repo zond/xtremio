@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
+import '../../shell/external_link.dart';
 import '../../shell/tv_density.dart';
 import '../../shell/tv_text_entry.dart';
 import '../../widgets/content_type_label.dart';

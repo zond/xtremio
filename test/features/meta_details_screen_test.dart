@@ -9,8 +9,10 @@ import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
+import 'package:xtremio/shell/external_link.dart';
 
 import '../support/fake_core_client.dart';
+import '../support/fake_link_opener.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
@@ -87,15 +89,19 @@ void main() {
     String type = 'movie',
     String id = 'tt0063350',
     String? videoId,
-  }) => CoreScope(
-    client: core,
-    child: PlaybackScope(
-      createEngine: () => engine,
-      torrentStats: FakeTorrentStatsClient(),
-      child: PrefsScope(
-        prefs: groupedPrefs(),
-        child: MaterialApp(
-          home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
+    ExternalLinkOpener? opener,
+  }) => ExternalLinkScope(
+    opener: opener ?? FakeLinkOpener(),
+    child: CoreScope(
+      client: core,
+      child: PlaybackScope(
+        createEngine: () => engine,
+        torrentStats: FakeTorrentStatsClient(),
+        child: PrefsScope(
+          prefs: groupedPrefs(),
+          child: MaterialApp(
+            home: MetaDetailsScreen(type: type, id: id, videoId: videoId),
+          ),
         ),
       ),
     ),
@@ -569,6 +575,166 @@ void main() {
 
       expect(find.byIcon(Icons.bookmark), findsOneWidget);
       expect(find.byIcon(Icons.bookmark_border), findsNothing);
+    });
+  });
+
+  group('the IMDb rating', () {
+    /// The fixture with the address taken off its IMDb entry, which is a
+    /// shape the protocol allows: a rating and no page to read it on.
+    Map<String, dynamic> withoutImdbUrl() {
+      final fixture = loadMetaDetailsFixture();
+      void strip(Object? node) {
+        if (node is List) {
+          for (final child in node) {
+            strip(child);
+          }
+          return;
+        }
+        if (node is! Map<String, dynamic>) return;
+        final links = node['links'];
+        if (links is List) {
+          for (final link in links) {
+            if (link is Map<String, dynamic> && link['category'] == 'imdb') {
+              link.remove('url');
+            }
+          }
+        }
+        for (final value in node.values) {
+          strip(value);
+        }
+      }
+
+      strip(fixture);
+      return fixture;
+    }
+
+    /// Whether the rating on screen is something a tap can follow.
+    bool ratingIsALink(String rating) => find
+        .ancestor(of: find.text(rating), matching: find.byType(InkWell))
+        .evaluate()
+        .isNotEmpty;
+
+    testWidgets('opens the page the addon linked, on a film', (tester) async {
+      useWideViewport(tester);
+      final opener = FakeLinkOpener();
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      await tester.pumpWidget(
+        harness(core, FakePlaybackEngine(), opener: opener),
+      );
+      await tester.pumpAndSettle();
+
+      expect(ratingIsALink('7.8'), isTrue);
+      await tester.tap(find.text('7.8'));
+      await tester.pumpAndSettle();
+
+      expect(opener.opened, [Uri.parse('https://imdb.com/title/tt0063350')]);
+    });
+
+    testWidgets('is the IMDb entry, not whichever link comes first', (
+      tester,
+    ) async {
+      // The fixture happens to list IMDb first, so a rating read off
+      // `links.first` would pass every other test here. This one puts the
+      // share link in front of it: the rating and the address behind it
+      // both have to come from the entry categorised `imdb`, or the viewer
+      // is sent to a page that has nothing to do with the number they
+      // pressed.
+      useWideViewport(tester);
+      final fixture = loadMetaDetailsFixture();
+      void reorder(Object? node) {
+        if (node is List) {
+          for (final child in node) {
+            reorder(child);
+          }
+          return;
+        }
+        if (node is! Map<String, dynamic>) return;
+        final links = node['links'];
+        if (links is List) {
+          links.sort((a, b) {
+            final left = (a as Map<String, dynamic>)['category'] == 'imdb';
+            final right = (b as Map<String, dynamic>)['category'] == 'imdb';
+            return left == right ? 0 : (left ? 1 : -1);
+          });
+        }
+        for (final value in node.values) {
+          reorder(value);
+        }
+      }
+
+      reorder(fixture);
+      final opener = FakeLinkOpener();
+      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
+      await tester.pumpWidget(
+        harness(core, FakePlaybackEngine(), opener: opener),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('7.8'), findsOneWidget, reason: 'still the rating');
+      await tester.tap(find.text('7.8'));
+      await tester.pumpAndSettle();
+
+      expect(opener.opened, [Uri.parse('https://imdb.com/title/tt0063350')]);
+    });
+
+    testWidgets('goes to the series, not the episode, on a series', (
+      tester,
+    ) async {
+      // An episode has no rating of its own and no page of its own here --
+      // a video carries an id, a title and a thumbnail -- so the rating on
+      // screen is the series' and so is the address behind it.
+      useWideViewport(tester);
+      final opener = FakeLinkOpener();
+      final core = FakeCoreClient(
+        state: {
+          CoreField.metaDetails: loadSeriesMetaDetailsFixture(),
+          CoreField.player: loadPlayerFixture(),
+        },
+      );
+      await tester.pumpWidget(
+        harness(
+          core,
+          FakePlaybackEngine(),
+          type: 'series',
+          id: seriesId,
+          videoId: pilotId,
+          opener: opener,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('9.5'));
+      await tester.pumpAndSettle();
+
+      expect(opener.opened, [Uri.parse('https://imdb.com/title/tt0903747')]);
+    });
+
+    testWidgets('is a plain line when the addon sent no address', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final opener = FakeLinkOpener();
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: withoutImdbUrl()},
+      );
+      await tester.pumpWidget(
+        harness(core, FakePlaybackEngine(), opener: opener),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('7.8'), findsOneWidget, reason: 'still shown');
+      expect(
+        ratingIsALink('7.8'),
+        isFalse,
+        reason: 'and not dressed as one, nor tappable',
+      );
+
+      await tester.tap(find.text('7.8'));
+      await tester.pumpAndSettle();
+
+      expect(opener.opened, isEmpty);
     });
   });
 
