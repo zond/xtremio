@@ -216,12 +216,15 @@ void main() {
     );
 
     expect(groupLabels(tester), ['1080p', '720p']);
-    expect(sourceTitles(tester), isEmpty);
 
-    await press(tester, LogicalKeyboardKey.select);
-    // Both addons' 1080p releases, in the order the chips choose (peers
-    // per megabyte: beta's ninety peers over the same two gigabytes).
+    // The rung the remote starts on has its row out: both addons' 1080p
+    // releases, in the order the chips choose (peers per megabyte: beta's
+    // ninety peers over the same two gigabytes), and nothing of 720p's.
     expect(sourceTitles(tester), ['Beta 1080p', 'Alpha 1080p']);
+
+    // And the next rung along lists its own, and only its own.
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(sourceTitles(tester), ['Alpha 720p']);
   });
 
   testWidgets('the groups are the addons when the preference says so, each '

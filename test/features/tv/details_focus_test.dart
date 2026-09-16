@@ -294,10 +294,11 @@ void main() {
 
       // One card per addon that answered, in the profile's order, and the
       // remote on the first of them -- not on a stream, which is a press
-      // further in now.
+      // further in now. Its row is out, because the highlight is what says
+      // which addon the screen is showing.
       expect(focusIn<TvSourceGroupCard>(), isTrue);
       expect(focusedLabel(tester), 'watchhub.strem.io');
-      expect(find.byType(TvSourceCard), findsNothing);
+      expect(find.byType(TvSourceCard), findsWidgets);
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), 'caching.stremio.net');
@@ -408,12 +409,12 @@ void main() {
     ) async {
       await mountSectioned(tester);
 
-      // Nothing is chosen, so there is no second row at all yet: the
-      // resolutions themselves are what the remote starts on, and the
-      // autofocus that put it there opens nothing.
+      // The resolutions are what the remote starts on, and the one it
+      // starts on is open: a highlight over a shut row says nothing about
+      // anything.
       expect(focusIn<TvSourceGroupCard>(), isTrue);
       expect(focusedLabel(tester), '2160p');
-      expect(find.byType(TvSourceCard), findsNothing);
+      expect(find.text('Alpha 2160p'), findsOneWidget);
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), '1080p');
@@ -438,13 +439,15 @@ void main() {
       tester,
     ) async {
       // Which sections are open is a global preference on a phone, kept
-      // across restarts; here exactly one row is open at a time and Back
-      // closes it. They share a word and nothing else, so a stored 2160p
-      // must not arrive with its sources already out.
-      await mountSectioned(tester, open: {'2160p'});
+      // across restarts; here exactly one row is open at a time, it is the
+      // one the remote is standing on, and Back closes it. They share a
+      // word and nothing else, so a stored 1080p must not be what is out:
+      // the row that opens is the one the highlight is on.
+      await mountSectioned(tester, open: {'1080p'});
 
-      expect(find.byType(TvSourceCard), findsNothing);
       expect(focusedLabel(tester), '2160p');
+      expect(find.text('Alpha 2160p'), findsOneWidget, reason: 'the focused');
+      expect(find.text('Beta 1080p'), findsNothing, reason: 'the remembered');
     });
 
     testWidgets('walking onto a group opens it beneath the row, which stays '
@@ -558,11 +561,9 @@ void main() {
       tester,
     ) async {
       await mountSectioned(tester);
-      // The first card holds the remote on arrival and its row is shut:
-      // where focus starts is the screen's choice, not the viewer's, so
-      // nothing is open until the remote is walked somewhere.
-      expect(find.byType(TvSourceCard), findsNothing);
-      await press(tester, LogicalKeyboardKey.select);
+      // The card the remote starts on has its row out already, so the
+      // press that goes down into it is the first one the viewer makes.
+      expect(find.text('Alpha 2160p'), findsOneWidget);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), 'Alpha 2160p');
 

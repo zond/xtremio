@@ -139,6 +139,50 @@ class TvSourceRows extends StatefulWidget {
 }
 
 class _TvSourceRowsState extends State<TvSourceRows> {
+  /// Whether the group the remote was handed on arrival has been shown.
+  ///
+  /// Once per row, and never again: Back closes an open row by rebuilding
+  /// this one with nothing open and the remote back on the card that
+  /// opened it, so opening it again there would make Back do nothing at
+  /// all. The groups arrive after the screen does -- the addons are still
+  /// answering -- so this cannot simply be done in [initState].
+  bool _shownOnArrival = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _showOnArrival();
+  }
+
+  @override
+  void didUpdateWidget(TvSourceRows oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _showOnArrival();
+  }
+
+  /// Opens the group the remote starts on, so the highlight tells the
+  /// truth from the first frame.
+  ///
+  /// The card that takes focus by default says which resolution -- or
+  /// which addon -- the screen is showing, and a highlight over a shut row
+  /// says it about nothing: every other way of landing on a group opens
+  /// it, so this one did too, one press later and only because the viewer
+  /// pressed select on a card they were already standing on.
+  ///
+  /// Nothing happens when the remote starts somewhere else ([defaultFocus]
+  /// is false whenever the last-used row is drawn, and that card is the
+  /// one the screen means to offer), nor when a group is open already.
+  void _showOnArrival() {
+    if (_shownOnArrival || !widget.defaultFocus) return;
+    final first = widget.groups.firstOrNull;
+    if (first == null) return;
+    _shownOnArrival = true;
+    if (widget.openLabel != null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) (widget.onFocusGroup ?? widget.onOpen)(first.label);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final groups = widget.groups;
