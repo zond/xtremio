@@ -196,6 +196,15 @@ fn start_with(
     if let Err(error) = allow_lan_media(&handle, false) {
         tracing::warn!(%error, "could not clear the lanMediaEnabled setting");
     }
+    // The setting as the server loaded it from its own file: a viewer who
+    // turned the trace on last week gets it on again at this start, which
+    // is what the server does for its half of the switch too.
+    match handle.settings() {
+        Ok(settings) => {
+            crate::logging::set_verbose(settings.diagnostics_trace);
+        }
+        Err(error) => tracing::warn!(%error, "could not read the diagnostics setting"),
+    }
     tracing::info!(%url, "embedded stream-server started");
     *app.server.write() = Some(Arc::new(handle));
     Ok(url)
@@ -393,7 +402,24 @@ pub fn settings() -> anyhow::Result<ServerSettings> {
 /// Applies `patch` as `POST /settings` would (same keys, validation and
 /// persistence) and returns the settings afterwards.
 pub fn update_settings(patch: serde_json::Value) -> anyhow::Result<ServerSettings> {
-    with_handle(|handle| handle.update_settings(patch))
+    update_settings_in(&crate::state::state(), patch)
+}
+
+/// [`update_settings`] against a given state, which is how a test writes a
+/// setting without taking the process's embedded server from another one.
+pub(crate) fn update_settings_in(
+    app: &AppState,
+    patch: serde_json::Value,
+) -> anyhow::Result<ServerSettings> {
+    let settings = with_handle_in(app, |handle| handle.update_settings(patch))?;
+    // Where the Verbose logging switch actually reaches the log. The
+    // server's own `set_diagnostics_trace` reloads a filter it installed,
+    // and it installed none: this crate owns the process's subscriber
+    // (`init_logging: false`), so the setting reached the server's file and
+    // stopped there. Read off the settings the server answered with rather
+    // than off the patch, so any other way of changing it lands here too.
+    crate::logging::set_verbose(settings.diagnostics_trace);
+    Ok(settings)
 }
 
 /// What the cache currently occupies against the limit in force, taking
@@ -713,6 +739,77 @@ mod tests {
     /// against one: what is under test is a property of `ServerState`, and
     /// starting a second server on its own ephemeral port and temp dirs is
     /// how that gets said.
+    /// The Verbose logging switch writes one of the embedded server's
+    /// settings, and that write is the only thing that can turn the two
+    /// traces on in this process: the server installed no filter of its
+    /// own ([`crate::logging`] owns the subscriber), so its own
+    /// `set_diagnostics_trace` has nothing to reload and the setting used
+    /// to reach its file and stop there.
+    #[test]
+    fn the_diagnostics_setting_reaches_this_processes_filter() {
+        let _serialised = crate::logging::VERBOSE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        crate::logging::init();
+        let app = Arc::new(AppState::default());
+        let tmp = tempfile::tempdir().expect("tempdir");
+        start_in(
+            &app,
+            StartConfig {
+                config_dir: tmp.path().join("server"),
+                cache_dir: tmp.path().join("cache"),
+            },
+        )
+        .expect("server start");
+        let traced = || tracing::enabled!(target: stream_server::RETENTION_TRACE_TARGET, tracing::Level::INFO);
+        assert!(!traced(), "the trace was on before the setting said so");
+
+        update_settings_in(&app, serde_json::json!({ "diagnosticsTrace": true }))
+            .expect("the setting is written");
+        assert!(traced(), "the setting did not reach this process's filter");
+
+        update_settings_in(&app, serde_json::json!({ "diagnosticsTrace": false }))
+            .expect("the setting is written");
+        assert!(!traced(), "the setting did not shut it again");
+
+        crate::logging::set_verbose(false);
+        stop_in(&app).expect("server stop");
+    }
+
+    /// And a start finds it where the last session left it: the server
+    /// loads its own settings file, so a viewer who turned the trace on
+    /// last week gets it on again without touching the switch.
+    #[test]
+    fn a_start_applies_the_setting_the_last_session_left() {
+        let _serialised = crate::logging::VERBOSE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        crate::logging::init();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let config = StartConfig {
+            config_dir: tmp.path().join("server"),
+            cache_dir: tmp.path().join("cache"),
+        };
+        let traced = || tracing::enabled!(target: stream_server::RETENTION_TRACE_TARGET, tracing::Level::INFO);
+
+        let first = Arc::new(AppState::default());
+        start_in(&first, config.clone()).expect("server start");
+        update_settings_in(&first, serde_json::json!({ "diagnosticsTrace": true }))
+            .expect("the setting is written");
+        stop_in(&first).expect("server stop");
+        // What a fresh process would have: nothing has told this one yet.
+        crate::logging::set_verbose(false);
+        assert!(!traced());
+
+        let second = Arc::new(AppState::default());
+        start_in(&second, config).expect("server start");
+
+        assert!(traced(), "the start did not apply the persisted setting");
+
+        crate::logging::set_verbose(false);
+        stop_in(&second).expect("server stop");
+    }
+
     #[test]
     fn with_handle_readers_run_concurrently_with_token_for() {
         let app = Arc::new(AppState::default());

@@ -36,6 +36,8 @@ use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::layer::{Context, Layer};
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::registry::Registry;
+use tracing_subscriber::reload;
 use tracing_subscriber::EnvFilter;
 
 /// Default filter when `RUST_LOG` is unset.
@@ -59,6 +61,45 @@ pub const RING_CAPACITY: usize = 400;
 /// what remembers that has to outlive any one session. Re-running this
 /// after a shutdown would be a no-op at best.
 static INIT: Once = Once::new();
+
+/// The base directives the trace targets are added to, and the handle that
+/// swaps the filter built from them.
+///
+/// Both traces are off in the filter this installs and are turned on by
+/// [`set_verbose`] alone. They were on unconditionally before: this crate
+/// owns the process's one subscriber (stream-server is embedded with
+/// `init_logging: false`), so the server's own switch had no filter to
+/// reload -- it wrote the setting to its file and the log carried the
+/// trace either way. `enginefs=info` and `stream_server=info` admit both
+/// targets wholesale, which is why they have to be named off explicitly
+/// rather than merely left out.
+static FILTER: OnceLock<(String, reload::Handle<EnvFilter, Registry>)> = OnceLock::new();
+
+/// Serialises the tests that flip the process's one filter and then read
+/// it back. Two of them exist -- this module's and the one that goes
+/// through the server's settings -- and the filter they assert about is
+/// global, so run together they read each other's writes. This is the
+/// shape that made stream-server's own suite flake once already.
+#[cfg(test)]
+pub(crate) static VERBOSE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+/// Turns the retention and proxy traces on or off in the running process.
+///
+/// Answers whether it reached a filter: false before [`init`] has run, or
+/// when a test harness installed a subscriber of its own, in which case
+/// nothing here is what decides what the log carries.
+pub fn set_verbose(on: bool) -> bool {
+    let Some((base, handle)) = FILTER.get() else {
+        return false;
+    };
+    match handle.reload(stream_server::log_filter(base, on)) {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::warn!(%error, on, "could not change the log filter");
+            false
+        }
+    }
+}
 
 /// The captured lines. Process-wide for the same reason [`INIT`] is: the
 /// subscriber that fills it outlives every session, and a log that was
@@ -118,8 +159,15 @@ pub fn recent_lines() -> Vec<String> {
 /// no longer is.
 pub fn init() {
     INIT.call_once(|| {
-        let filter =
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
+        let base = std::env::var("RUST_LOG")
+            .ok()
+            .filter(|directives| !directives.trim().is_empty())
+            .unwrap_or_else(|| DEFAULT_FILTER.to_string());
+        // Reloadable, because the Verbose logging switch changes it while
+        // the app is running: the viewer turns it on and plays the thing
+        // that misbehaves, without restarting anything.
+        let (filter, handle) = reload::Layer::new(stream_server::log_filter(&base, false));
+        let _ = FILTER.set((base, handle));
         let registry = tracing_subscriber::registry().with(filter).with(RingLayer);
         #[cfg(not(target_os = "android"))]
         let _ = registry
@@ -283,6 +331,41 @@ fn log_level(level: &Level) -> log::Level {
 
 #[cfg(test)]
 mod tests {
+    /// The switch the viewer flips has to reach this process's filter, not
+    /// just the server's settings file: this crate owns the subscriber, so
+    /// nothing else can turn the two traces on.
+    #[test]
+    fn the_verbose_switch_opens_and_shuts_the_two_traces() {
+        let _serialised = super::VERBOSE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        super::init();
+        let retention = || tracing::enabled!(target: stream_server::RETENTION_TRACE_TARGET, tracing::Level::INFO);
+        let proxy =
+            || tracing::enabled!(target: stream_server::PROXY_TRACE_TARGET, tracing::Level::INFO);
+        // Before anything is flipped, which is the half that was wrong:
+        // `enginefs=info` and `stream_server=info` admit both targets
+        // wholesale, so the filter installed here has to name them off
+        // rather than merely not mention them.
+        assert!(
+            !retention(),
+            "the retention trace was on before anyone asked"
+        );
+        assert!(!proxy(), "the proxy trace was on before anyone asked");
+
+        assert!(super::set_verbose(true));
+        assert!(retention(), "the switch did not reach the retention trace");
+        assert!(proxy(), "the switch did not reach the proxy trace");
+        assert!(
+            tracing::enabled!(target: "enginefs::engine", tracing::Level::INFO),
+            "the rest of the log went missing with it"
+        );
+
+        assert!(super::set_verbose(false));
+        assert!(!retention(), "the switch did not shut it again");
+        assert!(!proxy(), "the switch did not shut it again");
+    }
+
     use super::*;
 
     #[test]
