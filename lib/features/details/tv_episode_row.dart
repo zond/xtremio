@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
 import '../../shell/tv_density.dart';
@@ -51,8 +50,6 @@ class TvEpisodeRow extends StatefulWidget {
     required this.onSelect,
     required this.onToggleWatched,
     this.onFocus,
-    this.onUp,
-    this.chosenVideoId,
   });
 
   /// The episodes of the season on screen, in order.
@@ -85,27 +82,6 @@ class TvEpisodeRow extends StatefulWidget {
   /// is not a press: the screen decides what a walk along the row costs
   /// (it waits for the walk to stop before it asks an addon anything).
   final ValueChanged<VideoInfo>? onFocus;
-
-  /// The episode the viewer last chose, which is the card an up press
-  /// from the rows below climbs back to ([TvEpisodeRowState.focusSelected]).
-  ///
-  /// Not [selectedVideoId], which is what the *engine* has answered with:
-  /// a choice made by walking the row is asked for straight away and
-  /// answered a moment later, and in that moment the card the viewer is
-  /// inside is the one they picked, not the one the last answer was
-  /// about. What is drawn as selected is still the engine's answer, so
-  /// nothing on screen claims an episode is showing before it is.
-  final String? chosenVideoId;
-
-  /// An up press from a card, where the row above is the season pills.
-  ///
-  /// Directional focus takes the nearest node that overlaps the direction
-  /// pressed, so which row an up press reaches is a question about where
-  /// things happen to be drawn: a row of two narrow pills at the left is
-  /// stepped straight over into the header by a press made from a card
-  /// further along. The pills are the row above this one whatever their
-  /// width, so that is what this says, and geometry does not get a vote.
-  final VoidCallback? onUp;
 
   /// How wide one card is. Three of them and the edge of a fourth fit the
   /// info column of a 720p panel, which is what says the row scrolls.
@@ -163,35 +139,14 @@ class TvEpisodeRow extends StatefulWidget {
       captionHeight * math.max(1, TvDensity.textFactorOf(context));
 
   @override
-  State<TvEpisodeRow> createState() => TvEpisodeRowState();
+  State<TvEpisodeRow> createState() => _TvEpisodeRowState();
 }
 
-/// Public so the rows below can reach [focusSelected]: an up press from
-/// the sources climbs to the episode they belong to rather than to
-/// whatever is drawn above them, and the screen holds a
-/// `GlobalKey<TvEpisodeRowState>` to do it with.
-class TvEpisodeRowState extends State<TvEpisodeRow> {
+class _TvEpisodeRowState extends State<TvEpisodeRow> {
   final ScrollController _controller = ScrollController();
 
   /// One key per episode, so the reveal below can find the card's box.
   final Map<String, GlobalKey> _cards = {};
-
-  /// One focus node per episode, so the row below can hand the remote back
-  /// to the card its sources belong to; see [focusSelected].
-  final Map<String, FocusNode> _nodes = {};
-
-  FocusNode _nodeFor(String id) =>
-      _nodes.putIfAbsent(id, () => FocusNode(debugLabel: 'episode $id'));
-
-  /// Puts the remote on the episode whose sources are on screen: what an
-  /// up press from the rows below is answered with.
-  void focusSelected() {
-    final id =
-        widget.chosenVideoId ??
-        widget.selectedVideoId ??
-        widget.episodes.firstOrNull?.id;
-    if (id != null) _nodeFor(id).requestFocus();
-  }
 
   List<String> get _ids => [for (final v in widget.episodes) v.id];
 
@@ -214,9 +169,6 @@ class TvEpisodeRowState extends State<TvEpisodeRow> {
   @override
   void dispose() {
     _controller.dispose();
-    for (final node in _nodes.values) {
-      node.dispose();
-    }
     super.dispose();
   }
 
@@ -238,61 +190,42 @@ class TvEpisodeRowState extends State<TvEpisodeRow> {
     });
   }
 
-  /// Hands an up press to [TvEpisodeRow.onUp], when there is one.
-  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    final up = widget.onUp;
-    if (up == null ||
-        event is KeyUpEvent ||
-        event.logicalKey != LogicalKeyboardKey.arrowUp) {
-      return KeyEventResult.ignored;
-    }
-    up();
-    return KeyEventResult.handled;
-  }
-
   @override
   Widget build(BuildContext context) {
     final ids = _ids.toSet();
     _cards.removeWhere((id, _) => !ids.contains(id));
     return SizedBox(
       height: TvEpisodeRow.heightOf(context),
-      child: Focus(
-        canRequestFocus: false,
-        skipTraversal: true,
-        includeSemantics: false,
-        onKeyEvent: _onKey,
-        child: SingleChildScrollView(
-          controller: _controller,
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(
-            horizontal: TvEpisodeRow.sidePadding,
-            vertical: TvEpisodeRow.focusSlack,
-          ),
-          child: Row(
-            spacing: TvEpisodeRow.gap,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final video in widget.episodes)
-                SizedBox(
-                  key: _cards.putIfAbsent(video.id, GlobalKey.new),
-                  width: TvEpisodeRow.cardWidth,
-                  child: TvEpisodeCard(
-                    video: video,
-                    focusNode: _nodeFor(video.id),
-                    isSelected: video.id == widget.selectedVideoId,
-                    isWatched: widget.isWatched(video),
-                    isReleased: video.isReleased(widget.now),
-                    progress: widget.resumeProgress(video),
-                    download: widget.downloadOf(video),
-                    onTap: () => widget.onSelect(video),
-                    onLongPress: () => widget.onToggleWatched(video),
-                    onFocused: widget.onFocus == null
-                        ? null
-                        : () => widget.onFocus!(video),
-                  ),
+      child: SingleChildScrollView(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(
+          horizontal: TvEpisodeRow.sidePadding,
+          vertical: TvEpisodeRow.focusSlack,
+        ),
+        child: Row(
+          spacing: TvEpisodeRow.gap,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final video in widget.episodes)
+              SizedBox(
+                key: _cards.putIfAbsent(video.id, GlobalKey.new),
+                width: TvEpisodeRow.cardWidth,
+                child: TvEpisodeCard(
+                  video: video,
+                  isSelected: video.id == widget.selectedVideoId,
+                  isWatched: widget.isWatched(video),
+                  isReleased: video.isReleased(widget.now),
+                  progress: widget.resumeProgress(video),
+                  download: widget.downloadOf(video),
+                  onTap: () => widget.onSelect(video),
+                  onLongPress: () => widget.onToggleWatched(video),
+                  onFocused: widget.onFocus == null
+                      ? null
+                      : () => widget.onFocus!(video),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -319,7 +252,6 @@ class TvEpisodeCard extends StatelessWidget {
     this.progress,
     this.download,
     this.onFocused,
-    this.focusNode,
   });
 
   final VideoInfo video;
@@ -342,10 +274,6 @@ class TvEpisodeCard extends StatelessWidget {
 
   /// The remote has come to rest here; see [TvEpisodeRow.onFocus].
   final VoidCallback? onFocused;
-
-  /// The node this card focuses with, so the rows below can put the remote
-  /// back on it ([TvEpisodeRow.onUp]).
-  final FocusNode? focusNode;
 
   /// How tall the resume bar across the foot of the still is.
   static const double resumeBarHeight = 4;
@@ -374,7 +302,6 @@ class TvEpisodeCard extends StatelessWidget {
       onTap: isReleased ? onTap : null,
       onLongPress: isReleased ? onLongPress : null,
       onFocused: isReleased ? onFocused : null,
-      focusNode: focusNode,
       memoryId: 'details/episode/${video.id}',
       borderRadius: radius,
       child: Column(

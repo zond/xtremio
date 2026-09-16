@@ -494,6 +494,27 @@ void main() {
       expect(focusIn<ChoiceChip>(), isTrue);
     });
 
+    testWidgets('and the heading is two rungs, so both its controls are '
+        'walked through in either direction', (tester) async {
+      // The toggle is drawn on the heading's own line and the chips below
+      // it. One rung for the pair would mean arriving at whichever came
+      // first and never reaching the other, which is the failure this
+      // screen had before the ladder: a control on screen, marked, and
+      // unreachable.
+      await mountSectioned(tester);
+      expect(focusIn<TvSourceGroupCard>(), isTrue);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIn<ChoiceChip>(), isTrue, reason: 'the order chips');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedTooltip(), kStreamsSectionedTooltip);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<ChoiceChip>(), isTrue, reason: 'and back down');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<TvSourceGroupCard>(), isTrue);
+    });
+
     testWidgets('another group is a sideways press away, and takes the '
         'second row with it', (tester) async {
       await mountSectioned(tester);
@@ -703,8 +724,8 @@ void main() {
       expect(focusedLabel(tester), '2', reason: 'focus stayed on the pill');
     });
 
-    testWidgets('up from the group row goes to the episode these sources '
-        'are for', (tester) async {
+    testWidgets('the walk up from the group row comes back to the episode '
+        'these sources are for', (tester) async {
       await mountSeries(tester);
       // Walk the episode row first, so the episode the sources belong to
       // is not the one the row happens to start at.
@@ -715,9 +736,12 @@ void main() {
       await tester.pumpAndSettle();
 
       await stepDownTo<TvSourceGroupCard>(tester);
-      await press(tester, LogicalKeyboardKey.arrowUp);
+      // The heading's own controls are rungs between the two, so the walk
+      // back up passes through them rather than over them -- and the
+      // episode it arrives at is still the one that was left, which is
+      // what a viewer means by going back up.
+      await stepUpTo<TvEpisodeCard>(tester, limit: 4);
 
-      expect(focusIn<TvEpisodeCard>(), isTrue);
       expect(
         focusedEpisodeTitle(),
         chosen,
@@ -745,6 +769,31 @@ void main() {
         '1',
         reason: 'the pill of the season on screen, not the first of the row',
       );
+    });
+
+    testWidgets('the walk down from the pills stops at the sort and group-by '
+        'controls on the way to the sources', (tester) async {
+      // What the screen is a ladder *for*: these two lines of the heading
+      // are between the episodes and the sources, and a press down that
+      // went by distance stepped over one or both of them -- which on a
+      // remote means they cannot be reached at all.
+      await mountSeries(tester);
+      for (var i = 0; i < 8 && focusedLabel(tester) != '1'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      expect(focusedLabel(tester), '1', reason: 'the pill of season 1');
+
+      final stops = <String>[];
+      for (var i = 0; i < 8 && !focusIn<TvSourceGroupCard>(); i++) {
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        stops.add(focusedTooltip() ?? focusedLabel(tester) ?? 'nothing');
+      }
+
+      expect(focusIn<TvSourceGroupCard>(), isTrue, reason: 'it got there');
+      // Grouped by addon here, which is the layout with no order to
+      // choose and so no chips drawn: the toggle is the whole of the
+      // heading's controls, and the walk stops on it.
+      expect(stops, contains(kStreamsGroupedTooltip));
     });
 
     testWidgets('the sources follow the episode the remote stops on, and '

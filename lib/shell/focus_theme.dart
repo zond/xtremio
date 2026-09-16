@@ -122,6 +122,13 @@ abstract final class FocusTheme {
       menuButtonTheme: MenuButtonThemeData(
         style: _merge(base.menuButtonTheme.style, button),
       ),
+      // A tab can wear nothing else: it takes no per-state shape, and the
+      // bar's own indicator says which tab is *selected*, which is a
+      // different question from where the remote is standing. `TabBar`
+      // hands this overlay to the [InkWell] under each tab, so the fill
+      // reaches one the way it reaches a [ListTile] -- and at the same
+      // weight, because for both of them it is the whole indicator.
+      tabBarTheme: base.tabBarTheme.copyWith(overlayColor: _filled(emphasis)),
       switchTheme: base.switchTheme.copyWith(overlayColor: _overlay(emphasis)),
       // The overlay and not a side: `CheckboxThemeData.lerp` reads a side
       // resolved for the empty state and asserts it is not null, so a
@@ -158,6 +165,16 @@ abstract final class FocusTheme {
       WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.focused)
             ? stroke.withValues(alpha: lift(emphasis))
+            : null,
+      );
+
+  /// The same, at [fill]'s heavier weight: for a control with no stroke
+  /// to wear, the fill is the whole of what a viewer across the room has
+  /// to find.
+  static WidgetStateProperty<Color?> _filled(FocusEmphasis emphasis) =>
+      WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.focused)
+            ? stroke.withValues(alpha: fill(emphasis))
             : null,
       );
 

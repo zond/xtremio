@@ -318,8 +318,9 @@ void main() {
         isNotEmpty,
         reason:
             'the remote can land on a ${node.context?.widget.runtimeType} '
-            'with no ring lit on it, no stroke round it and no fill under '
-            'it -- nothing a viewer three metres away could find',
+            '(${node.debugLabel ?? 'unlabelled'}) with no ring lit on it, '
+            'no stroke round it and no fill under it -- nothing a viewer '
+            'three metres away could find',
       );
     }
     expect(
@@ -1275,6 +1276,36 @@ void main() {
       target: 'the search field',
     );
     expect(focusMarks(), {FocusMark.ring, FocusMark.fill});
+  });
+
+  testWidgets('and a tab is filled, which is the only mark a tab can wear', (
+    tester,
+  ) async {
+    // The bar's indicator marks the tab that is *open*, and is drawn on
+    // one whether or not the remote is anywhere near it -- so it is not
+    // this, and a tab that wore nothing else was a stop the D-pad could
+    // land on invisibly. The tabs of the Addons screen are the app's only
+    // ones.
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(
+      CoreScope(
+        client: fullCore(),
+        child: onTv(const AddonsScreen(), pushed: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Either of them: which tab the Tab order reaches first is the bar's
+    // business, and both wear what this is about.
+    await pressUntil(
+      tester,
+      LogicalKeyboardKey.tab,
+      () => const {'Installed', 'Community'}.contains(focusedLabel(tester)),
+      target: 'a tab of the Addons screen',
+      limit: 60,
+    );
+
+    expect(focusMarks(), {FocusMark.fill});
   });
 
   test('every screen in the app is walked, and twice where it opens '

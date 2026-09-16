@@ -305,7 +305,9 @@ class AddonDirectoryBar extends StatelessWidget {
   static const String refreshingMessage = 'Refreshing addons from your account';
   static const String explanation =
       'Installing one there into your Stremio account brings it here after '
-      'a refresh.';
+      'a refresh. That site also publishes its directory as an addon: '
+      'install it and its lists join the Catalog menu on this tab, which is '
+      'the way to browse it without a browser.';
 
   @override
   Widget build(BuildContext context) {

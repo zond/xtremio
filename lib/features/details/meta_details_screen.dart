@@ -9,6 +9,7 @@ import '../../shell/tv_density.dart';
 import '../../widgets/download_badge.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/focusable_tile.dart';
+import '../../widgets/tv_ladder.dart';
 import '../../widgets/poster_tile.dart';
 import '../../widgets/remote_press.dart';
 import '../../widgets/shared_field_screen.dart';
@@ -233,15 +234,20 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// selected episode) chooses one.
   int? _season;
 
-  /// The season pills, so an up press from the episode row can hand the
-  /// remote to the pill of the season on screen; see [TvEpisodeRow.onUp].
-  final GlobalKey<_SeasonSelectorState> _seasonKey =
-      GlobalKey<_SeasonSelectorState>();
-
-  /// The episode row, so an up press from the sources can hand the remote
-  /// to the card whose sources they are; see [TvSourceRows.onUp].
-  final GlobalKey<TvEpisodeRowState> _episodeKey =
-      GlobalKey<TvEpisodeRowState>();
+  /// The rungs of this screen's [TvLadder], top to bottom: the choices a
+  /// viewer makes on the way to a stream, in the order they make them.
+  ///
+  /// Numbered with gaps because most of them are conditional -- a film has
+  /// no seasons or episodes, a title nobody has played has no last-used
+  /// source, and the row of sources only exists while a group is open.
+  /// Only what is drawn is registered, and a press walks past the rest.
+  static const int _ladderSeasons = 10;
+  static const int _ladderEpisodes = 20;
+  static const int _ladderStreamControls = 30;
+  static const int _ladderStreamOrder = 35;
+  static const int _ladderLastUsed = 40;
+  static const int _ladderGroups = 50;
+  static const int _ladderSources = 60;
 
   /// The load a walk along the episode row is waiting to make; see
   /// [_focusVideo].
@@ -876,9 +882,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         _isWide = isWide;
         final info = _infoSlivers(state, meta, isWide: isWide, isTv: isTv);
         if (!isWide) {
-          return CustomScrollView(
-            controller: _narrowScroll,
-            slivers: [...info, ...streams],
+          return TvLadder(
+            child: CustomScrollView(
+              controller: _narrowScroll,
+              slivers: [...info, ...streams],
+            ),
           );
         }
         final paneWidth = (constraints.maxWidth * 0.38).clamp(320.0, 480.0);
@@ -1018,33 +1026,34 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       if (state.hasVideos) ...[
         if (seasons.length > 1 && season != null)
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: _SeasonSelector(
-                key: _seasonKey,
-                seasons: seasons,
-                selected: season,
-                onChanged: (season) => setState(() => _season = season),
+            child: TvLadderRow(
+              level: _ladderSeasons,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: _SeasonSelector(
+                  seasons: seasons,
+                  selected: season,
+                  onChanged: (season) => setState(() => _season = season),
+                ),
               ),
             ),
           ),
         if (isTv)
           SliverToBoxAdapter(
-            child: TvEpisodeRow(
-              key: _episodeKey,
-              episodes: episodes,
-              selectedVideoId: _selectedVideoId(state),
-              now: now,
-              isWatched: state.isWatched,
-              resumeProgress: (video) => _resumeProgress(state, video),
-              downloadOf: (video) => _downloads?.forVideo(widget.id, video.id),
-              onSelect: (video) => _selectVideo(video, reveal: true),
-              onToggleWatched: (video) => _toggleWatched(state, video),
-              chosenVideoId: _requestedVideoId,
-              onFocus: _focusVideo,
-              onUp: seasons.length > 1 && season != null
-                  ? () => _seasonKey.currentState?.focusSelected()
-                  : null,
+            child: TvLadderRow(
+              level: _ladderEpisodes,
+              child: TvEpisodeRow(
+                episodes: episodes,
+                selectedVideoId: _selectedVideoId(state),
+                now: now,
+                isWatched: state.isWatched,
+                resumeProgress: (video) => _resumeProgress(state, video),
+                downloadOf: (video) =>
+                    _downloads?.forVideo(widget.id, video.id),
+                onSelect: (video) => _selectVideo(video, reveal: true),
+                onToggleWatched: (video) => _toggleWatched(state, video),
+                onFocus: _focusVideo,
+              ),
             ),
           )
         else
@@ -1491,6 +1500,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           order: order,
           onOrderChanged: _setStreamsOrder,
           withSpinner: !waiting,
+          headingLevel: _ladderStreamControls,
+          orderLevel: _ladderStreamOrder,
         ),
       ),
       if (waiting)
@@ -1532,11 +1543,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       if (lastUsedStream != null)
         SliverToBoxAdapter(
           key: const ValueKey('tv-last-used'),
-          child: TvSourceRow(
-            defaultFocus: true,
-            sources: [
-              _tvLastUsed(state, lastUsed!.$1, lastUsedStream, downloads),
-            ],
+          child: TvLadderRow(
+            level: _ladderLastUsed,
+            child: TvSourceRow(
+              defaultFocus: true,
+              sources: [
+                _tvLastUsed(state, lastUsed!.$1, lastUsedStream, downloads),
+              ],
+            ),
           ),
         ),
       SliverToBoxAdapter(
@@ -1549,13 +1563,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             _reopenSuppressed = null;
           }),
           onFocusGroup: _focusSourceGroup,
-          // Up from the group row goes to the episode these sources are
-          // for, not to whatever is drawn above it. A film has no episode
-          // row, and there the press is left to directional focus, which
-          // reaches the order chips.
-          onUp: state.hasVideos
-              ? () => _episodeKey.currentState?.focusSelected()
-              : null,
+          groupLevel: _ladderGroups,
+          sourceLevel: _ladderSources,
           defaultFocus: lastUsedStream == null,
         ),
       ),
@@ -2130,9 +2139,9 @@ class _ExpandableTextState extends State<_ExpandableText> {
 ///   at the left like every other row on the screen. What that costs is
 ///   that directional focus, which prefers whatever overlaps the press
 ///   horizontally, no longer finds the pills from anywhere along the row
-///   below -- so the episode row hands an up press here itself
-///   ([TvEpisodeRow.onUp], [_SeasonSelectorState.focusSelected]) rather
-///   than leaving it to geometry.
+///   below. That is [TvLadder]'s job on this screen and not geometry's:
+///   the pills are a rung, and an up press from the episodes reaches them
+///   from anywhere along the row.
 /// - **The selected pill is scrolled into view** when the season changes or
 ///   the row is built for another title, so season 12 does not open with
 ///   the row parked at 1. Only the row moves: [ScrollPosition.ensureVisible]
@@ -2140,7 +2149,6 @@ class _ExpandableTextState extends State<_ExpandableText> {
 ///   would drag the page's vertical scroll along with it.
 class _SeasonSelector extends StatefulWidget {
   const _SeasonSelector({
-    super.key,
     required this.seasons,
     required this.selected,
     required this.onChanged,
@@ -2188,10 +2196,6 @@ class _SeasonSelectorState extends State<_SeasonSelector> {
 
   FocusNode _nodeFor(int season) =>
       _nodes.putIfAbsent(season, () => FocusNode(debugLabel: 'season $season'));
-
-  /// Puts the remote on the pill of the season on screen: what an up press
-  /// from the episode row is answered with.
-  void focusSelected() => _nodeFor(widget.selected).requestFocus();
 
   @override
   void initState() {
@@ -2518,7 +2522,23 @@ class _StreamsHeader extends StatelessWidget {
     this.order = StreamOrder.peersPerSize,
     this.onOrderChanged,
     this.withSpinner = true,
+    this.headingLevel,
+    this.orderLevel,
   });
+
+  /// Which rungs of the screen's [TvLadder] this heading's two lines are,
+  /// or null off a television and in the layouts that have no ladder.
+  ///
+  /// Two rungs and not one: the toggle is drawn on the heading's line and
+  /// the order chips below it, so a single rung would mean a press down
+  /// from the toggle left the heading entirely and neither could be
+  /// reached from the other.
+  final int? headingLevel;
+  final int? orderLevel;
+
+  /// Puts one line of the heading on a rung, when there is a ladder.
+  static Widget _rung(int? level, Widget child) =>
+      level == null ? child : TvLadderRow(level: level, child: child);
 
   final MetaDetailsState state;
 
@@ -2569,68 +2589,74 @@ class _StreamsHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Streams',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    // States which of the two layouts is on screen, right
-                    // next to the heading -- the toggle's tooltip says the
-                    // same thing, for when there is no room to read this.
-                    if (onSectionedChanged != null)
+          _rung(
+            headingLevel,
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        sectioned
-                            ? kStreamsSectionedLabel
-                            : kStreamsGroupedLabel,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        'Streams',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.primary,
                         ),
                       ),
-                    if (subtitle != null)
-                      Text(subtitle, style: theme.textTheme.bodySmall),
-                  ],
-                ),
-              ),
-              if (onSectionedChanged != null)
-                IconButton(
-                  tooltip: sectioned
-                      ? kStreamsSectionedTooltip
-                      : kStreamsGroupedTooltip,
-                  icon: Icon(
-                    sectioned ? Icons.view_agenda_outlined : Icons.sort,
+                      // States which of the two layouts is on screen, right
+                      // next to the heading -- the toggle's tooltip says the
+                      // same thing, for when there is no room to read this.
+                      if (onSectionedChanged != null)
+                        Text(
+                          sectioned
+                              ? kStreamsSectionedLabel
+                              : kStreamsGroupedLabel,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      if (subtitle != null)
+                        Text(subtitle, style: theme.textTheme.bodySmall),
+                    ],
                   ),
-                  onPressed: () => onSectionedChanged!(!sectioned),
                 ),
-              if (withSpinner && (isLoading || state.isLoadingStreams))
-                const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-            ],
+                if (onSectionedChanged != null)
+                  IconButton(
+                    tooltip: sectioned
+                        ? kStreamsSectionedTooltip
+                        : kStreamsGroupedTooltip,
+                    icon: Icon(
+                      sectioned ? Icons.view_agenda_outlined : Icons.sort,
+                    ),
+                    onPressed: () => onSectionedChanged!(!sectioned),
+                  ),
+                if (withSpinner && (isLoading || state.isLoadingStreams))
+                  const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
           ),
           // A Wrap rather than a row of segments: three labels have to fit
           // a phone's width and a 480 dp pane on a television, and the
           // chips are each a focus stop a remote can reach.
           if (sectioned && onOrderChanged != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 4),
-              child: FilterChips<StreamOrder>(
-                options: [
-                  for (final choice in StreamOrder.values)
-                    FilterOption(
-                      label: choice.label,
-                      selected: choice == order,
-                      request: choice,
-                    ),
-                ],
-                onSelect: onOrderChanged,
+            _rung(
+              orderLevel,
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: FilterChips<StreamOrder>(
+                  options: [
+                    for (final choice in StreamOrder.values)
+                      FilterOption(
+                        label: choice.label,
+                        selected: choice == order,
+                        request: choice,
+                      ),
+                  ],
+                  onSelect: onOrderChanged,
+                ),
               ),
             ),
         ],

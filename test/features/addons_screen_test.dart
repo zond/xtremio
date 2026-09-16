@@ -527,6 +527,11 @@ void main() {
     await openCommunity(tester);
 
     expect(find.text('connection refused'), findsOneWidget);
+    // The default test window is 800x600, which the bar's explanation and
+    // the filters above this leave no room in: scroll it up before asking
+    // where it is.
+    await tester.ensureVisible(find.text('Retry'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Retry'));
     await tester.pump();
     expect(core.dispatched, hasLength(3));
