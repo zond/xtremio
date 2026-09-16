@@ -80,7 +80,12 @@ final class StreamNumbers {
 /// read-ahead that has arrived, and a stream that has fetched nothing yet
 /// reads zero rather than the size of the window it is going to have.
 final class CacheWindow {
-  const CacheWindow({required this.behindBytes, required this.aheadBytes});
+  const CacheWindow({
+    required this.behindBytes,
+    required this.aheadBytes,
+    this.behindSeconds,
+    this.aheadSeconds,
+  });
 
   /// Bytes held behind the playhead: what a scan back is served from.
   final int behindBytes;
@@ -89,6 +94,20 @@ final class CacheWindow {
   /// under the playhead counts here -- it is the one a player is about to
   /// read, not one it has passed.
   final int aheadBytes;
+
+  /// How long the run behind lasts the stream that owns it, as the server
+  /// measured it: that head's own bytes over that head's own rate.
+  ///
+  /// Null where the stream is not consuming -- mpv's read of a Matroska
+  /// file's cues sits at the tail and takes nothing -- which is not "no
+  /// runway" but the opposite, and is why this is never computed here from
+  /// a video bitrate. A subtitle track's seconds have nothing to do with
+  /// how many bits the picture takes.
+  final double? behindSeconds;
+
+  /// The same for the run ahead: how long until the stream that is worst
+  /// off runs out, which is when the film next stops.
+  final double? aheadSeconds;
 
   /// The window in a `window` value, or null for the null the server sends
   /// where nothing is bounding the stream. A half the server did not send
@@ -99,21 +118,30 @@ final class CacheWindow {
     final behind = (value['behindBytes'] as num?)?.toInt();
     final ahead = (value['aheadBytes'] as num?)?.toInt();
     if (behind == null || ahead == null) return null;
-    return CacheWindow(behindBytes: behind, aheadBytes: ahead);
+    return CacheWindow(
+      behindBytes: behind,
+      aheadBytes: ahead,
+      behindSeconds: (value['behindSeconds'] as num?)?.toDouble(),
+      aheadSeconds: (value['aheadSeconds'] as num?)?.toDouble(),
+    );
   }
 
   @override
   bool operator ==(Object other) =>
       other is CacheWindow &&
       other.behindBytes == behindBytes &&
-      other.aheadBytes == aheadBytes;
+      other.aheadBytes == aheadBytes &&
+      other.behindSeconds == behindSeconds &&
+      other.aheadSeconds == aheadSeconds;
 
   @override
-  int get hashCode => Object.hash(behindBytes, aheadBytes);
+  int get hashCode =>
+      Object.hash(behindBytes, aheadBytes, behindSeconds, aheadSeconds);
 
   @override
   String toString() =>
-      'CacheWindow(behind: $behindBytes B, ahead: $aheadBytes B)';
+      'CacheWindow(behind: $behindBytes B / ${behindSeconds}s, '
+      'ahead: $aheadBytes B / ${aheadSeconds}s)';
 }
 
 /// What a torrent stream has committed to the swarm and moved over it.

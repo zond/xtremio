@@ -482,16 +482,53 @@ void main() {
     });
 
     test('the window is two halves, in bytes and in watching', () {
+      // The seconds are the server's, measured against each head's own
+      // rate; the panel does not divide bytes by a bitrate any more.
       expect(
         cacheRow(
           rows(
             window: const CacheWindow(
               behindBytes: 1288490188,
               aheadBytes: 356515840,
+              behindSeconds: 1260,
+              aheadSeconds: 300,
             ),
           ),
         ),
         'cache    294.6s mpv · behind 1.3 GB (21 min) · ahead 356.5 MB (5 min)',
+      );
+    });
+
+    test('the last seconds before it stops are written to a tenth', () {
+      // Where the number is about to matter: `2s` reads the same whether
+      // it is two seconds or two and nine tenths, and this is the row
+      // somebody watches while the film is deciding whether to stall.
+      expect(
+        cacheRow(
+          rows(
+            window: const CacheWindow(
+              behindBytes: 1288490188,
+              aheadBytes: 8388608,
+              behindSeconds: 1260,
+              aheadSeconds: 2.9,
+            ),
+          ),
+        ),
+        'cache    294.6s mpv · behind 1.3 GB (21 min) · ahead 8.4 MB (2.9s)',
+      );
+    });
+
+    test('a stream that is consuming nothing shows bytes and no time', () {
+      // mpv's read of a Matroska file's cues parks at the tail and takes
+      // nothing further, so it has no runway to state -- which is not the
+      // same as a short one, and must not be drawn as `(0.0s)`.
+      expect(
+        cacheRow(
+          rows(
+            window: const CacheWindow(behindBytes: 4194304, aheadBytes: 65536),
+          ),
+        ),
+        'cache    294.6s mpv · behind 4.2 MB · ahead 66 kB',
       );
     });
 
@@ -502,9 +539,16 @@ void main() {
       // read-ahead looks like ahead.
       expect(
         cacheRow(
-          rows(window: const CacheWindow(behindBytes: 0, aheadBytes: 0)),
+          rows(
+            window: const CacheWindow(
+              behindBytes: 0,
+              aheadBytes: 0,
+              behindSeconds: 0,
+              aheadSeconds: 0,
+            ),
+          ),
         ),
-        'cache    294.6s mpv · behind 0 B (0 s) · ahead 0 B (0 s)',
+        'cache    294.6s mpv · behind 0 B (0.0s) · ahead 0 B (0.0s)',
       );
     });
 
@@ -754,7 +798,12 @@ void main() {
             // What a proxied stream answers: a window off the proxy cache,
             // and no sharing at all -- it is not seeded.
             held: const StreamNumbers(
-              window: CacheWindow(behindBytes: 60000000, aheadBytes: 30000000),
+              window: CacheWindow(
+                behindBytes: 60000000,
+                aheadBytes: 30000000,
+                behindSeconds: 60,
+                aheadSeconds: 30,
+              ),
             ),
           ),
         ),

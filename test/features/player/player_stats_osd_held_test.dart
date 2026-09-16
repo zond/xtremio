@@ -44,7 +44,12 @@ void main() {
   }
 
   const held = StreamNumbers(
-    window: CacheWindow(behindBytes: 1200000000, aheadBytes: 340000000),
+    window: CacheWindow(
+      behindBytes: 1200000000,
+      aheadBytes: 340000000,
+      behindSeconds: 1200,
+      aheadSeconds: 300,
+    ),
     sharing: SharingNumbers(
       committedBytes: 820000000,
       transfer: LiveTransfer(
@@ -127,7 +132,12 @@ void main() {
 
     // And it keeps up as the answers change, on its own slow cadence.
     server.response = const StreamNumbers(
-      window: CacheWindow(behindBytes: 500000000, aheadBytes: 900000000),
+      window: CacheWindow(
+        behindBytes: 500000000,
+        aheadBytes: 900000000,
+        behindSeconds: 500,
+        aheadSeconds: 900,
+      ),
       sharing: SharingNumbers(committedBytes: 820000000),
     );
     await tester.pump(PlayerScreen.streamNumbersInterval);
@@ -168,9 +178,14 @@ void main() {
     expect(overlay, findsOneWidget);
     expect(harness.streamNumbers.requests, hasLength(1));
     expect(row(PlaybackStatsOverlay.collecting), findsOneWidget);
-    // In bytes alone: the watching each half is worth comes from mpv's
-    // bitrate, which is one of the readings still missing.
-    expect(row('cache    behind 1.2 GB · ahead 340.0 MB'), findsOneWidget);
+    // With its times, though mpv has reported nothing: the seconds are
+    // the server's, measured against each stream's own rate, so this row
+    // is whole before the media opens. It used to be bytes alone here,
+    // because the watching was the bytes over mpv's `video-bitrate`.
+    expect(
+      row('cache    behind 1.2 GB (20 min) · ahead 340.0 MB (5 min)'),
+      findsOneWidget,
+    );
     expect(
       row(
         'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB'
@@ -306,7 +321,12 @@ void main() {
       stream: DevStreams.bigBuckBunnyHttp,
     );
     harness.streamNumbers.response = const StreamNumbers(
-      window: CacheWindow(behindBytes: 60000000, aheadBytes: 30000000),
+      window: CacheWindow(
+        behindBytes: 60000000,
+        aheadBytes: 30000000,
+        behindSeconds: 60,
+        aheadSeconds: 30,
+      ),
     );
 
     await openPanel(tester, harness);

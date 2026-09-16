@@ -372,8 +372,8 @@ class PlaybackStatsOverlay extends StatelessWidget {
     final mpv = s == null ? null : _mpvCache(s);
     if (window == null) return mpv;
     final held =
-        'behind ${_span(window.behindBytes, s?.videoBitrate)}'
-        ' · ahead ${_span(window.aheadBytes, s?.videoBitrate)}';
+        'behind ${_span(window.behindBytes, window.behindSeconds)}'
+        ' · ahead ${_span(window.aheadBytes, window.aheadSeconds)}';
     return mpv == null ? held : '$mpv · $held';
   }
 
@@ -392,26 +392,37 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   /// Half the window: its bytes, and how much watching that is.
   ///
-  /// The time is the bytes over the stream's bitrate -- the panel's own
-  /// `bitrate` row, which is mpv's `video-bitrate`, so it counts the video
-  /// track and not the audio and subtitles beside it and reads a little
-  /// long. It is the only rate anything here has, and minutes are what
-  /// makes a byte count mean something from the sofa. **No rate, no
-  /// time**: the bytes go on their own rather than beside a dash, since
-  /// mpv answers no bitrate at all for the first seconds of every file.
+  /// The time is **the server's**, not an arithmetic done here.
+  ///
+  /// It used to be the bytes over mpv's `video-bitrate`, which was the only
+  /// rate this panel had. Two things were wrong with that. The half is
+  /// reported for whichever of the player's streams is worst off, and that
+  /// may be a subtitle track, whose runway has nothing to do with how many
+  /// bits the picture takes. And a stream that is consuming nothing has no
+  /// runway at all rather than a long one: mpv's read of a Matroska file's
+  /// cues parks at the tail and takes nothing further. The server measures
+  /// each head's own rate and sends the seconds with the bytes.
+  ///
+  /// **No rate, no time**: the bytes go on their own rather than beside a
+  /// dash, for a stream nothing has measured yet or one that is not
+  /// reading.
+  ///
+  /// Under ten seconds it is written to a tenth. That is the range where
+  /// the number is about to matter -- it is what the row says just before
+  /// the film stops -- and `2s` reads the same whether it is two seconds or
+  /// two and nine tenths. Above that a tenth is noise and the coarse shape
+  /// (`3m`) is what carries from the sofa.
   ///
   /// The time goes in brackets after the bytes rather than behind a slash.
   /// A slash between a size and a time is the shape a rate has, and the
   /// panel has real ones two rows down (`speed    1.2 MB/s`); this one is
   /// not a rate but the same quantity said again in the other unit.
-  static String _span(int bytes, int? bitsPerSecond) {
-    final seconds = bitsPerSecond == null || bitsPerSecond <= 0
-        ? null
-        : bytes * 8 / bitsPerSecond;
-    return seconds == null
-        ? formatBytes(bytes)
-        : '${formatBytes(bytes)}'
-              ' (${formatAge(Duration(seconds: seconds.round()))})';
+  static String _span(int bytes, double? seconds) {
+    if (seconds == null) return formatBytes(bytes);
+    final time = seconds < 10
+        ? '${seconds.toStringAsFixed(1)}s'
+        : formatAge(Duration(seconds: seconds.round()));
+    return '${formatBytes(bytes)} ($time)';
   }
 
   /// The sharing row: what this torrent has promised the swarm and what it
