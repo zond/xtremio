@@ -238,6 +238,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   final GlobalKey<_SeasonSelectorState> _seasonKey =
       GlobalKey<_SeasonSelectorState>();
 
+  /// The episode row, so an up press from the sources can hand the remote
+  /// to the card whose sources they are; see [TvSourceRows.onUp].
+  final GlobalKey<TvEpisodeRowState> _episodeKey =
+      GlobalKey<TvEpisodeRowState>();
+
   /// The load a walk along the episode row is waiting to make; see
   /// [_focusVideo].
   Timer? _focusSelect;
@@ -1026,6 +1031,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         if (isTv)
           SliverToBoxAdapter(
             child: TvEpisodeRow(
+              key: _episodeKey,
               episodes: episodes,
               selectedVideoId: _selectedVideoId(state),
               now: now,
@@ -1034,6 +1040,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               downloadOf: (video) => _downloads?.forVideo(widget.id, video.id),
               onSelect: (video) => _selectVideo(video, reveal: true),
               onToggleWatched: (video) => _toggleWatched(state, video),
+              chosenVideoId: _requestedVideoId,
               onFocus: _focusVideo,
               onUp: seasons.length > 1 && season != null
                   ? () => _seasonKey.currentState?.focusSelected()
@@ -1542,6 +1549,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             _reopenSuppressed = null;
           }),
           onFocusGroup: _focusSourceGroup,
+          // Up from the group row goes to the episode these sources are
+          // for, not to whatever is drawn above it. A film has no episode
+          // row, and there the press is left to directional focus, which
+          // reaches the order chips.
+          onUp: state.hasVideos
+              ? () => _episodeKey.currentState?.focusSelected()
+              : null,
           defaultFocus: lastUsedStream == null,
         ),
       ),

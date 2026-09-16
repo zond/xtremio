@@ -460,6 +460,40 @@ void main() {
       expect(focusedLabel(tester), 'Beta 1080p');
     });
 
+    testWidgets('up from a source goes to the group that opened it, not to '
+        'whatever is drawn above it', (tester) async {
+      await mountSectioned(tester);
+      // The third rung, so the card that opened the row is well to the
+      // left of the sources it opened: a source card is half again as wide
+      // as a group card, and by the second source the nearest card above
+      // is a different group entirely.
+      for (var i = 0; i < 4 && focusedLabel(tester) != '720p'; i++) {
+        await press(tester, LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusedLabel(tester), '720p');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<TvSourceCard>(), isTrue);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+
+      expect(focusIn<TvSourceGroupCard>(), isTrue);
+      expect(
+        focusedLabel(tester),
+        '720p',
+        reason: 'the card the viewer came down through',
+      );
+    });
+
+    testWidgets('and up from the group row reaches the order chips on a '
+        'film, which has no episode above it', (tester) async {
+      await mountSectioned(tester);
+      expect(focusIn<TvSourceGroupCard>(), isTrue);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+
+      expect(focusIn<ChoiceChip>(), isTrue);
+    });
+
     testWidgets('another group is a sideways press away, and takes the '
         'second row with it', (tester) async {
       await mountSectioned(tester);
@@ -667,6 +701,28 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       expect(find.text(meta.videosOfSeason(2).first.title), findsOneWidget);
       expect(focusedLabel(tester), '2', reason: 'focus stayed on the pill');
+    });
+
+    testWidgets('up from the group row goes to the episode these sources '
+        'are for', (tester) async {
+      await mountSeries(tester);
+      // Walk the episode row first, so the episode the sources belong to
+      // is not the one the row happens to start at.
+      await stepUpTo<TvEpisodeCard>(tester);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      final chosen = focusedEpisodeTitle();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      await stepDownTo<TvSourceGroupCard>(tester);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+
+      expect(focusIn<TvEpisodeCard>(), isTrue);
+      expect(
+        focusedEpisodeTitle(),
+        chosen,
+        reason: 'the card whose sources those were',
+      );
     });
 
     testWidgets('an up press from the episode row reaches the pills, '

@@ -44,21 +44,36 @@ import '../../widgets/focusable_tile.dart';
 ///   different thing wearing the same word. Nothing about opening a group
 ///   on a television is written down.
 ///
+/// **Up climbs the choices, not the screen.** A press up from a source
+/// goes to the group card that opened it -- which is rarely the card
+/// directly above, since a source card is half again as wide as a group
+/// card and the chosen group may be scrolled off to the left -- and a
+/// press up from the group row goes to whatever chose *it*
+/// ([TvSourceRows.onUp]: the episode whose sources these are). What the
+/// viewer walked down through is what they come back up through.
+///
 /// Closing the second row takes the card the remote was on off the screen
 /// with it, and nothing here puts the remote back: the enclosing
 /// [FocusScope] remembers what held focus before and hands it the ring
 /// when a focused node goes away, which is the group card that opened the
 /// row. A test walks that path, because "focus nowhere" on a television is
 /// a dead D-pad and the fallback is the only thing standing between them.
-class TvSourceRows extends StatelessWidget {
+class TvSourceRows extends StatefulWidget {
   const TvSourceRows({
     super.key,
     required this.groups,
     required this.openLabel,
     required this.onOpen,
     this.onFocusGroup,
+    this.onUp,
     this.defaultFocus = false,
   });
+
+  /// An up press from the group row, where the row above is whatever chose
+  /// these sources -- the episode, on a series. Null leaves the press to
+  /// directional focus, which is what a film wants: there is no episode
+  /// above it, and the order chips are the next row up.
+  final VoidCallback? onUp;
 
   /// The groups, in the order the row draws them.
   final List<TvSourceGroup> groups;
@@ -124,7 +139,35 @@ class TvSourceRows extends StatelessWidget {
       math.max(1, TvDensity.textFactorOf(context));
 
   @override
+  State<TvSourceRows> createState() => _TvSourceRowsState();
+}
+
+class _TvSourceRowsState extends State<TvSourceRows> {
+  /// One focus node per group label, so the row of sources below can hand
+  /// the remote back to the card that opened it.
+  final Map<String, FocusNode> _nodes = {};
+
+  FocusNode _nodeFor(String label) =>
+      _nodes.putIfAbsent(label, () => FocusNode(debugLabel: 'group $label'));
+
+  /// Puts the remote on the card whose sources are the row below.
+  void _focusChosen() {
+    final label = widget.openLabel;
+    if (label != null) _nodeFor(label).requestFocus();
+  }
+
+  @override
+  void dispose() {
+    for (final node in _nodes.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final groups = widget.groups;
+    final openLabel = widget.openLabel;
     if (groups.isEmpty) return const SizedBox.shrink();
     final open = groups.where((g) => g.label == openLabel).firstOrNull;
     return Column(
@@ -134,27 +177,31 @@ class TvSourceRows extends StatelessWidget {
         SizedBox(
           height: TvSourceRows.groupRowHeight(context),
           child: _Strip(
+            onUp: widget.onUp,
             children: [
               for (final (index, group) in groups.indexed)
                 SizedBox(
                   width: TvSourceRows.groupCardWidth,
                   child: TvSourceGroupCard(
                     group: group,
+                    focusNode: _nodeFor(group.label),
                     chosen: group.label == openLabel,
-                    defaultFocus: defaultFocus && index == 0,
+                    defaultFocus: widget.defaultFocus && index == 0,
                     // Opening, not toggling: the remote standing here is
                     // already what opened this row, so a press that closed
                     // it again would make select mean the opposite of what
                     // it means everywhere else on the screen. Back is what
                     // closes a row.
-                    onTap: () => onOpen(group.label),
-                    onFocused: () => (onFocusGroup ?? onOpen)(group.label),
+                    onTap: () => widget.onOpen(group.label),
+                    onFocused: () =>
+                        (widget.onFocusGroup ?? widget.onOpen)(group.label),
                   ),
                 ),
             ],
           ),
         ),
-        if (open != null) TvSourceRow(sources: open.sources),
+        if (open != null)
+          TvSourceRow(sources: open.sources, onUp: _focusChosen),
       ],
     );
   }
@@ -167,10 +214,16 @@ class TvSourceRow extends StatelessWidget {
   const TvSourceRow({
     super.key,
     required this.sources,
+    this.onUp,
     this.defaultFocus = false,
   });
 
   final List<TvSource> sources;
+
+  /// An up press from a source, where the row above is the group card that
+  /// opened this one. Null on the last-used row, which nothing opened and
+  /// which has the ordinary rows above it.
+  final VoidCallback? onUp;
 
   /// Whether the first card is where the remote starts on this screen.
   final bool defaultFocus;
@@ -179,6 +232,7 @@ class TvSourceRow extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     height: TvSourceRows.sourceRowHeight(context),
     child: _Strip(
+      onUp: onUp,
       children: [
         for (final (index, source) in sources.indexed)
           SizedBox(
@@ -205,16 +259,25 @@ class TvSourceRow extends StatelessWidget {
 /// and down at its own ends, and for the same reason. Every other key
 /// passes, so up and down still leave the row.
 class _Strip extends StatelessWidget {
-  const _Strip({required this.children});
+  const _Strip({required this.children, this.onUp});
 
   final List<Widget> children;
+
+  /// Where an up press goes, when the row has a parent to climb to rather
+  /// than whatever happens to be drawn above it.
+  final VoidCallback? onUp;
 
   /// Left at the first card and right at the last stay where they are.
   /// The cards a source cannot be played from are not focus stops and so
   /// are not in this list, which is what makes the ends the ends.
-  static KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
+    final up = onUp;
+    if (key == LogicalKeyboardKey.arrowUp && up != null) {
+      up();
+      return KeyEventResult.handled;
+    }
     final back = key == LogicalKeyboardKey.arrowLeft;
     if (!back && key != LogicalKeyboardKey.arrowRight) {
       return KeyEventResult.ignored;
@@ -262,6 +325,7 @@ class TvSourceGroupCard extends StatelessWidget {
     required this.chosen,
     required this.onTap,
     this.onFocused,
+    this.focusNode,
     this.defaultFocus = false,
   });
 
@@ -276,6 +340,10 @@ class TvSourceGroupCard extends StatelessWidget {
   /// (see [TvSourceRows]).
   final VoidCallback? onFocused;
 
+  /// The node this card focuses with, so the row it opens can put the
+  /// remote back on it ([TvSourceRow.onUp]).
+  final FocusNode? focusNode;
+
   final bool defaultFocus;
 
   @override
@@ -285,6 +353,7 @@ class TvSourceGroupCard extends StatelessWidget {
     return FocusableTile(
       onTap: onTap,
       onFocused: onFocused,
+      focusNode: focusNode,
       defaultFocus: defaultFocus,
       borderRadius: _cardRadius,
       child: _CardBox(
