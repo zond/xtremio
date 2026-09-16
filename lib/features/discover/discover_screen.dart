@@ -47,6 +47,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     with SharedFieldScreen<DiscoverScreen, DiscoverState> {
   CoreClient? _client;
   CoreFieldNotifier? _discover;
+
+  /// The profile, for one thing only: what the addon behind a catalog is
+  /// called, so the catalog menu can gather its entries under it.
+  CoreFieldNotifier? _ctx;
   int _nextPageRequestedAt = -1;
 
   /// The catalog of the last `Load` this screen dispatched, which names its
@@ -60,9 +64,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final client = CoreScope.of(context);
     if (_client != client) {
       _discover?.dispose();
+      _ctx?.dispose();
       _client = client;
       _discover = CoreFieldNotifier(client, CoreField.discover)
         ..addListener(onFieldChanged);
+      _ctx = CoreFieldNotifier(client, CoreField.ctx)..addListener(_onCtx);
       _load(widget.request);
     }
     trackRoute();
@@ -72,7 +78,14 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void dispose() {
     releaseField();
     _discover?.dispose();
+    _ctx?.dispose();
     super.dispose();
+  }
+
+  /// An addon installed or uninstalled while this screen is up renames the
+  /// headings in the catalog menu, and nothing else here.
+  void _onCtx() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -144,7 +157,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             if (selectable != null && !selectable.isEmpty)
               _tvGroup(
                 isTv,
-                _FilterBar(selectable: selectable, onSelect: _select),
+                _FilterBar(
+                  selectable: selectable,
+                  profile: _ctx?.value == null
+                      ? null
+                      : ProfileState.fromCtx(_ctx!.value!),
+                  onSelect: _select,
+                ),
               ),
             Expanded(
               child: state == null
@@ -210,9 +229,18 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 /// Stateless: [onSelect] gets the request the engine attached to the chosen
 /// entry, and the bar re-renders from the next state's `selected` flags.
 class _FilterBar extends StatelessWidget {
-  const _FilterBar({required this.selectable, required this.onSelect});
+  const _FilterBar({
+    required this.selectable,
+    required this.profile,
+    required this.onSelect,
+  });
 
   final DiscoverSelectable selectable;
+
+  /// Names the addon behind each catalog; null before the profile has been
+  /// read, when the menu falls back to the manifest URL's host.
+  final ProfileState? profile;
+
   final ValueChanged<ResourceRequest> onSelect;
 
   /// Label of a non-required extra's `value: null` option.
@@ -231,6 +259,40 @@ class _FilterBar extends StatelessWidget {
   ];
 
   static String _identity(String label) => label;
+
+  /// What the addon providing a catalog is called: the installed addon's
+  /// own name, else the host of its manifest URL -- the same fallback the
+  /// stream list uses for an addon that has been uninstalled since.
+  String _addonName(String base) =>
+      profile?.installedAddon(base)?.manifest.name ??
+      Uri.tryParse(base)?.host ??
+      base;
+
+  /// The catalogs as menu entries, gathered under the addon that provides
+  /// them.
+  ///
+  /// Gathered here rather than trusted to arrive that way: the engine lists
+  /// the catalogs of every installed addon, and a heading drawn twice for
+  /// one addon reads as two addons of the same name. With only one addon
+  /// there is nothing to tell apart, so no heading is drawn at all.
+  List<FilterOption<ResourceRequest>> _catalogOptions() {
+    final byAddon = <String, List<SelectableOption>>{};
+    for (final catalog in selectable.catalogs) {
+      byAddon
+          .putIfAbsent(_addonName(catalog.request.base), () => [])
+          .add(catalog);
+    }
+    return [
+      for (final addon in byAddon.entries)
+        for (final catalog in addon.value)
+          FilterOption(
+            label: catalog.label,
+            selected: catalog.selected,
+            request: catalog.request,
+            group: byAddon.length > 1 ? addon.key : null,
+          ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -251,7 +313,7 @@ class _FilterBar extends StatelessWidget {
           if (selectable.catalogs.isNotEmpty)
             FilterMenu(
               label: 'Catalog',
-              options: _options(selectable.catalogs),
+              options: _catalogOptions(),
               onSelect: onSelect,
             ),
           for (final extra in selectable.extra)

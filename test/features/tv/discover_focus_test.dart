@@ -155,6 +155,36 @@ void main() {
     expect(focusedLabel(tester), 'Genre: Any');
   });
 
+  testWidgets('the catalog menu heads each addon\'s catalogs, and the remote '
+      'walks from one group into the next', (tester) async {
+    useScreen(tester, tvSize);
+    final core = FakeCoreClient(
+      state: {
+        CoreField.discover: loadDiscoverFixture(),
+        CoreField.ctx: loadFixture('ctx_logged_in.json'),
+      },
+    );
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    for (var i = 0; i < 3; i++) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+    }
+    expect(focusedLabel(tester), 'Catalog: Popular');
+
+    await press(tester, LogicalKeyboardKey.select);
+
+    expect(find.text('Cinemeta'), findsOneWidget, reason: 'a heading');
+    expect(find.text('Public Domain Movies'), findsOneWidget);
+    // And the remote steps over them: Cinemeta's three, then the next
+    // addon's, with no dead press in between.
+    expect(focusedLabel(tester), 'Popular');
+    for (final next in ['New', 'Featured', 'publicdomainmovies']) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), next);
+    }
+  });
+
   testWidgets('a Discover pushed over another screen starts on its first '
       'poster; the tab does not', (tester) async {
     useScreen(tester, tvSize);

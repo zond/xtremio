@@ -20,12 +20,23 @@ final class FilterOption<R> {
     required this.label,
     required this.selected,
     required this.request,
+    this.group,
   });
 
   /// Display-ready label.
   final String label;
   final bool selected;
   final R request;
+
+  /// What this option is listed under, in a menu that groups its entries:
+  /// Discover's catalogs are grouped by the addon that provides them, since
+  /// a profile of a dozen addons offers a list nobody can read and two
+  /// addons may both call a catalog `Popular`.
+  ///
+  /// Null in a menu that does not group, and options that share one are
+  /// expected to arrive together -- a header is drawn wherever this changes
+  /// from the option before, so an interleaved list would repeat it.
+  final String? group;
 }
 
 /// The options as a segmented button (wide layouts).
@@ -101,6 +112,13 @@ class FilterChips<R> extends StatelessWidget {
 /// is a text field whose only focusable part is its trailing arrow, and
 /// the menu it opens highlights entries in step with the arrow keys but
 /// picks one only on Enter, which a remote does not send.
+/// Whether [options] at [index] opens a group, and so is drawn under a
+/// heading naming it.
+bool _headsGroup<R>(List<FilterOption<R>> options, int index) {
+  final group = options[index].group;
+  return group != null && (index == 0 || options[index - 1].group != group);
+}
+
 class FilterMenu<R> extends StatelessWidget {
   const FilterMenu({
     super.key,
@@ -134,7 +152,10 @@ class FilterMenu<R> extends StatelessWidget {
       // A new option list (another type or catalog) gets a fresh menu, so
       // its text never shows an entry that no longer exists.
       key: ValueKey(
-        Object.hashAll([label, for (final option in options) option.label]),
+        Object.hashAll([
+          label,
+          for (final option in options) ...[option.label, option.group],
+        ]),
       ),
       label: Text(label),
       initialSelection: selectedIndex,
@@ -145,13 +166,21 @@ class FilterMenu<R> extends StatelessWidget {
         constraints: BoxConstraints(maxHeight: 44),
       ),
       dropdownMenuEntries: [
-        for (final (index, option) in options.indexed)
+        for (final (index, option) in options.indexed) ...[
+          // A heading, which is an entry that cannot be chosen: the value
+          // is negative so it can never collide with an option's index.
+          if (_headsGroup(options, index))
+            DropdownMenuEntry(
+              value: -index - 1,
+              label: option.group!,
+              enabled: false,
+            ),
           DropdownMenuEntry(value: index, label: option.label),
+        ],
       ],
       onSelected: (index) {
-        if (index != null && !options[index].selected) {
-          onSelect(options[index].request);
-        }
+        if (index == null || index < 0) return;
+        if (!options[index].selected) onSelect(options[index].request);
       },
     );
   }
@@ -215,7 +244,20 @@ class _FilterMenuButtonState<R> extends State<_FilterMenuButton<R>> {
         onOpen: () => _setOpen(true),
         onClose: () => _setOpen(false),
         menuChildren: [
-          for (final (index, option) in widget.options.indexed)
+          for (final (index, option) in widget.options.indexed) ...[
+            // A heading and not a stop: it takes no focus, so the D-pad
+            // walks from the last entry of one group to the first of the
+            // next without a dead press in between.
+            if (_headsGroup(widget.options, index))
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                child: Text(
+                  option.group!,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
             MenuItemButton(
               autofocus: index == (selectedIndex ?? 0),
               onPressed: () {
@@ -223,6 +265,7 @@ class _FilterMenuButtonState<R> extends State<_FilterMenuButton<R>> {
               },
               child: Text(option.label),
             ),
+          ],
         ],
         builder: (context, controller, _) => OutlinedButton.icon(
           focusNode: _button,

@@ -606,6 +606,51 @@ void main() {
     );
   });
 
+  testWidgets('the catalog menu gathers its entries under the addon that '
+      'provides them', (tester) async {
+    // A profile of a dozen addons offers a catalog list nobody can read,
+    // and two addons may both call one `Popular`. The headings say whose
+    // each is; they are entries that cannot be chosen.
+    useNarrowScreen(tester);
+    final core = FakeCoreClient(
+      state: {
+        CoreField.discover: loadDiscoverFixture(),
+        CoreField.ctx: loadFixture('ctx_logged_in.json'),
+      },
+    );
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find
+          .ancestor(
+            of: find.text('Catalog'),
+            matching: find.byType(DropdownMenu<int>),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+
+    for (final addon in ['Cinemeta', 'Public Domain Movies']) {
+      final heading = find.widgetWithText(MenuItemButton, addon).hitTestable();
+      expect(heading, findsOneWidget, reason: 'a heading for $addon');
+      expect(
+        tester.widget<MenuItemButton>(heading).onPressed,
+        isNull,
+        reason: 'a heading is not an entry the menu can land on',
+      );
+    }
+    expect(
+      tester
+          .widget<MenuItemButton>(
+            find.widgetWithText(MenuItemButton, 'Popular').hitTestable(),
+          )
+          .onPressed,
+      isNotNull,
+      reason: 'and the catalogs under it still are',
+    );
+  });
+
   testWidgets('hides the filter bar while nothing is selectable', (
     tester,
   ) async {
