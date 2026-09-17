@@ -157,7 +157,7 @@ flate2 = "1"
 # on zond/rqbit, and always the rev the stream-server pin above uses for
 # its enginefs: a different one puts two librqbits in the graph, the crate
 # compiled twice. Bump the two together.
-librqbit = { git = "https://github.com/zond/rqbit", rev = "cd4d660a9ede70d2484d9d5930ff19c126edc048", default-features = false, features = [
+librqbit = { git = "https://github.com/zond/rqbit", rev = "3cc8eef7a18a74d23b391cf1ee8f43c63b3b12d5", default-features = false, features = [
     "rust-tls",
     "http-api-client",
 ] }
