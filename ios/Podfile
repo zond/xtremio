@@ -39,5 +39,11 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    # GoogleCast needs iOS 16; flutter_chrome_cast's podspec still says 15,
+    # and a pod target left at the podspec's floor fails the same way the
+    # Swift package did. The platform above is the floor for every pod.
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+    end
   end
 end
