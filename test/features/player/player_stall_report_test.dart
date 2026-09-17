@@ -60,17 +60,29 @@ void main() {
       reason: "the open's own wait, before a frame, is not a stall",
     );
     harness.engine.emitBuffering(false);
-    harness.engine.emitPosition(const Duration(seconds: 3));
+    // On load mpv reports zero and then the resume point: a jump, not
+    // playback. The first field log had the open's wait counted as a
+    // stall because of it.
+    harness.engine.emitPosition(const Duration(seconds: 897));
+    harness.engine.emitBuffering(true);
+    await pumpEvents(tester);
+    expect(
+      harness.playhead.stalls,
+      isEmpty,
+      reason: 'a jump to the resume point is a load, not playback',
+    );
+    harness.engine.emitBuffering(false);
+    harness.engine.emitPosition(const Duration(milliseconds: 897_250));
     await pumpEvents(tester);
 
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(harness.playhead.stalls, [
       infoHash,
-    ], reason: 'the popup, after playing');
+    ], reason: 'the popup, after the position advanced by a tick');
 
     harness.engine.emitBuffering(false);
-    harness.engine.emitPosition(const Duration(seconds: 9));
+    harness.engine.emitPosition(const Duration(milliseconds: 897_500));
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(harness.playhead.stalls, [

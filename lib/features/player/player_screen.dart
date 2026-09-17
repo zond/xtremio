@@ -783,10 +783,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int _stalls = 0;
   DateTime? _stallStart;
 
-  /// Whether the position has moved since the current `open` -- the video
-  /// has been playing, so a buffering popup from here on is a stall the
-  /// server is told about ([_reportStall]), and not the open's own wait.
+  /// Whether the position has advanced by a tick since the current `open`
+  /// -- the video has been playing, so a buffering popup from here on is a
+  /// stall the server is told about ([_reportStall]), and not the open's
+  /// own wait. A tick, not any change: on load mpv reports position zero
+  /// and then the resume point, and that jump counted as playback once
+  /// (the first field log of the reports had the open's wait as stall one).
   bool _playedSinceOpen = false;
+
+  /// The most a position can move between two reports and still be
+  /// playback rather than a seek or a load; see [_playedSinceOpen].
+  static const Duration _playbackTick = Duration(seconds: 2);
 
   /// How many times the engine has reported an end of file that was not
   /// one for the media on screen. See [_onFalseEnd].
@@ -1465,7 +1472,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _positionSeen = true;
     if (position != _position.value) {
       _stillTicks = 0;
-      _playedSinceOpen = true;
+      final advanced = position - _position.value;
+      if (advanced > Duration.zero && advanced < _playbackTick) {
+        _playedSinceOpen = true;
+      }
       if (_positionStuck) {
         DiagnosticsLog.info(
           'player',

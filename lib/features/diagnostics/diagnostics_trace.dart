@@ -29,12 +29,11 @@ class DiagnosticsTraceSync {
 
   static const String title = 'Verbose logging';
 
-  /// What turning it on buys, on the tile: the two logs it opens up, and
-  /// that the player's half waits for the next player.
+  /// What turning it on buys, on the tile, in one line: the two logs it
+  /// opens up. (A longer version said why and when; on a settings tile
+  /// about verbosity that read as a joke.)
   static const String description =
-      'The streaming server says what its cache decided and why, and the '
-      'player logs its demuxer, stream and cache. For a report; the player '
-      'part applies when the next video opens.';
+      'Adds server cache decisions and player stream logs to the report.';
 
   /// The viewer's choice, and what tells this when it changes.
   final AppPrefs prefs;
