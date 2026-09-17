@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
 
@@ -89,5 +90,33 @@ void main() {
       infoHash,
       infoHash,
     ], reason: 'every stall is one report; the server counts them');
+  });
+
+  testWidgets('buffering after a seek is not a stall', (tester) async {
+    final harness = bunny();
+    await harness.pump(tester);
+    harness.engine.emitPosition(const Duration(seconds: 897));
+    harness.engine.emitPosition(const Duration(milliseconds: 897_250));
+    await pumpEvents(tester);
+
+    // A ten-second step with the arrow key: the buffering that follows is
+    // the new window filling, which the server sizes on its own.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    harness.engine.emitPosition(const Duration(milliseconds: 907_250));
+    harness.engine.emitBuffering(true);
+    await pumpEvents(tester);
+    expect(
+      harness.playhead.stalls,
+      isEmpty,
+      reason: 'a seek deepens nothing, whatever it waits for',
+    );
+
+    // Playing normally again, and the next popup is a stall.
+    harness.engine.emitBuffering(false);
+    harness.engine.emitPosition(const Duration(milliseconds: 907_500));
+    harness.engine.emitBuffering(true);
+    await pumpEvents(tester);
+    expect(harness.playhead.stalls, [infoHash]);
   });
 }

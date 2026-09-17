@@ -784,15 +784,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
   DateTime? _stallStart;
 
   /// Whether the position has advanced by a tick since the current `open`
-  /// -- the video has been playing, so a buffering popup from here on is a
-  /// stall the server is told about ([_reportStall]), and not the open's
-  /// own wait. A tick, not any change: on load mpv reports position zero
-  /// and then the resume point, and that jump counted as playback once
-  /// (the first field log of the reports had the open's wait as stall one).
-  bool _playedSinceOpen = false;
+  /// or the last seek -- the video is playing normally, so a buffering
+  /// popup from here on is a stall the server is told about
+  /// ([_reportStall]), and not the wait a load or a seek has anyway. A
+  /// tick, not any change: on load mpv reports position zero and then the
+  /// resume point, and that jump counted as playback once (the first field
+  /// log of the reports had the open's wait as stall one); and a seek's
+  /// buffering is the new window filling, which the server sizes for
+  /// itself -- zond does not want a seek to deepen the split.
+  bool _playingNormally = false;
 
   /// The most a position can move between two reports and still be
-  /// playback rather than a seek or a load; see [_playedSinceOpen].
+  /// playback rather than a seek or a load; see [_playingNormally].
   static const Duration _playbackTick = Duration(seconds: 2);
 
   /// How many times the engine has reported an end of file that was not
@@ -1173,7 +1176,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _openRetries = 0;
     _openError = null;
     _stalls = 0;
-    _playedSinceOpen = false;
+    _playingNormally = false;
     _falseEnds = 0;
     _openedAt = DateTime.now();
     _open(
@@ -1474,7 +1477,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _stillTicks = 0;
       final advanced = position - _position.value;
       if (advanced > Duration.zero && advanced < _playbackTick) {
-        _playedSinceOpen = true;
+        _playingNormally = true;
       }
       if (_positionStuck) {
         DiagnosticsLog.info(
@@ -1605,14 +1608,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  /// Tells the server the buffering popup is up after the video had been
-  /// playing -- what has it split one more piece ahead of the reader for
-  /// the rest of this video. Not the open's own wait, which is not a stall
-  /// and which the server sizes from the film's rate on its own; and only a
-  /// torrent this server is streaming, since the count is that engine's.
+  /// Tells the server the buffering popup is up while the video was playing
+  /// normally -- what has it split one more piece ahead of the reader for
+  /// the rest of this video. Not the wait after an open or a seek, which is
+  /// a window filling and which the server sizes from the film's rate on
+  /// its own ([_playingNormally]); and only a torrent this server is
+  /// streaming, since the count is that engine's.
   Future<void> _reportStall() async {
     final request = _torrentStatsRequest;
-    if (request == null || !_playedSinceOpen) return;
+    if (request == null || !_playingNormally) return;
     try {
       await _playheadReporter?.notePlayerStalled(infoHash: request.infoHash);
     } catch (_) {
@@ -2490,6 +2494,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ? upper
         : target;
     _position.value = clamped;
+    // The buffering that follows is the new window filling, not a stall;
+    // see [_playingNormally].
+    _playingNormally = false;
     if (_casting) {
       // The receiver will report the new position itself; showing it at
       // once keeps the bar from snapping back while the round trip runs.
@@ -4213,6 +4220,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // player being released must not be asked to do.
     if (!_stillOurs) return;
     _position.value = position;
+    _playingNormally = false;
     await _engine?.seek(position);
     await _engine?.play();
   }
