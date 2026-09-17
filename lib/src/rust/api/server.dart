@@ -64,6 +64,25 @@ Future<void> serverNoteDuration({
   durationSeconds: durationSeconds,
 );
 
+/// **Tells the server a player opened on this torrent**: what the player
+/// goes on to say about buffering ([`server_note_player_stalled`]) is this
+/// video's and not the last one's. Never errors and never blocks on the
+/// network; with no server running it is a no-op.
+Future<void> serverNotePlayerOpened({required String infoHash}) => RustLib
+    .instance
+    .api
+    .crateApiServerServerNotePlayerOpened(infoHash: infoHash);
+
+/// **Tells the server the player is buffering after having played** -- the
+/// popup is up and the frames have stopped. The one thing about a stall
+/// the server cannot see for itself; each report has it split one more
+/// piece ahead of the reader for the rest of this video. Never errors and
+/// never blocks on the network.
+Future<void> serverNotePlayerStalled({required String infoHash}) => RustLib
+    .instance
+    .api
+    .crateApiServerServerNotePlayerStalled(infoHash: infoHash);
+
 /// The embedded server's settings as JSON (the `values` of `GET /settings`:
 /// `cacheSize`, `btMaxConnections`, ...). Errors when it is not running.
 Future<String> serverSettings() =>

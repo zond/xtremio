@@ -358,6 +358,32 @@ pub fn note_duration(info_hash: &str, file_idx: i64, filters: &[String], duratio
     crate::env::CONCURRENT.block_on(handle.note_duration(info_hash, &spelling, filters, duration));
 }
 
+/// A player opened on `info_hash`; see
+/// [`stream_server::ServerHandle::note_player_opened`]. Nothing when the
+/// server is not running.
+pub fn note_player_opened(info_hash: &str) {
+    let Some(app) = crate::state::current() else {
+        return;
+    };
+    let Some(handle) = app.server.running() else {
+        return;
+    };
+    crate::env::CONCURRENT.block_on(handle.note_player_opened(info_hash));
+}
+
+/// The player of `info_hash` is buffering after having played; see
+/// [`stream_server::ServerHandle::note_player_stalled`]. Nothing when the
+/// server is not running.
+pub fn note_player_stalled(info_hash: &str) {
+    let Some(app) = crate::state::current() else {
+        return;
+    };
+    let Some(handle) = app.server.running() else {
+        return;
+    };
+    crate::env::CONCURRENT.block_on(handle.note_player_stalled(info_hash));
+}
+
 /// Pins `file_idx` of `info_hash` as an offline download: the engine is
 /// created with `trackers` when the hash is new, the file is kept wanted
 /// whatever else the torrent streams, and the torrent stops being evictable.

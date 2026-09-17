@@ -106,6 +106,37 @@ pub fn server_note_duration(
     })
 }
 
+/// **Tells the server a player opened on this torrent**: what the player
+/// goes on to say about buffering ([`server_note_player_stalled`]) is this
+/// video's and not the last one's. Never errors and never blocks on the
+/// network; with no server running it is a no-op.
+pub fn server_note_player_opened(info_hash: String) -> anyhow::Result<()> {
+    guarded_ok(move || crate::server::note_player_opened(&info_hash))
+}
+
+/// **Tells the server the player is buffering after having played** -- the
+/// popup is up and the frames have stopped. The one thing about a stall
+/// the server cannot see for itself; each report has it split one more
+/// piece ahead of the reader for the rest of this video. Never errors and
+/// never blocks on the network.
+pub fn server_note_player_stalled(info_hash: String) -> anyhow::Result<()> {
+    guarded_ok(move || crate::server::note_player_stalled(&info_hash))
+}
+
+#[cfg(test)]
+mod note_player_tests {
+    use super::{server_note_player_opened, server_note_player_stalled};
+
+    /// **A report with no server running is a quiet no-op**, like a
+    /// length: the player fires these as hints and must never see an
+    /// error for one.
+    #[test]
+    fn a_report_with_nothing_running_is_a_quiet_no_op() {
+        assert!(server_note_player_opened("a".repeat(40)).is_ok());
+        assert!(server_note_player_stalled("a".repeat(40)).is_ok());
+    }
+}
+
 #[cfg(test)]
 mod note_duration_tests {
     use super::server_note_duration;

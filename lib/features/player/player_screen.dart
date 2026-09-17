@@ -783,6 +783,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int _stalls = 0;
   DateTime? _stallStart;
 
+  /// Whether the position has moved since the current `open` -- the video
+  /// has been playing, so a buffering popup from here on is a stall the
+  /// server is told about ([_reportStall]), and not the open's own wait.
+  bool _playedSinceOpen = false;
+
   /// How many times the engine has reported an end of file that was not
   /// one for the media on screen. See [_onFalseEnd].
   int _falseEnds = 0;
@@ -1161,6 +1166,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _openRetries = 0;
     _openError = null;
     _stalls = 0;
+    _playedSinceOpen = false;
     _falseEnds = 0;
     _openedAt = DateTime.now();
     _open(
@@ -1459,6 +1465,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _positionSeen = true;
     if (position != _position.value) {
       _stillTicks = 0;
+      _playedSinceOpen = true;
       if (_positionStuck) {
         DiagnosticsLog.info(
           'player',
@@ -1575,6 +1582,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (_) {
       // A hint, like the playhead: one that does not arrive costs the
       // freshness of a hint.
+    }
+  }
+
+  /// Tells the server a player opened on the torrent, so the stalls it goes
+  /// on to report are counted for this video; see [_reportStall].
+  Future<void> _reportPlayerOpened(String infoHash) async {
+    try {
+      await _playheadReporter?.notePlayerOpened(infoHash: infoHash);
+    } catch (_) {
+      // A hint; see [_reportDuration].
+    }
+  }
+
+  /// Tells the server the buffering popup is up after the video had been
+  /// playing -- what has it split one more piece ahead of the reader for
+  /// the rest of this video. Not the open's own wait, which is not a stall
+  /// and which the server sizes from the film's rate on its own; and only a
+  /// torrent this server is streaming, since the count is that engine's.
+  Future<void> _reportStall() async {
+    final request = _torrentStatsRequest;
+    if (request == null || !_playedSinceOpen) return;
+    try {
+      await _playheadReporter?.notePlayerStalled(infoHash: request.infoHash);
+    } catch (_) {
+      // A hint; see [_reportDuration].
     }
   }
 
@@ -1749,6 +1781,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final request = TorrentStatsRequest.forStream(stream);
     if (request == null) return;
     _torrentStatsRequest = request;
+    _reportPlayerOpened(request.infoHash);
     final fallback = request.torrentLevel;
     _torrentStatsFallback = fallback == request ? null : fallback;
     _startStartupPolling();
@@ -2073,6 +2106,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onBuffering(bool buffering) {
     _logStall(buffering);
+    if (buffering) _reportStall();
     setState(() => _buffering = buffering);
     _syncStatsPolls();
     _restartControlsTimer();

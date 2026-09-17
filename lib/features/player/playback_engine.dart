@@ -514,10 +514,13 @@ class MediaKitEngine implements PlaybackEngine {
   /// a rate, not enough for the mode to engage -- so display sync never
   /// ran, and the 2779 were never its to fix. They were the decoder:
   /// `hwdec=mediacodec-copy` reading every frame back into a ByteBuffer at
-  /// 86% of a core (`hevc_mediacodec: Both surface and native_window are
-  /// NULL` in logcat says it outright) and delivering them late. Asking
-  /// for the direct decoder instead ([configurationFor]) took the process
-  /// from 224% of a core to 45% and the drops to `1 vo / 0 decoder`.
+  /// 86% of a core and delivering them late. Asking for the direct decoder
+  /// instead ([configurationFor]) took the process from 224% of a core to
+  /// 45% and the drops to `1 vo / 0 decoder`. (An earlier note here read
+  /// `hevc_mediacodec: Both surface and native_window are NULL` in logcat
+  /// as the copy path announcing itself. It is not: the line appears with
+  /// the direct decoder too, as the 2026-09-17 captures showed. The OSD's
+  /// hwdec row is the check, not the log.)
   ///
   /// What `display-resample` did in the meantime was put the audio on a
   /// correction loop against a rate mpv cannot verify, and the sound drew
@@ -818,9 +821,10 @@ class MediaKitEngine implements PlaybackEngine {
   /// Chromecast with Google TV that copy is 10-30 ms of a 41 ms frame on the
   /// one core the player shares with everything else, and the stats OSD
   /// showed it as `hwdec mediacodec-copy` with thousands of `vo` drops and
-  /// none at the decoder -- frames decoded fine and arrived late. ffmpeg
-  /// announces the mode at every decoder init with "Both surface and
-  /// native_window are NULL".
+  /// none at the decoder -- frames decoded fine and arrived late. (ffmpeg's
+  /// "Both surface and native_window are NULL" at decoder init does *not*
+  /// announce the copy mode, whatever an earlier note here said: the
+  /// direct decoder logs it too. The OSD's hwdec row is the only check.)
   ///
   /// So name the list mpv-android uses: direct `mediacodec` first -- mpv's
   /// AImageReader interop renders the codec's output as an external texture

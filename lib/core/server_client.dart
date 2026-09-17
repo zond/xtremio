@@ -145,6 +145,18 @@ abstract interface class PlayheadReporter {
     required List<String> filters,
     required double durationSeconds,
   });
+
+  /// A player opened on the torrent: what it goes on to report as stalls
+  /// is this video's, not the last one's. Any file of the torrent -- the
+  /// count the server keeps is the torrent's.
+  Future<void> notePlayerOpened({required String infoHash});
+
+  /// The buffering popup is up after the video had been playing -- the one
+  /// thing about a stall the server cannot see for itself. Each report has
+  /// it fetch one more piece ahead of the reader as split, joinable claims
+  /// for the rest of this video; see stream-server's
+  /// `retention::deadline`.
+  Future<void> notePlayerStalled({required String infoHash});
 }
 
 /// Changing something about the embedded server, which is one call: a
@@ -257,6 +269,14 @@ class ServerClient
     filters: filters,
     durationSeconds: durationSeconds,
   );
+
+  @override
+  Future<void> notePlayerOpened({required String infoHash}) =>
+      rust.serverNotePlayerOpened(infoHash: infoHash);
+
+  @override
+  Future<void> notePlayerStalled({required String infoHash}) =>
+      rust.serverNotePlayerStalled(infoHash: infoHash);
 
   /// Base URL of the running server, or null when stopped.
   Uri? get baseUrl {
