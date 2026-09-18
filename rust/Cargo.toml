@@ -162,6 +162,17 @@ librqbit = { git = "https://github.com/zond/rqbit", rev = "ea276741629f7ff6030b3
     "http-api-client",
 ] }
 
+# librqbit-dualstack-sockets 0.7.0 (upstream rqbit's socket crate, from
+# crates.io) binds a socket to a device by index on macOS and by name
+# everywhere else, and socket2 binds by name on Linux, Android and Fuchsia
+# only -- so the crate did not compile for iOS at all, and the iOS build
+# in CI failed on it. Our fork gates the by-index path on every Apple OS
+# (`target_vendor = "apple"`); on 0.7.0 exactly, one commit. A patch here
+# and nowhere else, because this is the only tree that builds for iOS;
+# drop it when upstream publishes the fix.
+[patch.crates-io]
+librqbit-dualstack-sockets = { git = "https://github.com/zond/librqbit-dualstack-sockets", rev = "b75382ccdc69f203a2146af37fa6680ecba18582" }
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 
