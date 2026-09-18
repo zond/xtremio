@@ -477,7 +477,8 @@ void main() {
       ]),
       sectioned: true,
     );
-    await press(tester, LogicalKeyboardKey.select);
+    // Open on arrival: the remote lands on the group and its row is out,
+    // with no select -- which would carry the remote down into the row.
     expect(sourceTitles(tester), ['Alpha 1080p']);
     expect(backLeaves(tester), isFalse, reason: 'a row is open');
 

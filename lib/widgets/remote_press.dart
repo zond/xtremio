@@ -51,6 +51,14 @@ class RemotePress extends StatefulWidget {
   State<RemotePress> createState() => _RemotePressState();
 }
 
+/// Sent up the tree when select taps a [RemotePress], after its `onTap`
+/// has run. The press itself stops at the card, so this is how an ancestor
+/// learns of it -- a [TvLadderRow] that moves the remote on after a select
+/// (`advanceOnSelect`). Not sent for a long press, nor for a touch.
+class RemotePressed extends Notification {
+  const RemotePressed();
+}
+
 class _RemotePressState extends State<RemotePress> {
   /// Running while an activate key is held and has not become a long press.
   Timer? _hold;
@@ -106,7 +114,10 @@ class _RemotePressState extends State<RemotePress> {
         if (!_down) return KeyEventResult.ignored;
         final tap = !_longPressed;
         _reset();
-        if (tap) widget.onTap?.call();
+        if (tap) {
+          widget.onTap?.call();
+          const RemotePressed().dispatch(context);
+        }
         return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

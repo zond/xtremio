@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/tv_ladder.dart';
 
+import 'package:xtremio/widgets/remote_press.dart';
+
 import '../support/tv.dart';
 
 /// One focus node per card, so a test can put the remote somewhere to
@@ -150,5 +152,112 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowDown);
 
     expect(loose, hasLength(1), reason: 'the ladder took no part in it');
+  });
+
+  group('select on a row where landing already chooses', () {
+    /// Rows 0 and 20, the top one moving on after select when [advance];
+    /// its cards are plain buttons, or [RemotePress] tiles when [remote].
+    /// Every press of a top card is counted in [pressed].
+    Widget advancing({
+      required bool advance,
+      required bool remote,
+      required List<String> pressed,
+    }) {
+      Widget topCard(String label) => remote
+          ? RemotePress(
+              onTap: () => pressed.add(label),
+              onLongPress: () => pressed.add('$label held'),
+              child: Focus(focusNode: _nodeFor(label), child: Text(label)),
+            )
+          : ElevatedButton(
+              focusNode: _nodeFor(label),
+              onPressed: () => pressed.add(label),
+              child: Text(label),
+            );
+      return DeviceScope(
+        profile: tv,
+        child: MaterialApp(
+          home: Scaffold(
+            body: TvLadder(
+              child: Column(
+                children: [
+                  TvLadderRow(
+                    level: 0,
+                    advanceOnSelect: advance,
+                    child: Row(children: [topCard('a'), topCard('b')]),
+                  ),
+                  TvLadderRow(
+                    level: 20,
+                    child: Row(children: [_card('c'), _card('d')]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    for (final remote in [false, true]) {
+      final kind = remote ? 'a remote-press tile' : 'a plain button';
+      testWidgets('on $kind, select does what the card does and moves down', (
+        tester,
+      ) async {
+        useScreen(tester, tvSize);
+        final pressed = <String>[];
+        await tester.pumpWidget(
+          advancing(advance: true, remote: remote, pressed: pressed),
+        );
+        _nodeFor('b').requestFocus();
+        await tester.pumpAndSettle();
+
+        await press(tester, LogicalKeyboardKey.select);
+
+        expect(pressed, ['b'], reason: "the card's own action still runs");
+        expect(_focused(), 'c', reason: 'and then what down does');
+      });
+    }
+
+    for (final remote in [false, true]) {
+      final kind = remote ? 'a remote-press tile' : 'a plain button';
+      testWidgets('on $kind in a row not marked for it, select stays put', (
+        tester,
+      ) async {
+        useScreen(tester, tvSize);
+        final pressed = <String>[];
+        await tester.pumpWidget(
+          advancing(advance: false, remote: remote, pressed: pressed),
+        );
+        _nodeFor('a').requestFocus();
+        await tester.pumpAndSettle();
+
+        await press(tester, LogicalKeyboardKey.select);
+
+        expect(pressed, ['a']);
+        expect(_focused(), 'a');
+      });
+    }
+
+    testWidgets('a held select is the card\'s, and the remote stays', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      final pressed = <String>[];
+      await tester.pumpWidget(
+        advancing(advance: true, remote: true, pressed: pressed),
+      );
+      _nodeFor('a').requestFocus();
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+      await tester.pump(
+        RemotePress.holdDuration + const Duration(milliseconds: 50),
+      );
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+
+      expect(pressed, ['a held']);
+      expect(_focused(), 'a', reason: 'a long press is not a choice made');
+    });
   });
 }

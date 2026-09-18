@@ -462,11 +462,12 @@ void main() {
       expect(find.text('Beta 1080p'), findsOneWidget);
 
       // And select on the card that is already open leaves it open, rather
-      // than toggling the row away under the remote.
+      // than toggling the row away under the remote -- and goes down into
+      // it, since the landing already chose it.
       await press(tester, LogicalKeyboardKey.select);
 
       expect(find.text('Beta 1080p'), findsOneWidget);
-      expect(focusedLabel(tester), '1080p', reason: 'focus stayed');
+      expect(focusedLabel(tester), 'Beta 1080p', reason: 'down into the row');
       // Every rung is still on the screen, and the chosen one says so.
       final cards = tester
           .widgetList<TvSourceGroupCard>(find.byType(TvSourceGroupCard))
@@ -478,10 +479,6 @@ void main() {
         groupLabelStyle(tester, '2160p').fontWeight,
         isNot(FontWeight.w700),
       );
-
-      // And the source it revealed is the next thing down.
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusedLabel(tester), 'Beta 1080p');
     });
 
     testWidgets('up from a source goes to the group that opened it, not to '
@@ -546,12 +543,14 @@ void main() {
     testWidgets('another group is a sideways press away, and takes the '
         'second row with it', (tester) async {
       await mountSectioned(tester);
-      await press(tester, LogicalKeyboardKey.select);
-      expect(find.text('Alpha 2160p'), findsOneWidget);
+      expect(
+        find.text('Alpha 2160p'),
+        findsOneWidget,
+        reason: 'open on arrival',
+      );
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), '1080p', reason: 'no press back first');
-      await press(tester, LogicalKeyboardKey.select);
 
       expect(find.text('Beta 1080p'), findsOneWidget);
       expect(find.text('Alpha 2160p'), findsNothing);
@@ -773,7 +772,11 @@ void main() {
 
       await press(tester, LogicalKeyboardKey.select);
       expect(find.text(meta.videosOfSeason(2).first.title), findsOneWidget);
-      expect(focusedLabel(tester), '2', reason: 'focus stayed on the pill');
+      expect(
+        focusedEpisodeTitle(),
+        meta.videosOfSeason(2).first.title,
+        reason: 'select on a pill goes down into its episodes',
+      );
     });
 
     testWidgets('the walk down from the title reaches the pills, and the '
@@ -806,6 +809,34 @@ void main() {
         focusedEpisodeTitle(),
         chosen,
         reason: 'the card the remote left, not the one nearest the press',
+      );
+    });
+
+    testWidgets('select on an episode goes where down goes', (tester) async {
+      // Landing on an episode already loads its sources, so select had
+      // nothing left to do and viewers pressed it and saw nothing happen.
+      // It does what down does now: whichever of the heading's controls
+      // is next, the same stop a press down reaches.
+      await mountSeries(tester);
+      await stepUpTo<TvEpisodeCard>(tester);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      final episode = focusedEpisodeTitle();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      final below = focusedTooltip() ?? focusedLabel(tester);
+      expect(focusIn<TvEpisodeCard>(), isFalse, reason: 'down left the row');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedEpisodeTitle(), episode, reason: 'back where it was');
+
+      await press(tester, LogicalKeyboardKey.select);
+
+      expect(focusIn<TvEpisodeCard>(), isFalse);
+      expect(
+        focusedTooltip() ?? focusedLabel(tester),
+        below,
+        reason: 'the stop down reaches',
       );
     });
 

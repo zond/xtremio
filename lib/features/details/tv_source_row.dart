@@ -195,6 +195,7 @@ class _TvSourceRowsState extends State<TvSourceRows> {
       children: [
         TvLadderRow(
           level: widget.groupLevel,
+          advanceOnSelect: true,
           child: SizedBox(
             height: TvSourceRows.groupRowHeight(context),
             child: _Strip(

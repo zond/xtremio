@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../shell/device_profile.dart';
+import 'remote_press.dart';
 
 /// Vertical navigation on a television, by level rather than by distance.
 ///
@@ -24,6 +26,13 @@ import '../shell/device_profile.dart';
 /// alone** rather than swallowed, so directional focus still gets its go.
 /// Swallowing it is a dead D-pad, which is the one outcome worse than
 /// landing somewhere unexpected.
+///
+/// **On a row where landing already chooses, select moves on**
+/// ([TvLadderRow.advanceOnSelect]). A season pill switches the season when
+/// the remote lands on it, an episode loads its streams, a source group
+/// opens: by the time select is pressed there is nothing left for it to
+/// do, and viewers pressed it and saw nothing happen. On those rows select
+/// still does what the card does, and then what down does.
 ///
 /// Levels are numbers rather than positions in a list because the rows
 /// they name come and go: a film has no episode row, a title nobody has
@@ -91,12 +100,23 @@ class TvLadderController {
 ///
 /// Off a television this is its child and nothing else.
 class TvLadderRow extends StatefulWidget {
-  const TvLadderRow({super.key, required this.level, required this.child});
+  const TvLadderRow({
+    super.key,
+    required this.level,
+    this.advanceOnSelect = false,
+    required this.child,
+  });
 
   /// Where this row sits in the walk, low to high. The screens that use
   /// this leave gaps between them, so a row that only sometimes exists can
   /// be dropped in without renumbering the rest.
   final int level;
+
+  /// Whether select, once the card has done what it does, also moves the
+  /// remote down a row. For rows whose cards act on focus -- see [TvLadder].
+  /// Not for a row whose select is the point: a button, a sort chip, a
+  /// source that plays.
+  final bool advanceOnSelect;
 
   final Widget child;
 
@@ -163,9 +183,36 @@ class TvLadderRowState extends State<TvLadderRow> {
     if (index >= 0) _remembered = index;
   }
 
+  /// Moves the remote down a row once the frame the card's own action
+  /// schedules has been built: an episode chosen by select may put the rows
+  /// below on screen, and a move made before them would step past them.
+  void _advance() {
+    _onFocusChange(true);
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _ladder?.move(widget.level, up: false);
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
+
+  /// A card built on [RemotePress] takes select for itself, so the press
+  /// never reaches [_onKey]; it says it was pressed instead.
+  bool _onActivated(RemotePressed notification) {
+    _advance();
+    return true;
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
+    // A card that is a plain Flutter control activates through the app's
+    // shortcuts, above this row, so the press passes through here first:
+    // left alone for the control to act on, and the move follows it.
+    if (widget.advanceOnSelect &&
+        event is KeyDownEvent &&
+        RemotePress.activateKeys.contains(key)) {
+      _advance();
+      return KeyEventResult.ignored;
+    }
     final up = key == LogicalKeyboardKey.arrowUp;
     if (!up && key != LogicalKeyboardKey.arrowDown) {
       return KeyEventResult.ignored;
@@ -185,7 +232,12 @@ class TvLadderRowState extends State<TvLadderRow> {
       onFocusChange: _onFocusChange,
       onKeyEvent: _onKey,
       includeSemantics: false,
-      child: widget.child,
+      child: widget.advanceOnSelect
+          ? NotificationListener<RemotePressed>(
+              onNotification: _onActivated,
+              child: widget.child,
+            )
+          : widget.child,
     );
   }
 }

@@ -1040,6 +1040,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           SliverToBoxAdapter(
             child: TvLadderRow(
               level: _ladderSeasons,
+              advanceOnSelect: true,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: _SeasonSelector(
@@ -1054,6 +1055,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           SliverToBoxAdapter(
             child: TvLadderRow(
               level: _ladderEpisodes,
+              advanceOnSelect: true,
               child: TvEpisodeRow(
                 episodes: episodes,
                 selectedVideoId: _selectedVideoId(state),
