@@ -284,3 +284,41 @@ debug. The fix is the Linux renderer redesign in
 yet released. **No code change is needed here**: once a `media_kit_video`
 release includes it, `flutter pub upgrade media_kit_video` enables hardware
 rendering automatically. Android (the primary target) is unaffected.
+
+## Building for iOS
+
+The CI's iOS job compiles an unsigned release build (`make ios`) and fails,
+on purpose: getting past it takes a change to each of two upstream
+dependencies, and this project does not carry forks for a platform it does
+not ship. With both of these it compiles -- the build workflow on
+`c578980` passed its iOS job (run 35310774992) -- and nothing else was
+needed:
+
+1. **The Cast plugin's iOS floor.** `flutter_chrome_cast` 1.4.8 declares
+   iOS 15 in its `Package.swift` and podspec, but the GoogleCast SDK it
+   pulls in now requires iOS 16, so Xcode refuses the plugin's Swift
+   package target. The project's own minimum is already 16
+   (`ios/Podfile`, `ios/Runner.xcodeproj`), but no setting here reaches a
+   plugin's package target. Either raise the plugin's `.iOS("15.0")` and
+   podspec to 16.0 (a fork, depended on by git in `pubspec.yaml`), or build
+   through CocoaPods, where the Podfile does govern: run
+   `flutter config --no-enable-swift-package-manager` before building,
+   and pin every pod target in the Podfile's `post_install` hook:
+
+   ```ruby
+   target.build_configurations.each do |config|
+     config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+   end
+   ```
+
+2. **The socket crate's device bind.** `librqbit-dualstack-sockets` 0.7.0
+   (upstream rqbit's) binds a socket to an interface by index under
+   `target_os = "macos"` and by name everywhere else, and socket2 has the
+   by-name call on Linux, Android and Fuchsia only -- so iOS fails with
+   ``no method named `bind_device` found for reference `&Socket` ``.
+   The fix is widening both gates in `src/bind_device.rs` to
+   `target_vendor = "apple"`. It has to go in with
+   `[patch.crates-io]` in `rust/Cargo.toml`, pointing at a copy with that
+   change: `librqbit-utp`, also from crates.io, depends on the same crate
+   and re-exports its `BindDevice`, so a plain git dependency adds a
+   second copy and the two types do not match.
