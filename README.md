@@ -167,8 +167,46 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 | **macOS (desktop)** | ✅ Built weekly in CI (`build.yml`) | Native Rust + media_kit; unsigned, and needs a Mac to build yourself -- there is none in the project. |
 | **Android** | ✅ Supported | Rust cross-compiles to the NDK and is embedded as a native lib; the primary mobile target ([ANDROID.md](ANDROID.md)). |
 | **Android TV / Google TV** | ✅ Supported | The same app, not a separate build; install the APK for the ABI the box reports -- a Chromecast with Google TV is 32-bit, `make apk-tv` ([ANDROID.md](ANDROID.md)). |
-| **iOS** | ❌ Does not build today | CI compiles it and it fails in an upstream crate (`librqbit-dualstack-sockets` 0.7.0 calls a socket2 method iOS does not have). Past that, there is no signing identity here, the App Store is out on GPL-3 (see [License](#license)), and iOS throttles background work. |
+| **iOS** | ❌ Does not build as checked in | Two upstream dependencies do not build for iOS as released; with the two changes in [Building for iOS](#building-for-ios) it compiles. Past that, there is no signing identity here, the App Store is out on GPL-3 (see [License](#license)), and iOS throttles background work. |
 | **Web** | ❌ Not possible | A browser cannot do BitTorrent -- no raw sockets, no local server, no libmpv. A thin client onto a separate server is a different architecture, not this app. |
+
+### Building for iOS
+
+The CI's iOS job compiles an unsigned release build (`make ios`) and fails,
+on purpose: getting past it takes a change to each of two upstream
+dependencies, and this project does not carry forks for a platform it does
+not ship. With both of these it compiles -- the build workflow on
+`c578980` passed its iOS job (run 35310774992) -- and nothing else was
+needed:
+
+1. **The Cast plugin's iOS floor.** `flutter_chrome_cast` 1.4.8 declares
+   iOS 15 in its `Package.swift` and podspec, but the GoogleCast SDK it
+   pulls in now requires iOS 16, so Xcode refuses the plugin's Swift
+   package target. The project's own minimum is already 16
+   (`ios/Podfile`, `ios/Runner.xcodeproj`), but no setting here reaches a
+   plugin's package target. Either raise the plugin's `.iOS("15.0")` and
+   podspec to 16.0 (a fork, depended on by git in `pubspec.yaml`), or build
+   through CocoaPods, where the Podfile does govern: run
+   `flutter config --no-enable-swift-package-manager` before building,
+   and pin every pod target in the Podfile's `post_install` hook:
+
+   ```ruby
+   target.build_configurations.each do |config|
+     config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
+   end
+   ```
+
+2. **The socket crate's device bind.** `librqbit-dualstack-sockets` 0.7.0
+   (upstream rqbit's) binds a socket to an interface by index under
+   `target_os = "macos"` and by name everywhere else, and socket2 has the
+   by-name call on Linux, Android and Fuchsia only -- so iOS fails with
+   ``no method named `bind_device` found for reference `&Socket` ``.
+   The fix is widening both gates in `src/bind_device.rs` to
+   `target_vendor = "apple"`. It has to go in with
+   `[patch.crates-io]` in `rust/Cargo.toml`, pointing at a copy with that
+   change: `librqbit-utp`, also from crates.io, depends on the same crate
+   and re-exports its `BindDevice`, so a plain git dependency adds a
+   second copy and the two types do not match.
 
 ## What is next
 

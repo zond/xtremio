@@ -64,13 +64,7 @@ macos:
 
 # There is no signing identity to build against, so this answers whether the
 # iOS half compiles and nothing else -- the .app it leaves cannot be installed.
-# Built through CocoaPods, not Swift Package Manager: flutter_chrome_cast's
-# Package.swift declares iOS 15 while the GoogleCast package it pulls in
-# now needs 16, and Xcode refuses the package target. Under CocoaPods the
-# Podfile's platform (16) governs. The config is Flutter's global one; iOS
-# is compile-only here and nobody builds it by hand.
 ios:
-	flutter config --no-enable-swift-package-manager
 	flutter build ios --release --no-codesign $(DEFINES) $(FLAGS)
 
 run:
