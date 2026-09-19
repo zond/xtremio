@@ -580,19 +580,51 @@ pub fn shutdown() -> anyhow::Result<()> {
     let Some(app) = crate::state::take() else {
         return Ok(());
     };
+    retire(&app)
+}
+
+/// How long [`retire`] waits for the engine's queued storage writes.
+/// Bounded because a sequential effect is not always a disk write, and an
+/// exit that hangs on one is worse than one that loses the last of them.
+const SHUTDOWN_FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// [`shutdown`]'s teardown of a state already taken out of the process.
+fn retire(app: &AppState) -> anyhow::Result<()> {
     if app.core.runtime_mut().take().is_some() {
         tracing::info!("stremio-core runtime stopped");
+    }
+    // The engine persists a bucket by queuing its write and returning
+    // (`env::XtremioEnv::exec_sequential`), so the last dispatch -- the
+    // playback progress the app sends on its way out -- has returned long
+    // before its library write has run. Nothing can queue another once the
+    // runtime is gone but what is already queued, and that is waited for.
+    if !env::wait_for_sequential(SHUTDOWN_FLUSH_TIMEOUT) {
+        tracing::warn!("stremio-core storage writes still queued at shutdown; not waiting longer");
     }
     // Whatever the throttle says: the last minute of answers is the part
     // that would otherwise never reach the file. Of *this* state, which is
     // the only one anything still counting can be counting into.
-    crate::addon_health::flush_in(&app);
-    server::stop_in(&app)
+    crate::addon_health::flush_in(app);
+    server::stop_in(app)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A shutdown waits for the storage writes the engine has queued: a
+    /// dispatch returns before its persist has run, and the app's exit path
+    /// shuts down right after sending the last playback progress.
+    #[test]
+    fn a_shutdown_waits_for_queued_storage_writes() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        XtremioEnv::exec_sequential(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            let _ = tx.send(());
+        });
+        retire(&AppState::default()).expect("retire");
+        assert!(rx.try_recv().is_ok(), "the queued write ran first");
+    }
 
     #[test]
     fn loopback_urls_are_retargeted_but_remote_ones_kept() {

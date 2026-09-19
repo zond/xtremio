@@ -11,16 +11,21 @@
 //!   standing up a second one.
 //! - **storage**: one JSON file per key under a directory Dart chooses;
 //!   writes are temp-then-fsync-then-rename so a crash can never leave a
-//!   half-written bucket.
+//!   half-written bucket, and a write never lands over a newer one
+//!   ([`StorageOrder`]).
 //! - **executors**: two lib-owned tokio runtimes, `CONCURRENT` for parallel
 //!   effects and a single-worker `SEQUENTIAL` one because the engine relies
-//!   on storage/library persistence effects running in order.
+//!   on storage/library persistence effects running in order. What is
+//!   queued on `SEQUENTIAL` is counted, so a shutdown can wait for the
+//!   last writes ([`wait_for_sequential`]).
 //! - **time**: `chrono::Utc::now()`; analytics are stubbed (built without the
 //!   `analytics` feature).
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::{LazyLock, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Condvar, LazyLock, Mutex, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
@@ -63,6 +68,80 @@ pub static SEQUENTIAL: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
         .enable_all()
         .build()
         .expect("build sequential tokio runtime")
+});
+
+/// How many futures [`XtremioEnv::exec_sequential`] has queued that have not
+/// finished, and the condition a shutdown waits on for it to reach zero.
+static SEQUENTIAL_IN_FLIGHT: (Mutex<usize>, Condvar) = (Mutex::new(0), Condvar::new());
+
+/// One queued sequential future, counted from the moment it is queued until
+/// it is dropped -- finished, or thrown away with its runtime.
+struct InFlight;
+
+impl InFlight {
+    fn new() -> Self {
+        *SEQUENTIAL_IN_FLIGHT
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) += 1;
+        Self
+    }
+}
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        let (count, settled) = &SEQUENTIAL_IN_FLIGHT;
+        let mut count = count
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *count = count.saturating_sub(1);
+        if *count == 0 {
+            settled.notify_all();
+        }
+    }
+}
+
+/// Waits, for at most `timeout`, until nothing queued on `SEQUENTIAL` is
+/// still to run; `false` when the time ran out first.
+///
+/// For a shutdown. The engine persists a bucket by queuing the write here
+/// and returning, so a dispatch that has returned is not a library that is
+/// on disk: an app that exits right after a progress update loses it, and
+/// the exit path says it flushes library progress. What is waited for
+/// includes whatever those futures queue behind themselves, since the count
+/// only reaches zero when nothing is left.
+pub(crate) fn wait_for_sequential(timeout: Duration) -> bool {
+    let (count, settled) = &SEQUENTIAL_IN_FLIGHT;
+    let count = count
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (_count, waited) = settled
+        .wait_timeout_while(count, timeout, |count| *count > 0)
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    !waited.timed_out()
+}
+
+/// The order `set_storage` was asked for writes in, which is the order the
+/// engine meant them in: it serializes a bucket, and asks for its write,
+/// inside `Runtime::dispatch` under the model's write lock.
+///
+/// It then *queues* the write after letting that lock go, and two
+/// dispatchers can queue theirs the other way round: the older library
+/// snapshot runs second and is what stays on disk. So each write carries
+/// its place in the order it was asked for, and one that finds a later
+/// write to the same file already done is dropped -- it has nothing the
+/// file does not already hold a newer copy of.
+struct StorageOrder {
+    next: AtomicU64,
+    /// Per file, the place of the last write that landed. Also held across
+    /// the write itself, so "is there a newer one" and the write cannot be
+    /// split by another write to the same file.
+    landed: Mutex<HashMap<PathBuf, u64>>,
+}
+
+static STORAGE_ORDER: LazyLock<StorageOrder> = LazyLock::new(|| StorageOrder {
+    next: AtomicU64::new(0),
+    landed: Mutex::new(HashMap::new()),
 });
 
 /// A reqwest builder whose TLS trust is the compiled-in Mozilla root set
@@ -418,8 +497,19 @@ impl Env for XtremioEnv {
             Some(Err(error)) => return future::err(EnvError::Serde(error.to_string())).boxed_env(),
             None => None,
         };
+        // Taken now, while the engine still holds the model's lock, not when
+        // the write runs: see [`StorageOrder`].
+        let place = STORAGE_ORDER.next.fetch_add(1, Ordering::SeqCst);
         future::lazy(move |_| {
             let path = path.ok_or(EnvError::StorageUnavailable)?;
+            let mut landed = STORAGE_ORDER
+                .landed
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if landed.get(&path).is_some_and(|last| *last > place) {
+                tracing::debug!(path = %path.display(), "a newer write of this bucket has landed; dropping this one");
+                return Ok(());
+            }
             match serialized {
                 Some(bytes) => write_atomically(&path, &bytes)
                     .map_err(|error| EnvError::StorageWriteError(error.to_string())),
@@ -428,7 +518,9 @@ impl Env for XtremioEnv {
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
                     Err(error) => Err(EnvError::StorageWriteError(error.to_string())),
                 },
-            }
+            }?;
+            landed.insert(path, place);
+            Ok(())
         })
         .boxed_env()
     }
@@ -438,7 +530,13 @@ impl Env for XtremioEnv {
     }
 
     fn exec_sequential<F: Future<Output = ()> + Send + 'static>(future: F) {
-        SEQUENTIAL.spawn(future);
+        // Counted from here, not from when the worker gets to it: a future
+        // queued behind a slow one is as unwritten as the slow one is.
+        let in_flight = InFlight::new();
+        SEQUENTIAL.spawn(async move {
+            let _in_flight = in_flight;
+            future.await
+        });
     }
 
     fn now() -> DateTime<Utc> {
@@ -505,6 +603,45 @@ mod tests {
     use stremio_core::constants::{SCHEMA_VERSION, SCHEMA_VERSION_STORAGE_KEY};
 
     use super::*;
+
+    /// Writes land in the order they were asked for, whatever order they
+    /// run in: the engine asks under the model's lock and queues after
+    /// letting it go, so two dispatchers can queue theirs crosswise.
+    #[test]
+    fn an_older_write_queued_last_does_not_land_over_a_newer_one() {
+        with_storage_dir(|_| {
+            let older = XtremioEnv::set_storage("ordered", Some(&1u32));
+            let newer = XtremioEnv::set_storage("ordered", Some(&2u32));
+            block_on(newer).expect("the newer write");
+            block_on(older).expect("the older write is no error");
+            assert_eq!(
+                block_on(XtremioEnv::get_storage::<u32>("ordered")).expect("read"),
+                Some(2)
+            );
+            // And a later ask still lands.
+            block_on(XtremioEnv::set_storage("ordered", Some(&3u32))).expect("write");
+            assert_eq!(
+                block_on(XtremioEnv::get_storage::<u32>("ordered")).expect("read"),
+                Some(3)
+            );
+        });
+    }
+
+    /// What is queued on the sequential runtime is waited for, including
+    /// what it queues behind itself.
+    #[test]
+    fn a_shutdown_can_wait_for_the_sequential_queue() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        XtremioEnv::exec_sequential(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            XtremioEnv::exec_sequential(async move {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                let _ = tx.send(());
+            });
+        });
+        assert!(wait_for_sequential(Duration::from_secs(10)));
+        assert!(rx.try_recv().is_ok(), "the queue was waited out");
+    }
 
     #[derive(Debug, PartialEq, Serialize, Deserialize)]
     struct Item {
