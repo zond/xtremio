@@ -75,24 +75,50 @@ void main() {
 
     test('scrubs the path of an addon manifest URL, and URL credentials', () {
       // A debrid key rides in the path of a configured addon's manifest.
+      // An http(s) one goes down to its origin with every other URL on
+      // somebody else's host; the manifest rule is still what catches a
+      // scheme the URL pass does not read.
       expect(
         redactSecrets('addon https://tor.example.com/DEBRIDKEY/manifest.json'),
-        'addon https://tor.example.com/<redacted>/manifest.json',
+        'addon https://tor.example.com/…',
       );
       expect(
         redactSecrets('stremio://x.io/a/b/manifest.json opened'),
         'stremio://x.io/<redacted>/manifest.json opened',
       );
-      // An unconfigured addon's manifest has no secret in it, and its host
-      // is what names the addon in a report.
+      // The host is what names the addon in a report, and it stays.
       expect(
         redactSecrets('https://v3-cinemeta.strem.io/manifest.json'),
-        'https://v3-cinemeta.strem.io/manifest.json',
+        'https://v3-cinemeta.strem.io/…',
       );
       expect(
         redactSecrets('fetch https://user:pass@host/x'),
-        'fetch https://<redacted>@host/x',
+        'fetch https://host/…',
       );
+    });
+
+    test('reduces a URL on somebody else\'s host to its origin', () {
+      // Lines the Dart side never composed: the Rust half writes the
+      // archive and proxy URLs it was given, a debrid link's token signed
+      // into the path. And lines written whole under Verbose logging are
+      // still in the ring after it is turned off.
+      const line =
+          'WARN stream_server::routes::archive: fetch failed '
+          'url=https://xx12.download.real-debrid.com/d/RDSIGNEDTOKEN0123/Movie.rar '
+          'proxy=http://127.0.0.1:11470/proxy/d=https%3A%2F%2Fcomet.example'
+          '&p=PLAYERTOKEN/CONFIGKEY/playback/abc';
+      final redacted = redactSecrets(line);
+      expect(
+        redacted,
+        'WARN stream_server::routes::archive: fetch failed '
+        'url=https://xx12.download.real-debrid.com/… '
+        'proxy=http://127.0.0.1:11470/proxy/d=comet.example/…',
+      );
+      // The scrub is the scrub whatever the switch says: a report asked
+      // for redacted while Verbose logging is on is redacted too.
+      addTearDown(() => DiagnosticsLog.unredacted = false);
+      DiagnosticsLog.unredacted = true;
+      expect(redactSecrets(line), redacted);
     });
 
     test('leaves a field that holds nothing, and its punctuation, alone', () {
@@ -252,19 +278,35 @@ void main() {
     });
 
     test('keeps the path only where the path is ours', () {
+      addTearDown(DiagnosticsLog.reset);
       // The LAN listener's address, as a receiver is handed it: the same
       // `/{infoHash}/{fileIdx}` the server serves over loopback.
+      DiagnosticsLog.noteOwnServer(Uri.parse('http://192.168.1.20:39271/'));
+      DiagnosticsLog.noteOwnServer(Uri.parse('http://[fd00::7]:39271/'));
       expect(
         DiagnosticsLog.url(Uri.parse('http://192.168.1.20:39271/abc123/0')),
         'http://192.168.1.20:39271/abc123/0',
       );
       expect(
-        DiagnosticsLog.url(Uri.parse('http://10.0.0.7:39271/abc123/0')),
-        'http://10.0.0.7:39271/abc123/0',
-      );
-      expect(
         DiagnosticsLog.url(Uri.parse('http://[fd00::7]:39271/abc123/0')),
         'http://[fd00::7]:39271/abc123/0',
+      );
+      // A private address is not ours for being private: an addon hosted
+      // on the viewer's own LAN carries its config -- debrid key and all --
+      // in its path. Nor is another port on our own listener's host.
+      expect(
+        DiagnosticsLog.url(
+          Uri.parse('http://192.168.1.5:7000/realdebrid=RDKEY/stream/x.json'),
+        ),
+        'http://192.168.1.5:7000/…',
+      );
+      expect(
+        DiagnosticsLog.url(Uri.parse('http://192.168.1.20:8080/CONFIG/x')),
+        'http://192.168.1.20:8080/…',
+      );
+      expect(
+        DiagnosticsLog.url(Uri.parse('http://10.0.0.7:39271/abc123/0')),
+        'http://10.0.0.7:39271/…',
       );
       // A debrid host signs its token into the path; Torrentio puts the
       // debrid API key there. Neither is a path this app wrote.
@@ -404,6 +446,34 @@ void main() {
         contains('DEADBEEF0011'),
         reason: 'on: as it was logged',
       );
+    });
+
+    test('a line written whole under Verbose logging leaves scrubbed once '
+        'it is off', () {
+      // On, play a Comet stream, off, copy the report into a public issue:
+      // the lines from the verbose stretch are still in the 400-line ring.
+      addTearDown(() => DiagnosticsLog.unredacted = false);
+      final lines = captureDiagnostics();
+      DiagnosticsLog.unredacted = true;
+      DiagnosticsLog.info(
+        'player',
+        'open http://127.0.0.1:46503/proxy/d=https%3A%2F%2Fcomet.example'
+            '&p=PLAYERTOKEN/COMETCONFIG/playback/abc at 0s',
+      );
+      DiagnosticsLog.unredacted = false;
+      final report = formatDiagnostics(
+        snapshot: DiagnosticsSnapshot(
+          coreVersion: '0.1.0',
+          logLines: [for (final line in lines) line],
+        ),
+        platform: 'android',
+        osVersion: 'Android 14',
+        at: DateTime.utc(2026, 9, 19),
+      );
+      expect(lines.single, contains('COMETCONFIG'), reason: 'written whole');
+      expect(report, isNot(contains('COMETCONFIG')));
+      expect(report, isNot(contains('PLAYERTOKEN')));
+      expect(report, contains('/proxy/d=comet.example/…'));
     });
 
     test('heads the report with the build, device and server', () {

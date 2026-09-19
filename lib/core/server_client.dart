@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../src/rust/api/server.dart' as rust;
+import 'diagnostics_log.dart';
 import 'state/background_traffic.dart';
 import 'state/dht_status.dart';
 import 'state/server_storage.dart';
@@ -426,7 +427,12 @@ class ServerClient
   @override
   Future<Uri?> lanMediaBaseUrl({String? peerIp}) async {
     final url = await rust.serverLanMediaBaseUrl(peerIp: peerIp);
-    return url == null ? null : Uri.parse(url);
+    if (url == null) return null;
+    final base = Uri.parse(url);
+    // A cast URL on this base is ours, and its `/{infoHash}/{fileIdx}` is
+    // worth having in a report; nothing else on a LAN address is.
+    DiagnosticsLog.noteOwnServer(base);
+    return base;
   }
 
   static Map<String, dynamic> _object(String json) =>
