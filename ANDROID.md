@@ -796,6 +796,11 @@ adb logcat -d | grep -iE "flutter|xtremio|FATAL"
 
 **Verify:**
 
+Every line the app's own log keeps (ours, the server's, the player's)
+goes to logcat under the tag `xtremio`, so `adb logcat -s xtremio` is the
+app and nothing else. Third-party crates that log through `log` keep
+their own module-path tags (`rustls`, `mio`, ...).
+
 ```bash
 adb logcat -d | grep -E "flutter|xtremio|stream_server|rustls"
 # should show the embedded server starting, and no

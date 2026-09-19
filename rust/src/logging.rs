@@ -242,6 +242,10 @@ fn truncate(text: &str, max: usize) -> String {
     }
 }
 
+/// The logcat tag every line of ours goes out under, on Android.
+#[cfg(target_os = "android")]
+const LOGCAT_TAG: &str = "xtremio";
+
 /// Formats every event into [`RING`] -- and, on Android, into logcat.
 struct RingLayer;
 
@@ -260,11 +264,18 @@ impl<S: Subscriber> Layer<S> for RingLayer {
         // Straight to the installed logger rather than through `log!`, which
         // would apply the `log` crate's max level (`cap_log_bridge`) a second
         // time to a line our own filter already admitted.
+        //
+        // The module path is what android_logger names the logcat tag after
+        // (FRB configures no tag of its own), and a record built here has
+        // none unless it is given one: every line went to logcat with an
+        // empty tag, so `logcat -s` could not find them and a filter on the
+        // tag matched nothing. `adb logcat -s xtremio` now does.
         #[cfg(target_os = "android")]
         log::logger().log(
             &log::Record::builder()
                 .level(log_level(metadata.level()))
                 .target("xtremio_core")
+                .module_path_static(Some(LOGCAT_TAG))
                 .args(format_args!("{line}"))
                 .build(),
         );
