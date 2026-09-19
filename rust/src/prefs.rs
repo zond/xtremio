@@ -77,11 +77,13 @@ fn path() -> Option<PathBuf> {
 /// Under the file's lock, like a write: a read of a file that will not
 /// parse moves it aside, and a rename landing between a locked [`set_in`]'s
 /// read and its write -- or just after the write -- takes the key it has
-/// just stored with it.
+/// just stored with it. The lock of the state there is, if there is one: a
+/// read is an observer, and must not build a state a shutdown has just
+/// taken away (`crate::state::current`).
 pub fn get_all() -> anyhow::Result<Map<String, Value>> {
     let path = path().context("preferences: storage directory is not set")?;
-    let app = crate::state::state();
-    let _guard = app.prefs.file();
+    let app = crate::state::current();
+    let _guard = app.as_ref().map(|app| app.prefs.file());
     read_object(&path)
 }
 
