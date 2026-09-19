@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
+import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/player_harness.dart';
 
@@ -118,5 +120,36 @@ void main() {
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(harness.playhead.stalls, [infoHash]);
+  });
+
+  testWidgets('buffering after a change of window is not a stall', (
+    tester,
+  ) async {
+    // The same rule as a seek, and for the same reason: a new `buffer=`
+    // re-opens the stream, and what fills afterwards is that window and
+    // not a playback the arithmetic was too shallow for.
+    useWideViewport(tester);
+    final harness = bunny();
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(minutes: 96));
+    harness.engine.emitPosition(const Duration(seconds: 897));
+    harness.engine.emitPosition(const Duration(milliseconds: 897_250));
+    await pumpEvents(tester);
+
+    await tester.tap(find.byTooltip('Playback settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(PlayerSettingsSheet.bufferChipKey(BufferAhead.maximum)),
+    );
+    await tester.pumpAndSettle();
+    expect(harness.engine.opened, hasLength(2));
+
+    harness.engine.emitBuffering(true);
+    await pumpEvents(tester);
+    expect(
+      harness.playhead.stalls,
+      isEmpty,
+      reason: 'the new window filling, not a stall',
+    );
   });
 }

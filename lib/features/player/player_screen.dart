@@ -1313,6 +1313,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  void _reopenForBuffer(String previousWire) {
+    if (_bufferAhead.wire == previousWire || !_bufferOnUrlFor(_opened)) return;
+    _reopenAt(_resumePosition, reason: 'reopen-buffer=${_bufferAhead.wire}');
+  }
+
   /// [url] as the engine should fetch it, which is always a URL on our own
   /// server: the core's stream URL with `buffer=` added when it is a
   /// torrent the server is already serving, and the same stream wrapped in
@@ -1332,8 +1337,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// television.
   Uri _mediaUrl(Uri url) {
     if (!url.isScheme('http') && !url.isScheme('https')) return url;
-    final stream = _state?.selectedStream ?? _state?.convertedStream;
-    if (stream?.infoHash != null) return withBufferAhead(url, _bufferAhead);
+    if (_bufferOnUrlFor(url)) return withBufferAhead(url, _bufferAhead);
     final proxied = proxiedThroughServer(
       url,
       serverBase: _serverBase,
@@ -1399,14 +1403,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
           : null;
       _publishBuffer();
     });
-    if (choice.wire != previousWire) _reopenForBuffer();
+    _reopenForBuffer(previousWire);
     if (choice.storesTheFile) unawaited(_keepWholeFile());
   }
 
   /// Re-opens the stream at the position it is playing at, so a new
-  /// `buffer=` takes effect without restarting the playback.
-  void _reopenForBuffer() =>
-      _reopenAt(_resumePosition, reason: 'reopen-buffer=${_bufferAhead.wire}');
+  /// `buffer=` takes effect without restarting the playback -- and only
+  /// then.
+  ///
+  /// The window reaches libmpv through the URL and nowhere else, so a
+  /// re-open that would hand it the URL it is already reading buys
+  /// nothing and costs the picture: the demuxer starts again, the cache
+  /// it had filled is dropped and the film stops for as long as the new
+  /// read takes to come back. Which is the whole of what two choices with
+  /// the same `buffer=` did ([BufferAhead.wholeFile] and
+  /// [BufferAhead.maximum] share a wire, so a refused pin re-opened at
+  /// the value already in force), and the whole of what any choice did to
+  /// a stream the parameter is not written on ([_bufferOnUrlFor]).
 
   /// Where a re-open of the stream on screen should start.
   ///
@@ -1426,7 +1439,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _openStart = start;
     _openRetries = 0;
     _openError = null;
+    // The window that follows is filling, which is not the stall the
+    // server is told about; see [_playingNormally].
+    _playingNormally = false;
+    // A re-open is an attempt at the playback, so whatever the last one
+    // failed with is not what is happening any more: left, it sat as
+    // "Playback failed" over a stream that was playing again, kept the
+    // display's rate from being asked for ([_askDisplayFrameRate]) and
+    // held the stats panel's request away.
+    final failed = _engineError != null;
+    if (failed) setState(() => _engineError = null);
     _open(url, reason: reason);
+    if (failed) _restoreTorrentStats();
+  }
+
+  /// Puts back the torrent the failure forgot ([_failPlayback] stops the
+  /// polling for good), so the stall card and the stats panel have
+  /// something to ask about again.
+  ///
+  /// The start-up cadence [_startTorrentStats] arms belongs to a media
+  /// that has not loaded; anything else is whatever wants numbers now.
+  void _restoreTorrentStats() {
+    final state = _openState;
+    if (state == null || _torrentStatsRequest != null) return;
+    _startTorrentStats(state);
+    if (_mediaLoaded) {
+      _pauseTorrentStats();
+      _syncStatsPolls();
+    }
   }
 
   /// Pins what is playing as an offline download, which is what
@@ -1497,13 +1537,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// on the disk.
   void _failBuffer(String reason) {
     if (!_stillOurs) return;
+    final previousWire = _bufferAhead.wire;
     setState(() {
       _bufferOverride = BufferAhead.maximum;
       _keeping = false;
       _bufferNote = '$reason Buffering as far ahead as possible instead.';
       _publishBuffer();
     });
-    _reopenForBuffer();
+    _reopenForBuffer(previousWire);
   }
 
   /// Tells the engine what it can know about the file, which is what makes
@@ -1643,6 +1684,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// narrows a `-1` to a file; see [_openedFileIdx].
   List<String> get _openedFilters =>
       _opened?.queryParametersAll['f'] ?? const [];
+
+  /// Whether [url] is one the buffer window is written on at all: the
+  /// torrent half of [_mediaUrl]'s rule, asked on its own so that nothing
+  /// re-opens a stream for a parameter that would not be there.
+  bool _bufferOnUrlFor(Uri? url) {
+    if (url == null || (!url.isScheme('http') && !url.isScheme('https'))) {
+      return false;
+    }
+    final stream = _state?.selectedStream ?? _state?.convertedStream;
+    return stream?.infoHash != null;
+  }
 
   /// Tells the server how long the film is; see [_onCastStatus].
   Future<void> _reportDuration(Duration duration) async {

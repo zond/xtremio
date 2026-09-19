@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
+import 'package:xtremio/features/player/player_screen.dart';
+import 'package:xtremio/features/player/torrent_stall_overlay.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
 import '../../support/fake_downloads_client.dart';
@@ -145,6 +148,39 @@ void main() {
       expect(harness.engine.opened[2].$2, const Duration(minutes: 12));
     });
 
+    testWidgets('a re-open after a failure is a playback again', (
+      tester,
+    ) async {
+      // The failure card is about the attempt that failed. Changing the
+      // window is another attempt, and one that succeeds plays under a
+      // card that says it did not -- with the torrent the failure forgot
+      // still forgotten, so no stall card and no stats panel either.
+      useWideViewport(tester);
+      final harness = PlayerHarness(
+        prefs: await storedPrefs(BufferAhead.normal),
+      );
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 96));
+      harness.engine.emitPosition(const Duration(minutes: 12));
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      for (var i = 0; i <= PlayerScreen.falseEndRecoveries; i++) {
+        harness.engine.emitCompleted();
+        await pumpEvents(tester);
+      }
+      expect(find.textContaining('Playback failed'), findsOneWidget);
+
+      final opens = harness.engine.opened.length;
+      await openSheet(tester);
+      await chooseBuffer(tester, BufferAhead.maximum);
+      expect(harness.engine.opened, hasLength(opens + 1));
+      expect(find.textContaining('Playback failed'), findsNothing);
+
+      harness.engine.emitBuffering(true);
+      await pumpEvents(tester);
+      expect(find.byType(TorrentStallOverlay), findsOneWidget);
+    });
+
     testWidgets('reverts to the stored choice with the next playback', (
       tester,
     ) async {
@@ -271,6 +307,43 @@ void main() {
         openedBuffer(harness, harness.engine.opened.length - 1),
         'maximum',
       );
+      // Once: the refusal falls back to the window the pin already asked
+      // for on the URL (`wholeFile` and `maximum` share a `buffer=`), and
+      // re-opening the stream the engine is reading only interrupts it.
+      expect(harness.engine.opened, hasLength(2));
+    });
+
+    testWidgets('a direct stream, which carries no window, is left alone', (
+      tester,
+    ) async {
+      // `buffer=` goes on a torrent this server streams and nowhere else
+      // (a remote host knows nothing about it), so a change of window has
+      // nothing to say to the engine about a direct HTTP stream -- and a
+      // re-open would only stop the picture.
+      useWideViewport(tester);
+      final harness = PlayerHarness(
+        prefs: await storedPrefs(BufferAhead.normal),
+        player: {
+          'selected': {'stream': DevStreams.bigBuckBunnyHttp},
+          'stream': {
+            'type': 'Ready',
+            'content': [
+              {'streaming_url': DevStreams.bigBuckBunnyHttp['url']},
+              DevStreams.bigBuckBunnyHttp,
+            ],
+          },
+        },
+        stream: DevStreams.bigBuckBunnyHttp,
+      );
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 10));
+      harness.engine.emitPosition(const Duration(minutes: 2));
+      await pumpEvents(tester);
+      expect(harness.engine.opened, hasLength(1));
+
+      await openSheet(tester);
+      await chooseBuffer(tester, BufferAhead.maximum);
+      expect(harness.engine.opened, hasLength(1));
     });
   });
 }
