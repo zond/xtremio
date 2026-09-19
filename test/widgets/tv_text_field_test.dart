@@ -37,6 +37,7 @@ void main() {
     bool autofocus = false,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
+    VoidCallback? onClear,
   }) => DeviceScope(
     profile: isTv ? tv : DeviceProfile.fallback,
     child: MaterialApp(
@@ -48,6 +49,7 @@ void main() {
           autofocus: autofocus,
           onChanged: onChanged,
           onSubmitted: onSubmitted,
+          onClear: onClear,
         ),
       ),
     ),
@@ -80,6 +82,35 @@ void main() {
       expect(changed, ['me@example.com']);
       expect(submitted, ['me@example.com']);
       expect(find.text('me@example.com'), findsOneWidget);
+    });
+
+    testWidgets('Clear leaves the remote on the field, not on nothing', (
+      tester,
+    ) async {
+      // The button goes the moment there is nothing to clear, and the
+      // focus it held would go with it.
+      final controller = TextEditingController(text: 'dune');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(host(controller, onClear: controller.clear));
+      final clear = find.widgetWithIcon(IconButton, Icons.close);
+      Focus.of(tester.element(find.byIcon(Icons.close))).requestFocus();
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.context,
+        isNotNull,
+        reason: 'the button has the remote',
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+
+      expect(controller.text, isEmpty);
+      expect(clear, findsNothing);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'TvTextField',
+        reason: 'the field itself holds the focus now',
+      );
     });
 
     testWidgets('the field is not a TextField, so the D-pad is free', (

@@ -84,6 +84,16 @@ class _TvTextFieldState extends State<TvTextField> {
   /// A text-entry screen is up; a second press must not open another.
   bool _editing = false;
 
+  /// The field's own focus stop on a television, which is where Clear puts
+  /// the remote once it has done its job.
+  final FocusNode _fieldFocus = FocusNode(debugLabel: 'TvTextField');
+
+  @override
+  void dispose() {
+    _fieldFocus.dispose();
+    super.dispose();
+  }
+
   Future<void> _edit() async {
     if (_editing) return;
     _editing = true;
@@ -101,7 +111,14 @@ class _TvTextFieldState extends State<TvTextField> {
   }
 
   /// The Clear button, or nothing when there is nothing to clear.
-  Widget? _clearButton() {
+  ///
+  /// On a television the press hands focus to the field first: emptying
+  /// it takes the button out of the tree, and a focused node that leaves
+  /// the tree leaves the remote on nothing -- no ring anywhere, and the
+  /// next press of the D-pad has to find its own way back. The field is
+  /// what is left where the button was, and typing something new is the
+  /// usual next step anyway.
+  Widget? _clearButton({bool refocus = false}) {
     final onClear = widget.onClear;
     if (onClear == null || !widget.enabled || widget.controller.text.isEmpty) {
       return null;
@@ -109,7 +126,12 @@ class _TvTextFieldState extends State<TvTextField> {
     return IconButton(
       tooltip: 'Clear',
       icon: const Icon(Icons.close),
-      onPressed: onClear,
+      onPressed: refocus
+          ? () {
+              _fieldFocus.requestFocus();
+              onClear();
+            }
+          : onClear,
     );
   }
 
@@ -151,6 +173,7 @@ class _TvTextFieldState extends State<TvTextField> {
             onTap: onTap,
             child: InkWell(
               onTap: onTap,
+              focusNode: _fieldFocus,
               autofocus: widget.autofocus,
               onFocusChange: (focused) {
                 if (mounted) setState(() => _focused = focused);
@@ -179,7 +202,7 @@ class _TvTextFieldState extends State<TvTextField> {
         return Row(
           children: [
             Expanded(child: field),
-            _clearButton() ?? const SizedBox.shrink(),
+            _clearButton(refocus: true) ?? const SizedBox.shrink(),
           ],
         );
       },
