@@ -33,7 +33,8 @@ class DiagnosticsTraceSync {
   /// opens up. (A longer version said why and when; on a settings tile
   /// about verbosity that read as a joke.)
   static const String description =
-      'Adds server cache decisions and player stream logs to the report.';
+      'Adds cache and player detail and full stream links (which can hold '
+      'account keys) to the report.';
 
   /// The viewer's choice, and what tells this when it changes.
   final AppPrefs prefs;
@@ -66,6 +67,10 @@ class DiagnosticsTraceSync {
   void _reconsider() {
     if (_stopped) return;
     final wanted = prefs.verboseDiagnostics;
+    // The app's own half: URLs in the log and the report are kept whole
+    // while it is on. Here and not in [_push], because this side needs no
+    // server and must not wait for one.
+    DiagnosticsLog.unredacted = wanted;
     if (wanted == _sent) return;
     _sent = wanted;
     _writes = _writes.then((_) => _push(wanted));

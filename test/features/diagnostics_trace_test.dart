@@ -27,6 +27,22 @@ void main() {
     return sync;
   }
 
+  test("the app's own log keeps URLs whole exactly while it is on", () async {
+    addTearDown(() => DiagnosticsLog.unredacted = false);
+    final prefs = AppPrefs.inMemory();
+    final sync = started(prefs: prefs, server: RecordingServerSettings());
+    await settle(sync);
+    expect(DiagnosticsLog.unredacted, isFalse);
+
+    await prefs.setVerboseDiagnostics(true);
+    await settle(sync);
+    expect(DiagnosticsLog.unredacted, isTrue);
+
+    await prefs.setVerboseDiagnostics(false);
+    await settle(sync);
+    expect(DiagnosticsLog.unredacted, isFalse);
+  });
+
   test('the default is off, and the server is told so at start', () async {
     final server = RecordingServerSettings();
     final sync = started(prefs: AppPrefs.inMemory(), server: server);

@@ -128,7 +128,10 @@ String redactSecrets(String text) => text
 
 /// The text the Diagnostics screen copies: a short header saying what this
 /// build is and what the embedded server is doing, then the core's log
-/// lines, oldest first. Everything in it has been through [redactSecrets].
+/// lines, oldest first. Everything in it has been through [redactSecrets],
+/// unless [redact] is false -- by default, while Verbose logging is on
+/// ([DiagnosticsLog.unredacted]), when the report is for chasing a problem
+/// and the switch has said that it holds full stream links.
 String formatDiagnostics({
   required DiagnosticsSnapshot snapshot,
   required String platform,
@@ -138,6 +141,7 @@ String formatDiagnostics({
   DhtStatus? dht,
   String appVersion = kAppVersion,
   String gitCommit = kGitCommit,
+  bool? redact,
 }) {
   final serverUrl = snapshot.serverBaseUrl;
   final header = <String>[
@@ -163,5 +167,6 @@ String formatDiagnostics({
     'stremio-core: ${snapshot.stremioCoreRev ?? 'unknown'}',
     'log: ${snapshot.logLines.length} lines, oldest first',
   ];
-  return redactSecrets([...header, '', ...snapshot.logLines].join('\n'));
+  final text = [...header, '', ...snapshot.logLines].join('\n');
+  return (redact ?? !DiagnosticsLog.unredacted) ? redactSecrets(text) : text;
 }

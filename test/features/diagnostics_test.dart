@@ -209,6 +209,29 @@ void main() {
       ]);
     });
 
+    test('writes URLs whole while Verbose logging is on', () {
+      // Verbose logging is for chasing a problem, and a redacted stream URL
+      // is the thing that could not be chased: the RD stream mpv could not
+      // recognise could not be fetched again. The switch says so.
+      addTearDown(() => DiagnosticsLog.unredacted = false);
+      final comet = Uri.parse(
+        'http://127.0.0.1:46503/proxy/d=https%3A%2F%2Fcomet.example'
+        '&p=tok/CONFIG/playback/abc?apiKey=k',
+      );
+      DiagnosticsLog.unredacted = true;
+      expect(DiagnosticsLog.url(comet), comet.toString());
+      final lines = captureDiagnostics();
+      DiagnosticsLog.info('player', 'open $comet');
+      expect(lines, ['info player open $comet']);
+
+      DiagnosticsLog.unredacted = false;
+      expect(
+        DiagnosticsLog.url(comet),
+        'http://127.0.0.1:46503/proxy/d=comet.example/…',
+        reason: 'and redacted again once it is off',
+      );
+    });
+
     test('writes a URL without its query or its credentials', () {
       // The embedded server's own URL is worth having whole; an addon's is
       // where a key rides, and it rides in the query -- or in the path,
@@ -357,6 +380,32 @@ void main() {
   });
 
   group('formatDiagnostics', () {
+    test('skips the scrub while Verbose logging is on', () {
+      addTearDown(() => DiagnosticsLog.unredacted = false);
+      const snapshot = DiagnosticsSnapshot(
+        coreVersion: '0.1.0',
+        logLines: ['GET /catalog?apiKey=DEADBEEF0011&skip=100'],
+      );
+      String report() => formatDiagnostics(
+        snapshot: snapshot,
+        platform: 'android',
+        osVersion: 'Android 14',
+        at: DateTime.utc(2026, 9, 19),
+      );
+
+      expect(
+        report(),
+        isNot(contains('DEADBEEF0011')),
+        reason: 'off: scrubbed',
+      );
+      DiagnosticsLog.unredacted = true;
+      expect(
+        report(),
+        contains('DEADBEEF0011'),
+        reason: 'on: as it was logged',
+      );
+    });
+
     test('heads the report with the build, device and server', () {
       final text = formatDiagnostics(
         snapshot: const DiagnosticsSnapshot(
