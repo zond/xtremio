@@ -879,6 +879,24 @@ fn update_in<T>(
     update_when_in(app, f, |_, _, _| true)
 }
 
+/// [`update`], and then `after` with what `f` answered -- once the write
+/// has landed and *before* the file's lock is let go.
+///
+/// For a release decided from the registry: "no row wants this file" is
+/// only true while nobody can stage a row that does, and an [`add`] of
+/// that file landing between the decision and the unpin would have its pin
+/// dropped, and its bytes deleted, under a row that goes on counting on
+/// them. After the write, so the order at the other end still holds: the
+/// row says what was meant before the server is asked (see the module
+/// docs). The cost is the file's lock held across one unpin, which asks
+/// the server for nothing that waits on this file.
+fn update_then<T>(
+    f: impl FnOnce(&mut Registry) -> anyhow::Result<T>,
+    after: impl FnOnce(&T),
+) -> anyhow::Result<T> {
+    update_when_then_in(&crate::state::state(), f, |_, _, _| true, after)
+}
+
 /// The same, with a say in whether the change is worth a write. `needed` is
 /// asked what `f` did -- the registry before and after -- and a `false`
 /// leaves the file as it was, edits and all: the caller must be one whose
@@ -888,6 +906,16 @@ fn update_when_in<T>(
     app: &AppState,
     f: impl FnOnce(&mut Registry) -> anyhow::Result<T>,
     needed: impl FnOnce(&RegistryFile, &Registry, &Registry) -> bool,
+) -> anyhow::Result<T> {
+    update_when_then_in(app, f, needed, |_| {})
+}
+
+/// [`update_when_in`], with [`update_then`]'s `after`.
+fn update_when_then_in<T>(
+    app: &AppState,
+    f: impl FnOnce(&mut Registry) -> anyhow::Result<T>,
+    needed: impl FnOnce(&RegistryFile, &Registry, &Registry) -> bool,
+    after: impl FnOnce(&T),
 ) -> anyhow::Result<T> {
     let mut file = app.downloads.file();
     // One copy for `f` to edit; what the cache holds stays the "before" the
@@ -913,6 +941,7 @@ fn update_when_in<T>(
         });
         file.last_write = Some(Instant::now());
     }
+    after(&result);
     Ok(result)
 }
 
@@ -1290,19 +1319,24 @@ fn add_with(
                 message = failure.message(),
                 "could not pin the download"
             );
-            let owed = update(|registry| {
-                Ok(unstage_add(
-                    registry,
-                    &key,
-                    &info_hash,
-                    file_idx,
-                    previous,
-                    replaces.as_ref(),
-                ))
-            })?;
-            if let Some(owed) = owed {
-                release(&key, &owed);
-            }
+            // Released with the lock still held: see [`update_then`].
+            update_then(
+                |registry| {
+                    Ok(unstage_add(
+                        registry,
+                        &key,
+                        &info_hash,
+                        file_idx,
+                        previous,
+                        replaces.as_ref(),
+                    ))
+                },
+                |owed| {
+                    if let Some(owed) = owed {
+                        release(&key, owed);
+                    }
+                },
+            )?;
             return Ok(AddOutcome {
                 ok: false,
                 key: Some(key),
@@ -1320,44 +1354,52 @@ fn add_with(
     };
 
     // The new pin is in, so the old one may go -- before the row stops
-    // saying it is owed, and outside the file lock, since it is a server
-    // call. A kill between the two releases it again at boot, idempotently.
+    // saying it is owed. A kill between the two releases it again at boot,
+    // idempotently.
     //
     // Unless a row wants the old file now. The debt was decided when the
     // row was staged, and the pin can take as long as a magnet does: the
     // user can go back to the stream they had, or another title can name
     // that file, and releasing it then drops the pin of a row that is
-    // counting on it, and deletes its bytes under it.
+    // counting on it, and deletes its bytes under it. Asked and acted on
+    // under one hold of the file's lock ([`update_then`]), or a row staged
+    // between the answer and the unpin is exactly that row.
     if let Some(replaced) = &replaces {
-        if !pin_is_wanted(&load()?, &replaced.info_hash, replaced.file_idx) {
-            release(&key, replaced);
-        }
+        update_then(
+            |registry| {
+                Ok(!pin_is_wanted(
+                    registry,
+                    &replaced.info_hash,
+                    replaced.file_idx,
+                ))
+            },
+            |unwanted| {
+                if *unwanted {
+                    release(&key, replaced);
+                }
+            },
+        )?;
     }
 
-    let recorded = update(|registry| {
-        Ok(record_pin(
-            registry,
-            &key,
-            &info_hash,
-            file_idx,
-            replaces.as_ref(),
-            path,
-            &info,
-            Utc::now(),
-        ))
-    })?;
-    let entry = match recorded {
-        Ok(entry) => entry,
-        Err(orphaned) => {
-            // The row was taken while the pin was being taken -- a magnet
-            // takes as long as its tracker does -- so the pin just taken
-            // goes the way the row went, unless another row wants the file.
-            tracing::info!(
-                key,
-                orphaned,
-                "the download's row was taken while its pin was taken"
-            );
-            if orphaned {
+    // The row was taken while the pin was being taken -- a magnet takes as
+    // long as its tracker does -- so the pin just taken goes the way the row
+    // went, unless another row wants the file: asked and released under one
+    // hold of the lock ([`update_then`]).
+    let recorded = update_then(
+        |registry| {
+            Ok(record_pin(
+                registry,
+                &key,
+                &info_hash,
+                file_idx,
+                replaces.as_ref(),
+                path,
+                &info,
+                Utc::now(),
+            ))
+        },
+        |recorded| {
+            if let Err(true) = recorded {
                 release(
                     &key,
                     &Replaced {
@@ -1366,6 +1408,16 @@ fn add_with(
                     },
                 );
             }
+        },
+    )?;
+    let entry = match recorded {
+        Ok(entry) => entry,
+        Err(orphaned) => {
+            tracing::info!(
+                key,
+                orphaned,
+                "the download's row was taken while its pin was taken"
+            );
             return Ok(AddOutcome {
                 ok: false,
                 key: Some(key),
@@ -1743,44 +1795,68 @@ fn forget_removed(registry: &mut Registry, key: &str, info_hash: &str, file_idx:
 /// the row does. Run at boot before anything is re-pinned, so that a
 /// cancelled download is not first restarted and then cancelled again.
 fn finish_pending_removals_in(app: &Arc<AppState>) {
-    let registry = match load_in(app) {
-        Ok(registry) => registry,
+    finish_pending_removals_with(app, crate::server::unpin_download)
+}
+
+/// [`finish_pending_removals_in`] with the unpin handed in, which is how a
+/// test sees what the registry looks like while it is asked for.
+///
+/// The boot runs behind `core_init`, so the screens are up and Download
+/// can be pressed while it works. A reading taken once and acted on key by
+/// key is then a reading of rows that may not be there any more: the row
+/// under the key can be a fresh download of the same title, and dropping
+/// it -- or the pin of a file a new row has just started counting on --
+/// is the removal of a download the user asked for after the one being
+/// finished. So each removal is decided again and carried out under one
+/// hold of the file's lock, against the row [`remove`] marked
+/// ([`marked_for_removal`]) and nothing else. The lock is held across the
+/// unpin, which asks the server for nothing that waits on this file.
+fn finish_pending_removals_with(
+    app: &Arc<AppState>,
+    mut unpin: impl FnMut(&str, usize, bool) -> anyhow::Result<stream_server::UnpinOutcome>,
+) {
+    let pending: Vec<(String, String, usize)> = match load_in(app) {
+        Ok(registry) => registry
+            .items
+            .into_iter()
+            .filter(|(_, entry)| entry.is_leaving())
+            .map(|(key, entry)| (key, entry.info_hash, entry.file_idx))
+            .collect(),
         Err(error) => {
             tracing::warn!(%error, "could not read the downloads registry to finish removals");
             return;
         }
     };
-    for (key, entry) in &registry.items {
-        let Some(pending) = entry.pending_removal else {
-            continue;
-        };
+    for (key, info_hash, file_idx) in pending {
         if !crate::state::is_current(app) {
             return;
         }
-        if !pin_is_shared(&registry, key, &entry.info_hash, entry.file_idx) {
-            match crate::server::unpin_download(
-                &entry.info_hash,
-                entry.file_idx,
-                pending.delete_files,
-            ) {
-                Ok(outcome) => tracing::info!(
-                    key,
-                    unpinned = outcome.unpinned,
-                    deleted_files = outcome.deleted_files,
-                    "finished a removal a kill interrupted"
-                ),
-                Err(error) => {
-                    // Left for the next boot: the row still says what was
-                    // meant, and nothing polls or pins it meanwhile.
-                    tracing::warn!(key, %error, "could not finish an interrupted removal");
-                    continue;
+        let finished = update_in(app, |registry| {
+            let Some(pending) = marked_for_removal(registry, &key, &info_hash, file_idx)
+                .and_then(|entry| entry.pending_removal)
+            else {
+                return Ok(());
+            };
+            if !pin_is_shared(registry, &key, &info_hash, file_idx) {
+                match unpin(&info_hash, file_idx, pending.delete_files) {
+                    Ok(outcome) => tracing::info!(
+                        key,
+                        unpinned = outcome.unpinned,
+                        deleted_files = outcome.deleted_files,
+                        "finished a removal a kill interrupted"
+                    ),
+                    Err(error) => {
+                        // Left for the next boot: the row still says what
+                        // was meant, and nothing polls or pins it meanwhile.
+                        tracing::warn!(key, %error, "could not finish an interrupted removal");
+                        return Ok(());
+                    }
                 }
             }
-        }
-        if let Err(error) = update_in(app, |registry| {
-            registry.items.remove(key);
+            forget_removed(registry, &key, &info_hash, file_idx);
             Ok(())
-        }) {
+        });
+        if let Err(error) = finished {
             tracing::warn!(key, %error, "could not drop a removed download's row");
         }
     }
@@ -1793,35 +1869,69 @@ fn finish_pending_removals_in(app: &Arc<AppState>) {
 /// again ([`pins_in`]), since releasing the old file ahead of the new one
 /// being wanted would leave the title with neither.
 fn release_replaced_in(app: &Arc<AppState>) {
-    let (registry, live) = match (load_in(app), crate::server::downloads()) {
-        (Ok(registry), Ok(live)) => (registry, live),
-        (Err(error), _) | (_, Err(error)) => {
+    let live = match crate::server::downloads() {
+        Ok(live) => live,
+        Err(error) => {
             tracing::warn!(%error, "could not check for replaced downloads to release");
             return;
         }
     };
-    for (key, entry) in &registry.items {
-        let Some(replaced) = &entry.replaces else {
-            continue;
-        };
+    release_replaced_with(app, &live, release_replaced)
+}
+
+/// [`release_replaced_in`] against a pin set and a release handed in.
+///
+/// Each debt is decided again and settled under one hold of the file's
+/// lock, for the reason [`finish_pending_removals_with`] gives: this runs
+/// while the screens are up, and a reading taken once goes stale under a
+/// press on Download. Released from a stale reading, a file a new row has
+/// just started counting on loses its pin and its bytes; cleared from one,
+/// the debt a fresh swap under the same key has just written is gone, and
+/// the file it owes stays pinned with no row naming it.
+fn release_replaced_with(
+    app: &Arc<AppState>,
+    live: &[DownloadInfo],
+    mut release: impl FnMut(&str, &Replaced),
+) {
+    let owing: Vec<(String, Replaced)> = match load_in(app) {
+        Ok(registry) => registry
+            .items
+            .into_iter()
+            .filter_map(|(key, entry)| entry.replaces.map(|replaced| (key, replaced)))
+            .collect(),
+        Err(error) => {
+            tracing::warn!(%error, "could not check for replaced downloads to release");
+            return;
+        }
+    };
+    for (key, replaced) in owing {
         if !crate::state::is_current(app) {
             return;
         }
-        let pinned = live.iter().any(|info| {
-            info.info_hash.eq_ignore_ascii_case(&entry.info_hash) && info.file_idx == entry.file_idx
-        });
-        if !pinned {
-            continue;
-        }
-        if !pin_is_shared(&registry, key, &replaced.info_hash, replaced.file_idx) {
-            release_replaced(key, replaced);
-        }
-        if let Err(error) = update_in(app, |registry| {
-            if let Some(entry) = registry.items.get_mut(key) {
+        let settled = update_in(app, |registry| {
+            let Some(entry) = registry
+                .items
+                .get(&key)
+                .filter(|entry| entry.replaces.as_ref() == Some(&replaced))
+            else {
+                return Ok(());
+            };
+            let pinned = live.iter().any(|info| {
+                info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
+                    && info.file_idx == entry.file_idx
+            });
+            if !pinned {
+                return Ok(());
+            }
+            if !pin_is_shared(registry, &key, &replaced.info_hash, replaced.file_idx) {
+                release(&key, &replaced);
+            }
+            if let Some(entry) = registry.items.get_mut(&key) {
                 entry.replaces = None;
             }
             Ok(())
-        }) {
+        });
+        if let Err(error) = settled {
             tracing::warn!(key, %error, "could not record a replaced download as released");
         }
     }
@@ -3277,11 +3387,104 @@ mod tests {
                     .expect("the write while the pin is in flight");
                     answer
                 },
-                |_, replaced| released.push(replaced.clone()),
+                |_, replaced| {
+                    // Every release is decided and carried out under one
+                    // hold of the registry's lock: let go in between, an
+                    // add of that file can stage its row there and lose its
+                    // pin and its bytes to this release.
+                    assert!(
+                        crate::state::state().downloads.file.try_lock().is_err(),
+                        "released {replaced:?} with the registry's lock let go"
+                    );
+                    released.push(replaced.clone())
+                },
             )
             .expect("add");
             (outcome, released, load().expect("the registry after"))
         })
+    }
+
+    /// A removal the boot finishes is decided and carried out under one hold
+    /// of the registry's lock: the boot runs behind `core_init`, and a
+    /// Download pressed between a reading and the unpin would otherwise
+    /// have its row dropped, or its pin and bytes taken, by a removal the
+    /// user made before it.
+    #[test]
+    fn the_boot_finishes_a_removal_with_the_registry_held() {
+        crate::env::with_storage_dir(|_| {
+            let app = crate::state::state();
+            let leaving = |info_hash: &str, file_idx| Entry {
+                pending_removal: Some(PendingRemoval { delete_files: true }),
+                ..naming(info_hash, file_idx)
+            };
+            update(|registry| {
+                registry.items.insert("tt1:tt1".into(), leaving("abc", 2));
+                registry.items.insert(
+                    "tt2:tt2".into(),
+                    Entry {
+                        meta_id: "tt2".into(),
+                        video_id: "tt2".into(),
+                        ..leaving("def", 5)
+                    },
+                );
+                Ok(())
+            })
+            .expect("the registry going in");
+            let mut unpinned = Vec::new();
+            finish_pending_removals_with(&app, |info_hash, file_idx, delete_files| {
+                assert!(
+                    app.downloads.file.try_lock().is_err(),
+                    "unpinned {info_hash}/{file_idx} with the registry's lock let go"
+                );
+                unpinned.push((info_hash.to_owned(), file_idx, delete_files));
+                Ok(stream_server::UnpinOutcome {
+                    unpinned: true,
+                    deleted_files: delete_files,
+                })
+            });
+            assert_eq!(
+                unpinned,
+                vec![("abc".to_owned(), 2, true), ("def".to_owned(), 5, true)]
+            );
+            assert!(load().expect("the registry after").items.is_empty());
+        });
+    }
+
+    /// The boot settles a swap's debt under one hold of the registry's lock,
+    /// for the same reason it finishes a removal that way.
+    #[test]
+    fn the_boot_releases_a_replaced_file_with_the_registry_held() {
+        crate::env::with_storage_dir(|_| {
+            let app = crate::state::state();
+            let old = Replaced {
+                info_hash: "old".into(),
+                file_idx: 0,
+            };
+            update(|registry| {
+                registry.items.insert(
+                    "tt1:tt1".into(),
+                    Entry {
+                        replaces: Some(old.clone()),
+                        ..naming("abc", 2)
+                    },
+                );
+                Ok(())
+            })
+            .expect("the registry going in");
+            let mut released = Vec::new();
+            release_replaced_with(&app, &[pinned("abc", 2, false)], |_, replaced| {
+                assert!(
+                    app.downloads.file.try_lock().is_err(),
+                    "released {replaced:?} with the registry's lock let go"
+                );
+                released.push(replaced.clone());
+            });
+            assert_eq!(released, vec![old]);
+            assert_eq!(
+                load().expect("the registry after").items["tt1:tt1"].replaces,
+                None
+            );
+        });
     }
 
     /// A pin that lands for a row a removal took meanwhile is released:
