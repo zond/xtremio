@@ -607,10 +607,13 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       expect(prefs.streamsOrder, StreamOrder.largest);
       expect(stored.stored['streamsOrder'], 'largest');
+      // Picked, and on the way to the sources it orders: select does what
+      // down does after, as it does on every row where the choice is a step
+      // on the way down.
       expect(
-        focusedLabel(tester),
-        StreamOrder.largest.label,
-        reason: 'focus stayed on the chip that was pressed',
+        focusIn<TvSourceGroupCard>(),
+        isTrue,
+        reason: 'select on a chip moves down to the groups',
       );
       expect(
         tester
@@ -651,10 +654,12 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), kStreamsGroupedLabel);
       await press(tester, LogicalKeyboardKey.select);
+      // Grouped has no order to choose, so the order chips went with the
+      // press and the next row down is the groups.
       expect(
-        focusedLabel(tester),
-        kStreamsGroupedLabel,
-        reason: 'focus stayed on the chip that was pressed',
+        focusIn<TvSourceGroupCard>(),
+        isTrue,
+        reason: 'select on a chip moves down, past the rung that went away',
       );
       expect(
         tester

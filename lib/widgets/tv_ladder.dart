@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../shell/device_profile.dart';
+import 'focusable_tile.dart';
 import 'remote_press.dart';
 
 /// Vertical navigation on a television, by level rather than by distance.
@@ -89,7 +90,7 @@ class TvLadderController {
         ? levels.where((level) => level < from).toList().reversed
         : levels.where((level) => level > from);
     for (final level in candidates) {
-      if (_rows[level]?.focusRemembered() ?? false) return true;
+      if (_rows[level]?.focusRemembered(up: up) ?? false) return true;
     }
     return false;
   }
@@ -169,10 +170,30 @@ class TvLadderRowState extends State<TvLadderRow> {
   /// False when the row has nothing to take it -- a season with no
   /// episodes, a group whose sources have not arrived -- so the press can
   /// be offered to the row beyond it.
-  bool focusRemembered() {
+  ///
+  /// And brings it on screen, if it is not already. A card built on
+  /// [FocusableTile] scrolls itself into view when it takes focus, but a
+  /// plain control -- the layout and order chips -- does not, so a press
+  /// down onto a row below the fold moved the remote somewhere the viewer
+  /// could not see until the next press scrolled the page. Only as far as
+  /// needed, from the side the remote came from, so a row already on
+  /// screen does not move.
+  bool focusRemembered({bool up = false}) {
     final stops = _stops;
     if (stops.isEmpty) return false;
-    stops[_remembered.clamp(0, stops.length - 1)].requestFocus();
+    final stop = stops[_remembered.clamp(0, stops.length - 1)];
+    stop.requestFocus();
+    final target = stop.context;
+    if (target != null) {
+      Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        alignmentPolicy: up
+            ? ScrollPositionAlignmentPolicy.keepVisibleAtStart
+            : ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    }
     return true;
   }
 

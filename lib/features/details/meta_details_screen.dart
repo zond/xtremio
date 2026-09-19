@@ -2595,8 +2595,13 @@ class _StreamsHeader extends StatelessWidget {
   final int? orderLevel;
 
   /// Puts one line of the heading on a rung, when there is a ladder.
-  static Widget _rung(int? level, Widget child) =>
-      level == null ? child : TvLadderRow(level: level, child: child);
+  ///
+  /// Select on a chip picks it and then moves down, as it does on the
+  /// rows where landing already chooses: a viewer who has chosen how the
+  /// sources are cut or ordered is on the way to the sources.
+  static Widget _rung(int? level, Widget child) => level == null
+      ? child
+      : TvLadderRow(level: level, advanceOnSelect: true, child: child);
 
   final MetaDetailsState state;
 

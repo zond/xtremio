@@ -260,4 +260,55 @@ void main() {
       expect(_focused(), 'a', reason: 'a long press is not a choice made');
     });
   });
+
+  testWidgets('a press down onto a row below the fold brings it on screen', (
+    tester,
+  ) async {
+    // The layout and order chips are plain controls, which do not scroll
+    // themselves into view the way the tiles do: the remote went down onto
+    // the order chips and they stayed off screen until the next press.
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(
+      DeviceScope(
+        profile: tv,
+        child: MaterialApp(
+          home: Scaffold(
+            body: TvLadder(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    TvLadderRow(level: 0, child: _card('a')),
+                    SizedBox(height: tvSize.height * 2),
+                    TvLadderRow(level: 20, child: _card('b')),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    _nodeFor('a').requestFocus();
+    await tester.pumpAndSettle();
+    bool onScreen(String label) {
+      final box = tester.getRect(find.text(label));
+      return box.top >= 0 && box.bottom <= tvSize.height;
+    }
+
+    expect(onScreen('b'), isFalse, reason: 'below the fold to start');
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+
+    expect(_focused(), 'b');
+    expect(
+      onScreen('b'),
+      isTrue,
+      reason: 'and on screen, with no second press',
+    );
+
+    await press(tester, LogicalKeyboardKey.arrowUp);
+
+    expect(_focused(), 'a');
+    expect(onScreen('a'), isTrue, reason: 'and back up again');
+  });
 }
