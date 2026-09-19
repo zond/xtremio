@@ -100,7 +100,7 @@ what every model field means. The shape of the thing is in the
   and additive like the downloads registry: a write is a read-modify-write
   of one key, a key from a newer build survives it, and a file that cannot
   be parsed reads as "nothing set" rather than as a failure. Today it holds
-  six keys: `streamsSectioned` (the Details screen's sources list,
+  nine keys: `streamsSectioned` (the Details screen's sources list,
   sectioned by resolution -- the default -- rather than grouped by addon;
   an install from before the rename is read from the older `streamsFlat`
   name it was stored under, never written back), `openStreamSections`
@@ -115,9 +115,15 @@ what every model field means. The shape of the thing is in the
   It reaches the app twice over: `FocusHighlight` reads it for what the app
   draws itself, and `FocusTheme.apply` derives it into the `ThemeData` the
   app runs under, so every Material control is marked without opting in --
-  see AGENTS.md, *Eleven rules a real device taught us*) and
+  see AGENTS.md, *Eleven rules a real device taught us*),
+  `shareWhileIdle` (whether the server goes on uploading while nothing
+  plays; on unless the viewer turned it off), `verboseDiagnostics`
+  (Settings -> "Verbose logging": the server's retention trace, mpv's
+  demuxer, stream and cache lines and whole stream URLs in the log),
   `subtitleSync` (the subtitle timings the viewer has fixed by hand, most
-  recent first, bounded by recency -- see Subtitles). Nothing
+  recent first, bounded by recency -- see Subtitles) and `subtitlePicks`
+  (which subtitle each show was last watched with, and how often each
+  language has been picked). Nothing
   secret goes in it.
 - **How far ahead playback buffers is the viewer's choice.** The streaming
   server reads ahead of the play head by a window sized for a healthy
@@ -1291,8 +1297,9 @@ what every model field means. The shape of the thing is in the
   commits the dependency table below lists, the one the app needs being
   the commit that keeps an addon's own subtitle properties -- `fpsMilli`,
   `subtitleFileName`, `releaseGroup` and the rest -- in a flattened
-  `other` map instead of letting serde drop them; upstream PR
-  Stremio/stremio-core#1045, drop the fork once it lands) with the
+  `other` map instead of letting serde drop them, upstream PR
+  Stremio/stremio-core#1045, and two build fixes described in the table
+  below; drop the fork once the PR lands and the two are upstream) with the
   `derive` + `env-future-send`
   features, `zond/stream-server` at a fixed rev (`de03ad08` as this is
   written; the pin itself lives in `rust/Cargo.toml`, twice, for `server`
