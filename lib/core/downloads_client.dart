@@ -196,14 +196,16 @@ enum DownloadOpenFailure {
   /// The bytes are not all here yet.
   incomplete('incomplete'),
 
-  /// Whole, and nothing can serve it: the embedded server is not running.
-  /// The pieces a download is made of are only ever read through it.
+  /// Whole, and nothing can say right now whether it can be served: the
+  /// embedded server is not running (the pieces a download is made of are
+  /// only ever read through it), or it is and cannot speak for this file
+  /// yet -- the torrent was not restored, or it is still being checked or
+  /// resolved, as at the start of a launch. Worth asking again.
   unavailable('unavailable'),
 
-  /// The server is running and does not hold these pieces: the root they
-  /// were under was moved or reclaimed, the torrent was not restored, or
-  /// it is still being checked. The row will say `gone` after the next
-  /// start; until then this is what a play of it answers.
+  /// The server is running and has said it does not hold these pieces: the
+  /// root they were under was moved or reclaimed. The row will say `gone`
+  /// after the next start; until then this is what a play of it answers.
   notHeld('notHeld');
 
   const DownloadOpenFailure(this.wireName);

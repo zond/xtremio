@@ -1838,14 +1838,17 @@ pub enum OpenFailure {
     Unknown,
     /// The bytes are not all here yet.
     Incomplete,
-    /// The embedded server is not running, and the pieces are only ever
-    /// read through it.
+    /// Nothing can say whether the pieces are here right now: the embedded
+    /// server is not running (and the pieces are only ever read through
+    /// it), or it is and cannot speak for this file yet -- the pin is
+    /// dormant because the torrent was not restored, or the torrent is
+    /// hash-checking or resolving and has not said the file is whole. Worth
+    /// asking again; see [`stream_url`] for why these are not `NotHeld`.
     Unavailable,
-    /// The server is running and does not have this file's pieces to serve:
-    /// it holds no pin for them (the root was moved, or the volume they were
-    /// on was reclaimed and the start-up sweep took what was left), the pin
-    /// is dormant because the torrent was not restored, or the torrent is
-    /// re-checking and has not said the file is whole yet.
+    /// The server is running and has said it does not have this file's
+    /// pieces to serve: it holds no pin for them (the root was moved, or the
+    /// volume they were on was reclaimed and the start-up sweep took what
+    /// was left), or it has looked at the disk and the file is not whole.
     ///
     /// It is a refusal and not a URL for a sharp reason. On loopback the
     /// media route creates the torrent it is asked for when the session does

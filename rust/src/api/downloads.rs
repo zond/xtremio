@@ -124,10 +124,12 @@ pub fn downloads_start_fresh() -> anyhow::Result<String> {
 /// true for that: the row says the file is whole, **and** the server says it
 /// is holding it whole right now. When either is not, it answers
 /// `{"ok":false,"key":…,"reason":…}` — `unknown` (no such entry),
-/// `incomplete` (the bytes are not all here), `unavailable` (the server that
-/// reads the pieces is not running) or `notHeld` (it is running and does not
-/// have these pieces: the root moved or was reclaimed under them, the
-/// torrent was not restored, or it is still being checked) — so the caller
+/// `incomplete` (the bytes are not all here), `unavailable` (nothing can say
+/// right now: the server that reads the pieces is not running, or it is and
+/// the pin is dormant because the torrent was not restored, or still being
+/// checked or resolved — ask again in a moment) or `notHeld` (it is running
+/// and has said it does not have these pieces: the root moved or was
+/// reclaimed under them) — so the caller
 /// can stream the title instead of opening a player on a URL that would
 /// start a fresh torrent. Only a registry that cannot be read or written
 /// raises.
