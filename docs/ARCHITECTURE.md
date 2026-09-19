@@ -95,7 +95,7 @@ what every model field means. The shape of the thing is in the
   and additive like the downloads registry: a write is a read-modify-write
   of one key, a key from a newer build survives it, and a file that cannot
   be parsed reads as "nothing set" rather than as a failure. Today it holds
-  six keys: `streamsSectioned` (the Details screen's sources list,
+  nine keys: `streamsSectioned` (the Details screen's sources list,
   sectioned by resolution -- the default -- rather than grouped by addon;
   an install from before the rename is read from the older `streamsFlat`
   name it was stored under, never written back), `openStreamSections`
@@ -110,9 +110,15 @@ what every model field means. The shape of the thing is in the
   It reaches the app twice over: `FocusHighlight` reads it for what the app
   draws itself, and `FocusTheme.apply` derives it into the `ThemeData` the
   app runs under, so every Material control is marked without opting in --
-  see AGENTS.md, *Eleven rules a real device taught us*) and
+  see AGENTS.md, *Eleven rules a real device taught us*),
+  `shareWhileIdle` (whether the server goes on uploading while nothing
+  plays; on unless the viewer turned it off), `verboseDiagnostics`
+  (Settings -> "Verbose logging": the server's retention trace, mpv's
+  demuxer, stream and cache lines and whole stream URLs in the log),
   `subtitleSync` (the subtitle timings the viewer has fixed by hand, most
-  recent first, bounded by recency -- see Subtitles). Nothing
+  recent first, bounded by recency -- see Subtitles) and `subtitlePicks`
+  (which subtitle each show was last watched with, and how often each
+  language has been picked). Nothing
   secret goes in it.
 - **How far ahead playback buffers is the viewer's choice.** The streaming
   server reads ahead of the play head by a window sized for a healthy
@@ -1260,11 +1266,12 @@ what every model field means. The shape of the thing is in the
   sourced from `AddonInstalled`/`AddonUninstalled`/`AddonUpgraded`) show
   as a SnackBar.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
-  of the `zond/stremio-core` fork (`b4c92f3`: release 0.62.1 plus one
+  of the `zond/stremio-core` fork (`1819c56`: release 0.63.0 plus one
   commit that keeps an addon's own subtitle properties -- `fpsMilli`,
   `subtitleFileName`, `releaseGroup` and the rest -- in a flattened
-  `other` map instead of letting serde drop them; upstream PR
-  Stremio/stremio-core#1045, drop the fork once it lands) with the
+  `other` map instead of letting serde drop them, upstream PR
+  Stremio/stremio-core#1045, and two build fixes described in the table
+  below; drop the fork once the PR lands and the two are upstream) with the
   `derive` + `env-future-send`
   features, `zond/stream-server` at a fixed rev (`8317203` as this is
   written; the pin itself lives in `rust/Cargo.toml`, twice, for `server`
@@ -1334,7 +1341,7 @@ it:
 |---|---|---|
 | `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | A rev, for reproducibility, that has what the app uses: the server keeps no record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry; it chokes the session's uploading while nothing plays if *Share while idle* is off; and it has the LAN media listener a cast turns on. Default features are on, which is RAR support — see [the README](../README.md#license). |
 | `librqbit` | [`zond/rqbit`](https://github.com/zond/rqbit) | Only a dev-dependency here, for the real `.torrent` fixtures in `rust/tests/downloads.rs`. It is always the rev stream-server's `enginefs` uses; any other puts two librqbits in the graph. The fork is stream-server's: it follows upstream and adds what a bounded streaming cache needs from the engine. |
-| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.62.1 plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) instead of letting serde drop them — upstream PR Stremio/stremio-core#1045 — one that pins its `localsearch` dependency by rev rather than by branch, and one that relaxes `stremio-watched-bitfield`'s `flate2 = "1.0.*"` to `"1"`: stream-server's tree needs flate2 ≥ 1.1 and Cargo will not pick two 1.x versions, so without it the graph does not resolve. That last one replaced a vendored copy of the crate wired in with `[patch]`. |
+| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.63.0 plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) instead of letting serde drop them — upstream PR Stremio/stremio-core#1045 — one that pins its `localsearch` dependency by rev rather than by branch, and one that relaxes `stremio-watched-bitfield`'s `flate2 = "1.0.*"` to `"1"`: stream-server's tree needs flate2 ≥ 1.1 and Cargo will not pick two 1.x versions, so without it the graph does not resolve. That last one replaced a vendored copy of the crate wired in with `[patch]`. |
 
 Beside those, `flutter_rust_bridge` is exactly 2.13.0 in `pubspec.yaml`,
 `rust/Cargo.toml` and the codegen.

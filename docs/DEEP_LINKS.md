@@ -25,9 +25,11 @@ The contract, in full:
 - **A link replaces a details screen already open** rather than stacking a
   second one, because `addon_details` is one field holding one addon, and
   does nothing at all when that screen is already showing that addon.
-- **A host-less link (`stremio:///addons`) is dropped** with a log line that
-  does not include the URL — a manifest URL can carry a debrid API key. Those
-  are the official clients' own in-app routes, not manifest URLs.
+- **A host-less link (`stremio:///addons`) is dropped** silently: a debug
+  build prints a console line naming only the link's scheme, never the URL —
+  a manifest URL can carry a debrid API key — and a release build says
+  nothing, not even in the Diagnostics log. Those are the official clients'
+  own in-app routes, not manifest URLs.
 
 The pieces: `lib/shell/deep_link.dart` (the source, over
 [`app_links`](https://pub.dev/packages/app_links), and
