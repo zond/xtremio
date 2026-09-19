@@ -867,7 +867,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// what is drawn and what reaches the core both come from [_castStatus].
   CastClient? _cast;
   LanMediaControl? _lanMedia;
-  List<CastDevice> _castDevices = const [];
+
+  /// The receivers discovery has found, as a notifier because the device
+  /// sheet is a route of its own: this screen's `setState` does not reach
+  /// it, and a list frozen at the moment it opened is the list a viewer
+  /// waiting for their television to appear watches not change.
+  final ValueNotifier<List<CastDevice>> _castDeviceList = ValueNotifier(
+    const [],
+  );
+
+  List<CastDevice> get _castDevices => _castDeviceList.value;
   CastDevice? _castingTo;
   CastStatus _castStatus = const CastStatus(state: CastPlayerState.idle);
 
@@ -2682,6 +2691,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _showControls();
   }
 
+  /// The transport keys that name what they want, rather than toggling:
+  /// whoever has the stream is who they are for, exactly as
+  /// [_togglePlay] is. A phone that answered them itself went on playing
+  /// the film locally while the television played it too.
+  void _play() {
+    if (_casting) {
+      _cast?.play().ignore();
+    } else {
+      _engine?.play();
+    }
+    _showControls();
+  }
+
+  void _pause() {
+    if (_casting) {
+      _cast?.pause().ignore();
+    } else {
+      _engine?.pause();
+    }
+    _showControls();
+  }
+
   /// Puts the playback at [target] and tells everything that watches
   /// where it went.
   ///
@@ -3965,7 +3996,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _cast = client;
     _lanMedia = lanMedia;
     if (_isTv || !client.isSupported) return;
-    _castDevices = client.currentDevices;
+    _castDeviceList.value = client.currentDevices;
     _subscriptions.addAll([
       client.devices.listen(_onCastDevices),
       client.session.listen(_onCastSession),
@@ -3984,7 +4015,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onCastDevices(List<CastDevice> devices) {
     if (!mounted) return;
-    setState(() => _castDevices = devices);
+    setState(() => _castDeviceList.value = devices);
   }
 
   /// The session as the sender sees it. A null while this screen thinks it
@@ -4081,17 +4112,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _lastStats = stats;
     });
     await _showSheet(
-      (context) => CastDeviceSheet(
-        devices: _castDevices,
-        connected: _castingTo,
-        onSelect: (device) {
-          Navigator.of(context).pop();
-          unawaited(_startCast(device));
-        },
-        onDisconnect: () {
-          Navigator.of(context).pop();
-          unawaited(_stopCast());
-        },
+      (context) => ValueListenableBuilder<List<CastDevice>>(
+        valueListenable: _castDeviceList,
+        builder: (context, devices, _) => CastDeviceSheet(
+          devices: devices,
+          connected: _castingTo,
+          onSelect: (device) {
+            Navigator.of(context).pop();
+            unawaited(_startCast(device));
+          },
+          onDisconnect: () {
+            Navigator.of(context).pop();
+            unawaited(_stopCast());
+          },
+        ),
       ),
     );
     await _castStatsSubscription?.cancel();
@@ -4851,9 +4885,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case LogicalKeyboardKey.mediaPlayPause:
         if (event is KeyDownEvent) _togglePlay();
       case LogicalKeyboardKey.mediaPlay:
-        if (event is KeyDownEvent) _engine?.play();
+        if (event is KeyDownEvent) _play();
       case LogicalKeyboardKey.mediaPause:
-        if (event is KeyDownEvent) _engine?.pause();
+        if (event is KeyDownEvent) _pause();
       case LogicalKeyboardKey.mediaStop:
         // Stop ends the session: leave the player (unloading pauses and
         // reports the position). Unlike Back it has no ladder to come down
@@ -5007,6 +5041,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _flushRememberedTiming();
     _ownPrefs?.dispose();
     _bufferStatus.dispose();
+    _castDeviceList.dispose();
     // Both were unsubscribed from in [_detach]; what is left is the
     // notifiers themselves.
     _player?.dispose();

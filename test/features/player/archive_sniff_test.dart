@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/dev/dev_streams.dart';
 import 'package:xtremio/features/player/archive_sniff.dart';
 
@@ -186,6 +188,40 @@ void main() {
 
       expect(harness.archiveSniffs, hasLength(1));
       expect(find.text('Playback failed: $unrecognized'), findsOneWidget);
+    });
+
+    testWidgets('an answer that comes back after the stream changed is '
+        'dropped', (tester) async {
+      // Reading the start of the stream is a request over the network, and
+      // by the time it answers the screen may be playing something else:
+      // the core resolved another stream, and its failure -- or its
+      // playing -- is not this answer's to overwrite.
+      final gate = Completer<void>();
+      final harness = failing(unrecognized)
+        ..archiveKind = ArchiveKind.rar
+        ..archiveSniffPending = gate.future;
+      await harness.pump(tester);
+      expect(harness.archiveSniffs, hasLength(1));
+      expect(find.text('Playback failed: $unrecognized'), findsOneWidget);
+
+      // Another stream, resolved by the core while the check was out, and
+      // this one plays.
+      harness.engine.openError = null;
+      final next = Map<String, dynamic>.from(harness.fixture);
+      next['stream'] = {
+        'type': 'Ready',
+        'content': [
+          {'streaming_url': 'https://example.org/another.mkv'},
+          DevStreams.bigBuckBunnyHttp,
+        ],
+      };
+      harness.core.setState(CoreField.player, next);
+      await pumpEvents(tester);
+      expect(find.textContaining('Playback failed'), findsNothing);
+
+      gate.complete();
+      await pumpEvents(tester);
+      expect(find.textContaining('RAR archive'), findsNothing);
     });
 
     testWidgets('asks nothing of a stream that had loaded', (tester) async {

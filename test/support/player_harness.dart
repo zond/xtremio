@@ -125,8 +125,15 @@ class PlayerHarness {
   /// The URLs the screen asked that of, in order.
   final List<Uri> archiveSniffs = [];
 
+  /// Holds the check open until a test completes it: reading the start of
+  /// a stream is a request over the network, and what the screen does with
+  /// an answer that comes back late -- after another failure, or after the
+  /// core resolved a different stream -- is the question.
+  Future<void>? archiveSniffPending;
+
   Future<ArchiveKind?> _archiveSniff(Uri url) async {
     archiveSniffs.add(url);
+    if (archiveSniffPending != null) await archiveSniffPending;
     return archiveKind;
   }
 

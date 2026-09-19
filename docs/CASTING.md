@@ -35,7 +35,7 @@ the session what the receiver in the room supports.
   guess here is a guess about whether the evening works.
 - The **codecs** come from mpv while the stream is playing locally
   (`video-codec` and `audio-codec-name`, sampled while the receiver list is
-  open), and otherwise from what the release claims about itself — the
+  open, which is also as long as the list itself keeps following discovery), and otherwise from what the release claims about itself — the
   `StreamFacts` tags and the filename. A claim is believed when it says
   something is *wrong* and never taken as proof that something is right, so a
   codec nothing mentions passes on the container's strength alone, and mpv
@@ -139,8 +139,12 @@ casting is "no".
 
 **While casting** the player screen shows the title, the position, play/pause,
 seek and stop, all from the receiver's own status — a pause from its remote
-shows up here too. Local playback is stopped and its own reports ignored, and
-ending the session resumes it where the receiver had got to. The core hears the
+shows up here too, and the phone's own transport keys are the receiver's as
+much as the buttons on the bar are. Local playback is stopped and its own
+reports ignored, and ending the session resumes it where the receiver had got
+to: a status with no media in it (a session ending, one still connecting)
+keeps the last position the receiver reported rather than reading as a
+receiver at the start of the film. The core hears the
 same three actions local playback dispatches — `TimeChanged`, `PausedChanged`,
 `Ended` — so the library and continue-watching do not notice which device the
 pixels were on.

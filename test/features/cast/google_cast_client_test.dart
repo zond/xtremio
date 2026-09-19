@@ -76,6 +76,23 @@ void main() {
     client.dispose();
   });
 
+  test('no media status leaves the position where the receiver left it', () {
+    // The SDK reports a null status when the receiver has nothing loaded
+    // -- the session ending is one of those moments -- and it carries no
+    // position at all. Read as a position, its zero is what the player
+    // resumed from when the film came back to the phone.
+    final client = GoogleCastClient();
+    client.onPosition(const Duration(minutes: 40));
+    client.onMediaStatus(reported(CastMediaPlayerState.playing));
+    expect(client.lastStatus.position, const Duration(minutes: 40));
+
+    client.onMediaStatus(null);
+
+    expect(client.lastStatus.state, CastPlayerState.idle);
+    expect(client.lastStatus.position, const Duration(minutes: 40));
+    client.dispose();
+  });
+
   test('a session connecting is not reported as one that ended', () async {
     // Picking a second receiver starts its session while the first one's
     // is live, and a null for the new one still connecting read, in the

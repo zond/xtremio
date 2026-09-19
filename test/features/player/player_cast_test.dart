@@ -87,6 +87,26 @@ void main() {
       expect(castButton, findsOneWidget);
     });
 
+    testWidgets('a receiver that answers while the list is open joins it', (
+      tester,
+    ) async {
+      // The sheet is a route of its own, so the screen's rebuild does not
+      // reach it: a television that woke up a second after the viewer
+      // pressed Cast never appeared, however long they waited.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast);
+      await harness.pump(tester);
+      await tester.tap(castButton);
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('cast-device-${kitchen.id}')), findsNothing);
+
+      cast.emitDevices(const [livingRoom, kitchen]);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(ValueKey('cast-device-${kitchen.id}')), findsOneWidget);
+    });
+
     testWidgets('is never on a television, which is a receiver', (
       tester,
     ) async {
@@ -590,6 +610,32 @@ void main() {
       expect(lan.toggles, [true, true, false]);
       expect(harness.engine.seeks, [const Duration(minutes: 7)]);
       expect(harness.engine.playCalls, 1);
+    });
+  });
+
+  group('the transport keys while a receiver has the stream', () {
+    testWidgets('play and pause reach the receiver, not the engine here', (
+      tester,
+    ) async {
+      // A phone answering them itself played the film locally under the
+      // cast: two playbacks of one film, one of them audible in the room.
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final harness = castHarness(cast: cast);
+      await harness.pump(tester);
+      await castTo(tester, livingRoom);
+      final playedLocally = harness.engine.playCalls;
+      final pausedLocally = harness.engine.pauseCalls;
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+      await tester.pumpAndSettle();
+
+      expect(cast.pauses, 1);
+      expect(cast.plays, 1);
+      expect(harness.engine.playCalls, playedLocally);
+      expect(harness.engine.pauseCalls, pausedLocally);
     });
   });
 

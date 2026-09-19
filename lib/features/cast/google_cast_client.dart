@@ -112,7 +112,19 @@ class GoogleCastClient implements CastClient {
 
   void _onMediaStatus(GoggleCastMediaStatus? status) {
     if (status == null) {
-      _emit(const CastStatus(state: CastPlayerState.idle));
+      // No media status is the receiver saying it has nothing loaded --
+      // a session ending, or one still connecting -- and says nothing
+      // about where the film had got to. A zero here was the position
+      // the player then resumed from locally, so the film started again
+      // from the beginning; the last one the receiver reported is the
+      // last that was true.
+      _emit(
+        CastStatus(
+          state: CastPlayerState.idle,
+          position: _last.position,
+          duration: _last.duration,
+        ),
+      );
       return;
     }
     final state = switch (status.playerState) {
