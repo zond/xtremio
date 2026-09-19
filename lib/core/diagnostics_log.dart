@@ -1,4 +1,4 @@
-import 'dart:io' show InternetAddress, InternetAddressType;
+import 'dart:io' show InternetAddress;
 
 import 'package:flutter/foundation.dart';
 
@@ -53,7 +53,9 @@ abstract final class DiagnosticsLog {
   /// URL back as it is and the copied report skips its scrub
   /// (`formatDiagnostics`). The switch's own text says so: those URLs can
   /// carry an addon's debrid key. Lines written before it was turned on
-  /// stay redacted.
+  /// stay redacted, and the ones written while it was on are scrubbed by
+  /// the report ([safeUrl]) once it is off again: they are still in the
+  /// ring.
   static bool unredacted = false;
 
   /// The last line written, and how many identical ones have been
@@ -141,16 +143,22 @@ abstract final class DiagnosticsLog {
   ///   the target's host is what a report about a stream needs (which
   ///   debrid, which addon), and the `p=` token, the target path and its
   ///   query are what it must not have.
-  /// - A URL on this device or this network -- loopback, or a private
-  ///   address, which is the LAN listener a receiver is handed -- keeps its
-  ///   path: that is the server's `/{infoHash}/{fileIdx}`.
+  /// - A URL on this device, or on the host and port of the LAN listener a
+  ///   receiver is handed ([noteOwnServer]), keeps its path: that is the
+  ///   server's `/{infoHash}/{fileIdx}`. Another private address is
+  ///   somebody else's host like any other ([_isOurs]).
   /// - Anything else keeps only its origin: `https://host/…`. A path on
   ///   somebody else's host is a path this app did not write and cannot
   ///   vouch for.
   /// - A `file://` URL keeps only its last segment: the rest is the user's
   ///   directory layout, which no report needs.
-  static String url(Uri url) {
-    if (unredacted) return url.toString();
+  static String url(Uri url) => unredacted ? url.toString() : safeUrl(url);
+
+  /// [url] as [url] writes it with Verbose logging off, whatever the
+  /// switch says: what the copied report's scrub (`redactSecrets`) runs on
+  /// every URL in it, so lines written whole while the switch was on do
+  /// not leave in a report taken after it was turned off.
+  static String safeUrl(Uri url) {
     if (url.isScheme('file')) {
       final segments = url.pathSegments;
       final name = segments.isEmpty ? '' : segments.last;
@@ -166,7 +174,7 @@ abstract final class DiagnosticsLog {
       return '$origin/proxy/d=$target/…';
     }
     final query = url.hasQuery ? '?…' : '';
-    if (!_isThisNetwork(url.host)) {
+    if (!_isOurs(url)) {
       return '$origin${url.path.isEmpty ? '' : '/…'}$query';
     }
     return '$origin${url.path}$query';
@@ -182,7 +190,10 @@ abstract final class DiagnosticsLog {
   /// not parse as a URL is left as it was -- a token that only looks like
   /// one is not a place to invent a redaction, and the second lock is
   /// still there for it.
-  static String redactUrls(String text) =>
+  ///
+  /// [always] redacts with [safeUrl] whatever Verbose logging says; the
+  /// report's scrub asks for that.
+  static String redactUrls(String text, {bool always = false}) =>
       text.replaceAllMapped(_httpUrl, (match) {
         var written = match[0]!;
         var trailing = '';
@@ -193,7 +204,7 @@ abstract final class DiagnosticsLog {
         }
         final parsed = Uri.tryParse(written);
         if (parsed == null || parsed.host.isEmpty) return match[0]!;
-        return '${url(parsed)}$trailing';
+        return '${always ? safeUrl(parsed) : url(parsed)}$trailing';
       });
 
   static final RegExp _httpUrl = RegExp(r'https?://\S+', caseSensitive: false);
@@ -210,31 +221,42 @@ abstract final class DiagnosticsLog {
     return host.isEmpty ? '…' : host;
   }
 
-  /// Whether [host] is this device or a private address on its network:
-  /// the embedded server over loopback, or the LAN media listener's address
-  /// as a receiver is given it. Those are the URLs whose path is ours to
-  /// write down.
-  static bool _isThisNetwork(String host) {
-    if (host == 'localhost') return true;
-    final address = InternetAddress.tryParse(host);
-    if (address == null) return false;
-    if (address.isLoopback || address.isLinkLocal) return true;
-    final bytes = address.rawAddress;
-    return switch (address.type) {
-      InternetAddressType.IPv4 =>
-        bytes[0] == 10 ||
-            (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
-            (bytes[0] == 192 && bytes[1] == 168),
-      // fc00::/7, the unique local range.
-      InternetAddressType.IPv6 => (bytes[0] & 0xfe) == 0xfc,
-      _ => false,
-    };
+  /// The servers of ours that are reachable at an address other than
+  /// loopback: the LAN media listener, as `ServerClient.lanMediaBaseUrl`
+  /// answers it for a receiver ([noteOwnServer]).
+  static final Set<Uri> _ownServers = {};
+
+  /// Says that [base] is one of this app's own servers, so a URL on its
+  /// host and port keeps its path ([url]). Called with every LAN media
+  /// base handed out; loopback needs no noting.
+  static void noteOwnServer(Uri base) => _ownServers.add(
+    Uri(scheme: base.scheme, host: base.host, port: base.port),
+  );
+
+  /// Whether [url]'s path is ours to write down: anything on this device
+  /// (the embedded server over loopback), or the host *and port* of a
+  /// server of ours that is reachable from the network ([noteOwnServer]).
+  ///
+  /// Not "any private address", which is what it used to be: an addon
+  /// somebody hosts on their own LAN is on a private address too, and its
+  /// path carries its config -- debrid key included -- the same as a
+  /// public addon's does.
+  static bool _isOurs(Uri url) {
+    final host = url.host;
+    if (host == 'localhost' ||
+        (InternetAddress.tryParse(host)?.isLoopback ?? false)) {
+      return true;
+    }
+    return _ownServers.any(
+      (base) => base.host == host && base.port == url.port,
+    );
   }
 
   /// Forgets what was last written. For tests, which share a process.
   static void reset() {
     _last = null;
     _repeats = 0;
+    _ownServers.clear();
   }
 }
 

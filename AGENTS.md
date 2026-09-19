@@ -83,14 +83,18 @@ only inside the Rust crate.
 A URL in the diagnostics log is made safe in one place, `DiagnosticsLog`
 (`lib/core/diagnostics_log.dart`): `write` rewrites every `http(s)` URL in
 a line through `DiagnosticsLog.url`, which keeps a path only for a host on
-this device or its network and reduces a `/proxy/…` URL to the target's
-host. A debrid link signs its token into the *path*, Torrentio puts the
+this device or the LAN listener's own host and port (a private address is
+not ours for being private: a self-hosted addon carries its config there)
+and reduces a `/proxy/…` URL to the target's host. A debrid link signs its token into the *path*, Torrentio puts the
 debrid API key there, and a proxied stream carries the target's path and
 the player token after `/proxy/d=`, so dropping the query was never
 enough. Nothing below the FFI redacts -- `rust/src/logging.rs` re-emits
 every app line to logcat before storing it -- so a line is made safe
 before it is written, not on the way to the clipboard (`redactSecrets` is
-the second lock).
+the second lock, and runs every URL through the same rule,
+`DiagnosticsLog.safeUrl`). Verbose logging is the one exception, and a
+deliberate one: while it is on `url` writes URLs whole and the copied
+report skips the scrub; once it is off the scrub catches what it wrote.
 
 ## The app never speaks HTTP to the embedded server
 

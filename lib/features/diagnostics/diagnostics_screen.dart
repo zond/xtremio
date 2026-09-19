@@ -14,9 +14,12 @@ import 'diagnostics_report.dart';
 /// its own and the embedded stream-server's, which share the one
 /// subscriber -- and this screen shows them under a short header (build,
 /// device, server, the pinned revisions) and copies the lot to the
-/// clipboard. Everything shown and copied has been through
-/// [redactSecrets]: the server's bearer token, auth keys, passwords and
-/// addon manifest paths never leave the process.
+/// clipboard. With Verbose logging off, everything shown and copied has
+/// been through [redactSecrets]: the server's bearer token, auth keys and
+/// passwords never leave the process, and every URL is cut down to its
+/// origin unless its path is this app's own. With it on, the report is
+/// the log as written, full stream links included, which is what the
+/// switch says it adds.
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({
     super.key,
@@ -36,7 +39,8 @@ class DiagnosticsScreen extends StatefulWidget {
 }
 
 class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
-  /// The whole report, redacted, or null when it could not be read.
+  /// The whole report -- redacted unless Verbose logging is on -- or null
+  /// when it could not be read.
   String? _report;
 
   /// How many log lines it carries (the header is not one of them).

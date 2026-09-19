@@ -147,7 +147,7 @@ that card rather than failing outright. **Settings → Developer** ships in
 release builds: entries that play or download a public Big Buck Bunny
 torrent to prove the torrent path without any addon, and **Diagnostics**,
 which shows the core's recent log (its own and the embedded server's) and
-copies it, redacted, to the clipboard. **Library** lists every added title over the engine's
+copies it to the clipboard -- redacted, unless Verbose logging is on. **Library** lists every added title over the engine's
 `LibraryWithFilters` model (type and sort filters, cumulative paging,
 long-press to remove, mark watched, rewind or mute notifications), and
 the details header has a bookmark to add or remove a title, wearing on a

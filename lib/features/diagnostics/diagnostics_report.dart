@@ -90,11 +90,21 @@ final RegExp _manifestUrl = RegExp(
 
 /// Scrubs everything that must never reach the clipboard: the embedded
 /// server's bearer token and any other `Authorization` value, auth and API
-/// keys, passwords, and the path of an addon manifest URL.
+/// keys, passwords, and every `http(s)` URL down to what
+/// [DiagnosticsLog.safeUrl] keeps of it -- the origin, and the path only
+/// where the path is this app's own.
+///
+/// The URL pass is the one that matters most. The ring holds lines nobody
+/// on this side composed -- the Rust half writes whole archive and proxy
+/// URLs, a debrid link's token signed into the path -- and lines written
+/// whole while Verbose logging was on stay in the ring after it is turned
+/// off. Both reach the clipboard only through here.
 ///
 /// Deliberately blunt. A false positive costs a line of context in a bug
 /// report; a false negative puts a credential in a paste.
-String redactSecrets(String text) => text
+String redactSecrets(
+  String text,
+) => DiagnosticsLog.redactUrls(text, always: true)
     .replaceAllMapped(
       _authorizationValue,
       (match) => _isNothing(match[4]!)

@@ -118,12 +118,21 @@ after each run of presses and writes one line when the position is still
 where the run began; the stats OSD carries the demuxer's own answer
 (`seekable`, `partially-seekable`, `ranges`) beside it.
 
-Everything shown and copied goes through `redactSecrets`
-(`lib/features/diagnostics/diagnostics_report.dart`) first: the embedded
-server's bearer token, any `Authorization` value, auth and API keys,
-passwords and the path of an addon manifest URL (a debrid key rides there)
-never reach the clipboard. Nothing in that class is logged in the first
-place -- this is the second lock, not the first.
+With Verbose logging off, everything shown and copied goes through
+`redactSecrets` (`lib/features/diagnostics/diagnostics_report.dart`)
+first: the embedded server's bearer token, any `Authorization` value, auth
+and API keys and passwords never reach the clipboard, and every `http(s)`
+URL is cut down to what `DiagnosticsLog.safeUrl` keeps of it -- the
+origin, a `/proxy/…` URL's target host, and a path only on this device or
+the LAN listener a receiver was handed. That covers the whole-URL lines the
+Rust half writes (archive and proxy fetches) and the lines written whole
+while Verbose logging was on, which are still in the ring after it is
+turned off. Nothing in that class is logged by the app in the first place
+-- this is the second lock, not the first.
+
+With Verbose logging **on**, the report is copied as it was logged, with
+no scrub: full stream links, which can carry an addon's debrid key. The
+switch's own description says so.
 
 The header's app version and commit are whatever the build passed in as
 `--dart-define`s, and with nothing passed they read `unknown` -- which is
