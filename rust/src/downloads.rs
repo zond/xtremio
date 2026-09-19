@@ -1680,6 +1680,22 @@ pub struct RemoveOutcome {
 /// under it, or at best leave it unpinned and evictable while its row keeps
 /// claiming a complete download.
 pub fn remove(key: &str, delete_files: bool) -> anyhow::Result<RemoveOutcome> {
+    remove_with(key, delete_files, crate::server::unpin_download)
+}
+
+/// What a removal that left the pin to another row answers.
+const NOTHING_UNPINNED: stream_server::UnpinOutcome = stream_server::UnpinOutcome {
+    unpinned: false,
+    deleted_files: false,
+};
+
+/// [`remove`] with the unpin handed in, which is how a test sees what the
+/// registry looks like while it is asked for.
+fn remove_with(
+    key: &str,
+    delete_files: bool,
+    unpin: impl FnOnce(&str, usize, bool) -> anyhow::Result<stream_server::UnpinOutcome>,
+) -> anyhow::Result<RemoveOutcome> {
     /// What the first write decided: the row is gone already, or the pin is
     /// still to be dropped for these coordinates.
     enum Step {
@@ -1735,22 +1751,42 @@ pub fn remove(key: &str, delete_files: bool) -> anyhow::Result<RemoveOutcome> {
             file_idx,
         } => (info_hash, file_idx),
     };
-    let outcome = match crate::server::unpin_download(&info_hash, file_idx, delete_files) {
-        Ok(outcome) => outcome,
-        Err(error) => {
-            // The server could not be asked (it is not running), so the row
-            // stays, and stays an ordinary row: nothing was removed.
-            update(|registry| {
-                cancel_removal(registry, key, &info_hash, file_idx);
-                Ok(())
-            })?;
-            return Err(error);
+    // The intent is on disk; the unpin is decided again and carried out
+    // under one hold of the file's lock, with the row's last write. The
+    // first write's "no other row names this file" is only true while
+    // nobody can stage a row that does: an add of the same file for
+    // another title, landing between that answer and the unpin, would have
+    // its pin dropped -- and with `delete_files` its bytes deleted -- under
+    // a row that goes on counting on them. The lock is held across one
+    // unpin, which asks the server for nothing that waits on this file.
+    let outcome = update(|registry| {
+        if marked_for_removal(registry, key, &info_hash, file_idx).is_none() {
+            // Re-staged meanwhile: the row under the key is a download the
+            // user asked for after this removal, and its pin is its own.
+            return Ok(Ok(NOTHING_UNPINNED));
         }
-    };
-    update(|registry| {
-        forget_removed(registry, key, &info_hash, file_idx);
-        Ok(())
-    })?;
+        if pin_is_shared(registry, key, &info_hash, file_idx) {
+            tracing::info!(
+                key,
+                file_idx,
+                "another download named this file meanwhile; forgetting the entry, keeping the pin"
+            );
+            forget_removed(registry, key, &info_hash, file_idx);
+            return Ok(Ok(NOTHING_UNPINNED));
+        }
+        match unpin(&info_hash, file_idx, delete_files) {
+            Ok(outcome) => {
+                forget_removed(registry, key, &info_hash, file_idx);
+                Ok(Ok(outcome))
+            }
+            Err(error) => {
+                // The server could not be asked (it is not running), so the
+                // row stays, and stays an ordinary row: nothing was removed.
+                cancel_removal(registry, key, &info_hash, file_idx);
+                Ok(Err(error))
+            }
+        }
+    })??;
     Ok(RemoveOutcome {
         removed: true,
         unpinned: outcome.unpinned,
@@ -3447,6 +3483,49 @@ mod tests {
                 vec![("abc".to_owned(), 2, true), ("def".to_owned(), 5, true)]
             );
             assert!(load().expect("the registry after").items.is_empty());
+        });
+    }
+
+    /// A removal decides and carries out its unpin under one hold of the
+    /// registry's lock: let go in between, an add of the same file for
+    /// another title can stage its row there and lose its pin and its bytes
+    /// to this removal.
+    #[test]
+    fn a_removal_unpins_with_the_registry_held() {
+        crate::env::with_storage_dir(|_| {
+            update(|registry| {
+                registry.items.insert("tt1:tt1".into(), naming("abc", 2));
+                Ok(())
+            })
+            .expect("the registry going in");
+            let mut asked = false;
+            let outcome = remove_with("tt1:tt1", true, |info_hash, file_idx, delete_files| {
+                assert!(
+                    crate::state::state().downloads.file.try_lock().is_err(),
+                    "unpinned {info_hash}/{file_idx} with the registry's lock let go"
+                );
+                asked = true;
+                Ok(stream_server::UnpinOutcome {
+                    unpinned: true,
+                    deleted_files: delete_files,
+                })
+            })
+            .expect("remove");
+            assert!(asked);
+            assert!(outcome.removed && outcome.unpinned && outcome.deleted_files);
+            assert!(load().expect("the registry after").items.is_empty());
+
+            // A server that cannot be asked leaves an ordinary row.
+            update(|registry| {
+                registry.items.insert("tt1:tt1".into(), naming("abc", 2));
+                Ok(())
+            })
+            .expect("the registry going in");
+            assert!(remove_with("tt1:tt1", false, |_, _, _| Err(anyhow::anyhow!("down"))).is_err());
+            assert_eq!(
+                load().expect("the registry after").items["tt1:tt1"],
+                naming("abc", 2)
+            );
         });
     }
 
