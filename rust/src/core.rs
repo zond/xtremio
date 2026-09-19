@@ -254,6 +254,25 @@ fn hydrate<T: for<'de> Deserialize<'de> + Send + 'static>(
     }
 }
 
+/// Whether a failed schema migration refuses the boot: yes, unless all that
+/// went wrong is a bucket that would not parse.
+///
+/// That one case is `hydrate`'s own: a bucket that will not parse is moved
+/// aside and the engine starts without it, and a migration that stops on
+/// one leaves nothing a boot could do better. Everything else -- a read or
+/// write the disk refused, storage with no directory, buckets a newer
+/// build wrote (`StorageSchemaVersionDowngrade`) -- is a condition that
+/// says nothing about the data, and a boot carried on over it hydrates
+/// buckets in a schema this build does not read, moves them aside, and
+/// comes up anonymous with an empty library.
+fn migration_refuses_the_boot(error: &EnvError) -> bool {
+    match error {
+        EnvError::Serde(_) => false,
+        EnvError::StorageSchemaVersionUpgrade(source) => migration_refuses_the_boot(source),
+        _ => true,
+    }
+}
+
 /// Whether `url` names this machine: the two loopback addresses and the
 /// name that resolves to them. Shared with [`crate::addon_health`], which
 /// needs the same answer for the opposite reason -- what is on loopback is
@@ -346,9 +365,24 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
         .with_context(|| format!("create core cache dir {:?}", config.cache_dir))?;
 
     if let Err(error) = env::block_on(XtremioEnv::migrate_storage_schema()) {
+        if migration_refuses_the_boot(&error) {
+            // The rule `hydrate` keeps, for the same reason: the buckets are
+            // half-migrated or a newer build's, nothing says they are bad,
+            // and booting over them turns the logged-in user into an
+            // anonymous one once hydrate moves aside what it cannot parse.
+            // A refused boot can be retried; one that starts over cannot be
+            // undone. The server goes down with it, as below.
+            if let Err(stop) = server::stop_in(&app) {
+                tracing::warn!(%stop, "could not stop the embedded server after a refused boot");
+            }
+            return Err(anyhow::anyhow!(
+                "migrate the persisted stremio-core buckets: {}",
+                error.message()
+            ));
+        }
         tracing::warn!(
-            ?error,
-            "storage schema migration failed; continuing with what is readable"
+            error = %error.message(),
+            "storage schema migration could not parse a bucket; continuing with what is readable"
         );
     }
 

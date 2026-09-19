@@ -75,7 +75,12 @@ what every model field means. The shape of the thing is in the
   and read as empty; one the disk will not read refuses the boot
   (`core_init` fails and the Dart boot screen shows why) instead of
   starting an anonymous profile the first persist would write over the
-  real one.
+  real one. A stremio-core schema migration that fails refuses the boot the
+  same way (a read or write the disk refused, or buckets a newer build
+  wrote), unless all it hit was a bucket that will not parse, which is
+  then moved aside like any other. `core_shutdown` waits (up to 5 s) for
+  the storage writes the engine has queued, and a bucket write never lands
+  over a newer one of the same file, whatever order the two were queued in.
 - **The app's own preferences are a file beside those buckets**
   (`rust/src/prefs.rs`, `<storage_dir>/xtremio_prefs.json`): a flat JSON
   object of client-side choices -- how a list is laid out, which view a

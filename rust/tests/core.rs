@@ -353,5 +353,58 @@ fn core_lifecycle() -> anyhow::Result<()> {
         core4.join("profile.json").is_dir(),
         "and nothing was moved aside or written"
     );
+
+    // A schema migration that fails for any reason but a bucket that will
+    // not parse refuses the boot the same way: a schema version the disk
+    // will not read, and buckets a newer build wrote. Carried on over
+    // either, hydrate would read buckets in a schema this build does not
+    // know, move them aside, and boot the user anonymous.
+    let profile = serde_json::to_vec(&Profile::default())?;
+    let refused = |core: &std::path::Path| -> anyhow::Result<()> {
+        std::fs::write(core.join("profile.json"), &profile)?;
+        let error = match core_init(config(core.parent().expect("a root"))) {
+            Ok(_) => panic!("a failed migration must refuse the boot"),
+            Err(error) => error,
+        };
+        let chain = format!("{error:#}");
+        assert!(chain.contains("migrate"), "{chain}");
+        assert!(!core_is_initialized()?);
+        assert_eq!(server_base_url()?, None, "the server is not left running");
+        assert_eq!(
+            std::fs::read(core.join("profile.json"))?,
+            profile,
+            "and the profile is where it was"
+        );
+        Ok(())
+    };
+    let tmp5 = tempfile::tempdir()?;
+    let core5 = tmp5.path().join("core");
+    std::fs::create_dir_all(core5.join("schema_version.json"))?;
+    refused(&core5)?;
+    let tmp6 = tempfile::tempdir()?;
+    let core6 = tmp6.path().join("core");
+    std::fs::create_dir_all(&core6)?;
+    std::fs::write(
+        core6.join("schema_version.json"),
+        (stremio_core::constants::SCHEMA_VERSION + 1).to_string(),
+    )?;
+    refused(&core6)?;
+
+    // Except the one failure hydrate has its own answer for: a bucket that
+    // will not parse stops the migration, and is then moved aside and
+    // started without, like any other.
+    let tmp7 = tempfile::tempdir()?;
+    let core7 = tmp7.path().join("core");
+    std::fs::create_dir_all(&core7)?;
+    std::fs::write(core7.join("schema_version.json"), "1")?;
+    std::fs::write(core7.join("profile.json"), b"{ not json")?;
+    core_init(config(tmp7.path()))?;
+    assert!(core_is_initialized()?);
+    assert!(
+        !core7.join("profile.json").exists()
+            || std::fs::read(core7.join("profile.json"))? != b"{ not json",
+        "the unparsable profile was moved aside"
+    );
+    core_shutdown()?;
     Ok(())
 }
