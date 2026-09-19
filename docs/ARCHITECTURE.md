@@ -1272,13 +1272,14 @@ what every model field means. The shape of the thing is in the
   sourced from `AddonInstalled`/`AddonUninstalled`/`AddonUpgraded`) show
   as a SnackBar.
 - **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
-  of the `zond/stremio-core` fork (`b4c92f3`: release 0.62.1 plus one
-  commit that keeps an addon's own subtitle properties -- `fpsMilli`,
+  of the `zond/stremio-core` fork (`1819c56f`: release 0.63.0 plus the
+  commits the dependency table below lists, the one the app needs being
+  the commit that keeps an addon's own subtitle properties -- `fpsMilli`,
   `subtitleFileName`, `releaseGroup` and the rest -- in a flattened
   `other` map instead of letting serde drop them; upstream PR
   Stremio/stremio-core#1045, drop the fork once it lands) with the
   `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`8317203` as this is
+  features, `zond/stream-server` at a fixed rev (`de03ad08` as this is
   written; the pin itself lives in `rust/Cargo.toml`, twice, for `server`
   and its `enginefs`, and the `Pin stream-server at ...` commits move it
   there and not here, so read the current one from the file. What the pin
@@ -1346,7 +1347,7 @@ it:
 |---|---|---|
 | `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | A rev, for reproducibility, that has what the app uses: the server keeps no record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry; it chokes the session's uploading while nothing plays if *Share while idle* is off; and it has the LAN media listener a cast turns on. Default features are on, which is RAR support — see [the README](../README.md#license). |
 | `librqbit` | [`zond/rqbit`](https://github.com/zond/rqbit) | Only a dev-dependency here, for the real `.torrent` fixtures in `rust/tests/downloads.rs`. It is always the rev stream-server's `enginefs` uses; any other puts two librqbits in the graph. The fork is stream-server's: it follows upstream and adds what a bounded streaming cache needs from the engine. |
-| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.62.1 plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) instead of letting serde drop them — upstream PR Stremio/stremio-core#1045 — one that pins its `localsearch` dependency by rev rather than by branch, and one that relaxes `stremio-watched-bitfield`'s `flate2 = "1.0.*"` to `"1"`: stream-server's tree needs flate2 ≥ 1.1 and Cargo will not pick two 1.x versions, so without it the graph does not resolve. That last one replaced a vendored copy of the crate wired in with `[patch]`. |
+| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.63.0 plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) instead of letting serde drop them — upstream PR Stremio/stremio-core#1045 — one that pins its `localsearch` dependency by rev rather than by branch, and one that relaxes `stremio-watched-bitfield`'s `flate2 = "1.0.*"` to `"1"`: stream-server's tree needs flate2 ≥ 1.1 and Cargo will not pick two 1.x versions, so without it the graph does not resolve. That last one replaced a vendored copy of the crate wired in with `[patch]`. |
 
 Beside those, `flutter_rust_bridge` is exactly 2.13.0 in `pubspec.yaml`,
 `rust/Cargo.toml` and the codegen.
