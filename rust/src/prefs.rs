@@ -73,8 +73,15 @@ fn path() -> Option<PathBuf> {
 /// will not read is not the same answer -- that is "cannot tell" -- and
 /// comes back as the error, so nobody writes a default over what could not
 /// be seen.
+///
+/// Under the file's lock, like a write: a read of a file that will not
+/// parse moves it aside, and a rename landing between a locked [`set_in`]'s
+/// read and its write -- or just after the write -- takes the key it has
+/// just stored with it.
 pub fn get_all() -> anyhow::Result<Map<String, Value>> {
     let path = path().context("preferences: storage directory is not set")?;
+    let app = crate::state::state();
+    let _guard = app.prefs.file();
     read_object(&path)
 }
 
@@ -311,6 +318,29 @@ mod tests {
         crate::env::without_storage_dir(|| {
             assert!(get_all().is_err());
             assert!(set("streamsFlat", Some(Value::Bool(true))).is_err());
+        });
+    }
+
+    /// A read of a file that will not parse moves it aside, so it waits for
+    /// a write in progress rather than renaming the file under it.
+    #[test]
+    fn a_read_waits_for_a_write_in_progress() {
+        with_storage_dir(|dir| {
+            let file = dir.join(FILE_NAME);
+            std::fs::write(&file, b"{ not json").expect("write");
+            let app = crate::state::state();
+            let held = app.prefs.file();
+            let reader = std::thread::spawn(get_all);
+            // Only how sharp the test is depends on this wait: a read that
+            // has not got going yet has moved nothing either way.
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            assert!(
+                file.is_file(),
+                "the file was moved aside while a write held the lock"
+            );
+            drop(held);
+            assert!(reader.join().expect("the read").expect("read").is_empty());
+            assert!(!file.exists(), "moved aside once the lock was let go");
         });
     }
 }
