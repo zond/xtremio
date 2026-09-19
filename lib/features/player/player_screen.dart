@@ -108,6 +108,9 @@ class PlayerScreen extends StatefulWidget {
   /// take to fade is not worth putting a card over the picture for.
   static const Duration stuckAfter = Duration(seconds: 5);
 
+  /// How long "this subtitle could not be loaded" stays over the picture.
+  static const Duration subtitleFailureShown = Duration(seconds: 6);
+
   /// How often that is checked. A position that has stopped produces no
   /// events at all, which is exactly why it needs a clock and not a
   /// listener.
@@ -625,11 +628,55 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// watched the picture for it to take effect.
   bool _subtitlesChosenByHand = false;
 
+  /// The addon files mpv has said it could not load for this media
+  /// ([externalSubtitleFailure]), by URL. The auto-pick passes over them:
+  /// a dead link is dead on the next tracks event too, and picking it
+  /// again would only fetch it again.
+  final Set<String> _deadSubtitles = {};
+
+  /// What the last addon file put on screen replaced, for as long as it
+  /// might yet turn out not to load: its URL, the tracks as they were,
+  /// the file whose timing was in force, and whether the auto-pick made
+  /// the choice (and so should make another). `sub-add` does not answer
+  /// a failure (see [externalSubtitleFailure]); the error that says so
+  /// arrives on its own, and this is what it is undone from.
+  ({
+    String url,
+    PlaybackTracks before,
+    SubtitleInfo? beforeSubtitle,
+    bool auto,
+  })?
+  _subtitlePick;
+
+  /// What is said about a subtitle file that would not load, over the
+  /// picture for [PlayerScreen.subtitleFailureShown]; null otherwise.
+  String? _subtitleFailure;
+  Timer? _subtitleFailureTimer;
+
   /// Whether the engine has reported the opened media loaded (a duration,
   /// or that it is playing). Until then mpv is between files and refuses
   /// `sub-add` ("Cannot add track at the moment"), so the subtitle
   /// auto-pick waits for this.
   bool _mediaLoaded = false;
+
+  /// Whether the file the last `open` asked for has shown up: a duration,
+  /// or a position past zero. Reset by every `open` ([_open]), re-opens and
+  /// retries included, which is where it differs from [_mediaLoaded].
+  ///
+  /// Neither of that one's signals says so. media_kit's `open` stops the
+  /// player first, and the stop announces itself -- `position: 0` and then
+  /// `duration: 0` down the streams this screen listens to -- before a
+  /// byte of the new file has been read; and once the `loadfile` is issued
+  /// it reports `playing: true` straight away
+  /// (`player/native/player/real.dart`). A zero before this is that
+  /// announcement and not the viewer at the start of a film of no length,
+  /// so neither is believed ([_onPosition], [_onDuration]). Believed, the
+  /// position reported the viewer at the start to the core, and a second
+  /// re-open issued before the first had started resumed from it
+  /// ([_resumePosition]), since [_position] held it.
+  ///
+  /// It is also where an engine error stops being fatal ([_onEngineError]).
+  bool _mediaIn = false;
 
   /// What the viewer has asked of the subtitles on screen, and the whole
   /// of what mpv is playing them at: nothing else writes either property.
@@ -1210,6 +1257,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // has to be the one URL rather than three answers that agree today.
     final media = _mediaUrl(url);
     _engineUrl = media;
+    _mediaIn = false;
     DiagnosticsLog.info(
       'player',
       'open ${DiagnosticsLog.url(media)} '
@@ -1478,6 +1526,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _onPosition(Duration position) {
     if (_handedOver || _casting) return;
+    if (!_mediaIn) {
+      // The stop an `open` starts with, announcing itself; see [_mediaIn].
+      if (position == Duration.zero) return;
+      _mediaIn = true;
+    }
     _positionSeen = true;
     if (position != _position.value) {
       _stillTicks = 0;
@@ -1524,8 +1577,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onDuration(Duration duration) {
+    // The same stop's `duration: 0` ([_mediaIn]). Believed, it left the
+    // film with no length until the re-opened file reported one, and an
+    // early end of file in that gap passed for the end of the film
+    // ([_endLooksReal] with nothing to compare against).
+    if (!_mediaIn && duration == Duration.zero) return;
     setState(() => _duration = duration);
     if (duration > Duration.zero) {
+      _mediaIn = true;
       // **The one number the server cannot work out for itself.** A film's
       // length with its size is its bitrate, and the bitrate is what every
       // stream's lookahead is sized from: a player that is behind asks for
@@ -1674,9 +1733,83 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// read off a phone.
   void _onEngineLog(String line) => DiagnosticsLog.warn('mpv', line);
 
+  /// An error from the engine, which is fatal only while the file the
+  /// last `open` asked for has not shown up ([_mediaIn]).
+  ///
+  /// media_kit makes these out of mpv's error-level log lines
+  /// ([PlaybackEngine.errors]), so after the film is in, one is a line in
+  /// a log and not the end of the playback: a dead subtitle link
+  /// (`Can not open external file <url>.` and ffmpeg's `tcp:` line before
+  /// it), a decoder complaining about a damaged frame, a read that failed
+  /// and was retried. Treating those as "Playback failed" put the card,
+  /// and the addon's URL, over a film that went on playing underneath it,
+  /// with the controls pinned up, the display's rate given back and the
+  /// stall reports stopped for good. A playback that really has stopped
+  /// says so on its own terms -- an end of file that is not the end
+  /// ([_onFalseEnd]) or a position that stands still ([_checkStuck]) --
+  /// and those are what give up on it.
   void _onEngineError(String error) {
+    final subtitle = externalSubtitleFailure(error);
+    if (subtitle != null) {
+      _onSubtitleFailed(subtitle);
+      return;
+    }
+    if (_mediaIn) {
+      DiagnosticsLog.warn('player', 'engine error while playing: $error');
+      return;
+    }
     DiagnosticsLog.error('player', 'engine error: $error');
     _failPlayback(error);
+  }
+
+  /// mpv could not load the addon file at [url]: say so, and put back
+  /// what it was meant to replace -- mpv never took it off, since
+  /// `sub-add` changes the selection only when the file is in. A pick the
+  /// auto-pick made is made again, past the dead file.
+  void _onSubtitleFailed(String url) {
+    DiagnosticsLog.warn('player', 'subtitle file not loaded: $url');
+    _deadSubtitles.add(url);
+    final pick = _subtitlePick;
+    if (!_stillOurs ||
+        pick == null ||
+        pick.url != url ||
+        _tracks.value.activeSubtitleId != url) {
+      return;
+    }
+    _subtitlePick = null;
+    final subtitle = _externalSubtitle;
+    _undoSubtitlePick(pick.before, pick.beforeSubtitle);
+    _showSubtitleFailure(
+      subtitle == null
+          ? 'This subtitle could not be loaded.'
+          : 'The subtitle "${SubtitleMenu.externalLabel(subtitle)}" could '
+                'not be loaded.',
+    );
+    if (pick.auto) {
+      _autoPickedSubtitles = false;
+      _maybeAutoPickSubtitles();
+    }
+  }
+
+  /// Puts the tracks back to [before] and the timing to [beforeSubtitle]'s.
+  ///
+  /// Reverting is a change of what is on screen like any other, so the
+  /// multiplier comes back with it -- and this is the one path that moves
+  /// the timing outside a build: the panel is drawn from [_timing], so
+  /// without the rebuild it would go on showing the shift and the
+  /// multiplier mpv has already been taken off.
+  void _undoSubtitlePick(PlaybackTracks before, SubtitleInfo? beforeSubtitle) {
+    _tracks.value = before;
+    setState(() => _resetSubtitleTiming(beforeSubtitle));
+  }
+
+  void _showSubtitleFailure(String message) {
+    _subtitleFailureTimer?.cancel();
+    setState(() => _subtitleFailure = message);
+    _subtitleFailureTimer = Timer(PlayerScreen.subtitleFailureShown, () {
+      _subtitleFailureTimer = null;
+      if (mounted) setState(() => _subtitleFailure = null);
+    });
   }
 
   /// Shows "Playback failed: [error]" in place of whatever was waiting for
@@ -3153,6 +3286,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _selectExternalSubtitle(SubtitleInfo subtitle) {
     _subtitlesChosenByHand = true;
+    _subtitlePick = (
+      url: subtitle.url.toString(),
+      before: _tracks.value,
+      beforeSubtitle: _externalSubtitle,
+      auto: false,
+    );
     _tracks.value = _tracks.value.copyWith(
       activeSubtitleId: subtitle.url.toString(),
     );
@@ -3329,6 +3468,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final offered = _offeredSubtitles(state.externalSubtitleSources);
       final candidates = offered
           .map((source) => source.subtitle)
+          .where((s) => !_deadSubtitles.contains(s.url.toString()))
           .where((s) => matches(s.lang));
       // A remembered group is a preference among the files of the
       // language, never a condition on the language: a show that changes
@@ -3353,6 +3493,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           activeSubtitleId: external.url.toString(),
         );
         _resetSubtitleTiming(external);
+        _subtitlePick = (
+          url: external.url.toString(),
+          before: before,
+          beforeSubtitle: beforeSubtitle,
+          auto: true,
+        );
         applied = _engine?.setExternalSubtitle(
           external.url,
           title: SubtitleMenu.externalLabel(external),
@@ -3380,21 +3526,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
             if (_opened == url) _autoPickedSubtitles = true;
           },
           onError: (Object _) {
-            // Rejected (mpv could not add the track): show what is really
-            // selected and try again on the next tracks/state change.
-            // Reverting is a change of what is on screen like any other,
-            // so the multiplier comes back with it.
+            // Rejected: show what is really selected and try again on the
+            // next tracks/state change. An engine that refuses the call
+            // itself; mpv refusing a file does not come this way
+            // ([_onSubtitleFailed]).
             if (_opened != url ||
                 !_stillOurs ||
                 _tracks.value.activeSubtitleId != applying) {
               return;
             }
-            _tracks.value = before;
-            // The one path that moves the timing outside a build: the
-            // panel is drawn from [_timing], so without the rebuild it
-            // would go on showing the shift and the multiplier mpv has
-            // already been taken off.
-            setState(() => _resetSubtitleTiming(beforeSubtitle));
+            _undoSubtitlePick(before, beforeSubtitle);
           },
         )
         .whenComplete(() => _autoPickingSubtitles = false);
@@ -4436,6 +4577,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controlsTimer = null;
     _stuckTimer?.cancel();
     _stuckTimer = null;
+    _subtitleFailureTimer?.cancel();
+    _subtitleFailureTimer = null;
   }
 
   /// Stops the player, waits for it, and only then leaves the screen.
@@ -5210,6 +5353,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   // faded, which is the whole of what it is for. Top right,
                   // opposite the stats panel and clear of the subtitles it
                   // is being used to judge.
+                  // Outside the OSD's fade as well: it says why the
+                  // subtitle the viewer is looking for is not there, and
+                  // the bar is not what they are looking at.
+                  if (_subtitleFailure case final failure?)
+                    SafeArea(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 64),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              child: Text(
+                                failure,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (_timingShown)
                     SafeArea(
                       child: Padding(

@@ -1212,11 +1212,26 @@ what every model field means. The shape of the thing is in the
   peers there is nothing connected to count, so that line is the
   `peerDiscovery` counts plus, when a tracker answered, `137 seeds in the
   swarm`. Polling pauses when the media loads (see
-  the stall card below) and ends on an engine error and on dispose; direct
-  HTTP streams get nothing extra. The `TorrentStatsClient` comes from
+  the stall card below) and ends on a failed playback and on dispose;
+  direct HTTP streams get nothing extra. The `TorrentStatsClient` comes from
   `PlaybackScope`, so tests feed phases through a fake. The stream's
   `fileMustInclude` (`f=`) filters are not part of the library call: a
   stream without a `fileIdx` polls the torrent-level stats.
+- **An engine error is not a failed playback.** media_kit turns mpv's
+  error-level log lines from a handful of subsystems into `errors`
+  events, so one says something went wrong and not that the playback
+  did: a dead subtitle link, a decoder complaining, a read that was
+  retried. So "Playback failed: …" is shown only while the file the last
+  `open` asked for has not shown up (a duration, or a position past
+  zero); after that an error is a line in the diagnostics log, and what
+  gives up on a loaded playback is an end of file that is not the end
+  (`falseEndRecoveries` re-opens) or a position that stands still. mpv's
+  own words for a subtitle it could not fetch (`Can not open external
+  file <url>.`) are recognised: the file is passed over by the auto-pick
+  for the rest of the media, the selection it replaced goes back — `sub-add`
+  never took it off, and it answers a failure only in the log — and the
+  viewer is told which subtitle would not load, over the picture for six
+  seconds.
 - **Mid-playback stall card.** When playback that has started runs out of
   data (`buffering` from the engine), a torrent gets the same card rather
   than the spinner and sentence it used to: the polling that paused at

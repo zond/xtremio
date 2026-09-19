@@ -88,9 +88,13 @@ void main() {
     // The failure card replaces the picture and this screen stays up, so
     // nothing else on the way out runs: without the release here the
     // panel sits at the film's rate under a static card, and under every
-    // menu the viewer opens over it, until they press Back.
-    harness.engine.emitError('the stream stopped sending data');
-    await pumpEvents(tester);
+    // menu the viewer opens over it, until they press Back. A stream that
+    // keeps ending early is the failure a loaded film has: an engine
+    // error by then is a line in a log.
+    for (var i = 0; i <= PlayerScreen.falseEndRecoveries; i++) {
+      harness.engine.emitCompleted();
+      await pumpEvents(tester);
+    }
 
     expect(find.textContaining('Playback failed'), findsOneWidget);
     expect(harness.displayFrameRate.clears, 1);

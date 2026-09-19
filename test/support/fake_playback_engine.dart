@@ -100,6 +100,14 @@ class FakePlaybackEngine implements PlaybackEngine {
   /// with, so a later call can succeed while this one is still out.
   Completer<void>? subtitleGate;
 
+  /// Subtitle URLs mpv cannot fetch: `setExternalSubtitle` with one of
+  /// these *completes*, as media_kit's does -- `sub-add`'s return code is
+  /// logged and dropped (`_command`, `player/native/player/real.dart`) --
+  /// and the failure arrives the only way it does from mpv: as its
+  /// error-level log lines, which media_kit turns into [errors] events.
+  /// ffmpeg's `tcp:` line first, then `cplayer`'s own.
+  final Set<Uri> deadSubtitles = {};
+
   SubtitleStyle? subtitleStyle;
   double? lastSubtitleBottomPadding;
 
@@ -164,6 +172,15 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   void emitError(String error) => _errors.add(error);
 
+  /// An error-level mpv log line from [prefix], arriving as media_kit
+  /// delivers it: on the log (the screen's [engineLog], as
+  /// `MediaKitEngine` formats it) and, for the subsystems media_kit maps,
+  /// as an [errors] event carrying the bare text.
+  void emitMpvError(String prefix, String text) {
+    emitEngineLog('$prefix: $text');
+    emitError(text);
+  }
+
   /// One of mpv's own error-level log lines.
   void emitEngineLog(String line) => _engineLog.add(line);
   void emitVolume(double volume) => _volume.add(volume);
@@ -210,10 +227,24 @@ class FakePlaybackEngine implements PlaybackEngine {
   @override
   Stream<double> get videoFrameRate => _videoFrameRate.stream;
 
+  /// media_kit's `open` begins with a `stop(open: true)`, and a stop
+  /// announces itself ([dispose] says how): `position: 0`, then
+  /// `duration: 0`, before a byte of the new file is read. The zero
+  /// position arrives while the duration a screen holds is still the
+  /// last file's, which is the shape that reads as "the viewer is at the
+  /// start of this" -- so the fake emits both, in mpv's order, on every
+  /// `open`.
+  ///
+  /// Not the `playing: false` the same stop sends, nor the `playing:
+  /// true` media_kit sends as soon as the `loadfile` is issued: a test
+  /// says when its media plays, and a fake that played by itself on
+  /// every open would decide that for all of them.
   @override
   Future<void> open(Uri url, {Duration start = Duration.zero}) async {
     opened.add((url, start));
     callLog?.add('open');
+    emitPosition(Duration.zero);
+    emitDuration(Duration.zero);
     if (openPending != null) await openPending;
     if (openError != null) throw openError!;
   }
@@ -285,6 +316,10 @@ class FakePlaybackEngine implements PlaybackEngine {
     final error = subtitleError;
     await _takeGate();
     if (error != null) throw error;
+    if (deadSubtitles.contains(url)) {
+      emitMpvError('ffmpeg', 'tcp: Connection refused');
+      emitMpvError('cplayer', 'Can not open external file $url.');
+    }
   }
 
   @override

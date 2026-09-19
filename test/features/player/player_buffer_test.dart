@@ -114,6 +114,37 @@ void main() {
       expect(loads(harness), loadsBefore);
     });
 
+    testWidgets('the re-open\'s own zero is not reported as the viewer', (
+      tester,
+    ) async {
+      // media_kit's `open` stops the player first, and the stop pushes
+      // `position: 0` while the duration this screen holds is still the
+      // film's -- which, believed, is "the viewer is at the start" to the
+      // core, and continue-watching went back to the beginning.
+      useWideViewport(tester);
+      final harness = PlayerHarness(
+        prefs: await storedPrefs(BufferAhead.normal),
+      );
+      await harness.pump(tester);
+      harness.engine.emitDuration(const Duration(minutes: 96));
+      harness.engine.emitPosition(const Duration(minutes: 12));
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      expect(harness.lastPlayerArgs('TimeChanged')?['time'], 12 * 60 * 1000);
+
+      await openSheet(tester);
+      await chooseBuffer(tester, BufferAhead.large);
+      expect(harness.engine.opened, hasLength(2));
+      await pumpEvents(tester);
+      expect(harness.lastPlayerArgs('TimeChanged')?['time'], 12 * 60 * 1000);
+
+      // And a second change before the first re-open has started resumes
+      // where the viewer was, not at that zero.
+      await chooseBuffer(tester, BufferAhead.maximum);
+      expect(harness.engine.opened, hasLength(3));
+      expect(harness.engine.opened[2].$2, const Duration(minutes: 12));
+    });
+
     testWidgets('reverts to the stored choice with the next playback', (
       tester,
     ) async {

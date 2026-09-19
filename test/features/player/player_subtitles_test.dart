@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
+import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/subtitle_groups.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 
@@ -402,6 +405,88 @@ void main() {
     pokeState(harness);
     await pumpEvents(tester);
     expect(engine.externalSubtitles, hasLength(3));
+  });
+
+  testWidgets('a link mpv cannot load is said, and the next file is tried', (
+    tester,
+  ) async {
+    // What a dead subtitle link really does: `sub-add` completes, and
+    // mpv's error lines arrive on their own -- which used to be "Playback
+    // failed" over a film that went on playing.
+    useWideViewport(tester);
+    const otherFrench = 'https://subs.example.org/tt0063350/fre-2.srt';
+    final harness = harnessWithSubtitles(
+      preference: {'enabled': true, 'source': 'external', 'language': 'fre'},
+    );
+    (harness.fixture['subtitles'] as List).add(
+      subtitlesResponse(base: 'https://other.example.org/manifest.json', [
+        {'id': 'fre-2', 'lang': 'fre', 'url': otherFrench},
+      ]),
+    );
+    await harness.pump(tester);
+    final engine = harness.engine;
+    // Hold the pick to learn which file it chose, and make that one dead.
+    final gate = engine.subtitleGate = Completer<void>();
+    engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+    final dead = engine.externalSubtitles.single.$1;
+    engine.deadSubtitles.add(dead);
+    gate.complete();
+    await pumpEvents(tester);
+
+    expect(find.textContaining('Playback failed'), findsNothing);
+    expect(find.textContaining('could not be loaded'), findsOneWidget);
+    expect(engine.externalSubtitles, hasLength(2));
+    expect(engine.externalSubtitles.last.$1, isNot(dead));
+    expect(find.byIcon(Icons.subtitles), findsOneWidget);
+
+    // The one that loaded is the pick: nothing more is tried.
+    pokeState(harness);
+    await pumpEvents(tester);
+    expect(engine.externalSubtitles, hasLength(2));
+
+    // And the note goes, the film having gone on underneath it.
+    await tester.pump(PlayerScreen.subtitleFailureShown);
+    expect(find.textContaining('could not be loaded'), findsNothing);
+  });
+
+  testWidgets('a file picked by hand that will not load is put back', (
+    tester,
+  ) async {
+    useWideViewport(tester);
+    final harness = harnessWithSubtitles();
+    await harness.pump(tester);
+    final engine = harness.engine..deadSubtitles.add(Uri.parse(frenchUrl));
+    engine.emitTracks(
+      const PlaybackTracks(
+        subtitle: [TrackInfo(id: '3', language: 'eng')],
+        activeSubtitleId: '3',
+      ),
+    );
+    engine.emitDuration(const Duration(minutes: 96));
+    await pumpEvents(tester);
+
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('French'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('French'));
+    await tester.pumpAndSettle();
+    expect(engine.externalSubtitles.single.$1, Uri.parse(frenchUrl));
+
+    expect(find.textContaining('Playback failed'), findsNothing);
+    expect(
+      find.text('The subtitle "French" could not be loaded.'),
+      findsOneWidget,
+    );
+    // mpv never took the English track off, so that is what is shown as
+    // selected again.
+    await tester.tap(find.byTooltip('Subtitles (S)'));
+    await tester.pumpAndSettle();
+    final english = tester.widget<ListTile>(
+      find.ancestor(of: find.text('English'), matching: find.byType(ListTile)),
+    );
+    expect(english.selected, isTrue);
   });
 
   testWidgets('tells the core the filename once the media is open', (

@@ -21,6 +21,22 @@ export 'playback_stats.dart';
 export 'playback_tracks.dart';
 export 'torrent_stats.dart';
 
+/// The URL of the external subtitle file [error] says mpv could not load,
+/// or null when it says something else.
+///
+/// mpv's own words for it, `Can not open external file <url>.`, logged at
+/// error level by `cplayer` and so an [PlaybackEngine.errors] event --
+/// and the only word of it anyone gets: `sub-add` hands its failure back
+/// as the command's return code, which media_kit logs and drops, so the
+/// call itself completes as if the file had been added.
+String? externalSubtitleFailure(String error) {
+  const prefix = 'Can not open external file ';
+  if (!error.startsWith(prefix)) return null;
+  var url = error.substring(prefix.length).trim();
+  if (url.endsWith('.')) url = url.substring(0, url.length - 1);
+  return url.isEmpty ? null : url;
+}
+
 /// What the player screen needs from a video backend. `media_kit` is the
 /// real one; tests substitute a fake through [PlaybackScope] so the screen's
 /// core wiring can be exercised without libmpv.
@@ -36,6 +52,13 @@ abstract interface class PlaybackEngine {
 
   /// Fires once when the media reaches its end.
   Stream<bool> get completed;
+
+  /// What the backend says went wrong. media_kit makes these out of mpv's
+  /// error-level log lines from a handful of subsystems (`cplayer`, `vd`,
+  /// `ad`, `stream`, `file`, and ffmpeg's `tcp:` lines), so one says
+  /// something failed and not that the playback did: a dead external
+  /// subtitle URL arrives here too ([externalSubtitleFailure]), over a
+  /// film that plays on.
   Stream<String> get errors;
 
   /// What the backend itself says went wrong, verbatim -- mpv's own error

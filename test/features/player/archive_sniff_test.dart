@@ -189,6 +189,9 @@ void main() {
     });
 
     testWidgets('asks nothing of a stream that had loaded', (tester) async {
+      // Nor fails it: once the film is in, an engine error is one of mpv's
+      // log lines (a dead subtitle link, a damaged frame), and the film
+      // goes on playing under it.
       final harness = PlayerHarness(stream: DevStreams.bigBuckBunnyHttp)
         ..archiveKind = ArchiveKind.rar;
       await harness.pump(tester);
@@ -199,7 +202,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(harness.archiveSniffs, isEmpty);
-      expect(find.text('Playback failed: demuxer error'), findsOneWidget);
+      expect(find.textContaining('Playback failed'), findsNothing);
     });
   });
 }

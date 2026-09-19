@@ -220,9 +220,10 @@ void main() {
       startsWith('info player media loaded'),
       startsWith('warn player stalled at 0s (stall 1)'),
       startsWith('info player playing again after'),
-      'error player engine error: Failed to open the stream.',
-      'error player playback failed: Failed to open the stream.',
+      // Loaded: what mpv says now is a line in the log, not a failure.
+      'warn player engine error while playing: Failed to open the stream.',
     ]);
+    expect(find.textContaining('Playback failed'), findsNothing);
   });
 
   testWidgets('keeps a playback that stalls forever from filling the ring', (
