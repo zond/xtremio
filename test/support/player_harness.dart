@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
+import 'package:xtremio/features/player/archive_sniff.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_controls.dart';
 import 'package:xtremio/features/player/player_screen.dart';
@@ -117,6 +118,18 @@ class PlayerHarness {
   late final FakePlayheadReporter playhead = FakePlayheadReporter()
     ..callLog = calls;
 
+  /// What a stream that failed before loading turns out to be, as the
+  /// screen's archive check hears it: nothing, until a test says otherwise.
+  ArchiveKind? archiveKind;
+
+  /// The URLs the screen asked that of, in order.
+  final List<Uri> archiveSniffs = [];
+
+  Future<ArchiveKind?> _archiveSniff(Uri url) async {
+    archiveSniffs.add(url);
+    return archiveKind;
+  }
+
   /// Engine opens (`'open'`), stats fetches (`'stats'`), asks about what
   /// the server holds (`'held'`) and the teardown's own calls (`'quit'`,
   /// `'close-streams'`, `'dispose'`), in the order they happened.
@@ -187,6 +200,7 @@ class PlayerHarness {
         proxyStreams: proxyStreams,
         streamNumbers: streamNumbers,
         playhead: playhead,
+        archiveSniff: _archiveSniff,
         child: MaterialApp(
           navigatorObservers: navigatorObservers,
           // As `XtremioApp` builds it: the television's text scale and

@@ -17,6 +17,7 @@ import '../details/stream_facts.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
+import 'archive_sniff.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
 import 'player_controls.dart';
@@ -566,6 +567,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// the viewer is: it works that out from what the reads do.
   PlayheadReporter? _playheadReporter;
 
+  /// What a stream that failed before it loaded is asked, to tell an
+  /// archive from a film ([PlaybackScope.archiveSniffOf]).
+  Future<ArchiveKind?> Function(Uri url) _archiveSniff = sniffArchive;
+
   /// The app's preferences, for [AppPrefs.bufferAhead]. From the
   /// [PrefsScope] the app puts above every screen; a player mounted without
   /// one (a widget test that does not care where the choice goes) gets
@@ -1006,6 +1011,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _torrentStatsClient = PlaybackScope.torrentStatsOf(context);
     _streamNumbersReader = PlaybackScope.streamNumbersOf(context);
     _playheadReporter = PlaybackScope.playheadOf(context);
+    _archiveSniff = PlaybackScope.archiveSniffOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
     _proxyStreams = PlaybackScope.proxyStreamsOf(context);
@@ -1690,6 +1696,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _engineError = error;
       _stopTorrentStats();
     });
+    final url = _engineUrl;
+    if (!_mediaLoaded && url != null) _explainArchive(url, error);
+  }
+
+  /// Replaces [error] with what the source actually is, when it failed
+  /// because it is an archive or a disc image rather than a film.
+  ///
+  /// mpv's own words for that are "Failed to recognize file format", which
+  /// is true and useless: the source card rarely says what the file is, and
+  /// the fix -- another source -- is not something the message suggests.
+  /// Asked only of a stream that never loaded, and only once the failure
+  /// is final; the answer is dropped if another failure, or a new stream,
+  /// has replaced this one by the time it comes.
+  Future<void> _explainArchive(Uri url, String error) async {
+    final kind = await _archiveSniff(url);
+    if (kind == null || !mounted || _engineError != error) return;
+    DiagnosticsLog.info('player', 'the source is a ${kind.label}');
+    setState(() => _engineError = archiveFailure(kind));
   }
 
   // --- Retrying a slow torrent's open --------------------------------------

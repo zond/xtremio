@@ -11,6 +11,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/core.dart';
 import '../../shell/display_frame_rate.dart';
+import 'archive_sniff.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
 import 'subtitle_match.dart';
@@ -302,6 +303,7 @@ class PlaybackScope extends InheritedWidget {
     this.proxyStreams,
     this.streamNumbers,
     this.playhead,
+    this.archiveSniff,
     required super.child,
   });
 
@@ -342,6 +344,12 @@ class PlaybackScope extends InheritedWidget {
   /// see what was reported without reaching FFI.
   final PlayheadReporter? playhead;
 
+  /// What a stream that failed to open is asked, to say whether it is an
+  /// archive rather than a film (absent, [sniffArchive], which reads the
+  /// start of it over HTTP). A function so a test can answer without a
+  /// server.
+  final Future<ArchiveKind?> Function(Uri url)? archiveSniff;
+
   static PlaybackScope? _maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlaybackScope>();
 
@@ -372,6 +380,10 @@ class PlaybackScope extends InheritedWidget {
   static PlayheadReporter playheadOf(BuildContext context) =>
       _maybeOf(context)?.playhead ?? const ServerClient();
 
+  static Future<ArchiveKind?> Function(Uri url) archiveSniffOf(
+    BuildContext context,
+  ) => _maybeOf(context)?.archiveSniff ?? sniffArchive;
+
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
@@ -382,7 +394,8 @@ class PlaybackScope extends InheritedWidget {
       dhtStatus != oldWidget.dhtStatus ||
       proxyStreams != oldWidget.proxyStreams ||
       streamNumbers != oldWidget.streamNumbers ||
-      playhead != oldWidget.playhead;
+      playhead != oldWidget.playhead ||
+      archiveSniff != oldWidget.archiveSniff;
 }
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever
