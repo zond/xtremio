@@ -10,11 +10,14 @@
 //! It lives in `<storage_dir>/downloads.json` next to stremio-core's buckets
 //! and is written with the same atomic writer (`crate::env::write_atomically`),
 //! so a crash mid-write cannot leave half a registry. Reading is
-//! forward-compatible on purpose: a file from a newer build keeps its
-//! `version` and its unknown keys (they round-trip through
-//! [`Entry::extra`]), an entry this build cannot parse is dropped with a
-//! warning, and a corrupt file starts an empty registry rather than failing
-//! init.
+//! forward-compatible on purpose, and never at the cost of what is kept: a
+//! file from a newer build keeps its `version` and its unknown keys (they
+//! round-trip through [`Entry::extra`]), an entry this build cannot parse is
+//! kept verbatim and still named in the launch's pin set ([`pins_in`]), and
+//! a file that is not the shape this build writes -- corrupt JSON, no
+//! `items` object -- is an error that leaves the file where it is, never an
+//! empty registry ([`read_registry`]). Init goes on either way: the
+//! server is then told it cannot know the pin set, and keeps everything.
 //!
 //! Live progress is not stored by the server per download either: it comes
 //! from `ServerHandle::downloads()` and is merged in by [`refresh`], which
@@ -493,10 +496,12 @@ pub struct Registry {
     pub items: BTreeMap<String, Entry>,
     /// Entries this build could not parse, exactly as they were on disk.
     /// They are invisible to everything but [`Registry::serialize`], which
-    /// writes them back among the items: a forgiving read plus a whole-file
-    /// rewrite would otherwise *erase* an entry the next version wrote (or
-    /// a truncated one), while the server's pin for it lived on -- an
-    /// orphan the list cannot show and `remove` cannot reach.
+    /// writes them back among the items -- a forgiving read plus a
+    /// whole-file rewrite would otherwise *erase* an entry the next version
+    /// wrote (or a truncated one), while the server's pin for it lived on,
+    /// an orphan the list cannot show and `remove` cannot reach -- and
+    /// [`pins_in`], which still names them to the launch: left out of the
+    /// set, their bytes are swept before the session opens.
     unreadable: BTreeMap<String, serde_json::Value>,
 }
 
@@ -532,28 +537,42 @@ impl Serialize for Registry {
 }
 
 impl Registry {
-    /// Parses a registry file, never failing: a corrupt file, a missing
-    /// `items` object or an entry this build cannot read all degrade to a
-    /// warning and less data, because the alternative is an app that will
-    /// not start. A `version` at or above [`VERSION`] is preserved.
-    pub fn parse(bytes: &[u8]) -> Self {
-        let value: serde_json::Value = match serde_json::from_slice(bytes) {
-            Ok(value) => value,
-            Err(error) => {
-                tracing::warn!(%error, "downloads registry is unreadable; starting empty");
-                return Self::default();
-            }
-        };
+    /// Parses a registry file: forgiving about what is *in* it, strict about
+    /// its shape.
+    ///
+    /// A `version` above [`VERSION`] is kept, unknown keys survive in
+    /// [`Entry::extra`], and an entry this build cannot read is kept
+    /// verbatim (see [`Registry::unreadable`]). What is refused is a file
+    /// that is not the shape this build writes: not JSON, not an object, no
+    /// `items` object, a `version` that is not a number. Each of those
+    /// used to read as an empty registry, and this list is the only record
+    /// of what the user asked to keep -- the launch hands the server its
+    /// pin set ([`pins`]) and the server sweeps everything the set does not
+    /// name -- so "empty" is the answer that deletes every download. A
+    /// file whose `items` a later build made an array reads as unreadable,
+    /// which keeps everything, rather than as nothing, which keeps nothing.
+    pub fn parse(bytes: &[u8]) -> anyhow::Result<Self> {
+        let value: serde_json::Value = serde_json::from_slice(bytes)
+            .map_err(|error| anyhow::anyhow!("downloads registry is unreadable: {error}"))?;
         Self::from_value(&value)
     }
 
-    /// The parsed form of an already-decoded registry file.
-    fn from_value(value: &serde_json::Value) -> Self {
-        let version = value
-            .get("version")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(VERSION as u64)
-            .max(VERSION as u64) as u32;
+    /// The parsed form of an already-decoded registry file. See
+    /// [`Registry::parse`] for what is refused and why.
+    fn from_value(value: &serde_json::Value) -> anyhow::Result<Self> {
+        let unreadable =
+            |reason: &str| anyhow::anyhow!("downloads registry is unreadable: {reason}");
+        let Some(file) = value.as_object() else {
+            return Err(unreadable("the file is not a JSON object"));
+        };
+        let version = match file.get("version") {
+            None => VERSION,
+            Some(version) => version
+                .as_u64()
+                .and_then(|version| u32::try_from(version).ok())
+                .ok_or_else(|| unreadable("`version` is not a number"))?
+                .max(VERSION),
+        };
         if version > VERSION {
             tracing::warn!(
                 version,
@@ -561,12 +580,8 @@ impl Registry {
                 "downloads registry was written by a newer build; unknown keys are kept as-is"
             );
         }
-        let Some(items) = value.get("items").and_then(serde_json::Value::as_object) else {
-            tracing::warn!("downloads registry has no items object; starting empty");
-            return Self {
-                version,
-                ..Self::default()
-            };
+        let Some(items) = file.get("items").and_then(serde_json::Value::as_object) else {
+            return Err(unreadable("`items` is missing or not an object"));
         };
         let mut parsed = BTreeMap::new();
         let mut unreadable = BTreeMap::new();
@@ -583,11 +598,11 @@ impl Registry {
                 }
             }
         }
-        Self {
+        Ok(Self {
             version,
             items: parsed,
             unreadable,
-        }
+        })
     }
 }
 
@@ -647,8 +662,7 @@ fn stamp(path: &std::path::Path) -> anyhow::Result<Option<FileStamp>> {
 #[cfg(test)]
 static REGISTRY_READS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-/// Reads and parses the file at `path`, forgivingly (see [`Registry::parse`]),
-/// moving aside one that cannot be read as JSON at all.
+/// Reads and parses the file at `path` (see [`Registry::parse`]).
 ///
 /// **A file that will not read is an error, not an empty registry, and it
 /// stays where it is.** This list is the only record of what the user asked
@@ -674,30 +688,19 @@ fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
         }
         Err(error) => return Err(anyhow::anyhow!("read downloads registry: {error}")),
     };
-    match serde_json::from_slice::<serde_json::Value>(&bytes) {
-        Ok(value) if value.is_object() => Ok(Registry::from_value(&value)),
-        parsed => {
-            let reason = parsed
-                .err()
-                .map(|error| error.to_string())
-                .unwrap_or_else(|| "the file is not a JSON object".to_owned());
-            Err(anyhow::anyhow!(
-                "downloads registry is unreadable: {reason}"
-            ))
-        }
-    }
+    Registry::parse(&bytes)
 }
 
 /// The pin set to hand the server at startup: every download this registry
-/// names, as `info hash -> file indices`.
+/// names, as `info hash -> file indices` -- or `None` when it cannot say.
 ///
 /// **This is the authority on what is kept.** The server keeps no record of
 /// its own; it sweeps everything the set does not claim before its session
-/// opens, so this function's answer is what survives a launch. `None` --
-/// which is what a registry that would not read produces -- names nothing
-/// and is not an empty set: the server keeps every torrent's data for that
-/// boot and reports the condition, rather than deleting the downloads whose
-/// list we just failed to read.
+/// opens, so this function's answer is what survives a launch. `None` names
+/// nothing and is not an empty set (stream-server `ServerConfig::pins`):
+/// the server keeps every torrent's data for that boot and reports the
+/// condition, rather than deleting the downloads whose list we failed to
+/// read.
 ///
 /// Rows on their way out are left out: a removal that has begun is a
 /// download the user has already said goodbye to, and re-pinning it here
@@ -709,7 +712,16 @@ fn read_registry(path: &std::path::Path) -> anyhow::Result<Registry> {
 /// new pin is in, and [`release_replaced_in`] lets it go only then; the
 /// launch runs first, and a set without it would sweep the old file before
 /// that check could keep it.
-pub fn pins_in(registry: &Registry) -> stream_server::PinSet {
+///
+/// **An entry this build cannot parse is in too** -- it is most likely a
+/// newer build's download, and a downgrade must not cost the film. What it
+/// names is read out of the raw entry by the two keys every build has
+/// written ([`unreadable_pins`]); whatever else it may be doing is not
+/// this build's to judge, so it is pinned whether or not it is leaving. One
+/// whose file cannot be told from its keys makes the whole answer `None`:
+/// a set that leaves it out would sweep it, and one that guesses could pin
+/// the wrong file while sweeping nothing else of the torrent's anyway.
+pub fn pins_in(registry: &Registry) -> Option<stream_server::PinSet> {
     let mut pins: stream_server::PinSet = Default::default();
     for entry in registry.items.values() {
         if !entry.wants_pin() {
@@ -724,27 +736,66 @@ pub fn pins_in(registry: &Registry) -> stream_server::PinSet {
                 .push(old.file_idx);
         }
     }
+    for (key, raw) in &registry.unreadable {
+        let Some(named) = unreadable_pins(raw) else {
+            tracing::warn!(
+                key,
+                "an unreadable download entry names no file this build can tell; \
+                 the pin set cannot be known"
+            );
+            return None;
+        };
+        for (info_hash, file_idx) in named {
+            pins.entry(info_hash).or_default().push(file_idx);
+        }
+    }
     for indices in pins.values_mut() {
         indices.sort_unstable();
         indices.dedup();
     }
-    pins
+    Some(pins)
+}
+
+/// The files a raw entry this build cannot parse names, by the keys every
+/// build so far has written them under: `infoHash` and `fileIdx`, and the
+/// same pair under `replaces` when there is one. `None` when any of them is
+/// there in a shape this build does not know, or `infoHash` is not there at
+/// all -- which is the caller's cue that the pin set cannot be known.
+fn unreadable_pins(raw: &serde_json::Value) -> Option<Vec<(String, usize)>> {
+    fn pair(value: &serde_json::Value) -> Option<(String, usize)> {
+        let info_hash = value.get("infoHash")?.as_str()?.to_lowercase();
+        // Absent is file 0, as [`Entry::file_idx`] reads it.
+        let file_idx = match value.get("fileIdx") {
+            None => 0,
+            Some(file_idx) => usize::try_from(file_idx.as_u64()?).ok()?,
+        };
+        Some((info_hash, file_idx))
+    }
+    let mut named = vec![pair(raw)?];
+    if let Some(replaces) = raw.get("replaces").filter(|value| !value.is_null()) {
+        named.push(pair(replaces)?);
+    }
+    Some(named)
 }
 
 /// [`pins_in`] of the registry on disk, or `None` when it would not read --
-/// see [`read_registry`]. Called once, by [`crate::server::start`], before
-/// the server opens its session.
+/// see [`read_registry`] -- or names something this build cannot place.
+/// Called once, by [`crate::server::start`], before the server opens its
+/// session.
 pub fn pins() -> Option<stream_server::PinSet> {
-    match load() {
-        Ok(registry) => Some(pins_in(&registry)),
+    let pins = match load() {
+        Ok(registry) => pins_in(&registry),
         Err(error) => {
-            tracing::warn!(
-                %error,
-                "cannot say what is pinned; the server will keep every torrent's data this boot"
-            );
+            tracing::warn!(%error, "the downloads registry would not read");
             None
         }
+    };
+    if pins.is_none() {
+        tracing::warn!(
+            "cannot say what is pinned; the server will keep every torrent's data this boot"
+        );
     }
+    pins
 }
 
 /// Move an unreadable registry aside and start a fresh, empty one.
@@ -2454,7 +2505,8 @@ mod tests {
                  "items":{"tt1:tt1":{"metaId":"tt1","videoId":"tt1","type":"movie",
                                      "name":"A","infoHash":"a","fileIdx":0,
                                      "stream":{},"createdAt":"2024-01-01T00:00:00Z"}}}"#,
-        );
+        )
+        .expect("an older build's registry");
         assert_eq!(registry.items.len(), 1, "the entries are untouched");
         let written = String::from_utf8(serde_json::to_vec(&registry).unwrap()).unwrap();
         assert!(
@@ -2479,40 +2531,30 @@ mod tests {
         let registry = Registry::parse(
             br#"{"version":1,"items":{"tt1:tt1":{"metaId":"tt1","videoId":"tt1",
                  "infoHash":"abc","fileIdx":0,"stream":{},"state":"gone"}}}"#,
-        );
+        )
+        .expect("a registry with a gone row");
         let entry = &registry.items["tt1:tt1"];
         assert_eq!(entry.state, State::Gone);
         assert!(!entry.unfinished(), "so the boot leaves it alone");
     }
 
-    /// A registry survives a round-trip, and reading is forgiving in the
-    /// three ways that decide whether the app starts: a corrupt file, a
-    /// newer `version` with keys this build does not know, and one entry
-    /// that cannot be parsed among good ones.
+    /// A registry survives a round-trip, and reading is forgiving about
+    /// what is in the file: a newer `version` with keys this build does not
+    /// know, and one entry that cannot be parsed among good ones.
     #[test]
-    fn parsing_is_forward_compatible_and_never_fails() {
+    fn parsing_is_forward_compatible() {
         let mut registry = Registry::default();
         registry.items.insert("tt1:tt1".into(), entry("tt1", "tt1"));
         let bytes = serde_json::to_vec(&registry).unwrap();
-        assert_eq!(Registry::parse(&bytes), registry);
-
-        assert_eq!(Registry::parse(b"{not json"), Registry::default());
-        assert_eq!(Registry::parse(b"[]"), Registry::default());
-        assert_eq!(
-            Registry::parse(br#"{"version":1}"#),
-            Registry {
-                version: 1,
-                ..Registry::default()
-            }
-        );
+        assert_eq!(Registry::parse(&bytes).unwrap(), registry);
 
         // A newer file: the version is kept, the unknown entry key survives
-        // a round-trip, and an entry missing `metaId` is dropped, not fatal.
+        // a round-trip, and an entry missing `metaId` is kept, not fatal.
         let newer = br#"{"version":9,"items":{
             "tt1:tt1":{"metaId":"tt1","videoId":"tt1","infoHash":"abc",
                        "state":"seeding","futureField":{"a":1}},
             "broken":{"videoId":"x"}}}"#;
-        let parsed = Registry::parse(newer);
+        let parsed = Registry::parse(newer).unwrap();
         assert_eq!(parsed.version, 9);
         assert_eq!(parsed.items.len(), 1, "one entry this build can read");
         let kept = &parsed.items["tt1:tt1"];
@@ -2538,16 +2580,72 @@ mod tests {
             serde_json::json!({"videoId": "x"}),
             "{round_tripped}"
         );
-        assert_eq!(
-            Registry::parse(&serde_json::to_vec(&parsed).unwrap()),
-            parsed,
-            "and again, unchanged"
-        );
+        let again = Registry::parse(&serde_json::to_vec(&parsed).unwrap()).unwrap();
+        assert_eq!(again, parsed, "and again, unchanged");
         // A downgrade never claims a newer file is this build's shape.
+        assert_eq!(again.version, 9);
+    }
+
+    /// A file that is not the shape this build writes is an error, never an
+    /// empty registry: this list is what the launch tells the server to
+    /// keep, so "empty" is the answer that sweeps every download.
+    #[test]
+    fn a_file_of_another_shape_is_unreadable_rather_than_empty() {
+        for bytes in [
+            &b"{not json"[..],
+            b"[]",
+            br#"{"version":1}"#,
+            br#"{"version":2,"items":[{"metaId":"tt1","infoHash":"abc"}]}"#,
+            br#"{"version":"two","items":{}}"#,
+        ] {
+            let parsed = Registry::parse(bytes);
+            assert!(
+                parsed.is_err(),
+                "{} read as {parsed:?}",
+                String::from_utf8_lossy(bytes)
+            );
+        }
         assert_eq!(
-            Registry::parse(&serde_json::to_vec(&parsed).unwrap()).version,
-            9
+            Registry::parse(br#"{"items":{}}"#).unwrap(),
+            Registry::default(),
+            "no version is this build's"
         );
+    }
+
+    /// An entry this build cannot parse still reaches the launch's pin set,
+    /// by the keys every build has named its file with; one whose file those
+    /// keys cannot tell makes the set unknown, which keeps everything, and
+    /// never a set without it, which sweeps it.
+    #[test]
+    fn an_unreadable_entry_is_still_pinned_at_launch() {
+        let set = |items: &str| {
+            let bytes = format!(r#"{{"version":9,"items":{items}}}"#);
+            pins_in(&Registry::parse(bytes.as_bytes()).expect("a registry"))
+        };
+        // No `metaId`, and a state this build has never heard of: the file
+        // it names is still plain to see, and so is the one it replaces.
+        assert_eq!(
+            set(r#"{"new:new":{"videoId":"new","infoHash":"ABC","fileIdx":3,
+                   "replaces":{"infoHash":"def","fileIdx":1,"why":"newer"}},
+                  "tt1:tt1":{"metaId":"tt1","videoId":"tt1","infoHash":"abc","fileIdx":2}}"#),
+            Some(stream_server::PinSet::from([
+                ("abc".to_owned(), vec![2, 3]),
+                ("def".to_owned(), vec![1]),
+            ]))
+        );
+        assert_eq!(
+            set(r#"{"new:new":{"metaId":{"id":1},"infoHash":"abc"}}"#),
+            Some(stream_server::PinSet::from([("abc".to_owned(), vec![0])])),
+            "no fileIdx is file 0, as every build has read it"
+        );
+        for items in [
+            r#"{"new:new":{"metaId":"new","videoId":"new","infoHash":"abc","fileIdx":{"of":2}}}"#,
+            r#"{"new:new":{"metaId":"new","videoId":"new","infoHashes":["abc"]}}"#,
+            r#"{"new:new":{"videoId":"new","infoHash":"abc","replaces":["def",1]}}"#,
+            r#"{"new:new":"abc"}"#,
+        ] {
+            assert_eq!(set(items), None, "{items}");
+        }
     }
 
     #[test]
@@ -2823,7 +2921,7 @@ mod tests {
         gone.state = State::Gone;
         let mut registry = Registry::default();
         registry.items.insert("tt1:tt1".into(), gone);
-        assert_eq!(pins_in(&registry), stream_server::PinSet::default());
+        assert_eq!(pins_in(&registry), Some(stream_server::PinSet::default()));
 
         registry.items.insert("tt2:tt2".into(), entry("tt2", "tt2"));
         assert!(
@@ -2832,7 +2930,7 @@ mod tests {
         );
         assert_eq!(
             pins_in(&registry),
-            stream_server::PinSet::from([("abc".to_owned(), vec![2])]),
+            Some(stream_server::PinSet::from([("abc".to_owned(), vec![2])])),
             "the row that is staying is still pinned"
         );
     }
@@ -2851,7 +2949,10 @@ mod tests {
         registry.items.insert("tt1:tt1".into(), swapping);
         assert_eq!(
             pins_in(&registry),
-            stream_server::PinSet::from([("abc".to_owned(), vec![2]), ("def".to_owned(), vec![0])])
+            Some(stream_server::PinSet::from([
+                ("abc".to_owned(), vec![2]),
+                ("def".to_owned(), vec![0])
+            ]))
         );
     }
 
@@ -2898,7 +2999,7 @@ mod tests {
         assert_eq!(staged.error, None);
         assert_eq!(
             pins_in(&registry),
-            stream_server::PinSet::from([("abc".to_owned(), vec![2])])
+            Some(stream_server::PinSet::from([("abc".to_owned(), vec![2])]))
         );
     }
 
@@ -3316,7 +3417,7 @@ mod tests {
             assert_eq!(replaces, None, "over {previous:?}");
             assert_eq!(
                 pins_in(&registry),
-                stream_server::PinSet::from([("abc".to_owned(), vec![2])]),
+                Some(stream_server::PinSet::from([("abc".to_owned(), vec![2])])),
                 "the launch holds only the new file, over {previous:?}"
             );
         }
@@ -3355,7 +3456,7 @@ mod tests {
             serde_json::json!({"deleteFiles": false}),
             "{written}"
         );
-        let parsed = Registry::parse(&bytes);
+        let parsed = Registry::parse(&bytes).expect("a registry this build wrote");
         assert_eq!(parsed.items["tt1:tt1"], swapping);
         assert_eq!(parsed.items["tt2:tt2"], leaving);
     }

@@ -311,10 +311,17 @@ what every model field means. The shape of the thing is in the
   path — because a full disk is something to show, not an exception.
   Reading the registry is forgiving on purpose, and never at the cost of
   what is on disk: a file from a newer build keeps its `version` and its
-  unknown keys, an entry this build cannot parse is kept verbatim and
+  unknown keys, and an entry this build cannot parse is kept verbatim and
   written back untouched (it is left out of the list payload, not out of
-  the file), and a wholly unreadable file is moved aside as
-  `downloads.json.corrupt-<seconds>` before an empty one takes its place.
+  the file) and still named in the pin set the launch hands the server, by
+  its `infoHash`/`fileIdx` -- or, when those cannot be read either, the
+  launch names no set at all and the server keeps everything. A file that
+  is not the shape this build writes (not JSON, no `items` object) is an
+  error, never an empty registry: empty is the pin set that sweeps every
+  download. It is left where it is, the server is told nothing and keeps
+  everything, the list says `registryUnreadable`, and only the user's
+  `downloads_start_fresh` moves it aside as
+  `downloads.json.corrupt-<seconds>`.
   At boot every entry that is not complete is pinned again, on a blocking
   thread, since a pin waits on magnet metadata and nothing on screen waits
   on it. The row leads the server on the way in and follows it out: `add`

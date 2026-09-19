@@ -944,7 +944,7 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     );
     assert_eq!(
         xtremio_core::downloads::pins_in(&xtremio_core::downloads::load()?),
-        stream_server::PinSet::default(),
+        Some(stream_server::PinSet::default()),
         "nor is the next launch told to pin it"
     );
     // Unless another row still wants the file: the pin is that row's too,
@@ -1105,7 +1105,8 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
     );
 
     // An entry a *newer* build wrote is kept as it is, not dropped and then
-    // erased by the next write: the server is still pinning it.
+    // erased by the next write: it is a download that build asked to keep.
+    // (What the launch is told about it is `tests/downloads_unreadable.rs`.)
     std::fs::write(
         &registry_file,
         br#"{"version":9,"items":{"new:new":{"metaId":"new","videoId":"new","fileIdx":{"of":2}}}}"#,
