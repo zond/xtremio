@@ -9,15 +9,24 @@ import 'dart:io';
 /// format", which says nothing to the person holding the remote. This names
 /// the container instead, so the failure can say what the source is.
 enum ArchiveKind {
-  rar('RAR archive'),
-  zip('ZIP archive'),
-  sevenZip('7-Zip archive'),
-  iso('disc image (ISO)');
+  rar('RAR archive', 'rar'),
+  zip('ZIP archive', 'zip'),
+  sevenZip('7-Zip archive', '7zip'),
+  iso('disc image (ISO)', 'iso');
 
-  const ArchiveKind(this.label);
+  const ArchiveKind(this.label, this.serverPrefix);
 
   /// How the failure names it.
   final String label;
+
+  /// The URL prefix the streaming server mounts this format's translator
+  /// under (`server/src/lib.rs`, `archive_prefixes`): `/{serverPrefix}/create`
+  /// and `/{serverPrefix}/stream/...`. One prefix per format because the
+  /// prefix *is* which translator reads the container -- the server stopped
+  /// guessing from the file's suffix when archives became translations of
+  /// byte ranges. TAR has one too (`tar`), and nothing here sniffs a TAR:
+  /// it has no signature in its first bytes to sniff.
+  final String serverPrefix;
 }
 
 /// How many leading bytes [archiveKindOf] needs to see all it can: an ISO
