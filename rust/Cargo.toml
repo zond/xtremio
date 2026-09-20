@@ -78,14 +78,17 @@ http = "1"
 # traffic. On Android it was 91% of the Java heap; see `env.rs`.
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "gzip"] }
 # Mozilla's root program as full DER certificates: generated from the same
-# CCADB report as `webpki-roots` (already in the graph via stream-server)
-# and released in step with it, but in the form `reqwest::Certificate::
-# from_der` takes; `webpki-roots` ships trust anchors, which reqwest 0.13
-# has no builder method for.
+# CCADB report as `webpki-roots` and released in step with it, but in the
+# form `reqwest::Certificate::from_der` takes; `webpki-roots` ships trust
+# anchors, which reqwest 0.13 has no builder method for. `webpki-roots` is
+# not in the graph at all any more -- stream-server, its enginefs and
+# librqbit-upnp all take this crate now -- so nothing new is compiled.
 webpki-root-certs = "1"
 # Same matcher the server uses for a stream's `fileMustInclude` filters, so
 # a download picks the file the media route would play. Already in the graph
-# (tracing-subscriber's env-filter, stream-server), nothing new is compiled.
+# (stream-server, its enginefs, stremio-core), so nothing new is compiled --
+# but no longer through tracing-subscriber: its env-filter builds on
+# `matchers` and `regex-automata`, and does not pull `regex` itself.
 regex = "1"
 # Free space and total space of the volume the server writes to
 # (`src/storage.rs`), for the "is the device full" line of a diagnostics
