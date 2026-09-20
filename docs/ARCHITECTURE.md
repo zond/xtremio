@@ -594,6 +594,40 @@ what every model field means. The shape of the thing is in the
   local inside that window. Only a read outside it goes back to the
   origin. That is the cushion this design wants, on the server's side of
   the hop rather than in the player's heap.
+- **A stream that turns out to be an archive is played, not refused.** Some
+  sources serve a whole container rather than the film inside it: a debrid
+  link to a `.rar` of a release, a torrent whose one big file is a `.zip`
+  or a disc image. mpv answers those with "Failed to recognize file
+  format", so the player reads the start of a stream that failed before it
+  loaded and names the container by its signature
+  (`lib/features/player/archive_sniff.dart`; RAR, ZIP, 7-Zip, and ISO 9660
+  by `CD001` at byte 32769). It then hands the container to the server,
+  which reads it as **ranges of itself** -- nothing extracted, nothing
+  written, a member served as cheaply as a plain file
+  (`docs/translated-sources.md` in the stream-server tree).
+  `lib/features/player/archive_route.dart` is that half. A stream on
+  anybody else's host is `POST /{rar|zip|7zip|iso}/create` with
+  `{"urls": [<the URL the engine was handed>]}` -- the `/proxy` one,
+  credentials and all, because a container the server cannot fetch is one
+  it cannot index -- and then `GET /{fmt}/stream/{key}`, whose redirect
+  names the member; a file of a torrent is
+  `GET /{fmt}/stream/torrent:<info hash>/<the file's name in the torrent>`
+  with no create call at all, the name being `streamName` from the
+  server's own `stats.json`. The key is one path segment, so its `/` is
+  escaped. What plays is the member URL (`_translatedUrl`), which stands
+  in front of the core's own URL at every later `open` -- a buffer change,
+  a reconnect -- while `_opened` stays what the core published; `buffer=`
+  is not written on it, since the archive routes read no such query and
+  the read-ahead is the one the translator's source opens underneath.
+  **A container that cannot be played is still said honestly**: the server
+  answers `415` (`compressed`, `encrypted`, `solid`, `noRandomAccess`,
+  `unsupported`), `422` (`malformed`) or `501`, each with a sentence, and
+  `archiveRefusal` shows the app's own wording for the four that are just
+  "the film is packed" and the server's sentence where it names something
+  concrete -- which volume is missing, which UDF structure. Addon-declared
+  archives (`rarUrls`/`zipUrls` -> `StreamKind.archive`) are untouched by
+  all of this: stremio-core builds the `/create` URL for those and the
+  player opens it like any other stream.
 - **A player that is left ends its own reads first.** Each player screen
   mints a token (`player-1`, `player-2`, ...), writes it into the `/proxy`
   URLs it hands the engine as `p=`, and on the way out calls

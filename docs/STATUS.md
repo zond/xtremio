@@ -6,8 +6,11 @@ app *is* is in the [README](../README.md).
 **Status:** phase 3 (account, library, addons, settings) is complete
 on top of phase 2 (browse → details → play); what the README calls next is
 not started. The app boots `stremio-core` and the
-embedded `stream-server` at start-up, and nothing in the app talks HTTP
-to that server except libmpv fetching media: the server's control API
+embedded `stream-server` at start-up, and the HTTP the app speaks to that
+server is only ever its open media routes: libmpv fetching media, and the
+player reading the start of a stream that failed and handing the
+container it turned out to be to the archive routes
+(`archive_sniff.dart`, `archive_route.dart`). The server's control API
 takes a per-launch bearer token that only the Rust side holds
 (stremio-core's requests get it in `Env::fetch`; the app's own control
 calls are FFI). **Board** shows a continue-watching
@@ -143,7 +146,11 @@ for torrents that shows the server's start-up phase (checking existing
 data, finding peers, buffering the start) with percentages and download
 speed instead of a bare spinner, and an open that fails while the torrent
 is still resolving, checking or buffering is retried a few times behind
-that card rather than failing outright. **Settings → Developer** ships in
+that card rather than failing outright. A stream that turns out to be an
+archive or a disc image rather than a film is handed to the server, which
+reads the film inside it as ranges of the container itself and plays it;
+one whose film is packed rather than merely wrapped says so in a sentence
+instead. **Settings → Developer** ships in
 release builds: entries that play or download a public Big Buck Bunny
 torrent to prove the torrent path without any addon, and **Diagnostics**,
 which shows the core's recent log (its own and the embedded server's) and
