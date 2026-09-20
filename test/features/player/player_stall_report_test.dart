@@ -76,16 +76,28 @@ void main() {
     );
     harness.engine.emitBuffering(false);
     harness.engine.emitPosition(const Duration(milliseconds: 897_250));
+    harness.engine.emitBuffering(true);
+    await pumpEvents(tester);
+    expect(
+      harness.playhead.stalls,
+      isEmpty,
+      reason: 'a quarter of a second of film is not yet watching',
+    );
+
+    // Two seconds of it is, and the popup after that is a stall.
+    harness.engine.emitBuffering(false);
+    harness.engine.emitPosition(const Duration(milliseconds: 898_250));
+    harness.engine.emitPosition(const Duration(milliseconds: 899_250));
     await pumpEvents(tester);
 
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(harness.playhead.stalls, [
       infoHash,
-    ], reason: 'the popup, after the position advanced by a tick');
+    ], reason: 'the popup, after the film has actually been playing');
 
     harness.engine.emitBuffering(false);
-    harness.engine.emitPosition(const Duration(milliseconds: 897_500));
+    harness.engine.emitPosition(const Duration(milliseconds: 899_500));
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(harness.playhead.stalls, [
@@ -98,7 +110,8 @@ void main() {
     final harness = bunny();
     await harness.pump(tester);
     harness.engine.emitPosition(const Duration(seconds: 897));
-    harness.engine.emitPosition(const Duration(milliseconds: 897_250));
+    harness.engine.emitPosition(const Duration(milliseconds: 898_000));
+    harness.engine.emitPosition(const Duration(milliseconds: 899_000));
     await pumpEvents(tester);
 
     // A ten-second step with the arrow key: the buffering that follows is
@@ -114,9 +127,63 @@ void main() {
       reason: 'a seek deepens nothing, whatever it waits for',
     );
 
-    // Playing normally again, and the next popup is a stall.
+    // Watching again -- two seconds of film -- and the next popup is a
+    // stall.
     harness.engine.emitBuffering(false);
-    harness.engine.emitPosition(const Duration(milliseconds: 907_500));
+    harness.engine.emitPosition(const Duration(milliseconds: 908_250));
+    await pumpEvents(tester);
+    harness.engine.emitPosition(const Duration(milliseconds: 909_250));
+    await pumpEvents(tester);
+    harness.engine.emitBuffering(true);
+    await pumpEvents(tester);
+    expect(harness.playhead.stalls, [infoHash]);
+  });
+
+  testWidgets('a scrub back is not a run of stalls', (tester) async {
+    // The field, 2026-09-20 21:09:27: six "stalls" a second apart at
+    // descending positions -- 6190s, 6180s, 6170s, 6157s, 6145s, 6133s --
+    // two of them counted by the server, and the split depth stepped up
+    // behind them. The remote's rewind key reaches mpv directly, so this
+    // player never sees a seek: it sees the position jump backwards, and a
+    // few frames playing between two rewinds re-armed the report.
+    final harness = bunny();
+    await harness.pump(tester);
+    harness.engine.emitPosition(const Duration(seconds: 6200));
+    await pumpEvents(tester);
+    harness.engine.emitPosition(const Duration(seconds: 6201));
+    await pumpEvents(tester);
+    harness.engine.emitPosition(const Duration(seconds: 6202));
+    await pumpEvents(tester);
+    expect(
+      harness.playhead.stalls,
+      isEmpty,
+      reason: 'nothing has buffered yet',
+    );
+
+    for (final at in const [6190, 6180, 6170, 6157, 6145, 6133]) {
+      // The rewind, seen only as the position moving back...
+      harness.engine.emitPosition(Duration(seconds: at));
+      await pumpEvents(tester);
+      // ...the frames that play while the next one is pressed...
+      harness.engine.emitPosition(Duration(milliseconds: at * 1000 + 300));
+      await pumpEvents(tester);
+      // ...and the buffering the rewind itself caused.
+      harness.engine.emitBuffering(true);
+      await pumpEvents(tester);
+      harness.engine.emitBuffering(false);
+      await pumpEvents(tester);
+    }
+    expect(
+      harness.playhead.stalls,
+      isEmpty,
+      reason: 'a rewind is a seek, whoever asked mpv for it',
+    );
+
+    // And once the viewer settles down to watch, a stall counts again.
+    harness.engine.emitPosition(const Duration(milliseconds: 6134_300));
+    await pumpEvents(tester);
+    harness.engine.emitPosition(const Duration(milliseconds: 6135_300));
+    await pumpEvents(tester);
     harness.engine.emitBuffering(true);
     await pumpEvents(tester);
     expect(harness.playhead.stalls, [infoHash]);

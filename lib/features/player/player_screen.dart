@@ -851,16 +851,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int _stalls = 0;
   DateTime? _stallStart;
 
-  /// Whether the position has advanced by a tick since the current `open`
-  /// or the last seek -- the video is playing normally, so a buffering
-  /// popup from here on is a stall the server is told about
-  /// ([_reportStall]), and not the wait a load or a seek has anyway. A
-  /// tick, not any change: on load mpv reports position zero and then the
-  /// resume point, and that jump counted as playback once (the first field
-  /// log of the reports had the open's wait as stall one); and a seek's
-  /// buffering is the new window filling, which the server sizes for
-  /// itself -- zond does not want a seek to deepen the split.
+  /// Whether the film has actually been playing since the current `open`
+  /// or the last seek -- so a buffering popup from here on is a stall the
+  /// server is told about ([_reportStall]), and not the wait a load or a
+  /// seek has anyway. A seek's buffering is the new window filling, which
+  /// the server sizes for itself; zond does not want a seek to deepen the
+  /// split.
+  ///
+  /// **A tick of playback in total, not one advancing report.** It was the
+  /// latter, and a scrub back defeated it: each rewind lands, a few frames
+  /// decode and play, that forward step re-armed this, and the *next*
+  /// rewind's buffering went to the server as a stall. The field log of
+  /// 2026-09-20 21:09:27 has six of them a second apart at descending
+  /// positions -- 6190s, 6180s, 6170s ... -- two counted, and the split
+  /// depth stepped up behind them. Summing the forward steps instead means
+  /// a viewer has to watch [_playbackTick] of film before a stall counts,
+  /// which no rewind can fake and which is what "playing normally" was
+  /// always meant to say. [_playedSinceSeek] is the sum; a seek resets it.
   bool _playingNormally = false;
+
+  /// Forward playback since the current `open` or the last seek, summed
+  /// from the position reports; see [_playingNormally].
+  Duration _playedSinceSeek = Duration.zero;
+
+  /// How much film has to have played since the last seek before a
+  /// buffering popup is a stall the server is told about. Two seconds: long
+  /// enough that the few frames between two rewinds of a scrub back cannot
+  /// reach it, short enough that a viewer who is genuinely watching has
+  /// passed it before anything could stall. See [_playingNormally].
+  static const Duration _playedBeforeAStallCounts = Duration(seconds: 2);
 
   /// The most a position can move between two reports and still be
   /// playback rather than a seek or a load; see [_playingNormally].
@@ -1259,6 +1278,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _openError = null;
     _stalls = 0;
     _playingNormally = false;
+    _playedSinceSeek = Duration.zero;
     _falseEnds = 0;
     _openedAt = DateTime.now();
     _open(
@@ -1474,6 +1494,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // The window that follows is filling, which is not the stall the
     // server is told about; see [_playingNormally].
     _playingNormally = false;
+    _playedSinceSeek = Duration.zero;
     // A re-open is an attempt at the playback, so whatever the last one
     // failed with is not what is happening any more: left, it sat as
     // "Playback failed" over a stream that was playing again, kept the
@@ -1609,7 +1630,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _stillTicks = 0;
       final advanced = position - _position.value;
       if (advanced > Duration.zero && advanced < _playbackTick) {
-        _playingNormally = true;
+        // Summed, not taken one report at a time: see [_playingNormally].
+        _playedSinceSeek += advanced;
+        if (_playedSinceSeek >= _playedBeforeAStallCounts) {
+          _playingNormally = true;
+        }
+      } else {
+        // **A seek this player never made.** The remote's rewind and
+        // fast-forward keys reach mpv directly, so `_seekTo` does not run
+        // and nothing above disarms -- which is how a scrub back came to be
+        // reported as six stalls (the field log of 2026-09-20). A position
+        // that moves backwards, or forwards by more than a tick, is a seek
+        // whoever asked for it, and what follows it is a window filling.
+        _playingNormally = false;
+        _playedSinceSeek = Duration.zero;
       }
       if (_positionStuck) {
         DiagnosticsLog.info(
@@ -2855,6 +2889,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // The buffering that follows is the new window filling, not a stall;
     // see [_playingNormally].
     _playingNormally = false;
+    _playedSinceSeek = Duration.zero;
     if (_casting) {
       // The receiver will report the new position itself; showing it at
       // once keeps the bar from snapping back while the round trip runs.
@@ -4662,6 +4697,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!_stillOurs) return;
     _position.value = position;
     _playingNormally = false;
+    _playedSinceSeek = Duration.zero;
     await _engine?.seek(position);
     await _engine?.play();
   }
