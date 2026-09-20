@@ -1959,7 +1959,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _stopTorrentStats();
     });
     final url = _engineUrl;
-    if (!_mediaLoaded && url != null) {
+    // [_mediaIn], not [_mediaLoaded]: media_kit reports `playing: true`
+    // the moment the `loadfile` is issued, before a byte has been read,
+    // so on Android the other flag is true within a few hundred
+    // milliseconds of every open and asked nothing of the container
+    // playbacks this exists for. A film inside a RAR came back as mpv's
+    // "Failed to recognize file format" on the television while every
+    // test here passed, because a test's open fails at `open` and never
+    // reports itself playing.
+    if (!_mediaIn && url != null) {
       _explainArchive(url, error, fileInTorrent);
     }
   }
@@ -1983,9 +1991,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// mpv that mpv could open. What it costs is the wait for mpv to give
   /// up, which is the wait the message already had.
   ///
-  /// Asked only of a stream that never loaded, and only once the failure
-  /// is final; the answer is dropped if another failure, or a new stream,
-  /// has replaced this one by the time it comes.
+  /// Asked only of a stream whose file never showed up ([_mediaIn]), and
+  /// only once the failure is final; the answer is dropped if another
+  /// failure, or a new stream, has replaced this one by the time it
+  /// comes.
   Future<void> _explainArchive(
     Uri url,
     String error,

@@ -231,6 +231,27 @@ void main() {
       expect(find.textContaining('RAR archive'), findsNothing);
     });
 
+    testWidgets('asks about a stream mpv reported playing but never had', (
+      tester,
+    ) async {
+      // What the television does. media_kit answers `open` with
+      // `playing: true` as soon as it has issued the `loadfile`, before a
+      // byte of the file has been read, so the failure that follows is a
+      // failure of a stream the player has been told is playing -- and
+      // the container behind it is exactly the one worth naming. Nothing
+      // of the film has shown up: no duration, no position.
+      final harness = PlayerHarness(stream: DevStreams.bigBuckBunnyHttp)
+        ..archiveKind = ArchiveKind.rar;
+      await harness.pump(tester);
+      harness.engine.emitPlaying(true);
+      await tester.pump();
+
+      harness.engine.emitError(unrecognized);
+      await pumpEvents(tester);
+      expect(harness.archiveSniffs, hasLength(1));
+      expect(find.textContaining('RAR archive'), findsOneWidget);
+    });
+
     testWidgets('asks nothing of a stream that had loaded', (tester) async {
       // Nor fails it: once the film is in, an engine error is one of mpv's
       // log lines (a dead subtitle link, a damaged frame), and the film
