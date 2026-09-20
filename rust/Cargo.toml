@@ -35,14 +35,14 @@ flutter_rust_bridge = "=2.13.0"
 # with the fetch-ahead bounded by the window, liveness that ends on a switch
 # or a restart rather than on a clock, and no cache cleaner at all -- every
 # byte under the root has exactly one thing that deletes it.
-stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "315cda2d30ea65dd06fc7edb14256f3ebe4976da" }
+stream-server = { package = "server", git = "https://github.com/zond/stream-server", rev = "83c4c9c3de53273d8300b2097a4b83185531ca02" }
 
 # `ServerHandle::dht_status` answers `enginefs::backend::DhtStatus`, which
 # `stream-server` does not re-export (unlike `CacheUsage`/`EngineStats`), so
 # it is named directly here -- same git pin as stream-server, so nothing
 # extra is compiled: it is already in the graph as stream-server's own
 # dependency.
-enginefs = { git = "https://github.com/zond/stream-server", rev = "315cda2d30ea65dd06fc7edb14256f3ebe4976da" }
+enginefs = { git = "https://github.com/zond/stream-server", rev = "83c4c9c3de53273d8300b2097a4b83185531ca02" }
 
 # The official Stremio engine (addons, catalogs, library, player state).
 # `derive` exports #[derive(Model)]; `env-future-send` makes EnvFuture Send so
@@ -62,7 +62,7 @@ enginefs = { git = "https://github.com/zond/stream-server", rev = "315cda2d30ea6
 # and Cargo will not pick two 1.x versions, so without that commit this
 # graph does not resolve at all; it used to be a vendored copy of the
 # crate wired in with `[patch]`.
-stremio-core = { git = "https://github.com/zond/stremio-core", rev = "1819c56f01da6540711c054a6026fca9e9d73599", features = ["derive", "env-future-send"] }
+stremio-core = { git = "https://github.com/zond/stremio-core", rev = "ef43c64636d68311c059893fb2a40cfbe920bd63", features = ["derive", "env-future-send"] }
 
 anyhow = "1"
 chrono = "0.4"
@@ -160,7 +160,7 @@ flate2 = "1"
 # on zond/rqbit, and always the rev the stream-server pin above uses for
 # its enginefs: a different one puts two librqbits in the graph, the crate
 # compiled twice. Bump the two together.
-librqbit = { git = "https://github.com/zond/rqbit", rev = "29f4804e9c5be6846ef6d2dabb3e092593424aaf", default-features = false, features = [
+librqbit = { git = "https://github.com/zond/rqbit", rev = "d02b73a22ff4f8ec5014de4f361295530260a911", default-features = false, features = [
     "rust-tls",
     "http-api-client",
 ] }

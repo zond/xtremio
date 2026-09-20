@@ -165,11 +165,12 @@ dependencies = [
 
 [[package]]
 name = "async_zip"
-version = "0.0.18"
+version = "0.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d8c50d65ce1b0e0cb65a785ff615f78860d7754290647d3b983208daa4f85e6"
+checksum = "fb7f5f40e1eb30949a266fc900d37fd3267c7baf50c3705ac09c5d8ced5def63"
 dependencies = [
  "async-compression",
+ "binrw",
  "crc32fast",
  "futures-lite",
  "pin-project",
@@ -368,6 +369,30 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex 1.3.0",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "binrw"
+version = "0.15.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ad120d555272286c1017d25165ab8bd74806f13fc85b258484ec7e4ce75458f"
+dependencies = [
+ "array-init",
+ "binrw_derive",
+ "bytemuck",
+]
+
+[[package]]
+name = "binrw_derive"
+version = "0.15.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6df92e0e9baae4dc82c7bad7715ca40c0a5c71539057bf2ea04a5c29c980410b"
+dependencies = [
+ "either",
+ "owo-colors",
+ "proc-macro2",
+ "quote",
  "syn 2.0.119",
 ]
 
@@ -1102,7 +1127,7 @@ dependencies = [
 [[package]]
 name = "enginefs"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=315cda2d30ea65dd06fc7edb14256f3ebe4976da#315cda2d30ea65dd06fc7edb14256f3ebe4976da"
+source = "git+https://github.com/zond/stream-server?rev=83c4c9c3de53273d8300b2097a4b83185531ca02#83c4c9c3de53273d8300b2097a4b83185531ca02"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2133,7 +2158,7 @@ dependencies = [
 [[package]]
 name = "librqbit"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -2197,7 +2222,7 @@ dependencies = [
 [[package]]
 name = "librqbit-bencode"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -2213,7 +2238,7 @@ dependencies = [
 [[package]]
 name = "librqbit-buffers"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "bytes",
  "librqbit-clone-to-owned",
@@ -2224,7 +2249,7 @@ dependencies = [
 [[package]]
 name = "librqbit-clone-to-owned"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "bytes",
 ]
@@ -2232,7 +2257,7 @@ dependencies = [
 [[package]]
 name = "librqbit-core"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2261,7 +2286,7 @@ dependencies = [
 [[package]]
 name = "librqbit-dht"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "anyhow",
  "backon",
@@ -2308,7 +2333,7 @@ dependencies = [
 [[package]]
 name = "librqbit-lsd"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "anyhow",
  "atoi",
@@ -2327,7 +2352,7 @@ dependencies = [
 [[package]]
 name = "librqbit-peer-protocol"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "anyhow",
  "bitvec",
@@ -2347,7 +2372,7 @@ dependencies = [
 [[package]]
 name = "librqbit-sha1-wrapper"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "assert_cfg",
  "aws-lc-rs",
@@ -2356,7 +2381,7 @@ dependencies = [
 [[package]]
 name = "librqbit-tracker-comms"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2384,7 +2409,7 @@ dependencies = [
 [[package]]
 name = "librqbit-upnp"
 version = "9.0.1"
-source = "git+https://github.com/zond/rqbit?rev=29f4804e9c5be6846ef6d2dabb3e092593424aaf#29f4804e9c5be6846ef6d2dabb3e092593424aaf"
+source = "git+https://github.com/zond/rqbit?rev=d02b73a22ff4f8ec5014de4f361295530260a911#d02b73a22ff4f8ec5014de4f361295530260a911"
 dependencies = [
  "anyhow",
  "bstr",
@@ -2478,9 +2503,9 @@ checksum = "39f3d72d77227090eed75ea331285a53726e78374a1f357ff5757702c23c70cc"
 
 [[package]]
 name = "lzma-rust2"
-version = "0.20.1"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e2a88783b84d2d67ef2791778a9e76bfb68b8017aaf6c9d7d5f2626a478b16c"
+checksum = "fde178a3caf126c440fa15628147772d8ee590a39477d711353fbe2e58a73a5b"
 
 [[package]]
 name = "magnet-url"
@@ -2640,9 +2665,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.30.1"
+version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
 dependencies = [
  "bitflags 2.13.2",
  "cfg-if",
@@ -2890,6 +2915,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "owo-colors"
+version = "4.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c45bb4a6ae1280ec0803b1ef9d3455eb50f01efbbe1447ab020f1d54fba9d8"
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3058,9 +3089,9 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.41.0"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
+checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
 dependencies = [
  "memchr",
  "serde",
@@ -3765,7 +3796,7 @@ dependencies = [
 [[package]]
 name = "server"
 version = "0.1.8"
-source = "git+https://github.com/zond/stream-server?rev=315cda2d30ea65dd06fc7edb14256f3ebe4976da#315cda2d30ea65dd06fc7edb14256f3ebe4976da"
+source = "git+https://github.com/zond/stream-server?rev=83c4c9c3de53273d8300b2097a4b83185531ca02#83c4c9c3de53273d8300b2097a4b83185531ca02"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3814,9 +3845,9 @@ dependencies = [
 
 [[package]]
 name = "sevenz-rust2"
-version = "0.22.2"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb967eb8b29410e61e8c9005058fcfd5889d0b827856beb25529c73dfc86a98a"
+checksum = "0a4f883677093690e91fef8ae81fad8bce9e2c3a079b61054f05ce0d3ecf681e"
 dependencies = [
  "aes",
  "bzip2",
@@ -3972,7 +4003,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "stremio-core"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=1819c56f01da6540711c054a6026fca9e9d73599#1819c56f01da6540711c054a6026fca9e9d73599"
+source = "git+https://github.com/zond/stremio-core?rev=ef43c64636d68311c059893fb2a40cfbe920bd63#ef43c64636d68311c059893fb2a40cfbe920bd63"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4018,7 +4049,7 @@ dependencies = [
 [[package]]
 name = "stremio-derive"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=1819c56f01da6540711c054a6026fca9e9d73599#1819c56f01da6540711c054a6026fca9e9d73599"
+source = "git+https://github.com/zond/stremio-core?rev=ef43c64636d68311c059893fb2a40cfbe920bd63#ef43c64636d68311c059893fb2a40cfbe920bd63"
 dependencies = [
  "case",
  "proc-macro-crate",
@@ -4048,7 +4079,7 @@ dependencies = [
 [[package]]
 name = "stremio-watched-bitfield"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=1819c56f01da6540711c054a6026fca9e9d73599#1819c56f01da6540711c054a6026fca9e9d73599"
+source = "git+https://github.com/zond/stremio-core?rev=ef43c64636d68311c059893fb2a40cfbe920bd63#ef43c64636d68311c059893fb2a40cfbe920bd63"
 dependencies = [
  "base64 0.13.1",
  "flate2",
