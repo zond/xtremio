@@ -117,6 +117,17 @@ class PlayerScreen extends StatefulWidget {
   /// listener.
   static const Duration stuckInterval = Duration(seconds: 1);
 
+  /// How far the position has to have moved before a player that stood
+  /// still is playing again rather than twitching.
+  ///
+  /// A film that really resumed passes this inside a second; a decoder
+  /// putting out the odd frame behind a picture that is not moving does
+  /// not. Taken from the field log of 2026-09-20, where a 4K remux froze
+  /// for seventy seconds: a position report a fraction of a second along
+  /// cleared the flag, the log said "playing again", and nothing was ever
+  /// said about the minute that followed.
+  static const Duration stuckTwitch = Duration(milliseconds: 500);
+
   /// How long the stats OSD stays up after the pointer stops moving.
   static const Duration statsHoverTimeout = Duration(seconds: 3);
 
@@ -555,6 +566,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// looking, so the looking may as well be the unit.
   Timer? _stuckTimer;
   int _stillTicks = 0;
+
+  /// The position the standing-still is measured from: the last one far
+  /// enough from the one before it to be film playing
+  /// ([PlayerScreen.stuckTwitch]).
+  Duration _stillFrom = Duration.zero;
   bool _positionStuck = false;
 
   /// Whether the player has reported a position at all yet.
@@ -934,6 +950,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// file actually is instead of what its name claims.
   PlaybackStats? _lastStats;
   StreamSubscription<PlaybackStats>? _castStatsSubscription;
+
+  /// The sample asked for while the position stands still; see
+  /// [_logWhatMpvIsDoing]. Held only until it answers.
+  StreamSubscription<PlaybackStats>? _stuckSample;
 
   /// The receiver has reported the media finished and the core has been
   /// told. A receiver keeps saying so; the core hears it once.
@@ -1627,7 +1647,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _positionSeen = true;
     if (position != _position.value) {
-      _stillTicks = 0;
       final advanced = position - _position.value;
       if (advanced > Duration.zero && advanced < _playbackTick) {
         // Summed, not taken one report at a time: see [_playingNormally].
@@ -1645,17 +1664,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _playingNormally = false;
         _playedSinceSeek = Duration.zero;
       }
-      if (_positionStuck) {
-        DiagnosticsLog.info(
-          'player',
-          'playing again at ${position.inSeconds}s, after the position stood '
-              'still with mpv reporting no stall',
-        );
-        setState(() => _positionStuck = false);
-        // The card going leaves the stall cadence behind otherwise: the
-        // stats poll picks its interval only when asked to, as
-        // [_onBuffering] asks.
-        _syncStatsPolls();
+      // Far enough to be film, not a frame or two behind a picture that
+      // is standing still ([PlayerScreen.stuckTwitch]).
+      if ((position - _stillFrom).abs() >= PlayerScreen.stuckTwitch) {
+        _stillTicks = 0;
+        _stillFrom = position;
+        if (_positionStuck) {
+          DiagnosticsLog.info(
+            'player',
+            'playing again at ${position.inSeconds}s, after the position '
+                'stood still with mpv reporting no stall',
+          );
+          setState(() => _positionStuck = false);
+          _stuckSample?.cancel();
+          _stuckSample = null;
+          // The card going leaves the stall cadence behind otherwise: the
+          // stats poll picks its interval only when asked to, as
+          // [_onBuffering] asks.
+          _syncStatsPolls();
+        }
       }
     }
     _reportedPosition = position;
@@ -1818,6 +1845,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _startStuckWatch() {
     _stuckTimer?.cancel();
     _stillTicks = 0;
+    _stillFrom = Duration.zero;
     _positionSeen = false;
     _stuckTimer = Timer.periodic(
       PlayerScreen.stuckInterval,
@@ -1835,6 +1863,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _casting ||
         _handedOver) {
       _stillTicks = 0;
+      _stillFrom = _position.value;
       return;
     }
     if (_positionStuck) return;
@@ -1849,6 +1878,51 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
     setState(() => _positionStuck = true);
     _syncStatsPolls();
+    _logWhatMpvIsDoing();
+  }
+
+  /// Writes down what mpv is actually doing with the film, once, when the
+  /// position has stood still.
+  ///
+  /// A frozen picture is either a decoder that cannot keep up or a read
+  /// that never arrived, and the log could tell them apart in neither
+  /// direction: a 4K remux froze on the television for seventy seconds
+  /// leaving nothing but the warning above. The numbers that answer it --
+  /// which decoder is in use, what the codec and the size are, how many
+  /// frames went on the floor, how much the demuxer has in hand -- are
+  /// sampled twice a second by [PlaybackStats] and thrown away whenever
+  /// nobody has the stats panel open. This asks for one sample.
+  ///
+  /// Silent on a player that will not answer: the sample is a diagnostic,
+  /// and a diagnostic that can hold up anything is worse than none.
+  void _logWhatMpvIsDoing() {
+    final engine = _engine;
+    if (engine == null) return;
+    _stuckSample?.cancel();
+    _stuckSample = engine.stats.listen(_logStats);
+  }
+
+  /// The one sample [_logWhatMpvIsDoing] asked for, written down and the
+  /// asking ended: the panel's cadence is not something a log line needs.
+  void _logStats(PlaybackStats stats) {
+    _stuckSample?.cancel();
+    _stuckSample = null;
+    if (!mounted || !_positionStuck) return;
+    String? size() => stats.width == null || stats.height == null
+        ? null
+        : '${stats.width}x${stats.height}';
+    DiagnosticsLog.info(
+      'player',
+      'what mpv is doing with it: '
+          'hwdec=${stats.hwdec ?? '?'} '
+          'video=${stats.videoCodec ?? '?'} ${size() ?? '?'} '
+          'audio=${stats.audioCodec ?? '?'} '
+          'fps=${stats.outputFps ?? '?'}/${stats.containerFps ?? '?'} '
+          'dropped=${stats.droppedFrames ?? '?'}'
+          '/${stats.decoderDroppedFrames ?? '?'} '
+          'cache=${stats.cacheDuration?.inMilliseconds ?? '?'}ms '
+          'paused_for_cache=${stats.pausedForCache ?? '?'}',
+    );
   }
 
   /// mpv's own error log. Not shown, only recorded: this is where the
@@ -4885,6 +4959,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subscriptions.clear();
     unawaited(_castStatsSubscription?.cancel());
     _castStatsSubscription = null;
+    unawaited(_stuckSample?.cancel());
+    _stuckSample = null;
     _cancelCastFetch();
     _cancelOpenRetry();
     _stopTorrentStats();

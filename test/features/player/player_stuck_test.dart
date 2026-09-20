@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xtremio/features/player/playback_stats.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/torrent_stall_overlay.dart';
 
+import '../../support/diagnostics_capture.dart';
 import '../../support/player_harness.dart';
 
 /// **Waiting is not the same question as mpv buffering.**
@@ -68,6 +70,79 @@ void main() {
           'the stats poll kept the stall cadence after the position moved on: '
           '$recovered polls in ten seconds against $whileStuck while stuck',
     );
+  });
+
+  testWidgets('a position that stops moving writes down what mpv is doing', (
+    tester,
+  ) async {
+    // A frozen picture is a decoder that cannot keep up or a read that
+    // never arrived, and only these numbers tell them apart. They are
+    // sampled twice a second and kept nowhere unless the stats panel is
+    // open, which on a television it never is.
+    final lines = captureDiagnostics();
+    final harness = PlayerHarness();
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(seconds: 6669));
+    harness.engine.emitPlaying(true);
+    harness.engine.emitBuffering(false);
+    harness.engine.emitPosition(const Duration(seconds: 5113));
+    await pumpEvents(tester);
+
+    await tester.pump(PlayerScreen.stuckAfter + PlayerScreen.stuckInterval);
+    harness.engine.emitStats(
+      const PlaybackStats(
+        hwdec: 'no',
+        videoCodec: 'hevc (Main 10)',
+        audioCodec: 'truehd',
+        width: 3840,
+        height: 2160,
+        outputFps: 0,
+        containerFps: 23.976,
+        droppedFrames: 0,
+        decoderDroppedFrames: 0,
+        cacheDuration: Duration(seconds: 12),
+        pausedForCache: false,
+      ),
+    );
+    await pumpEvents(tester);
+
+    expect(
+      lines,
+      contains(
+        'info player what mpv is doing with it: hwdec=no '
+        'video=hevc (Main 10) 3840x2160 audio=truehd fps=0.0/23.976 '
+        'dropped=0/0 cache=12000ms paused_for_cache=false',
+      ),
+    );
+  });
+
+  testWidgets('a frame or two is not playing again', (tester) async {
+    // What froze a 4K remux on the television for seventy seconds: the
+    // position moved a fraction of a second, the flag cleared, the log
+    // said "playing again", and the detector -- counting from zero
+    // again -- never spoke about the minute that followed.
+    final lines = captureDiagnostics();
+    final harness = PlayerHarness();
+    await harness.pump(tester);
+    harness.engine.emitDuration(const Duration(seconds: 6669));
+    harness.engine.emitPlaying(true);
+    harness.engine.emitBuffering(false);
+    harness.engine.emitPosition(const Duration(seconds: 5113));
+    await pumpEvents(tester);
+    await tester.pump(PlayerScreen.stuckAfter + PlayerScreen.stuckInterval);
+    expect(find.textContaining(TorrentStallOverlay.waiting), findsOneWidget);
+
+    harness.engine.emitPosition(
+      const Duration(seconds: 5113, milliseconds: 120),
+    );
+    await pumpEvents(tester);
+    expect(find.textContaining(TorrentStallOverlay.waiting), findsOneWidget);
+    expect(lines.where((line) => line.contains('playing again')), isEmpty);
+
+    // A second of film is film.
+    harness.engine.emitPosition(const Duration(seconds: 5114));
+    await pumpEvents(tester);
+    expect(find.textContaining(TorrentStallOverlay.waiting), findsNothing);
   });
 
   testWidgets('a paused player is not waiting', (tester) async {
