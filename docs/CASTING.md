@@ -79,10 +79,20 @@ accident of which URL is read:
   torrent-borne container needs no session at all beforehand: its key names
   the torrent and the file, and the first LAN request for a member is what
   indexes it, out of a torrent this device already has.
-- A session idle for ten minutes is swept (`SESSION_IDLE_TIMEOUT`). A
-  receiver that is reading keeps it leased, so this only bites a cast left
-  paused for longer than that; a torrent-borne one re-indexes itself on the
-  next request, a link-borne one cannot and the receiver gets a `404`.
+- **A session lasts as long as nobody opens anything else.** It used to be
+  swept ten idle minutes after its last read (`SESSION_IDLE_TIMEOUT`), and
+  a cast left paused for longer than that lost it: a torrent-borne session
+  re-indexes itself on the next request, but a link-borne one cannot -- the
+  `/create` that could make another is not on the LAN listener -- so the
+  receiver got a `404` with no way back. The server's sessions now follow
+  the live entity like everything else it keeps (stream-server
+  `enginefs::retention::live`, `translators::session`): a session is kept
+  while its own container is what is playing, a receiver that is reading
+  keeps it leased on top of that, and what takes it is the viewer opening
+  something else -- which is also what ends the cast. So a paused cast
+  keeps its session, for as long as nobody on the phone starts something
+  else; and starting something else is not a case the receiver has to be
+  able to recover from, because the cast is over.
 
 A refusal is a dialog that says what is wrong and that the conversion which
 would fix it does not exist yet; `CastRefusal` names which rule refused, which
