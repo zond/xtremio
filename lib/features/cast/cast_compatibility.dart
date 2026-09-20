@@ -37,6 +37,18 @@ import '../player/playback_stats.dart';
 /// are deliberately not mounted on the LAN media listener, because each is
 /// an open proxy and the local network is not the loopback interface. That
 /// refusal is about the URL and comes first.
+///
+/// **What is judged is the film, not the container it arrived in.** When a
+/// stream turns out to be an archive or a disc image the player plays the
+/// member inside it, on the server's archive stream routes, and that member
+/// URL and that member's name are what reach this check (`_castSource` and
+/// `_castFilename` in the player). So a `.rar` holding an MP4 is judged as
+/// the MP4 it holds, and an `.iso` behind a `/proxy` link is judged on
+/// `/iso/stream/...` rather than refused as proxied -- rightly, because
+/// that is the URL the receiver would fetch, the LAN listener does serve
+/// it (`archive_stream_routes` is on the allow-list), and the credentials
+/// the container needed stay on the loopback side in the session the
+/// `/create` made.
 sealed class CastCompatibility {
   const CastCompatibility();
 

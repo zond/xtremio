@@ -619,12 +619,25 @@ what every model field means. The shape of the thing is in the
   a reconnect -- while `_opened` stays what the core published; `buffer=`
   is not written on it, since the archive routes read no such query and
   the read-ahead is the one the translator's source opens underneath.
+  **And the member is what is cast**, not the container: `_castSource` and
+  `_castFilename` hand a receiver `_translatedUrl` and judge
+  `CastCompatibility` by the member's own name, so a `.rar` holding an MP4
+  casts where the `.rar` used to be refused on its extension -- see
+  [docs/CASTING.md](CASTING.md), which also says why the URL the receiver
+  gets is one the LAN listener serves.
   **A container that cannot be played is still said honestly**: the server
   answers `415` (`compressed`, `encrypted`, `solid`, `noRandomAccess`,
-  `unsupported`), `422` (`malformed`) or `501`, each with a sentence, and
-  `archiveRefusal` shows the app's own wording for the four that are just
-  "the film is packed" and the server's sentence where it names something
-  concrete -- which volume is missing, which UDF structure. Addon-declared
+  `unsupported`), `422` (`malformed`) or `501` (`noRanges`, the origin will
+  not serve byte ranges; `noReader`, this build has no reader for the
+  format), each with a kind and a sentence, and `archiveRefusal` shows the
+  app's own wording for the four that are just "the film is packed" and the
+  server's sentence where it names something concrete -- which volume is
+  missing, which UDF structure. `noReader` is the one sentence never shown:
+  it names a cargo feature, which is for whoever built the app, so the
+  viewer gets the app's own wording and the server's goes to the log. A
+  `501` from a server older than those kinds carries `{"error": ...}` and
+  no kind (`ArchiveRefused.unavailable`), and is said in the app's words
+  too, since one of the two it might be is that one. Addon-declared
   archives (`rarUrls`/`zipUrls` -> `StreamKind.archive`) are untouched by
   all of this: stremio-core builds the `/create` URL for those and the
   player opens it like any other stream.

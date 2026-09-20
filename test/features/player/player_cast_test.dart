@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/cast_widgets.dart';
+import 'package:xtremio/features/dev/dev_streams.dart';
+import 'package:xtremio/features/player/archive_route.dart';
+import 'package:xtremio/features/player/archive_sniff.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/up_next_card.dart';
@@ -1038,6 +1041,236 @@ void main() {
 
       expect(find.byType(CastRefusedDialog), findsNothing);
       expect(cast.disconnects, 0);
+    });
+  });
+
+  // A container is played as the film inside it, and so is cast: what the
+  // receiver is handed and what the compatibility check judges are both the
+  // member, not the archive around it. Before this, `_startCast` handed the
+  // receiver `_opened` -- the container -- and judged it by the container's
+  // name, so every one of these was refused on the strength of an extension
+  // the viewer never chose ("a Chromecast plays MP4 and WebM files; this
+  // stream is a .rar file").
+  group('a container casts as the film inside it', () {
+    const unrecognized = 'Failed to recognize file format.';
+
+    /// Long enough for every retry a torrent's first `open` gets: mpv
+    /// refuses the container at once, and the archive check only runs once
+    /// the failure is final.
+    Future<void> waitOutTheRetries(WidgetTester tester) async {
+      for (var i = 0; i < PlayerScreen.torrentOpenRetries + 2; i++) {
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pump();
+      }
+    }
+
+    /// The recorded torrent, whose file is [container]: the engine refuses
+    /// it, the sniff names it, and the server answers with [member]. The
+    /// stats answer names the container to the archive route and is what
+    /// ends the start-up retries.
+    PlayerHarness torrentContainer({
+      required String container,
+      required Uri member,
+      required ArchiveKind kind,
+      required FakeCastClient cast,
+      required FakeLanMediaControl lan,
+    }) {
+      final harness =
+          PlayerHarness(
+              player: playerWithFilename(container),
+              cast: cast,
+              lanMedia: lan,
+              configureEngine: (engine) => engine.openError = unrecognized,
+            )
+            ..archiveKind = kind
+            ..archiveRouting = ArchiveMember(member);
+      harness.torrentStats.response = TorrentStats(
+        phase: TorrentPhase.ready,
+        streamName: container,
+      );
+      return harness;
+    }
+
+    testWidgets(
+      'a torrent-borne .rar is cast as its .mp4 member, at the LAN address',
+      (tester) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        const container = 'Night.of.the.Living.Dead.1080p.x264.AAC.rar';
+        final member = Uri.parse(
+          '${PlayerHarness.recordedServerBaseUrl}/rar/stream/'
+          'torrent%3A11ea02584fa6351956f35671962ab46354d99060%2F$container'
+          '/Night.of.the.Living.Dead.1080p.x264.AAC.mp4',
+        );
+        final harness = torrentContainer(
+          container: container,
+          member: member,
+          kind: ArchiveKind.rar,
+          cast: cast,
+          lan: lan,
+        );
+        await harness.pump(tester);
+        await waitOutTheRetries(tester);
+
+        // The member is what is playing here, which is the premise.
+        expect(harness.engine.opened.map((open) => open.$1).last, member);
+
+        await castTo(tester, livingRoom);
+
+        // No refusal: what was judged is the member's `.mp4`, not the
+        // container's `.rar`.
+        expect(find.byType(CastRefusedDialog), findsNothing);
+        expect(cast.loads, hasLength(1));
+        final media = cast.loads.single.$1;
+        expect(media.contentType, 'video/mp4');
+        // The member's own path, on the listener's address. The archive
+        // *stream* routes are mounted on the LAN listener
+        // (`lan_media_routes()` in the server), so this is a URL the
+        // receiver can actually fetch.
+        expect(media.url.host, '192.168.1.20');
+        expect(media.url.port, 39271);
+        expect(media.url.path, member.path);
+        expect(media.url.pathSegments.first, 'rar');
+      },
+    );
+
+    testWidgets(
+      'a link-borne container is cast as its member, not refused as proxied',
+      (tester) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        // A link the player fetches through the server's own `/proxy`,
+        // which is never on the LAN listener and was the refusal this
+        // stream used to get. The member is on the archive stream routes,
+        // which are -- and the credentials the container needed stayed on
+        // the loopback side, in the session `/create` made.
+        final member = Uri.parse(
+          '${PlayerHarness.recordedServerBaseUrl}/zip/stream/abc123/'
+          'Big.Buck.Bunny.1080p.x264.AAC.mp4',
+        );
+        final harness =
+            PlayerHarness(
+                player: {
+                  'selected': {'stream': DevStreams.bigBuckBunnyHttp},
+                  'stream': {
+                    'type': 'Ready',
+                    'content': [
+                      {'streaming_url': DevStreams.bigBuckBunnyHttp['url']},
+                      DevStreams.bigBuckBunnyHttp,
+                    ],
+                  },
+                },
+                stream: DevStreams.bigBuckBunnyHttp,
+                cast: cast,
+                lanMedia: lan,
+                configureEngine: (engine) => engine.openError = unrecognized,
+              )
+              ..archiveKind = ArchiveKind.zip
+              ..archiveRouting = ArchiveMember(member);
+        await harness.pump(tester);
+        await pumpEvents(tester);
+
+        // The container was fetched through `/proxy`; the member is not.
+        expect(harness.engine.opened.first.$1.pathSegments.first, 'proxy');
+        expect(harness.engine.opened.map((open) => open.$1).last, member);
+
+        await castTo(tester, livingRoom);
+
+        expect(find.byType(CastRefusedDialog), findsNothing);
+        expect(cast.loads, hasLength(1));
+        final media = cast.loads.single.$1;
+        expect(media.contentType, 'video/mp4');
+        expect(media.url.host, '192.168.1.20');
+        expect(media.url.port, 39271);
+        expect(media.url.path, member.path);
+      },
+    );
+
+    testWidgets(
+      "a member the receiver cannot decode is refused in the member's own "
+      'words',
+      (tester) async {
+        useWideViewport(tester);
+        final cast = FakeCastClient(devices: const [livingRoom]);
+        final lan = FakeLanMediaControl()..baseUrl = lanBase;
+        // The container is a `.rar`; the film inside it is a Matroska. The
+        // refusal has to name the Matroska -- that is what the receiver
+        // would have to decode, and it is the reason another source would
+        // help.
+        const container = 'Night.of.the.Living.Dead.1080p.x264.AAC.rar';
+        final harness = torrentContainer(
+          container: container,
+          member: Uri.parse(
+            '${PlayerHarness.recordedServerBaseUrl}/rar/stream/abc123/'
+            'Night.of.the.Living.Dead.1080p.x264.AAC.mkv',
+          ),
+          kind: ArchiveKind.rar,
+          cast: cast,
+          lan: lan,
+        );
+        await harness.pump(tester);
+        await waitOutTheRetries(tester);
+
+        await castTo(tester, livingRoom);
+
+        expect(find.byType(CastRefusedDialog), findsOneWidget);
+        // The member's problem, named. Not the archive's.
+        expect(find.textContaining('Matroska'), findsOneWidget);
+        expect(find.textContaining('.rar'), findsNothing);
+        // And nothing was opened to the network for a cast that never was.
+        expect(cast.loads, isEmpty);
+        expect(cast.connectAttempts, isEmpty);
+        expect(lan.toggles, isEmpty);
+      },
+    );
+
+    testWidgets('a member with no name to read is an answer, not a "not yet"', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final cast = FakeCastClient(devices: const [livingRoom]);
+      final lan = FakeLanMediaControl()..baseUrl = lanBase;
+      // The failure that translates the stream clears everything the
+      // torrent was known by, [_serverFilename] included, and the reopen
+      // arms the polling again -- so right after a container is
+      // translated this screen is, on the old rule, "a torrent whose
+      // file the server has not named". It is nothing of the kind: the
+      // server has opened the container and said what is inside it, and
+      // this member is what it said. A member whose name says nothing is
+      // therefore an unknown file and not a wait, which would never end.
+      const container = 'Night.of.the.Living.Dead.1080p.x264.AAC.rar';
+      final harness = torrentContainer(
+        container: container,
+        member: Uri.parse(
+          '${PlayerHarness.recordedServerBaseUrl}/rar/stream/abc123/FEATURE',
+        ),
+        kind: ArchiveKind.rar,
+        cast: cast,
+        lan: lan,
+      );
+      // One answer, which names the container to the archive route, and
+      // then a server that says nothing more: what the check knows about
+      // the member is the member's own name and nothing else.
+      harness.torrentStats.holdAnswers = true;
+      await tester.pumpWidget(harness.build());
+      await tester.pump();
+      await tester.pump(PlayerScreen.torrentStatsInterval);
+      harness.torrentStats.answer();
+      await pumpEvents(tester);
+      await waitOutTheRetries(tester);
+      expect(
+        harness.engine.opened.map((open) => open.$1).last.pathSegments.last,
+        'FEATURE',
+      );
+
+      await castTo(tester, livingRoom);
+
+      expect(find.byType(CastRefusedDialog), findsOneWidget);
+      expect(find.textContaining('Nothing here says'), findsOneWidget);
+      expect(find.textContaining('try again'), findsNothing);
+      expect(cast.loads, isEmpty);
     });
   });
 

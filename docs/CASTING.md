@@ -44,6 +44,46 @@ the session what the receiver in the room supports.
   each an open proxy and are deliberately not mounted on the LAN listener, so
   a stream stremio-core plays through the proxy cannot be cast at all.
 
+**What is judged and sent is the film, not the container it came in.** When a
+stream turns out to be an archive or a disc image the player plays the member
+inside it, as ranges of the container, on the server's archive stream routes
+(`_translatedUrl`; see [ARCHITECTURE.md](ARCHITECTURE.md)). The cast follows
+it: `PlayerScreen._castSource` is `_translatedUrl ?? _opened` and
+`_castFilename` is the member's own name -- the last segment of the URL the
+archive route redirected to, which ends in the film's file name for exactly
+this reason -- so everything above is asked about the member. A `.rar` whose
+one member is an MP4 therefore casts, where before the check read
+`streamName` (the `.rar` in the torrent) or `behaviorHints.filename` (the
+`.rar` the addon linked to) and refused it on an extension the viewer never
+chose. A member the receiver could not decode is still refused, in the
+*member's* terms: a Matroska inside a `.rar` is refused as a Matroska.
+
+The `/proxy` rule above is judged on the same URL, which is why a
+link-borne container no longer trips it: what the receiver fetches is
+`/{rar|zip|7zip|iso}/stream/{key}/{member}`, not the `/proxy` URL the
+*server* fetched the container with. That is right, and it is not an
+accident of which URL is read:
+
+- The LAN listener mounts those routes on purpose. `lan_media_routes()` in
+  the server is `lan_stream_routes()` **plus `archive_stream_routes()`** --
+  the byte-serving half of the archive API, which looks a session up and
+  fetches nothing a caller named.
+- The `/create` half is deliberately *not* on it: it reaches out to a
+  caller-supplied URL. So a session made on loopback is readable from the
+  LAN and a new one cannot be made there. The player rebuilds the member URL
+  on the LAN base rather than creating anything, so that is all it needs.
+- The container's credentials never travel over the LAN. A link-borne
+  session keeps its `ProxySource` -- the URL, the length, the validator, the
+  `h=` headers -- for the session's life (`SessionSources::Held`), so the
+  receiver's request carries a key and the server supplies the rest. A
+  torrent-borne container needs no session at all beforehand: its key names
+  the torrent and the file, and the first LAN request for a member is what
+  indexes it, out of a torrent this device already has.
+- A session idle for ten minutes is swept (`SESSION_IDLE_TIMEOUT`). A
+  receiver that is reading keeps it leased, so this only bites a cast left
+  paused for longer than that; a torrent-borne one re-indexes itself on the
+  next request, a link-borne one cannot and the receiver gets a `404`.
+
 A refusal is a dialog that says what is wrong and that the conversion which
 would fix it does not exist yet; `CastRefusal` names which rule refused, which
 is the seam Media3 fills.
@@ -56,12 +96,18 @@ names the file makes the same button work, with nothing reopened. The name is
 kept for as long as the player is on that stream, because the polling stops
 once playback is under way while which file this is does not go stale, and it
 is only ever taken from an answer about the file being streamed: the
-torrent-level fallback's `streamName` is the file the server *guessed*.
+torrent-level fallback's `streamName` is the file the server *guessed*. A
+member is never this refusal: the failure that translates a stream stops the
+polling and clears the request before the container is ever sent to the
+server, and the reopen that plays the member does not start it again -- so a
+member whose name says nothing is an *unknown* file, which is an answer,
+rather than a wait that would never end.
 
 **The URL the receiver is given.** A Chromecast cannot fetch from
 `127.0.0.1`, so a loopback URL is rebuilt on the server's **LAN media
-listener** — a second HTTP listener with no control routes on it at all, and
-deliberately without `/proxy` and `/ftp` (`rust/src/server.rs`,
+listener** — a second HTTP listener with no control routes on it at all,
+deliberately without `/proxy` and `/ftp` and without the archive `/create`s
+(`rust/src/server.rs`,
 `server_set_lan_media`). What its stream route does is the server's, and
 since stream-server `388f68b` (in the pin from 75c15dc) it serves only the
 torrents this device already holds: an unknown hash is a `404` at once and no

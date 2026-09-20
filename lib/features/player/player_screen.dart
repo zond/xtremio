@@ -1977,9 +1977,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _translatedUrl = member;
         _reopenAt(_resumePosition, reason: 'archive-member');
       case ArchiveRefused():
+        // The server's own sentence too, and this is the only place it
+        // goes for a `noReader`: it names a cargo feature, which is for
+        // whoever built the app and not for whoever is watching (see
+        // [archiveRefusal]).
         DiagnosticsLog.warn(
           'player',
-          'the server will not serve this ${kind.label}: ${routed.kind}',
+          'the server will not serve this ${kind.label}: '
+              '${routed.kind} (${routed.message})',
         );
         setState(() => _engineError = archiveRefusal(kind, routed));
       case null:
@@ -4251,6 +4256,49 @@ class _PlayerScreenState extends State<PlayerScreen> {
   StreamFacts get _streamFacts =>
       StreamFacts.of(_state?.selectedStream ?? StreamInfo(widget.stream));
 
+  /// **What a receiver is sent, and what the cast is judged by: the film,
+  /// not the container it came in.**
+  ///
+  /// When the stream turned out to be an archive or a disc image the
+  /// server serves the film inside it as ranges of the container
+  /// ([_translatedUrl]), and that member URL is what mpv is playing -- so
+  /// it is also what a receiver should fetch and what its decoder has to
+  /// cope with. Judging the container instead refused every one of these
+  /// on the container's own extension: a `.rar` is not in the castable
+  /// table, so a receiver was told "a Chromecast plays MP4 and WebM files"
+  /// about a release whose one member is an MP4 it plays perfectly well.
+  ///
+  /// Nothing about an ordinary stream changes: with no member this is
+  /// [_opened], which is what it always was.
+  Uri? get _castSource => _translatedUrl ?? _opened;
+
+  /// The name the compatibility check reads, which has to be the name of
+  /// whatever [_castSource] is.
+  ///
+  /// For a member that is the member's own name, as the server stated it:
+  /// the last segment of the URL the archive route redirected to, which
+  /// ends in the film's own file name for exactly this reason (see
+  /// `routeArchive`). [castFilename]'s answer is the *container's* name
+  /// there -- `streamName` is the `.rar` in the torrent, and the addon's
+  /// `behaviorHints.filename` is the `.rar` it linked to -- so it is not
+  /// consulted at all once there is a member, rather than being ranked
+  /// below one: a wrong name outranking a right one is the whole of the
+  /// bug this replaces.
+  ///
+  /// A member whose name has no extension yields null, and the check then
+  /// reads the URL itself and finds the same nothing: an unknown
+  /// container, refused. That is a real answer and not a "not yet" -- the
+  /// server has already said what is inside the container, and this is
+  /// what it said.
+  String? get _castFilename {
+    final member = _translatedUrl;
+    if (member == null) {
+      return castFilename(_state, serverFilename: _serverFilename);
+    }
+    final segments = member.pathSegments;
+    return segments.isEmpty ? null : segments.last;
+  }
+
   /// Hands the stream to [device], or explains why it cannot be.
   ///
   /// Nothing is loaded until every step has answered: the stream has to be
@@ -4271,13 +4319,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// last line here nothing else knows they exist.
   Future<void> _startCast(CastDevice device) async {
     final cast = _cast;
-    final local = _opened;
+    // The film, which for a container is the member inside it; see
+    // [_castSource]. Every step below -- the check, the LAN address, the
+    // load -- is about this URL and no longer about the archive around it.
+    final local = _castSource;
     if (cast == null || local == null || !_stillOurs) return;
     final state = _state;
     final compatibility = CastCompatibility.of(
       url: local,
+      // Still the stream's own facts, and right for a member too: a
+      // container is named after the release it holds, so the tags that
+      // say HEVC or DTS are claims about the film inside it. They are
+      // claims either way, believed only when they say something is
+      // wrong.
       facts: _streamFacts,
-      filename: castFilename(state, serverFilename: _serverFilename),
+      filename: _castFilename,
       stats: _lastStats,
       // A torrent *this device's server is serving* and has not named the
       // file of yet: the answer is "not until it has", and it comes
@@ -4287,6 +4343,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // from what there is -- right, because nothing on this device is
       // ever going to name that file, and "try again in a moment" would
       // be a wait that never ends.
+      //
+      // Never true of a member, and by the state rather than by a clause
+      // of its own: a translation only ever happens out of [_failPlayback],
+      // which stops the polling and clears the request before the sniff
+      // goes out, and the reopen that plays the member does not start it
+      // again ([_openStream] returns on the unchanged URL). So a member
+      // whose name says nothing is an unknown file here, which is the
+      // answer -- the server has opened the container and said what is
+      // inside it -- and not a wait that would never end. There is a test
+      // that says so.
       containerPending: _torrentStatsRequest != null && _serverFilename == null,
     );
     if (compatibility is CastRefused) {
@@ -4539,6 +4605,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// it is; the receiver has a network connection of its own. Only a URL on
   /// the embedded server needs the server's LAN media listener, which is
   /// therefore the only case that starts one.
+  ///
+  /// [local] is the film ([_castSource]), so for a container it is the
+  /// member's URL on the archive stream routes -- and the listener does
+  /// serve those: `lan_media_routes()` mounts `archive_stream_routes()`
+  /// beside `lan_stream_routes()`, deliberately, for this. What it does
+  /// not mount is the archive `/create` half, which fetches a
+  /// caller-named URL; so a session made here on loopback is readable
+  /// from the LAN and a new one cannot be made there. That costs nothing
+  /// while a cast is running -- the receiver's own reads keep the session
+  /// leased -- and is why the member is rebuilt on the LAN base rather
+  /// than re-created for it.
   Future<Uri?> _castUrl(Uri local, CastDevice device) async {
     // The LAN listener serves the embedded server's routes and nothing
     // else, so a URL on another server on this device has no address a
