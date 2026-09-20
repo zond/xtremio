@@ -17,6 +17,7 @@ import '../details/stream_facts.dart';
 import '../downloads/download_labels.dart';
 import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
+import 'archive_route.dart';
 import 'archive_sniff.dart';
 import 'playback_engine.dart';
 import 'playback_stats_overlay.dart';
@@ -574,6 +575,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// archive from a film ([PlaybackScope.archiveSniffOf]).
   Future<ArchiveKind?> Function(Uri url) _archiveSniff = sniffArchive;
 
+  /// How a container that turned out to be one is handed to the server, to
+  /// be read as ranges of itself ([PlaybackScope.archiveRouteOf]).
+  ArchiveRouter _archiveRoute = routeArchive;
+
+  /// The film inside the container [_opened] turned out to be, as a URL on
+  /// the streaming server ([_explainArchive]). Null for every ordinary
+  /// stream, which is almost all of them.
+  ///
+  /// It stands *in place of* [_opened] at every `open` from the moment it
+  /// is set, so a re-open for a new buffer window or after a network error
+  /// goes back to the film and not to the archive around it; [_opened]
+  /// itself stays the URL the core published, because that is what the
+  /// core's next state is compared against. Cleared with the stream.
+  Uri? _translatedUrl;
+
   /// The app's preferences, for [AppPrefs.bufferAhead]. From the
   /// [PrefsScope] the app puts above every screen; a player mounted without
   /// one (a widget test that does not care where the choice goes) gets
@@ -1068,6 +1084,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _streamNumbersReader = PlaybackScope.streamNumbersOf(context);
     _playheadReporter = PlaybackScope.playheadOf(context);
     _archiveSniff = PlaybackScope.archiveSniffOf(context);
+    _archiveRoute = PlaybackScope.archiveRouteOf(context);
     _subtitleMatchClient = PlaybackScope.subtitleMatchOf(context);
     _dhtStatusProvider = PlaybackScope.dhtStatusOf(context);
     _proxyStreams = PlaybackScope.proxyStreamsOf(context);
@@ -1216,6 +1233,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
     _opened = url;
+    // Another stream, so whatever the last one turned out to hold is not
+    // this one's to play.
+    _translatedUrl = null;
     _autoPickedSubtitles = false;
     _subtitlesChosenByHand = false;
     _mediaLoaded = false;
@@ -1264,7 +1284,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Once: [_mediaUrl] reads the buffer window and the proxy token and
     // sets [_proxiedStream], and what is logged, opened and asked about
     // has to be the one URL rather than three answers that agree today.
-    final media = _mediaUrl(url);
+    // [_translatedUrl] stands in front of the stream's own URL when the
+    // stream turned out to be a container: what plays is the film inside
+    // it, at a URL on our own server, and every later re-open is of that.
+    final media = _mediaUrl(_translatedUrl ?? url);
     _engineUrl = media;
     _mediaIn = false;
     DiagnosticsLog.info(
@@ -1701,6 +1724,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (url == null || (!url.isScheme('http') && !url.isScheme('https'))) {
       return false;
     }
+    // Not what is playing when the stream turned out to be a container
+    // ([_translatedUrl]). The member is served by the archive routes, which
+    // read no query but the session's own: the parameter would name
+    // nothing there, and the read-ahead is the one the translator's source
+    // opens on the torrent underneath it.
+    if (_translatedUrl != null) return false;
     final stream = _state?.selectedStream ?? _state?.convertedStream;
     return stream?.infoHash != null;
   }
@@ -1886,28 +1915,112 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // held at the film's rate until the viewer pressed Back, which is the
     // juddering system UI this feature exists to avoid.
     _releaseDisplayFrameRate();
+    // Which file of the torrent the server opened, read before the
+    // failure forgets the torrent: [_stopTorrentStats] clears it, and it
+    // is what names the container to the archive routes
+    // ([_archiveRequest]).
+    final fileInTorrent = _serverFilename ?? _torrentStats?.streamName;
     setState(() {
       _engineError = error;
       _stopTorrentStats();
     });
     final url = _engineUrl;
-    if (!_mediaLoaded && url != null) _explainArchive(url, error);
+    if (!_mediaLoaded && url != null) {
+      _explainArchive(url, error, fileInTorrent);
+    }
   }
 
-  /// Replaces [error] with what the source actually is, when it failed
-  /// because it is an archive or a disc image rather than a film.
+  /// Plays the film inside the source, when the source turned out to be a
+  /// container rather than a film -- and says why not when it cannot.
   ///
-  /// mpv's own words for that are "Failed to recognize file format", which
-  /// is true and useless: the source card rarely says what the file is, and
-  /// the fix -- another source -- is not something the message suggests.
+  /// mpv's own words for a container are "Failed to recognize file format",
+  /// which is true and useless: the source card rarely says what the file
+  /// is, and the fix is not something the message suggests. The sniff
+  /// names it ([archiveKindOf]); the server can then read the film inside
+  /// it as ranges of the container itself, with nothing extracted and
+  /// nothing written ([routeArchive]), and what plays is the member.
+  ///
+  /// **After the failure, not before it.** Sniffing before the first open
+  /// would put a ranged read in front of every playback there is, and
+  /// almost every playback is a film -- a round trip and 32 KiB (an ISO
+  /// carries its signature at byte 32769) spent to learn nothing, on every
+  /// title, on a television. Here it costs only the playbacks that were
+  /// already going to fail, and it is truthful: nothing is taken away from
+  /// mpv that mpv could open. What it costs is the wait for mpv to give
+  /// up, which is the wait the message already had.
+  ///
   /// Asked only of a stream that never loaded, and only once the failure
   /// is final; the answer is dropped if another failure, or a new stream,
   /// has replaced this one by the time it comes.
-  Future<void> _explainArchive(Uri url, String error) async {
+  Future<void> _explainArchive(
+    Uri url,
+    String error,
+    String? fileInTorrent,
+  ) async {
+    // Already the film inside a container: what failed is the member, and
+    // sending a member round again would put the screen in a loop --
+    // every answer to the sniff is the same answer, and every route of it
+    // re-opens the same URL. One translation per stream.
+    if (_translatedUrl != null) return;
     final kind = await _archiveSniff(url);
     if (kind == null || !mounted || _engineError != error) return;
     DiagnosticsLog.info('player', 'the source is a ${kind.label}');
-    setState(() => _engineError = archiveFailure(kind));
+    final request = _archiveRequest(kind, url, fileInTorrent);
+    final routed = request == null ? null : await _archiveRoute(request);
+    if (!mounted || _engineError != error) return;
+    switch (routed) {
+      case ArchiveMember(url: final member):
+        DiagnosticsLog.info(
+          'player',
+          'the ${kind.label} holds ${DiagnosticsLog.url(member)}',
+        );
+        _translatedUrl = member;
+        _reopenAt(_resumePosition, reason: 'archive-member');
+      case ArchiveRefused():
+        DiagnosticsLog.warn(
+          'player',
+          'the server will not serve this ${kind.label}: ${routed.kind}',
+        );
+        setState(() => _engineError = archiveRefusal(kind, routed));
+      case null:
+        setState(() => _engineError = archiveFailure(kind));
+    }
+  }
+
+  /// How the server is asked about the container this stream turned out to
+  /// be, or null when there is nothing to ask with.
+  ///
+  /// A torrent's container is a file of a torrent the server already has,
+  /// so it is named rather than fetched: the info hash and
+  /// [fileInTorrent], the file's own name as the server states it
+  /// ([_serverFilename], which is `streamName` from `stats.json` and is
+  /// exactly the string the route matches on). Nothing else is a torrent, so it is named by the URL --
+  /// [url], which is the URL the *engine* was handed and not the core's
+  /// bare one: for anybody else's host that is this server's `/proxy` URL,
+  /// carrying the stream's credentials, and a container the server cannot
+  /// fetch is a container it cannot index.
+  ArchiveRouteRequest? _archiveRequest(
+    ArchiveKind kind,
+    Uri url,
+    String? fileInTorrent,
+  ) {
+    final base = _serverBase;
+    if (base == null) return null;
+    final stream = _openState?.selectedStream;
+    if (stream?.kind == StreamKind.torrent) {
+      final infoHash = stream?.infoHash;
+      // Which file of the torrent this is comes from the server's own
+      // stats, and a torrent it has not answered about yet is one nothing
+      // here can name a file of.
+      if (infoHash == null || fileInTorrent == null) return null;
+      return ArchiveRouteRequest.inTorrent(
+        serverBase: base,
+        kind: kind,
+        infoHash: infoHash,
+        pathInTorrent: fileInTorrent,
+      );
+    }
+    return ArchiveRouteRequest.link(serverBase: base, kind: kind, played: url);
   }
 
   // --- Retrying a slow torrent's open --------------------------------------

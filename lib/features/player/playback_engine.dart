@@ -11,6 +11,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/core.dart';
 import '../../shell/display_frame_rate.dart';
+import 'archive_route.dart';
 import 'archive_sniff.dart';
 import 'playback_stats.dart';
 import 'playback_tracks.dart';
@@ -327,6 +328,7 @@ class PlaybackScope extends InheritedWidget {
     this.streamNumbers,
     this.playhead,
     this.archiveSniff,
+    this.archiveRoute,
     required super.child,
   });
 
@@ -373,6 +375,12 @@ class PlaybackScope extends InheritedWidget {
   /// server.
   final Future<ArchiveKind?> Function(Uri url)? archiveSniff;
 
+  /// How a container the sniff named is sent to the streaming server, which
+  /// reads the film inside it as ranges of the container itself (absent,
+  /// [routeArchive]). A function for the same reason as [archiveSniff]: a
+  /// test answers what the server would without one running.
+  final ArchiveRouter? archiveRoute;
+
   static PlaybackScope? _maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlaybackScope>();
 
@@ -407,6 +415,9 @@ class PlaybackScope extends InheritedWidget {
     BuildContext context,
   ) => _maybeOf(context)?.archiveSniff ?? sniffArchive;
 
+  static ArchiveRouter archiveRouteOf(BuildContext context) =>
+      _maybeOf(context)?.archiveRoute ?? routeArchive;
+
   @override
   bool updateShouldNotify(PlaybackScope oldWidget) =>
       createEngine != oldWidget.createEngine ||
@@ -418,7 +429,8 @@ class PlaybackScope extends InheritedWidget {
       proxyStreams != oldWidget.proxyStreams ||
       streamNumbers != oldWidget.streamNumbers ||
       playhead != oldWidget.playhead ||
-      archiveSniff != oldWidget.archiveSniff;
+      archiveSniff != oldWidget.archiveSniff ||
+      archiveRoute != oldWidget.archiveRoute;
 }
 
 /// [PlaybackEngine] over `media_kit` (libmpv). Direct play only: whatever

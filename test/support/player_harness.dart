@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
+import 'package:xtremio/features/player/archive_route.dart';
 import 'package:xtremio/features/player/archive_sniff.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_controls.dart';
@@ -137,6 +138,25 @@ class PlayerHarness {
     return archiveKind;
   }
 
+  /// What the server answers about a container the screen sent it: nothing
+  /// it could be asked ([ArchiveRouting] null) until a test says otherwise,
+  /// which leaves the viewer the plain "can't be played" message.
+  ArchiveRouting? archiveRouting;
+
+  /// The requests the screen made of it, in order: what it named, how, and
+  /// on which server.
+  final List<ArchiveRouteRequest> archiveRoutes = [];
+
+  /// Holds the ask open until a test completes it, like
+  /// [archiveSniffPending].
+  Future<void>? archiveRoutePending;
+
+  Future<ArchiveRouting?> _archiveRoute(ArchiveRouteRequest request) async {
+    archiveRoutes.add(request);
+    if (archiveRoutePending != null) await archiveRoutePending;
+    return archiveRouting;
+  }
+
   /// Engine opens (`'open'`), stats fetches (`'stats'`), asks about what
   /// the server holds (`'held'`) and the teardown's own calls (`'quit'`,
   /// `'close-streams'`, `'dispose'`), in the order they happened.
@@ -208,6 +228,7 @@ class PlayerHarness {
         streamNumbers: streamNumbers,
         playhead: playhead,
         archiveSniff: _archiveSniff,
+        archiveRoute: _archiveRoute,
         child: MaterialApp(
           navigatorObservers: navigatorObservers,
           // As `XtremioApp` builds it: the television's text scale and
