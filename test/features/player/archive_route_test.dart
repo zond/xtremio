@@ -193,15 +193,42 @@ void main() {
         isA<ArchiveRefused>().having((r) => r.kind, 'kind', 'malformed'),
       );
 
-      // 501: this server declining to do the work. The route says `error`
-      // and names no kind there, so the word is ours and the sentence is
-      // still the server's.
+      // 501: this server declining to do the work, in the same shape, and
+      // saying which of the two it is. The kind is what tells them apart,
+      // and it has to, because only one of the two sentences is for a
+      // viewer.
       createStatus = HttpStatus.notImplemented;
       createBody = {
-        'error':
+        'refused': ArchiveRefused.noRanges,
+        'message':
             'this link\'s host does not serve byte ranges, so a file '
             'inside it could only be played by downloading the whole thing',
       };
+      expect(
+        await routeArchive(link()),
+        isA<ArchiveRefused>()
+            .having((r) => r.kind, 'kind', ArchiveRefused.noRanges)
+            .having((r) => r.message, 'message', startsWith('this link\'s')),
+      );
+
+      createBody = {
+        'refused': ArchiveRefused.noReader,
+        'message':
+            'RAR support is not compiled into this build (rebuild with '
+            'the "rar" cargo feature)',
+      };
+      expect(
+        await routeArchive(link()),
+        isA<ArchiveRefused>()
+            .having((r) => r.kind, 'kind', ArchiveRefused.noReader)
+            .having((r) => r.message, 'message', contains('cargo feature')),
+      );
+
+      // A `501` from a server older than those kinds, which says `error`
+      // and names none: still read, because a branch that has not bumped
+      // its pin is the ordinary case, and a refusal dropped is a viewer
+      // told nothing.
+      createBody = {'error': 'this link\'s host does not serve byte ranges'};
       expect(
         await routeArchive(link()),
         isA<ArchiveRefused>()
@@ -335,13 +362,37 @@ void main() {
         said('unsupported', message: 'this UDF image uses a metadata map'),
         startsWith('this UDF image uses a metadata map'),
       );
+      // And `noRanges`, the one `501` whose sentence is viewer copy: it
+      // says what is wrong with the link, which is the whole of what there
+      // is to say about it.
       expect(
-        said(ArchiveRefused.unavailable, message: 'this link\'s host will not'),
+        said(ArchiveRefused.noRanges, message: 'this link\'s host will not'),
         'this link\'s host will not. Try another source.',
       );
       // A kind this app has never heard of is still the server's sentence
       // and never a blank.
       expect(said('somethingNew'), 'the server said so. Try another source.');
+    });
+
+    test('never repeats a sentence written for whoever built the app', () {
+      // The other `501`. Its message names a cargo feature, and whoever is
+      // reading a playback failure did not build the app -- so this is the
+      // one refusal whose sentence is ours, with the server's kept for the
+      // log (the warning in `_explainArchive`).
+      const built =
+          'RAR support is not compiled into this build (rebuild with the '
+          '"rar" cargo feature)';
+      expect(
+        said(ArchiveRefused.noReader, message: built),
+        'this build of the app cannot read a RAR archive at all. Try '
+        'another source.',
+      );
+      // A `501` from a server older than the two kinds names neither, and
+      // one of the two it might be is the one above: so it is said in our
+      // words too, as little as is honest.
+      final unnamed = said(ArchiveRefused.unavailable, message: built);
+      expect(unnamed, isNot(contains('cargo')));
+      expect(unnamed, contains('RAR archive'));
     });
   });
 }

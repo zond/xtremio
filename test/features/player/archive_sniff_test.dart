@@ -10,6 +10,7 @@ import 'package:xtremio/features/player/archive_sniff.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/player/torrent_stats.dart';
 
+import '../../support/diagnostics_capture.dart';
 import '../../support/player_harness.dart';
 
 /// A source that serves an archive instead of a film.
@@ -365,6 +366,38 @@ void main() {
       // Nothing is re-opened on a refusal: there is nothing to open.
       expect(harness.engine.opened, hasLength(1));
     });
+
+    testWidgets(
+      "a build with no reader says so in our words, and the server's go to "
+      'the log',
+      (tester) async {
+        // The `noReader` 501: the server's sentence names a cargo feature,
+        // which is for whoever builds the app. A television is the last
+        // place it belongs -- and a log is the first, because it is the
+        // one thing that says how to fix it.
+        final log = captureDiagnostics();
+        const built =
+            'RAR support is not compiled into this build (rebuild with the '
+            '"rar" cargo feature)';
+        final harness = failingLink(unrecognized)
+          ..archiveKind = ArchiveKind.rar
+          ..archiveRouting = const ArchiveRefused(
+            kind: ArchiveRefused.noReader,
+            message: built,
+          );
+        await harness.pump(tester);
+
+        expect(
+          find.text(
+            'Playback failed: this build of the app cannot read a RAR '
+            'archive at all. Try another source.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('cargo'), findsNothing);
+        expect(log.where((line) => line.contains(built)), hasLength(1));
+      },
+    );
 
     testWidgets('a refusal the app has nothing better for keeps the '
         'server\'s sentence', (tester) async {

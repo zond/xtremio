@@ -46,21 +46,36 @@ final class ArchiveMember extends ArchiveRouting {
 /// [kind] is the server's own word for it (`Refusal::kind` in
 /// `server/src/translators/mod.rs`), which is part of the route's contract
 /// and stable: `compressed`, `encrypted`, `solid`, `malformed`,
-/// `noRandomAccess`, `unsupported` -- plus [unavailable], which is this
-/// app's name for the `501` the route answers with `{"error": ...}` rather
-/// than `{"refused": ...}`. [message] is the sentence the server wrote for
-/// a player to show.
+/// `noRandomAccess`, `unsupported`, and the two the `501`s carry --
+/// [noRanges] and [noReader]. [message] is the sentence the server wrote
+/// for a player to show, and for every kind but [noReader] it is copy a
+/// viewer can read.
 final class ArchiveRefused extends ArchiveRouting {
   const ArchiveRefused({required this.kind, required this.message});
 
   final String kind;
   final String message;
 
-  /// The kind this app gives a `501`: an origin that will not serve byte
-  /// ranges (serving a member out of it would mean downloading the whole
-  /// container), or a build with no reader for the format at all. The
-  /// route says `{"error": ...}` for both, so the word is ours; the
-  /// sentence is still the server's.
+  /// **The origin will not serve byte ranges**, so serving a member out of
+  /// it would mean downloading the whole container -- which is the thing
+  /// the translated-sources design exists to stop. A `501`, because it is
+  /// the server declining the work rather than the container being at
+  /// fault, and the sentence with it is written for a viewer.
+  static const String noRanges = 'noRanges';
+
+  /// **This build has no reader for the format** -- the MIT build has no
+  /// RAR reader, because `unrar-rs` is GPL-3.0. A fact about the build and
+  /// not about the film, and the server's sentence for it names a cargo
+  /// feature: it is for whoever builds the app, goes to the log, and never
+  /// to a television. [archiveRefusal] says this one in the app's own
+  /// words.
+  static const String noReader = 'noReader';
+
+  /// A `501` that named no kind, which is a server older than the two
+  /// above. Which of them it is cannot be told apart without matching
+  /// English, so it is neither: the viewer gets the app's own sentence and
+  /// the server's goes to the log, because one of the two it might be is
+  /// the one that must not be shown.
   static const String unavailable = 'unavailable';
 
   @override
@@ -257,34 +272,41 @@ Future<HttpClientResponse> _send(
 
 /// The refusal [answer] carries, or null when it is not one.
 ///
-/// Two shapes, both from `routes/archive.rs`: `415` (a member this server
-/// will not serve by range) and `422` (a container that contradicts
-/// itself) carry `{"refused": kind, "message": sentence}`; `501` carries
-/// `{"error": sentence}` and no kind, because it is *this server*
-/// declining to do the work rather than the container being at fault.
+/// One shape now, from `routes/archive.rs`: `415` (a member this server
+/// will not serve by range), `422` (a container that contradicts itself)
+/// and `501` (this server declining the work -- the origin will not serve
+/// ranges, or this build has no reader for the format) all carry
+/// `{"refused": kind, "message": sentence}`. The kind is what tells the
+/// two `501`s apart, and telling them apart matters: one is copy for the
+/// viewer and the other names a cargo feature (see [ArchiveRefused]).
+///
+/// A `501` carrying the older `{"error": sentence}` and no kind is still
+/// read, as [ArchiveRefused.unavailable]: a build pinned to a server from
+/// before the kinds is the ordinary state of a branch that has not bumped
+/// its pin, and a refusal read as "no answer at all" would put the plain
+/// "can't be played" in front of a viewer who could have been told why.
 ///
 /// It always reads the body to its end, whatever the status: the one
 /// caller that wants something else off the answer -- the redirect's
 /// `Location` -- takes it off the headers before this is called.
 Future<ArchiveRefused?> _refusalOf(HttpClientResponse answer) async {
   final status = answer.statusCode;
-  final refused =
-      status == HttpStatus.unsupportedMediaType ||
-      status == HttpStatus.unprocessableEntity;
-  if (!refused && status != HttpStatus.notImplemented) {
+  if (status != HttpStatus.unsupportedMediaType &&
+      status != HttpStatus.unprocessableEntity &&
+      status != HttpStatus.notImplemented) {
     await answer.drain<void>();
     return null;
   }
   final json = await _json(answer);
-  if (refused) {
-    final kind = json?['refused'];
-    final message = json?['message'];
-    if (kind is! String || message is! String || message.isEmpty) return null;
+  final kind = json?['refused'];
+  final message = json?['message'];
+  if (kind is String && message is String && message.isNotEmpty) {
     return ArchiveRefused(kind: kind, message: message);
   }
-  final message = json?['error'];
-  if (message is! String || message.isEmpty) return null;
-  return ArchiveRefused(kind: ArchiveRefused.unavailable, message: message);
+  if (status != HttpStatus.notImplemented) return null;
+  final said = json?['error'];
+  if (said is! String || said.isEmpty) return null;
+  return ArchiveRefused(kind: ArchiveRefused.unavailable, message: said);
 }
 
 /// How much of a body this reads before calling it malformed: every body
@@ -317,11 +339,28 @@ Future<Map<String, dynamic>?> _json(HttpClientResponse answer) async {
 /// is written for a player to show, and for `malformed` and `unsupported`
 /// it names the one concrete thing (which volume is missing, which UDF
 /// structure) that no message written here could know. Where the UI can
-/// say it better it does: the four refusals below are *the film is packed*,
-/// said four ways, and what a viewer needs from them is that no amount of
-/// waiting will help and another source will.
+/// say it better it does: the four packing refusals below are *the film is
+/// packed*, said four ways, and what a viewer needs from them is that no
+/// amount of waiting will help and another source will.
+///
+/// And where the server's sentence is **not** for a viewer it is not shown:
+/// [ArchiveRefused.noReader] names a cargo feature, which belongs in a log
+/// and never on a television, and [ArchiveRefused.unavailable] is a `501`
+/// from a server that did not say which of the two it was -- and one of the
+/// two it might be is that one. [ArchiveRefused.noRanges] is the exception
+/// among the `501`s and falls through to the server's own words, which say
+/// what is wrong with the link in the viewer's terms.
 String archiveRefusal(ArchiveKind kind, ArchiveRefused refusal) {
   final said = switch (refusal.kind) {
+    // The server's sentence for this one names a cargo feature and is for
+    // whoever builds the app; the viewer gets what it means for them.
+    ArchiveRefused.noReader =>
+      'this build of the app cannot read a ${kind.label} at all',
+    // And this one, which cannot be told from the above without the kind:
+    // said as little as is honest, since the server that answered does not
+    // say which of the two it meant.
+    ArchiveRefused.unavailable =>
+      'this server will not serve the film inside this ${kind.label}',
     'compressed' =>
       'this ${kind.label} has the film packed inside it rather than just '
           'wrapped, so playing it would mean unpacking the whole archive '
