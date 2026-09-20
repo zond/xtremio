@@ -44,6 +44,30 @@ make apk-split                                                           # relea
 make apk-debug FLAGS="--target-platform android-arm64,android-x64"       # phone/64-bit TV + emulator
 ```
 
+### The libmpv the APK carries
+
+`pubspec.yaml` overrides `media_kit_libs_android_video` with the vendored
+copy in `third_party/media_kit_libs_android_video`, whose
+`android/build.gradle` fetches the **`full`** flavour of the prebuilt
+libmpv rather than the `default` one media_kit pins.
+
+The default flavour's ffmpeg is configured with `--disable-decoders` and a
+whitelist that has no `truehd` and no `mlp` -- while still enabling the
+TrueHD *demuxer*. A UHD Blu-ray remux usually carries Dolby TrueHD as its
+only audio track, so on the television such a film played as a picture
+with no sound at all, and said so nowhere but the log
+(`ad: Failed to initialize a decoder for codec 'truehd'`). The `full`
+flavour is the same libmpv, ffmpeg and NDK revision built with
+`--enable-decoders`; it costs 3.4 MiB per ABI and keeps the same licence
+(`--disable-gpl --disable-nonfree --enable-version3`).
+
+**On any media_kit bump, check the four URLs and MD5 sums in that file**:
+upstream goes on pinning the default flavour, so re-vendoring without
+looking loses TrueHD again and nothing fails -- the films just go quiet.
+DTS-HD Master Audio was never affected (`ff_dca_decoder` covers the
+lossless XLL extension too), and Atmos objects fold to the channel bed on
+every build there is, because ffmpeg has no renderer for them.
+
 `make apk-tv` is not `make apk` with a different flag by accident: see
 "Running on a physical device" for which box wants which ABI. It is an armv7
 build, so it is one of the two that need libclang.

@@ -64,6 +64,19 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+# The Android libmpv, built with every decoder rather than the whitelist
+# media_kit publishes by default.
+#
+# That whitelist leaves out TrueHD and MLP, so a Dolby TrueHD track -- the
+# usual audio of a UHD Blu-ray remux -- played as silence on the
+# television, with "Failed to initialize a decoder for codec 'truehd'" in
+# the log and nothing at all on screen. The override is this package with
+# four URLs changed: same libmpv, same ffmpeg, same NDK, same licence, and
+# 3.4 MiB more per ABI (see `third_party/media_kit_libs_android_video`).
+dependency_overrides:
+  media_kit_libs_android_video:
+    path: third_party/media_kit_libs_android_video
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
