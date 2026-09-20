@@ -339,6 +339,66 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// resolution is open.
   bool _openSourceRowDrawn = false;
 
+  /// The node the last-used source card focuses with, so the screen can
+  /// put the remote there itself; see [_takeTheRemoteToTheLastUsed].
+  final FocusNode _lastUsedNode = FocusNode(debugLabel: 'last-used source');
+
+  /// Where the remote was first put down on this screen, and whether it
+  /// has left. Where it starts is the screen's to choose; after that it is
+  /// the viewer's, and nothing drawn later takes it off what they walked
+  /// to.
+  FocusNode? _startedOn;
+  bool _remoteHasMoved = false;
+
+  /// Whether the screen has taken the remote to the last-used card, which
+  /// it does at most once -- on arrival, when that card turns up.
+  bool _tookTheRemote = false;
+
+  /// Follows the remote, so [_takeTheRemoteToTheLastUsed] can tell the
+  /// focus the screen chose from the focus the viewer chose.
+  void _watchTheRemote() {
+    final node = FocusManager.instance.primaryFocus;
+    // A scope is what holds focus between one tile losing it and the next
+    // taking it -- a row closing, a sliver rebuilt -- and is nowhere the
+    // viewer can have moved the remote to.
+    if (node == null || node is FocusScopeNode) return;
+    if (_startedOn == null) {
+      _startedOn = node;
+      return;
+    }
+    if (node != _startedOn) _remoteHasMoved = true;
+  }
+
+  /// Puts the remote on the last-used card, the first time that card is
+  /// drawn and only while the remote is still where the screen put it.
+  ///
+  /// The card's own autofocus is not enough. The addons answer with
+  /// streams before the engine has said which source the title was last
+  /// played from, so the group row below is built first and takes the
+  /// start of the screen -- and Flutter drops an autofocus asked for by a
+  /// widget built into a scope that already has a focused child. Opening a
+  /// title from a continue-watching card left the remote a row below the
+  /// one card that continues it, which is several presses from the one
+  /// thing the viewer came to do.
+  ///
+  /// Never off a card the viewer walked to: the player writes the
+  /// last-used source down while it is up, so coming back from it draws
+  /// this card for the first time on a screen the viewer is already using.
+  void _takeTheRemoteToTheLastUsed() {
+    if (_tookTheRemote || _remoteHasMoved) return;
+    _tookTheRemote = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _remoteHasMoved) return;
+      _lastUsedNode.requestFocus();
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_watchTheRemote);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -411,6 +471,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   @override
   void dispose() {
     releaseField();
+    FocusManager.instance.removeListener(_watchTheRemote);
+    _lastUsedNode.dispose();
     _focusSelect?.cancel();
     _narrowScroll.dispose();
     _details?.dispose();
@@ -1168,6 +1230,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final lastUsedStream = lastUsed == null
         ? null
         : sources.merged(lastUsed.$2);
+    if (isTv && lastUsedStream != null) _takeTheRemoteToTheLastUsed();
     final videoId = state.streamPath?.id ?? meta.id;
     final downloads = _downloadsClient == null
         ? null
@@ -1561,6 +1624,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             level: _ladderLastUsed,
             child: TvSourceRow(
               defaultFocus: true,
+              focusNode: _lastUsedNode,
               sources: [
                 _tvLastUsed(state, lastUsed!.$1, lastUsedStream, downloads),
               ],

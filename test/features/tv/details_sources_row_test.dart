@@ -337,6 +337,27 @@ void main() {
     expect(find.byType(PlayerScreen), findsOneWidget);
   });
 
+  testWidgets('the last-used card arriving after the streams takes the '
+      'remote, which has not been moved', (tester) async {
+    // Opening a title from a continue-watching card: the addons answer
+    // with streams before the engine has said which source the title was
+    // last played from, so the card the screen wants the remote on is
+    // built after the row that stands in for it. Nobody has touched the
+    // D-pad, so the start of the screen is still the screen's to choose.
+    List<Map<String, dynamic>> streams() => [
+      group('alpha.example', [
+        torrent(hash(1), 'Alpha 1080p', '\u{1f464} 20 \u{1f4be} 2 GB'),
+      ]),
+    ];
+    final core = await mount(tester, movieWith(streams()));
+    expect(focusedLabel(tester), 'alpha.example');
+
+    core.setState(CoreField.metaDetails, withLastUsed(movieWith(streams())));
+    await tester.pumpAndSettle();
+
+    expect(focusedLabel(tester), kContinueWithLastSource);
+  });
+
   testWidgets('the last-used card appearing leaves the remote on the card '
       'it was on', (tester) async {
     // The engine writes the last-used source down while the player is up,

@@ -239,12 +239,19 @@ class TvSourceRow extends StatelessWidget {
     super.key,
     required this.sources,
     this.defaultFocus = false,
+    this.focusNode,
   });
 
   final List<TvSource> sources;
 
   /// Whether the first card is where the remote starts on this screen.
   final bool defaultFocus;
+
+  /// The node the first card focuses with, for a screen that has to put
+  /// the remote on that card itself rather than by [defaultFocus] -- which
+  /// only ever takes when nothing else is focused yet (see
+  /// [MetaDetailsScreen]'s last-used card, the one caller).
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -257,6 +264,7 @@ class TvSourceRow extends StatelessWidget {
             child: TvSourceCard(
               source: source,
               defaultFocus: defaultFocus && index == 0,
+              focusNode: index == 0 ? focusNode : null,
             ),
           ),
       ],
@@ -421,10 +429,14 @@ class TvSourceCard extends StatelessWidget {
     super.key,
     required this.source,
     this.defaultFocus = false,
+    this.focusNode,
   });
 
   final TvSource source;
   final bool defaultFocus;
+
+  /// See [TvSourceRow.focusNode]; one is made for the card when null.
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -436,6 +448,7 @@ class TvSourceCard extends StatelessWidget {
       onTap: source.onSelect,
       onLongPress: source.onHold,
       defaultFocus: defaultFocus,
+      focusNode: focusNode,
       borderRadius: _cardRadius,
       child: _CardBox(
         color: source.highlighted
