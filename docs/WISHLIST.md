@@ -52,6 +52,9 @@ deferred every time because direct play covers what is actually watched.
 
 ## A discover-only torrent state
 
+**Being scoped 2026-09-21 -- zond wants this built, not wished for.** What
+follows is the reason; the design is in hand.
+
 An engine with no reader wants every file, and the want set only narrows
 when a stream arrives -- so anything that creates an engine early fetches
 the whole torrent until a reader shows up (measured 2026-09-19: 546 MB at
@@ -89,10 +92,24 @@ that does not arrive. Here so the decision is findable, not to be done.
 
 ## Multi-volume RAR behind a debrid link
 
-Works from a torrent -- the server finds the sibling volumes in the
-torrent's own file list. Behind a debrid link it cannot: the app is handed
-one URL and a set needs all of them, each separately signed. It would take
-an addon that names every volume, which no addon does.
+Works from a torrent: the server finds the sibling volumes in the
+torrent's own file list. Behind a debrid link the app is handed one URL,
+and a set needs all of them, each separately signed.
+
+**But the server half is already built for it**: `/rar/create` takes
+`urls`, a list of volumes in order, and it is only the app that sends a
+list of one (`archive_route.dart`). So this works the day an addon lists
+every volume of a set as its own stream -- the app would gather the
+siblings from the stream list it already has, by infohash and by the
+volume numbering in the names, and hand the server all of them. No URL
+guessing: an addon that offers three streams is offering three URLs.
+
+What is missing is an addon that does it. The debrid services unpack RAR
+sets themselves, so what they expose is usually the film rather than the
+volumes -- which is why a good addon answers such a torrent with "not
+available" rather than with a list of `.partNN.rar` files, and why the one
+that *did* list them was the one misbehaving. **Send one real stream list
+that names every volume and this becomes an afternoon.**
 
 ## Audio a receiver cannot have
 
