@@ -273,6 +273,54 @@ class GoogleCastClient implements CastClient {
     return _castDevice(device);
   }
 
+  /// How long a receiver is given to finish connecting before the cast is
+  /// given up on.
+  ///
+  /// The receiver has an application to launch before it can be loaded:
+  /// the television's own log put three and a quarter seconds between
+  /// "Loading application" and "App running", and a cold one is slower.
+  /// This is the wait, and what ends it is the sentence the viewer gets
+  /// for a receiver that never answered.
+  static const Duration connectTimeout = Duration(seconds: 20);
+
+  /// Whether the session is connected, waiting up to [timeout] for it.
+  ///
+  /// **A LOAD sent before the session is up reaches nobody.** Starting a
+  /// session answers as soon as the platform has taken the request, long
+  /// before the receiver has launched its application, and the film was
+  /// handed over in that gap: the receiver came up with no media on it
+  /// and went on reporting "No media status" until the sender gave up.
+  /// From the sending side that looked exactly like a receiver that could
+  /// not reach us -- it asked the LAN listener for nothing, because it had
+  /// never been told to ask for anything (the field log of 2026-09-21,
+  /// both ends).
+  ///
+  /// [reports] says whether each session the platform reports is
+  /// connected; [now] answers the same question about the session standing
+  /// at the moment it is called, for the answer that arrived before
+  /// anything was listening.
+  @visibleForTesting
+  static Future<bool> connected(
+    Stream<bool> reports, {
+    required bool Function() now,
+    Duration timeout = connectTimeout,
+  }) async {
+    final ready = Completer<bool>();
+    final watching = reports.listen((connected) {
+      if (connected && !ready.isCompleted) ready.complete(true);
+    });
+    // Asked after the listen, never before it: a session that connected
+    // while this was subscribing is one nothing will report again.
+    if (!ready.isCompleted && now()) ready.complete(true);
+    final giveUp = Timer(timeout, () {
+      if (!ready.isCompleted) ready.complete(false);
+    });
+    final answer = await ready.future;
+    giveUp.cancel();
+    await watching.cancel();
+    return answer;
+  }
+
   @override
   Future<CastDevice?> connect(CastDevice device) async {
     await _ensureInitialised();
@@ -289,8 +337,24 @@ class GoogleCastClient implements CastClient {
     await _rememberAddress(device.id);
     final started = await GoogleCastSessionManager.instance
         .startSessionWithDevice(found);
-    return started ? _castDevice(found) : null;
+    if (!started) return null;
+    final manager = GoogleCastSessionManager.instance;
+    final ready = await connected(
+      manager.currentSessionStream.map(_isConnected),
+      now: () => _isConnected(manager.currentSession),
+    );
+    if (!ready) {
+      DiagnosticsLog.warn(
+        'cast',
+        'the receiver did not finish connecting; nothing was loaded on it',
+      );
+      return null;
+    }
+    return _castDevice(found);
   }
+
+  static bool _isConnected(GoogleCastSession? session) =>
+      session?.connectionState == GoogleCastConnectState.connected;
 
   /// Asks Android where the receiver with [id] is and remembers the answer.
   ///

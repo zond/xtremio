@@ -1,6 +1,9 @@
 import 'package:flutter_chrome_cast/entities.dart';
 import 'package:flutter_chrome_cast/enums.dart';
 import 'package:flutter_chrome_cast/models.dart';
+
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/google_cast_client.dart';
@@ -34,6 +37,51 @@ final media = CastMedia(
 /// which is exactly why the one thing `load` decides on its own has to be
 /// decided before that check.
 void main() {
+  group('waiting for the session before anything is loaded', () {
+    // A LOAD sent before the session is up reaches nobody: the receiver
+    // launches its application, comes up with no media on it, and reports
+    // "No media status" until the sender gives up -- which from the
+    // sending side is indistinguishable from a receiver that cannot reach
+    // us (the field log of 2026-09-21, read at both ends).
+    test('a session that connects while we wait is waited for', () async {
+      final reports = StreamController<bool>();
+      final ready = GoogleCastClient.connected(
+        reports.stream,
+        now: () => false,
+      );
+
+      reports.add(false);
+      await Future<void>.delayed(Duration.zero);
+      reports.add(true);
+
+      expect(await ready, isTrue);
+      await reports.close();
+    });
+
+    test('a session already connected is not waited for', () async {
+      final reports = StreamController<bool>();
+      expect(
+        await GoogleCastClient.connected(reports.stream, now: () => true),
+        isTrue,
+      );
+      await reports.close();
+    });
+
+    test('a receiver that never connects is given up on', () async {
+      // Short enough to wait out here; the real one is twenty seconds.
+      final reports = StreamController<bool>();
+      expect(
+        await GoogleCastClient.connected(
+          reports.stream,
+          now: () => false,
+          timeout: const Duration(milliseconds: 20),
+        ),
+        isFalse,
+      );
+      await reports.close();
+    });
+  });
+
   test('what the receiver says is written down, once per thing it says', () {
     // The only account of a cast the sending side ever gets. A receiver
     // that refuses the film reports `idle` with a reason and fetches
