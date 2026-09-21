@@ -5,17 +5,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/features/cast/cast_client.dart';
 import 'package:xtremio/features/cast/google_cast_client.dart';
 
+import '../../support/diagnostics_capture.dart';
+
 /// What the SDK reports on its status stream when the receiver changes
 /// state: no position anywhere in it, which is the whole of the trouble.
-GoggleCastMediaStatus reported(CastMediaPlayerState state) =>
-    GoggleCastMediaStatus(
-      mediaSessionID: 1,
-      playerState: state,
-      playbackRate: 1,
-      volume: 1,
-      isMuted: false,
-      repeatMode: GoogleCastMediaRepeatMode.off,
-    );
+GoggleCastMediaStatus reported(
+  CastMediaPlayerState state, {
+  GoogleCastMediaIdleReason? idleReason,
+}) => GoggleCastMediaStatus(
+  mediaSessionID: 1,
+  playerState: state,
+  idleReason: idleReason,
+  playbackRate: 1,
+  volume: 1,
+  isMuted: false,
+  repeatMode: GoogleCastMediaRepeatMode.off,
+);
 
 final media = CastMedia(
   url: Uri.parse('http://192.168.1.20:39271/abc/0'),
@@ -29,6 +34,30 @@ final media = CastMedia(
 /// which is exactly why the one thing `load` decides on its own has to be
 /// decided before that check.
 void main() {
+  test('what the receiver says is written down, once per thing it says', () {
+    // The only account of a cast the sending side ever gets. A receiver
+    // that refuses the film reports `idle` with a reason and fetches
+    // nothing, which from here is indistinguishable from a receiver that
+    // never heard of us -- unless this line is in the log.
+    final lines = captureDiagnostics();
+    final client = GoogleCastClient();
+
+    client.onMediaStatus(reported(CastMediaPlayerState.buffering));
+    client.onMediaStatus(reported(CastMediaPlayerState.buffering));
+    client.onMediaStatus(
+      reported(
+        CastMediaPlayerState.idle,
+        idleReason: GoogleCastMediaIdleReason.error,
+      ),
+    );
+
+    expect(lines, [
+      'info cast the receiver says buffering',
+      'warn cast the receiver gave up on the media: idle (error)',
+    ]);
+    client.dispose();
+  });
+
   test('a state change carries the position last seen', () {
     final client = GoogleCastClient();
     final seen = <CastStatus>[];

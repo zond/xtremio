@@ -11,6 +11,7 @@ import 'package:flutter_chrome_cast/media.dart';
 import 'package:flutter_chrome_cast/models.dart';
 import 'package:flutter_chrome_cast/session.dart';
 
+import '../../core/diagnostics_log.dart';
 import 'cast_client.dart';
 
 /// [CastClient] over `flutter_chrome_cast` (the Google Cast SDK).
@@ -110,7 +111,40 @@ class GoogleCastClient implements CastClient {
   @visibleForTesting
   CastStatus get lastStatus => _last;
 
+  /// What the receiver last said it was doing, so [_logWhatTheReceiverSays]
+  /// writes a line when that changes and not twice a second.
+  String? _lastReported;
+
+  /// Writes down what the receiver reports, which is the only account of a
+  /// cast this side of the network ever gets.
+  ///
+  /// A receiver that refuses the film says so here and nowhere else: the
+  /// load is handed to the SDK, which answers at once, and the refusal
+  /// arrives later as a status of `idle` with a reason. Without this, a
+  /// receiver that turned the media down and a receiver that never heard
+  /// of us looked identical from the sender -- a listener that started,
+  /// ran for twenty seconds and stopped, with nothing in between (the
+  /// field log of 2026-09-21, casting from the phone to the television).
+  void _logWhatTheReceiverSays(GoggleCastMediaStatus? status) {
+    final reason = status?.idleReason;
+    final said = status == null
+        ? 'nothing loaded'
+        : '${status.playerState.name}'
+              '${reason == null || reason == GoogleCastMediaIdleReason.none ? '' : ' (${reason.name})'}';
+    if (said == _lastReported) return;
+    _lastReported = said;
+    // An error is the receiver's verdict on the film and belongs above
+    // the rest of the traffic; everything else is a state it passed
+    // through on the way.
+    if (reason == GoogleCastMediaIdleReason.error) {
+      DiagnosticsLog.warn('cast', 'the receiver gave up on the media: $said');
+    } else {
+      DiagnosticsLog.info('cast', 'the receiver says $said');
+    }
+  }
+
   void _onMediaStatus(GoggleCastMediaStatus? status) {
+    _logWhatTheReceiverSays(status);
     if (status == null) {
       // No media status is the receiver saying it has nothing loaded --
       // a session ending, or one still connecting -- and says nothing
@@ -314,7 +348,12 @@ class GoogleCastClient implements CastClient {
     // nothing to report either way).
     _last = _last.at(start);
     if (!_initialised) return;
+    _lastReported = null;
     final url = media.url.toString();
+    DiagnosticsLog.info(
+      'cast',
+      'handing the receiver ${media.contentType} at ${start.inSeconds}s',
+    );
     final metadata = GoogleCastGenericMediaMetadata(
       title: media.title,
       subtitle: media.subtitle,
