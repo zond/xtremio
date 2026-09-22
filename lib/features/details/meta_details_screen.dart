@@ -1922,6 +1922,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             icon: Icons.extension_outlined,
             title: _NoStreamsNotice.addonsLabel,
             facts: [_NoStreamsNotice.explanation],
+            details: const [],
             highlighted: false,
             download: null,
             downloading: false,
@@ -1933,6 +1934,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             icon: Icons.cloud_off_outlined,
             title: failure.name,
             facts: [failure.message],
+            details: const [],
             highlighted: false,
             download: null,
             downloading: false,
@@ -1954,6 +1956,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             icon: Icons.inbox_outlined,
             title: addon.name,
             facts: const [kAddonHadNothing],
+            details: const [],
             highlighted: false,
             download: null,
             downloading: false,
@@ -1982,7 +1985,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   ///
   /// What no longer fits is the release tags and the addons that offered
   /// the same source: another addon having it is a `+1` after the addon's
-  /// name, which is the fact without the sentence.
+  /// name, which is the fact without the sentence. Both are carried whole
+  /// in [TvSource.details] instead, which the strip under the row draws
+  /// for the one card the remote is on ([TvSourceDetailStrip]).
   ///
   /// A source the player cannot open leads the line with which kind it is
   /// instead of taking a press, so it is not a focus stop and the remote
@@ -2000,6 +2005,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final bound = downloads?.forGroup(row.group);
     final addon = facts?.addonName ?? _addonNameOf(_profileNow, row.group);
     final others = row.alsoFrom.length;
+    // The grouped layout ranks inside one addon's own answer and so reads
+    // nothing out of the streams; the strip under the row wants the tags
+    // either way, and reading them twice is cheaper than carrying a second
+    // list through the derivation for the sake of one card.
+    final read = facts ?? StreamFacts.of(stream, addonName: addon);
     return (
       icon: _StreamTile._iconFor(stream.kind),
       title: releaseNameOf(stream, addonName: addon),
@@ -2018,6 +2028,19 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           others == 0 ? addon : '$addon +$others'
         else if (facts?.resolutionLabel != null)
           facts!.resolutionLabel!,
+      ],
+      details: [
+        // What kind of source it is, which a playable card says with an
+        // icon and nothing else -- an icon is a glyph a viewer has to
+        // have learnt. One that is not playable already leads its facts
+        // line with the word, and saying it twice on one panel reads as
+        // two different things.
+        if (stream.isPlayable) stream.kind.label,
+        // The release tags, which are what went when the card was cut to
+        // two lines of name over one of facts.
+        ...read.tags,
+        // The `+1` on the card's facts line, spelled out: which addon.
+        if (row.alsoFrom.isNotEmpty) 'also from ${row.alsoFrom.join(', ')}',
       ],
       highlighted: lastUsed != null && stream.isSameSource(lastUsed),
       download: bound?.entryOf(stream),
@@ -2049,6 +2072,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       facts: [
         releaseNameOf(stream, addonName: _addonNameOf(_profileNow, group)),
       ],
+      // A rung of one card with nothing under it: the strip is the
+      // sources row's, and this card's whole line is the release already.
+      details: const [],
       highlighted: true,
       download: bound?.entryOf(stream),
       downloading: bound?.isPending(stream) ?? false,
