@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/stream_facts.dart';
+import 'package:xtremio/features/details/tv_source_row.dart';
 
 import '../support/fixtures.dart';
 
@@ -465,6 +466,112 @@ void main() {
 
     test('no rows are no sections', () {
       expect(sectionsByResolution(<StreamFacts>[], (f) => f), isEmpty);
+    });
+  });
+
+  releaseNameTests();
+}
+
+/// The four shapes real addons send, and what a card leads with for each.
+///
+/// None of them is a field called "the release": every one of these is a
+/// convention, and the differences between them are the whole reason
+/// [releaseNameOf] exists rather than a card reading `stream.name`.
+void releaseNameTests() {
+  group('the release a card leads with', () {
+    test("Torrentio's: the name is the addon and the quality, the release "
+        'is the first line of the description', () {
+      final stream = StreamInfo(const {
+        'infoHash': 'a',
+        'name': 'Torrentio\n4k',
+        'description':
+            'Movie.Name.2019.2160p.BluRay.x265-GROUP\n'
+            '👤 716 💾 10.69 GB ⚙️ ThePirateBay',
+      });
+      expect(
+        releaseNameOf(stream, addonName: 'Torrentio'),
+        'Movie.Name.2019.2160p.BluRay.x265-GROUP',
+      );
+    });
+
+    test('an addon that sets behaviorHints.filename is believed over its '
+        'own free text, minus the container', () {
+      final stream = StreamInfo(const {
+        'infoHash': 'a',
+        'name': 'Some Addon',
+        'description': 'Movie.Name.2019.1080p.WEB-DL-OTHER',
+        'behaviorHints': {'filename': 'Movie.Name.2019.2160p.BluRay.mkv'},
+      });
+      expect(
+        releaseNameOf(stream, addonName: 'Some Addon'),
+        'Movie.Name.2019.2160p.BluRay',
+      );
+    });
+
+    test('a one-line description with no release in it is prose, and the '
+        'name is what is left', () {
+      // WatchHub, as it is in our own recorded fixture: `Subscription` is
+      // not a release, and a card headed with it would say nothing.
+      final stream = StreamInfo(const {
+        'externalUrl': 'https://example/watch',
+        'name': 'Amazon Prime Video',
+        'description': 'Subscription',
+      });
+      expect(
+        releaseNameOf(stream, addonName: 'watchhub.strem.io'),
+        'Amazon Prime Video',
+      );
+    });
+
+    test('an addon with nothing but a name leads with it, on one line', () {
+      final stream = StreamInfo(const {
+        'infoHash': 'a',
+        'name': 'Torrentio\n4k',
+      });
+      expect(releaseNameOf(stream, addonName: 'Torrentio'), 'Torrentio 4k');
+    });
+
+    test('a description that is only the numbers leaves nothing behind, and '
+        'the name is what is left', () {
+      // The public-domain addon in the recorded fixture.
+      final stream = StreamInfo(const {
+        'infoHash': 'a',
+        'name': '1080p',
+        'description': '💾 1.51 GB',
+      });
+      expect(releaseNameOf(stream, addonName: 'caching.stremio.net'), '1080p');
+    });
+
+    test('a candidate that is the addon over again is skipped, so the card '
+        'does not say one name twice', () {
+      final stream = StreamInfo(const {
+        'infoHash': 'a',
+        'name': 'Comet',
+        'description': 'Movie.Name.2019.1080p-GROUP',
+        'behaviorHints': {'filename': 'comet.mkv'},
+      });
+      expect(
+        releaseNameOf(stream, addonName: 'Comet'),
+        'Movie.Name.2019.1080p-GROUP',
+      );
+    });
+
+    test('a stream that says nothing at all falls back to what kind it is', () {
+      final stream = StreamInfo(const {'infoHash': 'a'});
+      expect(releaseNameOf(stream), StreamKind.torrent.label);
+    });
+  });
+
+  group('breaking a release for a card two lines tall', () {
+    test('gives the layout somewhere to break at every separator', () {
+      expect(
+        breakableRelease('Avalon.2001.1080p.x264-CiNEFiLE'),
+        'Avalon.​2001.​1080p.​x264-​CiNEFiLE',
+      );
+    });
+
+    test('and adds nothing to a name that already has spaces in it', () {
+      expect(breakableRelease('Alpha 1080p'), 'Alpha 1080p');
     });
   });
 }

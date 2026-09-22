@@ -31,6 +31,26 @@ import 'tv_episode_row.dart';
 import 'tv_meta_header.dart';
 import 'tv_source_row.dart';
 
+/// The rungs of the television ladder that collapse: one of them is open
+/// and the rest are a header line each (see [TvLadderRung]).
+///
+/// The title's own block is not among them -- it is what the screen is
+/// about, and it is always on the panel -- and neither is anything a
+/// viewer cannot be left standing in front of with nothing to press.
+enum _DetailsRung {
+  /// The one card that carries on from where the viewer left off.
+  continueWatching,
+
+  /// The season's episodes, and the season pills above them.
+  episodes,
+
+  /// The groups of sources and whichever group's row is out.
+  sources,
+
+  /// What the addons did other than answer with streams.
+  addons,
+}
+
 /// One title: dispatches `Load MetaDetails` for [type]/[id] on mount and
 /// shows the meta item, its episodes (for a series) and every stream the
 /// installed addons return for the selected video.
@@ -249,14 +269,23 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// the heading's controls on a bad one, and either way left the episode
   /// row arrived at sideways, with its memory of where the viewer was
   /// overwritten by wherever the press landed.
+  /// On a television most of these sit inside a [TvLadderRung], whose
+  /// header is a rung of the walk in its own right: the walk goes header,
+  /// header, header down the screen, and only the open rung puts its own
+  /// rows between two of them.
   static const int _ladderInfo = 0;
-  static const int _ladderSeasons = 10;
-  static const int _ladderEpisodes = 20;
-  static const int _ladderStreamControls = 30;
-  static const int _ladderStreamOrder = 35;
-  static const int _ladderLastUsed = 40;
+  static const int _ladderLastUsedHeader = 10;
+  static const int _ladderLastUsed = 15;
+  static const int _ladderEpisodesHeader = 20;
+  static const int _ladderSeasons = 24;
+  static const int _ladderEpisodes = 28;
+  static const int _ladderSourcesHeader = 40;
+  static const int _ladderStreamControls = 43;
+  static const int _ladderStreamOrder = 46;
   static const int _ladderGroups = 50;
-  static const int _ladderSources = 60;
+  static const int _ladderSources = 55;
+  static const int _ladderAddonsHeader = 70;
+  static const int _ladderAddons = 75;
 
   /// The load a walk along the episode row is waiting to make; see
   /// [_focusVideo].
@@ -339,6 +368,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// resolution is open.
   bool _openSourceRowDrawn = false;
 
+  /// The rung the viewer has settled on: the one they pressed select on,
+  /// or -- when they have walked away without choosing -- whichever was
+  /// open when they first moved the remote. Null while the screen is still
+  /// the one deciding (see [_rungToOpen]).
+  _DetailsRung? _chosenRung;
+
+  /// The rung the last build drew open, so a move of the remote can freeze
+  /// it (see [_watchTheRemote]) without the listener having to work out
+  /// what is on screen.
+  _DetailsRung? _shownRung;
+
   /// The node the last-used source card focuses with, so the screen can
   /// put the remote there itself; see [_takeTheRemoteToTheLastUsed].
   final FocusNode _lastUsedNode = FocusNode(debugLabel: 'last-used source');
@@ -366,7 +406,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       _startedOn = node;
       return;
     }
-    if (node != _startedOn) _remoteHasMoved = true;
+    if (node == _startedOn || _remoteHasMoved) return;
+    _remoteHasMoved = true;
+    // The remote has left where the screen put it, so which rung is open
+    // is the viewer's from here: a last-used source arriving late must not
+    // shut the rung they walked into. Whatever is open when they move is
+    // what they are looking at, even though they never pressed select on
+    // its header.
+    _chosenRung ??= _shownRung;
   }
 
   /// Puts the remote on the last-used card, the first time that card is
@@ -374,7 +421,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   ///
   /// The card's own autofocus is not enough. The addons answer with
   /// streams before the engine has said which source the title was last
-  /// played from, so the group row below is built first and takes the
+  /// played from, so the sources rung below is built first and takes the
   /// start of the screen -- and Flutter drops an autofocus asked for by a
   /// widget built into a scope that already has a focused child. Opening a
   /// title from a continue-watching card left the remote a row below the
@@ -384,14 +431,66 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// Never off a card the viewer walked to: the player writes the
   /// last-used source down while it is up, so coming back from it draws
   /// this card for the first time on a screen the viewer is already using.
+  /// Decided here, while the build that draws the card is still running:
+  /// by the frame this lands on, the rung the remote was standing in has
+  /// closed under it and the scope has handed the ring elsewhere, so
+  /// asking again then would be asking about the screen's own doing.
   void _takeTheRemoteToTheLastUsed() {
     if (_tookTheRemote || _remoteHasMoved) return;
     _tookTheRemote = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _remoteHasMoved) return;
+      if (!mounted) return;
       _lastUsedNode.requestFocus();
     });
   }
+
+  /// Which rung of the collapsing ladder is open.
+  ///
+  /// **What is open on arrival is whatever the title is for.** A viewer who
+  /// has played this title before came back to carry on, so the rung with
+  /// the last-used source on it is out and select plays it; a series they
+  /// have not played is a choice of episode; a film they have not played is
+  /// a choice of source. Rung zero would be right for none of them.
+  ///
+  /// Once the viewer has chosen -- select on a header, or simply walking
+  /// the remote off where the screen put it ([_watchTheRemote]) -- that
+  /// choice stands, and a rung arriving late does not move it. The
+  /// last-used source is written down by the player and comes back seconds
+  /// after the streams do; that is the same bug as leaving the remote where
+  /// it was, wearing a different hat.
+  ///
+  /// A rung that is not drawn cannot be open, so a choice the next state
+  /// has nothing for falls back to the arrival order rather than leaving
+  /// the screen with nothing out.
+  _DetailsRung? _rungToOpen(
+    MetaDetailsState state, {
+    required bool hasLastUsed,
+    required bool hasSources,
+    required bool hasAddons,
+  }) {
+    final drawn = {
+      if (hasLastUsed) _DetailsRung.continueWatching,
+      if (state.hasVideos) _DetailsRung.episodes,
+      if (hasSources) _DetailsRung.sources,
+      if (hasAddons) _DetailsRung.addons,
+    };
+    final chosen = _chosenRung;
+    if (chosen != null && drawn.contains(chosen)) return chosen;
+    for (final rung in [
+      _DetailsRung.continueWatching,
+      if (state.hasVideos) _DetailsRung.episodes,
+      _DetailsRung.sources,
+      _DetailsRung.episodes,
+      _DetailsRung.addons,
+    ]) {
+      if (drawn.contains(rung)) return rung;
+    }
+    return null;
+  }
+
+  /// Select on a rung's header: this one opens, and whichever was open
+  /// closes with it.
+  void _openRung(_DetailsRung rung) => setState(() => _chosenRung = rung);
 
   @override
   void initState() {
@@ -1098,11 +1197,61 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               ),
       ),
       if (state.hasVideos) ...[
-        if (seasons.length > 1 && season != null)
+        if (isTv)
+          // The season and its episodes are one rung: picking a season is
+          // picking which episodes are under it, and a viewer looking for
+          // an episode wants both or neither. Its header says which season
+          // and how many, which is the whole of what a shut rung owes.
           SliverToBoxAdapter(
-            child: TvLadderRow(
-              level: _ladderSeasons,
-              advanceOnSelect: true,
+            child: TvLadderRung(
+              level: _ladderEpisodesHeader,
+              label: kEpisodesLabel,
+              summary: _episodesSummary(season, episodes.length),
+              open: _shownRung == _DetailsRung.episodes,
+              onOpen: () => _openRung(_DetailsRung.episodes),
+              children: [
+                if (seasons.length > 1 && season != null)
+                  TvLadderRow(
+                    level: _ladderSeasons,
+                    advanceOnSelect: true,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                      child: _SeasonSelector(
+                        seasons: seasons,
+                        selected: season,
+                        onChanged: (season) => setState(() => _season = season),
+                      ),
+                    ),
+                  ),
+                TvLadderRow(
+                  level: _ladderEpisodes,
+                  advanceOnSelect: true,
+                  child: TvEpisodeRow(
+                    episodes: episodes,
+                    selectedVideoId: _selectedVideoId(state),
+                    now: now,
+                    // The remote starts here only when this is the rung
+                    // the title is for and nothing has taken it yet: a
+                    // rung the viewer opens themselves leaves them on the
+                    // header they pressed, one press above the row.
+                    defaultFocus:
+                        _shownRung == _DetailsRung.episodes &&
+                        _startedOn == null,
+                    isWatched: state.isWatched,
+                    resumeProgress: (video) => _resumeProgress(state, video),
+                    downloadOf: (video) =>
+                        _downloads?.forVideo(widget.id, video.id),
+                    onSelect: (video) => _selectVideo(video, reveal: true),
+                    onToggleWatched: (video) => _toggleWatched(state, video),
+                    onFocus: _focusVideo,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          if (seasons.length > 1 && season != null)
+            SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: _SeasonSelector(
@@ -1112,27 +1261,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                 ),
               ),
             ),
-          ),
-        if (isTv)
-          SliverToBoxAdapter(
-            child: TvLadderRow(
-              level: _ladderEpisodes,
-              advanceOnSelect: true,
-              child: TvEpisodeRow(
-                episodes: episodes,
-                selectedVideoId: _selectedVideoId(state),
-                now: now,
-                isWatched: state.isWatched,
-                resumeProgress: (video) => _resumeProgress(state, video),
-                downloadOf: (video) =>
-                    _downloads?.forVideo(widget.id, video.id),
-                onSelect: (video) => _selectVideo(video, reveal: true),
-                onToggleWatched: (video) => _toggleWatched(state, video),
-                onFocus: _focusVideo,
-              ),
-            ),
-          )
-        else
           SliverList.builder(
             itemCount: episodes.length,
             itemBuilder: (context, index) {
@@ -1149,10 +1277,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               );
             },
           ),
+        ],
       ],
       const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
     ];
   }
+
+  /// What a shut episodes rung says it holds: which season is under it and
+  /// how many episodes that is.
+  static String _episodesSummary(int? season, int count) => season == null
+      ? (count == 1 ? '1 episode' : '$count episodes')
+      : 'Season $season · $count';
 
   /// The streams for the selected video, the meta addon's own first. The
   /// engine lists every addon it asked from the moment of the request (as
@@ -1256,6 +1391,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         noneYet: noneYet,
         lastUsed: lastUsed,
         lastUsedStream: lastUsedStream,
+        sourceCount: sources.length,
         downloads: downloads,
       );
     }
@@ -1514,16 +1650,22 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     required bool noneYet,
     required (StreamGroup, StreamInfo)? lastUsed,
     required StreamInfo? lastUsedStream,
+    required int sourceCount,
     required _StreamDownloads? downloads,
   }) {
-    TvSource source(_SourceRow row) =>
-        _tvSource(state, row, lastUsed: lastUsed?.$2, downloads: downloads);
+    TvSource source(_SourceRow row) => _tvSource(
+      state,
+      row,
+      isSectioned: isSectioned,
+      lastUsed: lastUsed?.$2,
+      downloads: downloads,
+    );
     final groups = <TvSourceGroup>[
       if (isSectioned)
         for (final section in sections)
           (
             label: section.label,
-            summary: section.summary,
+            count: '${section.rows.length}',
             icon: null,
             sources: [for (final row in section.rows) source(row)],
           )
@@ -1533,139 +1675,218 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             label: _addonNameOf(profile, group),
             // A group with nothing in it is here only while its answer is
             // still coming: one that settled on no streams was taken out
-            // of the list above.
-            summary: rows.isEmpty && group.isLoading
-                ? kLookingForStreams
-                : rows.length == 1
-                ? '1 source'
-                : '${rows.length} sources',
+            // of the list above. A pill has no room to say so in words,
+            // so it says nothing rather than a zero that reads as "none".
+            count: rows.isEmpty && group.isLoading ? null : '${rows.length}',
             icon: null,
             sources: [for (final row in rows) source(row)],
           ),
-      // What the vertical list says in three quiet blocks below the
-      // streams has one card at the end of the group row here, and its
-      // own row underneath when it is chosen. The information is the
-      // point, not its shape -- and a viewer who never chooses it is
-      // still told, in a line, that four addons had nothing and one is
-      // dead.
-      ?_tvAccounting(
-        profile: profile,
-        empties: empties,
-        failures: failures,
-        foundNothing: foundNothing,
-        isEpisode: state.hasVideos,
-      ),
     ];
+    // Every addon is still answering and there is not a pill to draw yet.
+    // [TvSourceRows] draws nothing for no groups, which would leave an
+    // open sources rung with nothing under its header at all; the row the
+    // pills will fill gets a spinner in its middle instead.
+    final waiting = groups.isEmpty && state.isLoadingStreams;
+    final accounting = _tvAccounting(
+      profile: profile,
+      empties: empties,
+      failures: failures,
+      foundNothing: foundNothing,
+      isEpisode: state.hasVideos,
+    );
+    // A rung with nothing behind its header is not drawn at all, so the
+    // walk steps over it rather than stopping on a line that opens
+    // nothing.
+    final hasSources = groups.isNotEmpty || waiting || noneYet;
+    final rung = _shownRung = _rungToOpen(
+      state,
+      hasLastUsed: lastUsedStream != null,
+      hasSources: hasSources,
+      hasAddons: accounting != null,
+    );
+    final sourcesOpen = rung == _DetailsRung.sources;
     // What Back has to put away, which is the row [TvSourceRows] will
     // actually draw rather than the label on its own (see
-    // [_openSourceRowDrawn]).
-    _openSourceRowDrawn = groups.any((g) => g.label == _openSourceGroup);
-    // Every addon is still answering and there is not a card to draw yet.
-    // [TvSourceRows] draws nothing for no groups, which would leave the
-    // heading's 16 dp spinner at the far right of a television as the
-    // whole of the loading indicator; the row the cards will fill gets
-    // one in its middle instead, and the heading's is put away until
-    // there are cards for it to spin beside.
-    final waiting = groups.isEmpty && state.isLoadingStreams;
+    // [_openSourceRowDrawn]) -- and only while the rung holding that row
+    // is the one that is open, or a shut rung would swallow the press.
+    _openSourceRowDrawn =
+        sourcesOpen && groups.any((g) => g.label == _openSourceGroup);
     return [
-      SliverToBoxAdapter(
-        child: _StreamsHeader(
-          key: _streamsKey,
-          state: state,
-          sectioned: isSectioned,
-          onSectionedChanged: _setStreamsSectioned,
-          order: order,
-          onOrderChanged: _setStreamsOrder,
-          withSpinner: !waiting,
-          layoutLevel: _ladderStreamControls,
-          orderLevel: _ladderStreamOrder,
-        ),
-      ),
-      if (waiting)
-        SliverToBoxAdapter(
-          key: const ValueKey('tv-sources-waiting'),
-          child: SizedBox(
-            height: TvSourceRows.groupRowHeight(context),
-            child: const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 12),
-                  Text(kLookingForStreams),
-                ],
-              ),
-            ),
-          ),
-        ),
-      if (noneYet)
-        const SliverToBoxAdapter(
-          child: ListTile(
-            leading: Icon(Icons.touch_app_outlined),
-            title: Text('Pick an episode to see its streams'),
-          ),
-        ),
-      // The shortcut is a card of its own above the groups, and the one
-      // the remote starts on: it is the source the viewer is most likely
-      // to want, which is why it is drawn at all.
+      // The shortcut is a rung of its own above the sources, and the one
+      // the screen opens for a title that has been played: it is the
+      // source the viewer is most likely to want, which is why it is drawn
+      // at all.
       //
-      // Keyed, and so is the row below it, because this one *appears*:
+      // Keyed, and so is the rung below it, because this one *appears*:
       // the engine writes the last-used source down while the player is
       // up, so the first thing a title is ever played from comes back to
-      // a sliver list one longer than it left. Unkeyed, the rows below
-      // would be matched against this card's adapter, torn down and
+      // a sliver list one longer than it left. Unkeyed, the rungs below
+      // would be matched against this one's adapter, torn down and
       // rebuilt -- taking the focus node the remote was on with them, and
       // then this card, freshly built and asking for focus, would answer
       // the D-pad instead of the card the viewer left.
       if (lastUsedStream != null)
         SliverToBoxAdapter(
           key: const ValueKey('tv-last-used'),
-          child: TvLadderRow(
-            level: _ladderLastUsed,
-            child: TvSourceRow(
-              defaultFocus: true,
-              focusNode: _lastUsedNode,
-              sources: [
-                _tvLastUsed(state, lastUsed!.$1, lastUsedStream, downloads),
-              ],
+          child: TvLadderRung(
+            level: _ladderLastUsedHeader,
+            label: kContinueWatchingLabel,
+            // Which release it would carry on with: the one thing that
+            // tells a viewer whether to press select or go and pick
+            // another, and all a shut rung has room for.
+            summary: releaseNameOf(
+              lastUsedStream,
+              addonName: _addonNameOf(profile, lastUsed!.$1),
             ),
+            open: rung == _DetailsRung.continueWatching,
+            onOpen: () => _openRung(_DetailsRung.continueWatching),
+            children: [
+              TvLadderRow(
+                level: _ladderLastUsed,
+                child: TvSourceRow(
+                  defaultFocus: _startedOn == null,
+                  focusNode: _lastUsedNode,
+                  sources: [
+                    _tvLastUsed(state, lastUsed.$1, lastUsedStream, downloads),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-      SliverToBoxAdapter(
-        key: const ValueKey('tv-source-rows'),
-        child: TvSourceRows(
-          groups: groups,
-          openLabel: _openSourceGroup,
-          onOpen: (label) => setState(() {
-            _openSourceGroup = label;
-            _reopenSuppressed = null;
-          }),
-          onFocusGroup: _focusSourceGroup,
-          groupLevel: _ladderGroups,
-          sourceLevel: _ladderSources,
-          defaultFocus: lastUsedStream == null,
+      if (hasSources)
+        SliverToBoxAdapter(
+          key: const ValueKey('tv-source-rows'),
+          child: TvLadderRung(
+            level: _ladderSourcesHeader,
+            label: kSourcesLabel,
+            // Nothing to count yet and addons still out: say what is
+            // being waited for rather than "0 from 0 addons".
+            summary: sourceCount == 0 && state.isLoadingStreams
+                ? kLookingForStreams
+                : _sourcesSummary(state, sources: sourceCount),
+            // The heading's own small spinner had nowhere left to go once
+            // the heading became this line, and a line that says how many
+            // sources there are while more are still arriving has to say
+            // that too.
+            trailing: !waiting && state.isLoadingStreams
+                ? const SizedBox.square(
+                    dimension: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : null,
+            open: sourcesOpen,
+            onOpen: () => _openRung(_DetailsRung.sources),
+            children: [
+              _StreamsHeader(
+                key: _streamsKey,
+                state: state,
+                sectioned: isSectioned,
+                onSectionedChanged: _setStreamsSectioned,
+                order: order,
+                onOrderChanged: _setStreamsOrder,
+                // The rung header above carries it now.
+                heading: false,
+                withSpinner: false,
+                layoutLevel: _ladderStreamControls,
+                orderLevel: _ladderStreamOrder,
+              ),
+              if (waiting)
+                SizedBox(
+                  key: const ValueKey('tv-sources-waiting'),
+                  height: TvSourceRows.sourceRowHeight(context),
+                  // The spinner alone: the rung's own header line is
+                  // saying what it is waiting for, and saying it twice on
+                  // one screen reads as two different waits.
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+              if (noneYet)
+                const ListTile(
+                  leading: Icon(Icons.touch_app_outlined),
+                  title: Text('Pick an episode to see its streams'),
+                ),
+              TvSourceRows(
+                groups: groups,
+                openLabel: _openSourceGroup,
+                onOpen: (label) => setState(() {
+                  _openSourceGroup = label;
+                  _reopenSuppressed = null;
+                }),
+                onFocusGroup: _focusSourceGroup,
+                groupLevel: _ladderGroups,
+                sourceLevel: _ladderSources,
+                // Whether the first pill is the screen's starting
+                // place, and -- when the viewer opens this rung
+                // themselves later -- what makes it put a row of sources
+                // out rather than a row of pills with nothing under
+                // them. The autofocus half of that is dropped by Flutter
+                // when the header already holds the remote, which is the
+                // only way of arriving here with something focused.
+                defaultFocus: lastUsedStream == null,
+              ),
+            ],
+          ),
         ),
-      ),
+      if (accounting != null)
+        SliverToBoxAdapter(
+          key: const ValueKey('tv-source-accounting'),
+          child: TvLadderRung(
+            level: _ladderAddonsHeader,
+            label: accounting.label,
+            summary: accounting.summary,
+            open: rung == _DetailsRung.addons,
+            onOpen: () => _openRung(_DetailsRung.addons),
+            children: [
+              TvLadderRow(
+                level: _ladderAddons,
+                // The last rung standing is where the remote starts: a
+                // fresh profile whose addons all had nothing opens on
+                // this, and a screen with nothing focused is a dead
+                // D-pad.
+                child: TvSourceRow(
+                  defaultFocus: _startedOn == null,
+                  sources: accounting.sources,
+                ),
+              ),
+            ],
+          ),
+        ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
     ];
   }
 
-  /// What the addons did other than answer with streams, as the last card
-  /// of the group row and the row it opens; null when there is nothing to
-  /// account for.
+  /// What a shut sources rung says it holds: how many sources there are
+  /// between every addon that answered, and how many addons that was.
   ///
-  /// The card's own line is the whole of what a viewer who does not choose
-  /// it sees, so it carries the counts -- how many failed, how many had
-  /// nothing -- and the row underneath carries the names, what each dead
-  /// addon said, and the two things worth doing about one: opening its
-  /// details, whose manifest fetch is the reachability test (select), and
-  /// uninstalling it (a hold, since a button drawn inside a card cannot be
-  /// reached by a remote).
+  /// The count is of *sources* and not of listings, which is what the
+  /// grouped layout would otherwise say: one release two addons both
+  /// offered is one thing a viewer can watch, and the pills below it say
+  /// the same by both wearing it.
+  String _sourcesSummary(MetaDetailsState state, {required int sources}) {
+    final addons = state.allStreamGroups
+        .where((group) => group.streams.isNotEmpty)
+        .length;
+    final from = addons == 1 ? '1 addon' : '$addons addons';
+    return '$sources from $from';
+  }
+
+  /// What the addons did other than answer with streams, as a rung of its
+  /// own at the foot of the ladder; null when there is nothing to account
+  /// for.
+  ///
+  /// A rung and not one more pill among the resolutions, which is what it
+  /// was: it is not a group of sources, and its one line -- how many
+  /// failed, how many had nothing -- is exactly the shape a rung header
+  /// has and nothing a 36 dp pill could carry. The row underneath carries
+  /// the names, what each dead addon said, and the two things worth doing
+  /// about one: opening its details, whose manifest fetch is the
+  /// reachability test (select), and uninstalling it (a hold, since a
+  /// button drawn inside a card cannot be reached by a remote).
   ///
   /// Nobody having anything at all is not one more line here but the
-  /// card's own name, because on a fresh profile it is the answer to the
+  /// rung's own name, because on a fresh profile it is the answer to the
   /// screen rather than a footnote to it.
-  TvSourceGroup? _tvAccounting({
+  ({String label, String summary, List<TvSource> sources})? _tvAccounting({
     required ProfileState? profile,
     required List<StreamGroup> empties,
     required List<AddonFailure> failures,
@@ -1695,19 +1916,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           _EmptyAddonsSummary.summaryLabel(names.length, isEpisode: isEpisode),
         if (failures.isEmpty && names.isEmpty) kNothingCameBack,
       ].join(' · '),
-      icon: foundNothing
-          ? Icons.search_off
-          : failures.isNotEmpty
-          ? Icons.cloud_off_outlined
-          : Icons.inbox_outlined,
       sources: [
         if (foundNothing)
           (
             icon: Icons.extension_outlined,
             title: _NoStreamsNotice.addonsLabel,
-            detail: _NoStreamsNotice.explanation,
-            badges: const <String>[],
-            alsoFrom: null,
+            facts: [_NoStreamsNotice.explanation],
             highlighted: false,
             download: null,
             downloading: false,
@@ -1718,9 +1932,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           (
             icon: Icons.cloud_off_outlined,
             title: failure.name,
-            detail: failure.message,
-            badges: const <String>[],
-            alsoFrom: null,
+            facts: [failure.message],
             highlighted: false,
             download: null,
             downloading: false,
@@ -1741,9 +1953,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           (
             icon: Icons.inbox_outlined,
             title: addon.name,
-            detail: kAddonHadNothing,
-            badges: const <String>[],
-            alsoFrom: null,
+            facts: const [kAddonHadNothing],
             highlighted: false,
             download: null,
             downloading: false,
@@ -1754,17 +1964,33 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     );
   }
 
-  /// One row of the sources list as a television card draws it.
+  /// One row of the sources list as a television card draws it: the
+  /// release it is, and under it the one line of facts a 96 dp card has
+  /// room for.
   ///
-  /// The badges are exactly what the vertical list puts on the same row:
-  /// what [StreamFacts] read in the sectioned layout, and [StreamHints] in
-  /// the grouped one where nothing was parsed. A source the player cannot
-  /// open says which kind it is on a badge instead of taking a press, so
-  /// it is not a focus stop and the remote steps over it -- the disabled
-  /// row, in the shape a card has.
+  /// **The release leads.** The engine has no field for it, and what the
+  /// list showed instead was the stream's `name` -- which for Torrentio is
+  /// the addon and the quality, so four cards read "Torrentio" four times
+  /// and the thing that actually tells them apart was nowhere on the
+  /// screen. [releaseNameOf] is where it comes from now.
+  ///
+  /// **The facts line says what the pill above it does not.** The pills
+  /// are the resolutions in the sectioned layout and the addons in the
+  /// grouped one, so exactly one of those two is worth repeating on the
+  /// card, and the other would be the same word on every card in the row.
+  /// The rest -- the seeders, the size -- is on every card either way.
+  ///
+  /// What no longer fits is the release tags and the addons that offered
+  /// the same source: another addon having it is a `+1` after the addon's
+  /// name, which is the fact without the sentence.
+  ///
+  /// A source the player cannot open leads the line with which kind it is
+  /// instead of taking a press, so it is not a focus stop and the remote
+  /// steps over it -- the disabled row, in the shape a card has.
   TvSource _tvSource(
     MetaDetailsState state,
     _SourceRow row, {
+    required bool isSectioned,
     required StreamInfo? lastUsed,
     required _StreamDownloads? downloads,
   }) {
@@ -1772,21 +1998,27 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final facts = row.facts;
     final hints = facts == null ? StreamHints.of(stream) : null;
     final bound = downloads?.forGroup(row.group);
+    final addon = facts?.addonName ?? _addonNameOf(_profileNow, row.group);
+    final others = row.alsoFrom.length;
     return (
       icon: _StreamTile._iconFor(stream.kind),
-      title: stream.title,
-      // The group card names the addon in the grouped layout; in the
-      // sectioned one there is no heading and the card has to say it.
-      detail: facts?.addonName,
-      badges: [
-        if (facts != null)
-          ...facts.badges
-        else
-          for (final chip in hints!.chips)
-            if (chip.toLowerCase() != stream.title.toLowerCase()) chip,
+      title: releaseNameOf(stream, addonName: addon),
+      facts: [
         if (!stream.isPlayable) stream.kind.label,
+        if (facts != null) ...[
+          ?facts.seedersLabel,
+          ?facts.sizeLabel,
+        ] else ...[
+          ?hints!.resolution,
+          if (hints.seeders != null) '${hints.seeders} seeders',
+          ?hints.size,
+        ],
+        // The pill says the other one of these two on every card below it.
+        if (isSectioned)
+          others == 0 ? addon : '$addon +$others'
+        else if (facts?.resolutionLabel != null)
+          facts!.resolutionLabel!,
       ],
-      alsoFrom: row.alsoFrom.isEmpty ? null : alsoFromLabel(row.alsoFrom),
       highlighted: lastUsed != null && stream.isSameSource(lastUsed),
       download: bound?.entryOf(stream),
       downloading: bound?.isPending(stream) ?? false,
@@ -1796,6 +2028,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       onHold: bound?.remoteAction(stream),
     );
   }
+
+  /// The profile as the last derivation read it, for the places that want
+  /// an addon's name outside one.
+  ProfileState? get _profileNow => _derived?.profile;
 
   /// The last-used source as its own card: the same shortcut the vertical
   /// list draws above the sections, saying what it is on the first line
@@ -1810,9 +2046,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     return (
       icon: Icons.history,
       title: kContinueWithLastSource,
-      detail: stream.title,
-      badges: const [],
-      alsoFrom: null,
+      facts: [
+        releaseNameOf(stream, addonName: _addonNameOf(_profileNow, group)),
+      ],
       highlighted: true,
       download: bound?.entryOf(stream),
       downloading: bound?.isPending(stream) ?? false,
@@ -2605,9 +2841,20 @@ const String kLookingForStreams = 'Looking for streams…';
 /// sections on a phone and its own card on a television.
 const String kContinueWithLastSource = 'Continue with last source';
 
-/// The card at the end of a television's group row: what the addons did
+/// The rung at the foot of a television's ladder: what the addons did
 /// other than answer with streams.
 const String kSourceAccountingLabel = 'Addons';
+
+/// What the rung holding the last-used source is called when it is shut.
+const String kContinueWatchingLabel = 'Continue watching';
+
+/// What the rung holding the sources is called when it is shut. "Sources"
+/// and not "Streams": a television's rung is a row of releases to pick
+/// from, and the word the rest of this screen's TV code uses for one.
+const String kSourcesLabel = 'Sources';
+
+/// What the rung holding the season and its episodes is called.
+const String kEpisodesLabel = 'Episodes';
 
 /// What that card says when every addon answered and none of them said
 /// anything worth counting.
@@ -2645,9 +2892,19 @@ class _StreamsHeader extends StatelessWidget {
     this.order = StreamOrder.peersPerSize,
     this.onOrderChanged,
     this.withSpinner = true,
+    this.heading = true,
     this.layoutLevel,
     this.orderLevel,
   });
+
+  /// Whether the heading draws its own title and the line about which
+  /// episode it is.
+  ///
+  /// False on a television, where the sources are a rung of a collapsing
+  /// ladder and the rung's header line already says what this is and how
+  /// much of it there is. What is left here is the chips, which are the
+  /// two choices about the list rather than a heading over it.
+  final bool heading;
 
   /// Which rungs of the screen's [TvLadder] the heading's two chip rows
   /// are, or null off a television and in the layouts that have no ladder.
@@ -2716,30 +2973,31 @@ class _StreamsHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Streams',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: theme.colorScheme.primary,
+          if (heading)
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Streams',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
-                    ),
-                    if (subtitle != null)
-                      Text(subtitle, style: theme.textTheme.bodySmall),
-                  ],
+                      if (subtitle != null)
+                        Text(subtitle, style: theme.textTheme.bodySmall),
+                    ],
+                  ),
                 ),
-              ),
-              if (withSpinner && (isLoading || state.isLoadingStreams))
-                const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-            ],
-          ),
+                if (withSpinner && (isLoading || state.isLoadingStreams))
+                  const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
           // How the list is cut, as a choice rather than as a switch: two
           // chips reading the two layouts, the selected one being what is
           // on screen. Above the order chips because it is the larger

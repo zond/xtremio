@@ -11,7 +11,7 @@ import '../../widgets/focusable_tile.dart';
 import '../../widgets/tv_ladder.dart';
 
 /// The sources of the selected video on a television: a row of group
-/// cards, and beneath it the sources of whichever group is chosen.
+/// pills, and beneath it the sources of whichever group is chosen.
 ///
 /// The phone and the desktop list every source in one vertical column, cut
 /// into collapsible sections. A remote cannot walk that: a title with six
@@ -22,8 +22,8 @@ import '../../widgets/tv_ladder.dart';
 /// is in and the one the D-pad is built for.
 ///
 /// What the first level groups *by* is the layout preference the sources
-/// list already has ([AppPrefs.streamsSectioned]): a card per resolution,
-/// or a card per addon. It is not a second setting, and the order chips
+/// list already has ([AppPrefs.streamsSectioned]): a pill per resolution,
+/// or a pill per addon. It is not a second setting, and the order chips
 /// above still order inside a group.
 ///
 /// Three things about it are not cosmetic:
@@ -31,7 +31,7 @@ import '../../widgets/tv_ladder.dart';
 /// - **Walking the group row opens what the remote lands on.** A group is
 ///   a choice of what the second row shows, and a highlight says as much
 ///   as a press does: the row under the remote is always the row for the
-///   card it is on, and select is left to go down into it. The group row
+///   pill it is on, and select is left to go down into it. The group row
 ///   itself stays put, so the next group is one sideways press away rather
 ///   than a press back and a press down.
 /// - **Both rows are built all at once.** Directional focus only
@@ -52,7 +52,7 @@ import '../../widgets/tv_ladder.dart';
 /// Closing the second row takes the card the remote was on off the screen
 /// with it, and nothing here puts the remote back: the enclosing
 /// [FocusScope] remembers what held focus before and hands it the ring
-/// when a focused node goes away, which is the group card that opened the
+/// when a focused node goes away, which is the group pill that opened the
 /// row. A test walks that path, because "focus nowhere" on a television is
 /// a dead D-pad and the fallback is the only thing standing between them.
 class TvSourceRows extends StatefulWidget {
@@ -81,32 +81,43 @@ class TvSourceRows extends StatefulWidget {
   /// Opens that group, or closes the open one (null).
   final ValueChanged<String?> onOpen;
 
-  /// The remote has come to rest on a group card, which is the viewer
+  /// The remote has come to rest on a group pill, which is the viewer
   /// asking for that group's sources. Separate from [onOpen] because the
   /// screen answers it differently: a row the viewer has just put away
-  /// with Back must not come straight back when focus returns to the card
+  /// with Back must not come straight back when focus returns to the pill
   /// it was opened from. Falls back to [onOpen] when nobody is listening.
   final ValueChanged<String>? onFocusGroup;
 
-  /// Whether the first group card is where the remote starts on this
+  /// Whether the first group pill is where the remote starts on this
   /// screen. False when something above it (the last-used source) is.
   final bool defaultFocus;
 
-  /// How wide a group card is: enough for a resolution or an addon name
-  /// and the line under it, narrow enough that several rungs are on the
-  /// panel at once.
-  static const double groupCardWidth = 208;
+  /// How wide a group pill is allowed to get.
+  ///
+  /// A resolution is one word and the pill is as wide as that word. An
+  /// addon's name is not: `caching.stremio.net` drawn in full is most of
+  /// a quarter of the panel, and four of those are a row the remote has
+  /// to scroll. So a long label ellipsizes at the width the card this
+  /// replaced used to be, and the row stays a row of choices.
+  static const double maxPillWidth = 208;
 
-  /// The box a group card is drawn in at text scale 1.
-  static const double groupCardHeight = 84;
+  /// How tall a group pill is drawn at text scale 1.
+  ///
+  /// A resolution is one word and a count. The 208x84 card this replaced
+  /// carried an icon, the word, and two lines of summary under it -- four
+  /// of them were the whole panel, and the screen had five other rungs to
+  /// fit. The pill is as tall as the word needs and as wide as the word
+  /// is, which is what lets the sources, the episodes and the last-used
+  /// card share a 720p panel.
+  static const double pillHeight = 36;
 
-  /// How wide a source card is. A release name is long, and this is the
-  /// row the viewer actually reads.
-  static const double sourceCardWidth = 300;
+  /// How wide a source card is: two lines of a release name, which is what
+  /// the row is really for.
+  static const double sourceCardWidth = 260;
 
-  /// The box a source card is drawn in at text scale 1: two lines of name
-  /// over the badges, the addon and whoever else offered it.
-  static const double sourceCardHeight = 148;
+  /// The box a source card is drawn in at text scale 1: two lines of
+  /// release name over one line of facts.
+  static const double sourceCardHeight = 96;
 
   /// The gap between two cards.
   static const double gap = 12;
@@ -121,7 +132,7 @@ class TvSourceRows extends StatefulWidget {
 
   /// The height of the group row, including that room.
   static double groupRowHeight(BuildContext context) =>
-      focusSlack * 2 + groupCardHeight * _textFactor(context);
+      focusSlack * 2 + pillHeight * _textFactor(context);
 
   /// The height of the row of sources under it.
   static double sourceRowHeight(BuildContext context) =>
@@ -142,7 +153,7 @@ class _TvSourceRowsState extends State<TvSourceRows> {
   /// Whether the group the remote was handed on arrival has been shown.
   ///
   /// Once per row, and never again: Back closes an open row by rebuilding
-  /// this one with nothing open and the remote back on the card that
+  /// this one with nothing open and the remote back on the pill that
   /// opened it, so opening it again there would make Back do nothing at
   /// all. The groups arrive after the screen does -- the addons are still
   /// answering -- so this cannot simply be done in [initState].
@@ -163,15 +174,15 @@ class _TvSourceRowsState extends State<TvSourceRows> {
   /// Opens the group the remote starts on, so the highlight tells the
   /// truth from the first frame.
   ///
-  /// The card that takes focus by default says which resolution -- or
+  /// The pill that takes focus by default says which resolution -- or
   /// which addon -- the screen is showing, and a highlight over a shut row
   /// says it about nothing: every other way of landing on a group opens
   /// it, so this one did too, one press later and only because the viewer
-  /// pressed select on a card they were already standing on.
+  /// pressed select on a pill they were already standing on.
   ///
   /// Nothing happens when the remote starts somewhere else ([defaultFocus]
-  /// is false whenever the last-used row is drawn, and that card is the
-  /// one the screen means to offer), nor when a group is open already.
+  /// is false whenever another rung is the one the title is for), nor when
+  /// a group is open already.
   void _showOnArrival() {
     if (_shownOnArrival || !widget.defaultFocus) return;
     final first = widget.groups.firstOrNull;
@@ -201,21 +212,18 @@ class _TvSourceRowsState extends State<TvSourceRows> {
             child: _Strip(
               children: [
                 for (final (index, group) in groups.indexed)
-                  SizedBox(
-                    width: TvSourceRows.groupCardWidth,
-                    child: TvSourceGroupCard(
-                      group: group,
-                      chosen: group.label == openLabel,
-                      defaultFocus: widget.defaultFocus && index == 0,
-                      // Opening, not toggling: the remote standing here is
-                      // already what opened this row, so a press that closed
-                      // it again would make select mean the opposite of what
-                      // it means everywhere else on the screen. Back is what
-                      // closes a row.
-                      onTap: () => widget.onOpen(group.label),
-                      onFocused: () =>
-                          (widget.onFocusGroup ?? widget.onOpen)(group.label),
-                    ),
+                  TvSourceGroupPill(
+                    group: group,
+                    chosen: group.label == openLabel,
+                    defaultFocus: widget.defaultFocus && index == 0,
+                    // Opening, not toggling: the remote standing here is
+                    // already what opened this row, so a press that closed
+                    // it again would make select mean the opposite of what
+                    // it means everywhere else on the screen. Back is what
+                    // closes a row.
+                    onTap: () => widget.onOpen(group.label),
+                    onFocused: () =>
+                        (widget.onFocusGroup ?? widget.onOpen)(group.label),
                   ),
               ],
             ),
@@ -317,7 +325,7 @@ class _Strip extends StatelessWidget {
       ),
       child: Row(
         spacing: TvSourceRows.gap,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: children,
       ),
     );
@@ -332,10 +340,15 @@ class _Strip extends StatelessWidget {
   }
 }
 
-/// One card of the first row: a resolution rung or an addon, what it
-/// holds, and whether its sources are the ones on screen.
-class TvSourceGroupCard extends StatelessWidget {
-  const TvSourceGroupCard({
+/// One pill of the first row: a resolution rung, an addon, or the line of
+/// accounting the sources rows have nowhere else to put -- what it is
+/// called, how many it holds, and whether those are the sources on screen.
+///
+/// A pill and not a card, because a resolution is one word. It is as wide
+/// as its own label, so the row is read as a set of choices rather than as
+/// a wall of boxes, and eight of them still fit across a 720p panel.
+class TvSourceGroupPill extends StatelessWidget {
+  const TvSourceGroupPill({
     super.key,
     required this.group,
     required this.chosen,
@@ -351,65 +364,85 @@ class TvSourceGroupCard extends StatelessWidget {
 
   final VoidCallback onTap;
 
-  /// The remote has come to rest on this card, which opens its sources
+  /// The remote has come to rest on this pill, which opens its sources
   /// (see [TvSourceRows]).
   final VoidCallback? onFocused;
 
   final bool defaultFocus;
 
+  /// Half the height, so the box comes out a stadium: the painter clamps a
+  /// corner to half the box it is drawn on and never grows one.
+  static const BorderRadius _radius = BorderRadius.all(
+    Radius.circular(TvSourceRows.pillHeight / 2),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final count = group.count;
     return FocusableTile(
       onTap: onTap,
       onFocused: onFocused,
       defaultFocus: defaultFocus,
-      borderRadius: _cardRadius,
-      child: _CardBox(
-        // Chosen is a fill, a border and a weight, never the tint alone:
-        // colour is the first cue a bright room takes away, and which
-        // group is showing is the whole point of the row.
-        color: chosen ? scheme.primaryContainer : scheme.surfaceContainerHigh,
-        borderColor: chosen ? scheme.primary : Colors.transparent,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      borderRadius: _radius,
+      // A row of stadiums side by side: the ring, and none of the lift a
+      // poster gets. The chosen one is already marked by its fill.
+      treatment: FocusTreatment.row,
+      child: Container(
+        height: TvSourceRows.pillHeight,
+        constraints: const BoxConstraints(maxWidth: TvSourceRows.maxPillWidth),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          // Chosen is a fill, a border and a weight, never the tint alone:
+          // colour is the first cue a bright room takes away, and which
+          // group is showing is the whole point of the row.
+          color: chosen ? scheme.primaryContainer : scheme.surfaceContainerHigh,
+          borderRadius: _radius,
+          border: Border.all(
+            color: chosen ? scheme.primary : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 6,
           children: [
-            Row(
-              spacing: 6,
-              children: [
-                if (group.icon != null)
-                  Icon(
-                    group.icon,
-                    size: 18,
-                    color: chosen
-                        ? scheme.onPrimaryContainer
-                        : scheme.onSurfaceVariant,
-                  ),
-                Expanded(
-                  child: Text(
-                    group.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: chosen ? scheme.onPrimaryContainer : null,
-                      fontWeight: chosen ? FontWeight.w700 : null,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const Spacer(),
-            Text(
-              group.summary,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
+            if (group.icon != null)
+              Icon(
+                group.icon,
+                size: 18,
                 color: chosen
                     ? scheme.onPrimaryContainer
                     : scheme.onSurfaceVariant,
               ),
+            Flexible(
+              child: Text(
+                group.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: chosen ? scheme.onPrimaryContainer : null,
+                  fontWeight: chosen ? FontWeight.w700 : null,
+                ),
+              ),
             ),
+            // The count is a second line of text and not part of the
+            // label: the label is the choice and the count is what is
+            // behind it, so the count is drawn quieter -- and the label on
+            // its own is what anything looking for this pill by name
+            // finds.
+            if (count != null)
+              Text(
+                '· $count',
+                maxLines: 1,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: chosen
+                      ? scheme.onPrimaryContainer
+                      : scheme.onSurfaceVariant,
+                ),
+              ),
           ],
         ),
       ),
@@ -420,10 +453,18 @@ class TvSourceGroupCard extends StatelessWidget {
 /// One card of the second row: a source to play, or a line of the
 /// accounting that has nowhere else to go (see [TvSourceRows]).
 ///
+/// The release name leads, because it is the one thing on the card that
+/// tells two sources apart, and under it one line of facts -- seeders,
+/// size, and whichever of the resolution and the addon the pill above does
+/// not already say. What used to be a second and a third line (the badges,
+/// the addon, "Also from ...") is that one line now: the card is 96 dp
+/// tall so that the episodes and the last-used source can be on the panel
+/// with it.
+///
 /// A source that the player cannot open takes no press, and so is not a
 /// focus stop either -- the remote steps over it, exactly as the vertical
-/// list's disabled row does. What kind of source it is says so on a badge
-/// instead, since there is no play arrow to replace.
+/// list's disabled row does. What kind of source it is leads the facts
+/// line instead, since there is no play arrow to replace.
 class TvSourceCard extends StatelessWidget {
   const TvSourceCard({
     super.key,
@@ -442,8 +483,6 @@ class TvSourceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final detail = source.detail;
-    final alsoFrom = source.alsoFrom;
     return FocusableTile(
       onTap: source.onSelect,
       onLongPress: source.onHold,
@@ -458,49 +497,42 @@ class TvSourceCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Expanded(
+              child: Row(
+                spacing: 6,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(source.icon, size: 16, color: scheme.onSurfaceVariant),
+                  Expanded(
+                    child: Text(
+                      breakableRelease(source.title),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurface,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Row(
-              spacing: 8,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 6,
               children: [
-                Icon(source.icon, size: 18, color: scheme.onSurfaceVariant),
                 Expanded(
                   child: Text(
-                    source.title,
-                    maxLines: 2,
+                    source.facts.join(' · '),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 ?_downloadMark(source),
               ],
             ),
-            const Spacer(),
-            if (source.badges.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Wrap(
-                  spacing: 6,
-                  children: [for (final badge in source.badges) _Badge(badge)],
-                ),
-              ),
-            if (detail != null)
-              Text(
-                detail,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            if (alsoFrom != null)
-              Text(
-                alsoFrom,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
           ],
         ),
       ),
@@ -515,7 +547,7 @@ class TvSourceCard extends StatelessWidget {
   Widget? _downloadMark(TvSource source) {
     if (source.downloading) {
       return const SizedBox.square(
-        dimension: 18,
+        dimension: 14,
         child: CircularProgressIndicator(strokeWidth: 2),
       );
     }
@@ -524,36 +556,30 @@ class TvSourceCard extends StatelessWidget {
   }
 }
 
-/// One fact about a source, in the same box the vertical list draws it in.
-class _Badge extends StatelessWidget {
-  const _Badge(this.label);
+/// [release] with a break opportunity after every separator a release name
+/// is built out of.
+///
+/// `Avalon.2001.1080p.BluRay.x264-CiNEFiLE` is one word as far as Unicode
+/// line breaking is concerned: nothing in UAX #14 breaks after a full stop
+/// between two letters. So a card 260 wide broke it wherever the second
+/// line happened to start -- `Avalon.2001.1080p.BluRay.x2` / `64-CiNEFiLE`
+/// -- which splits the very tokens a viewer reads the name by. A
+/// zero-width space after each `.`, `_` and `-` gives the layout somewhere
+/// to break that a reader would have broken it anyway, and nothing is
+/// added anywhere else: a space is already a break opportunity, and a
+/// release with neither still breaks mid-token because a word longer than
+/// the line has to.
+///
+/// The character is invisible and has no width, so the line is drawn
+/// exactly as it reads. It is in the string the card lays out and
+/// therefore in what a widget test finds by text, which is why the test
+/// helpers take it back out again rather than every assertion spelling it.
+String breakableRelease(String release) =>
+    release.replaceAllMapped(RegExp(r'[._-]'), (m) => '${m[0]}​');
 
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        child: Text(
-          label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSecondaryContainer,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The ground both kinds of card are drawn on: a filled, rounded box with
-/// a border that is there whether or not it is coloured, so marking a card
-/// does not move anything inside it.
+/// The ground a card is drawn on: a filled, rounded box with a border that
+/// is there whether or not it is coloured, so marking a card does not move
+/// anything inside it.
 class _CardBox extends StatelessWidget {
   const _CardBox({
     required this.color,
@@ -572,7 +598,7 @@ class _CardBox extends StatelessWidget {
       borderRadius: _cardRadius,
       border: Border.all(color: borderColor, width: 2),
     ),
-    child: Padding(padding: const EdgeInsets.all(10), child: child),
+    child: Padding(padding: const EdgeInsets.all(8), child: child),
   );
 }
 
@@ -583,27 +609,22 @@ const BorderRadius _cardRadius = BorderRadius.all(Radius.circular(8));
 /// One source as a television card draws it, or one line of the accounting
 /// that the sources rows have taken the place of.
 ///
-/// The screen builds these: what a card shows about a stream (which addon
-/// answered, what could be read out of it, who else offered the same
-/// source) is the sources list's business, and what a press does about it
-/// -- play it, keep it, check the addon that failed -- is the screen's.
+/// The screen builds these: what a card shows about a stream (which release
+/// it is, what could be read out of it, which addon answered) is the
+/// sources list's business, and what a press does about it -- play it, keep
+/// it, check the addon that failed -- is the screen's.
 typedef TvSource = ({
   /// The kind of source, or what the line is about.
   IconData icon,
 
-  /// The release, or what the accounting has to say.
+  /// The release name ([releaseNameOf]), or what the accounting has to
+  /// say.
   String title,
 
-  /// The addon that answered, or the rest of the sentence. Null draws no
-  /// line at all.
-  String? detail,
-
-  /// Resolution, size, seeders: only what is actually known, never a
-  /// placeholder for what is not.
-  List<String> badges,
-
-  /// The other addons that offered this very source, already worded.
-  String? alsoFrom,
+  /// The one line under it, already in the order it reads and with only
+  /// what is actually known in it -- never a placeholder for what is not.
+  /// Joined with a middle dot by the card.
+  List<String> facts,
 
   /// This is the source the title was last played from.
   bool highlighted,
@@ -622,16 +643,20 @@ typedef TvSource = ({
   VoidCallback? onHold,
 });
 
-/// One card of the group row and the sources it opens.
+/// One pill of the group row and the sources it opens.
 typedef TvSourceGroup = ({
-  /// The rung, the addon, or what the accounting card is called. It is the
+  /// The rung, the addon, or what the accounting pill is called. It is the
   /// group's identity as well as its label: it is what says which row is
   /// open.
   String label,
 
-  /// What the card says it holds -- the same line a collapsed section
-  /// header carries on a phone.
-  String summary,
+  /// How many sources are behind it, drawn after the label -- "1080p ·
+  /// 31". Null for a group whose count is not the useful thing about it.
+  ///
+  /// A count and not the sentence a collapsed section header carries on a
+  /// phone ("31 streams · best 90 seeders"): a pill is one word wide, and
+  /// the swarm is on each card in the row the pill opens.
+  String? count,
 
   /// Drawn before the label; null for the groups that are simply sources.
   IconData? icon,

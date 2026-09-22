@@ -44,6 +44,10 @@ final class StreamSourceIndex {
 
   final Map<String, _SharedSource> _sources;
 
+  /// How many distinct sources were listed, however many addons listed
+  /// them and however many times: what a collapsed sources rung counts.
+  int get length => _sources.length;
+
   /// [stream] carrying every tracker any listing of the same source named,
   /// first seen first and each one once. [stream] itself when that is
   /// already what it carries.

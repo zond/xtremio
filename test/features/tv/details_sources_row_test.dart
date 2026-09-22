@@ -178,8 +178,8 @@ bool backLeaves(WidgetTester tester) => tester
 
 /// The labels of the group row, left to right.
 List<String> groupLabels(WidgetTester tester) => [
-  for (final card in tester.widgetList<TvSourceGroupCard>(
-    find.byType(TvSourceGroupCard),
+  for (final card in tester.widgetList<TvSourceGroupPill>(
+    find.byType(TvSourceGroupPill),
   ))
     card.group.label,
 ];
@@ -189,6 +189,28 @@ List<String> sourceTitles(WidgetTester tester) => [
   for (final card in tester.widgetList<TvSourceCard>(find.byType(TvSourceCard)))
     card.source.title,
 ];
+
+/// The one line of facts the card titled [title] carries, in order.
+List<String> factsOf(WidgetTester tester, String title) => tester
+    .widgetList<TvSourceCard>(find.byType(TvSourceCard))
+    .firstWhere((card) => card.source.title == title)
+    .source
+    .facts;
+
+/// Walks down the ladder to the header of the rung called [label] and
+/// presses select on it, which opens that rung and shuts whichever was
+/// open.
+Future<void> openRung(
+  WidgetTester tester,
+  String label, {
+  int limit = 8,
+}) async {
+  for (var i = 0; i < limit && focusedLabel(tester) != label; i++) {
+    await press(tester, LogicalKeyboardKey.arrowDown);
+  }
+  expect(focusedLabel(tester), label, reason: 'the walk reached $label');
+  await press(tester, LogicalKeyboardKey.select);
+}
 
 /// Everything drawn inside the card titled [title].
 Finder inSource(String title, Finder matching) => find.descendant(
@@ -243,44 +265,56 @@ void main() {
     );
 
     expect(groupLabels(tester), ['alpha.example', 'beta.example']);
-    final card = tester.widget<TvSourceGroupCard>(
-      find.byType(TvSourceGroupCard).first,
+    // A pill says how many are behind it, and nothing else: it is a word
+    // wide, and the swarm is on every card of the row it opens.
+    expect(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is TvSourceGroupPill && w.group.label == 'alpha.example',
+        ),
+        matching: find.text('· 2'),
+      ),
+      findsOneWidget,
     );
-    expect(card.group.summary, '2 sources');
 
     await press(tester, LogicalKeyboardKey.select);
     expect(sourceTitles(tester), ['Alpha 1080p', 'Alpha 720p']);
   });
 
-  testWidgets('a source card says the release, what is known of it, which '
-      'addon answered and who else offered it', (tester) async {
+  testWidgets('a source card leads with the release and says the rest on '
+      'one line', (tester) async {
+    // Written the way Torrentio writes them: the name is the addon and
+    // the quality, and the release is the first line of the description.
+    // The card that led with the name read "Torrentio" four times over.
+    const release = 'Alpha.2001.1080p.BluRay.x264-CiNEFiLE';
     await mount(
       tester,
       movieWith([
         group('alpha.example', [
-          torrent(hash(1), 'Alpha 1080p', '👤 42 💾 1.5 GB'),
+          torrent(hash(1), 'Alpha\n1080p', '$release\n👤 42 💾 1.5 GB'),
         ]),
         group('beta.example', [
-          torrent(hash(1), 'Beta 1080p', '👤 42 💾 1.5 GB'),
+          torrent(hash(1), 'Beta\n1080p', '$release\n👤 42 💾 1.5 GB'),
         ]),
       ]),
       sectioned: true,
     );
-    await press(tester, LogicalKeyboardKey.select);
 
-    // One release is one card, whichever addon it came from.
-    expect(sourceTitles(tester), ['Alpha 1080p']);
-    expect(inSource('Alpha 1080p', find.text('1080p')), findsOneWidget);
-    expect(inSource('Alpha 1080p', find.text('1.5 GB')), findsOneWidget);
-    expect(inSource('Alpha 1080p', find.text('42 seeders')), findsOneWidget);
+    // One release is one card, whichever addon it came from -- and the
+    // release is the headline, with somewhere to break it at every dot.
+    expect(sourceTitles(tester), [release]);
+    expect(inSource(release, find.text(breakableRelease(release))), findsOne);
+    // The pill above says the resolution, so the card says the two facts
+    // it cannot, and the addon that answered -- with a +1 for the other
+    // one that offered the very same source.
+    expect(factsOf(tester, release), [
+      '42 seeders',
+      '1.5 GB',
+      'alpha.example +1',
+    ]);
     expect(
-      inSource('Alpha 1080p', find.text('alpha.example')),
-      findsOneWidget,
-      reason: 'no heading above it any more',
-    );
-    expect(
-      inSource('Alpha 1080p', find.text('Also from beta.example')),
-      findsOneWidget,
+      inSource(release, find.text('42 seeders · 1.5 GB · alpha.example +1')),
+      findsOne,
     );
   });
 
@@ -301,15 +335,12 @@ void main() {
       isFalse,
       reason: 'nothing in the row it opened can be reached',
     );
-    // And the card says why, where the play arrow would have been.
-    expect(
-      inSource('Amazon Prime Video', find.text('External')),
-      findsOneWidget,
-    );
+    // And the card says why, at the head of its line of facts.
+    expect(factsOf(tester, 'Amazon Prime Video').first, 'External');
   });
 
-  testWidgets('the last-used source is a card of its own above the groups, '
-      'and where the remote starts', (tester) async {
+  testWidgets('a title that has been played opens on the last-used source, '
+      'with the remote already on it', (tester) async {
     await mount(
       tester,
       withLastUsed(
@@ -324,11 +355,16 @@ void main() {
 
     expect(focusIn<TvSourceCard>(), isTrue);
     expect(focusedLabel(tester), kContinueWithLastSource);
+    // Its rung is above the sources, and the sources are shut: one rung
+    // is open at a time, and this is the one the title is for.
     expect(
-      tester.getTopLeft(find.text(kContinueWithLastSource)).dy,
-      lessThan(tester.getTopLeft(find.text('alpha.example')).dy),
+      tester.getTopLeft(find.text(kContinueWatchingLabel)).dy,
+      lessThan(tester.getTopLeft(find.text(kSourcesLabel)).dy),
     );
-    // It says which release it is, and it plays.
+    expect(find.byType(TvSourceGroupPill), findsNothing);
+    // It says which release it is -- on the card, and on the shut rung's
+    // own line, which is all a viewer needs to tell it from picking
+    // another.
     expect(
       inSource(kContinueWithLastSource, find.text('Alpha 1080p')),
       findsOneWidget,
@@ -380,7 +416,10 @@ void main() {
     core.setState(CoreField.metaDetails, withLastUsed(movieWith(streams())));
     await tester.pumpAndSettle();
 
-    expect(find.text(kContinueWithLastSource), findsOneWidget);
+    // The rung it arrives on is drawn and shut: the viewer is standing in
+    // another one, and opening this would take the card they are on off
+    // the screen.
+    expect(find.text(kContinueWatchingLabel), findsOneWidget);
     expect(focusedLabel(tester), 'Alpha 720p');
   });
 
@@ -398,7 +437,7 @@ void main() {
           ]),
       ]),
     );
-    expect(find.byType(TvSourceGroupCard), findsNWidgets(12));
+    expect(find.byType(TvSourceGroupPill), findsNWidgets(12));
 
     for (var i = 0; i < 20 && focusedLabel(tester) != 'addon11.example'; i++) {
       await press(tester, LogicalKeyboardKey.arrowRight);
@@ -406,7 +445,7 @@ void main() {
     expect(focusedLabel(tester), 'addon11.example');
     // And it is on the panel, not off the end of the strip.
     final row = tester.getRect(find.byType(TvSourceRows));
-    final card = tester.getRect(find.byType(TvSourceGroupCard).last);
+    final card = tester.getRect(find.byType(TvSourceGroupPill).last);
     expect(card.left, greaterThanOrEqualTo(row.left));
     expect(card.right, lessThanOrEqualTo(row.right));
   });
@@ -459,7 +498,7 @@ void main() {
     expect(focusedLabel(tester), '720p');
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedLabel(tester), '720p');
-    expect(focusIn<TvSourceGroupCard>(), isTrue);
+    expect(focusIn<TvSourceGroupPill>(), isTrue);
 
     // And the row of sources it opens, which is the one with cards wide
     // enough to run off the panel.
@@ -478,7 +517,7 @@ void main() {
     // Up and down still leave: only the two keys that run along the row
     // are taken.
     await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusIn<TvSourceGroupCard>(), isTrue);
+    expect(focusIn<TvSourceGroupPill>(), isTrue);
   });
 
   testWidgets('a rung the streams stop offering stops taking the Back '
@@ -532,16 +571,18 @@ void main() {
       also: {CoreField.ctx: loadCtxLoggedOutFixture()},
     );
 
-    // Last, after the addons that did answer, and counting both without
-    // being opened at all.
-    expect(groupLabels(tester), ['alpha.example', kSourceAccountingLabel]);
+    // A rung of its own below the sources, counting both without being
+    // opened at all: what the addons did is not a group of sources, and
+    // its one line is exactly what a rung header has room for and a 36 dp
+    // pill has not.
+    expect(groupLabels(tester), ['alpha.example']);
+    expect(find.text(kSourceAccountingLabel), findsOneWidget);
     expect(
       find.text('1 addons did not answer · 1 addon had nothing for this title'),
       findsOneWidget,
     );
 
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    await press(tester, LogicalKeyboardKey.select);
+    await openRung(tester, kSourceAccountingLabel);
     expect(sourceTitles(tester), ['mirror.example', 'quiet.example']);
     expect(
       inSource('mirror.example', find.text('Failed to fetch: 404 Not Found')),
@@ -586,10 +627,9 @@ void main() {
     expect(
       find.text('5 addons had nothing for this title'),
       findsOneWidget,
-      reason: 'the card that opens the row still counts them',
+      reason: 'the shut rung still counts them',
     );
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    await press(tester, LogicalKeyboardKey.select);
+    await openRung(tester, kSourceAccountingLabel);
     expect(sourceTitles(tester), [
       'one.example',
       'two.example',
@@ -605,26 +645,28 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowRight);
     }
     expect(focusedLabel(tester), 'five.example');
-    final row = tester.getRect(find.byType(TvSourceRows));
+    // The accounting is a rung of its own, so what has to hold the last
+    // card is its one row rather than the two the sources are.
+    final row = tester.getRect(find.byType(TvSourceRow));
     final card = tester.getRect(find.byType(TvSourceCard).last);
     expect(card.left, greaterThanOrEqualTo(row.left));
     expect(card.right, lessThanOrEqualTo(row.right));
   });
 
-  testWidgets('nobody having anything at all names the card, and the card '
-      'opens the addons screen', (tester) async {
+  testWidgets('nobody having anything at all names the rung, and the screen '
+      'opens on it', (tester) async {
     await mount(
       tester,
       movieWith([emptyGroup('quiet.example'), emptyGroup('silent.example')]),
     );
 
-    expect(groupLabels(tester), ['No streams for this title']);
+    // There is no sources rung to open -- nothing answered with one -- so
+    // this is the rung the screen is for, and the remote is on the one
+    // thing there is to press rather than nowhere at all.
+    expect(groupLabels(tester), isEmpty);
+    expect(find.text('No streams for this title'), findsOneWidget);
     expect(find.text('2 addons had nothing for this title'), findsOneWidget);
-
-    await press(tester, LogicalKeyboardKey.select);
     expect(sourceTitles(tester).first, 'Add an addon');
-
-    await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedLabel(tester), 'Add an addon');
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
@@ -655,7 +697,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(TvSourceRows), findsNothing);
-    expect(find.byType(TvSourceGroupCard), findsNothing);
+    expect(find.byType(TvSourceGroupPill), findsNothing);
     expect(find.byKey(streamSectionKey(StreamResolution.fhd1080)), findsOne);
   });
 

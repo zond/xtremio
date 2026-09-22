@@ -1003,11 +1003,13 @@ void main() {
         await pressUntil(
           tester,
           LogicalKeyboardKey.tab,
-          () => focusIn<TvSourceGroupCard>(),
+          () => focusIn<TvSourceGroupPill>(),
           target: 'a group of sources',
         );
         await press(tester, LogicalKeyboardKey.select);
-        await press(tester, LogicalKeyboardKey.arrowDown);
+        if (!focusIn<TvSourceCard>()) {
+          await press(tester, LogicalKeyboardKey.arrowDown);
+        }
         expect(focusIn<TvSourceCard>(), isTrue);
         await press(tester, LogicalKeyboardKey.contextMenu);
         expect(find.byType(AlertDialog), findsOneWidget);

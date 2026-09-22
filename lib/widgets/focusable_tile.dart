@@ -40,6 +40,7 @@ class FocusableTile extends StatefulWidget {
     this.memoryId,
     this.defaultFocus = false,
     this.onFocused,
+    this.treatment = FocusTreatment.tile,
     this.borderRadius = const BorderRadius.all(Radius.circular(8)),
   });
 
@@ -71,6 +72,14 @@ class FocusableTile extends StatefulWidget {
 
   /// Autofocus on a TV when nothing is remembered (or there is no memory).
   final bool defaultFocus;
+
+  /// How much of the focus indicator this one wears ([FocusTreatment]).
+  /// [FocusTreatment.tile] is what a poster-like tile is, and the default
+  /// because that is what nearly every caller is; a line the width of the
+  /// panel -- a collapsing ladder's rung header -- asks for
+  /// [FocusTreatment.row] instead, because a zoom on something that wide
+  /// lifts it over its neighbours rather than out of them.
+  final FocusTreatment treatment;
 
   /// Clips the ink and rounds the ring; every tile uses 8 px.
   final BorderRadius borderRadius;
@@ -157,6 +166,7 @@ class _FocusableTileState extends State<FocusableTile> {
         focusColor: Colors.transparent,
         child: FocusHighlight(
           focused: _focused,
+          treatment: widget.treatment,
           borderRadius: widget.borderRadius,
           // Nothing drawn inside a tile is a focus stop. The tile takes
           // focus as a whole and the [RemotePress] above takes select, so
