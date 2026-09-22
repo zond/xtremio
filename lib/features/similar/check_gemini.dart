@@ -67,13 +67,20 @@ final class GeminiModelCheck implements ModelCheckProvider {
 
   /// The row's own question in the row's own request, so that what the
   /// check measures is what the viewer would get.
+  ///
+  /// Asked as a film, because every target in the shipped keys is one and
+  /// the keys are what the answer is scored against -- see
+  /// `tool/recommendations/README.md`, where nothing about series was
+  /// measured. A viewer standing on a series gets the series question
+  /// ([askForSimilar]); this check has no opinion about that question
+  /// because there is no key to have one with.
   @override
   Future<List<SuggestedTitle>> suggest(String subject) => GeminiSimilarTitles(
     apiKey: apiKey,
     model: model,
     endpoint: endpoint,
     budget: budget,
-  ).suggest(subject);
+  ).suggest(subject, about: SuggestedKind.film);
 
   @override
   Future<List<String>> order(String target, List<String> films) async {

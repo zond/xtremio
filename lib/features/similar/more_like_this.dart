@@ -12,7 +12,9 @@
 /// 1. **What was answered before, if anything was.** The first answer is
 ///    the answer, for the life of the install (`SimilarMemory`) -- the
 ///    same model asked twice agrees with itself about half the time, and a
-///    row that reshuffles on every visit is one nobody can point at.
+///    row that reshuffles on every visit is one nobody can point at. Only
+///    an answer to the question this build asks counts as one
+///    (`similarQuestionVersion`); an older one is asked again.
 /// 2. **The model, only with a key and only once per title.** With no key
 ///    configured nothing is asked of any provider at all -- not a probe,
 ///    not a default key, nothing: there is no key in this repository and
@@ -115,7 +117,14 @@ final class MoreLikeThis {
     final provider = providerFor(apiKey: apiKey, model: model);
     final List<SuggestedTitle> answered;
     try {
-      answered = await provider.suggest(year == null ? name : '$name ($year)');
+      answered = await provider.suggest(
+        year == null ? name : '$name ($year)',
+        // Stremio's own `movie`/`series`, which is what the screen has,
+        // turned into the question's vocabulary. Anything else -- a type
+        // this app does not put a details screen under -- is asked about
+        // as a film, which is the question that was measured.
+        about: SuggestedKind.parse(type) ?? SuggestedKind.film,
+      );
     } on SimilarTitlesFailure catch (failure) {
       // Which failure it was, so that a fallback to another model -- or a
       // viewer being told to pick one -- has grounds a week later. The

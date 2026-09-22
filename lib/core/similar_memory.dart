@@ -18,6 +18,13 @@
 /// and every stored row goes through the same guard on the way to the
 /// screen (`resolveSuggestions`), so an invented title is stored, resolves
 /// to nothing, and costs one search.
+///
+/// The one thing that is allowed to expire an answer is the *question*.
+/// Every row carries the version of the wording it came from
+/// ([similarQuestionVersion]) and a row from another version is read back
+/// as nothing remembered, because "the first answer is the answer" is a
+/// rule about a question and not about a title: without it, changing the
+/// wording would change what only a fresh install ever sees.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -37,6 +44,22 @@ import 'package:flutter/foundation.dart';
 /// prefer a `-latest` alias where a provider offers one, since an alias
 /// rots more slowly than a version does.
 const String defaultSimilarModel = 'gemini-3.1-flash-lite';
+
+/// Which version of the question produced a stored answer.
+///
+/// The first answer is the answer for the life of the install, which is
+/// what makes the row point-at-able and is also a trap: a change to the
+/// wording is a change nobody who has already opened a title ever sees.
+/// Version 1 is the first question that asks about television as well as
+/// film; the film-only question that shipped before it wrote no stamp at
+/// all, and an unstamped row reads back as 0 -- *not this version* --
+/// which is exactly what it is.
+///
+/// **Change [askForSimilar] and change this.** It lives here rather than
+/// beside the question for the reason [defaultSimilarModel] does: this is
+/// the half of it the preferences file has to know about, and nothing in
+/// `core/` may reach into `features/`.
+const int similarQuestionVersion = 1;
 
 /// Which catalogue a suggestion is to be looked for in.
 ///
@@ -100,10 +123,11 @@ final class SuggestedTitle {
   /// there, and because the reason is what a viewer judges the row by.
   final String why;
 
-  /// Which catalogue to look in, when the model said. Null is ordinary:
-  /// the schema asks for a title, a year and a reason, and a kind only
-  /// when the model volunteers one -- see [resolveSuggestions] for what
-  /// happens when it does not.
+  /// Which catalogue to look in. The schema asks for it now, so an answer
+  /// to the current question states one; null is what a word
+  /// [SuggestedKind.parse] does not know reads back as, and what every row
+  /// stored before the schema asked reads as -- see [resolveSuggestions]
+  /// for what happens then.
   final SuggestedKind? kind;
 
   /// The row as it is written to the preferences file. The kind is written
@@ -171,21 +195,37 @@ final class SimilarMemory {
   /// costs is being asked again.
   static const int limit = 128;
 
-  /// What was answered about [id] of [type], or null when nothing was.
+  /// What was answered about [id] of [type], or null when nothing this
+  /// build can use was.
   ///
   /// An empty list is a *value*: the model answered and nothing it named
   /// survived parsing. Asking again would cost a call to be told the same
   /// thing, so null and empty are kept apart here the way they are
   /// everywhere else in this file.
+  ///
+  /// An answer to an *older* question is null rather than a value, and
+  /// that is the point of [similarQuestionVersion]. A viewer who opened a
+  /// series while the question was film-only has ten films written down
+  /// under it; without this they would keep that row for the life of the
+  /// install, and the change would be one only new installs ever saw.
   List<SuggestedTitle>? forItem({required String type, required String id}) {
     for (final entry in entries) {
-      if (entry.type == type && entry.id == id) return entry.suggestions;
+      if (entry.type == type && entry.id == id) {
+        return entry.askedAs == similarQuestionVersion
+            ? entry.suggestions
+            : null;
+      }
     }
     return null;
   }
 
   /// This memory with [suggestions] written in under [type] and [id],
-  /// moved to the front, and the oldest row dropped once [limit] is past.
+  /// stamped with the question that produced them, moved to the front,
+  /// and the oldest row dropped once [limit] is past.
+  ///
+  /// The row this replaces goes whatever it was stamped with, so a
+  /// re-ask forced by [similarQuestionVersion] costs one call and then
+  /// stops costing anything.
   SimilarMemory remembering({
     required String type,
     required String id,
@@ -197,7 +237,12 @@ final class SimilarMemory {
     ];
     return SimilarMemory(
       [
-        SimilarAnswer(type: type, id: id, suggestions: suggestions),
+        SimilarAnswer(
+          type: type,
+          id: id,
+          suggestions: suggestions,
+          askedAs: similarQuestionVersion,
+        ),
         ...kept,
       ].take(limit).toList(growable: false),
     );
@@ -234,6 +279,7 @@ final class SimilarAnswer {
     required this.type,
     required this.id,
     required this.suggestions,
+    required this.askedAs,
   });
 
   /// The meta item's own `type` (`movie`, `series`), which is half the key
@@ -248,14 +294,27 @@ final class SimilarAnswer {
   /// [SimilarMemory.forItem].
   final List<SuggestedTitle> suggestions;
 
+  /// Which question was asked to get these ([similarQuestionVersion]).
+  ///
+  /// Zero for a row written before there was a stamp, which is the
+  /// film-only question and is not any version this build asks.
+  final int askedAs;
+
   Map<String, Object> toJson() => {
     'type': type,
     'id': id,
+    'asked': askedAs,
     'films': [for (final suggestion in suggestions) suggestion.toJson()],
   };
 
   /// One stored row, or null when it names no title or no id -- a row
   /// nothing could be looked up by.
+  ///
+  /// A row with no `asked`, or one whose `asked` is not a number, is
+  /// version 0: an answer this build did not ask for. That is not a row
+  /// to drop -- dropping it and re-asking look the same from here, and
+  /// keeping it means [SimilarMemory.remembering] has something to
+  /// replace rather than a duplicate to make.
   static SimilarAnswer? fromJson(Object? json) {
     if (json is! Map) return null;
     final type = json['type'];
@@ -269,10 +328,12 @@ final class SimilarAnswer {
         if (suggestion != null) suggestions.add(suggestion);
       }
     }
+    final asked = json['asked'];
     return SimilarAnswer(
       type: type,
       id: id,
       suggestions: List.unmodifiable(suggestions),
+      askedAs: asked is int ? asked : 0,
     );
   }
 
@@ -281,8 +342,10 @@ final class SimilarAnswer {
       other is SimilarAnswer &&
       other.type == type &&
       other.id == id &&
+      other.askedAs == askedAs &&
       listEquals(other.suggestions, suggestions);
 
   @override
-  int get hashCode => Object.hash(type, id, Object.hashAll(suggestions));
+  int get hashCode =>
+      Object.hash(type, id, askedAs, Object.hashAll(suggestions));
 }

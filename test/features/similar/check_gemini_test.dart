@@ -117,6 +117,33 @@ void main() {
       },
     );
 
+    test('the recommendation half asks about a film', () async {
+      // Every target in the shipped keys is a film, and the keys are what
+      // the answer is scored against. The row asks a series a different
+      // question (`askForSimilar`) and nothing here has a key to score
+      // that one with, so the check must ask the film one.
+      answer(HttpStatus.ok, {
+        'candidates': [
+          {
+            'content': {
+              'parts': [
+                {
+                  'text': jsonEncode({'titles': <Object>[]}),
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      await provider().suggest('Avalon (2001)');
+
+      final text =
+          ((sent.single['contents'] as List).first as Map)['parts'][0]['text']
+              as String;
+      expect(text, askForSimilar('Avalon (2001)', about: SuggestedKind.film));
+    });
+
     test('the key rides in the query and nowhere else', () async {
       answer(HttpStatus.ok, ordered(const []));
 

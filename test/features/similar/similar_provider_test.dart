@@ -39,15 +39,19 @@ void main() {
           delay: delay,
         ));
 
-    /// A documented answer: the films, inside the JSON text of the first
+    /// A documented answer: the titles, inside the JSON text of the first
     /// candidate's parts.
-    Object films(List<Map<String, Object>> rows) => {
+    ///
+    /// `titles` and not `films`: the wire key names both kinds, because
+    /// the key is one more place the model would otherwise be told the
+    /// answer is films.
+    Object titles(List<Map<String, Object>> rows) => {
       'candidates': [
         {
           'content': {
             'parts': [
               {
-                'text': jsonEncode({'films': rows}),
+                'text': jsonEncode({'titles': rows}),
               },
             ],
           },
@@ -103,26 +107,64 @@ void main() {
     test('parses the documented answer shape', () async {
       answer(
         HttpStatus.ok,
-        films([
-          {'title': 'Avalon', 'year': 2001, 'why': 'same grey war dream'},
-          {'title': 'Æon Flux', 'year': 1991, 'why': 'same airless future'},
+        titles([
+          {
+            'title': 'Avalon',
+            'year': 2001,
+            'kind': 'film',
+            'why': 'same grey war dream',
+          },
+          {
+            'title': 'Æon Flux',
+            'year': 1991,
+            'kind': 'series',
+            'why': 'same airless future',
+          },
         ]),
       );
 
-      final suggestions = await provider().suggest('Wave Twisters (2001)');
+      final suggestions = await provider().suggest(
+        'Wave Twisters (2001)',
+        about: SuggestedKind.film,
+      );
 
       expect(suggestions, hasLength(2));
       expect(suggestions.first.title, 'Avalon');
       expect(suggestions.first.year, 2001);
       expect(suggestions.first.why, 'same grey war dream');
-      // Nothing in the documented shape says which catalogue to look in.
-      expect(suggestions.first.kind, isNull);
+      // The kind the model stated, which is the whole reason the schema
+      // asks for it: one catalogue searched instead of two, and the 1991
+      // series cannot land on the 2005 film of the same name.
+      expect(suggestions.first.kind, SuggestedKind.film);
+      expect(suggestions.last.kind, SuggestedKind.series);
+    });
+
+    test('a kind nobody can parse is a suggestion, not a loss', () async {
+      // A required field costs nothing when a model writes something
+      // unexpected into it: the kind is null, and the guard looks in both
+      // catalogues exactly as it did before the field existed.
+      answer(
+        HttpStatus.ok,
+        titles([
+          {'title': 'Avalon', 'year': 2001, 'kind': 'anime', 'why': 'grey'},
+          {'title': 'Heat', 'year': 1995, 'why': 'no kind at all'},
+        ]),
+      );
+
+      final suggestions = await provider().suggest(
+        'Wave Twisters (2001)',
+        about: SuggestedKind.film,
+      );
+
+      expect(suggestions.map((s) => s.title), ['Avalon', 'Heat']);
+      expect(suggestions.map((s) => s.kind), [isNull, isNull]);
     });
 
     test('asks for feel, in JSON, of the model it was given', () async {
-      answer(HttpStatus.ok, films(const []));
+      answer(HttpStatus.ok, titles(const []));
 
-      await provider(model: 'gemini-4.0-flash-latest').suggest('Avalon (2001)');
+      await provider(model: 'gemini-4.0-flash-latest')
+          .suggest('Avalon (2001)', about: SuggestedKind.film);
 
       expect(
         urls.single.path,
@@ -141,21 +183,88 @@ void main() {
       final config = body['generationConfig'] as Map<String, dynamic>;
       expect(config['responseMimeType'], 'application/json');
       final schema = config['responseSchema'] as Map<String, dynamic>;
-      final film =
-          ((schema['properties'] as Map)['films'] as Map)['items'] as Map;
-      expect(film['required'], ['title', 'year', 'why']);
+      // `titles`, not `films`: the wire key is one more place the model
+      // would be told what kind of thing is wanted.
+      expect(schema['required'], ['titles']);
+      final row =
+          ((schema['properties'] as Map)['titles'] as Map)['items'] as Map;
+      // The kind is asked for outright rather than hoped for: a field in
+      // the shape, and a required one.
+      expect(row['properties'], contains('kind'));
+      expect(row['required'], ['title', 'year', 'kind', 'why']);
+    });
+
+    test('a film and a series are asked different questions', () async {
+      answer(HttpStatus.ok, titles(const []));
+
+      String promptOf(Map<String, dynamic> body) =>
+          ((body['contents'] as List).first as Map)['parts'][0]['text']
+              as String;
+
+      await provider().suggest('Avalon (2001)', about: SuggestedKind.film);
+      final film = promptOf(sent.single);
+      sent.clear();
+      await provider().suggest(
+        'Breaking Bad (2008)',
+        about: SuggestedKind.series,
+      );
+      final series = promptOf(sent.single);
+
+      // Both ask for both kinds, because a series is a good answer about a
+      // film -- *Æon Flux* for *Wave Twisters* -- and a film can be a good
+      // answer about a series.
+      for (final prompt in [film, series]) {
+        expect(prompt, contains('films'));
+        expect(prompt, contains('series'));
+        expect(prompt, contains('"kind":"film|series"'));
+        expect(prompt, contains('{"titles":'));
+        // The measured phrasing, in both: feel, register, pace, texture,
+        // over a shared premise.
+        expect(prompt, contains('*feel* like it'));
+        expect(prompt, contains('the same register, pace and texture'));
+        expect(prompt, contains('merely share its premise'));
+      }
+
+      // The film question is the measured one, word for word.
+      expect(
+        film,
+        'Name 10 films or television series to watch next for someone who '
+        'loved Avalon (2001). '
+        'Prefer films that *feel* like it -- the same register, pace and '
+        'texture -- over films that merely share its premise. '
+        'Answer JSON only: {"titles":[{"title":"","year":0,'
+        '"kind":"film|series","why":"under 12 words"}]}. '
+        'Real, released titles only; do not include the film itself.',
+      );
+
+      // The series question prefers series -- someone on a show page
+      // mostly wants another show -- and leaves a film room.
+      expect(
+        series,
+        'Name 10 television series or films to watch next for someone who '
+        'loved Breaking Bad (2008). '
+        'Prefer series that *feel* like it -- the same register, pace and '
+        'texture -- over series that merely share its premise; a film that '
+        'genuinely fits belongs in the answer too. '
+        'Answer JSON only: {"titles":[{"title":"","year":0,'
+        '"kind":"film|series","why":"under 12 words"}]}. '
+        'Real, released titles only; do not include the series itself.',
+      );
     });
 
     test('drops a row it cannot read and keeps the rest', () async {
       answer(
         HttpStatus.ok,
-        films([
+        titles([
           {'title': 'Avalon', 'year': 2001, 'why': 'grey'},
           {'title': 'Nothing', 'why': 'no year, so nothing to check it by'},
         ]),
       );
 
-      final suggestions = await provider().suggest('Wave Twisters (2001)');
+      final suggestions = await provider().suggest(
+        'Wave Twisters (2001)',
+        about: SuggestedKind.film,
+      );
 
       expect(suggestions.map((s) => s.title), ['Avalon']);
     });
@@ -166,7 +275,7 @@ void main() {
       });
 
       await expectLater(
-        provider().suggest('Avalon (2001)'),
+        provider().suggest('Avalon (2001)', about: SuggestedKind.film),
         throwsA(
           isA<SimilarTitlesFailure>().having(
             (f) => f.trouble,
@@ -183,7 +292,7 @@ void main() {
       });
 
       await expectLater(
-        provider().suggest('Avalon (2001)'),
+        provider().suggest('Avalon (2001)', about: SuggestedKind.film),
         throwsA(
           isA<SimilarTitlesFailure>().having(
             (f) => f.trouble,
@@ -197,7 +306,7 @@ void main() {
     test('a tier and a quota are told apart', () async {
       Future<SimilarTrouble?> troubleOf(GeminiSimilarTitles asked) async {
         try {
-          await asked.suggest('Avalon (2001)');
+          await asked.suggest('Avalon (2001)', about: SuggestedKind.film);
           return null;
         } on SimilarTitlesFailure catch (failure) {
           return failure.trouble;
@@ -227,12 +336,15 @@ void main() {
       });
       answer(
         HttpStatus.ok,
-        films([
+        titles([
           {'title': 'Avalon', 'year': 2001, 'why': 'grey'},
         ]),
       );
 
-      final suggestions = await provider().suggest('Wave Twisters (2001)');
+      final suggestions = await provider().suggest(
+        'Wave Twisters (2001)',
+        about: SuggestedKind.film,
+      );
 
       expect(suggestions.map((s) => s.title), ['Avalon']);
       expect(sent, hasLength(2));
@@ -260,12 +372,15 @@ void main() {
       });
       answer(
         HttpStatus.ok,
-        films([
+        titles([
           {'title': 'Avalon', 'year': 2001, 'why': 'grey'},
         ]),
       );
 
-      final suggestions = await provider().suggest('Wave Twisters (2001)');
+      final suggestions = await provider().suggest(
+        'Wave Twisters (2001)',
+        about: SuggestedKind.film,
+      );
 
       expect(suggestions.map((s) => s.title), ['Avalon']);
       expect(
@@ -284,7 +399,7 @@ void main() {
       );
 
       await expectLater(
-        nowhere.suggest('Avalon (2001)'),
+        nowhere.suggest('Avalon (2001)', about: SuggestedKind.film),
         throwsA(
           isA<SimilarTitlesFailure>()
               .having((f) => f.trouble, 'trouble', SimilarTrouble.unreachable)
@@ -311,7 +426,7 @@ void main() {
       });
 
       await expectLater(
-        provider().suggest('Avalon (2001)'),
+        provider().suggest('Avalon (2001)', about: SuggestedKind.film),
         throwsA(
           isA<SimilarTitlesFailure>().having(
             (f) => f.trouble,
@@ -327,13 +442,41 @@ void main() {
       answer(HttpStatus.ok, {'candidates': []});
 
       await expectLater(
-        provider().suggest('Avalon (2001)'),
+        provider().suggest('Avalon (2001)', about: SuggestedKind.film),
         throwsA(
           isA<SimilarTitlesFailure>().having(
             (f) => f.trouble,
             'trouble',
             SimilarTrouble.malformed,
           ),
+        ),
+      );
+
+      // Including JSON under the key the question no longer uses. An
+      // answer that was not understood is malformed and is not cached as
+      // "this title is like nothing".
+      answers.clear();
+      answer(HttpStatus.ok, {
+        'candidates': [
+          {
+            'content': {
+              'parts': [
+                {
+                  'text':
+                      '{"films":[{"title":"Avalon","year":2001,"why":"grey"}]}',
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      await expectLater(
+        provider().suggest('Avalon (2001)', about: SuggestedKind.film),
+        throwsA(
+          isA<SimilarTitlesFailure>()
+              .having((f) => f.trouble, 'trouble', SimilarTrouble.malformed)
+              .having((f) => f.detail, 'detail', 'titles'),
         ),
       );
     });
@@ -348,7 +491,8 @@ void main() {
                 {'text': 'Sure! Here you go:\n'},
                 {
                   'text':
-                      '{"films":[{"title":"Avalon","year":2001,"why":"grey"}]}'
+                      '{"titles":[{"title":"Avalon","year":2001,'
+                      '"kind":"film","why":"grey"}]}'
                       '\nHope that helps.',
                 },
               ],
@@ -357,7 +501,10 @@ void main() {
         ],
       });
 
-      final suggestions = await provider().suggest('Wave Twisters (2001)');
+      final suggestions = await provider().suggest(
+        'Wave Twisters (2001)',
+        about: SuggestedKind.film,
+      );
 
       expect(suggestions.map((s) => s.title), ['Avalon']);
     });
@@ -365,13 +512,14 @@ void main() {
     test('a request past the budget is abandoned', () async {
       answer(
         HttpStatus.ok,
-        films(const []),
+        titles(const []),
         delay: const Duration(seconds: 30),
       );
 
       final started = DateTime.now();
       await expectLater(
-        provider(budget: const Duration(milliseconds: 150)).suggest('Avalon'),
+        provider(budget: const Duration(milliseconds: 150))
+            .suggest('Avalon', about: SuggestedKind.film),
         throwsA(
           isA<SimilarTitlesFailure>().having(
             (f) => f.trouble,
