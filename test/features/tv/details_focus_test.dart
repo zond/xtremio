@@ -310,6 +310,16 @@ Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
   return core;
 }
 
+/// The card in the row of sources for the release called [release].
+///
+/// Not `find.text`: the strip under the row says the name of the card the
+/// remote is on as well, in full and on one line ([TvSourceDetailStrip]),
+/// so a release that is on the panel once is on it twice. What these tests
+/// are about is which row is out, and a row is its cards.
+Finder sourceCard(String release) => find.byWidgetPredicate(
+  (widget) => widget is TvSourceCard && widget.source.title == release,
+);
+
 void main() {
   group('movie', () {
     testWidgets('the sources are a row under the rest, not a pane beside '
@@ -449,7 +459,7 @@ void main() {
       // anything.
       expect(focusIn<TvSourceGroupPill>(), isTrue);
       expect(focusedLabel(tester), '2160p');
-      expect(find.text('Alpha 2160p'), findsOneWidget);
+      expect(sourceCard('Alpha 2160p'), findsOneWidget);
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), '1080p');
@@ -481,7 +491,7 @@ void main() {
       await mountSectioned(tester, open: {'1080p'});
 
       expect(focusedLabel(tester), '2160p');
-      expect(find.text('Alpha 2160p'), findsOneWidget, reason: 'the focused');
+      expect(sourceCard('Alpha 2160p'), findsOneWidget, reason: 'the focused');
       expect(find.text('Beta 1080p'), findsNothing, reason: 'the remembered');
     });
 
@@ -494,14 +504,14 @@ void main() {
       // for the card it is on, and no press was needed to say so.
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), '1080p');
-      expect(find.text('Beta 1080p'), findsOneWidget);
+      expect(sourceCard('Beta 1080p'), findsOneWidget);
 
       // And select on the card that is already open leaves it open, rather
       // than toggling the row away under the remote -- and goes down into
       // it, since the landing already chose it.
       await press(tester, LogicalKeyboardKey.select);
 
-      expect(find.text('Beta 1080p'), findsOneWidget);
+      expect(sourceCard('Beta 1080p'), findsOneWidget);
       expect(focusedLabel(tester), 'Beta 1080p', reason: 'down into the row');
       // Every rung is still on the screen, and the chosen one says so.
       final cards = tester
@@ -578,17 +588,13 @@ void main() {
     testWidgets('another group is a sideways press away, and takes the '
         'second row with it', (tester) async {
       await mountSectioned(tester);
-      expect(
-        find.text('Alpha 2160p'),
-        findsOneWidget,
-        reason: 'open on arrival',
-      );
+      expect(sourceCard('Alpha 2160p'), findsOneWidget, reason: 'on arrival');
 
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedLabel(tester), '1080p', reason: 'no press back first');
 
-      expect(find.text('Beta 1080p'), findsOneWidget);
-      expect(find.text('Alpha 2160p'), findsNothing);
+      expect(sourceCard('Beta 1080p'), findsOneWidget);
+      expect(find.text('Alpha 2160p'), findsNothing, reason: 'gone entirely');
     });
 
     testWidgets('Back puts the open row away before it leaves the screen', (
@@ -597,7 +603,7 @@ void main() {
       await mountSectioned(tester);
       // The card the remote starts on has its row out already, so the
       // press that goes down into it is the first one the viewer makes.
-      expect(find.text('Alpha 2160p'), findsOneWidget);
+      expect(sourceCard('Alpha 2160p'), findsOneWidget);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedLabel(tester), 'Alpha 2160p');
 
@@ -720,8 +726,8 @@ void main() {
       expect(focusedLabel(tester), 'alpha.example');
       await press(tester, LogicalKeyboardKey.select);
       expect(
-        tester.getTopLeft(find.text('Alpha 720p')).dx,
-        lessThan(tester.getTopLeft(find.text('Alpha 2160p')).dx),
+        tester.getTopLeft(sourceCard('Alpha 720p')).dx,
+        lessThan(tester.getTopLeft(sourceCard('Alpha 2160p')).dx),
       );
     });
 

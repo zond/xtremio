@@ -95,6 +95,23 @@ class TvLadderController {
 
   void _register(int level, TvLadderRowState row) => _rows[level] = row;
 
+  /// Which of the row at [level]'s focus stops it will hand the remote
+  /// back to: where the remote was when it left, or its first.
+  ///
+  /// For what has to be right about a row *before* the remote is in it --
+  /// the strip under the sources, which says everything about the card the
+  /// row would land on that the card itself has no room for. Reading it
+  /// from here rather than keeping a second copy is the point: two answers
+  /// to "which card is the row on" disagree the moment one of them is
+  /// wrong, and the disagreement is a readout describing a card the viewer
+  /// is not about to reach.
+  ///
+  /// An index into that row's focus stops rather than into whatever it
+  /// draws, so a caller counts the same things the walk does -- a card no
+  /// press can reach is not one of them -- and it is not clamped to
+  /// anything here, because the row it names may not be built yet.
+  int rememberedStop(int level) => _remembered[level] ?? 0;
+
   void _unregister(int level, TvLadderRowState row) {
     if (_rows[level] == row) _rows.remove(level);
   }
