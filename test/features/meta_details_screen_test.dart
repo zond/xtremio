@@ -54,7 +54,13 @@ Map<String, dynamic> torrentGroup(String videoId) => {
         'infoHash': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         'fileIdx': 3,
         'name': 'Torrentio\n1080p',
-        'description': 'Breaking.Bad.S01E01.1080p.mkv\n👤 42 💾 1.51 GB',
+        // The tracker on the end is not decoration: `StreamHints.strip`
+        // knows the seeders and the size and takes them out, and does not
+        // know the tracker, so what it leaves is two lines. A fixture
+        // without one leaves exactly one line and hides the bug that drew
+        // the release twice on a phone.
+        'description':
+            'Breaking.Bad.S01E01.1080p.mkv\n👤 42 💾 1.51 GB ⚙️ ThePirateBay',
         'behaviorHints': {'filename': 'Breaking.Bad.S01E01.1080p.mkv'},
       },
     ],
@@ -867,11 +873,15 @@ void main() {
       expect(find.textContaining('Failed to fetch'), findsOneWidget);
       expect(find.text('torrentio.example'), findsOneWidget);
       expect(find.text(kTileRelease), findsOneWidget);
-      // Said once. The row is headed by the release, and the line that
-      // used to sit under it was the same filename with `.mkv` still on
-      // the end -- which is what a phone drew twice until the comparison
-      // learned to ignore the extension.
-      expect(find.text('Breaking.Bad.S01E01.1080p.mkv'), findsNothing);
+      // Said once, and this is the assertion that says so. `find.text` is
+      // an exact match, so asserting that the filename is drawn nowhere
+      // passed happily while the line under the title read
+      // "Breaking.Bad.S01E01.1080p.mkv\nThePirateBay" -- the release, on
+      // screen, one line under itself, which is the bug this is here to
+      // catch. Counting every Text the release appears *in* is what
+      // catches it: the title, and nothing else.
+      expect(find.textContaining(kTileRelease), findsOneWidget);
+      expect(find.text('ThePirateBay'), findsOneWidget);
       expect(find.byTooltip('Breaking.Bad.S01E01.1080p.mkv'), findsOneWidget);
       expect(find.text('1080p'), findsOneWidget);
       expect(find.text('1.51 GB'), findsOneWidget);

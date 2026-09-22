@@ -511,9 +511,6 @@ String releaseNameOf(StreamInfo stream, {String? addonName}) {
 bool _looksLikeARelease(String text) =>
     RegExp(r'[A-Za-z0-9][._-][A-Za-z0-9]').hasMatch(text);
 
-/// [name] without the container extension an addon's filename carries, and
-/// only that: a release ends in `-GROUP`, and a four-letter tag after a dot
-/// is what tells `.mkv` from `x264-CiNEFiLE`.
 /// Whether two strings name the same release, give or take a container
 /// extension and a difference of case.
 ///
@@ -530,10 +527,86 @@ bool sameRelease(String? a, String? b) {
   return bare(a) == bare(b);
 }
 
+/// [text] with a leading line naming the same release as [release] taken
+/// off, and null when nothing is left.
+///
+/// Comparing the *whole* of what [StreamHints.strip] leaves against the
+/// release is not enough, and the phone showed why twice. A Torrentio
+/// description is the release, then a line of seeders and size and the
+/// tracker that answered:
+///
+/// ```
+/// Breaking.Bad.S01E01.1080p.WEB-DL.x265.mkv
+/// 👤 42 💾 1.51 GB ⚙️ ThePirateBay
+/// ```
+///
+/// [StreamHints.strip] takes out the seeders and the size, which it
+/// recognises, and leaves `ThePirateBay`, which it does not. So what is
+/// left is two lines, never equal to the one-line release however it is
+/// normalised, and the row drew the whole of it -- headed by the release,
+/// one line under the release.
+///
+/// The repeat is the *first line*, so that is what comes off. What follows
+/// it is the tracker, the languages, the subtitles: not a repeat of
+/// anything, and the only place the row says it.
+String? withoutRelease(String? text, String release) {
+  if (text == null) return null;
+  final lines = text.split('\n');
+  var from = 0;
+  while (from < lines.length && lines[from].trim().isEmpty) {
+    from++;
+  }
+  if (from < lines.length && sameRelease(lines[from], release)) from++;
+  final rest = lines.sublist(from).join('\n').trim();
+  return rest.isEmpty ? null : rest;
+}
+
+/// The containers an addon's filename actually ends in.
+///
+/// Named, rather than matched by shape. "A dot and two to four letters at
+/// the end" is what a container looks like, and it is also what a codec
+/// looks like: `Breaking.Bad.S01E01.1080p.WEB-DL.x265` ends in `.x265`,
+/// which that shape reads as an extension and takes off, leaving a release
+/// that ends `WEB-DL`. That is what kept the phone drawing the release
+/// twice after it was supposedly fixed -- the title had `.x265` on it and
+/// the line beneath, stripped of `.mkv` and then of `.x265`, did not, so
+/// the two never compared equal. A list cannot make that mistake.
+const Set<String> _containers = {
+  '3gp',
+  'asf',
+  'avi',
+  'divx',
+  'flv',
+  'img',
+  'iso',
+  'm2ts',
+  'm4v',
+  'mkv',
+  'mov',
+  'mp4',
+  'mpeg',
+  'mpg',
+  'mts',
+  'ogm',
+  'ogv',
+  'rm',
+  'rmvb',
+  'ts',
+  'vob',
+  'webm',
+  'wmv',
+};
+
+/// [name] without the container extension an addon's filename carries, and
+/// only that: a release ends in `-GROUP` or `.x265`, and neither is an
+/// extension however much the second one looks like one.
 String? _withoutExtension(String? name) {
   if (name == null) return null;
-  final match = RegExp(r'\.[A-Za-z0-9]{2,4}$').firstMatch(name);
-  return match == null ? name : name.substring(0, match.start);
+  final dot = name.lastIndexOf('.');
+  if (dot < 1 || dot == name.length - 1) return name;
+  return _containers.contains(name.substring(dot + 1).toLowerCase())
+      ? name.substring(0, dot)
+      : name;
 }
 
 /// The first line with anything on it; null when there is none.

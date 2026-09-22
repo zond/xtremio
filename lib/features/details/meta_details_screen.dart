@@ -3880,10 +3880,10 @@ class _StreamTile extends StatelessWidget {
         ? stream.title
         // The grouped list is headed by the addon, so the line under the
         // title was the release -- which is the title now. Saying it twice
-        // is worse than saying it once.
-        : grouped == null || sameRelease(grouped, release)
-        ? null
-        : grouped;
+        // is worse than saying it once, and what an addon writes after the
+        // release (the tracker, the languages) is worth keeping, so the
+        // repeat comes off a line at a time rather than all or nothing.
+        : withoutRelease(grouped, release);
     final isTv = DeviceScope.isTv(context);
     final alsoFrom = this.alsoFrom.isEmpty
         ? null
