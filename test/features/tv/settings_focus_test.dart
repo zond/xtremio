@@ -5,6 +5,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addons_screen.dart';
 import 'package:xtremio/features/settings/account_section.dart';
 import 'package:xtremio/features/settings/core_settings.dart';
+import 'package:xtremio/features/settings/recommendations_section.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
@@ -169,6 +170,36 @@ void main() {
       isTrue,
       reason: 'focus returns',
     );
+  });
+
+  testWidgets('the remote reaches the model chooser and opens it', (
+    tester,
+  ) async {
+    // The model used to be a box, and a box on a television is the
+    // text-entry screen and a remote spelling out `gemini-3.1-flash-lite`
+    // one letter at a time. It is a menu now, which is the shape every
+    // other choice on this screen already takes: walk to it, press
+    // select, walk the options, press select.
+    useScreen(tester, tvSize);
+    final prefs = AppPrefs(client: FakePrefsClient());
+    await tester.pumpWidget(harness(fakeCore(), prefs: prefs));
+    await tester.pumpAndSettle();
+
+    // No key, so nothing was asked of anybody and what is offered is the
+    // measured default.
+    final measured = RecommendationsSection.label(defaultSimilarModel);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await downTo(tester, measured);
+    expect(focusIn<DropdownButton<String>>(), isTrue);
+
+    await press(tester, LogicalKeyboardKey.select);
+    // The menu is a route listing every option, the current one focused.
+    expect(find.text(measured), findsWidgets);
+    expect(focusedLabel(tester), measured);
+    await press(tester, LogicalKeyboardKey.select);
+
+    expect(prefs.similarModel, defaultSimilarModel);
+    expect(focusIn<DropdownButton<String>>(), isTrue, reason: 'focus returns');
   });
 
   testWidgets('select flips a switch and picks from a choice menu', (
