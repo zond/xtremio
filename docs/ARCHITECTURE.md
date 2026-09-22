@@ -100,14 +100,17 @@ what every model field means. The shape of the thing is in the
   and additive like the downloads registry: a write is a read-modify-write
   of one key, a key from a newer build survives it, and a file that cannot
   be parsed reads as "nothing set" rather than as a failure. Today it holds
-  nine keys: `streamsSectioned` (the Details screen's sources list,
+  ten keys: `streamsSectioned` (the Details screen's sources list,
   sectioned by resolution -- the default -- rather than grouped by addon;
   an install from before the rename is read from the older `streamsFlat`
   name it was stored under, never written back), `openStreamSections`
   (which resolution sections are expanded, empty meaning every one
-  collapsed on purpose rather than "unset"), `streamsOrder` (what order the
-  streams inside one of those sections are in), `bufferAhead` (how far
-  ahead playback buffers, below), `focusEmphasis` (Settings ->
+  collapsed on purpose rather than "unset"), `openStreamAddons` (the same
+  for the grouped layout's addon groups, by transport URL, and a key of
+  its own because an addon may be called what a resolution is called and
+  because the two layouts ask different questions), `streamsOrder` (what
+  order the streams inside one of those sections are in), `bufferAhead`
+  (how far ahead playback buffers, below), `focusEmphasis` (Settings ->
   Interface -> "Bold focus", a switch offered on a television only:
   `standard` is the two-stroke ring with its zoom and shadow, `bold`
   thickens the ring and dims everything the remote is not on, for a bright

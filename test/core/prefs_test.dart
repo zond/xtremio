@@ -198,6 +198,76 @@ void main() {
     });
   });
 
+  group('which addon groups are open', () {
+    test('an absent key loads as null, an empty one as an empty set', () async {
+      final unset = AppPrefs(client: FakePrefsClient());
+      await unset.load();
+      expect(
+        unset.openStreamAddons,
+        isNull,
+        reason: 'nothing chosen yet, not "chose to close every group"',
+      );
+
+      final closed = AppPrefs(
+        client: FakePrefsClient({'openStreamAddons': <String>[]}),
+      );
+      await closed.load();
+      expect(
+        closed.openStreamAddons,
+        isEmpty,
+        reason: 'a deliberate, stored choice: close everything',
+      );
+      expect(closed.openStreamAddons, isNotNull);
+    });
+
+    test('a stored choice round-trips through a fresh AppPrefs', () async {
+      final client = FakePrefsClient();
+      final prefs = AppPrefs(client: client);
+
+      await prefs.setOpenStreamAddons({'https://alpha.example/manifest.json'});
+      expect(client.stored['openStreamAddons'], [
+        'https://alpha.example/manifest.json',
+      ]);
+
+      final restarted = AppPrefs(client: client);
+      await restarted.load();
+      expect(restarted.openStreamAddons, {
+        'https://alpha.example/manifest.json',
+      });
+    });
+
+    test('is a key of its own: neither choice reaches the other', () async {
+      final client = FakePrefsClient();
+      final prefs = AppPrefs(client: client);
+
+      // An addon that happens to be called what a resolution is called --
+      // which is exactly why these are two keys.
+      await prefs.setOpenStreamAddons({'1080p'});
+      expect(prefs.openStreamSections, isNull);
+
+      await prefs.setOpenStreamSections({'2160p'});
+      expect(prefs.openStreamAddons, {'1080p'});
+      expect(client.stored['openStreamAddons'], ['1080p']);
+      expect(client.stored['openStreamSections'], ['2160p']);
+
+      final restarted = AppPrefs(client: client);
+      await restarted.load();
+      expect(restarted.openStreamAddons, {'1080p'});
+      expect(restarted.openStreamSections, {'2160p'});
+    });
+
+    test('setting the same set again writes nothing', () async {
+      final client = FakePrefsClient();
+      final prefs = AppPrefs(client: client);
+      await prefs.setOpenStreamAddons({'https://alpha.example/manifest.json'});
+      final writesSoFar = client.writes.length;
+
+      await prefs.setOpenStreamAddons({'https://alpha.example/manifest.json'});
+
+      expect(client.writes.length, writesSoFar);
+    });
+  });
+
   testWidgets('PrefsScope hands the value down and rebuilds on a change', (
     tester,
   ) async {

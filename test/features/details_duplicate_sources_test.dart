@@ -180,9 +180,17 @@ void main() {
   /// Grouped is no longer the default; every test that wants it says so.
   /// Loaded already, the way start-up reads it before the first sources
   /// list is built.
+  ///
+  /// With both addon groups open, for the reason [openSectionsPrefs]
+  /// opens every section: the addon groups collapse now and start shut, a
+  /// duplicate test is about which rows survive and in whose group, and
+  /// opening two headers first would say nothing about that.
   Future<AppPrefs> groupedPrefs() async {
     final prefs = AppPrefs(
-      client: FakePrefsClient({'streamsSectioned': false}),
+      client: FakePrefsClient({
+        'streamsSectioned': false,
+        'openStreamAddons': [alphaUrl, betaUrl],
+      }),
     );
     addTearDown(prefs.dispose);
     await prefs.load();

@@ -30,10 +30,11 @@ one: **sectioned** -- every addon's answers put together and cut into
 **one collapsible section per resolution**, highest first, with the
 streams nothing could be read from last in a section that says it does
 not know rather than guessing a rung -- is the default. The other is
-grouped: a section per addon, in profile order, each addon's own ranking
-intact, which is what the engine hands over and what the sources list
-looked like before the sectioned layout existed. Every resolution section
-starts *collapsed*, on every title, until the viewer opens one, so the
+grouped: a collapsible section per addon, in profile order, each addon's
+own ranking intact, which is what the engine hands over and what the
+sources list looked like before the sectioned layout existed. Every
+resolution section starts *collapsed*, on every title, until the viewer
+opens one, so the
 first thing shown is a compact list of what is available rather than a
 guess at what they want; a *closed* header still says how many streams it
 holds and the best swarm among them -- an empty-looking 2160p and a
@@ -53,10 +54,17 @@ never as a zero and never as a best guess -- while a swarm known to be
 empty is ranked, and ranked last of the ranked. Each row names the addon
 it came from and is badged with what could actually be read off the
 stream, size and peers included -- nothing is badged that is not known.
-The layout, the order and which sections are open are all global and
-persisted (`streamsSectioned`, `streamsOrder` and `openStreamSections` in
-the preferences file), so they follow the user to the next title and
-survive a restart -- an install from before the layout was renamed keeps
+The addon groups collapse and are remembered the same way, under
+`openStreamAddons` -- a key of its own, since an addon may be called what
+a resolution is called and what a viewer left open among resolutions says
+nothing about which addons they want open. Nothing remembered means every
+group shut, which is what a fresh install shows; a remembered addon this
+title has no sources from opens nothing and is never swapped for another
+group. The layout, the order and which sections and groups are open are
+all global and persisted (`streamsSectioned`, `streamsOrder`,
+`openStreamSections` and `openStreamAddons` in the preferences file), so
+they follow the user to the next title and survive a restart -- an
+install from before the layout was renamed keeps
 its choice too, read from the older `streamsFlat` key it was stored
 under. **One release is one
 row**: two addons offering the same torrent (or one addon offering it
@@ -126,9 +134,9 @@ Back puts the open row away before it leaves the screen, a rung on the same
 ladder the player comes down -- while there is a row to put away, which is
 a group still carrying the open label rather than the label on its own.
 Which group is open is deliberately *not* the phone's
-`openStreamSections`: that is a
-global set of resolutions kept across restarts, and this is one row at a
-time that Back closes -- the same word for two different things. What the
+`openStreamSections` or `openStreamAddons`: those are global sets kept
+across restarts, and this is one row at a time that Back closes -- the
+same word for two different things. What the
 addons did other than answer -- the ones that failed, the ones that had
 nothing, and nobody having anything at all -- is the last card of that row,
 counting on its own line so a viewer who never chooses it is still told,

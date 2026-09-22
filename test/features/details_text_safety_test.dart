@@ -39,13 +39,15 @@ Map<String, dynamic> streams(List<Map<String, dynamic>> list) => [
 void main() {
   /// Grouped, not the sources list's sectioned default: this file is
   /// about text rendering safety on a stream row, not resolution
-  /// sections, and the fixture's one release needs no section opened to
-  /// be on screen. `AppPrefs.inMemory()` persists nothing, so the
-  /// setter's write below completes synchronously (nothing to await) and
-  /// the value is already in place by the time this returns.
+  /// sections, with [addonUrl]'s group open so the release is on screen
+  /// without a header to tap first (the addon groups collapse too now, and
+  /// start shut). `AppPrefs.inMemory()` persists nothing, so the setters'
+  /// writes below complete synchronously (nothing to await) and the values
+  /// are already in place by the time this returns.
   AppPrefs groupedPrefs() {
     final prefs = AppPrefs.inMemory();
     unawaited(prefs.setStreamsSectioned(false));
+    unawaited(prefs.setOpenStreamAddons({addonUrl}));
     return prefs;
   }
 

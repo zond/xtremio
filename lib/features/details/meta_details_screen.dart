@@ -118,6 +118,16 @@ enum _DetailsRung {
 /// resolution the current title does not offer is simply not shown open --
 /// it is never swapped for some other section the viewer did not ask for.
 ///
+/// The addon groups collapse the same way and remember the same way, in
+/// [AppPrefs.openStreamAddons] -- a key of its own, because an addon may
+/// be called what a resolution is called and because the two layouts ask
+/// different questions. Nothing remembered means every group shut, on a
+/// fresh install and after the last one is closed; a remembered addon this
+/// title has no sources from is not shown open and never stands in for
+/// another group. A closed group's header says how many streams it holds,
+/// which is all this layout knows without parsing rows it is not asked to
+/// rank.
+///
 /// Everything around the streams is the same in both layouts: the
 /// last-used shortcut, the addons that had nothing, the ones that failed,
 /// and the notice when nobody had anything.
@@ -1454,6 +1464,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final sections = derived.sections;
     final grouped = derived.grouped;
     final openSections = _visibleOpenSections(sections);
+    final openAddons = _rememberedOpenAddons();
     // The shortcut is the same source as one of the rows below, so it is
     // handed the same merged trackers; nothing else about it changes.
     final lastUsedStream = lastUsed == null
@@ -1540,6 +1551,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           _StreamGroupSliver(
             group: entry.$1,
             rows: entry.$2,
+            expanded: openAddons.contains(_addonStorageLabel(entry.$1)),
+            onExpand: () => _toggleAddon(entry.$1),
             lastUsed: lastUsed?.$2,
             onPlay: (stream) => _play(state, entry.$1, stream),
             downloads: downloads?.forGroup(entry.$1),
@@ -2326,6 +2339,33 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     });
   }
 
+  /// Every addon group the viewer has ever opened, anywhere, straight out
+  /// of [AppPrefs.openStreamAddons]. Empty both when nothing has ever been
+  /// chosen and when the viewer shut the last one on purpose -- both mean
+  /// every group closed, which is what a fresh install shows.
+  ///
+  /// Each group asks this set for *its own* label, which is the rule
+  /// [_visibleOpenSections] spells out for the resolutions: a remembered
+  /// addon this title has no sources from opens nothing, and is never
+  /// substituted with some other addon's group.
+  Set<String> _rememberedOpenAddons() =>
+      _prefs?.openStreamAddons ?? const <String>{};
+
+  /// Opens or closes one addon group, on the *full* remembered set (every
+  /// addon ever opened on any title), not just what this title shows open:
+  /// otherwise closing a group here could silently drop an addon another
+  /// title still remembers, one that had nothing for this title in the
+  /// first place.
+  void _toggleAddon(StreamGroup group) {
+    final label = _addonStorageLabel(group);
+    final full = _rememberedOpenAddons();
+    _prefs?.setOpenStreamAddons({
+      for (final addon in full)
+        if (addon != label) addon,
+      if (!full.contains(label)) label,
+    });
+  }
+
   /// What an addon is called in a list that has lost its headings: the
   /// installed addon's own name, else the host its manifest URL names --
   /// the same fallback the failed-addon rows use.
@@ -3074,6 +3114,29 @@ const String kStreamsGroupedLabel = 'Grouped by addon';
 Key streamSectionKey(StreamResolution? resolution) =>
     ValueKey('streams-section-${resolution?.label ?? 'unknown'}');
 
+/// The label [AppPrefs.openStreamAddons] stores one addon group under: the
+/// addon's transport URL, which is the identity the profile, the
+/// failed-addon rows and a pin all key on already.
+///
+/// Not the heading: that is a name, and a name is neither unique (two
+/// addons may call themselves the same thing) nor stable (a manifest
+/// renames itself and the group a viewer opened would come back shut). The
+/// streams a *meta* addon attached to the video are a group of their own,
+/// under a heading of their own ("From ..."), and get a label of their own
+/// -- the same addon can answer both as the meta addon and as a stream
+/// addon, and the two groups open and close separately.
+String _addonStorageLabel(StreamGroup group) =>
+    group.isFromMeta ? 'meta:${group.request.base}' : group.request.base;
+
+/// The key on one addon group's header, where [storageLabel] is what
+/// [_addonStorageLabel] made of the group -- the addon's transport URL.
+///
+/// By the stored label and not by the heading, for the reason that label
+/// exists: a heading is a name, two addons may share one, and a test that
+/// tapped a name would be tapping whichever group came first.
+Key streamAddonKey(String storageLabel) =>
+    ValueKey('streams-addon-$storageLabel');
+
 class _StreamsHeader extends StatelessWidget {
   const _StreamsHeader({
     super.key,
@@ -3499,8 +3562,17 @@ class _ResolutionSectionSliver extends StatelessWidget {
   }
 }
 
-/// One addon's answer: its label and the streams under it, or a spinner
-/// while they are still on their way.
+/// One addon's answer: a header that says whose it is and how much is in
+/// it, the streams under it when it is open, and a spinner while they are
+/// still on their way.
+///
+/// Collapsible for the reason the resolution sections are: with several
+/// addons installed the open groups ran one after another for screens, and
+/// what a viewer wanted was the one addon they trust. A closed header
+/// still says how many streams are folded away -- not how healthy they
+/// are, the way [_ResolutionSectionSliver] does, because this layout
+/// deliberately does not parse its rows (see `_deriveStreams`): the
+/// grouped list is each addon's own ranking, which costs nothing to show.
 ///
 /// Only groups with something to show reach here. An addon that *failed* is
 /// collected into [FailedAddonsSection], and one that answered with
@@ -3510,6 +3582,8 @@ class _StreamGroupSliver extends StatelessWidget {
   const _StreamGroupSliver({
     required this.group,
     required this.rows,
+    required this.expanded,
+    required this.onExpand,
     required this.lastUsed,
     required this.onPlay,
     this.downloads,
@@ -3521,6 +3595,12 @@ class _StreamGroupSliver extends StatelessWidget {
   /// own repeats collapsed and every one of them carrying the trackers the
   /// other addons named for the same source.
   final List<_SourceRow> rows;
+
+  /// Whether the rows are on screen. Remembered across titles and restarts
+  /// in [AppPrefs.openStreamAddons]; with nothing remembered every group is
+  /// closed.
+  final bool expanded;
+  final VoidCallback onExpand;
 
   /// The stream pinned as "Continue with last source", highlighted here too.
   final StreamInfo? lastUsed;
@@ -3542,16 +3622,31 @@ class _StreamGroupSliver extends StatelessWidget {
     return SliverMainAxisGroup(
       slivers: [
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Text(
+          child: ListTile(
+            key: streamAddonKey(_addonStorageLabel(group)),
+            leading: Icon(
+              expanded ? Icons.expand_more : Icons.chevron_right,
+              color: theme.colorScheme.primary,
+            ),
+            title: Text(
               label,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.primary,
               ),
             ),
+            // A group still answering has nothing folded away yet, so it
+            // counts nothing and says so with the spinner below instead.
+            subtitle: waiting
+                ? null
+                : Text(
+                    rows.length == 1 ? '1 stream' : '${rows.length} streams',
+                  ),
+            onTap: onExpand,
           ),
         ),
+        // Whatever the memory says: an answer still on its way is not
+        // something the viewer closed, and a spinner nobody can see reads
+        // as an addon that was never asked.
         if (waiting)
           const SliverToBoxAdapter(
             child: ListTile(
@@ -3563,20 +3658,21 @@ class _StreamGroupSliver extends StatelessWidget {
               title: Text(kLookingForStreams),
             ),
           ),
-        SliverList.builder(
-          itemCount: rows.length,
-          itemBuilder: (context, index) {
-            final stream = rows[index].stream;
-            final lastUsed = this.lastUsed;
-            return _StreamTile(
-              stream: stream,
-              alsoFrom: rows[index].alsoFrom,
-              highlighted: lastUsed != null && stream.isSameSource(lastUsed),
-              onTap: stream.isPlayable ? () => onPlay(stream) : null,
-              downloads: downloads,
-            );
-          },
-        ),
+        if (expanded)
+          SliverList.builder(
+            itemCount: rows.length,
+            itemBuilder: (context, index) {
+              final stream = rows[index].stream;
+              final lastUsed = this.lastUsed;
+              return _StreamTile(
+                stream: stream,
+                alsoFrom: rows[index].alsoFrom,
+                highlighted: lastUsed != null && stream.isSameSource(lastUsed),
+                onTap: stream.isPlayable ? () => onPlay(stream) : null,
+                downloads: downloads,
+              );
+            },
+          ),
       ],
     );
   }
