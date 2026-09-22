@@ -108,6 +108,36 @@ Map<String, dynamic> series() =>
         },
       ];
 
+/// Walks [key] to the end of the ladder and says which rung headers the
+/// remote stood on along the way, counting the one it started on.
+///
+/// The walk stops when a press moves nothing, which is what the top and
+/// the foot of the ladder answer with: a press nothing can take is left
+/// alone rather than swallowed, so the remote stays where it is.
+Future<List<String>> walkRungs(
+  WidgetTester tester,
+  LogicalKeyboardKey key,
+) async {
+  final headers = rungs(tester).toSet();
+  final stood = <String>[];
+  void note() {
+    final here = focusedLabel(tester);
+    if (here == null || !headers.contains(here)) return;
+    if (stood.isEmpty || stood.last != here) stood.add(here);
+  }
+
+  note();
+  var last = focusedLabel(tester);
+  for (var i = 0; i < 12; i++) {
+    await press(tester, key);
+    final here = focusedLabel(tester);
+    if (here == last) break;
+    last = here;
+    note();
+  }
+  return stood;
+}
+
 /// Walks up until the remote is on the header of the rung called [label].
 Future<void> stepUpToRung(WidgetTester tester, String label) async {
   for (var i = 0; i < 6 && focusedLabel(tester) != label; i++) {
@@ -292,13 +322,82 @@ void main() {
       expect(focusedLabel(tester), kSourcesLabel);
     });
 
-    testWidgets('and opening one again is not closing it: Back is what '
-        'closes things here', (tester) async {
+    testWidgets('and select on the open rung shuts it: a header that only '
+        'ever opens is a toggle that lies', (tester) async {
       await mount(tester, film());
       await stepUpToRung(tester, kSourcesLabel);
+      expect(openRungLabel(tester), kSourcesLabel);
 
       await press(tester, LogicalKeyboardKey.select);
-      expect(openRungLabel(tester), kSourcesLabel, reason: 'still open');
+
+      expect(openRungLabel(tester), isNull, reason: 'the ladder is all lines');
+      expect(find.byType(TvSourceGroupPill), findsNothing);
+      expect(find.byType(TvSourceCard), findsNothing);
+
+      await press(tester, LogicalKeyboardKey.select);
+      expect(openRungLabel(tester), kSourcesLabel, reason: 'and open again');
+      expect(find.byType(TvSourceGroupPill), findsOneWidget);
+    });
+
+    testWidgets('and shutting one leaves the remote on the header it was '
+        'pressed on, which is still on the panel', (tester) async {
+      await mount(tester, playedSeries(), type: 'series', id: seriesId);
+      await stepUpToRung(tester, kContinueWatchingLabel);
+
+      await press(tester, LogicalKeyboardKey.select);
+
+      expect(openRungLabel(tester), isNull);
+      expect(focusedLabel(tester), kContinueWatchingLabel);
+      // On the panel and not merely in the tree: a remote standing on
+      // something scrolled off the bottom is the same dead end as a remote
+      // standing on nothing.
+      final header = find.ancestor(
+        of: find.text(kContinueWatchingLabel),
+        matching: find.byType(TvLadderRung),
+      );
+      expect(header, findsOneWidget);
+      expect(tester.getRect(header).top, lessThan(tvSize.height));
+      // And the walk still works from there, in both directions.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), kEpisodesLabel);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), kContinueWatchingLabel);
+    });
+
+    testWidgets('up from the continue-watching row lands on the episodes '
+        'rung drawn above it, rather than stepping over it', (tester) async {
+      await mount(tester, playedSeries(), type: 'series', id: seriesId);
+      expect(focusedLabel(tester), kContinueWithLastSource);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), kContinueWatchingLabel, reason: 'its own');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+
+      expect(focusedLabel(tester), kEpisodesLabel);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), kContinueWatchingLabel, reason: 'and back');
+    });
+
+    testWidgets('and the whole ladder walks both ways: no rung can be '
+        'stepped over', (tester) async {
+      await mount(tester, playedSeries(), type: 'series', id: seriesId);
+      final drawn = rungs(tester);
+      expect(drawn, [
+        kEpisodesLabel,
+        kContinueWatchingLabel,
+        kSourcesLabel,
+        kSourceAccountingLabel,
+      ], reason: 'the order they are drawn down the panel');
+
+      // Down to the foot of the ladder, then up the whole of it and down
+      // the whole of it: what the walk stops on is the panel's own order,
+      // backwards and forwards, with nothing missing from either.
+      await walkRungs(tester, LogicalKeyboardKey.arrowDown);
+      expect(
+        await walkRungs(tester, LogicalKeyboardKey.arrowUp),
+        drawn.reversed.toList(),
+      );
+      expect(await walkRungs(tester, LogicalKeyboardKey.arrowDown), drawn);
     });
   });
 

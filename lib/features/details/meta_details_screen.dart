@@ -294,12 +294,24 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// header is a rung of the walk in its own right: the walk goes header,
   /// header, header down the screen, and only the open rung puts its own
   /// rows between two of them.
+  ///
+  /// **These are the order things are drawn down the panel, and the two
+  /// are one list even though they are built by two methods.** The title
+  /// and the episodes come from [_infoSlivers] and everything from the
+  /// last-used source down from [_tvSourceSlivers], and the screen lays
+  /// them out info-then-sources -- so the continue-watching rung is
+  /// *below* the episodes on the panel, whatever order the two methods are
+  /// called in. It was numbered above them, and a press up from the
+  /// last-used card went to the title and stepped over the episodes
+  /// entirely: the ladder walks these numbers and the viewer walks the
+  /// panel, so a number out of order is a rung the D-pad cannot reach from
+  /// its neighbour.
   static const int _ladderInfo = 0;
-  static const int _ladderLastUsedHeader = 10;
-  static const int _ladderLastUsed = 15;
   static const int _ladderEpisodesHeader = 20;
   static const int _ladderSeasons = 24;
   static const int _ladderEpisodes = 28;
+  static const int _ladderLastUsedHeader = 30;
+  static const int _ladderLastUsed = 35;
   static const int _ladderSourcesHeader = 40;
   static const int _ladderStreamControls = 43;
   static const int _ladderStreamOrder = 46;
@@ -396,6 +408,25 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// open when they first moved the remote. Null while the screen is still
   /// the one deciding (see [_rungToOpen]).
   _DetailsRung? _chosenRung;
+
+  /// Whether the viewer has shut the rung they had open, leaving the
+  /// ladder a stack of header lines with nothing out.
+  ///
+  /// **What closing the chosen rung means, since it had to mean
+  /// something.** The rungs are one at a time, so shutting the open one
+  /// leaves no other rung for the press to fall back to -- and reopening
+  /// the next one down would be answering select with a rung the viewer
+  /// did not ask for. So it shuts the ladder: the title block and the
+  /// header lines, which is the contents page this ladder collapses into
+  /// and a perfectly good thing to be looking at. The remote is not moved,
+  /// because the header that was pressed is one of those lines and is
+  /// still on the panel: what goes away is entirely below it.
+  ///
+  /// Kept apart from [_chosenRung] rather than folded into it as a null,
+  /// because null there means the screen has not been told yet and falls
+  /// back to the arrival order ([_rungToOpen]) -- which would open again,
+  /// on the same frame, the rung the press had just shut.
+  bool _rungsShut = false;
 
   /// The rung the last build drew open, so a move of the remote can freeze
   /// it (see [_watchTheRemote]) without the listener having to work out
@@ -518,7 +549,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   ///
   /// A rung that is not drawn cannot be open, so a choice the next state
   /// has nothing for falls back to the arrival order rather than leaving
-  /// the screen with nothing out.
+  /// the screen with nothing out. A viewer who shut the rung they had open
+  /// is the one case where nothing being out is the answer ([_rungsShut]):
+  /// they asked for it, and a late arrival does not undo it.
   ///
   /// [_DetailsRung.moreLikeThis] is in what is *drawn* and not in that
   /// arrival order: a viewer can open it and stay in it, and nothing else
@@ -529,6 +562,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     required bool hasSources,
     required bool hasAddons,
   }) {
+    if (_rungsShut) return null;
     final drawn = {
       if (hasLastUsed) _DetailsRung.continueWatching,
       if (state.hasVideos) _DetailsRung.episodes,
@@ -551,8 +585,22 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   }
 
   /// Select on a rung's header: this one opens, and whichever was open
-  /// closes with it.
-  void _openRung(_DetailsRung rung) => setState(() => _chosenRung = rung);
+  /// closes with it -- unless this *is* the one that was open, in which
+  /// case it closes and the ladder is left shut ([_rungsShut]).
+  ///
+  /// A header that only ever opens is a control that lies about being a
+  /// toggle, and on a television it is worse than on a phone: there is no
+  /// scrollbar and no gesture to put away a rung opened to look at one
+  /// thing. The chevron on the line says open or shut, and this is what
+  /// makes the press match it.
+  ///
+  /// [_shownRung] and not [_chosenRung] is what the press is measured
+  /// against: what a viewer means by "the one that is open" is the one
+  /// they can see out, which is what the last build drew.
+  void _selectRung(_DetailsRung rung) => setState(() {
+    _rungsShut = _shownRung == rung;
+    _chosenRung = rung;
+  });
 
   @override
   void initState() {
@@ -1347,7 +1395,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               label: kEpisodesLabel,
               summary: _episodesSummary(season, episodes.length),
               open: _shownRung == _DetailsRung.episodes,
-              onOpen: () => _openRung(_DetailsRung.episodes),
+              onSelect: () => _selectRung(_DetailsRung.episodes),
               children: [
                 if (seasons.length > 1 && season != null)
                   TvLadderRow(
@@ -1906,7 +1954,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               addonName: _addonNameOf(profile, lastUsed!.$1),
             ),
             open: rung == _DetailsRung.continueWatching,
-            onOpen: () => _openRung(_DetailsRung.continueWatching),
+            onSelect: () => _selectRung(_DetailsRung.continueWatching),
             children: [
               TvLadderRow(
                 level: _ladderLastUsed,
@@ -1943,7 +1991,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                   )
                 : null,
             open: sourcesOpen,
-            onOpen: () => _openRung(_DetailsRung.sources),
+            onSelect: () => _selectRung(_DetailsRung.sources),
             children: [
               _StreamsHeader(
                 key: _streamsKey,
@@ -2007,7 +2055,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             label: accounting.label,
             summary: accounting.summary,
             open: rung == _DetailsRung.addons,
-            onOpen: () => _openRung(_DetailsRung.addons),
+            onSelect: () => _selectRung(_DetailsRung.addons),
             children: [
               TvLadderRow(
                 level: _ladderAddons,
@@ -2077,7 +2125,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       // a race between two waits when only one of them is theirs. The
       // words say it, once.
       open: open,
-      onOpen: () => _openRung(_DetailsRung.moreLikeThis),
+      onSelect: () => _selectRung(_DetailsRung.moreLikeThis),
       children: [
         TvLadderRow(
           level: _ladderSimilar,
