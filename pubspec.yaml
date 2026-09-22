@@ -96,6 +96,14 @@ flutter:
     - LICENSE-GPL-3.0
     - LICENSE-unrar-rs
 
+    # The answer keys "Test this model" scores against: 528 films across
+    # seven titles, each rated for how relevant it is and for what it is
+    # like to sit through. Cut from the research keys by
+    # `tool/recommendations/ship_keys.py` to a title, a year and those two
+    # ratings -- 30 KB against 900, because nothing on a television reads
+    # the reasoning or the citations. See `tool/recommendations/README.md`.
+    - assets/recommendations/answer_keys.json
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
