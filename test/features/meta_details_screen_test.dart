@@ -867,7 +867,11 @@ void main() {
       expect(find.textContaining('Failed to fetch'), findsOneWidget);
       expect(find.text('torrentio.example'), findsOneWidget);
       expect(find.text(kTileRelease), findsOneWidget);
-      expect(find.text('Breaking.Bad.S01E01.1080p.mkv'), findsOneWidget);
+      // Said once. The row is headed by the release, and the line that
+      // used to sit under it was the same filename with `.mkv` still on
+      // the end -- which is what a phone drew twice until the comparison
+      // learned to ignore the extension.
+      expect(find.text('Breaking.Bad.S01E01.1080p.mkv'), findsNothing);
       expect(find.byTooltip('Breaking.Bad.S01E01.1080p.mkv'), findsOneWidget);
       expect(find.text('1080p'), findsOneWidget);
       expect(find.text('1.51 GB'), findsOneWidget);

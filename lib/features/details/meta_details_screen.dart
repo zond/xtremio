@@ -3820,7 +3820,7 @@ class _StreamTile extends StatelessWidget {
         // The grouped list is headed by the addon, so the line under the
         // title was the release -- which is the title now. Saying it twice
         // is worse than saying it once.
-        : grouped == null || grouped == release
+        : grouped == null || sameRelease(grouped, release)
         ? null
         : grouped;
     final isTv = DeviceScope.isTv(context);

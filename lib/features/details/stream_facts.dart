@@ -514,6 +514,22 @@ bool _looksLikeARelease(String text) =>
 /// [name] without the container extension an addon's filename carries, and
 /// only that: a release ends in `-GROUP`, and a four-letter tag after a dot
 /// is what tells `.mkv` from `x264-CiNEFiLE`.
+/// Whether two strings name the same release, give or take a container
+/// extension and a difference of case.
+///
+/// The row's title comes from [releaseNameOf], which prefers
+/// `behaviorHints.filename` **without** its extension; the line that used
+/// to sit under it is the description's first line, which for most addons
+/// is that same filename **with** `.mkv` still on the end. Compared
+/// exactly, those are two different strings, so the phone drew the release
+/// twice, one line under the other.
+bool sameRelease(String? a, String? b) {
+  if (a == null || b == null) return false;
+  String bare(String value) =>
+      (_withoutExtension(value.trim()) ?? value).toLowerCase();
+  return bare(a) == bare(b);
+}
+
 String? _withoutExtension(String? name) {
   if (name == null) return null;
   final match = RegExp(r'\.[A-Za-z0-9]{2,4}$').firstMatch(name);
