@@ -15,6 +15,7 @@ export 'focus_emphasis.dart';
 export 'prefs_client.dart';
 export 'resource.dart';
 export 'server_client.dart';
+export 'similar_memory.dart';
 export 'state/addon_descriptor.dart';
 export 'state/addon_details.dart';
 export 'state/background_traffic.dart';

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../src/rust/api/prefs.dart' as rust;
 import 'buffer_ahead.dart';
 import 'focus_emphasis.dart';
+import 'similar_memory.dart';
 import 'stream_order.dart';
 import 'subtitle_picks.dart';
 import 'subtitle_sync.dart';
@@ -171,6 +172,41 @@ class AppPrefs extends ChangeNotifier {
   /// at different moments and forgotten independently.
   static const String subtitlePicksKey = 'subtitlePicks';
 
+  /// The `similarApiKey` key: the API key "More like this" asks a model
+  /// with, pasted by the viewer, and **absent until they paste one**.
+  ///
+  /// There is no default, no fallback and no key anywhere in this
+  /// repository: it is public, and a key in a source file or a test
+  /// fixture ships in every APK ever built from it. With this unset the
+  /// feature asks nothing of anybody ([MoreLikeThis]).
+  ///
+  /// It lives here rather than in the account's settings for the same
+  /// reason the buffer and the focus emphasis do -- it is this device's,
+  /// this file is not synced anywhere, and adding a field to stremio's
+  /// `Settings` would mean forking the core. **Never log it**: it is auth
+  /// material in the sense `AGENTS.md` means, and the one place it goes is
+  /// the query string of the provider's own request.
+  static const String similarApiKeyKey = 'similarApiKey';
+
+  /// The `similarModel` key: which model is asked (see
+  /// [defaultSimilarModel] for what the default is and why it was
+  /// measured rather than chosen).
+  ///
+  /// A setting and not a constant because model names rot: in one
+  /// afternoon of measuring, two of the models this might have defaulted
+  /// to began answering *404, no longer available to new users*. A viewer
+  /// whose model is retired needs somewhere to type the name of one that
+  /// is not, without waiting for a release.
+  static const String similarModelKey = 'similarModel';
+
+  /// The `similarSuggestions` key: what a model has already answered
+  /// about each title (see [SimilarMemory]).
+  ///
+  /// Kept for the life of the install, because the same model asked the
+  /// same question twice agrees with itself about half the time and a row
+  /// that reshuffles every visit is one nobody can point at.
+  static const String similarSuggestionsKey = 'similarSuggestions';
+
   bool _streamsSectioned = true;
 
   bool get streamsSectioned => _streamsSectioned;
@@ -213,6 +249,23 @@ class AppPrefs extends ChangeNotifier {
   SubtitlePickMemory _subtitlePicks = SubtitlePickMemory.empty;
 
   SubtitlePickMemory get subtitlePicks => _subtitlePicks;
+
+  /// The viewer's API key for suggestions, or **null when they have not
+  /// pasted one** -- which is what a fresh install is, and what a key
+  /// cleared back to an empty box is. A blank string is not a key, so it
+  /// reads as null rather than as a key that fails every request.
+  String? get similarApiKey => _similarApiKey;
+  String? _similarApiKey;
+
+  /// Which model suggestions are asked of. Never null: the default is a
+  /// measured one, and a viewer who clears the box gets it back rather
+  /// than a feature that cannot work.
+  String get similarModel => _similarModel;
+  String _similarModel = defaultSimilarModel;
+
+  SimilarMemory _similarSuggestions = SimilarMemory.empty;
+
+  SimilarMemory get similarSuggestions => _similarSuggestions;
 
   /// Reads every stored preference. Called once at start-up, before any
   /// screen that reads one can be on the stack, so the first list is
@@ -298,6 +351,24 @@ class AppPrefs extends ChangeNotifier {
       _subtitlePicks = picks;
       changed = true;
     }
+    // A key that is not a string, or is blank, is no key: the feature is
+    // off rather than failing a request per title.
+    final apiKey = stored[similarApiKeyKey];
+    final trimmed = apiKey is String ? apiKey.trim() : '';
+    if (trimmed.isNotEmpty && trimmed != _similarApiKey) {
+      _similarApiKey = trimmed;
+      changed = true;
+    }
+    final model = stored[similarModelKey];
+    if (model is String && model.trim().isNotEmpty && model != _similarModel) {
+      _similarModel = model.trim();
+      changed = true;
+    }
+    final similar = SimilarMemory.fromJson(stored[similarSuggestionsKey]);
+    if (similar != _similarSuggestions) {
+      _similarSuggestions = similar;
+      changed = true;
+    }
     if (changed) notifyListeners();
   }
 
@@ -372,6 +443,44 @@ class AppPrefs extends ChangeNotifier {
     await _write(
       subtitlePicksKey,
       value == SubtitlePickMemory.empty ? null : value.toJson(),
+    );
+  }
+
+  /// Stores the viewer's API key, or forgets it when [value] is null or
+  /// blank -- an empty box is "no key", which is a decision, and storing
+  /// `""` would be the same decision spelled in a way every reader of the
+  /// file has to think about.
+  Future<void> setSimilarApiKey(String? value) async {
+    final trimmed = value?.trim();
+    final key = trimmed == null || trimmed.isEmpty ? null : trimmed;
+    if (_similarApiKey == key) return;
+    _similarApiKey = key;
+    notifyListeners();
+    await _write(similarApiKeyKey, key);
+  }
+
+  /// Stores which model is asked, or clears the key back to
+  /// [defaultSimilarModel] when the box is emptied.
+  Future<void> setSimilarModel(String? value) async {
+    final trimmed = value?.trim();
+    final model = trimmed == null || trimmed.isEmpty
+        ? defaultSimilarModel
+        : trimmed;
+    if (_similarModel == model) return;
+    _similarModel = model;
+    notifyListeners();
+    await _write(similarModelKey, model == defaultSimilarModel ? null : model);
+  }
+
+  /// Stores what models have answered, or removes the key once nothing is
+  /// remembered -- for the same reason [setSubtitleSync] does.
+  Future<void> setSimilarSuggestions(SimilarMemory value) async {
+    if (_similarSuggestions == value) return;
+    _similarSuggestions = value;
+    notifyListeners();
+    await _write(
+      similarSuggestionsKey,
+      value.entries.isEmpty ? null : value.toJson(),
     );
   }
 
