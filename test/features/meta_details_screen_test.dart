@@ -1618,8 +1618,12 @@ void main() {
     ) async {
       await mount(tester, [loadingGroup(youTubeUrl)]);
 
-      // Nothing yet, not nothing at all: it is still a section.
-      expect(find.text('v3-channels.strem.io'), findsOneWidget);
+      // Nothing yet, not nothing at all: it is still a section. And it is
+      // headed "YouTube", which is what that addon calls itself in its own
+      // manifest -- not `v3-channels.strem.io`, which is where it is
+      // hosted and which no viewer installed by that name.
+      expect(find.text('YouTube'), findsOneWidget);
+      expect(find.text('v3-channels.strem.io'), findsNothing);
       expect(find.text(kLookingForStreams), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNWidgets(2));
       expect(find.textContaining('had nothing for this'), findsNothing);

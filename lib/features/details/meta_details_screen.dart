@@ -1601,6 +1601,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         for (final entry in grouped)
           _StreamGroupSliver(
             group: entry.$1,
+            name: _addonNameOf(_profileNow, entry.$1),
             rows: entry.$2,
             expanded: openAddons.contains(_addonStorageLabel(entry.$1)),
             onExpand: () => _toggleAddon(entry.$1),
@@ -1612,11 +1613,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       if (empties.isNotEmpty)
         SliverToBoxAdapter(
           child: _EmptyAddonsSummary(
-            names: [
-              for (final group in empties)
-                profile?.installedAddon(group.request.base)?.manifest.name ??
-                    group.addonLabel,
-            ],
+            names: [for (final group in empties) _addonNameOf(profile, group)],
             isEpisode: state.hasVideos,
           ),
         ),
@@ -2150,12 +2147,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final locked = profile?.addonsLocked ?? false;
     final quiet = [
       for (final group in empties)
-        (
-          name:
-              profile?.installedAddon(group.request.base)?.manifest.name ??
-              group.addonLabel,
-          transportUrl: group.request.base,
-        ),
+        (name: _addonNameOf(profile, group), transportUrl: group.request.base),
     ];
     final names = [for (final addon in quiet) addon.name];
     return (
@@ -3643,9 +3635,9 @@ class _ResolutionSectionSliver extends StatelessWidget {
 /// addons installed the open groups ran one after another for screens, and
 /// what a viewer wanted was the one addon they trust. A closed header
 /// still says how many streams are folded away -- not how healthy they
-/// are, the way [_ResolutionSectionSliver] does, because this layout
-/// deliberately does not parse its rows (see `_deriveStreams`): the
-/// grouped list is each addon's own ranking, which costs nothing to show.
+/// are, the way [_ResolutionSectionSliver] does: this list is each addon's
+/// own ranking, and a summary of what is inside would be summarising an
+/// order the addon chose rather than one this screen did.
 ///
 /// Only groups with something to show reach here. An addon that *failed* is
 /// collected into [FailedAddonsSection], and one that answered with
@@ -3654,6 +3646,7 @@ class _ResolutionSectionSliver extends StatelessWidget {
 class _StreamGroupSliver extends StatelessWidget {
   const _StreamGroupSliver({
     required this.group,
+    required this.name,
     required this.rows,
     required this.expanded,
     required this.onExpand,
@@ -3663,6 +3656,19 @@ class _StreamGroupSliver extends StatelessWidget {
   });
 
   final StreamGroup group;
+
+  /// What to call the addon: the name out of its own manifest, which is
+  /// what it calls itself and what the Addons screen calls it.
+  ///
+  /// The heading used to be `group.addonLabel`, which is the host of the
+  /// manifest URL -- so a list of "Torrentio", "Comet" and "MediaFusion"
+  /// read as "torrentio.strem.fun", "comet.elfhosted.com" and
+  /// "mediafusion.elfhosted.com": the hosting arrangement rather than the
+  /// addon, and three of them sharing a domain look like one thing.
+  /// Everything else on this screen already resolved the name and only
+  /// the heading did not ([_addonNameOf], which falls back to the host
+  /// for an addon the profile has never heard of).
+  final String name;
 
   /// What to list under the heading: the group's streams with this addon's
   /// own repeats collapsed and every one of them carrying the trackers the
@@ -3685,9 +3691,7 @@ class _StreamGroupSliver extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = group.isFromMeta
-        ? 'From ${group.addonLabel}'
-        : group.addonLabel;
+    final label = group.isFromMeta ? 'From $name' : name;
     // Nothing yet, as opposed to nothing at all: a group that settled on
     // no streams is not listed here at all any more, so the label with a
     // spinner under it can only mean the answer is still coming.
