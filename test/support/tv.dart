@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/focus_emphasis.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/focus_theme.dart';
+import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 
 /// A television: remote only, no touchscreen.
@@ -212,6 +213,11 @@ bool _isFloor(Color color) {
 
 /// The first text on the widget holding primary focus (a button's label, a
 /// tile's title), null when nothing with text has it.
+///
+/// Zero-width spaces are taken back out: a source card puts one after
+/// every dot of a release name so the layout has somewhere to break it
+/// ([breakableRelease]), and a character with no width is not something a
+/// viewer reads or an assertion should have to spell.
 String? focusedLabel(WidgetTester tester) {
   final context = _focusedContext();
   if (context == null) return null;
@@ -220,7 +226,7 @@ String? focusedLabel(WidgetTester tester) {
     matching: find.byType(Text),
   );
   if (texts.evaluate().isEmpty) return null;
-  return tester.widget<Text>(texts.first).data;
+  return tester.widget<Text>(texts.first).data?.replaceAll('​', '');
 }
 
 /// The name on the [FocusableTile] holding primary focus, null when focus

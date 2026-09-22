@@ -39,6 +39,15 @@ import 'remote_press.dart';
 /// they name come and go: a film has no episode row, a title nobody has
 /// played has no last-used source. Leave gaps ([TvLadderRow.level]), and a
 /// row that is not on screen is simply not registered.
+///
+/// **A ladder can collapse** ([TvLadderRung]). A screen whose every rung is
+/// drawn out is a wall: the details screen had the seasons, the episodes,
+/// two rows of chips, the last-used source, the groups and their sources
+/// all on the panel at once, and a 720p television has room for about half
+/// of that. So each rung can be a header line instead -- what it is called
+/// and what it holds -- with one of them open at a time. What is open is
+/// the screen's to decide, not this widget's: which rung a title is *for*
+/// is a question about the title.
 class TvLadder extends StatefulWidget {
   const TvLadder({super.key, required this.child});
 
@@ -72,6 +81,17 @@ class _TvLadderScope extends InheritedWidget {
 /// The rows of one screen, in the order the viewer walks them.
 class TvLadderController {
   final Map<int, TvLadderRowState> _rows = {};
+
+  /// Where the remote was in each row, by level and not by row.
+  ///
+  /// A row that is on screen keeps this itself. A rung that collapses
+  /// takes its rows out of the tree entirely ([TvLadderRung]), and a row
+  /// that has been disposed of remembers nothing -- so walking into the
+  /// sources and coming back to the episodes landed on the first episode
+  /// of the season rather than on the one whose sources those were. The
+  /// level is the row's identity across that, which is what it already is
+  /// for the walk itself.
+  final Map<int, int> _remembered = {};
 
   void _register(int level, TvLadderRowState row) => _rows[level] = row;
 
@@ -135,9 +155,19 @@ class TvLadderRowState extends State<TvLadderRow> {
   TvLadderController? _ladder;
 
   /// The card the remote was last on, as an index into this row's focus
-  /// stops. Zero until it has been here, which is what makes arriving at a
-  /// row for the first time land on its first card.
-  int _remembered = 0;
+  /// stops. Kept by the ladder under this row's level, so it survives the
+  /// row being taken off the screen and put back ([TvLadderController]).
+  /// Zero until the remote has been here, which is what makes arriving at
+  /// a row for the first time land on its first card.
+  int get _remembered => _ladder?._remembered[widget.level] ?? _ownMemory;
+
+  set _remembered(int index) {
+    _ownMemory = index;
+    _ladder?._remembered[widget.level] = index;
+  }
+
+  /// The same, for a row with no ladder above it to keep it.
+  int _ownMemory = 0;
 
   @override
   void didChangeDependencies() {
@@ -259,6 +289,145 @@ class TvLadderRowState extends State<TvLadderRow> {
               child: widget.child,
             )
           : widget.child,
+    );
+  }
+}
+
+/// One rung of a collapsing [TvLadder]: a header line that is always on the
+/// panel, and what the rung holds, drawn only while it is open.
+///
+/// The header is the walk's stop for this rung, so a rung that holds
+/// nothing the remote can reach -- the sources while every addon is still
+/// answering -- is still a line a press down lands on and a press down
+/// leaves, rather than a hole. A rung with nothing to *say* at all is not
+/// drawn by its screen, and the walk steps over it the way it steps over
+/// any row that is not registered.
+///
+/// **Select opens, and Back closes.** Landing on a header does not open it:
+/// a walk down the ladder would otherwise open every rung it passed and
+/// leave Back with a stack of them to put away. So this is one of the rows
+/// [TvLadderRow.advanceOnSelect] is explicitly not for -- select here is
+/// the point rather than a leftover -- and the press that opens a rung
+/// leaves the remote on the header, one press above what it opened.
+///
+/// Which rung is open is the screen's: [open] is read, never kept here, so
+/// opening one is the same act as closing the one that was open.
+class TvLadderRung extends StatelessWidget {
+  const TvLadderRung({
+    super.key,
+    required this.level,
+    required this.label,
+    required this.open,
+    required this.onOpen,
+    this.summary = '',
+    this.trailing,
+    this.children = const [],
+  });
+
+  /// Where the header sits in the walk. The rows of [children] carry their
+  /// own levels, between this one and the next rung's.
+  final int level;
+
+  /// What the rung is called, on the left of the line.
+  final String label;
+
+  /// What it holds, on the right: "58 from 4 addons", "Season 1 · 13". The
+  /// whole of what a viewer who never opens this rung is told, so it
+  /// carries counts rather than an invitation.
+  final String summary;
+
+  /// Drawn between the label and the summary -- the spinner, while the
+  /// rung is still filling up.
+  final Widget? trailing;
+
+  final bool open;
+
+  /// Open this rung, which closes whichever one was open.
+  final VoidCallback onOpen;
+
+  /// The rows inside it, each a [TvLadderRow] of its own.
+  final List<Widget> children;
+
+  /// The box one header line is drawn in at text scale 1.
+  static const double headerHeight = 44;
+
+  /// Between one rung and the next.
+  static const double gap = 8;
+
+  /// The margin either side of a header, so a header lines up with the
+  /// rows inside it rather than with the edge of the panel.
+  static const double sidePadding = 16;
+
+  static const BorderRadius _radius = BorderRadius.all(Radius.circular(8));
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(sidePadding, gap, sidePadding, 0),
+          child: TvLadderRow(
+            level: level,
+            child: FocusableTile(
+              onTap: onOpen,
+              borderRadius: _radius,
+              // A line the width of the panel: the ring and the dimming,
+              // and neither the zoom nor the shadow, which on something
+              // this wide would lift it over the rungs either side of it.
+              treatment: FocusTreatment.row,
+              child: Container(
+                height: headerHeight,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: _radius,
+                ),
+                child: Row(
+                  spacing: 8,
+                  children: [
+                    // Open and shut, said by the chevron as well as by
+                    // whether anything is drawn underneath: a rung whose
+                    // contents run off the bottom of the panel looks shut
+                    // from where the viewer is sitting.
+                    Icon(
+                      open ? Icons.expand_more : Icons.chevron_right,
+                      size: 20,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ),
+                    ?trailing,
+                    const Spacer(),
+                    if (summary.isNotEmpty)
+                      Flexible(
+                        child: Text(
+                          summary,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (open) ...children,
+      ],
     );
   }
 }

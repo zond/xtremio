@@ -148,7 +148,7 @@ TextStyle groupLabelStyle(WidgetTester tester, String label) => tester
     .widget<Text>(
       find.descendant(
         of: find.byWidgetPredicate(
-          (w) => w is TvSourceGroupCard && w.group.label == label,
+          (w) => w is TvSourceGroupPill && w.group.label == label,
         ),
         matching: find.text(label),
       ),
@@ -219,12 +219,45 @@ Future<void> openSource(
   }
   expect(focusedLabel(tester), group, reason: 'the group row reached $group');
   await press(tester, LogicalKeyboardKey.select);
-  await press(tester, LogicalKeyboardKey.arrowDown);
+  // Select on a pill opens its row and carries the remote into it, which
+  // is what [TvLadderRow.advanceOnSelect] is for. The press that used to
+  // follow it was a no-op then and is a step past the row now, because
+  // there is a rung below the sources for it to land on.
+  if (!focusIn<TvSourceCard>()) {
+    await press(tester, LogicalKeyboardKey.arrowDown);
+  }
   for (var i = 0; i < limit && focusedLabel(tester) != source; i++) {
     await press(tester, LogicalKeyboardKey.arrowRight);
   }
   expect(focusedLabel(tester), source);
   expect(focusIn<TvSourceCard>(), isTrue);
+}
+
+/// Walks the ladder -- down first, then up -- to the header of the rung
+/// called [label], and presses select on it, which opens that rung and
+/// shuts whichever one was open.
+Future<void> openRung(
+  WidgetTester tester,
+  String label, {
+  int limit = 8,
+}) async {
+  for (var i = 0; i < limit && focusedLabel(tester) != label; i++) {
+    await press(tester, LogicalKeyboardKey.arrowDown);
+  }
+  for (var i = 0; i < limit && focusedLabel(tester) != label; i++) {
+    await press(tester, LogicalKeyboardKey.arrowUp);
+  }
+  expect(focusedLabel(tester), label, reason: 'the walk reached $label');
+  await press(tester, LogicalKeyboardKey.select);
+}
+
+/// Opens the sources rung and puts the remote on the first group pill in
+/// it. A series opens on its episodes, so the sources are a rung the test
+/// has to ask for.
+Future<void> openTheSources(WidgetTester tester) async {
+  if (focusIn<TvSourceGroupPill>()) return;
+  await openRung(tester, kSourcesLabel);
+  await stepDownTo<TvSourceGroupPill>(tester);
 }
 
 /// Presses up until the control tooltipped [tooltip] has focus: what is
@@ -254,8 +287,8 @@ Future<AppPrefs> groupedPrefs() async {
   return prefs;
 }
 
-/// Mounts Breaking Bad at the pilot on a TV, focus on the group card of
-/// the addon that answered with its torrent.
+/// Mounts Breaking Bad at the pilot on a TV, focus on the pilot's card in
+/// the episode row.
 Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
   useScreen(tester, tvSize);
   final core = FakeCoreClient(
@@ -271,7 +304,9 @@ Future<FakeCoreClient> mountSeries(WidgetTester tester) async {
     ),
   );
   await tester.pumpAndSettle();
-  expect(focusedLabel(tester), 'torrentio.example');
+  // A series nobody has played opens on its episodes: the choice the
+  // screen is for is which one, not which source of one nobody picked.
+  expect(focusedEpisodeTitle(), 'Pilot');
   return core;
 }
 
@@ -296,7 +331,7 @@ void main() {
       // remote on the first of them -- not on a stream, which is a press
       // further in now. Its row is out, because the highlight is what says
       // which addon the screen is showing.
-      expect(focusIn<TvSourceGroupCard>(), isTrue);
+      expect(focusIn<TvSourceGroupPill>(), isTrue);
       expect(focusedLabel(tester), 'watchhub.strem.io');
       expect(find.byType(TvSourceCard), findsWidgets);
 
@@ -412,7 +447,7 @@ void main() {
       // The resolutions are what the remote starts on, and the one it
       // starts on is open: a highlight over a shut row says nothing about
       // anything.
-      expect(focusIn<TvSourceGroupCard>(), isTrue);
+      expect(focusIn<TvSourceGroupPill>(), isTrue);
       expect(focusedLabel(tester), '2160p');
       expect(find.text('Alpha 2160p'), findsOneWidget);
 
@@ -428,7 +463,7 @@ void main() {
       // what is under the remote now is this card's own sources.
       expect(
         tester
-            .widgetList<TvSourceGroupCard>(find.byType(TvSourceGroupCard))
+            .widgetList<TvSourceGroupPill>(find.byType(TvSourceGroupPill))
             .where((card) => card.chosen)
             .map((card) => card.group.label),
         ['2160p'],
@@ -470,7 +505,7 @@ void main() {
       expect(focusedLabel(tester), 'Beta 1080p', reason: 'down into the row');
       // Every rung is still on the screen, and the chosen one says so.
       final cards = tester
-          .widgetList<TvSourceGroupCard>(find.byType(TvSourceGroupCard))
+          .widgetList<TvSourceGroupPill>(find.byType(TvSourceGroupPill))
           .toList();
       expect(cards.map((card) => card.group.label), ['2160p', '1080p', '720p']);
       expect(cards.map((card) => card.chosen), [false, true, false]);
@@ -497,7 +532,7 @@ void main() {
 
       await press(tester, LogicalKeyboardKey.arrowUp);
 
-      expect(focusIn<TvSourceGroupCard>(), isTrue);
+      expect(focusIn<TvSourceGroupPill>(), isTrue);
       expect(
         focusedLabel(tester),
         '720p',
@@ -508,7 +543,7 @@ void main() {
     testWidgets('and up from the group row reaches the order chips on a '
         'film, which has no episode above it', (tester) async {
       await mountSectioned(tester);
-      expect(focusIn<TvSourceGroupCard>(), isTrue);
+      expect(focusIn<TvSourceGroupPill>(), isTrue);
 
       await press(tester, LogicalKeyboardKey.arrowUp);
 
@@ -523,7 +558,7 @@ void main() {
       // screen had before the ladder: a control on screen, marked, and
       // unreachable.
       await mountSectioned(tester);
-      expect(focusIn<TvSourceGroupCard>(), isTrue);
+      expect(focusIn<TvSourceGroupPill>(), isTrue);
 
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusedLabel(tester), StreamOrder.peersPerSize.label);
@@ -537,7 +572,7 @@ void main() {
         reason: 'and back down',
       );
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusIn<TvSourceGroupCard>(), isTrue);
+      expect(focusIn<TvSourceGroupPill>(), isTrue);
     });
 
     testWidgets('another group is a sideways press away, and takes the '
@@ -575,7 +610,7 @@ void main() {
       // of what held focus before, which is all that stands between this
       // and a dead D-pad.
       expect(focusedLabel(tester), '2160p');
-      expect(focusIn<TvSourceGroupCard>(), isTrue);
+      expect(focusIn<TvSourceGroupPill>(), isTrue);
       // And it stays shut: the card the remote has just been handed back
       // is the one the press closed, so reopening it here would make Back
       // look like it did nothing at all.
@@ -611,7 +646,7 @@ void main() {
       // down does after, as it does on every row where the choice is a step
       // on the way down.
       expect(
-        focusIn<TvSourceGroupCard>(),
+        focusIn<TvSourceGroupPill>(),
         isTrue,
         reason: 'select on a chip moves down to the groups',
       );
@@ -657,7 +692,7 @@ void main() {
       // Grouped has no order to choose, so the order chips went with the
       // press and the next row down is the groups.
       expect(
-        focusIn<TvSourceGroupCard>(),
+        focusIn<TvSourceGroupPill>(),
         isTrue,
         reason: 'select on a chip moves down, past the rung that went away',
       );
@@ -674,11 +709,11 @@ void main() {
       // one of them opens is that addon's own ranking, left to right.
       expect(
         tester
-            .widgetList<TvSourceGroupCard>(find.byType(TvSourceGroupCard))
+            .widgetList<TvSourceGroupPill>(find.byType(TvSourceGroupPill))
             .map((card) => card.group.label),
         ['alpha.example', 'beta.example'],
       );
-      await stepDownTo<TvSourceGroupCard>(tester);
+      await stepDownTo<TvSourceGroupPill>(tester);
       for (var i = 0; i < 4 && focusedLabel(tester) != 'alpha.example'; i++) {
         await press(tester, LogicalKeyboardKey.arrowLeft);
       }
@@ -804,8 +839,12 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<ChoiceChip>(), isTrue, reason: 'the pills');
       await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusedLabel(tester), kEpisodesLabel, reason: 'the rung header');
+      await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<TvMetaHeader>(), isTrue, reason: 'the title block');
 
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedLabel(tester), kEpisodesLabel, reason: 'not stepped over');
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusIn<ChoiceChip>(), isTrue, reason: 'not stepped over');
       await press(tester, LogicalKeyboardKey.arrowDown);
@@ -845,8 +884,8 @@ void main() {
       );
     });
 
-    testWidgets('the walk up from the group row comes back to the episode '
-        'these sources are for', (tester) async {
+    testWidgets('opening the episodes again comes back to the episode these '
+        'sources are for', (tester) async {
       await mountSeries(tester);
       // Walk the episode row first, so the episode the sources belong to
       // is not the one the row happens to start at.
@@ -856,12 +895,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
 
-      await stepDownTo<TvSourceGroupCard>(tester);
-      // The heading's own controls are rungs between the two, so the walk
-      // back up passes through them rather than over them -- and the
-      // episode it arrives at is still the one that was left, which is
-      // what a viewer means by going back up.
-      await stepUpTo<TvEpisodeCard>(tester, limit: 4);
+      // Going into the sources shuts the episodes behind it: one rung is
+      // open at a time. So the walk back is up to the episodes' header
+      // and a press to open it -- and the row under it still hands the
+      // remote the card that was left, which is what a viewer means by
+      // going back.
+      await openTheSources(tester);
+      expect(focusIn<TvEpisodeCard>(), isFalse, reason: 'the rung shut');
+      await openRung(tester, kEpisodesLabel);
+      await stepDownTo<TvEpisodeCard>(tester, limit: 4);
 
       expect(
         focusedEpisodeTitle(),
@@ -904,13 +946,22 @@ void main() {
       }
       expect(focusedLabel(tester), '1', reason: 'the pill of season 1');
 
+      // The walk down leaves this rung at its header and reaches the
+      // sources' header, which is one press -- the rungs are the walk
+      // now. Inside the rung it opens, the chips are stops of their own
+      // on the way to the pills, which is what this is really about.
       final stops = <String>[];
-      for (var i = 0; i < 8 && !focusIn<TvSourceGroupCard>(); i++) {
+      for (var i = 0; i < 8 && focusedLabel(tester) != kSourcesLabel; i++) {
+        await press(tester, LogicalKeyboardKey.arrowDown);
+      }
+      expect(focusedLabel(tester), kSourcesLabel);
+      await press(tester, LogicalKeyboardKey.select);
+      for (var i = 0; i < 8 && !focusIn<TvSourceGroupPill>(); i++) {
         await press(tester, LogicalKeyboardKey.arrowDown);
         stops.add(focusedTooltip() ?? focusedLabel(tester) ?? 'nothing');
       }
 
-      expect(focusIn<TvSourceGroupCard>(), isTrue, reason: 'it got there');
+      expect(focusIn<TvSourceGroupPill>(), isTrue, reason: 'it got there');
       // Grouped by addon here, which is the layout with no order to
       // choose and so no chips drawn: the toggle is the whole of the
       // heading's controls, and the walk stops on it.

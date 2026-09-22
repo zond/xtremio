@@ -148,13 +148,36 @@ String? focusedEpisode() {
   return card == null ? null : TvEpisodeCard.title(card.video);
 }
 
-/// The remote starts on the sources at the foot of the column; up from
-/// there walks back through the streams header onto the episode row.
+/// The remote starts on the episodes of a series, which is the rung the
+/// screen opens on; this is what puts it back there from wherever a test
+/// has walked it to.
 Future<void> stepOntoTheRow(WidgetTester tester) async {
+  // Down first and then up: the row sits under the rung's header, so
+  // which way it is from the remote depends on where the test left it.
+  for (var i = 0; i < 6 && focusedEpisode() == null; i++) {
+    await press(tester, LogicalKeyboardKey.arrowDown);
+  }
   for (var i = 0; i < 10 && focusedEpisode() == null; i++) {
     await press(tester, LogicalKeyboardKey.arrowUp);
   }
   expect(focusedEpisode(), isNotNull, reason: 'the remote reached the row');
+}
+
+/// Walks the ladder -- down first, then up -- to the header of the rung
+/// called [label] and opens it, which shuts whichever one was open.
+Future<void> openRung(
+  WidgetTester tester,
+  String label, {
+  int limit = 8,
+}) async {
+  for (var i = 0; i < limit && focusedLabel(tester) != label; i++) {
+    await press(tester, LogicalKeyboardKey.arrowDown);
+  }
+  for (var i = 0; i < limit && focusedLabel(tester) != label; i++) {
+    await press(tester, LogicalKeyboardKey.arrowUp);
+  }
+  expect(focusedLabel(tester), label, reason: 'the walk reached $label');
+  await press(tester, LogicalKeyboardKey.select);
 }
 
 void main() {
@@ -374,7 +397,7 @@ void main() {
     expect(tester.getRect(cardOf(pilotId)).right, lessThan(row.left));
   });
 
-  testWidgets('coming back from the player leaves the remote on the card it '
+  testWidgets('coming back from the player leaves the row on the card it '
       'was on', (tester) async {
     await mount(
       tester,
@@ -382,35 +405,47 @@ void main() {
       also: {CoreField.player: loadPlayerFixture()},
     );
 
-    // Open the addon's sources before walking away from them: what is on
-    // screen is a card per addon until one of them is chosen.
-    await press(tester, LogicalKeyboardKey.select);
+    // Walk the row, which asks for the episode the remote comes to rest
+    // on: a step along the row is a move inside a path the viewer already
+    // picked, not a reason to put anything away.
     await stepOntoTheRow(tester);
-
-    // Walking the row asks for the episode it comes to rest on, and that
-    // refresh leaves the chosen group where it is: a step along the row is
-    // a move inside a path the viewer already picked, not a reason to put
-    // their sources away.
     await press(tester, LogicalKeyboardKey.arrowRight);
     await press(tester, LogicalKeyboardKey.arrowRight);
     final left = focusedEpisode();
     expect(left, isNot(seasonOne(series()).first.title));
-    expect(find.byType(TvSourceCard), findsWidgets, reason: 'the row stayed');
 
-    // A pointer tap on the source, so nothing but the player moves focus
+    // Into the sources, which shuts the episodes behind them, and play
+    // one. A pointer tap, so nothing but the player moves focus
     // (scrolling it back into view does not).
-    final source = find.textContaining('Torrentio').first;
+    await openRung(tester, kSourcesLabel);
+    // Down through the rung's own controls until a group pill takes the
+    // remote, which is what puts that group's sources out.
+    for (
+      var i = 0;
+      i < 4 && find.byType(TvSourceCard).evaluate().isEmpty;
+      i++
+    ) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(find.byType(TvSourceCard), findsWidgets, reason: 'a row is out');
+    // The card by its widget rather than by its words: it leads with the
+    // release now ("Breaking.Bad.S01E01.1080p", off the addon's own
+    // filename) rather than with the addon's name.
+    final source = find.byType(TvSourceCard).first;
     await tester.ensureVisible(source);
     await tester.pumpAndSettle();
     await tester.tap(source);
     await tester.pumpAndSettle();
     expect(find.byType(PlayerScreen), findsOneWidget);
-    expect(focusedEpisode(), isNull, reason: 'the player took the remote');
 
-    // Paused with nothing put away, so Back leaves the player at once.
+    // Paused with nothing put away, so Back leaves the player at once --
+    // and the episodes, opened again, hand the remote the card it left
+    // rather than the first of the season.
     await systemBack(tester);
     await tester.pumpAndSettle();
     expect(find.byType(PlayerScreen), findsNothing);
+    await openRung(tester, kEpisodesLabel);
+    await stepOntoTheRow(tester);
     expect(focusedEpisode(), left);
   });
 
@@ -420,9 +455,15 @@ void main() {
     // can carry that across its edge; the title and the air date cannot,
     // and on a television they are the only words saying which episode
     // this is.
+    //
+    // Measured on a card the remote is *not* on: the focused one is drawn
+    // five per cent larger ([FocusHighlight.focusedScale]), which moves
+    // its caption outward, and the inset is a property of the card rather
+    // than of the card that happens to be focused. The screen opens on
+    // the episodes now, so there always is a focused one.
     final fixture = series();
     await mount(tester, fixture);
-    final pilot = seasonOne(fixture).first;
+    final pilot = seasonOne(fixture)[1];
 
     final card = tester.getRect(cardOf(pilot.id));
     final title = tester.getRect(

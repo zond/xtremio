@@ -443,3 +443,97 @@ List<StreamSection<T>> sectionsByResolution<T>(
         ),
   ];
 }
+
+/// The release a stream is of — `Avalon.2001.1080p.BluRay.x264-CiNEFiLE` —
+/// as the one line a card can lead with.
+///
+/// The engine models a stream as a source plus a `name`, a `description`
+/// and `behaviorHints`, and *none* of them is the release. What addons
+/// actually put where, on the answers this app has recorded:
+///
+/// - **`behaviorHints.filename`** is the file the addon says it will play.
+///   It is the only structured field that ever carries a release, so it is
+///   read first, with its extension taken off because a card is not a
+///   directory listing.
+/// - **The first line of `description`** is where Torrentio and the addons
+///   that copy it write the release, with the numbers on the lines below
+///   (`👤 716 💾 10.69 GB ⚙️ ThePirateBay`). The markers and the numbers
+///   are stripped off it ([StreamHints.strip]), because an addon that
+///   writes them inline would otherwise put a size in the headline that
+///   the facts line repeats. A description is free text, though, and most
+///   addons put prose in it -- WatchHub says `Subscription` -- so it is
+///   taken only when it *looks* like a release ([_looksLikeARelease]).
+/// - **`name`** is last, and is what the app showed before this existed:
+///   for Torrentio it is `"Torrentio\n4k"` — the addon and the quality,
+///   which is not a release at all but is better than an empty card.
+///
+/// [addonName] is what the card says elsewhere, and a candidate equal to it
+/// is skipped rather than drawn: an addon whose description is its own name
+/// would otherwise have the card say that name twice, once as the release
+/// it does not have and once as the addon that answered.
+///
+/// Never empty: a stream nothing could be read from falls all the way back
+/// to what kind of source it is, which is what the list showed for it
+/// before.
+String releaseNameOf(StreamInfo stream, {String? addonName}) {
+  final hints = StreamHints.of(stream);
+  final described = hints.strip(_firstLine(stream.description));
+  final candidates = [
+    _withoutExtension(stream.filename),
+    described != null && _looksLikeARelease(described) ? described : null,
+    _oneLine(stream.name),
+  ];
+  for (final candidate in candidates) {
+    final release = candidate?.trim();
+    if (release == null || release.isEmpty) continue;
+    if (addonName != null && release.toLowerCase() == addonName.toLowerCase()) {
+      continue;
+    }
+    return release;
+  }
+  return _oneLine(stream.name) ??
+      _oneLine(stream.description) ??
+      stream.kind.label;
+}
+
+/// Whether a line of free text is a release rather than a sentence about
+/// the stream.
+///
+/// A release is built out of tokens joined by dots, underscores or
+/// hyphens -- `1080p.BluRay.x264-CiNEFiLE`, `WEB-DL`, `FLAC2.0` -- and
+/// prose is not: `Subscription`, `Rent, Buy`, `ADS`. One such join is
+/// enough, and requiring one is what keeps an addon that writes a word in
+/// its description from having that word for a headline.
+///
+/// A release with no join in it at all is missed, and falls back to the
+/// name the list showed before. That is the safe way round: a name is
+/// always something, and a wrong headline is read as the wrong file.
+bool _looksLikeARelease(String text) =>
+    RegExp(r'[A-Za-z0-9][._-][A-Za-z0-9]').hasMatch(text);
+
+/// [name] without the container extension an addon's filename carries, and
+/// only that: a release ends in `-GROUP`, and a four-letter tag after a dot
+/// is what tells `.mkv` from `x264-CiNEFiLE`.
+String? _withoutExtension(String? name) {
+  if (name == null) return null;
+  final match = RegExp(r'\.[A-Za-z0-9]{2,4}$').firstMatch(name);
+  return match == null ? name : name.substring(0, match.start);
+}
+
+/// The first line with anything on it; null when there is none.
+String? _firstLine(String? text) {
+  if (text == null) return null;
+  for (final line in text.split('\n')) {
+    if (line.trim().isNotEmpty) return line.trim();
+  }
+  return null;
+}
+
+/// [text] with its line breaks turned into spaces, so a two-line `name`
+/// ("Torrentio\n4k") reads as one headline rather than laying out as two
+/// on a card that has room for the release instead.
+String? _oneLine(String? text) {
+  if (text == null) return null;
+  final joined = text.replaceAll(RegExp(r'\s*\n\s*'), ' ').trim();
+  return joined.isEmpty ? null : joined;
+}

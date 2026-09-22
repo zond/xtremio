@@ -100,14 +100,17 @@ void main() {
   }
 
   testWidgets('while every addon is still answering, the one spinner on a '
-      'television is on the centre line under the Streams heading, with '
+      'television is on the centre line under the sources rung, with '
       'the label the phone list carries', (tester) async {
     await pump(tester, device: tv, state: streamsLoading());
 
+    // The heading is the rung's own header line here, and what it is
+    // waiting for is the line's summary -- so the label is said once, up
+    // there, and the spinner under it says nothing.
     expect(spinner, findsOneWidget);
     final centre = tester.getCenter(spinner);
     expect(centre.dx, closeTo(tvSize.width / 2, 2));
-    final heading = tester.getRect(find.text('Streams'));
+    final heading = tester.getRect(find.text(kSourcesLabel));
     expect(centre.dy, greaterThan(heading.bottom));
     expect(centre.dy, lessThan(tvSize.height));
     expect(find.text(kLookingForStreams), findsOneWidget);
