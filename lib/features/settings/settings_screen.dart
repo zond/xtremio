@@ -11,6 +11,7 @@ import '../downloads/downloads_screen.dart';
 import '../player/player_screen.dart';
 import 'account_section.dart';
 import 'core_settings.dart';
+import 'recommendations_section.dart';
 
 /// Settings: the account ([AccountSection] over `ctx.profile`), the ways to
 /// the Addons and Downloads screens, the controls over
@@ -246,6 +247,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             (settings, write) =>
                 InterfaceSettingsSection(settings: settings, onSetting: write),
           ),
+          // The app's own preferences again, and about what is shown on a
+          // title rather than about the account or the server -- so it
+          // sits with Interface above it and outside `_withSettings`.
+          const _SectionHeader(RecommendationsSection.title),
+          RecommendationsSection(prefs: _prefs),
           const _SectionHeader('Streaming server'),
           _withSettings(
             (settings, write) => StreamingServerSection(
