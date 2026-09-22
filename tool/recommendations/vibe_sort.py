@@ -42,7 +42,7 @@ def questions():
     thin-but-warm -- rather than whatever the key happens to list first.
     """
     out = []
-    for path in sorted(glob.glob(os.path.join(HERE, "gold_*.json"))):
+    for path in sorted(glob.glob(os.path.join(HERE, "keys", "gold_*.json"))):
         data = json.load(open(path))
         tiers = []
         for tone in (2, 1, 0):

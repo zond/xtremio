@@ -36,6 +36,16 @@ POOL = os.path.join(HERE, "pool_unrated.json")
 # What the app would ask for. Stated here rather than buried in the call,
 # because the wording is a thing we are measuring, not a detail.
 ASK_FOR_FEEL = os.environ.get("ASK_FOR_FEEL", "1") == "1"
+# Whether to ask the question the app asks today, which admits
+# television series. 0 asks the film-only question the README's
+# numbers were taken with.
+ASK_FOR_ALSO_SERIES = os.environ.get("ASK_FOR_ALSO_SERIES", "1") == "1"
+# `similarSystemInstruction` in similar_titles.dart, word for word. The
+# app sends one to every provider including Google; this script used to
+# send none to Google and a films-only one to the others, so three of the
+# four were measured on an instruction the app does not give.
+SYSTEM = ("You recommend films and television. Real, released titles only. "
+          "JSON only.")
 
 def norm(text):
     years = re.findall(r"(1[89]\d\d|20\d\d)", text)
@@ -57,7 +67,7 @@ def load_keys():
     across targets is the distance between them.
     """
     keys = {}
-    for path in sorted(glob.glob(os.path.join(HERE, "gold_*.json"))):
+    for path in sorted(glob.glob(os.path.join(HERE, "keys", "gold_*.json"))):
         data = json.load(open(path))
         index = {}
         for e in data["entries"]:
@@ -72,9 +82,27 @@ def load_keys():
     return keys
 
 def prompt_for(target):
+    """The app's own film question, word for word.
+
+    Kept in step with `askForSimilar` in lib/features/similar/
+    similar_titles.dart deliberately: measuring one question and shipping
+    another is how a table of numbers stops describing the app. When that
+    Dart changes, change this, re-measure, and say in the README what
+    moved.
+
+    ASK_FOR_ALSO_SERIES=0 asks the old film-only question instead -- the
+    one every number in the README was originally taken with -- so the
+    cost of admitting series can be measured rather than assumed.
+    """
     feel = (" Prefer films that *feel* like it -- the same register, pace and "
             "texture -- over films that merely share its premise."
             if ASK_FOR_FEEL else "")
+    if ASK_FOR_ALSO_SERIES:
+        return (f"Name {WANTED} films or television series to watch next for "
+                f"someone who loved {target}.{feel} "
+                'Answer JSON only: {"titles":[{"title":"","year":0,'
+                '"kind":"film|series","why":"under 12 words"}]}. '
+                "Real, released titles only; do not include the film itself.")
     return (f"Name {WANTED} films to watch next for someone who loved {target}.{feel} "
             'Answer JSON only: {"films":[{"title":"","year":0,"why":"under 12 words"}]}. '
             "Real, released films only; do not include the film itself.")
@@ -98,14 +126,15 @@ def ask(spec, target):
     if provider == "google":
         d = post(f"https://generativelanguage.googleapis.com/v1beta/models/"
                  f"{model}:generateContent?key={KEYS['google']}",
-                 {"contents": [{"parts": [{"text": prompt}]}],
+                 {"system_instruction": {"parts": [{"text": SYSTEM}]},
+                  "contents": [{"parts": [{"text": prompt}]}],
                   "generationConfig": {"temperature": 0.7,
                                        "responseMimeType": "application/json"}}, {})
         text = "".join(p.get("text", "")
                        for p in d["candidates"][0]["content"]["parts"])
     elif provider == "anthropic":
         payload = {"model": model, "max_tokens": 2048,
-                   "system": "You recommend films. Real, released titles only. JSON only.",
+                   "system": SYSTEM,
                    "messages": [{"role": "user", "content": prompt}]}
         if "-5" not in model:                 # newer models retired the parameter
             payload["temperature"] = 0.7
@@ -119,28 +148,40 @@ def ask(spec, target):
                         "response_format": {"type": "json_object"},
                         "messages": [
                             {"role": "system",
-                             "content": "You recommend films. Real, released titles only. JSON only."},
+                             "content": SYSTEM},
                             {"role": "user", "content": prompt}]},
                  {"Authorization": f"Bearer {KEYS[provider]}"})
         text = d["choices"][0]["message"]["content"]
     else:
         raise ValueError(f"unknown provider in {spec!r}")
-    films = json.loads(text[text.find("{"):text.rfind("}") + 1])["films"]
+    answer = json.loads(text[text.find("{"):text.rfind("}") + 1])
+    # The key the app asks for, then the one the old question asked for.
+    # A model that writes the other one is answering, not failing.
+    films = answer.get("titles") if "titles" in answer else answer["films"]
     return films, time.monotonic() - start
 
 def exists_on_tmdb(title, year):
-    url = "https://api.themoviedb.org/3/search/movie?" + urllib.parse.urlencode(
-        {"query": title, "year": year} if year else {"query": title})
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {TMDB}"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            results = json.load(r).get("results", [])
-    except Exception:
-        return True          # the benefit of the doubt: our lookup failed, not the model
-    for m in results[:5]:
-        got = (m.get("release_date") or "")[:4]
-        if not year or (got.isdigit() and abs(int(got) - int(year)) <= 1):
-            return True
+    """Whether TMDB has a film *or* a television series by this name.
+
+    Both, since the app's question admits series. Searching only
+    /search/movie was right while the question said "films only"; against
+    the question as it is asked now it would score every correct series
+    as an invented title, and report a collapse in `real` that is entirely
+    this function's doing.
+    """
+    for kind, dated in (("movie", "release_date"), ("tv", "first_air_date")):
+        url = f"https://api.themoviedb.org/3/search/{kind}?" + urllib.parse.urlencode(
+            {"query": title, "year": year} if year else {"query": title})
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {TMDB}"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                results = json.load(r).get("results", [])
+        except Exception:
+            return True      # the benefit of the doubt: our lookup failed, not the model
+        for m in results[:5]:
+            got = (m.get(dated) or "")[:4]
+            if not year or (got.isdigit() and abs(int(got) - int(year)) <= 1):
+                return True
     return False
 
 def judge(spec, target, key):
@@ -235,8 +276,14 @@ def report(model, keys):
     return all_pool
 
 keys = load_keys()
+# Loudly, because a glob that matches nothing is not an empty measurement,
+# it is no measurement at all -- and the script used to carry on and print
+# "answered nothing" for every model, which reads like a result.
+if not keys:
+    sys.exit(f"no answer keys found in {os.path.join(HERE, 'keys')}")
 print(f"{len(keys)} answer keys: " + ", ".join(keys))
-print(f"{RUNS} runs of {WANTED} films each; asking for feel: {ASK_FOR_FEEL}")
+print(f"{RUNS} runs of {WANTED} each; asking for feel: {ASK_FOR_FEEL}; "
+      f"series admitted: {ASK_FOR_ALSO_SERIES}")
 pool = []
 for model in (sys.argv[1:] or ["gemini-3.1-flash-lite"]):
     pool += report(model, keys)

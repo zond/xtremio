@@ -46,12 +46,19 @@ research: see **Pooling** below.
 
 ## The tests
 
-**The app no longer asks what these scripts ask.** `recommend_bench.py`
-still carries the film-only prompt every number below was measured with,
-while the app (`lib/features/similar/`) now asks for films *and* series,
-asks which each one is, and asks a different question again when the viewer
-is standing on a series -- a question nothing here has measured, since all
-528 researched titles are films. Make the two match before measuring again.
+**`recommend_bench.py` asks what the app asks**, and it is on the reader
+to keep it that way: the prompt is `askForSimilar` in
+`lib/features/similar/similar_titles.dart`, word for word, and the system
+instruction is `similarSystemInstruction`. Change the Dart, change the
+script, re-measure, and say here what moved. Measuring one question while
+shipping another is how a table of numbers quietly stops describing the
+app, which is what happened between the first measurements and the day
+the app learned to ask about series.
+
+`ASK_FOR_ALSO_SERIES=0` asks the old film-only question instead, so the
+cost of admitting series can be measured rather than argued about. The
+app's *series* question is still unmeasured, and cannot be measured
+against these keys: all 528 researched titles are films.
 
 **`recommend_bench.py`** -- the honest one. Asks for ten films, scores the
 answer against the key, and reports five things, because one number hides
@@ -140,3 +147,52 @@ Read with care:
 On this evidence the app's default is `gemini-3.1-flash-lite`: within
 0.06 of the best judgement available at any speed, the best coverage of
 any model tested, the most self-consistent, and under three seconds.
+
+## What admitting series cost, 2026-09-22 (later the same day)
+
+The app's question changed to ask for films *and* series. `ASK_FOR_ALSO_SERIES`
+makes that a switch, so the two questions can be put to the same model on
+the same afternoon with the same key:
+
+| `gemini-3.1-flash-lite` | series admitted | film-only |
+|---|---|---|
+| relevance lift | +0.17 | +0.15 |
+| tone lift | +0.16 | +0.15 |
+| in key | 0.87 | 0.90 |
+| real | 1.00 | 0.95 |
+| consistent | 0.59 | 0.52 |
+| breadth | 0.48 | 0.51 |
+| slowest | 2.9 s | 2.8 s |
+
+**The two are indistinguishable**, and that is the finding. One run each is
+nowhere near enough to call +0.17 better than +0.15 -- this benchmark's
+leader changed on every run until it was given repeats and a paired sign
+test, which is why the table above exists and this one is only a check
+that nothing collapsed. Nothing collapsed.
+
+Three cautions, none of them about series:
+
+* **Both columns are provisional.** 27 and 20 suggestions are in no key
+  and are simply left out of the scoring, which flatters a model that
+  wanders. Pooling is what settles it, and it is not optional -- see above.
+* **The film-only column is below this README's own row for the same
+  model on the same question** (+0.15 against +0.19). Either run-to-run
+  noise, or `gemini-3.1-flash-lite` has moved behind a stable name. The
+  second is the reason the app treats the model as a preference and every
+  failure as classified rather than fatal.
+* **`The Call of Cthulhu` is below chance on tone in both columns** (0.26
+  and 0.32 against 0.44), and `The American Astronaut` is at or below
+  chance on both axes. The obscure targets are still where this model
+  fails, and admitting series did not change that either way.
+
+Two bugs were found by running it, both of which had made earlier runs
+worse than useless:
+
+* `recommend_bench.py` and `vibe_sort.py` globbed `gold_*.json` beside
+  themselves after the keys moved into `keys/`. The bench printed
+  `0 answer keys` and then "answered nothing" per model -- which reads
+  like a result. Zero keys is an error now.
+* `exists_on_tmdb` searched `/search/movie` only. Correct while the
+  question said "films only"; against the question as it is asked now it
+  would have scored every correct series as an invented title and blamed
+  the wording for it. It searches `/search/tv` as well.

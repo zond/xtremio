@@ -52,3 +52,6 @@ rust/target/
 
 # Agent worktrees; each is a git checkout of this repo and must never be committed as a gitlink.
 .claude/worktrees/
+
+# The bench writes it; it is an input to rating, not a result.
+tool/recommendations/pool_unrated.json
