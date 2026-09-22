@@ -268,7 +268,7 @@ class _TvSourceRowsState extends State<TvSourceRows> {
           advanceOnSelect: true,
           child: SizedBox(
             height: TvSourceRows.groupRowHeight(context),
-            child: _Strip(
+            child: TvCardStrip(
               children: [
                 for (final (index, group) in groups.indexed)
                   TvSourceGroupPill(
@@ -338,7 +338,7 @@ class TvSourceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     height: TvSourceRows.sourceRowHeight(context),
-    child: _Strip(
+    child: TvCardStrip(
       children: [
         for (final (index, source) in sources.indexed)
           SizedBox(
@@ -368,8 +368,13 @@ class TvSourceRow extends StatelessWidget {
 /// swallowed at its ends -- the same thing the shell's rail does with up
 /// and down at its own ends, and for the same reason. Every other key
 /// passes, so up and down still leave the row.
-class _Strip extends StatelessWidget {
-  const _Strip({required this.children});
+///
+/// Public because it is the shape of a row on this screen rather than of
+/// a source: the suggestions row ([SimilarTitlesRow]) is the same strip
+/// with posters in it, and a second copy of the end-swallowing would be a
+/// second place for it to be wrong.
+class TvCardStrip extends StatelessWidget {
+  const TvCardStrip({super.key, required this.children});
 
   final List<Widget> children;
 

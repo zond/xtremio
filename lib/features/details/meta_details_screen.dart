@@ -23,7 +23,9 @@ import '../downloads/downloads_screen.dart';
 import '../downloads/offline_play.dart';
 import '../downloads/remove_download_dialog.dart';
 import '../player/player_screen.dart';
+import '../similar/similar_resolver.dart';
 import 'episode_thumbnail.dart';
+import 'similar_row.dart';
 import 'stream_facts.dart';
 import 'stream_sources.dart';
 import 'tv_backdrop.dart';
@@ -46,6 +48,15 @@ enum _DetailsRung {
 
   /// The groups of sources and whichever group's row is out.
   sources,
+
+  /// What a model says this title is like ([SimilarTitlesRow]).
+  ///
+  /// The one rung the screen never opens by itself. Its answer arrives
+  /// seconds after the screen does and sometimes not at all, so a rung
+  /// that could be the open one would be a screen whose shape depends on
+  /// when a stranger's server replied. It opens when the viewer presses
+  /// select on its header and at no other time.
+  moreLikeThis,
 
   /// What the addons did other than answer with streams.
   addons,
@@ -284,6 +295,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   static const int _ladderStreamOrder = 46;
   static const int _ladderGroups = 50;
   static const int _ladderSources = 55;
+  static const int _ladderSimilarHeader = 60;
+  static const int _ladderSimilar = 65;
   static const int _ladderAddonsHeader = 70;
   static const int _ladderAddons = 75;
 
@@ -383,6 +396,32 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// put the remote there itself; see [_takeTheRemoteToTheLastUsed].
   final FocusNode _lastUsedNode = FocusNode(debugLabel: 'last-used source');
 
+  /// How "More like this" is asked, from the [SimilarScope] above this
+  /// screen (absent, a [MoreLikeThis] of the screen's own). Read once,
+  /// because the question is asked once.
+  late final SimilarAskBuilder _askSimilar = SimilarScope.of(context);
+
+  /// Whether the question has gone out for this title, which is also the
+  /// answer to *is the feature on*: with no key configured nothing is
+  /// asked and no rung is drawn ([_maybeAskSimilar]).
+  bool _similarAsked = false;
+
+  /// What came back: the titles a catalogue confirmed, in the model's
+  /// order. Null while the ask is out -- which is where the header says it
+  /// is looking -- and empty when the model had nothing or the guard
+  /// dropped all of it, which takes the rung away again.
+  List<SimilarTitle>? _similar;
+
+  /// Whether there is a "More like this" rung on the panel at all.
+  ///
+  /// Three states and not two: never asked (no key) and asked-and-empty
+  /// both draw nothing, and the wait between them is a header that says
+  /// it is looking. A feature that is off says nothing about itself --
+  /// there is no "configure a key" line here, because a viewer who has
+  /// not set one up is not being sold anything.
+  bool get _hasSimilar =>
+      _similarAsked && (_similar == null || _similar!.isNotEmpty);
+
   /// Where the remote was first put down on this screen, and whether it
   /// has left. Where it starts is the screen's to choose; after that it is
   /// the viewer's, and nothing drawn later takes it off what they walked
@@ -462,6 +501,10 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// A rung that is not drawn cannot be open, so a choice the next state
   /// has nothing for falls back to the arrival order rather than leaving
   /// the screen with nothing out.
+  ///
+  /// [_DetailsRung.moreLikeThis] is in what is *drawn* and not in that
+  /// arrival order: a viewer can open it and stay in it, and nothing else
+  /// ever will. See the rung.
   _DetailsRung? _rungToOpen(
     MetaDetailsState state, {
     required bool hasLastUsed,
@@ -472,6 +515,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       if (hasLastUsed) _DetailsRung.continueWatching,
       if (state.hasVideos) _DetailsRung.episodes,
       if (hasSources) _DetailsRung.sources,
+      if (_hasSimilar) _DetailsRung.moreLikeThis,
       if (hasAddons) _DetailsRung.addons,
     };
     final chosen = _chosenRung;
@@ -533,6 +577,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           : (DownloadsController(downloads)..addListener(_onDownloadsChanged));
     }
     trackRoute();
+    // A key can arrive after the title has: the preferences are read
+    // asynchronously at start-up, and the settings screen where one is
+    // pasted in is a few presses from here. [PrefsScope] is an
+    // `InheritedNotifier`, so a key written anywhere runs this again --
+    // which is the only moment a screen already on the stack has to
+    // notice one.
+    final state = ownState;
+    if (state != null) _maybeAskSimilar(state);
   }
 
   /// A tick moved some download's numbers. Only a change to one of *this
@@ -617,6 +669,37 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       _revealStreams(atEnd: false);
     }
     _maybePickInitialVideo(state);
+    _maybeAskSimilar(state);
+  }
+
+  /// Asks what this title is like, once, as soon as the title itself is
+  /// known -- its name and year are the question.
+  ///
+  /// **With no key configured nothing is asked.** The feature answers
+  /// every failure with an empty list, a missing key included, so asking
+  /// anyway would work; it is the *rung* that cannot wait for that answer.
+  /// A header that appeared and then went away again on every title a
+  /// viewer who has configured nothing opens is worse than no row, so the
+  /// one thing the screen reads for itself is whether there is a key.
+  void _maybeAskSimilar(MetaDetailsState state) {
+    final meta = state.meta;
+    final prefs = _prefs;
+    if (!mounted || _similarAsked || meta == null || prefs == null) return;
+    if (prefs.similarApiKey == null) return;
+    _similarAsked = true;
+    unawaited(_similarFor(meta, prefs));
+  }
+
+  Future<void> _similarFor(MetaItem meta, AppPrefs prefs) async {
+    final titles = await _askSimilar(prefs)(
+      type: widget.type,
+      id: widget.id,
+      name: meta.name,
+      year: yearIn(meta.releaseInfo),
+    );
+    // Late by design -- three seconds is the good case. Everything about
+    // what this must not disturb on the way in is in [_tvSimilarRung].
+    if (mounted) setState(() => _similar = titles);
   }
 
   /// The episode the screen shows as selected: the tap in flight, else the
@@ -1279,6 +1362,17 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           ),
         ],
       ],
+      // The same films a television gets, as an ordinary section rather
+      // than a rung: this column is what the title *is* -- its name, its
+      // description, its episodes -- and what it is like belongs at the
+      // end of it. Below the breakpoint that puts it between the episodes
+      // and the sources, and on a wide layout at the foot of the left
+      // pane, which is the same place in both. It is drawn only where
+      // there is no ladder: the television has one.
+      if (!isTv && _hasSimilar)
+        SliverToBoxAdapter(
+          child: SimilarSection(titles: _similar, onOpen: _openSimilar),
+        ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
     ];
   }
@@ -1827,6 +1921,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             ],
           ),
         ),
+      if (_hasSimilar)
+        SliverToBoxAdapter(
+          key: const ValueKey('tv-more-like-this'),
+          child: _tvSimilarRung(open: rung == _DetailsRung.moreLikeThis),
+        ),
       if (accounting != null)
         SliverToBoxAdapter(
           key: const ValueKey('tv-source-accounting'),
@@ -1853,6 +1952,74 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
     ];
+  }
+
+  /// What a model says this title is like, as a rung below the sources.
+  ///
+  /// **Everything here is about a row that arrives late.** The answer
+  /// takes three seconds when it comes at all, by which time the viewer
+  /// has read the screen and moved the remote, and this screen has been
+  /// broken twice already by something appearing under a viewer who was
+  /// using it (see [_takeTheRemoteToTheLastUsed] and
+  /// [FocusableTile._autofocus]). Three things keep it still, and none of
+  /// them is optional:
+  ///
+  ///  * **The header is there from the first frame.** Whether there is a
+  ///    rung at all is decided by whether a key is configured, which is
+  ///    known before the title is drawn -- so the line appears with the
+  ///    rest of the ladder and says it is looking, and the answer landing
+  ///    changes the words on it and nothing else. A rung that appeared
+  ///    when the answer did would push everything below it down the panel
+  ///    at a moment nobody chose.
+  ///  * **Nothing in it asks for the remote.** Every other rung hands its
+  ///    row a `defaultFocus` for the arrival case; this one never does,
+  ///    at any point in its life. The remote gets here by being walked
+  ///    here.
+  ///  * **The row is the same height empty as full** ([SimilarTitlesRow]),
+  ///    so even a viewer standing inside the open rung when the answer
+  ///    lands sees posters replace a spinner and nothing move.
+  ///
+  /// And when the answer is nothing -- a model with nothing to say, or a
+  /// row the guard emptied -- the rung goes away rather than standing
+  /// there as a header over an empty strip.
+  Widget _tvSimilarRung({required bool open}) {
+    final titles = _similar;
+    return TvLadderRung(
+      level: _ladderSimilarHeader,
+      label: kMoreLikeThisLabel,
+      // Titles rather than films: the guard resolves a suggestion against
+      // both catalogues, and a series that is like this film is a right
+      // answer rather than a mistake to paper over in the summary.
+      summary: titles == null
+          ? kLookingForSimilar
+          : (titles.length == 1 ? '1 title' : '${titles.length} titles'),
+      // No spinner on the line, unlike the sources' header: this is not
+      // what the viewer is waiting for. They came for something to watch,
+      // and a second thing turning on the panel while the sources fill is
+      // a race between two waits when only one of them is theirs. The
+      // words say it, once.
+      open: open,
+      onOpen: () => _openRung(_DetailsRung.moreLikeThis),
+      children: [
+        TvLadderRow(
+          level: _ladderSimilar,
+          child: SimilarTitlesRow(titles: titles, onOpen: _openSimilar),
+        ),
+      ],
+    );
+  }
+
+  /// A suggestion was chosen: this screen again, for that title.
+  ///
+  /// Pushed rather than replaced, the way the board's tiles open a title,
+  /// so Back comes back to the film the suggestion was about. Two of these
+  /// screens on one field is what [SharedFieldScreen] is for.
+  void _openSimilar(MetaItemPreview item) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MetaDetailsScreen(type: item.type, id: item.id),
+      ),
+    );
   }
 
   /// What a shut sources rung says it holds: how many sources there are
