@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../core/core.dart';
+import '../../widgets/readout.dart';
 import '../addons/addons_screen.dart';
 import '../dev/dev_streams.dart';
 import '../diagnostics/diagnostics_screen.dart';
@@ -28,6 +29,18 @@ import 'recommendations_section.dart';
 /// the D-pad walked a screenful of them would overlap the rows above and
 /// below it on every press, which is the reason `FocusTreatment` has two
 /// values.
+///
+/// Every control -- and that was the hole. A row with no `onTap` is no
+/// control, takes no focus and is therefore jumped over by a remote; and on
+/// a television the scroll view follows focus, so a row that is jumped over
+/// is a row the screen never scrolls to. The status of the server, the
+/// health of the DHT, the core's schema version: three lines a viewer came
+/// here to read, and the last of them sat under the fold with nothing able
+/// to bring it up. Those are [Readout]s now, which are stops wearing the
+/// ring alone -- marked, because the remote is standing there, and not
+/// filled, because pressing one does nothing. The section headers are not:
+/// a header is a label on the row below it, and that row is a stop whose
+/// own reveal brings the header on screen with it.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.dhtStatus});
 
@@ -278,14 +291,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _ => 'Unknown',
                     };
               final url = state?['baseUrl'] as String?;
-              return ListTile(
-                leading: Icon(
-                  settings?['type'] == 'Ready'
-                      ? Icons.check_circle_outline
-                      : Icons.hourglass_empty,
+              return Readout(
+                child: ListTile(
+                  leading: Icon(
+                    settings?['type'] == 'Ready'
+                        ? Icons.check_circle_outline
+                        : Icons.hourglass_empty,
+                  ),
+                  title: const Text('Status'),
+                  subtitle: Text(url == null ? status : '$status · $url'),
                 ),
-                title: const Text('Status'),
-                subtitle: Text(url == null ? status : '$status · $url'),
               );
             },
           ),
@@ -314,17 +329,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // than only ever flagging a fault. `DhtStatus.healthLine` is the
           // one place the wording lives; Diagnostics reads the same
           // `unavailableMessage` constant it composes with.
-          ListTile(
-            leading: const Icon(Icons.hub_outlined),
-            title: const Text('Peer discovery'),
-            subtitle: Text(_dht?.healthLine ?? 'Unknown'),
+          Readout(
+            child: ListTile(
+              leading: const Icon(Icons.hub_outlined),
+              title: const Text('Peer discovery'),
+              subtitle: Text(_dht?.healthLine ?? 'Unknown'),
+            ),
           ),
           const _SectionHeader('Core'),
-          ListTile(
-            leading: const Icon(Icons.memory_outlined),
-            title: const Text('stremio-core storage schema'),
-            subtitle: Text(
-              initInfo == null ? 'unknown' : 'v${initInfo.schemaVersion}',
+          Readout(
+            child: ListTile(
+              leading: const Icon(Icons.memory_outlined),
+              title: const Text('stremio-core storage schema'),
+              subtitle: Text(
+                initInfo == null ? 'unknown' : 'v${initInfo.schemaVersion}',
+              ),
             ),
           ),
           const _SectionHeader('About'),

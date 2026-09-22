@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../shell/tv_text_entry.dart';
+import '../../widgets/focusable_tile.dart';
+import '../../widgets/readout.dart';
 import '../../widgets/tv_text_field.dart';
 import '../player/language_names.dart';
 import '../player/playback_engine.dart';
@@ -24,6 +26,11 @@ import '../sharing/sharing_activity.dart';
 /// plain rows, the language dropdowns -- for the reason [SettingsScreen]
 /// gives. The two exceptions are drawn elsewhere and marked there: the
 /// folder field is a [TvTextField] and the subtitle colours are chips.
+///
+/// And what is read rather than pressed is a [Readout], which on a
+/// television is a stop wearing the ring alone: the subtitle preview and
+/// the line saying why a server URL was refused. Nothing the floor can
+/// mark, because nothing there is a control.
 typedef SettingWriter = void Function(String key, Object? value);
 
 /// The widget key of the control for one settings key.
@@ -393,18 +400,25 @@ class SubtitlesSettingsSection extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            color: const Color(0xFF303030),
-            child: Text(
-              'Subtitle preview',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: style.fontSize * 0.6,
-                color: style.color,
-                backgroundColor: style.hasBackground
-                    ? style.backgroundColor
-                    : null,
+          // The one thing on this section worth looking at, and the reason
+          // the chips above it are here. It took no focus, so on a
+          // television it sat under the fold while the colour was picked:
+          // the chips are the last stop of the section and a stop is
+          // revealed with its own bottom at the bottom of the screen.
+          child: Readout(
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              color: const Color(0xFF303030),
+              child: Text(
+                'Subtitle preview',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: style.fontSize * 0.6,
+                  color: style.color,
+                  backgroundColor: style.hasBackground
+                      ? style.backgroundColor
+                      : null,
+                ),
               ),
             ),
           ),
@@ -707,10 +721,15 @@ class _StreamingServerSectionState extends State<StreamingServerSection> {
                 if (error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      error,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
+                    // Why the URL was refused, which is the one line on
+                    // this section somebody has to read rather than press.
+                    child: Readout(
+                      padding: const EdgeInsets.all(FocusRing.textInset),
+                      child: Text(
+                        error,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
                       ),
                     ),
                   ),

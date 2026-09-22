@@ -18,10 +18,12 @@ import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/player/playback_tracks.dart';
 import 'package:xtremio/features/player/track_menus.dart';
 import 'package:xtremio/features/search/search_screen.dart';
+import 'package:xtremio/features/settings/account_section.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/shell/tv_density.dart';
+import 'package:xtremio/widgets/readout.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../../support/fake_core_client.dart';
@@ -367,6 +369,25 @@ void main() {
     expect(find.byType(AlertDialog), findsOneWidget);
   }
 
+  /// The first words on each [Readout] the screen has built right now --
+  /// the same words [focusedLabel] answers with when the remote is
+  /// standing on one, so the two can be compared.
+  Set<String> readoutWords(WidgetTester tester) {
+    final words = <String>{};
+    for (final element in find.byType(Readout).evaluate()) {
+      final texts = find
+          .descendant(
+            of: find.byWidget(element.widget),
+            matching: find.byType(Text),
+          )
+          .evaluate();
+      if (texts.isEmpty) continue;
+      final data = (texts.first.widget as Text).data;
+      if (data != null) words.add(data);
+    }
+    return words;
+  }
+
   /// Every stop the remote can land on right now.
   ///
   /// The same filter directional traversal applies: a node under an
@@ -586,6 +607,74 @@ void main() {
       );
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
+    }),
+    walk('settings_screen.dart', 'and the read-only blocks on Settings', (
+      tester,
+    ) async {
+      // The other way round from the rest of this file, and the fault the
+      // owner reported from a Chromecast: not a stop with nothing drawn on
+      // it, but words with no stop at all. The page scrolls by moving
+      // focus, so a block the D-pad jumps over is a block the page never
+      // scrolls to -- and the report under "Test this model" is both the
+      // longest thing on this screen and the last, which is the worst
+      // possible thing to be unreachable.
+      //
+      // Named by nothing: the walk collects the [Readout]s the screen
+      // builds as it goes and the ones it lands on, and the two sets have
+      // to match. A block added to this screen without a way to reach it
+      // fails here whatever it says.
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(client: fullCore(), child: onTv(const SettingsScreen())),
+      );
+      await tester.pumpAndSettle();
+
+      final built = <String>{};
+      final reached = <String>{};
+      for (var i = 0; i < 80; i++) {
+        built.addAll(readoutWords(tester));
+        if (focusIn<Readout>()) {
+          reached.add(focusedLabel(tester) ?? 'unnamed');
+          // Marked, and marked as something to read: the ring alone, with
+          // none of the fill the floor puts under a control that can be
+          // pressed.
+          expect(focusMarks(), {FocusMark.ring});
+        }
+        await press(tester, LogicalKeyboardKey.arrowDown);
+      }
+      built.addAll(readoutWords(tester));
+
+      expect(
+        built,
+        isNotEmpty,
+        reason: 'this screen is made of read-only rows; none was built',
+      );
+      expect(
+        built.difference(reached),
+        isEmpty,
+        reason: 'a block of words on Settings the D-pad walked straight past',
+      );
+      // And the blocks by name, because the check above is satisfied by a
+      // screen with no readouts on it at all: these are the ones that were
+      // unreachable when this was reported, each named by enough of itself
+      // to tell it from its neighbours.
+      for (final words in [
+        AccountSection.libraryNote,
+        'Subtitle preview',
+        'More like this',
+        'is kept on this device and sent only to Google',
+        'Being listed is not being usable',
+        'Until a key is pasted there is no list to choose from',
+        'Status',
+        'Peer discovery',
+        'stremio-core storage schema',
+      ]) {
+        expect(
+          reached.any((landed) => landed.contains(words)),
+          isTrue,
+          reason: 'the remote never reached "$words"',
+        );
+      }
     }),
     walk('addons_screen.dart', 'Addons', (tester) async {
       useScreen(tester, tvSize);

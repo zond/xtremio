@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../shell/tv_text_entry.dart';
+import '../../widgets/focusable_tile.dart';
+import '../../widgets/readout.dart';
 import '../../widgets/tv_text_field.dart';
 
 /// Settings → Account, over `ctx.profile.auth`.
@@ -13,7 +15,12 @@ import '../../widgets/tv_text_field.dart';
 /// The form's two fields are [TvTextField]s and carry the app's ring
 /// themselves; the consent boxes and the buttons around them are Material
 /// controls on the app's own surface and take the theme floor
-/// (`FocusTheme`), which is the whole of what marks them.
+/// (`FocusTheme`), which is the whole of what marks them. What is read
+/// rather than pressed -- why a sign-in was refused, what signing in is
+/// for, which account this is, and a banner's message -- is a [Readout],
+/// so that a remote can reach it: on a television the page scrolls only by
+/// moving focus, and the note under the buttons is the last thing on the
+/// section.
 ///
 /// Signed out it is the sign-in / create-account form: `Authenticate` with
 /// `AuthRequest::Login` or `::Register` (the latter with the GDPR consent
@@ -395,10 +402,13 @@ class _AccountSectionState extends State<AccountSection> {
           if (error != null)
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                error,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
+              child: Readout(
+                padding: const EdgeInsets.all(FocusRing.textInset),
+                child: Text(
+                  error,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
                 ),
               ),
             ),
@@ -428,10 +438,13 @@ class _AccountSectionState extends State<AccountSection> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            AccountSection.libraryNote,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          Readout(
+            padding: const EdgeInsets.all(FocusRing.textInset),
+            child: Text(
+              AccountSection.libraryNote,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],
@@ -448,14 +461,16 @@ class _AccountSectionState extends State<AccountSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ListTile(
-          leading: CircleAvatar(
-            foregroundImage: avatar == null ? null : NetworkImage(avatar),
-            onForegroundImageError: avatar == null ? null : (_, _) {},
-            child: const Icon(Icons.person_outline),
+        Readout(
+          child: ListTile(
+            leading: CircleAvatar(
+              foregroundImage: avatar == null ? null : NetworkImage(avatar),
+              onForegroundImageError: avatar == null ? null : (_, _) {},
+              child: const Icon(Icons.person_outline),
+            ),
+            title: Text(user.email),
+            subtitle: const Text('Signed in'),
           ),
-          title: Text(user.email),
-          subtitle: const Text('Signed in'),
         ),
         if (profile.addonsLocked)
           _Banner(
@@ -532,17 +547,22 @@ class _Banner extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Row(
-                children: [
-                  Icon(icon, color: scheme.onErrorContainer),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: TextStyle(color: scheme.onErrorContainer),
+              // The message and not the whole banner: the Retry one of
+              // these has a button under it, which is a stop of its own,
+              // and a ring round both would light for either.
+              Readout(
+                child: Row(
+                  children: [
+                    Icon(icon, color: scheme.onErrorContainer),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        message,
+                        style: TextStyle(color: scheme.onErrorContainer),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               if (actionLabel != null)
                 TextButton(onPressed: onAction, child: Text(actionLabel!))
