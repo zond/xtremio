@@ -320,22 +320,27 @@ class TvLadderRowState extends State<TvLadderRow> {
 /// drawn by its screen, and the walk steps over it the way it steps over
 /// any row that is not registered.
 ///
-/// **Select opens, and Back closes.** Landing on a header does not open it:
-/// a walk down the ladder would otherwise open every rung it passed and
-/// leave Back with a stack of them to put away. So this is one of the rows
+/// **Select opens, and select again shuts.** Landing on a header does not
+/// open it: a walk down the ladder would otherwise open every rung it
+/// passed and leave a stack of them out. So this is one of the rows
 /// [TvLadderRow.advanceOnSelect] is explicitly not for -- select here is
 /// the point rather than a leftover -- and the press that opens a rung
-/// leaves the remote on the header, one press above what it opened.
+/// leaves the remote on the header, one press above what it opened. The
+/// press that shuts one leaves it there too: the header is what everything
+/// that goes away was underneath.
 ///
-/// Which rung is open is the screen's: [open] is read, never kept here, so
-/// opening one is the same act as closing the one that was open.
+/// Which rung is open is the screen's: [open] is read, never kept here,
+/// and [onSelect] is the press being reported rather than an instruction.
+/// Opening one is the same act as closing the one that was open, and what
+/// select on the open one means -- there being no other rung to fall back
+/// to -- is a question about the screen rather than about this line.
 class TvLadderRung extends StatelessWidget {
   const TvLadderRung({
     super.key,
     required this.level,
     required this.label,
     required this.open,
-    required this.onOpen,
+    required this.onSelect,
     this.summary = '',
     this.trailing,
     this.children = const [],
@@ -359,8 +364,9 @@ class TvLadderRung extends StatelessWidget {
 
   final bool open;
 
-  /// Open this rung, which closes whichever one was open.
-  final VoidCallback onOpen;
+  /// Select was pressed on this header. Whether that opens this rung,
+  /// shuts it, or shuts whichever other one was open is the screen's.
+  final VoidCallback onSelect;
 
   /// The rows inside it, each a [TvLadderRow] of its own.
   final List<Widget> children;
@@ -390,7 +396,7 @@ class TvLadderRung extends StatelessWidget {
           child: TvLadderRow(
             level: level,
             child: FocusableTile(
-              onTap: onOpen,
+              onTap: onSelect,
               borderRadius: _radius,
               // A line the width of the panel: the ring and the dimming,
               // and neither the zoom nor the shadow, which on something
