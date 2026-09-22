@@ -50,6 +50,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/core.dart';
 import '../../shell/tv_text_entry.dart';
+import '../../widgets/focusable_tile.dart';
+import '../../widgets/readout.dart';
 import '../../widgets/tv_text_field.dart';
 import '../similar/check_gemini.dart';
 import '../similar/check_keys.dart';
@@ -296,13 +298,15 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const ListTile(
-          leading: Icon(Icons.auto_awesome_outlined),
-          title: Text('More like this'),
-          subtitle: Text(
-            'A row of suggestions under a title, from a Google Gemini model '
-            'asked with a key of your own. With no key here the row does '
-            'not appear and nothing is asked of anybody.',
+        const Readout(
+          child: ListTile(
+            leading: Icon(Icons.auto_awesome_outlined),
+            title: Text('More like this'),
+            subtitle: Text(
+              'A row of suggestions under a title, from a Google Gemini '
+              'model asked with a key of your own. With no key here the row '
+              'does not appear and nothing is asked of anybody.',
+            ),
           ),
         ),
         _field(
@@ -371,11 +375,16 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
           onTap: _hasKey && !running ? _test : null,
         ),
         if (failure != null)
-          ListTile(
-            leading: Icon(Icons.error_outline, color: theme.colorScheme.error),
-            title: const Text('No answer'),
-            subtitle: Text(
-              'The model did not answer: $failure. Nothing was measured.',
+          Readout(
+            child: ListTile(
+              leading: Icon(
+                Icons.error_outline,
+                color: theme.colorScheme.error,
+              ),
+              title: const Text('No answer'),
+              subtitle: Text(
+                'The model did not answer: $failure. Nothing was measured.',
+              ),
             ),
           ),
         if (report != null) ..._results(theme, report),
@@ -426,18 +435,21 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
       ),
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-        child: Text(
-          // Both halves are measured and neither is obvious. The mark says
-          // which model the evidence is about; the second sentence says
-          // that the list is where a model is found and the check is where
-          // it is settled.
-          'The one marked measured is what the measuring settled on: the '
-          'best coverage of the answer keys of anything that answers '
-          'inside the five seconds the row waits. Being listed is not '
-          'being usable — 20 of 33 listed models could not answer when '
-          'they were asked something — so Test this model below is what '
-          'settles it.',
-          style: theme.textTheme.bodySmall,
+        child: Readout(
+          padding: const EdgeInsets.all(FocusRing.textInset),
+          child: Text(
+            // Both halves are measured and neither is obvious. The mark
+            // says which model the evidence is about; the second sentence
+            // says that the list is where a model is found and the check
+            // is where it is settled.
+            'The one marked measured is what the measuring settled on: the '
+            'best coverage of the answer keys of anything that answers '
+            'inside the five seconds the row waits. Being listed is not '
+            'being usable — 20 of 33 listed models could not answer when '
+            'they were asked something — so Test this model below is what '
+            'settles it.',
+            style: theme.textTheme.bodySmall,
+          ),
         ),
       ),
       // No list, so a name can still go in by hand: a fetch that failed
@@ -513,7 +525,13 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
         ),
         Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: Text(note, style: Theme.of(context).textTheme.bodySmall),
+          // What typing there decides is a paragraph, and a paragraph the
+          // remote cannot reach is one it scrolls past: the note under the
+          // key field is four lines of what the key is and where it goes.
+          child: Readout(
+            padding: const EdgeInsets.all(FocusRing.textInset),
+            child: Text(note, style: Theme.of(context).textTheme.bodySmall),
+          ),
         ),
       ],
     ),
@@ -523,72 +541,90 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
   /// carries it. A number with nothing beside it is a number nobody can
   /// act on: chance is printed next to the judgement, the veto next to
   /// the inventions, and the row's budget next to the time.
+  ///
+  /// **Each is a [Readout].** This is the longest thing on the settings
+  /// screen and the one somebody sits down to read, and on a television
+  /// none of it took focus: the remote jumped from "Test this model"
+  /// straight past the whole report, which therefore never scrolled into
+  /// view. A row apiece rather than one ring round the five, because the
+  /// D-pad walks this screen a row at a time everywhere else and each of
+  /// these is one number with its own sentence under it.
   List<Widget> _results(ThemeData theme, ModelCheckReport report) => [
-    ListTile(
-      leading: Icon(
-        report.usable
-            ? Icons.check_circle_outline
-            : Icons.report_problem_outlined,
-        color: report.usable
-            ? theme.colorScheme.primary
-            : theme.colorScheme.error,
-      ),
-      title: Text(report.verdict),
-      subtitle: Text(
-        'Measured over ${report.targets} films and '
-        '${report.suggested} suggestions.',
-      ),
-    ),
-    ListTile(
-      leading: const Icon(Icons.balance_outlined),
-      title: Text(
-        'Judgement ${_score(report.judgement)} · '
-        'chance is ${_score(toneChance)}',
-      ),
-      subtitle: const Text(
-        'Handed a list of films, how often it puts the one that feels '
-        'nearer the target first. The list is stocked with films that are '
-        'closely related and feel nothing alike, so a model that sorts by '
-        'relatedness scores below chance rather than above it.',
+    Readout(
+      child: ListTile(
+        leading: Icon(
+          report.usable
+              ? Icons.check_circle_outline
+              : Icons.report_problem_outlined,
+          color: report.usable
+              ? theme.colorScheme.primary
+              : theme.colorScheme.error,
+        ),
+        title: Text(report.verdict),
+        subtitle: Text(
+          'Measured over ${report.targets} films and '
+          '${report.suggested} suggestions.',
+        ),
       ),
     ),
-    ListTile(
-      leading: const Icon(Icons.fact_check_outlined),
-      title: Text('Agreement ${_score(report.agreement)}'),
-      subtitle: const Text(
-        'How much of what it recommended our answer keys rate. Anything '
-        'outside the keys counts as nothing, so this is a floor and not a '
-        'mark: a model can be right about a film nobody researched.',
+    Readout(
+      child: ListTile(
+        leading: const Icon(Icons.balance_outlined),
+        title: Text(
+          'Judgement ${_score(report.judgement)} · '
+          'chance is ${_score(toneChance)}',
+        ),
+        subtitle: const Text(
+          'Handed a list of films, how often it puts the one that feels '
+          'nearer the target first. The list is stocked with films that '
+          'are closely related and feel nothing alike, so a model that '
+          'sorts by relatedness scores below chance rather than above it.',
+        ),
       ),
     ),
-    ListTile(
-      leading: Icon(
-        Icons.movie_filter_outlined,
-        color: report.inventsFilms ? theme.colorScheme.error : null,
-      ),
-      title: Text(
-        report.invented == 0
-            ? 'Invented films: none in ${report.suggested}'
-            : 'Invented films: ${report.invented} in ${report.suggested}',
-      ),
-      subtitle: const Text(
-        'Titles no catalogue has. More than one in six and the model is '
-        'unusable whatever else it scored: an invented film does not leave '
-        'a gap, it reaches the screen as a real poster for something that '
-        'does not exist.',
+    Readout(
+      child: ListTile(
+        leading: const Icon(Icons.fact_check_outlined),
+        title: Text('Agreement ${_score(report.agreement)}'),
+        subtitle: const Text(
+          'How much of what it recommended our answer keys rate. Anything '
+          'outside the keys counts as nothing, so this is a floor and not '
+          'a mark: a model can be right about a film nobody researched.',
+        ),
       ),
     ),
-    ListTile(
-      leading: Icon(
-        Icons.timer_outlined,
-        color: report.tooSlow ? theme.colorScheme.error : null,
+    Readout(
+      child: ListTile(
+        leading: Icon(
+          Icons.movie_filter_outlined,
+          color: report.inventsFilms ? theme.colorScheme.error : null,
+        ),
+        title: Text(
+          report.invented == 0
+              ? 'Invented films: none in ${report.suggested}'
+              : 'Invented films: ${report.invented} in ${report.suggested}',
+        ),
+        subtitle: const Text(
+          'Titles no catalogue has. More than one in six and the model is '
+          'unusable whatever else it scored: an invented film does not '
+          'leave a gap, it reaches the screen as a real poster for '
+          'something that does not exist.',
+        ),
       ),
-      title: Text('Slowest call ${_seconds(report.slowest)}'),
-      subtitle: Text(
-        report.tooSlow
-            ? 'Over the ${_seconds(similarBudget)} the row lives under, so '
-                  'expect no row.'
-            : 'The row gives up at ${_seconds(similarBudget)}.',
+    ),
+    Readout(
+      child: ListTile(
+        leading: Icon(
+          Icons.timer_outlined,
+          color: report.tooSlow ? theme.colorScheme.error : null,
+        ),
+        title: Text('Slowest call ${_seconds(report.slowest)}'),
+        subtitle: Text(
+          report.tooSlow
+              ? 'Over the ${_seconds(similarBudget)} the row lives under, '
+                    'so expect no row.'
+              : 'The row gives up at ${_seconds(similarBudget)}.',
+        ),
       ),
     ),
   ];

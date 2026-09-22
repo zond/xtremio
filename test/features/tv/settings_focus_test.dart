@@ -8,6 +8,7 @@ import 'package:xtremio/features/settings/core_settings.dart';
 import 'package:xtremio/features/settings/recommendations_section.dart';
 import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
+import 'package:xtremio/widgets/readout.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../../support/fake_core_client.dart';
@@ -39,6 +40,16 @@ Widget harness(FakeCoreClient core, {AppPrefs? prefs}) {
     ),
   );
 }
+
+/// What the engine says when the API refused a sign-in, which is what puts
+/// a line of red under the form.
+const authRefused = RuntimeCoreEvent({
+  'event': 'Error',
+  'args': {
+    'error': {'type': 'API', 'message': 'Wrong email or password', 'code': 3},
+    'source': {'event': 'UserAuthenticated'},
+  },
+});
 
 /// The settings map of the last `UpdateSettings` dispatched.
 Map<String, dynamic> lastSettings(FakeCoreClient core) {
@@ -240,5 +251,96 @@ void main() {
     expect(chosen, isNot(countdown));
     expect(picked, PlayerSettingsSection.upNextLabel(chosen));
     expect(focusIn<DropdownButton<int>>(), isTrue, reason: 'focus returns');
+  });
+
+  testWidgets('the remote reaches the line saying why a URL was refused', (
+    tester,
+  ) async {
+    // A read-only block that is only ever on screen when something has
+    // gone wrong, which is the worst kind to be unreachable: it appears
+    // under the Save that was just pressed, and on a television a block
+    // that takes no focus is one the page cannot be scrolled to.
+    useScreen(tester, tvSize);
+    final core = fakeCore(embeddedUrl: Uri.parse('http://127.0.0.1:11470'));
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await downTo(tester, 'Remote server');
+    await press(tester, LogicalKeyboardKey.select);
+    // An empty box is not a URL, which is what the line under it says.
+    // The Save is beside the box rather than under it, so this is a right
+    // press and not another down.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusIn<TvTextField>(), isTrue);
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedLabel(tester), 'Save');
+    await press(tester, LogicalKeyboardKey.select);
+    expect(find.text(StreamingServerSection.invalidUrlMessage), findsOneWidget);
+
+    await downTo(tester, StreamingServerSection.invalidUrlMessage);
+    expect(focusIn<Readout>(), isTrue);
+    expect(focusMarks(), {FocusMark.ring});
+  });
+
+  testWidgets('and the account row, which is words rather than a control', (
+    tester,
+  ) async {
+    // Signed in, the first thing on the screen is which account this is --
+    // an email address a viewer reads and presses nothing on.
+    useScreen(tester, tvSize);
+    // With the addon collection locked, so the banner under the account
+    // row is drawn as well: it is the other read-only block here, and the
+    // only one with a button of its own inside it.
+    final ctx = loadCtxLoggedInFixture();
+    (ctx['profile'] as Map<String, dynamic>)['addonsLocked'] = true;
+    final core = FakeCoreClient(
+      state: {
+        CoreField.ctx: ctx,
+        CoreField.installedAddons: loadInstalledAddonsFixture(),
+        CoreField.remoteAddons: loadRemoteAddonsFixture(),
+      },
+    );
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+    final email = ProfileState.fromCtx(ctx).user!.email;
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), email);
+    expect(focusIn<Readout>(), isTrue);
+    expect(focusMarks(), {FocusMark.ring});
+
+    // And the banner under it, which is a whole paragraph of what went
+    // wrong -- reachable itself, with its Retry a stop of its own after
+    // it rather than a ring drawn round both.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusIn<Readout>(), isTrue);
+    expect(
+      focusedLabel(tester),
+      startsWith('Your addon collection could not be fetched'),
+    );
+    expect(focusMarks(), {FocusMark.ring});
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), 'Retry');
+    expect(focusIn<Readout>(), isFalse);
+  });
+
+  testWidgets('and the line saying why a sign-in was refused', (tester) async {
+    // The error appears under the button that was just pressed, and it is
+    // words rather than a control: on a television that is a block the
+    // page cannot scroll to unless it takes focus.
+    useScreen(tester, tvSize);
+    final core = fakeCore();
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+
+    core.emit(authRefused);
+    await tester.pumpAndSettle();
+    expect(find.text('Wrong email or password'), findsOneWidget);
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await downTo(tester, 'Wrong email or password');
+    expect(focusIn<Readout>(), isTrue);
+    expect(focusMarks(), {FocusMark.ring});
   });
 }

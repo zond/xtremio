@@ -15,6 +15,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/settings/recommendations_section.dart';
@@ -22,7 +23,9 @@ import 'package:xtremio/features/settings/settings_screen.dart';
 import 'package:xtremio/features/similar/check_keys.dart';
 import 'package:xtremio/features/similar/check_model.dart';
 import 'package:xtremio/features/similar/similar_titles.dart';
+import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/tv_text_entry.dart';
+import 'package:xtremio/widgets/readout.dart';
 import 'package:xtremio/widgets/tv_text_field.dart';
 
 import '../support/diagnostics_capture.dart';
@@ -30,6 +33,7 @@ import '../support/fake_core_client.dart';
 import '../support/fake_model_check.dart';
 import '../support/fake_prefs_client.dart';
 import '../support/fixtures.dart';
+import '../support/tv.dart';
 
 /// A key of the shape a viewer would paste, and of no use to anybody.
 const String pastedKey = 'AIza-not-a-real-key';
@@ -154,6 +158,21 @@ void main() {
       ),
     );
     await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+  }
+
+  /// The section on a television, which is where a block of words that
+  /// takes no focus is a block the page can never be scrolled to.
+  Future<void> openOnTv(WidgetTester tester) async {
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(
+      DeviceScope(
+        profile: tv,
+        child: MaterialApp(
+          home: Scaffold(body: ListView(children: [section()])),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -530,6 +549,71 @@ void main() {
       find.textContaining('sorts by relatedness scores below chance'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('on a television the remote reaches the report it just ran', (
+    tester,
+  ) async {
+    // What the owner found on a Chromecast. The report is the longest
+    // block on the settings screen and it was the one thing there that
+    // took no focus, so the D-pad went from "Test this model" to whatever
+    // was under it -- and since the page scrolls only by moving focus, the
+    // numbers it had just spent six calls measuring never came on screen.
+    await start(apiKey: pastedKey);
+    await openOnTv(tester);
+
+    await tester.ensureVisible(find.byKey(RecommendationsSection.testKey));
+    await tester.tap(find.byKey(RecommendationsSection.testKey));
+    await tester.pumpAndSettle();
+    expect(find.text('Usable.'), findsOneWidget);
+
+    final reached = <String>{};
+    for (var i = 0; i < 24; i++) {
+      if (focusIn<Readout>()) {
+        reached.add(focusedLabel(tester) ?? 'unnamed');
+        // Marked as something to read: the ring, and not the fill the
+        // floor puts under a control that can be pressed.
+        expect(focusMarks(), {FocusMark.ring});
+      }
+      await press(tester, LogicalKeyboardKey.arrowDown);
+    }
+
+    expect(reached, contains('Usable.'));
+    expect(reached, contains('Judgement 1.00 · chance is 0.50'));
+    expect(reached, contains('Agreement 1.00'));
+    expect(
+      reached.where((words) => words.startsWith('Invented films')),
+      isNotEmpty,
+    );
+    expect(
+      reached.where((words) => words.startsWith('Slowest call')),
+      isNotEmpty,
+    );
+  });
+
+  testWidgets('and on a television the line saying it did not answer', (
+    tester,
+  ) async {
+    // The other thing "Test this model" can put on the screen, and the
+    // same fault: a row of words under the row that was pressed.
+    await start(apiKey: pastedKey);
+    answering = FakeCheckModel(
+      ordering: (target, films) =>
+          throw const SimilarTitlesFailure(SimilarTrouble.gone, '404'),
+    );
+    await openOnTv(tester);
+
+    await tester.ensureVisible(find.byKey(RecommendationsSection.testKey));
+    await tester.tap(find.byKey(RecommendationsSection.testKey));
+    await tester.pumpAndSettle();
+    expect(find.text('No answer'), findsOneWidget);
+
+    final reached = <String>{};
+    for (var i = 0; i < 20; i++) {
+      if (focusIn<Readout>()) reached.add(focusedLabel(tester) ?? 'unnamed');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(reached, contains('No answer'));
   });
 
   testWidgets('leaving the screen cancels the check', (tester) async {
