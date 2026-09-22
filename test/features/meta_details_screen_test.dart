@@ -20,6 +20,21 @@ import '../support/fixtures.dart';
 const seriesId = 'tt0903747';
 const pilotId = '$seriesId:1:1';
 
+/// Every addon the fixtures and helpers in this file answer with, by the
+/// transport URL `AppPrefs.openStreamAddons` remembers a group under: the
+/// three in the movie fixture, the two in the episode one, the grafted
+/// [torrentGroup], and the ones the tests add by hand. Listing a group
+/// that this or that title never has is harmless -- a remembered addon a
+/// title has no sources from is simply not shown.
+const everyAddon = {
+  'https://watchhub.strem.io/manifest.json',
+  'https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json',
+  'http://127.0.0.1:11470/local-addon/manifest.json',
+  'https://torrentio.example/manifest.json',
+  'https://v3-channels.strem.io/manifest.json',
+  'https://mirror.example/stremio/manifest.json',
+};
+
 /// A Torrentio-style stream group for the selected episode, to graft onto
 /// the series fixture (the default addons have no torrents for it).
 Map<String, dynamic> torrentGroup(String videoId) => {
@@ -79,12 +94,19 @@ void main() {
   /// Grouped, not the sources list's sectioned default: this file is
   /// about the screen's own loading and routing, not resolution sections,
   /// and most of it wants a stream on screen with no section to open
-  /// first. `AppPrefs.inMemory()` persists nothing, so the setter's write
-  /// below completes synchronously (nothing to await) and the value is
+  /// first. `AppPrefs.inMemory()` persists nothing, so the setters' writes
+  /// below complete synchronously (nothing to await) and the values are
   /// already in place by the time this returns.
+  ///
+  /// The addon groups collapse too now, and remember nothing by default
+  /// (`AppPrefs.openStreamAddons`), so this says once that every addon
+  /// these fixtures can answer with is open -- again so a test about
+  /// loading and routing has its streams on screen without opening a
+  /// group first.
   AppPrefs groupedPrefs() {
     final prefs = AppPrefs.inMemory();
     unawaited(prefs.setStreamsSectioned(false));
+    unawaited(prefs.setOpenStreamAddons(everyAddon));
     return prefs;
   }
 

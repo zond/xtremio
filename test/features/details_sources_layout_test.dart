@@ -135,6 +135,24 @@ Future<void> toggleSection(
   await tester.pumpAndSettle();
 }
 
+/// Opens or closes the group headed by the addon at [base]. By its key
+/// for the same reason the sections are: the heading is the addon's host
+/// and its rows badge that host too.
+Future<void> toggleAddon(WidgetTester tester, String base) async {
+  await tester.tap(find.byKey(streamAddonKey(base)));
+  await tester.pumpAndSettle();
+}
+
+/// Where the header of the addon at [base] is.
+double topOfAddon(WidgetTester tester, String base) =>
+    tester.getTopLeft(find.byKey(streamAddonKey(base))).dy;
+
+/// What the header of the addon at [base] says it is holding.
+String addonSummary(WidgetTester tester, String base) {
+  final header = tester.widget<ListTile>(find.byKey(streamAddonKey(base)));
+  return (header.subtitle! as Text).data!;
+}
+
 /// Where the header of [resolution] is, which is not `topOf` its label: a
 /// row inside the section badges the same text.
 double topOfSection(WidgetTester tester, StreamResolution? resolution) =>
@@ -189,13 +207,19 @@ void main() {
   }
 
   /// The movie fixture with [streams] in place of its own, and the default
-  /// profile as `ctx` so the addons can be named.
+  /// profile as `ctx` so the addons can be named. [metaStreams] are the
+  /// streams a meta addon attached to the video itself, which the grouped
+  /// layout heads "From ..." and keeps apart from that addon's answer as a
+  /// stream addon.
   FakeCoreClient coreWith(
     List<Map<String, dynamic>> streams, {
+    List<Map<String, dynamic>> metaStreams = const [],
     Map<CoreField, Map<String, dynamic>> also = const {},
   }) => FakeCoreClient(
     state: {
-      CoreField.metaDetails: loadMetaDetailsFixture()..['streams'] = streams,
+      CoreField.metaDetails: loadMetaDetailsFixture()
+        ..['streams'] = streams
+        ..['metaStreams'] = metaStreams,
       CoreField.ctx: loadCtxLoggedOutFixture(),
       ...also,
     },
@@ -281,10 +305,16 @@ void main() {
 
       await choose(tester, kStreamsGroupedLabel);
 
-      // A heading per addon, once each, above its own streams: what this
-      // list looked like before the sectioned layout existed.
+      // A heading per addon, once each: what this list looked like before
+      // the sectioned layout existed, except that the groups start shut
+      // like the sections do.
       expect(find.text('alpha.example'), findsOneWidget);
       expect(find.text('beta.example'), findsOneWidget);
+      expect(find.text('Alpha 720p'), findsNothing);
+      expect(find.text('Beta 1080p'), findsNothing);
+
+      await toggleAddon(tester, alphaUrl);
+      await toggleAddon(tester, betaUrl);
       expect(topOf('alpha.example'), lessThan(topOf('Alpha 720p')));
       // Each addon's own ranking, untouched: alpha's worst release first.
       expect(topOf('Alpha 720p'), lessThan(topOf('Alpha 2160p')));
@@ -307,7 +337,10 @@ void main() {
       (tester) async {
         useWideViewport(tester);
         final prefs = AppPrefs(
-          client: FakePrefsClient({'streamsSectioned': false}),
+          client: FakePrefsClient({
+            'streamsSectioned': false,
+            'openStreamAddons': [alphaUrl],
+          }),
         );
         addTearDown(prefs.dispose);
         await prefs.load();
@@ -674,6 +707,247 @@ void main() {
     });
   });
 
+  group('which addon groups are open', () {
+    /// The grouped layout over [stored], loaded the way start-up reads it
+    /// before the first sources list is built.
+    Future<AppPrefs> groupedPrefs([FakePrefsClient? stored]) async {
+      final client = stored ?? FakePrefsClient();
+      client.stored['streamsSectioned'] = false;
+      final prefs = AppPrefs(client: client);
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      return prefs;
+    }
+
+    testWidgets('with nothing remembered every group is shut', (tester) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(
+        harness(coreWith(twoAddons()), prefs: await groupedPrefs()),
+      );
+      await tester.pumpAndSettle();
+
+      // Both headings, and not one stream under either: an empty memory
+      // means everything closed, which is what a fresh install has.
+      expect(find.text('alpha.example'), findsOneWidget);
+      expect(find.text('beta.example'), findsOneWidget);
+      expect(
+        topOfAddon(tester, alphaUrl),
+        lessThan(topOfAddon(tester, betaUrl)),
+        reason: 'the groups are still in the order the addons answered',
+      );
+      expect(find.text('Alpha 720p'), findsNothing);
+      expect(find.text('Alpha 2160p'), findsNothing);
+      expect(find.text('Beta 1080p'), findsNothing);
+      expect(find.text('Beta mystery release'), findsNothing);
+      // A closed header still says how much is folded away in it.
+      expect(addonSummary(tester, alphaUrl), '2 streams');
+      expect(addonSummary(tester, betaUrl), '2 streams');
+    });
+
+    testWidgets('opening one shows its sources, and the same preferences '
+        'build it open again', (tester) async {
+      useWideViewport(tester);
+      final stored = FakePrefsClient();
+      final prefs = await groupedPrefs(stored);
+      await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
+      await tester.pumpAndSettle();
+
+      await toggleAddon(tester, alphaUrl);
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      expect(find.text('Alpha 2160p'), findsOneWidget);
+      expect(prefs.openStreamAddons, {alphaUrl});
+      expect(stored.stored['openStreamAddons'], [alphaUrl]);
+
+      // The app comes up again: a new AppPrefs over the same file, read
+      // before the first sources list is built.
+      await tester.pumpWidget(const SizedBox());
+      final restarted = AppPrefs(client: stored);
+      addTearDown(restarted.dispose);
+      await restarted.load();
+      await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: restarted));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      expect(find.text('Beta 1080p'), findsNothing);
+    });
+
+    testWidgets('opening one leaves the others shut', (tester) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(
+        harness(coreWith(twoAddons()), prefs: await groupedPrefs()),
+      );
+      await tester.pumpAndSettle();
+
+      await toggleAddon(tester, betaUrl);
+      expect(find.text('Beta 1080p'), findsOneWidget);
+      expect(find.text('Alpha 720p'), findsNothing);
+      expect(find.text('Alpha 2160p'), findsNothing);
+    });
+
+    testWidgets('closing one leaves the others as they were', (tester) async {
+      useWideViewport(tester);
+      final stored = FakePrefsClient();
+      final prefs = await groupedPrefs(stored);
+      await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
+      await tester.pumpAndSettle();
+
+      await toggleAddon(tester, alphaUrl);
+      await toggleAddon(tester, betaUrl);
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      expect(find.text('Beta 1080p'), findsOneWidget);
+
+      await toggleAddon(tester, alphaUrl);
+      expect(find.text('Alpha 720p'), findsNothing);
+      expect(
+        find.text('Beta 1080p'),
+        findsOneWidget,
+        reason: 'closing one group says nothing about the others',
+      );
+      expect(prefs.openStreamAddons, {betaUrl});
+
+      // And the last one closed leaves a set that is empty on purpose,
+      // kept apart from "unset" the way the sections' one is.
+      await toggleAddon(tester, betaUrl);
+      expect(find.text('Beta 1080p'), findsNothing);
+      expect(stored.stored['openStreamAddons'], isEmpty);
+      final restarted = AppPrefs(client: stored);
+      addTearDown(restarted.dispose);
+      await restarted.load();
+      expect(restarted.openStreamAddons, isEmpty);
+      expect(restarted.openStreamAddons, isNotNull);
+    });
+
+    testWidgets('a remembered addon this title has no sources from opens '
+        'nothing else in its place', (tester) async {
+      useWideViewport(tester);
+      final prefs = await groupedPrefs(
+        FakePrefsClient({
+          'openStreamAddons': ['https://gamma.example/manifest.json'],
+        }),
+      );
+      await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Alpha 720p'),
+        findsNothing,
+        reason: 'not substituted for a group this title actually has',
+      );
+      expect(find.text('Beta 1080p'), findsNothing);
+      expect(
+        find.text('alpha.example'),
+        findsOneWidget,
+        reason: 'the header is still there, just closed',
+      );
+    });
+
+    testWidgets('a group closed here keeps an addon another title '
+        'remembers', (tester) async {
+      useWideViewport(tester);
+      const gammaUrl = 'https://gamma.example/manifest.json';
+      final stored = FakePrefsClient({
+        'openStreamAddons': [alphaUrl, gammaUrl],
+      });
+      final prefs = await groupedPrefs(stored);
+      await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
+      await tester.pumpAndSettle();
+
+      // Closing alpha works on the whole remembered set, so gamma -- open
+      // on some other title, and not offered here -- is still remembered.
+      await toggleAddon(tester, alphaUrl);
+      expect(find.text('Alpha 720p'), findsNothing);
+      expect(prefs.openStreamAddons, {gammaUrl});
+    });
+
+    testWidgets('one addon answering twice is two groups that open '
+        'separately', (tester) async {
+      useWideViewport(tester);
+      final stored = FakePrefsClient();
+      final prefs = await groupedPrefs(stored);
+      await tester.pumpWidget(
+        harness(
+          coreWith(
+            [
+              ready(alphaUrl, [
+                {
+                  'infoHash': 'a' * 40,
+                  'name': 'Alpha 720p',
+                  'description': '👤 5 💾 900 MB',
+                },
+              ]),
+            ],
+            // The same addon, answering as the meta addon too: one
+            // transport URL, two groups, two headings.
+            metaStreams: [
+              ready(alphaUrl, [
+                {'url': 'https://alpha.example/trailer.mp4', 'name': 'Trailer'},
+              ]),
+            ],
+          ),
+          prefs: prefs,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('From alpha.example'), findsOneWidget);
+      expect(find.text('alpha.example'), findsOneWidget);
+
+      await toggleAddon(tester, alphaUrl);
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      expect(
+        find.text('Trailer'),
+        findsNothing,
+        reason: 'the meta addon\'s group is remembered under its own label',
+      );
+      expect(prefs.openStreamAddons, {alphaUrl});
+
+      await toggleAddon(tester, 'meta:$alphaUrl');
+      expect(find.text('Trailer'), findsOneWidget);
+      expect(prefs.openStreamAddons, {alphaUrl, 'meta:$alphaUrl'});
+    });
+
+    testWidgets('the two memories do not bleed into each other', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final stored = FakePrefsClient();
+      // Sectioned first: open 720p, which is a resolution and nothing to
+      // do with any addon.
+      final prefs = AppPrefs(client: stored);
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      await tester.pumpWidget(harness(coreWith(twoAddons()), prefs: prefs));
+      await tester.pumpAndSettle();
+      await toggleSection(tester, StreamResolution.hd720);
+      expect(prefs.openStreamSections, {'720p'});
+      expect(
+        prefs.openStreamAddons,
+        anyOf(isNull, isEmpty),
+        reason: 'opening a section chose nothing about the addons',
+      );
+
+      // Grouped, and the section's memory buys nothing here: every group
+      // is still shut.
+      await choose(tester, kStreamsGroupedLabel);
+      expect(find.text('Alpha 720p'), findsNothing);
+
+      await toggleAddon(tester, alphaUrl);
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      expect(prefs.openStreamAddons, {alphaUrl});
+      expect(prefs.openStreamSections, {
+        '720p',
+      }, reason: 'opening a group left the resolutions where they were');
+      expect(stored.stored['openStreamSections'], ['720p']);
+      expect(stored.stored['openStreamAddons'], [alphaUrl]);
+
+      // And back: the section is still the one that was open, with the
+      // addon's choice nowhere in it.
+      await choose(tester, kStreamsSectionedLabel);
+      expect(find.text('Alpha 720p'), findsOneWidget);
+      expect(find.text('Alpha 2160p'), findsNothing);
+    });
+  });
+
   group('the choice sticks', () {
     testWidgets('the layout, across another title, on the app-wide value', (
       tester,
@@ -685,6 +959,7 @@ void main() {
       await tester.pumpAndSettle();
       await choose(tester, kStreamsGroupedLabel);
       expect(prefs.streamsSectioned, isFalse);
+      await toggleAddon(tester, alphaUrl);
 
       // A second title, a whole new screen, the same preference above it.
       await rebuild(

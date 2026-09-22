@@ -137,13 +137,23 @@ class GatedListingClient extends FakeDownloadsClient {
 void main() {
   /// Grouped, not the sources list's sectioned default: this file is about
   /// the downloads affordances on a stream tile, not about resolution
-  /// sections, and the fixture's one torrent needs no section opened to be
-  /// on screen for it. `AppPrefs.inMemory()` persists nothing, so the
-  /// setter's write below completes synchronously (nothing to await) and
-  /// the value is already in place by the time this returns.
+  /// sections, with the groups that hold those torrents open so the tile
+  /// is on screen without a header to tap first (the addon groups collapse
+  /// too now, and start shut): the movie fixture's public-domain addon and
+  /// the Torrentio-style group the episode tests graft on.
+  /// `AppPrefs.inMemory()` persists nothing, so the setters' writes below
+  /// complete synchronously (nothing to await) and the values are already
+  /// in place by the time this returns.
   AppPrefs groupedPrefs() {
     final prefs = AppPrefs.inMemory();
     unawaited(prefs.setStreamsSectioned(false));
+    unawaited(
+      prefs.setOpenStreamAddons({
+        'https://caching.stremio.net/publicdomainmovies.now.sh/manifest.json',
+        'https://torrentio.example/manifest.json',
+        'https://watchhub.strem.io/manifest.json',
+      }),
+    );
     return prefs;
   }
 

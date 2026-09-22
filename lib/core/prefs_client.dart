@@ -116,6 +116,23 @@ class AppPrefs extends ChangeNotifier {
   /// [openStreamSections].
   static const String openStreamSectionsKey = 'openStreamSections';
 
+  /// The `openStreamAddons` key: which addon groups of the *grouped*
+  /// sources list are expanded, as a list of each group's stored label
+  /// (the addon's transport URL — see `_addonStorageLabel` in
+  /// `meta_details_screen.dart`). Global and sticky exactly the way
+  /// [openStreamSectionsKey] is, and empty the same deliberate way: with
+  /// nothing remembered every group is shut, on a fresh install and after
+  /// the viewer has closed the last one.
+  ///
+  /// A key of its own rather than a share of [openStreamSectionsKey], for
+  /// two reasons. An addon may be called something a resolution is also
+  /// called, and one set cannot tell the two apart — the addon would open
+  /// a section, or the section the addon. And they are different
+  /// questions: what a viewer left open among resolutions says nothing
+  /// about which addons they want open, so one layout's choice must not
+  /// arrive as the other's.
+  static const String openStreamAddonsKey = 'openStreamAddons';
+
   /// The `bufferAhead` key: how far ahead playback buffers by default (see
   /// [BufferAhead]). The player takes this unless the viewer overrides it
   /// for the playback on screen.
@@ -225,6 +242,14 @@ class AppPrefs extends ChangeNotifier {
   Set<String>? get openStreamSections => _openStreamSections;
   Set<String>? _openStreamSections;
 
+  /// The stored labels of the addon groups currently expanded, or null
+  /// when nothing has ever been chosen. Null and an empty set are drawn
+  /// the same (every group shut) and stored differently, for the same
+  /// reason [openStreamSections] keeps them apart: an empty set is the
+  /// viewer's own "close everything" and has to read back as one.
+  Set<String>? get openStreamAddons => _openStreamAddons;
+  Set<String>? _openStreamAddons;
+
   BufferAhead _bufferAhead = BufferAhead.normal;
 
   BufferAhead get bufferAhead => _bufferAhead;
@@ -318,6 +343,17 @@ class AppPrefs extends ChangeNotifier {
         changed = true;
       }
     }
+    final openAddons = stored[openStreamAddonsKey];
+    if (openAddons is List) {
+      final parsed = <String>{
+        for (final entry in openAddons)
+          if (entry is String) entry,
+      };
+      if (!setEquals(parsed, _openStreamAddons)) {
+        _openStreamAddons = parsed;
+        changed = true;
+      }
+    }
     final buffer = BufferAhead.parse(stored[bufferAheadKey]);
     if (buffer != null && buffer != _bufferAhead) {
       _bufferAhead = buffer;
@@ -391,6 +427,13 @@ class AppPrefs extends ChangeNotifier {
     _openStreamSections = value;
     notifyListeners();
     await _write(openStreamSectionsKey, value.toList());
+  }
+
+  Future<void> setOpenStreamAddons(Set<String> value) async {
+    if (setEquals(_openStreamAddons, value)) return;
+    _openStreamAddons = value;
+    notifyListeners();
+    await _write(openStreamAddonsKey, value.toList());
   }
 
   Future<void> setBufferAhead(BufferAhead value) async {
