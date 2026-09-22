@@ -1,0 +1,657 @@
+{
+ "target": "Heat (1995)",
+ "entries": [
+  {
+   "title": "L.A. Takedown",
+   "year": 1989,
+   "grade": 3,
+   "tone": 1,
+   "what": "Michael Mann's own American TV film (a 90-minute NBC pilot, not a theatrical feature): a detective and a professional thief circle each other across Los Angeles",
+   "why": "Mann's earlier version of Heat from the same 1979 script, with several scenes staged near-identically including the coffee-shop meeting; tone is 1 rather than 2 only because television budget and flat video lighting strip out the widescreen blue nightscape",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/L.A._Takedown"
+  },
+  {
+   "title": "Thief",
+   "year": 1981,
+   "grade": 3,
+   "tone": 2,
+   "what": "Mann's first feature: a Chicago safecracker with a rigid life-plan takes one last score from the outfit and burns everything down rather than be owned",
+   "why": "The direct ancestor of Heat in every respect that matters: the same Chicago crew milieu Mann learned from detective Chuck Adamson, the same diner monologue about time and what a man can hold onto, the same rain-slick neon and real tools used correctly on real steel",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Thief_(1981_film)"
+  },
+  {
+   "title": "Collateral",
+   "year": 2004,
+   "grade": 3,
+   "tone": 2,
+   "what": "A contract killer commandeers a cab driver for one night of five hits across Los Angeles while a detective closes in",
+   "why": "Mann's other Los Angeles night picture and the closest match to Heat's texture: the city shot as a lit grid seen from freeways, professionalism as an argument about how to live, and violence that arrives in two seconds and is over",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Collateral_(film)"
+  },
+  {
+   "title": "Miami Vice",
+   "year": 2006,
+   "grade": 3,
+   "tone": 2,
+   "what": "Two undercover detectives sink into a transnational drug pipeline until the cover identity and the real one stop being distinguishable",
+   "why": "Mann re-doing the Heat structure in digital: procedure given the same weight as plot, minimal exposition, lovers used as the pressure that professionalism cannot absorb, and a final firefight staged as ballistics rather than choreography",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Miami_Vice_(film)"
+  },
+  {
+   "title": "Public Enemies",
+   "year": 2009,
+   "grade": 3,
+   "tone": 2,
+   "what": "John Dillinger's last year, tracked by Melvin Purvis and the new federal bureau being built to catch him",
+   "why": "Mann again, with Heat's cinematographer Dante Spinotti and Heat's composer Elliot Goldenthal, telling the same two-sided story: the thief who is excellent and doomed, the lawman whose institution is the only thing that can beat him",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Public_Enemies_(2009_film)"
+  },
+  {
+   "title": "Manhunter",
+   "year": 1986,
+   "grade": 3,
+   "tone": 2,
+   "what": "An FBI profiler is pulled back to reconstruct a family killer's method by inhabiting his point of view",
+   "why": "Mann and Spinotti's first collaboration and the film where the Heat palette is invented: pastel-and-steel compositions, a hunter who understands his quarry better than his own family, and long stretches of pure procedure",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Manhunter_(film)"
+  },
+  {
+   "title": "Le Samouraï",
+   "year": 1967,
+   "grade": 3,
+   "tone": 2,
+   "what": "A Parisian contract killer with an immaculate routine is identified by a witness and hunted by both the police and his employers",
+   "why": "Documented source: Mann has said he built Neil McCauley out of the detached, minimalist bearing of Alain Delon in this film, and the discipline-as-identity idea comes straight from it",
+   "basis": "influence",
+   "source": "https://en.wikipedia.org/wiki/Heat_(1995_film)"
+  },
+  {
+   "title": "Le Cercle Rouge",
+   "year": 1970,
+   "grade": 3,
+   "tone": 2,
+   "what": "An ex-convict, an escaped prisoner and an alcoholic ex-police marksman assemble for a jewel robbery while a patient commissaire closes the circle",
+   "why": "The Melville film Heat is most often placed beside: a near-wordless centrepiece robbery played as craft, a cop and a thief who are moral equals, and the conviction that the job and the man are the same thing",
+   "basis": "lineage",
+   "source": "https://en.wikipedia.org/wiki/Le_Cercle_Rouge"
+  },
+  {
+   "title": "The Town",
+   "year": 2010,
+   "grade": 3,
+   "tone": 2,
+   "what": "A Charlestown bank-robbery crew works one score too many while an FBI agent tightens around them and the leader tries to leave",
+   "why": "The most complete American restaging of Heat: armoured-car takedown, tactical gear, an FBI pursuer given equal screen time, a romance that becomes the exit route, and a running street gunfight in a real city; reception routinely notes the debt, with Richard Roeper calling it incredibly similar to Heat",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/The_Town_(2010_film)"
+  },
+  {
+   "title": "Den of Thieves",
+   "year": 2018,
+   "grade": 3,
+   "tone": 1,
+   "what": "A Los Angeles sheriff's Major Crimes unit and a crew of ex-military bank robbers stalk each other toward a Federal Reserve job",
+   "why": "The most literal Heat imitation ever released, down to the LA setting, the crew-versus-unit symmetry, the sit-down between the two leaders and the freeway ambush; tone is 1 because it swaps Mann's cool formality for sweat, bulk and swagger",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Den_of_Thieves_(film)"
+  },
+  {
+   "title": "To Live and Die in L.A.",
+   "year": 1985,
+   "grade": 3,
+   "tone": 2,
+   "what": "A Secret Service agent chasing a counterfeiter becomes indistinguishable from him",
+   "why": "The other great 1980s Los Angeles crime film built on the cop and the criminal as mirrored professionals, with the same appetite for the city's industrial edges, flat concrete daylight and wide-screen night, and an abrupt violence that refuses to be heroic",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/To_Live_and_Die_in_L.A._(film)"
+  },
+  {
+   "title": "The Insider",
+   "year": 1999,
+   "grade": 3,
+   "tone": 2,
+   "what": "A tobacco scientist and a television producer try to get a story on air against the industry and the network",
+   "why": "Mann and Spinotti immediately after Heat, applying the identical grammar - long lenses, blue-grey interiors, competent men explaining their obligations to each other, procedure as suspense - to a story with no crime in it; the grade is for how directly the craft connection runs, not for subject overlap",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/The_Insider_(film)"
+  },
+  {
+   "title": "Le Deuxième Souffle",
+   "year": 1966,
+   "grade": 2,
+   "tone": 2,
+   "what": "An escaped gangster takes one last platinum robbery while a commissaire manoeuvres him into betraying himself",
+   "why": "Melville's fullest statement of the code Heat inherits: the hold-up executed as engineering, a policeman who respects his target, and a thief for whom reputation is worth more than survival",
+   "basis": "lineage",
+   "source": "https://en.wikipedia.org/wiki/Le_Deuxi%C3%A8me_Souffle"
+  },
+  {
+   "title": "Bob le flambeur",
+   "year": 1956,
+   "grade": 2,
+   "tone": 1,
+   "what": "An ageing Montmartre gambler plans a casino robbery that his own crew's indiscretion undoes",
+   "why": "The founding text of the Melville professional line Heat descends from, with the paternal thief and the friendly policeman who will still arrest him; tone is 1 because its register is wry and affectionate where Heat is severe",
+   "basis": "lineage",
+   "source": "https://en.wikipedia.org/wiki/Bob_le_flambeur"
+  },
+  {
+   "title": "Un flic",
+   "year": 1972,
+   "grade": 2,
+   "tone": 2,
+   "what": "A Paris commissaire works a bank robbery and a drugs shipment run by the nightclub owner who is also his friend",
+   "why": "Melville's last film and the purest cop-and-thief diptych before Heat: two men with the same temperament on opposite sides, filmed in drained blue-grey with almost no dialogue that is not operational",
+   "basis": "lineage",
+   "source": "https://en.wikipedia.org/wiki/Un_flic"
+  },
+  {
+   "title": "Rififi",
+   "year": 1955,
+   "grade": 2,
+   "tone": 2,
+   "what": "Four men rob a Paris jewellers through the ceiling, then are destroyed by their own code's failure points",
+   "why": "The heist-as-process film that made competence itself the drama; the half-hour silent robbery is the ancestor of Heat's insistence that the audience watch the work being done correctly",
+   "basis": "form",
+   "source": "https://en.wikipedia.org/wiki/Rififi"
+  },
+  {
+   "title": "The Asphalt Jungle",
+   "year": 1950,
+   "grade": 2,
+   "tone": 1,
+   "what": "A criminologist assembles specialists for a jewel job, each defined by the private need that will undo him",
+   "why": "The template for the crew film Heat perfects: the job planned by a professional, roles allotted by skill, and men characterised through what they do and what they want after the score",
+   "basis": "form",
+   "source": "https://en.wikipedia.org/wiki/The_Asphalt_Jungle"
+  },
+  {
+   "title": "The Killing",
+   "year": 1956,
+   "grade": 2,
+   "tone": 1,
+   "what": "An ex-convict runs a racetrack robbery built on strangers each performing one timed task",
+   "why": "Kubrick's fractured-clock heist, the other structural ancestor of Heat's planning-execution-collapse shape, and equally cold about the human weak link that wrecks a perfect plan",
+   "basis": "form",
+   "source": "https://en.wikipedia.org/wiki/The_Killing_(1956_film)"
+  },
+  {
+   "title": "Point Blank",
+   "year": 1967,
+   "grade": 2,
+   "tone": 1,
+   "what": "A betrayed thief walks through a modernist Los Angeles demanding the exact sum he is owed from a corporate crime syndicate",
+   "why": "The LA professional-criminal film Mann's generation absorbed: a man reduced to his function, hard geometric architecture, the city as glass and concrete abstraction; tone is 1 because Boorman is fractured and dreamlike where Mann is literal",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Point_Blank_(1967_film)"
+  },
+  {
+   "title": "The Driver",
+   "year": 1978,
+   "grade": 2,
+   "tone": 2,
+   "what": "A nameless getaway driver and a nameless detective who is obsessed with catching him duel across nocturnal Los Angeles",
+   "why": "Walter Hill stripped the cop-and-thief duel to its abstract minimum a generation before Heat: no backstory, no names, no explanation, only two specialists in empty LA streets at night and one long, wordless demonstration of skill",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/The_Driver"
+  },
+  {
+   "title": "The Friends of Eddie Coyle",
+   "year": 1973,
+   "grade": 2,
+   "tone": 1,
+   "what": "An ageing Boston gun-runner tries to trade information for leniency and discovers what the trade costs",
+   "why": "The best American film about crime as a job with no glamour: men talking shop in car parks, the mechanics of a bank job shown plainly, loyalty as a market; tone is 1 because the palette is drab winter brown, not Mann's engineered blue",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/The_Friends_of_Eddie_Coyle_(film)"
+  },
+  {
+   "title": "Charley Varrick",
+   "year": 1973,
+   "grade": 2,
+   "tone": 1,
+   "what": "A small-town bank robber realises he has taken mob money and must out-think both the syndicate's cleaner and the law",
+   "why": "Siegel's portrait of the last of the independents: a thief defined entirely by tradecraft and the discipline to walk away, which is precisely McCauley's rule about the thirty seconds flat",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Charley_Varrick"
+  },
+  {
+   "title": "Straight Time",
+   "year": 1978,
+   "grade": 2,
+   "tone": 1,
+   "what": "A released convict tries parole, fails it, and returns to armed robbery with a crew he assembles himself",
+   "why": "The most accurate film about the McCauley type Heat is drawn from - the institutionalised professional who cannot hold a civilian life - and it shares Heat's refusal to moralise about the choice",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Straight_Time"
+  },
+  {
+   "title": "The Outfit",
+   "year": 1973,
+   "grade": 2,
+   "tone": 1,
+   "what": "A recently released convict systematically robs the Chicago syndicate that killed his brother",
+   "why": "John Flynn's adaptation of Richard Stark's Parker novel, the coldest American rendering of the thief-as-craftsman, working through targets with the same methodical, unhurried professionalism Heat's crew brings to an armoured car",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/The_Outfit_(1973_film)"
+  },
+  {
+   "title": "The French Connection",
+   "year": 1971,
+   "grade": 2,
+   "tone": 1,
+   "what": "Two New York narcotics detectives grind through surveillance toward a heroin shipment and the elegant European behind it",
+   "why": "The American procedural that gave equal, unsentimental weight to the hunt and the hunted, built out of stakeouts, tails and dead ends; tone is 1 because Friedkin is handheld and grimy where Mann is composed",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/The_French_Connection_(film)"
+  },
+  {
+   "title": "L.A. Confidential",
+   "year": 1997,
+   "grade": 2,
+   "tone": 1,
+   "what": "Three Los Angeles detectives converge on a diner massacre that leads back inside their own department",
+   "why": "Shot by Dante Spinotti two years after Heat, and the other great modern Los Angeles crime film about institutions, discipline and the city's moral geography; tone is 1 because the period warmth and plot density are the opposite of Heat's cool austerity",
+   "basis": "crew",
+   "source": "https://en.wikipedia.org/wiki/L.A._Confidential_(film)"
+  },
+  {
+   "title": "The Good Thief",
+   "year": 2002,
+   "grade": 2,
+   "tone": 1,
+   "what": "A heroin-addicted gambler in Nice mounts a casino robbery while a policeman who likes him circles",
+   "why": "Scored by Elliot Goldenthal, Heat's composer, and a direct remake of Bob le flambeur - so it sits on both the crew web and the Melville lineage Heat belongs to",
+   "basis": "crew",
+   "source": "https://en.wikipedia.org/wiki/The_Good_Thief_(film)"
+  },
+  {
+   "title": "Triple Frontier",
+   "year": 2019,
+   "grade": 2,
+   "tone": 1,
+   "what": "Five former special-forces operators plan and execute a robbery in South America, then are destroyed by the weight of what they took",
+   "why": "A post-Heat crew film in everything but setting: the planning montage, the tactical vocabulary, the professionals who are better at the job than at their lives, and a second half that is pure consequence",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Triple_Frontier_(film)"
+  },
+  {
+   "title": "Den of Thieves 2: Pantera",
+   "year": 2025,
+   "grade": 2,
+   "tone": 1,
+   "what": "The sheriff's-unit detective follows the surviving thief to Europe for a diamond-exchange job, and joins him",
+   "why": "The sequel that makes the Heat inheritance explicit by putting the cop and the thief on the same crew; the European heist procedure is closer to Melville than the first film, but the loose, jokey register is not Mann's",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Den_of_Thieves_2:_Pantera"
+  },
+  {
+   "title": "Wrath of Man",
+   "year": 2021,
+   "grade": 2,
+   "tone": 1,
+   "what": "A new armoured-truck guard turns out to be hunting the crew that killed his son, and the crew turns out to be ex-military professionals",
+   "why": "Built out of Heat's parts - armoured-car takedowns, an ex-forces crew with tactical discipline, a chapter structure that replays the same job from both sides - in a cold grey palette with sudden, unglamorous gunfire",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Wrath_of_Man"
+  },
+  {
+   "title": "Ambulance",
+   "year": 2022,
+   "grade": 2,
+   "tone": 0,
+   "what": "Two brothers rob a Los Angeles bank, the job collapses, and they escape in a hijacked ambulance with a wounded officer aboard",
+   "why": "A downtown Los Angeles bank robbery that goes loud and spills into the streets, explicitly measured against Heat by trade press on release; divergence is extreme - the grade is for the subject and city, while the tone is 0 because the drone-swarm camera and constant hysteria are the antithesis of Mann's stillness",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Ambulance_(2022_film)"
+  },
+  {
+   "title": "Sicario",
+   "year": 2015,
+   "grade": 2,
+   "tone": 2,
+   "what": "An FBI agent is seconded to an opaque interagency task force operating across the Mexican border",
+   "why": "The modern film that best reproduces Heat's procedural patience and its treatment of violence: long silent approach, tactical competence filmed as ritual, then a few seconds of percussive gunfire in stopped traffic",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Sicario_(2015_film)"
+  },
+  {
+   "title": "Hell or High Water",
+   "year": 2016,
+   "grade": 2,
+   "tone": 1,
+   "what": "Two brothers rob West Texas branch banks on a deadline while a Texas Ranger near retirement works out their pattern",
+   "why": "The cleanest recent example of Heat's two-track structure, with the pursuer given as much interiority as the robbers and a final exchange between the surviving man on each side; tone is 1 - sun-bleached daylight and dry comedy instead of blue night",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Hell_or_High_Water_(film)"
+  },
+  {
+   "title": "Infernal Affairs",
+   "year": 2002,
+   "grade": 2,
+   "tone": 1,
+   "what": "A police mole inside a triad and a triad mole inside the police hunt each other without knowing who they are hunting",
+   "why": "The Hong Kong film that pushes Heat's symmetry to its limit: two professionals, equal weight, each defined by the discipline his role demands, meeting in the open with everything unsaid",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Infernal_Affairs"
+  },
+  {
+   "title": "Ronin",
+   "year": 1998,
+   "grade": 2,
+   "tone": 2,
+   "what": "Ex-intelligence operatives are hired to take a case from an armed convoy, with no one trusting anyone",
+   "why": "Frankenheimer's film of pure competence: men who will not explain themselves, tradecraft shown rather than described, and action staged for plausibility - the same pleasure Heat takes in people who are extremely good at something",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Ronin_(film)"
+  },
+  {
+   "title": "Drive",
+   "year": 2011,
+   "grade": 2,
+   "tone": 2,
+   "what": "A Los Angeles stunt driver who moonlights as a getaway wheelman breaks his own rule for a neighbour",
+   "why": "The LA-at-night tradition after Mann: a professional with a code stated as a rule about minutes, the city as a lit grid from above, long silences broken by sudden brutal violence",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Drive_(2011_film)"
+  },
+  {
+   "title": "Blackhat",
+   "year": 2015,
+   "grade": 2,
+   "tone": 2,
+   "what": "A convicted hacker is furloughed to track a saboteur across Hong Kong and Jakarta",
+   "why": "Late Mann working in exactly Heat's idiom - surveillance procedure, professionals who respect each other across the law, digital night cityscapes, a firefight in a Hong Kong drainage tunnel filmed for sound and impact rather than spectacle",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Blackhat_(film)"
+  },
+  {
+   "title": "Ferrari",
+   "year": 2023,
+   "grade": 1,
+   "tone": 1,
+   "what": "Enzo Ferrari in the summer of 1957, holding a failing company, two families and a racing team together",
+   "why": "Mann's own filmography again: obsession with work as the organising fact of a life, and a sudden, brutally unsentimental crash that arrives the way Heat's violence does; otherwise a different register entirely",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Ferrari_(2023_film)"
+  },
+  {
+   "title": "The Last of the Mohicans",
+   "year": 1992,
+   "grade": 1,
+   "tone": 1,
+   "what": "A frontier scout and his adopted family are caught in the British-French war in colonial New York",
+   "why": "Mann directing, Dante Spinotti shooting, immediately before Heat - the same eye for landscape, physical competence and men who do not explain themselves; the connection is craft lineage, not story",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/The_Last_of_the_Mohicans_(1992_film)"
+  },
+  {
+   "title": "Ali",
+   "year": 2001,
+   "grade": 1,
+   "tone": 1,
+   "what": "Ten years of Muhammad Ali's life, from the first Liston fight to Kinshasa",
+   "why": "Mann between Heat's crew films, again filming training and preparation as the real subject and refusing to explain his protagonist's decisions in dialogue",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Ali_(film)"
+  },
+  {
+   "title": "The Keep",
+   "year": 1983,
+   "grade": 1,
+   "tone": 0,
+   "what": "German soldiers garrison a Carpathian fortress and release what is sealed inside it",
+   "why": "Included only to complete Mann's filmography: a supernatural war picture with a synthesiser score, useful in a key as the Mann title that is genuinely unlike Heat",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/The_Keep_(film)"
+  },
+  {
+   "title": "The Dark Knight",
+   "year": 2008,
+   "grade": 1,
+   "tone": 1,
+   "what": "A masked vigilante, a district attorney and a police lieutenant confront an anarchist in a large American city",
+   "why": "Documented influence: Christopher Nolan has said he drew on Heat to tell the story of a city, and the opening bank robbery and the downtown armoured-car sequence are direct borrowings; the connection is real but the register is comic-book opera",
+   "basis": "influence",
+   "source": "https://en.wikipedia.org/wiki/Heat_(1995_film)"
+  },
+  {
+   "title": "Zodiac",
+   "year": 2007,
+   "grade": 1,
+   "tone": 1,
+   "what": "Detectives, reporters and a cartoonist spend two decades failing to close a serial murder case",
+   "why": "The most rigorous modern American procedural, giving the work itself - files, interviews, jurisdictions - the weight Heat gives to surveillance; tone is 1 because the violence is brief and clinical but the film is talk, not action",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Zodiac_(film)"
+  },
+  {
+   "title": "The Departed",
+   "year": 2006,
+   "grade": 1,
+   "tone": 0,
+   "what": "A state trooper is planted inside a Boston crime organisation while its boss has a man planted inside the police",
+   "why": "Structurally a cop-and-criminal mirror film of the kind Heat popularised in America, and a common model answer; tone is 0 - Scorsese is fast, profane and needle-dropped where Mann is quiet and composed",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/The_Departed"
+  },
+  {
+   "title": "Donnie Brasco",
+   "year": 1997,
+   "grade": 1,
+   "tone": 1,
+   "what": "An FBI agent undercover in a New York crew is absorbed by the man who vouches for him",
+   "why": "Two years after Heat, with Pacino on the criminal side again, and built on the same interest in crime as a trade with rules; the emotional texture is elegiac and intimate rather than cool",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Donnie_Brasco_(film)"
+  },
+  {
+   "title": "Dog Day Afternoon",
+   "year": 1975,
+   "grade": 1,
+   "tone": 1,
+   "what": "An improvised Brooklyn bank robbery becomes a day-long siege with police, FBI and a crowd outside",
+   "why": "Pacino robbing a bank badly is the exact inverse of McCauley robbing one well, and the film is a standing reference for how American cinema stages a bank job and a police perimeter; comic, sweaty and hand-held rather than cool",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Dog_Day_Afternoon"
+  },
+  {
+   "title": "Drug War",
+   "year": 2012,
+   "grade": 1,
+   "tone": 2,
+   "what": "A mainland narcotics captain turns a captured manufacturer and runs him through an escalating series of operations",
+   "why": "Johnnie To at his most procedural: an unbroken chain of operations shown as work, no interiority, and a final shootout that is flat, sudden and without music - a near-perfect tonal match on a smaller canvas",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Drug_War_(film)"
+  },
+  {
+   "title": "The Place Beyond the Pines",
+   "year": 2012,
+   "grade": 1,
+   "tone": 1,
+   "what": "A motorcycle stunt rider robs banks to support his child; a police officer who shoots him inherits the consequences",
+   "why": "A cop-and-robber diptych where each man's life is the other's shadow, explicitly structured as two halves rather than two parallel tracks",
+   "basis": "form",
+   "source": "https://en.wikipedia.org/wiki/The_Place_Beyond_the_Pines"
+  },
+  {
+   "title": "Widows",
+   "year": 2018,
+   "grade": 1,
+   "tone": 1,
+   "what": "The widows of a dead Chicago crew execute the job their husbands left planned",
+   "why": "A heist film built on planning, logistics and the crew as an economic unit, with a city's politics and police as an equal thread; McQueen's chill is social rather than professional",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Widows_(2018_film)"
+  },
+  {
+   "title": "Takers",
+   "year": 2010,
+   "grade": 1,
+   "tone": 1,
+   "what": "A polished Los Angeles robbery crew takes an armoured-car job while a detective closes in",
+   "why": "An open Heat pastiche - LA crew, armoured car, dogged detective, downtown street gunfight - and a useful discrimination test, because it has the shape without the weight",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Takers"
+  },
+  {
+   "title": "Inside Man",
+   "year": 2006,
+   "grade": 1,
+   "tone": 0,
+   "what": "A meticulously designed Manhattan bank robbery becomes a hostage negotiation the police cannot read",
+   "why": "A high-competence robbery filmed as a puzzle with a detective as the equal opposite; tone is 0 - it is playful, warm and talky, a caper rather than a tragedy",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Inside_Man"
+  },
+  {
+   "title": "The Score",
+   "year": 2001,
+   "grade": 1,
+   "tone": 1,
+   "what": "A Montreal safecracker planning to retire is pushed into one last vault job with a volatile younger partner",
+   "why": "De Niro again as the disciplined thief with one rule he breaks, and a film that takes the mechanics of the job seriously; otherwise conventional and softly lit",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/The_Score_(2001_film)"
+  },
+  {
+   "title": "Nightcrawler",
+   "year": 2014,
+   "grade": 1,
+   "tone": 2,
+   "what": "A freelance crime videographer films Los Angeles at night for the local news and begins shaping what he films",
+   "why": "The purest recent example of the LA-at-night tradition Heat defined, with the same helicopter-lit boulevards and empty freeways; the connection is the city and the palette, not the story",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Nightcrawler_(film)"
+  },
+  {
+   "title": "Training Day",
+   "year": 2001,
+   "grade": 1,
+   "tone": 1,
+   "what": "A rookie spends one day with a narcotics detective who has made his own rules",
+   "why": "A Los Angeles police film shot in the real city's geography, about a man articulating his code at length to someone who has not earned it; kinetic and hot where Heat is cool",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Training_Day"
+  },
+  {
+   "title": "We Own the Night",
+   "year": 2007,
+   "grade": 1,
+   "tone": 1,
+   "what": "A nightclub manager is forced to choose between the Russian traffickers who employ him and his police family",
+   "why": "A New York crime film with a deliberate 1980s gravity, built on the two-sides structure and on procedure - the wired buy, the convoy ambush - rather than on set pieces",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/We_Own_the_Night_(film)"
+  },
+  {
+   "title": "Goodfellas",
+   "year": 1990,
+   "grade": 1,
+   "tone": 0,
+   "what": "Thirty years inside a New York crew, narrated from the inside",
+   "why": "Included as a discrimination case: a canonical crime film every recommender returns, but organised crime as social world and voice-over memoir, with no procedural patience, no equal-weight pursuer and no interest in the job as craft - tone 0 against Heat",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Goodfellas"
+  },
+  {
+   "title": "The Godfather",
+   "year": 1972,
+   "grade": 1,
+   "tone": 0,
+   "what": "A crime family transfers power from father to youngest son",
+   "why": "Included as a discrimination case: the default answer to any crime-film question, but a warm-toned family tragedy about succession and legitimacy, sharing with Heat only the word crime - tone 0",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/The_Godfather"
+  },
+  {
+   "title": "Pulp Fiction",
+   "year": 1994,
+   "grade": 1,
+   "tone": 0,
+   "what": "Interlocking Los Angeles crime stories told out of order",
+   "why": "Included as a discrimination case: same city, same decade, same genre shelf, and a near-universal model answer, but pastiche, dialogue-comedy and chronological play rather than procedure, competence and consequence - tone 0",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Pulp_Fiction"
+  },
+  {
+   "title": "The Way of the Gun",
+   "year": 2000,
+   "kind": "film",
+   "grade": 2,
+   "tone": 1,
+   "what": "McQuarrie's directorial debut: two drifters kidnap a surrogate mother for ransom and find themselves outclassed by the professionals sent to recover her",
+   "why": "One of the few films that took the right lesson from Heat's set pieces. Weapons are handled by people who have been trained, reloads and cover discipline play out in real time, and a firefight is staged as work rather than as choreography, with an ageing professional in James Caan set against amateurs much as Heat sets crew against crew. Sits comfortably beside the key's Den of Thieves and Triple Frontier. Its register is grubbier and more sardonic than Mann's, and it has no interest in the domestic cost.",
+   "basis": "mode",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Miller's Crossing",
+   "year": 1990,
+   "kind": "film",
+   "grade": 1,
+   "tone": 0,
+   "what": "The Coens' Prohibition gangster film: an Irish crime boss's advisor plays two organisations against each other over a bookmaker's life",
+   "why": "This is a crime film, and the recommendation does not get much past that. What Heat offers is contemporary Los Angeles, procedural accuracy, and professionals whose competence eats their private lives; the Coens are working in period pastiche with mannered dialogue, a plot of concealed motive, and characters who are moves in a scheme rather than men with a job. The key already places Goodfellas and The Godfather at this grade for the same reason.",
+   "basis": "lineage",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Internal Affairs",
+   "year": 1990,
+   "kind": "film",
+   "grade": 2,
+   "tone": 1,
+   "what": "Mike Figgis's Los Angeles thriller: an Internal Affairs investigator becomes obsessed with a charismatic patrol officer who runs a crew of corrupt cops and gets inside his marriage",
+   "why": "The film Heat's central relationship most resembles outside Mann's own work. Two men in Los Angeles understand each other better than anyone else does and lock into a pursuit that is personal long before it is procedural, while the investigator's marriage collapses under the job. It arrived five years earlier and uses the city's freeways, glass and tiled interiors in a way Heat would make definitive. Figgis plays it at psychological-thriller pitch rather than Mann's operatic distance.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Chinatown",
+   "year": 1974,
+   "kind": "film",
+   "grade": 1,
+   "tone": 0,
+   "what": "Roman Polanski's film from the Robert Towne script: a Los Angeles private investigator hired for a routine infidelity job walks into the theft of the city's water supply and the family crime behind it",
+   "why": "The founding text of Los Angeles as a moral geography, which is the ground the key uses to hold L.A. Confidential at grade 2, and Heat is unimaginable outside a tradition that treats the city's infrastructure as the real subject. That is the whole of the claim. Everything Heat is actually made of is missing: no crew, no logistics, no tactical competence, no equal-weight pursuer, no men characterised by the quality of their work. Chinatown is a mystery with a detective who is wrong about everything, told in warm period light with a wisecrack in every scene, where Mann is cool, literal and humourless.",
+   "basis": "lineage",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Heat and Bone",
+   "year": 2019,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "No such film. IMDb's title index returns nothing under this title in any year; the nearest entries are Jacques Audiard's Rust and Bone (2012) and the Australian Hearts and Bones (2019), and the suggested title reads as a collision of the target's own name with one of those",
+   "why": "The film does not exist, so it cannot be a recommendation. Worth recording rather than quietly dropping, because of what it shows about how it was produced: a plausible-sounding title assembled out of the target's name and a real one nearby, then justified with a line — 'modern take on cat-and-mouse with emotional depth' — general enough to fit whatever the title turned out to be. The same block produced Heat's only other two suggestions, both famous crime films with no procedural relationship to this one.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "The Usual Suspects",
+   "year": 1995,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Bryan Singer's film from Christopher McQuarrie's script: a conman being interrogated after a harbour massacre narrates an account of the crew and the man who assembled it, and the account is not true",
+   "why": "Recommended for being 'cat-and-mouse with a twist', which describes the one thing Heat conspicuously refuses. Hanna and McCauley meet in the middle of the film, in the open, and tell each other the truth; nothing is withheld from the audience at any point and there is no revelation waiting. The Usual Suspects is a flashback puzzle whose whole value is its final thirty seconds. Shared year, shared genre shelf, nothing else. The key does hold McQuarrie, through The Way of the Gun, which earns its place on how it stages a firefight rather than on anything he wrote here.",
+   "basis": "mode",
+   "source": "judgement",
+   "pooled": true
+  }
+ ]
+}

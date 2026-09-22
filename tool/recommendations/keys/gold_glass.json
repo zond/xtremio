@@ -1,0 +1,773 @@
+{
+ "target": "Glass (2019)",
+ "entries": [
+  {
+   "title": "Unbreakable",
+   "year": 2000,
+   "grade": 3,
+   "tone": 2,
+   "what": "M. Night Shyamalan's American drama: a Philadelphia security guard walks away from a train crash without a scratch, and a brittle-boned comic-book dealer tells him he may be a superhero",
+   "why": "First film of the same Eastrail 177 trilogy; the same two characters, David Dunn and Elijah Price, and the same slow, grounded treatment of comic-book mythology that Glass concludes",
+   "basis": "lineage",
+   "source": "https://en.wikipedia.org/wiki/Unbreakable_(film)"
+  },
+  {
+   "title": "Split",
+   "year": 2016,
+   "grade": 3,
+   "tone": 2,
+   "what": "Shyamalan's American thriller: a man with dissociative identity disorder abducts three schoolgirls while a 24th personality, the Beast, prepares to take over his body",
+   "why": "Second film of the trilogy; Kevin Wendell Crumb and his alters are half of Glass's cast, and Split's final scene is the hinge that made Glass exist",
+   "basis": "lineage",
+   "source": "https://en.wikipedia.org/wiki/Split_(2016_American_film)"
+  },
+  {
+   "title": "The Sixth Sense",
+   "year": 1999,
+   "grade": 3,
+   "tone": 2,
+   "what": "Shyamalan's American ghost story: a child psychologist treats a boy who says he sees dead people",
+   "why": "Shyamalan's breakthrough and the template for what Glass does - a child-psychiatry frame, a patient whose impossible claim is treated as pathology, and a final reversal that rereads the whole film",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/The_Sixth_Sense"
+  },
+  {
+   "title": "Signs",
+   "year": 2002,
+   "grade": 3,
+   "tone": 2,
+   "what": "Shyamalan's American science-fiction drama: a lapsed-priest farmer and his family barricade themselves in a Pennsylvania farmhouse during an alien arrival",
+   "why": "The other Shyamalan film about whether a family's odd traits are coincidence or design; same Pennsylvania register, same argument about believing you are part of a story",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Signs_(film)"
+  },
+  {
+   "title": "Chronicle",
+   "year": 2012,
+   "grade": 3,
+   "tone": 1,
+   "what": "Josh Trank's American found-footage film: three Seattle high-school seniors gain telekinesis and one of them curdles into a villain",
+   "why": "The clearest modern heir to Unbreakable's proposition - powers arriving to ordinary people, filmed like documentary, with a villain's origin given the same weight as a hero's",
+   "basis": "lineage",
+   "source": "judgement"
+  },
+  {
+   "title": "Super",
+   "year": 2010,
+   "grade": 3,
+   "tone": 0,
+   "what": "James Gunn's American black comedy: a short-order cook with no powers appoints himself a superhero and beats criminals with a wrench",
+   "why": "The definitive film about a man whose belief that he is a superhero may simply be mental illness; Glass spends its entire second act arguing that exact question. Relevant but tonally opposite: Gunn is loud, gory and cartoonish where Glass is flat and clinical.",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Defendor",
+   "year": 2009,
+   "grade": 3,
+   "tone": 2,
+   "what": "Peter Stebbings's Canadian drama: a developmentally disabled man fights crime in a homemade costume while a court-appointed psychiatrist assesses whether he is competent",
+   "why": "Structurally the closest film to Glass's middle act - a costumed man in psychiatric custody, a doctor assembling the case that his heroism is delusion, and a script that refuses to settle it cheaply",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Special",
+   "year": 2006,
+   "grade": 3,
+   "tone": 2,
+   "what": "Hal Haberman and Jeremy Passmore's American indie: a lonely comic-book fan on an experimental antidepressant becomes convinced the drug has given him powers",
+   "why": "The purest version of Glass's central doubt - a man certain he is extraordinary, and the clinical voice telling him it is a side effect",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Birdman or (The Unexpected Virtue of Ignorance)",
+   "year": 2014,
+   "grade": 3,
+   "tone": 0,
+   "what": "Alejandro G. Inarritu's American drama, staged to look like one continuous take: a washed-up actor famous for playing a superhero mounts a Broadway play while the character's voice hounds him",
+   "why": "A man who may have real powers or may be floridly ill, wrapped in an argument about what comic-book heroes mean; its unresolved ambiguity is the one Glass builds its finale on. Relevant but tonally opposite: a bravura roving long-take with a drum score, nothing like Glass's static, muted watching.",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "K-PAX",
+   "year": 2001,
+   "grade": 3,
+   "tone": 2,
+   "what": "Iain Softley's American drama: a psychiatrist treats a serene new patient who calmly insists he is a visitor from another planet",
+   "why": "Almost a dry run for Glass's second act - a hospital, a doctor assembling mundane explanations for extraordinary claims, and an ending that leaves the evidence pointing both ways",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Shutter Island",
+   "year": 2010,
+   "grade": 3,
+   "tone": 1,
+   "what": "Martin Scorsese's American thriller: a US marshal investigates a patient's disappearance from a hospital for the criminally insane in 1954",
+   "why": "The other great asylum film built on the possibility that the institution is right about you; the same locked-ward geography and the same reversal in which the doctors' account replaces the hero's",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Watchmen",
+   "year": 2009,
+   "grade": 3,
+   "tone": 0,
+   "what": "Zack Snyder's American adaptation of Alan Moore's comic: costumed vigilantes in an alternate 1985, nearly all of them powerless and none of them well",
+   "why": "The founding deconstruction that Unbreakable and Glass answer - masked heroism as pathology, and a mastermind who has already executed his plan before the heroes arrive, which is Elijah Price's move exactly. Relevant but tonally opposite: operatic, slow-motion Snyder spectacle against Glass's withheld, institutional quiet.",
+   "basis": "lineage",
+   "source": "judgement"
+  },
+  {
+   "title": "Joker",
+   "year": 2019,
+   "grade": 3,
+   "tone": 0,
+   "what": "Todd Phillips's American drama: a failed party clown and stand-up comic in a decaying Gotham City slides into violence",
+   "why": "Released the same year and doing the same job from the villain's side - comic-book mythology retold as untreated mental illness, with a narrator whose account cannot be trusted. Relevant but tonally opposite: a grimy character study that escalates to riot, where Glass stays small, clean and deliberately anticlimactic.",
+   "basis": "lineage",
+   "source": "judgement"
+  },
+  {
+   "title": "The Village",
+   "year": 2004,
+   "grade": 2,
+   "tone": 2,
+   "what": "Shyamalan's American period thriller: an isolated nineteenth-century settlement lives in fear of the creatures in the surrounding woods",
+   "why": "Shyamalan's other film about a mythology deliberately manufactured to control people; the elders build a monster story the way Elijah Price builds a comic-book one",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/The_Village_(2004_film)"
+  },
+  {
+   "title": "The Visit",
+   "year": 2015,
+   "grade": 2,
+   "tone": 1,
+   "what": "Shyamalan's American found-footage horror-comedy: two children film a week at the farm of grandparents they have never met",
+   "why": "The cheap Blumhouse reinvention that made finishing the trilogy possible, and it runs the same trick of letting a mundane explanation (dementia, delusion) shadow a monstrous one",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/The_Visit_(2015_American_film)"
+  },
+  {
+   "title": "Old",
+   "year": 2021,
+   "grade": 2,
+   "tone": 1,
+   "what": "Shyamalan's American thriller: holidaymakers on a secluded beach find they are ageing several decades in a single day",
+   "why": "Late Shyamalan in the same register - a sealed location, a high-concept anomaly, and an institution watching the subjects from outside the frame",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Old_(film)"
+  },
+  {
+   "title": "Knock at the Cabin",
+   "year": 2023,
+   "grade": 2,
+   "tone": 2,
+   "what": "Shyamalan's American thriller: four strangers take a family hostage in a holiday cabin and demand a human sacrifice to stop the apocalypse",
+   "why": "The most direct restatement of Glass's question - are these people prophets or a shared delusion - with the film withholding proof for as long as it can bear to",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Knock_at_the_Cabin"
+  },
+  {
+   "title": "Trap",
+   "year": 2024,
+   "grade": 2,
+   "tone": 1,
+   "what": "Shyamalan's American thriller: a serial killer takes his teenage daughter to a pop concert that turns out to be a police operation built to catch him",
+   "why": "Another Shyamalan study of a monstrous man passing as ordinary and the apparatus assembled to contain him; the sealed arena does the work the hospital does in Glass",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Trap_(2024_film)"
+  },
+  {
+   "title": "Logan",
+   "year": 2017,
+   "grade": 2,
+   "tone": 0,
+   "what": "James Mangold's American western-inflected X-Men film: an ageing, poisoned Wolverine escorts a child across a country where mutants have died out",
+   "why": "The other major film about superheroes as worn-out bodies in a world that has decided they never existed; grounded, elegiac, about the cost of the myth rather than its thrills. Relevant but tonally opposite: sustained brutal action, where Glass keeps its fights brief, clumsy and offhand.",
+   "basis": "lineage",
+   "source": "judgement"
+  },
+  {
+   "title": "Brightburn",
+   "year": 2019,
+   "grade": 2,
+   "tone": 1,
+   "what": "David Yarovesky's American horror film, produced by James Gunn: a Kansas couple raise the alien boy they found in a crashed pod, and he grows up wrong",
+   "why": "Same year, same move as Glass - take a familiar comic-book origin, play it entirely straight in a small town, and let the superpowered child be a monster",
+   "basis": "lineage",
+   "source": "judgement"
+  },
+  {
+   "title": "Midnight Special",
+   "year": 2016,
+   "grade": 2,
+   "tone": 2,
+   "what": "Jeff Nichols's American science-fiction road movie: a father flees across the South with his young son, whose powers are wanted by both a cult and the federal government",
+   "why": "Powers handled with Shyamalan's own restraint - long quiet scenes, ordinary people, institutions closing in - and like Glass it ends by making the extraordinary undeniable and public",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Fast Color",
+   "year": 2018,
+   "grade": 2,
+   "tone": 2,
+   "what": "Julia Hart's American drama: three generations of Black women in a drought-stricken Midwest share an inherited ability, pursued by researchers",
+   "why": "A superhero film shot as a family drama, with powers as inheritance rather than spectacle and scientists who want to study the subject rather than fight her",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Sleight",
+   "year": 2016,
+   "grade": 2,
+   "tone": 1,
+   "what": "J. D. Dillard's American indie: a Los Angeles street magician raising his little sister deals drugs and hides a homemade electromagnetic implant in his arm",
+   "why": "A grounded origin story assembled out of poverty and improvisation, in the register Unbreakable invented; the hero is built rather than born",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Griff the Invisible",
+   "year": 2010,
+   "grade": 2,
+   "tone": 1,
+   "what": "Leon Ford's Australian romance: a bullied office clerk patrols his neighbourhood at night in a homemade suit, believing he can turn invisible",
+   "why": "A whole film about the kindness or cruelty of telling someone their powers are not real - precisely Dr Staple's argument, played out as a love story",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Confessions of a Superhero",
+   "year": 2007,
+   "grade": 2,
+   "tone": 1,
+   "what": "Matthew Ogens's American documentary: four people who make a living posing as Superman, Batman, the Hulk and Wonder Woman on the Hollywood Walk of Fame",
+   "why": "The documentary version of Glass's patients - adults whose sense of self has fused with a comic-book figure - and it never treats them as a joke",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "The Fisher King",
+   "year": 1991,
+   "grade": 2,
+   "tone": 0,
+   "what": "Terry Gilliam's American drama: a disgraced New York radio host is dragged into the life of a homeless man who believes he is a knight questing for the Holy Grail",
+   "why": "Trauma converted into a private mythology, complete with a Red Knight only he can see; the film argues, as Glass does, that the myth may be load-bearing even if it is not literally true. Relevant but tonally opposite: Gilliam's maximalist fantasy and manic performances against Glass's clinical flatness.",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Don Juan DeMarco",
+   "year": 1994,
+   "grade": 2,
+   "tone": 1,
+   "what": "Jeremy Leven's American comedy-drama: a psychiatrist has ten days to talk a young man out of his belief that he is the world's greatest lover",
+   "why": "The Dr Staple scenario in miniature - a clinician on a deadline to dismantle a patient's identity, who ends up half-converted himself",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Harvey",
+   "year": 1950,
+   "grade": 2,
+   "tone": 1,
+   "what": "Henry Koster's American comedy: a gentle drinker insists his closest friend is a six-foot invisible rabbit, and his family tries to have him committed",
+   "why": "The kindest film ever made about institutionalising someone for a belief; the sanatorium, the certain doctors and an ending that tilts toward the patient all prefigure Glass",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Take Shelter",
+   "year": 2011,
+   "grade": 2,
+   "tone": 2,
+   "what": "Jeff Nichols's American drama: an Ohio construction worker with a family history of schizophrenia builds a storm shelter for apocalyptic visions he cannot explain",
+   "why": "Sustains the prophet-or-patient question longer than almost any film, and grounds it in jobs, insurance and a wife's fear - the ordinary texture Glass reaches for",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Identity",
+   "year": 2003,
+   "grade": 2,
+   "tone": 1,
+   "what": "James Mangold's American thriller: ten strangers stranded at a desert motel are murdered one by one, intercut with a death-row hearing",
+   "why": "The other studio thriller whose engine is dissociative identity disorder and a psychiatrist's late-night session; Split's premise with the reveal placed at the midpoint",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Primal Fear",
+   "year": 1996,
+   "grade": 2,
+   "tone": 1,
+   "what": "Gregory Hoblit's American courtroom thriller: a defence lawyer takes the case of an altar boy who appears to have a violent second personality",
+   "why": "The definitive film about whether multiple personalities are real or performed, and about experts who stake everything on the answer - the doubt Glass weaponises",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Fight Club",
+   "year": 1999,
+   "grade": 2,
+   "tone": 0,
+   "what": "David Fincher's American satire: an insomniac office drone and a soap salesman start an underground fighting club that becomes an army",
+   "why": "A man who invents a mythic second self to escape an ordinary life, undone by a late twist about identity; the closest 1999 sibling to Unbreakable's thesis. Relevant but tonally opposite: Fincher's stylised, fast, aggressive surface where Glass is drab and still.",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "One Flew Over the Cuckoo's Nest",
+   "year": 1975,
+   "grade": 2,
+   "tone": 2,
+   "what": "Milos Forman's American drama: a convict feigns madness to serve his sentence in a mental hospital and collides with its head nurse",
+   "why": "The ward as a machine for making people ordinary; Nurse Ratched and Dr Staple are doing the same job, and Glass's ending is a deliberate answer to this one",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "The Master",
+   "year": 2012,
+   "grade": 2,
+   "tone": 2,
+   "what": "Paul Thomas Anderson's American drama: a damaged navy veteran falls in with the charismatic founder of a new psychological movement in 1950",
+   "why": "The cult-psychiatry film - sessions engineered to rewrite what a man believes about himself, shot as an intimate duel, which is what Glass's group therapy scenes are",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Dark City",
+   "year": 1998,
+   "grade": 2,
+   "tone": 0,
+   "what": "Alex Proyas's Australian-American noir science-fiction film: a man wakes with no memory in a city that pale strangers rebuild every night",
+   "why": "A hidden order suppressing an extraordinary man's knowledge of what he can do; the discovery-of-powers beat and the conspiratorial reveal are Glass's blueprint. Relevant but tonally opposite: expressionist noir spectacle with a CGI finale, against Glass's suburban plainness.",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Total Recall",
+   "year": 1990,
+   "grade": 2,
+   "tone": 0,
+   "what": "Paul Verhoeven's American science-fiction action film: a construction worker buys implanted memories of being a secret agent and can no longer tell which life is real",
+   "why": "Contains in one scene what Glass expands into a whole act - an official calmly explaining that the hero's heroism is a psychotic break, with the film declining to prove him wrong. Relevant but tonally opposite: Verhoeven action bombast, with only the psychiatrist scene sharing Glass's register.",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "The Prestige",
+   "year": 2006,
+   "grade": 2,
+   "tone": 1,
+   "what": "Christopher Nolan's British-American drama: two Victorian stage magicians destroy each other over a vanishing-man trick",
+   "why": "Obsessive rivals, showmanship as identity, and a structure built to detonate late; the hero-and-nemesis symmetry Elijah Price theorises about, told straight",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "I Kill Giants",
+   "year": 2017,
+   "grade": 2,
+   "tone": 1,
+   "what": "Anders Walter's British-American-Belgian drama from the graphic novel: a withdrawn girl who says she hunts giants is pursued by the school psychologist while her mother is dying",
+   "why": "A child's monster mythology defended against a therapist who wants to rename it grief; like Glass, it takes the belief seriously before it takes it apart",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Lady in the Water",
+   "year": 2006,
+   "grade": 1,
+   "tone": 2,
+   "what": "Shyamalan's American fable: an apartment-block superintendent finds a water nymph in the swimming pool and recruits his tenants into her bedtime-story rescue",
+   "why": "Shyamalan's other film about people discovering their assigned roles in a mythology; widely derided, but driven by the same conviction that stories are literal instructions. The connection is thin but the texture is exact: apartment-block suburbia, long quiet takes, spectacle almost entirely withheld.",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Lady_in_the_Water"
+  },
+  {
+   "title": "The Happening",
+   "year": 2008,
+   "grade": 1,
+   "tone": 2,
+   "what": "Shyamalan's American eco-horror film: an unexplained airborne agent makes people across the northeast kill themselves",
+   "why": "Part of the filmography, and it shares Glass's habit of having characters theorise the plot aloud; worth seeing to understand the career low that Glass's comeback was measured against. A weak recommendation that nonetheless feels startlingly like Glass to sit through: flat affect, static framing, catastrophe kept offscreen.",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/The_Happening_(2008_film)"
+  },
+  {
+   "title": "After Earth",
+   "year": 2013,
+   "grade": 1,
+   "tone": 1,
+   "what": "Shyamalan's American science-fiction adventure with Will and Jaden Smith: a boy crash-lands on a long-abandoned Earth with his injured father and must cross it alone",
+   "why": "The nadir of the studio run that preceded the low-budget reinvention; its father-and-son survival frame is a flattened version of the Dunn family material Glass returns to",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/After_Earth"
+  },
+  {
+   "title": "Wide Awake",
+   "year": 1998,
+   "grade": 1,
+   "tone": 1,
+   "what": "Shyamalan's early American family drama: a Catholic schoolboy in Philadelphia goes looking for God after his grandfather dies",
+   "why": "The pre-fame Shyamalan feature; the parochial Philadelphia setting and the child whose private conviction the adults treat as a symptom are already in place",
+   "basis": "director",
+   "source": "https://en.wikipedia.org/wiki/Wide_Awake_(1998_film)"
+  },
+  {
+   "title": "Devil",
+   "year": 2010,
+   "grade": 1,
+   "tone": 1,
+   "what": "John Erick Dowdle's American thriller: five strangers are trapped in a stalled office-block elevator with the Devil among them",
+   "why": "Story by and produced by M. Night Shyamalan (The Night Chronicles); a single-location fable about a hidden identity in a small group, made in his voice without his direction",
+   "basis": "crew",
+   "source": "https://en.wikipedia.org/wiki/Devil_(2010_film)"
+  },
+  {
+   "title": "The Watchers",
+   "year": 2024,
+   "grade": 1,
+   "tone": 1,
+   "what": "Ishana Night Shyamalan's Irish-American horror film: four strangers are held in a forest bunker and watched each night by creatures that imitate people",
+   "why": "Produced by M. Night Shyamalan and directed by his daughter; the family's continuing subject of captives under observation and a folklore that turns out to be literally true",
+   "basis": "crew",
+   "source": "https://en.wikipedia.org/wiki/The_Watchers_(film)"
+  },
+  {
+   "title": "Mystery Men",
+   "year": 1999,
+   "grade": 1,
+   "tone": 0,
+   "what": "Kinka Usher's American comedy: a team of amateur superheroes with near-useless powers must rescue their city's real hero",
+   "why": "The comic treatment of Glass's premise - heroes whose powers may amount to nothing at all - and a record of how the genre looked the year before Unbreakable",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Kick-Ass",
+   "year": 2010,
+   "grade": 1,
+   "tone": 0,
+   "what": "Matthew Vaughn's British-American action comedy: a teenager with no training buys a wetsuit online and declares himself a superhero",
+   "why": "The other big film about ordinary people acting out comic books in the real world and being badly hurt for it",
+   "basis": "lineage",
+   "source": "judgement"
+  },
+  {
+   "title": "Push",
+   "year": 2009,
+   "grade": 1,
+   "tone": 0,
+   "what": "Paul McGuigan's American thriller shot in Hong Kong: people with psychic abilities dodge a government agency trying to weaponise them",
+   "why": "A grounded-powers chase built on a secret agency that manages the extraordinary - the organisation Glass reveals in its last act, played as pulp",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Carrie",
+   "year": 1976,
+   "grade": 1,
+   "tone": 0,
+   "what": "Brian De Palma's American horror film from Stephen King's novel: a bullied, sheltered teenager discovers telekinesis and uses it at the prom",
+   "why": "Named by Josh Trank as an influence on Chronicle, the key Unbreakable descendant; the founding film of powers-as-affliction, where the origin story is also the tragedy",
+   "basis": "influence",
+   "source": "https://en.wikipedia.org/wiki/Chronicle_(2012_film)"
+  },
+  {
+   "title": "The Fury",
+   "year": 1978,
+   "grade": 1,
+   "tone": 0,
+   "what": "Brian De Palma's American thriller: a former intelligence agent searches for his telekinetic son, held by a covert agency training psychics",
+   "why": "Also named by Trank as a Chronicle influence; the 1970s template for a secret institution that collects extraordinary people, which is what Glass's ending turns out to be about",
+   "basis": "influence",
+   "source": "https://en.wikipedia.org/wiki/Chronicle_(2012_film)"
+  },
+  {
+   "title": "Psycho",
+   "year": 1960,
+   "grade": 1,
+   "tone": 1,
+   "what": "Alfred Hitchcock's American horror film: a woman fleeing with stolen money stops at a roadside motel run by a young man and his mother",
+   "why": "Ancestor of both halves of Glass - a killer with a second personality, and a closing scene in which a psychiatrist explains the entire film to the audience",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "The Three Faces of Eve",
+   "year": 1957,
+   "grade": 1,
+   "tone": 2,
+   "what": "Nunnally Johnson's American drama from a real case history: a timid Georgia housewife in psychiatric treatment turns out to have two further personalities",
+   "why": "The original dissociative-identity film and the source of every convention Split and Glass inherit, right down to the doctor narrating the diagnosis to camera. Thin as a recommendation, but the texture is very close: sober, static, clinical, a case study told at conversational volume.",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "A Beautiful Mind",
+   "year": 2001,
+   "grade": 1,
+   "tone": 1,
+   "what": "Ron Howard's American biographical drama: the mathematician John Nash's career, marriage and schizophrenia",
+   "why": "A mainstream film that seats the audience inside a delusion before revealing it as one; the same technique Glass uses when it lets Dr Staple's explanation sound complete",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Bug",
+   "year": 2006,
+   "grade": 1,
+   "tone": 2,
+   "what": "William Friedkin's American chamber piece from Tracy Letts's play: a lonely woman living in an Oklahoma motel and a Gulf War veteran convince each other that insects are breeding under their skin",
+   "why": "A shared delusion assembled step by step with total conviction, in one room; generically remote from Glass but the clearest case study of what its therapy scenes propose. Argued rather than obvious, yet it feels more like Glass than most of the superhero titles here: one room, slow escalation, no spectacle at all.",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Donnie Darko",
+   "year": 2001,
+   "grade": 1,
+   "tone": 1,
+   "what": "Richard Kelly's American film: a suburban teenager on medication is visited by a figure in a rabbit suit who tells him the world ends in 28 days",
+   "why": "Teenager as either prophet or patient, complete with therapy sessions and pills, and a mythology the film finally declines to disown",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Jacob's Ladder",
+   "year": 1990,
+   "grade": 1,
+   "tone": 1,
+   "what": "Adrian Lyne's American horror film: a Vietnam veteran working in a New York post office is stalked by visions and by evidence of an army drug experiment",
+   "why": "Unreliable perception, a suspected institutional experiment and a reversal that reframes everything - the twist-thriller tradition Shyamalan came out of",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Memento",
+   "year": 2000,
+   "grade": 1,
+   "tone": 1,
+   "what": "Christopher Nolan's American thriller told backwards: a man who cannot form new memories hunts his wife's killer using tattoos and Polaroids",
+   "why": "The other 2000 film engineered so its ending rewrites the hero's identity; the exact wave of twist cinema Unbreakable was released into",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "The Game",
+   "year": 1997,
+   "grade": 1,
+   "tone": 0,
+   "what": "David Fincher's American thriller: a cold investment banker is enrolled in a participatory game that systematically dismantles his life",
+   "why": "An unseen organisation stage-manages a man's reality until he cannot tell staged from real; the paranoid machinery behind Glass, plus a reveal that recasts everything",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Phenomenon",
+   "year": 1996,
+   "grade": 1,
+   "tone": 2,
+   "what": "Jon Turteltaub's American drama: a small-town car mechanic sees a light in the sky and wakes with genius-level intelligence and telekinesis",
+   "why": "An ordinary man's powers are tested by doctors and the government and finally explained away as a symptom - the deflation Dr Staple attempts on David Dunn. A modest pick with a near-identical register: small-town quiet, medical testing, an extraordinary man handled by doctors rather than by action.",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "American Splendor",
+   "year": 2003,
+   "grade": 1,
+   "tone": 1,
+   "what": "Shari Springer Berman and Robert Pulcini's American film about Harvey Pekar, the hospital file clerk who wrote autobiographical comics, mixing drama, animation and the real Pekar",
+   "why": "Comics as the mythology of ordinary, unhappy lives; the collector-and-shop world Elijah Price comes from, taken seriously as a subject in itself",
+   "basis": "subject",
+   "source": "judgement"
+  },
+  {
+   "title": "Big Fish",
+   "year": 2003,
+   "grade": 1,
+   "tone": 0,
+   "what": "Tim Burton's American fantasy: a dying man's tall tales about giants, witches and a circus are set against his son's search for the facts",
+   "why": "A film about whether a mythologised life is a lie or a truer account; Glass ends by choosing the myth, and this makes the same choice tenderly",
+   "basis": "form",
+   "source": "judgement"
+  },
+  {
+   "title": "Looper",
+   "year": 2012,
+   "kind": "film",
+   "grade": 1,
+   "tone": 1,
+   "what": "Rian Johnson's time-travel thriller: a hitman who disposes of bodies sent back from the future is assigned his older self, and finds a child whose telekinesis will make him a monster",
+   "why": "Sits with the key's Push and Chronicle rather than above them. The powers are grounded the way Glass insists on, telekinesis as a parlour trick in a diner until it is a catastrophe, in a world otherwise shabby and unremarkable, and the film ends on a sacrifice made to control what someone is becoming. But telekinesis is a subplot inside a time-travel picture, and Johnson has no interest in the question Glass exists to ask, which is whether believing you are extraordinary is a diagnosis.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Super 8",
+   "year": 2011,
+   "kind": "film",
+   "grade": 1,
+   "tone": 0,
+   "what": "J.J. Abrams's Amblin homage: children shooting a zombie movie in 1979 Ohio witness a train crash and the escape of a creature the Air Force will do anything to recover",
+   "why": "One thread holds. A state apparatus works to keep the existence of something extraordinary out of public knowledge, which is precisely the machinery Glass reveals in its last act and the reason its ending lands as it does. Everything else is remote: Super 8 is a warm nostalgia piece about childhood friendship, and the reverence offered as grounds is reverence for Spielberg, not for the comic-book mythology Glass spends two hours taking apart.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "The Gift",
+   "year": 2015,
+   "kind": "film",
+   "grade": 1,
+   "tone": 1,
+   "what": "Joel Edgerton's thriller: a couple moving back to Los Angeles are drawn into the orbit of a man the husband bullied at school, who has waited a long time",
+   "why": "Defensible on Shyamalan's own stated thesis, that damage done in childhood manufactures the extraordinary, which is the line Split and Glass build their whole scheme on. The Gift is that proposition with the powers removed: a man made entirely by what was done to him, and a bully whose account of himself the film dismantles late and coldly, withholding its information in the same way. No mythology, no institution and no powers, which is where the case stops.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Tenet",
+   "year": 2020,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Christopher Nolan's film: an agent is trained to fight through inverted entropy in order to prevent a war started by the future",
+   "why": "A vast, loud, exposition-dense action film organised around a physical gimmick. Glass is a chamber piece in a psychiatric hospital whose climax is a scuffle in a car park and whose actual subject is whether a man's belief about himself is a diagnosis. 'Mind-bending, high-stakes, layered narrative' describes Tenet's marketing, and none of the three applies to Glass, which is deliberately small, flat and deflationary.",
+   "basis": "mode",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "The Double Life of Véronique",
+   "year": 1991,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Krzysztof Kieślowski's film: two identical women, one in Kraków and one in Paris, who have never met and feel each other's lives",
+   "why": "Suggested on 'dual timelines', which this film does not have and Glass does not have either — Glass runs three characters through a single continuous present inside one building. The only route from here to Kieślowski is the word 'two'. There is no institution, no mythology and no power in it, and it is an amber-lit metaphysical romance. It earns a grade 1 in the Avalon key on a real argument about colour grading and an unverifiable second self; nothing equivalent is available here.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "The Fountain",
+   "year": 2006,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Darren Aronofsky's three-strand film in which a conquistador, a research oncologist and a man in a floating bubble tree all play out the same refusal of death",
+   "why": "Offered for 'layered time structures'. Glass has no time structure at all: it is chronological, continuous, and covers a few days. The two films share no subject, no register and no lineage, and The Fountain's sincerity about transcendence is exactly what Glass spends two hours declining to grant its characters until the last reel, and then grants on institutional evidence rather than on faith.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Coherence",
+   "year": 2013,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "James Ward Byrkit's improvised film in which a dinner party during a comet pass finds itself one of many branching copies",
+   "why": "Suggested for 'alternate realities', of which Glass has none. Glass's whole argument is that there is exactly one reality and the only question is whether three men inside it are what they say they are. Low budget is the wrong axis too: Shyamalan self-financed Glass at twenty million dollars and shot it as a studio film in controlled colour blocks, one hue per character.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "The Lobster",
+   "year": 2015,
+   "kind": "film",
+   "grade": 0,
+   "tone": 1,
+   "what": "Yorgos Lanthimos's film: single people are given forty-five days at a hotel to pair off or be converted into an animal of their choosing",
+   "why": "My first instinct was a grade 1 on the institution — a calm professional in a managed facility tells people what they are and what happens if they decline to accept it, which is Dr. Staple's entire function. I overruled it. The hotel classifies by romantic status, not by a claim to be extraordinary, and Lanthimos has no interest whatever in the mythology question Glass exists to argue; the key already covers institutional reality-definition properly with One Flew Over the Cuckoo's Nest, K-PAX and Bug. Tone survives the cut: both are sterile, evenly lit, flatly performed, and clinical about cruelty.",
+   "basis": "mode",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Under the Skin",
+   "year": 2013,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Jonathan Glazer's film: a creature in the shape of a woman collects men in Glasgow and delivers them into a black fluid",
+   "why": "'Unsettling atmosphere, layered mystery' attached to a film that is neither. Glass explains itself continuously — Dr. Staple states her thesis aloud, Mr. Glass states his, and the ending is literally a broadcast. Glazer's film explains nothing and has no characters in the sense Glass has them. It is a strong recommendation for The Call of Cthulhu and is rated there; here it is a title that travelled between targets unchanged.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Annihilation",
+   "year": 2018,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Alex Garland's film: a biologist enters a coastal zone where living forms refract into each other",
+   "why": "The third target this title has been fired at in this pool. Against Glass there is nothing: no institution, no comic-book argument, no ordinary-world framing, and no interest in whether extraordinary ability is real or delusional — the Shimmer is unambiguously real from the opening shot, which is the one thing Glass keeps in doubt for two hours. 'Psychological horror, surreal sci-fi tension' is a shelf label.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "The Witch",
+   "year": 2015,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Robert Eggers's 1630 New England film in which a Puritan family's beliefs about witchcraft turn out to be correct",
+   "why": "Suggested for 'slow-burn dread, psychological unraveling'. Glass is a contemporary American film about superheroes, set in a hospital, with a fistfight in it, and what unravels is institutional rather than psychological. The one real common element — both films end by confirming that what a character believed was true — is a resolution so widely shared that it cannot carry a recommendation on its own.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "The Killing of a Sacred Deer",
+   "year": 2017,
+   "kind": "film",
+   "grade": 1,
+   "tone": 1,
+   "what": "Yorgos Lanthimos's film: a cardiac surgeon's children begin to be paralysed one by one by a teenage boy who tells him, calmly, that he must choose one of them to kill",
+   "why": "Defensible on register rather than subject, and the register is specific: sterile hospital corridors shot in gliding wide-angle, flat affect, and an institution that cannot name what is happening inside it. Glass's Raven Hill scenes — the pink room, the unhurried clinician, the pressure applied without a raised voice — work the same way. Where it stops is that Lanthimos's intrusion is a moral debt with a stated rule, while Glass is about a conspiracy with an organisation behind it. The key's Bug and Jacob's Ladder sit at this grade on the same kind of partial claim.",
+   "basis": "mode",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Session 9",
+   "year": 2001,
+   "kind": "film",
+   "grade": 2,
+   "tone": 1,
+   "what": "Brad Anderson's film, shot in the genuinely abandoned Danvers State Hospital: an asbestos-removal crew works a week inside the building while one of them listens through old therapy tapes of a patient whose alters include a voice calling itself Simon",
+   "why": "The best new pick for this target. Its centre is dissociative identity treated as a horror mechanism — a patient's alters interviewed one at a time on tape until the violent one answers, and a man in the present taken over by it — which is the structure Split built the Horde on and that Glass spends its running time adjudicating. It also makes a psychiatric institution the physical fact of the film, a place with its own history and authority, which is what Raven Hill is meant to be. The key holds Identity, Primal Fear and The Three Faces of Eve on the dissociation shelf and Session 9 is the better film than two of them. Grimy, decaying early-digital video against Glass's clean colour blocking.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  },
+  {
+   "title": "Enemy",
+   "year": 2013,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Denis Villeneuve's yellow-graded Toronto film in which a history lecturer pursues a bit-part actor identical to himself",
+   "why": "The one weak suggestion in an otherwise careful set. Glass is not an identity mystery and has no enigmatic ending: it names its institution, states its thesis in dialogue, and closes with a deliberate public broadcast. Kevin Crumb's fracture is external, literal and clinically labelled, where Adam and Anthony's is an unresolved allegory the film refuses to settle. Enemy earns a defensible grade against Avalon on a real argument about grading and silence; none of that reaches Glass.",
+   "basis": "subject",
+   "source": "judgement",
+   "pooled": true
+  }
+ ]
+}
