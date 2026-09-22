@@ -123,8 +123,12 @@ void main() {
         required String id,
         required String name,
         int? year,
+        bool afresh = false,
       }) {
-        asked.add(year == null ? '$type $id $name' : '$type $id $name ($year)');
+        final subject = year == null
+            ? '$type $id $name'
+            : '$type $id $name ($year)';
+        asked.add(afresh ? '$subject afresh' : subject);
         return answer.future;
       };
 
@@ -135,6 +139,7 @@ void main() {
         required String id,
         required String name,
         int? year,
+        bool afresh = false,
       }) {
         fail('the model was asked about $name with no key configured');
       };
@@ -182,10 +187,35 @@ void main() {
   /// Lands the answer on the screen. The completion is a microtask and
   /// [WidgetTester.pumpAndSettle] does not run one before its first frame,
   /// so the tree is pumped once for it and settled after.
+  ///
+  /// A fresh completer is left behind it, so a re-ask has one of its own.
   Future<void> land(WidgetTester tester, List<SimilarTitle> titles) async {
-    answer.complete(titles);
+    final landing = answer;
+    answer = Completer<List<SimilarTitle>>();
+    landing.complete(titles);
     await tester.pump();
     await tester.pumpAndSettle();
+  }
+
+  /// Opens the rung, walks the remote down into the strip and along it to
+  /// the far end, and says what it stood on at every step.
+  Future<List<String?>> walkTheRow(WidgetTester tester) async {
+    await stepDownToRung(tester, kMoreLikeThisLabel);
+    await press(tester, LogicalKeyboardKey.select);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    final walk = <String?>[focusedLabel(tester)];
+    for (var i = 0; i < 2; i++) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      walk.add(focusedLabel(tester));
+    }
+    return walk;
+  }
+
+  /// Select on the card the remote is standing on. Not settled: while the
+  /// ask is out the card holds a spinner, and a spinner never stops.
+  Future<void> pressSelect(WidgetTester tester) async {
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
   }
 
   group('whether there is a rung at all', () {
@@ -366,6 +396,96 @@ void main() {
             .map((screen) => screen.id),
         contains('tt0079944'),
       );
+    });
+  });
+
+  /// The way to ask again, which on a television is a card at the end of
+  /// the strip rather than anything on the rung's header: the remote is
+  /// already in the row, and walking off the end of it is the gesture.
+  group('asking again', () {
+    testWidgets('is the last card of the row, reached by walking off the '
+        'end of it, and is not what the rung focuses first', (tester) async {
+      await mount(tester);
+      await land(tester, [stalker, existenz]);
+
+      final walk = await walkTheRow(tester);
+
+      expect(walk, ['Stalker', 'eXistenZ', kAskAgainLabel]);
+      // The strip still swallows a press past its end, so the card is the
+      // last stop rather than a way out of the row.
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedLabel(tester), kAskAgainLabel);
+      // And left comes straight back to the posters.
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focusedLabel(tester), 'eXistenZ');
+    });
+
+    testWidgets('with no key configured there is no rung, and so no card', (
+      tester,
+    ) async {
+      await mount(tester, apiKey: null, askFor: never);
+
+      expect(find.text(kAskAgainLabel), findsNothing);
+    });
+
+    testWidgets('select on it asks again although an answer is remembered, '
+        'and the new answer replaces the old one', (tester) async {
+      await mount(tester);
+      await land(tester, [stalker, existenz]);
+      await walkTheRow(tester);
+      expect(asked, hasLength(1));
+
+      await pressSelect(tester);
+
+      expect(
+        asked.last,
+        'movie $movieId Night of the Living Dead (1968) afresh',
+      );
+      expect(
+        find.text('Stalker'),
+        findsOneWidget,
+        reason: 'the old row stands while the new ask is out',
+      );
+
+      await land(tester, [suggestion('tt0113277', 'Heat', 1995)]);
+
+      expect(find.text('Heat'), findsOneWidget);
+      expect(find.text('Stalker'), findsNothing);
+      expect(summaryOf(tester, kMoreLikeThisLabel), '1 title');
+    });
+
+    testWidgets('a re-ask that comes back with nothing keeps the row, the '
+        'rung and the remote, and says so', (tester) async {
+      await mount(tester);
+      await land(tester, [stalker, existenz]);
+      await walkTheRow(tester);
+
+      await pressSelect(tester);
+      await land(tester, const []);
+
+      expect(rungs(tester), [kSourcesLabel, kMoreLikeThisLabel]);
+      expect(find.text('Stalker'), findsOneWidget);
+      expect(find.text('eXistenZ'), findsOneWidget);
+      expect(find.text(kNothingNewSimilar), findsOneWidget);
+      expect(
+        focusedLabel(tester),
+        kAskAgainLabel,
+        reason: 'a press that changed nothing moved nothing either',
+      );
+    });
+
+    testWidgets('and four presses while the ask is out cost one call', (
+      tester,
+    ) async {
+      await mount(tester);
+      await land(tester, [stalker, existenz]);
+      await walkTheRow(tester);
+
+      for (var i = 0; i < 4; i++) {
+        await pressSelect(tester);
+      }
+
+      expect(asked, hasLength(2), reason: 'the first ask and one re-ask');
     });
   });
 

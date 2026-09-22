@@ -22,6 +22,12 @@
 /// 3. **The guard**, which is not optional and is documented where it
 ///    lives (`similar_resolver.dart`).
 ///
+/// And one way past all of it: `afresh`, which is the viewer saying the
+/// row is wrong. It steps over both caches and writes the new answer over
+/// the old one -- but only when there is a new answer to write, because
+/// every failure here is an empty list and a row the viewer was looking at
+/// is not a thing a failure may take away. See [MoreLikeThis.forItem].
+///
 /// What the row itself does with the result -- how many it shows, what a
 /// reason looks like on a television -- is not here. This hands back
 /// catalogue items and the model's sentence about each.
@@ -78,25 +84,55 @@ final class MoreLikeThis {
   /// Titles like [name] ([year]), the item [id] of [type] on screen.
   ///
   /// Empty is an ordinary answer, and every failure is one.
+  ///
+  /// [afresh] is the viewer having pressed "ask again": the model is asked
+  /// about this title whatever is written down about it, and the answer
+  /// replaces what was. Two things about it are the whole of the feature:
+  ///
+  ///  * **Both caches are stepped over**, and they are two -- the answer
+  ///    remembered under this title and the resolution of it this run. A
+  ///    remembered *empty* answer is a value here and normally stops the
+  ///    asking, which makes it exactly the row somebody presses this for.
+  ///  * **The row is replaced only when something came back to replace it
+  ///    with.** Everything that can go wrong is an empty list by design
+  ///    (see the top of this file), so a provider that is gone and a model
+  ///    with nothing to say arrive looking the same -- and neither is
+  ///    grounds for blanking a row that was fine, which is the one thing
+  ///    the press must not cost. An empty re-ask therefore writes nothing
+  ///    and caches nothing: what was remembered stands, and the next press
+  ///    asks again.
   Future<List<SimilarTitle>> forItem({
     required String type,
     required String id,
     required String name,
     int? year,
+    bool afresh = false,
   }) async {
     final key = '$type/$id';
-    if (_resolved[key] case final already?) return already;
+    if (!afresh) {
+      if (_resolved[key] case final already?) return already;
+    }
     final suggestions = await _suggestionsFor(
       type: type,
       id: id,
       name: name,
       year: year,
+      afresh: afresh,
     );
-    return _resolved[key] = await resolveSuggestions(
+    final resolved = await resolveSuggestions(
       suggestions,
       subjectId: id,
       search: search,
     );
+    if (afresh) {
+      // The guard can empty a model's answer on its own -- ten invented
+      // titles resolve to nothing -- so the test is on what would reach
+      // the screen and not on what the model said. That keeps the row, the
+      // per-run resolution and the preferences file saying one thing.
+      if (resolved.isEmpty) return const [];
+      await _remember(type: type, id: id, suggestions: suggestions);
+    }
+    return _resolved[key] = resolved;
   }
 
   /// What the model said about this title: off the preferences file when
@@ -107,9 +143,12 @@ final class MoreLikeThis {
     required String id,
     required String name,
     int? year,
+    required bool afresh,
   }) async {
-    final remembered = prefs.similarSuggestions.forItem(type: type, id: id);
-    if (remembered != null) return remembered;
+    if (!afresh) {
+      final remembered = prefs.similarSuggestions.forItem(type: type, id: id);
+      if (remembered != null) return remembered;
+    }
     final apiKey = prefs.similarApiKey;
     // No key, no provider. Not "ask and fail" -- ask *nothing*.
     if (apiKey == null) return const [];
@@ -146,13 +185,24 @@ final class MoreLikeThis {
     }
     // Written down even when it is empty: an answer with nothing in it is
     // an answer, and asking again would cost a call to be told it twice.
-    await prefs.setSimilarSuggestions(
-      prefs.similarSuggestions.remembering(
-        type: type,
-        id: id,
-        suggestions: answered,
-      ),
-    );
+    // A re-ask writes nothing here -- it writes after the guard has run,
+    // and only if anything survived it ([forItem]).
+    if (!afresh) await _remember(type: type, id: id, suggestions: answered);
     return answered;
   }
+
+  /// [suggestions] written down under this title, stamped with the question
+  /// that produced them and moved to the front of the recency order
+  /// ([SimilarMemory.remembering]), replacing whatever was there.
+  Future<void> _remember({
+    required String type,
+    required String id,
+    required List<SuggestedTitle> suggestions,
+  }) => prefs.setSimilarSuggestions(
+    prefs.similarSuggestions.remembering(
+      type: type,
+      id: id,
+      suggestions: suggestions,
+    ),
+  );
 }

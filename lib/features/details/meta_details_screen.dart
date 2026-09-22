@@ -422,6 +422,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// dropped all of it, which takes the rung away again.
   List<SimilarTitle>? _similar;
 
+  /// Whether a re-ask is out ([_askSimilarAgain]).
+  ///
+  /// One ask at a time, and this is the guard rather than a disabled
+  /// control: the television's card keeps its tap for as long as the
+  /// remote may be standing on it, so four presses in a row have to cost
+  /// one call here.
+  bool _reasking = false;
+
   /// Whether there is a "More like this" rung on the panel at all.
   ///
   /// Three states and not two: never asked (no key) and asked-and-empty
@@ -710,6 +718,44 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // Late by design -- three seconds is the good case. Everything about
     // what this must not disturb on the way in is in [_tvSimilarRung].
     if (mounted) setState(() => _similar = titles);
+  }
+
+  /// The viewer has said this row is wrong: ask the model again about the
+  /// title on screen, past everything remembered about it.
+  ///
+  /// **A press may not leave them with less than they had.** Every failure
+  /// down there is an empty list by design ([MoreLikeThis]), so a provider
+  /// that is gone and a model with nothing to say arrive looking the same,
+  /// and neither is grounds for blanking a row somebody was looking at
+  /// when they pressed -- on a television, one they may be standing in.
+  /// So the rule is one rule for both: the row is replaced only when
+  /// something came back to replace it with, and otherwise the
+  /// suggestions stand, unchanged on the panel and unchanged in the
+  /// preferences file, and the viewer is told once. A press that changed
+  /// nothing and said nothing is a dead button.
+  Future<void> _askSimilarAgain() async {
+    final meta = ownState?.meta;
+    final prefs = _prefs;
+    if (_reasking || meta == null || prefs == null) return;
+    setState(() => _reasking = true);
+    final List<SimilarTitle> titles;
+    try {
+      titles = await _askSimilar(prefs)(
+        type: widget.type,
+        id: widget.id,
+        name: meta.name,
+        year: yearIn(meta.releaseInfo),
+        afresh: true,
+      );
+    } finally {
+      if (mounted) setState(() => _reasking = false);
+    }
+    if (!mounted) return;
+    if (titles.isEmpty) {
+      _tell(kNothingNewSimilar);
+      return;
+    }
+    setState(() => _similar = titles);
   }
 
   /// The episode the screen shows as selected: the tap in flight, else the
@@ -1381,7 +1427,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       // there is no ladder: the television has one.
       if (!isTv && _hasSimilar)
         SliverToBoxAdapter(
-          child: SimilarSection(titles: _similar, onOpen: _openSimilar),
+          child: SimilarSection(
+            titles: _similar,
+            onOpen: _openSimilar,
+            onAskAgain: () => unawaited(_askSimilarAgain()),
+            asking: _reasking,
+          ),
         ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
     ];
@@ -1995,6 +2046,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// And when the answer is nothing -- a model with nothing to say, or a
   /// row the guard emptied -- the rung goes away rather than standing
   /// there as a header over an empty strip.
+  ///
+  /// The way to ask again is the last card *of the row* rather than
+  /// anything on this header, which is both where the D-pad already goes
+  /// and the one place it cannot be what the rung focuses first; see the
+  /// card ([SimilarTitlesRow.onAskAgain]).
   Widget _tvSimilarRung({required bool open}) {
     final titles = _similar;
     return TvLadderRung(
@@ -2016,7 +2072,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       children: [
         TvLadderRow(
           level: _ladderSimilar,
-          child: SimilarTitlesRow(titles: titles, onOpen: _openSimilar),
+          child: SimilarTitlesRow(
+            titles: titles,
+            onOpen: _openSimilar,
+            onAskAgain: () => unawaited(_askSimilarAgain()),
+            asking: _reasking,
+          ),
         ),
       ],
     );
