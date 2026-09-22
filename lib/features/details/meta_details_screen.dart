@@ -1754,11 +1754,23 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                 group,
                 _collapse(
                   [
+                    // Read, the same as the sectioned layout reads. This
+                    // list does not *rank* by what is in a stream -- it
+                    // keeps each addon's own order -- and it was given no
+                    // facts at all for that reason, which is why the two
+                    // layouts drew different things from different
+                    // sources and drifted apart. The television already
+                    // paid for this read per card ([_tvSource]); paying
+                    // for it once here is what makes one row look the
+                    // same whichever way the list is grouped.
                     for (final stream in group.streams)
                       (
                         group: group,
                         stream: stream,
-                        facts: null,
+                        facts: StreamFacts.of(
+                          stream,
+                          addonName: _addonNameOf(profile, group),
+                        ),
                         alsoFrom: const <String>[],
                       ),
                   ],
@@ -3727,6 +3739,8 @@ class _StreamGroupSliver extends StatelessWidget {
               final lastUsed = this.lastUsed;
               return _StreamTile(
                 stream: stream,
+                facts: rows[index].facts,
+                headedByAddon: true,
                 alsoFrom: rows[index].alsoFrom,
                 highlighted: lastUsed != null && stream.isSameSource(lastUsed),
                 onTap: stream.isPlayable ? () => onPlay(stream) : null,
@@ -3827,6 +3841,7 @@ class _StreamTile extends StatelessWidget {
     this.downloads,
     this.facts,
     this.alsoFrom = const [],
+    this.headedByAddon = false,
   });
 
   final StreamInfo stream;
@@ -3838,12 +3853,24 @@ class _StreamTile extends StatelessWidget {
   /// one addon listed twice, which is the addon repeating itself.
   final List<String> alsoFrom;
 
-  /// In the flat list, what was read out of the stream: the row says which
-  /// addon answered (there is no heading above it any more) and carries a
-  /// badge for each thing that is actually known -- an unknown gets no
-  /// badge rather than a placeholder. Null is the grouped list, where the
-  /// heading names the addon and the chips come from [StreamHints].
+  /// What was read out of the stream: a badge for each thing that is
+  /// actually known, and an unknown gets no badge rather than a
+  /// placeholder.
+  ///
+  /// Both lists pass one. Null is the "continue with the last source"
+  /// row, which says what it is instead of what it holds.
   final StreamFacts? facts;
+
+  /// Whether the heading above this row already names the addon, as the
+  /// grouped list's does.
+  ///
+  /// The two lists show the same row from the same reading, and differ in
+  /// exactly one thing: which fact the heading has already said. The
+  /// sectioned list is headed by a resolution, so the row names the addon
+  /// under the release; the grouped list is headed by the addon, so it
+  /// does not say it twice. Everything else -- the release, the badges --
+  /// is the same either way, and that is the point of the flag.
+  final bool headedByAddon;
   final VoidCallback? onTap;
   final bool highlighted;
   final IconData? leadingIcon;
@@ -3864,26 +3891,25 @@ class _StreamTile extends StatelessWidget {
     // this is the same derivation, in the list the phone draws.
     final release = releaseNameOf(stream, addonName: facts?.addonName);
     final title = titleOverride ?? release;
-    // A name that is nothing but the hint ("1080p") needs no chip for it.
-    final chips = facts != null
-        ? facts.badges
-        : [
-            for (final chip in hints.chips)
-              if (chip.toLowerCase() != stream.title.toLowerCase()) chip,
-          ];
-    final grouped = stream.name == null
-        ? null
-        : hints.strip(stream.description);
-    final description = facts != null
-        ? facts.addonName
-        : titleOverride != null
+    // A row whose whole name is the hint ("1080p", which is all some
+    // addons call a stream) needs no badge saying it again. The badges
+    // are read now rather than pulled out of the free text, so this is
+    // checked against what the row is actually headed with -- the badges
+    // repeat the title just as readily as the old chips did, and a row
+    // reading "1080p / 1080p / 2 GB" is what it looks like when nobody
+    // checks.
+    final chips = [
+      for (final chip in facts?.badges ?? hints.chips)
+        if (chip.toLowerCase() != title.toLowerCase()) chip,
+    ];
+    // Which fact the heading above has not already said. For the
+    // "continue" row, which has no heading and no reading, it is what the
+    // source calls itself.
+    final description = facts == null
         ? stream.title
-        // The grouped list is headed by the addon, so the line under the
-        // title was the release -- which is the title now. Saying it twice
-        // is worse than saying it once, and what an addon writes after the
-        // release (the tracker, the languages) is worth keeping, so the
-        // repeat comes off a line at a time rather than all or nothing.
-        : withoutRelease(grouped, release);
+        : headedByAddon
+        ? null
+        : facts.addonName;
     final isTv = DeviceScope.isTv(context);
     final alsoFrom = this.alsoFrom.isEmpty
         ? null

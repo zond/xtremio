@@ -881,7 +881,11 @@ void main() {
       // catch. Counting every Text the release appears *in* is what
       // catches it: the title, and nothing else.
       expect(find.textContaining(kTileRelease), findsOneWidget);
-      expect(find.text('ThePirateBay'), findsOneWidget);
+      // And the addon's raw blurb is not drawn at all. Both lists read
+      // the stream now and draw badges out of what they read, so the free
+      // text -- the tracker, whatever else an addon writes after the
+      // release -- is no longer a thing either list puts on screen.
+      expect(find.textContaining('ThePirateBay'), findsNothing);
       expect(find.byTooltip('Breaking.Bad.S01E01.1080p.mkv'), findsOneWidget);
       expect(find.text('1080p'), findsOneWidget);
       expect(find.text('1.51 GB'), findsOneWidget);

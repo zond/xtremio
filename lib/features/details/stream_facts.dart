@@ -511,56 +511,6 @@ String releaseNameOf(StreamInfo stream, {String? addonName}) {
 bool _looksLikeARelease(String text) =>
     RegExp(r'[A-Za-z0-9][._-][A-Za-z0-9]').hasMatch(text);
 
-/// Whether two strings name the same release, give or take a container
-/// extension and a difference of case.
-///
-/// The row's title comes from [releaseNameOf], which prefers
-/// `behaviorHints.filename` **without** its extension; the line that used
-/// to sit under it is the description's first line, which for most addons
-/// is that same filename **with** `.mkv` still on the end. Compared
-/// exactly, those are two different strings, so the phone drew the release
-/// twice, one line under the other.
-bool sameRelease(String? a, String? b) {
-  if (a == null || b == null) return false;
-  String bare(String value) =>
-      (_withoutExtension(value.trim()) ?? value).toLowerCase();
-  return bare(a) == bare(b);
-}
-
-/// [text] with a leading line naming the same release as [release] taken
-/// off, and null when nothing is left.
-///
-/// Comparing the *whole* of what [StreamHints.strip] leaves against the
-/// release is not enough, and the phone showed why twice. A Torrentio
-/// description is the release, then a line of seeders and size and the
-/// tracker that answered:
-///
-/// ```
-/// Breaking.Bad.S01E01.1080p.WEB-DL.x265.mkv
-/// 👤 42 💾 1.51 GB ⚙️ ThePirateBay
-/// ```
-///
-/// [StreamHints.strip] takes out the seeders and the size, which it
-/// recognises, and leaves `ThePirateBay`, which it does not. So what is
-/// left is two lines, never equal to the one-line release however it is
-/// normalised, and the row drew the whole of it -- headed by the release,
-/// one line under the release.
-///
-/// The repeat is the *first line*, so that is what comes off. What follows
-/// it is the tracker, the languages, the subtitles: not a repeat of
-/// anything, and the only place the row says it.
-String? withoutRelease(String? text, String release) {
-  if (text == null) return null;
-  final lines = text.split('\n');
-  var from = 0;
-  while (from < lines.length && lines[from].trim().isEmpty) {
-    from++;
-  }
-  if (from < lines.length && sameRelease(lines[from], release)) from++;
-  final rest = lines.sublist(from).join('\n').trim();
-  return rest.isEmpty ? null : rest;
-}
-
 /// The containers an addon's filename actually ends in.
 ///
 /// Named, rather than matched by shape. "A dot and two to four letters at

@@ -562,64 +562,11 @@ void releaseNameTests() {
     });
   });
 
-  group('the line under the release', () {
-    // The shapes a phone actually drew the release twice on. What
-    // `StreamHints.strip` leaves is not one line: it takes out the
-    // seeders and the size, which it knows, and leaves the tracker,
-    // which it does not.
-    test('is what is left once the release itself comes off the front', () {
-      expect(
-        withoutRelease(
-          'Breaking.Bad.S01E01.1080p.WEB-DL.x265.mkv\nThePirateBay',
-          'Breaking.Bad.S01E01.1080p.WEB-DL.x265',
-        ),
-        'ThePirateBay',
-      );
-    });
-
-    test('keeps every line after it, which is said nowhere else', () {
-      expect(
-        withoutRelease(
-          'Movie.Name.2019.2160p.BluRay.x265-GROUP\n'
-              'ThePirateBay\n'
-              'Multi Audio',
-          'Movie.Name.2019.2160p.BluRay.x265-GROUP',
-        ),
-        'ThePirateBay\nMulti Audio',
-      );
-    });
-
-    test('is nothing at all when the release was the whole of it', () {
-      expect(
-        withoutRelease('The.Movie.2019.1080p.mkv', 'The.Movie.2019.1080p'),
-        isNull,
-      );
-    });
-
-    test('keeps a first line that is not the release', () {
-      expect(
-        withoutRelease('Some other file.mkv\nThePirateBay', 'The.Movie.2019'),
-        'Some other file.mkv\nThePirateBay',
-      );
-    });
-  });
-
   group('a codec is not a container', () {
-    // `.x265` is a dot and four characters, which is what an extension
-    // looks like. Taking it off left the title ending `WEB-DL` and the
-    // line beneath ending `x265`, so they never compared equal and the
-    // release was drawn twice.
-    test('so a release ending in one is the same release with .mkv on it', () {
-      expect(
-        sameRelease(
-          'Breaking.Bad.S01E01.1080p.WEB-DL.x265.mkv',
-          'Breaking.Bad.S01E01.1080p.WEB-DL.x265',
-        ),
-        isTrue,
-      );
-    });
-
-    test('and a filename ending in one keeps it', () {
+    // `.x265` is a dot and four characters, which is exactly what an
+    // extension looks like, so the shape that recognised `.mkv`
+    // recognised it too and took it off the title.
+    test('so a filename ending in one keeps it', () {
       final stream = StreamInfo(const {
         'infoHash': 'a',
         'name': 'Torrentio\n1080p',

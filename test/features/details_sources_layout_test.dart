@@ -707,6 +707,90 @@ void main() {
     });
   });
 
+  group('one row, whichever way the list is grouped', () {
+    /// A Torrentio-shaped answer: the release in `behaviorHints.filename`,
+    /// and a description that leads with that same filename and carries
+    /// the seeders, the size and the tracker after it.
+    List<Map<String, dynamic>> oneRealisticStream() => [
+      ready(alphaUrl, [
+        {
+          'infoHash': 'a' * 40,
+          'name': 'Torrentio\n1080p',
+          'description':
+              'Movie.Name.2019.1080p.WEB-DL.x265-GROUP.mkv\n'
+              '👤 42 💾 1.51 GB ⚙️ ThePirateBay',
+          'behaviorHints': {
+            'filename': 'Movie.Name.2019.1080p.WEB-DL.x265-GROUP.mkv',
+          },
+        },
+      ]),
+    ];
+
+    /// Every string the sources list is drawing, in the order it draws
+    /// them.
+    List<String> drawn(WidgetTester tester) => [
+      for (final text in tester.widgetList<Text>(find.byType(Text))) ?text.data,
+    ];
+
+    testWidgets('the two layouts draw the same row, and differ only in the '
+        'fact their heading already said', (tester) async {
+      useWideViewport(tester);
+      final client = FakePrefsClient();
+      final prefs = AppPrefs(client: client);
+      addTearDown(prefs.dispose);
+      await prefs.load();
+      await tester.pumpWidget(
+        harness(coreWith(oneRealisticStream()), prefs: prefs),
+      );
+      await tester.pumpAndSettle();
+
+      await toggleSection(tester, StreamResolution.fhd1080);
+      final sectioned = drawn(tester);
+
+      await choose(tester, kStreamsGroupedLabel);
+      await toggleAddon(tester, alphaUrl);
+      final grouped = drawn(tester);
+
+      // The release leads both, said once in each. `textContaining` and
+      // not `text`: an exact match passed for a year while the grouped
+      // list drew the release with the tracker stuck on the end of it.
+      const release = 'Movie.Name.2019.1080p.WEB-DL.x265-GROUP';
+      expect(
+        sectioned.where((line) => line.contains(release)),
+        hasLength(1),
+        reason: 'the sectioned list says the release once',
+      );
+      expect(
+        grouped.where((line) => line.contains(release)),
+        hasLength(1),
+        reason: 'and so does the grouped one',
+      );
+
+      // The badges are read out of the stream in both, not out of the
+      // free text in one of them.
+      for (final badge in ['1.51 GB', '42 seeders']) {
+        expect(sectioned, contains(badge));
+        expect(grouped, contains(badge));
+      }
+
+      // The single intended difference: the sectioned list is headed by a
+      // resolution so the row names the addon; the grouped list is headed
+      // by the addon so it does not say it again.
+      expect(sectioned, contains('alpha.example'));
+      expect(
+        grouped.where((line) => line == 'alpha.example'),
+        hasLength(1),
+        reason: 'the heading, and not the row underneath it as well',
+      );
+
+      // And the addon's raw blurb is drawn by neither. It was what the
+      // grouped list used to put under the release: the filename again,
+      // with whatever the hint parser did not recognise trailing it.
+      expect(sectioned, isNot(contains('ThePirateBay')));
+      expect(grouped, isNot(contains('ThePirateBay')));
+    });
+  });
+
   group('which addon groups are open', () {
     /// The grouped layout over [stored], loaded the way start-up reads it
     /// before the first sources list is built.
