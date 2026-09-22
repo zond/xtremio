@@ -24,6 +24,11 @@
 ///    anything about it changing, so [defaultSimilarModel] is a default
 ///    for a preference and every failure is classified
 ///    ([SimilarTrouble]) so that the log can say which of those happened.
+///
+/// One thing in this file is **not** from that measurement, and says so
+/// where it lives: the question is now two questions, one for a film and
+/// one for a series, and only the film one has ever been measured. The
+/// 528 researched titles are films, asked about films.
 library;
 
 import '../../core/core.dart';
@@ -49,21 +54,67 @@ const String similarSystemInstruction =
     'You recommend films and television. Real, released titles only. '
     'JSON only.';
 
+/// The shape of the answer, the same in both questions.
+///
+/// `titles` and not `films`, because the key is one more place the model
+/// is told what kind of thing is wanted, and it is told twice already.
+/// `kind` is asked for outright rather than hoped for: the model knows
+/// whether it meant the series or the film made of it, and a suggestion
+/// that says so is one catalogue search instead of two
+/// ([resolveSuggestions]).
+const String _answerShape =
+    'Answer JSON only: {"titles":[{"title":"","year":0,'
+    '"kind":"film|series","why":"under 12 words"}]}.';
+
 /// The question, for a title named [subject] -- `Avalon (2001)`, with the
 /// year when one is known, because a title alone is ambiguous in exactly
-/// the way the answers are.
+/// the way the answers are -- and [about], which is what the viewer is
+/// standing on.
 ///
-/// The second sentence is the measured one. The same model asked for films
+/// **Both questions ask for both kinds.** A model told to name films names
+/// films, which is what made a series page answer with ten of them; and a
+/// model told to name films is also right to answer *Æon Flux* for *Wave
+/// Twisters*, which is why neither question shuts the other kind out.
+///
+/// **The second sentence is the measured one**, and in the film question
+/// it is the measured wording unchanged. The same model asked for films
 /// that *feel* alike rather than films that are related scores 0.85
 /// against 0.73 on tone; it is a third of the difference between the best
 /// model measured and the worst usable one, bought for one sentence.
-String askForSimilar(String subject, {int count = similarSuggestionCount}) =>
-    'Name $count films to watch next for someone who loved $subject. '
-    'Prefer films that *feel* like it -- the same register, pace and '
-    'texture -- over films that merely share its premise. '
-    'Answer JSON only: {"films":[{"title":"","year":0,'
-    '"why":"under 12 words"}]}. '
-    'Real, released films only; do not include the film itself.';
+///
+/// **The kind preference is a judgement, not a measurement.** Every number
+/// in `tool/recommendations/` was taken with films as the subject and
+/// films as the answers; nothing about series was measured at all. That a
+/// viewer on a show page mostly wants another show is what we think a
+/// viewer wants, and the series question's wording -- the same sentence
+/// with the noun swapped -- inherits none of the film numbers' authority.
+/// The benchmarks in `tool/recommendations/` still carry the old film-only
+/// prompt, so the app and the measurement no longer ask the same thing;
+/// the README says so.
+///
+/// Changing any of this wording means changing [similarQuestionVersion],
+/// or the change is one nobody who has already opened a title will see.
+String askForSimilar(
+  String subject, {
+  required SuggestedKind about,
+  int count = similarSuggestionCount,
+}) => switch (about) {
+  SuggestedKind.film =>
+    'Name $count films or television series to watch next for someone who '
+        'loved $subject. '
+        'Prefer films that *feel* like it -- the same register, pace and '
+        'texture -- over films that merely share its premise. '
+        '$_answerShape '
+        'Real, released titles only; do not include the film itself.',
+  SuggestedKind.series =>
+    'Name $count television series or films to watch next for someone who '
+        'loved $subject. '
+        'Prefer series that *feel* like it -- the same register, pace and '
+        'texture -- over series that merely share its premise; a film that '
+        'genuinely fits belongs in the answer too. '
+        '$_answerShape '
+        'Real, released titles only; do not include the series itself.',
+};
 
 /// Where suggestions come from.
 ///
@@ -76,13 +127,21 @@ String askForSimilar(String subject, {int count = similarSuggestionCount}) =>
 /// Nothing here promises the titles exist. That is [resolveSuggestions]'s
 /// job, and it is not optional.
 abstract interface class SimilarTitlesProvider {
-  /// What is like [subject] (`Avalon (2001)`), or a [SimilarTitlesFailure].
+  /// What is like [subject] (`Avalon (2001)`), which is a film or a
+  /// series ([about]) -- or a [SimilarTitlesFailure].
+  ///
+  /// [about] has no default. A film and a series are different questions
+  /// ([askForSimilar]), and a default would be one of them asked quietly
+  /// about the other, which is the bug this parameter exists to end.
   ///
   /// Throws rather than answering empty, because the two mean different
   /// things to everything upstream: empty is a model that answered and had
   /// nothing to say, and a failure is one that could not be asked. An
   /// empty answer is cached; a failure is not.
-  Future<List<SuggestedTitle>> suggest(String subject);
+  Future<List<SuggestedTitle>> suggest(
+    String subject, {
+    required SuggestedKind about,
+  });
 }
 
 /// The kinds of not-answering, told apart so a log line can say which.

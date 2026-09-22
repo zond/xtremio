@@ -46,6 +46,13 @@ research: see **Pooling** below.
 
 ## The tests
 
+**The app no longer asks what these scripts ask.** `recommend_bench.py`
+still carries the film-only prompt every number below was measured with,
+while the app (`lib/features/similar/`) now asks for films *and* series,
+asks which each one is, and asks a different question again when the viewer
+is standing on a series -- a question nothing here has measured, since all
+528 researched titles are films. Make the two match before measuring again.
+
 **`recommend_bench.py`** -- the honest one. Asks for ten films, scores the
 answer against the key, and reports five things, because one number hides
 the failures that matter: how good the films it found are, whether they

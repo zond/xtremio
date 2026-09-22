@@ -151,12 +151,85 @@ void main() {
       );
     });
 
+    test('an answer to another question is nothing remembered', () {
+      const asked = [SuggestedTitle(title: 'Avalon', year: 2001, why: 'grey')];
+
+      // No stamp at all: what every row written by the film-only question
+      // looks like. A viewer standing on a series would otherwise keep
+      // its ten films for the life of the install.
+      final unstamped = SimilarMemory.fromJson([
+        {
+          'type': 'series',
+          'id': 'tt1',
+          'films': [
+            {'title': 'Avalon', 'year': 2001, 'why': 'grey'},
+          ],
+        },
+      ]);
+      expect(unstamped.entries.single.askedAs, 0);
+      expect(unstamped.forItem(type: 'series', id: 'tt1'), isNull);
+
+      // A stamp from some other version of the wording is the same
+      // answer, and so is one from a version this build has never heard
+      // of: what is reused is an answer to *this* question.
+      for (final version in [
+        similarQuestionVersion - 1,
+        similarQuestionVersion + 1,
+      ]) {
+        final other = SimilarMemory([
+          SimilarAnswer(
+            type: 'series',
+            id: 'tt1',
+            suggestions: asked,
+            askedAs: version,
+          ),
+        ]);
+        expect(other.forItem(type: 'series', id: 'tt1'), isNull);
+      }
+
+      // This version's answer is read back, and survives the file.
+      final mine = SimilarMemory.empty.remembering(
+        type: 'series',
+        id: 'tt1',
+        suggestions: asked,
+      );
+      expect(mine.entries.single.askedAs, similarQuestionVersion);
+      expect(mine.forItem(type: 'series', id: 'tt1'), asked);
+      expect(SimilarMemory.fromJson(mine.toJson()), mine);
+    });
+
+    test('a re-ask replaces the stale row rather than joining it', () {
+      final stale = SimilarMemory.fromJson([
+        {'type': 'series', 'id': 'tt1', 'films': []},
+      ]);
+      expect(stale.forItem(type: 'series', id: 'tt1'), isNull);
+
+      final fresh = stale.remembering(
+        type: 'series',
+        id: 'tt1',
+        suggestions: const [],
+      );
+
+      // One row, this version's, so the re-ask costs one call and then
+      // stops costing anything.
+      expect(fresh.entries, hasLength(1));
+      expect(fresh.forItem(type: 'series', id: 'tt1'), isEmpty);
+
+      // And the two are different memories, which is what gets the new
+      // stamp to disk: `setSimilarSuggestions` writes nothing when the
+      // value it is handed equals the one it holds, so a re-ask that came
+      // back with the same titles would otherwise never be written down
+      // and the viewer would be asked again on every restart.
+      expect(fresh, isNot(stale));
+    });
+
     test('a row this build cannot read is dropped, not a failed load', () {
       final memory = SimilarMemory.fromJson([
         {'id': 'tt1', 'films': []}, // no type: nothing to look it up by
         {
           'type': 'movie',
           'id': 'tt2',
+          'asked': similarQuestionVersion,
           'films': [
             {'title': 'Avalon', 'year': 2001, 'why': 'grey', 'kind': 'film'},
             {'title': 'No year', 'why': 'nothing to check it by'},

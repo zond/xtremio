@@ -86,8 +86,21 @@ void main() {
       year: 2001,
     );
 
-    expect(asked, ['Wave Twisters (2001)']);
+    expect(asked, ['Wave Twisters (2001) as film']);
     expect(built, ['$defaultSimilarModel with not-a-real-key']);
+  });
+
+  test('a series is asked about as a series', () async {
+    // The screen's own `type` is what decides which question is asked, so
+    // a show page does not get a row of ten films.
+    await feature().forItem(
+      type: 'series',
+      id: 'tt0903747',
+      name: 'Breaking Bad',
+      year: 2008,
+    );
+
+    expect(asked, ['Breaking Bad (2008) as series']);
   });
 
   test('the model named in preferences is the one asked', () async {
@@ -97,7 +110,7 @@ void main() {
 
     expect(built, ['gemini-9.9-flash-latest with not-a-real-key']);
     // No year known is no year claimed.
-    expect(asked, ['Avalon']);
+    expect(asked, ['Avalon as film']);
   });
 
   test('a title is asked about once, ever', () async {
@@ -120,6 +133,46 @@ void main() {
     expect(again.single.item.id, 'tt0219653');
     expect(asked, hasLength(1), reason: 'the first answer is the answer');
     expect(storage.stored[AppPrefs.similarSuggestionsKey], isNotNull);
+  });
+
+  test('an answer to an older question is asked again', () async {
+    // What an install that has already opened this series holds: ten
+    // titles written down by the film-only question, with no stamp on
+    // them at all. Without the stamp that viewer keeps a row of films
+    // under a television series for the life of the install, and this
+    // change would be one only a fresh install ever saw.
+    storage = FakePrefsClient({
+      AppPrefs.similarApiKeyKey: 'not-a-real-key',
+      AppPrefs.similarSuggestionsKey: [
+        {
+          'type': 'series',
+          'id': 'tt0903747',
+          'films': [
+            {'title': 'Sicario', 'year': 2015, 'why': 'a film, on a show'},
+          ],
+        },
+      ],
+    });
+    prefs = AppPrefs(client: storage);
+    await prefs.load();
+    built = [];
+    asked = [];
+
+    await feature().forItem(
+      type: 'series',
+      id: 'tt0903747',
+      name: 'Breaking Bad',
+    );
+
+    expect(asked, ['Breaking Bad as series']);
+    // And the new answer replaces the stale row rather than joining it,
+    // so it is asked once and not once a visit.
+    await feature().forItem(
+      type: 'series',
+      id: 'tt0903747',
+      name: 'Breaking Bad',
+    );
+    expect(asked, hasLength(1));
   });
 
   test('an answer with nothing in it is still an answer', () async {
@@ -203,14 +256,19 @@ Future<List<Map<String, dynamic>>> _catalogue(String type, String query) async {
 final class _FakeProvider implements SimilarTitlesProvider {
   _FakeProvider(this.asked, this.answering);
 
+  /// What was asked about, and as what: `Avalon (2001) as film`. The kind
+  /// is in the string because it is half the question.
   final List<String> asked;
 
   /// A list to answer with, or an object to throw.
   final Object Function(String subject) answering;
 
   @override
-  Future<List<SuggestedTitle>> suggest(String subject) async {
-    asked.add(subject);
+  Future<List<SuggestedTitle>> suggest(
+    String subject, {
+    required SuggestedKind about,
+  }) async {
+    asked.add('$subject as ${about.stored}');
     final answer = answering(subject);
     if (answer is List<SuggestedTitle>) return answer;
     throw answer;

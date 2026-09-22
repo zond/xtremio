@@ -63,6 +63,11 @@ abstract interface class ModelCheckProvider {
   Future<List<String>> order(String target, List<String> films);
 
   /// The row's own question, unchanged: what to watch after [subject].
+  ///
+  /// No kind, because every [subject] here is a key's target and every
+  /// key's target is a film. The row asks a film and a series different
+  /// questions ([askForSimilar]) and only the film one has a key to be
+  /// scored against, so this is the film one.
   Future<List<SuggestedTitle>> suggest(String subject);
 }
 

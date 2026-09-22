@@ -133,6 +133,34 @@ void main() {
       expect(table.asked, ['series/Æon Flux']);
     });
 
+    test('a kind nobody can parse falls back to both catalogues', () async {
+      // The schema requires a kind, which is only worth doing because a
+      // word outside the vocabulary costs nothing: it reads as no kind
+      // stated, and no kind stated is both catalogues in a fixed order.
+      final answered = SuggestedTitle.fromJson({
+        'title': 'Æon Flux',
+        'year': 1991,
+        'kind': 'anime',
+        'why': 'because',
+      })!;
+      expect(answered.kind, isNull);
+
+      final table = catalogue({
+        'series/Æon Flux': [
+          meta('tt4', 'Æon Flux', '1991-1995', type: 'series'),
+        ],
+      });
+
+      final resolved = await resolveSuggestions(
+        [answered],
+        subjectId: 'tt0000',
+        search: table.search,
+      );
+
+      expect(resolved.single.item.id, 'tt4');
+      expect(table.asked, ['movie/Æon Flux', 'series/Æon Flux']);
+    });
+
     test('the subject suggested back is dropped', () async {
       final table = catalogue({
         'movie/Heat': [meta('tt0113277', 'Heat', '1995')],

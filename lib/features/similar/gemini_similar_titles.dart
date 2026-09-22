@@ -51,7 +51,7 @@ final Uri googleGenerativeLanguage = Uri.parse(
 /// `thinkingConfig` is not sent at all but is named here because a model
 /// that starts rejecting it would otherwise be unusable, and the two
 /// response fields are given up last -- without them the answer is prose
-/// with JSON somewhere in it, which [_filmsIn] can still often read.
+/// with JSON somewhere in it, which the reader can still often read.
 ///
 /// Both spellings of each are matched, because the API's own error
 /// messages use the snake-cased names of its proto fields while the body
@@ -92,10 +92,13 @@ final class GeminiSimilarTitles implements SimilarTitlesProvider {
   final int count;
 
   @override
-  Future<List<SuggestedTitle>> suggest(String subject) async {
+  Future<List<SuggestedTitle>> suggest(
+    String subject, {
+    required SuggestedKind about,
+  }) async {
     final client = HttpClient()..connectionTimeout = budget;
     try {
-      return await _ask(client, subject).timeout(budget);
+      return await _ask(client, subject, about).timeout(budget);
     } on TimeoutException {
       throw const SimilarTitlesFailure(SimilarTrouble.tooSlow);
     } on SimilarTitlesFailure {
@@ -114,10 +117,14 @@ final class GeminiSimilarTitles implements SimilarTitlesProvider {
     }
   }
 
-  Future<List<SuggestedTitle>> _ask(HttpClient client, String subject) async {
-    final body = _body(subject);
+  Future<List<SuggestedTitle>> _ask(
+    HttpClient client,
+    String subject,
+    SuggestedKind about,
+  ) async {
+    final body = _body(subject, about);
     try {
-      return _filmsIn(await _send(client, body));
+      return _titlesIn(await _send(client, body));
     } on _Refused catch (refusal) {
       final parameter = _named(refusal.message);
       if (parameter == null) {
@@ -127,7 +134,7 @@ final class GeminiSimilarTitles implements SimilarTitlesProvider {
       // answer: the alternative is a loop that strips the request down to
       // nothing while the viewer waits.
       try {
-        return _filmsIn(await _send(client, _without(body, parameter)));
+        return _titlesIn(await _send(client, _without(body, parameter)));
       } on _Refused catch (again) {
         throw SimilarTitlesFailure(
           SimilarTrouble.refused,
@@ -137,16 +144,21 @@ final class GeminiSimilarTitles implements SimilarTitlesProvider {
     }
   }
 
-  /// The request, exactly as measured: a system instruction, the question,
-  /// and a `generationConfig` pinning JSON of a stated shape.
+  /// The request: a system instruction, the question for a film or a
+  /// series ([askForSimilar]), and a `generationConfig` pinning JSON of a
+  /// stated shape.
   ///
-  /// The schema asks for a title, a year and a reason, and nothing else --
-  /// that shape is the one every measurement in `tool/recommendations` was
-  /// taken against. A model that volunteers a `kind` beside them is read
-  /// ([SuggestedTitle.fromJson]); one that does not leaves the kind
-  /// unstated, which [resolveSuggestions] handles by looking in both
-  /// catalogues.
-  Map<String, Object?> _body(String subject) => {
+  /// The schema asks for a title, a year, a reason **and a kind**, all
+  /// four required. The kind costs nothing when a model writes something
+  /// unexpected -- `SuggestedKind.parse` answers null for a word it does
+  /// not know, and [resolveSuggestions] then looks in both catalogues,
+  /// which is what it did for every answer before this field existed.
+  /// What it buys is the ordinary case: one search instead of two, and a
+  /// series that cannot land on the film made of it.
+  ///
+  /// The measurements in `tool/recommendations` were taken against the
+  /// older shape, with `films` for `titles` and no kind.
+  Map<String, Object?> _body(String subject, SuggestedKind about) => {
     'system_instruction': {
       'parts': [
         {'text': similarSystemInstruction},
@@ -155,7 +167,7 @@ final class GeminiSimilarTitles implements SimilarTitlesProvider {
     'contents': [
       {
         'parts': [
-          {'text': askForSimilar(subject, count: count)},
+          {'text': askForSimilar(subject, about: about, count: count)},
         ],
       },
     ],
@@ -165,20 +177,21 @@ final class GeminiSimilarTitles implements SimilarTitlesProvider {
       'responseSchema': {
         'type': 'OBJECT',
         'properties': {
-          'films': {
+          'titles': {
             'type': 'ARRAY',
             'items': {
               'type': 'OBJECT',
               'properties': {
                 'title': {'type': 'STRING'},
                 'year': {'type': 'INTEGER'},
+                'kind': {'type': 'STRING'},
                 'why': {'type': 'STRING'},
               },
-              'required': ['title', 'year', 'why'],
+              'required': ['title', 'year', 'kind', 'why'],
             },
           },
         },
-        'required': ['films'],
+        'required': ['titles'],
       },
     },
   };
@@ -281,7 +294,7 @@ final class GeminiSimilarTitles implements SimilarTitlesProvider {
     return copy;
   }
 
-  /// The films in a documented answer.
+  /// The titles in a documented answer.
   ///
   /// `candidates[0].content.parts[].text` joined -- the parts are a list
   /// because the API may split one answer across several -- then the
@@ -290,8 +303,8 @@ final class GeminiSimilarTitles implements SimilarTitlesProvider {
   ///
   /// Anything that is not that shape is [SimilarTrouble.malformed] rather
   /// than an empty answer: an answer that was not understood must not be
-  /// cached as "this film is like nothing".
-  static List<SuggestedTitle> _filmsIn(Map<String, dynamic> answer) {
+  /// cached as "this title is like nothing".
+  static List<SuggestedTitle> _titlesIn(Map<String, dynamic> answer) {
     final candidates = answer['candidates'];
     if (candidates is! List || candidates.isEmpty) {
       throw const SimilarTitlesFailure(SimilarTrouble.malformed, 'candidates');
@@ -317,14 +330,15 @@ final class GeminiSimilarTitles implements SimilarTitlesProvider {
     } on FormatException {
       throw const SimilarTitlesFailure(SimilarTrouble.malformed, 'not JSON');
     }
-    final films = decoded is Map ? decoded['films'] : null;
-    if (films is! List) {
-      throw const SimilarTitlesFailure(SimilarTrouble.malformed, 'films');
+    final titles = decoded is Map ? decoded['titles'] : null;
+    if (titles is! List) {
+      throw const SimilarTitlesFailure(SimilarTrouble.malformed, 'titles');
     }
     // A row that cannot be read is one suggestion lost, not an answer
-    // lost: a model that names nine films and a fragment has named nine
-    // films.
-    return [for (final film in films) ?SuggestedTitle.fromJson(film)];
+    // lost: a model that names nine titles and a fragment has named nine
+    // titles. A kind nobody can parse is not a row that cannot be read --
+    // it is a row resolved against both catalogues, as they all were.
+    return [for (final title in titles) ?SuggestedTitle.fromJson(title)];
   }
 }
 
