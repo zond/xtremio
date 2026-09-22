@@ -95,7 +95,10 @@ void main() {
     // The row is there, the half character is not, and nothing threw: a
     // rendered `<?>` (or an exception) is what this is about.
     expect(tester.takeException(), isNull);
-    expect(find.text('Alpha 1080p'), findsOneWidget);
+    // The row leads with the release, which here is the description's
+    // first line; the half character is gone from it either way, which is
+    // what this is about.
+    expect(find.text('Alpha.1080p.mkv'), findsOneWidget);
     expect(find.text('42 seeders'), findsOneWidget);
     expect(find.text('1.51 GB'), findsOneWidget);
   });
@@ -106,6 +109,9 @@ void main() {
     // Long enough that the tile has to shorten it, with the emoji where a
     // truncation by code units would land between its two halves.
     final title = 'Torrentio 👤 ${'the same very long release name ' * 4}';
+    // A release is trimmed where it is derived, and this fixture ends in a
+    // space; what the row draws is the trimmed string.
+    final drawnTitle = title.trim();
     await pump(
       tester,
       coreWith([
@@ -114,10 +120,10 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    final drawn = tester.widget<Text>(find.text(title));
+    final drawn = tester.widget<Text>(find.text(drawnTitle));
     // The string reaches the widget entire; the *painted* line is what is
     // shortened, by the widget, which cannot cut a character in half.
-    expect(drawn.data, title);
+    expect(drawn.data, drawnTitle);
     expect(drawn.data, contains('👤'));
     expect(drawn.maxLines, isNotNull);
     expect(drawn.overflow, TextOverflow.ellipsis);
@@ -136,7 +142,9 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Alpha 720p'), findsOneWidget);
+    expect(find.text('Alpha.720p.mkv'), findsOneWidget);
+    // Said once, not twice: the release is the row's title now, so the
+    // line under it that used to repeat it is not drawn.
     expect(find.text('Alpha.720p.mkv'), findsOneWidget);
   });
 }

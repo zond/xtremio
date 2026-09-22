@@ -3699,7 +3699,14 @@ class _StreamTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final hints = StreamHints.of(stream);
     final facts = this.facts;
-    final title = titleOverride ?? stream.title;
+    // The release, not the addon. `stream.title` is `name ?? description`,
+    // which for the addons people actually install is their own name and a
+    // quality -- "Torrentio 4k" -- so a phone showed the release nowhere in
+    // the flat list and only as a subtitle in the grouped one. The
+    // television was given [releaseNameOf] when its cards were rebuilt;
+    // this is the same derivation, in the list the phone draws.
+    final release = releaseNameOf(stream, addonName: facts?.addonName);
+    final title = titleOverride ?? release;
     // A name that is nothing but the hint ("1080p") needs no chip for it.
     final chips = facts != null
         ? facts.badges
@@ -3707,13 +3714,19 @@ class _StreamTile extends StatelessWidget {
             for (final chip in hints.chips)
               if (chip.toLowerCase() != stream.title.toLowerCase()) chip,
           ];
+    final grouped = stream.name == null
+        ? null
+        : hints.strip(stream.description);
     final description = facts != null
         ? facts.addonName
         : titleOverride != null
         ? stream.title
-        : stream.name == null
+        // The grouped list is headed by the addon, so the line under the
+        // title was the release -- which is the title now. Saying it twice
+        // is worse than saying it once.
+        : grouped == null || grouped == release
         ? null
-        : hints.strip(stream.description);
+        : grouped;
     final isTv = DeviceScope.isTv(context);
     final alsoFrom = this.alsoFrom.isEmpty
         ? null

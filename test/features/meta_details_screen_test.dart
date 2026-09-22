@@ -46,6 +46,12 @@ Map<String, dynamic> torrentGroup(String videoId) => {
   },
 };
 
+/// What the row is headed with: the release, derived from the fixture's
+/// `behaviorHints.filename` without its extension. It was the addon and
+/// the quality ("Torrentio 1080p") until the tiles were made to lead with
+/// the release, which is the thing a viewer is actually choosing between.
+const kTileRelease = 'Breaking.Bad.S01E01.1080p';
+
 /// The season pills, in the order the row draws them: every [ChoiceChip]
 /// under the widget that also holds the row's own "Season" label.
 Finder seasonPills() => find.descendant(
@@ -290,7 +296,7 @@ void main() {
         harness(core, FakePlaybackEngine(), type: 'series', id: seriesId),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Torrentio\n1080p'));
+      await tester.tap(find.text(kTileRelease));
       await tester.pumpAndSettle();
       expect(find.byType(PlayerScreen), findsOneWidget);
 
@@ -838,7 +844,7 @@ void main() {
       expect(find.text('127.0.0.1'), findsOneWidget);
       expect(find.textContaining('Failed to fetch'), findsOneWidget);
       expect(find.text('torrentio.example'), findsOneWidget);
-      expect(find.text('Torrentio\n1080p'), findsOneWidget);
+      expect(find.text(kTileRelease), findsOneWidget);
       expect(find.text('Breaking.Bad.S01E01.1080p.mkv'), findsOneWidget);
       expect(find.byTooltip('Breaking.Bad.S01E01.1080p.mkv'), findsOneWidget);
       expect(find.text('1080p'), findsOneWidget);
@@ -941,7 +947,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('No streams for this episode'), findsNothing);
-      expect(find.text('Torrentio\n1080p'), findsOneWidget);
+      expect(find.text(kTileRelease), findsOneWidget);
     });
 
     testWidgets('tapping an episode loads its streams', (tester) async {
@@ -1159,7 +1165,7 @@ void main() {
       (fixture['streams'] as List<dynamic>).add(torrentGroup(pilotId));
       final core = await mountSeries(tester, fixture: fixture);
 
-      await tester.tap(find.text('Torrentio\n1080p'));
+      await tester.tap(find.text(kTileRelease));
       await tester.pumpAndSettle();
 
       expect(find.byType(PlayerScreen), findsOneWidget);
@@ -1262,10 +1268,7 @@ void main() {
       // The streams themselves, with the section pulled up so the list
       // under it is what fills the screen.
       expect(tester.getTopLeft(find.text('Streams')).dy, lessThan(waiting));
-      expect(
-        tester.getRect(find.text('Torrentio\n1080p')).bottom,
-        lessThan(800),
-      );
+      expect(tester.getRect(find.text(kTileRelease)).bottom, lessThan(800));
     });
 
     testWidgets('wide layouts put the streams in a side pane', (tester) async {
