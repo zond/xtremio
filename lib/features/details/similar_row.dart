@@ -46,6 +46,20 @@ const String kMoreLikeThisLabel = 'More like this';
 /// the time the viewer is looking at it, since the ask takes seconds.
 const String kLookingForSimilar = 'Looking for titles…';
 
+/// What the control that asks again is called, where there is room for a
+/// word -- the television's card.
+const String kAskAgainLabel = 'Ask again';
+
+/// The whole of what that control does, for a screen reader and for the
+/// phone's tooltip. "Ask again" on its own says nothing about what is
+/// being asked, and an icon says less than that.
+const String kAskAgainHint = 'Ask again for more like this';
+
+/// What is said when a re-ask comes back with nothing to put on the row.
+/// Once, and briefly: a press that changed nothing and said nothing is a
+/// dead button.
+const String kNothingNewSimilar = 'Nothing new came back; these stay.';
+
 /// How a title's suggestions are asked for: [MoreLikeThis.forItem]'s own
 /// shape, so the real one is a tear-off.
 typedef SimilarAsk = Future<List<SimilarTitle>> Function({
@@ -53,6 +67,7 @@ typedef SimilarAsk = Future<List<SimilarTitle>> Function({
   required String id,
   required String name,
   int? year,
+  bool afresh,
 });
 
 /// How that asker is built once the preferences are known.
@@ -99,6 +114,8 @@ class SimilarTitlesRow extends StatelessWidget {
     super.key,
     required this.titles,
     required this.onOpen,
+    this.onAskAgain,
+    this.asking = false,
   });
 
   /// What survived the guard, in the model's own order; null while the
@@ -109,10 +126,25 @@ class SimilarTitlesRow extends StatelessWidget {
   /// Open that title's own details screen.
   final ValueChanged<MetaItemPreview> onOpen;
 
+  /// Ask the model again about the title this row is under, as the last
+  /// card of the strip ([_AskAgainCard]); null for a row that has no such
+  /// card, which is every row off a television -- the phone keeps the
+  /// control in the section header instead ([SimilarSection]).
+  final VoidCallback? onAskAgain;
+
+  /// Whether that ask is out. The row keeps every suggestion it has while
+  /// it is, and the card is what says so.
+  final bool asking;
+
   /// The poster, at the size the drawing settled on: small enough that
   /// seven fit across a 720p panel with the ladder above them.
   static const double posterWidth = 120;
   static const double posterHeight = 180;
+
+  /// The ask-again card, narrower than a poster because it holds an icon
+  /// and one word rather than artwork, and because the posters are what
+  /// the row is for.
+  static const double askAgainWidth = 96;
 
   /// The box under it, holding the name and the year at text scale 1.
   /// Two lines, the gap above them and the inset the focus ring needs.
@@ -144,6 +176,10 @@ class SimilarTitlesRow extends StatelessWidget {
                     title: title,
                     onOpen: () => onOpen(title.item),
                   ),
+                // Last, so that a press past the last poster lands on it:
+                // see [_AskAgainCard] for why it is in the strip at all.
+                if (onAskAgain case final askAgain?)
+                  _AskAgainCard(onPressed: askAgain, asking: asking),
               ],
             ),
     );
@@ -229,22 +265,133 @@ class _SimilarPoster extends StatelessWidget {
   }
 }
 
+/// The way to ask the model again, on a television: the last card of the
+/// strip, shaped like the posters beside it.
+///
+/// **It is a card in the row and not a control on the header**, and that
+/// is the ladder's own convention rather than a choice made here. The
+/// remote is standing *in* the strip, a press past the last poster is
+/// where it already goes, and [TvCardStrip] swallows that press at the end
+/// of the row -- so a card put there is one press from the suggestions and
+/// one press back, with nothing new to learn. A header control would be a
+/// second focus stop on a line that is exactly one stop everywhere else on
+/// this screen, and would want a press *up*, out of the row, to reach.
+///
+/// **Nothing here asks for the remote.** No `defaultFocus`, no
+/// `memoryId`: the rung opens on the first poster and this is at the far
+/// end of it, which is the same rule the rung itself is written to.
+///
+/// **It keeps its tap while an ask is out.** A [FocusableTile] with no
+/// `onTap` is not a focus stop at all, so disabling it would take the
+/// remote off the card the viewer had just pressed and drop it somewhere
+/// they did not choose. One ask at a time is the screen's guard; the card
+/// only says that one is out.
+class _AskAgainCard extends StatelessWidget {
+  const _AskAgainCard({required this.onPressed, required this.asking});
+
+  final VoidCallback onPressed;
+  final bool asking;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final factor = SimilarTitlesRow._textFactor(context);
+    return SizedBox(
+      width: SimilarTitlesRow.askAgainWidth,
+      child: FocusableTile(
+        onTap: onPressed,
+        child: Semantics(
+          container: true,
+          button: true,
+          excludeSemantics: true,
+          label: kAskAgainHint,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                // A poster's height, so the card sits on the same two
+                // lines the row is ruled by rather than floating in it.
+                height: SimilarTitlesRow.posterHeight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHigh,
+                    borderRadius: const BorderRadius.all(Radius.circular(8)),
+                  ),
+                  child: Center(
+                    child: asking
+                        ? const SizedBox.square(
+                            dimension: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(Icons.refresh, color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: SimilarTitlesRow.captionHeight * factor,
+                child: Padding(
+                  // The inset every caption in this row is held off its
+                  // tile's edges by; see [_SimilarPoster].
+                  padding: const EdgeInsets.fromLTRB(
+                    FocusRing.textInset,
+                    6,
+                    FocusRing.textInset,
+                    FocusRing.textInset,
+                  ),
+                  child: Text(
+                    kAskAgainLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The same films on a phone and a desktop, where there is no ladder to
 /// hang a rung on: a heading and the row under it, one more section of the
 /// scroll.
 ///
 /// It says it is looking in the heading exactly as the rung's header does,
 /// so the section does not appear empty and then fill.
+///
+/// The way to ask again is a plain icon control in that heading, beside
+/// the words it belongs to. A phone has a finger rather than a D-pad, so
+/// there is no walk to preserve and nothing to be said for burying the
+/// control at the end of a sideways scroll ([_AskAgainCard] is the other
+/// half of this, and says why a television is not the same).
 class SimilarSection extends StatelessWidget {
-  const SimilarSection({super.key, required this.titles, required this.onOpen});
+  const SimilarSection({
+    super.key,
+    required this.titles,
+    required this.onOpen,
+    this.onAskAgain,
+    this.asking = false,
+  });
 
   final List<SimilarTitle>? titles;
   final ValueChanged<MetaItemPreview> onOpen;
+
+  /// Ask the model again about the title this section is under; null for
+  /// a section with no such control.
+  final VoidCallback? onAskAgain;
+
+  /// Whether that ask is out.
+  final bool asking;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final titles = this.titles;
+    final askAgain = onAskAgain;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -265,6 +412,26 @@ class SimilarSection extends StatelessWidget {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
+                ),
+              // Nothing to ask again about until there is a first answer,
+              // and the first ask is already out while this says so.
+              if (titles != null && askAgain != null)
+                IconButton(
+                  // Unpressable while an ask is out, which a phone can
+                  // afford: there is no remote standing on the control to
+                  // be dropped when it stops being one. The guard that
+                  // makes four presses one call is the screen's either
+                  // way.
+                  onPressed: asking ? null : askAgain,
+                  tooltip: kAskAgainHint,
+                  iconSize: 20,
+                  visualDensity: VisualDensity.compact,
+                  icon: asking
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
                 ),
             ],
           ),

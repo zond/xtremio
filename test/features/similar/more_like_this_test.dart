@@ -237,18 +237,196 @@ void main() {
 
     expect(searched, searches);
   });
+
+  /// The one way past "the first answer is the answer": the viewer saying
+  /// the row is wrong. What is asserted here is the pair of rules that
+  /// makes that safe -- everything remembered is stepped over, and nothing
+  /// is written down unless something came back to write.
+  group('asking again', () {
+    const stalker = SuggestedTitle(title: 'Stalker', year: 1979, why: 'grey');
+
+    /// A remembered answer for [id], and the row it resolved to.
+    Future<void> rememberOne(String id) async {
+      await feature().forItem(type: 'movie', id: id, name: 'A');
+    }
+
+    test('goes past a remembered answer, and the new one replaces it at '
+        'the front of the recency order', () async {
+      await rememberOne('tt1');
+      await rememberOne('tt2');
+      expect(asked, hasLength(2));
+
+      answering = (_) => const [stalker];
+      final again = await feature().forItem(
+        type: 'movie',
+        id: 'tt1',
+        name: 'A',
+        afresh: true,
+      );
+
+      expect(again.single.item.id, 'tt0079944');
+      expect(
+        asked,
+        hasLength(3),
+        reason: 'the remembered row was stepped over',
+      );
+      final memory = prefs.similarSuggestions;
+      expect(memory.forItem(type: 'movie', id: 'tt1'), const [stalker]);
+      expect(memory.entries.first.id, 'tt1', reason: 'most recently asked');
+      expect(memory.entries.first.askedAs, similarQuestionVersion);
+      expect(memory.entries, hasLength(2), reason: 'replaced, not added to');
+
+      // And an ordinary visit after it reads the new row back rather than
+      // asking a fourth time: a re-ask is one call, not a mode.
+      final plain = await feature().forItem(
+        type: 'movie',
+        id: 'tt1',
+        name: 'A',
+      );
+      expect(plain.single.item.id, 'tt0079944');
+      expect(asked, hasLength(3));
+    });
+
+    test('goes past a remembered answer of nothing, which normally stops '
+        'the asking altogether', () async {
+      answering = (_) => const <SuggestedTitle>[];
+      expect(
+        await feature().forItem(type: 'movie', id: 'tt1', name: 'A'),
+        isEmpty,
+      );
+
+      answering = (_) => const [stalker];
+      final again = await feature().forItem(
+        type: 'movie',
+        id: 'tt1',
+        name: 'A',
+        afresh: true,
+      );
+
+      expect(again.single.item.id, 'tt0079944');
+      expect(prefs.similarSuggestions.forItem(type: 'movie', id: 'tt1'), const [
+        stalker,
+      ]);
+    });
+
+    test(
+      'and past the resolution this run, since that is a cache too',
+      () async {
+        var searched = 0;
+        Future<List<Map<String, dynamic>>> searching(
+          String type,
+          String query,
+        ) async {
+          searched++;
+          return _catalogue(type, query);
+        }
+
+        final one = feature(search: searching);
+        await one.forItem(type: 'movie', id: 'tt1', name: 'A');
+        final searches = searched;
+
+        answering = (_) => const [stalker];
+        final again = await one.forItem(
+          type: 'movie',
+          id: 'tt1',
+          name: 'A',
+          afresh: true,
+        );
+
+        expect(searched, greaterThan(searches));
+        expect(again.single.item.id, 'tt0079944');
+      },
+    );
+
+    test(
+      'a re-ask that fails leaves what is remembered exactly as it was',
+      () async {
+        captureDiagnostics();
+        await rememberOne('tt1');
+        final kept = prefs.similarSuggestions;
+        answering = (_) =>
+            const SimilarTitlesFailure(SimilarTrouble.gone, '404');
+
+        final again = await feature().forItem(
+          type: 'movie',
+          id: 'tt1',
+          name: 'A',
+          afresh: true,
+        );
+
+        expect(again, isEmpty, reason: 'nothing came back');
+        expect(prefs.similarSuggestions, kept);
+      },
+    );
+
+    test('and so does one the model answers with nothing: a press may not '
+        'leave the viewer with less than they had', () async {
+      // The deliberate choice, and the reason it is this one. A failure
+      // and an empty answer are the same list down here, so the screen
+      // could not tell them apart even if it wanted to -- and the viewer
+      // pressed because the row was wrong, not to be rid of it. Storing
+      // the empty would take the row away on the next visit, for an
+      // answer the same model disagrees with itself about half the time.
+      await rememberOne('tt1');
+      final kept = prefs.similarSuggestions;
+      answering = (_) => const <SuggestedTitle>[];
+
+      expect(
+        await feature().forItem(
+          type: 'movie',
+          id: 'tt1',
+          name: 'A',
+          afresh: true,
+        ),
+        isEmpty,
+      );
+
+      expect(prefs.similarSuggestions, kept);
+    });
+
+    test('and so does one whose titles no catalogue confirms', () async {
+      // The guard is what empties this one, not the provider: ten invented
+      // films are a full answer that resolves to nothing. The test is on
+      // what would reach the screen, which is why.
+      await rememberOne('tt1');
+      final kept = prefs.similarSuggestions;
+      answering = (_) => const [
+        SuggestedTitle(title: 'The Otherside', year: 2022, why: 'invented'),
+      ];
+
+      expect(
+        await feature().forItem(
+          type: 'movie',
+          id: 'tt1',
+          name: 'A',
+          afresh: true,
+        ),
+        isEmpty,
+      );
+
+      expect(prefs.similarSuggestions, kept);
+    });
+  });
 }
 
-/// A catalogue holding one film, under the one name the fake model uses.
+/// A catalogue holding the two films the fake model names, and nothing
+/// else -- so a suggestion of any other title is one the guard drops,
+/// which is what an invented title does.
 Future<List<Map<String, dynamic>>> _catalogue(String type, String query) async {
-  if (type != 'movie' || query != 'Avalon') return const [];
+  const films = {
+    'Avalon': ('tt0219653', '2001'),
+    'Stalker': ('tt0079944', '1979'),
+  };
+  if (type != 'movie') return const [];
+  final film = films[query];
+  if (film == null) return const [];
   return [
     {
-      'id': 'tt0219653',
-      'imdb_id': 'tt0219653',
+      'id': film.$1,
+      'imdb_id': film.$1,
       'type': 'movie',
-      'name': 'Avalon',
-      'releaseInfo': '2001',
+      'name': query,
+      'releaseInfo': film.$2,
     },
   ];
 }
