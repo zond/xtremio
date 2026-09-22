@@ -1,6 +1,12 @@
 /// Settings → Recommendations: the key and the model "More like this"
 /// asks, and a way to find out whether that model can do the job.
 ///
+/// **It says whose key it is.** These are Google AI Studio keys, made at
+/// `aistudio.google.com` and spent against the Gemini API; a section that
+/// says "API key" and "Model" invites somebody to paste an OpenAI or an
+/// OpenRouter key and wait for it to work. The provider is named on the
+/// field and on the line under it.
+///
 /// The app's own preferences and not `profile.settings` fields, for the
 /// reason "Buffer ahead" and "Share while idle" are: they are this
 /// device's, the file they live in is synced nowhere, and stremio-core's
@@ -21,11 +27,24 @@
 /// models differ enormously — `tool/recommendations/README.md` has six
 /// measured, one of which was below chance on both axes and invented
 /// twenty titles in seventy-one — and a viewer who has pasted a key and
-/// typed a model name has no way of telling which of those they have. The
+/// chosen a model name has no way of telling which of those they have. The
 /// numbers, what they mean and why there are three of them are in
 /// `check_model.dart`; this screen shows them and says what they mean on
 /// the tile rather than in a help page nobody opens.
+///
+/// **The model is chosen from the account's own catalogue**
+/// ([ModelCatalogue]) rather than typed, because the names rot and because
+/// a television has no keyboard. What the chooser must not imply is that
+/// everything in it works: 20 of 33 listed models failed when they were
+/// actually asked something. So the list is where a model is *found* and
+/// the check is where it is *settled*, and the tile says that in those
+/// words. A model the list does not have — a fetch that failed, a name the
+/// filter dropped, a viewer who knows better — stays chosen and stays
+/// visible; a list that silently drops what somebody chose is a list that
+/// overrides them.
 library;
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -35,7 +54,9 @@ import '../../widgets/tv_text_field.dart';
 import '../similar/check_gemini.dart';
 import '../similar/check_keys.dart';
 import '../similar/check_model.dart';
+import '../similar/model_catalogue.dart';
 import '../similar/similar_titles.dart';
+import 'core_settings.dart';
 
 /// How a check is built once the key and the model are known.
 ///
@@ -58,6 +79,7 @@ class RecommendationsSection extends StatefulWidget {
     super.key,
     required this.prefs,
     this.checkFor = _googleCheck,
+    this.listModels = listGeminiModels,
   });
 
   final AppPrefs prefs;
@@ -66,14 +88,34 @@ class RecommendationsSection extends StatefulWidget {
   /// hands one that answers without a network; nothing else does.
   final ModelCheckFactory checkFor;
 
+  /// Where the chooser's models come from. A test hands one that answers
+  /// without a network; nothing else does.
+  final ModelCatalogue listModels;
+
   static const Key apiKeyFieldKey = ValueKey('setting-similarApiKey');
   static const Key saveApiKeyKey = ValueKey('setting-similarApiKey-save');
-  static const Key modelFieldKey = ValueKey('setting-similarModel');
+
+  /// The chooser, keyed the way every other setting's menu on this screen
+  /// is ([settingKey]).
+  static final Key modelMenuKey = settingKey(AppPrefs.similarModelKey);
+
+  /// The box the name goes in when there is no list to choose from. A key
+  /// of its own rather than [modelMenuKey], because the two are different
+  /// controls and only one of them is on screen at a time.
+  static const Key modelFieldKey = ValueKey('setting-similarModel-typed');
   static const Key saveModelKey = ValueKey('setting-similarModel-save');
   static const Key testKey = ValueKey('setting-similar-test');
 
   /// What the section is headed with on the settings screen.
   static const String title = 'Recommendations';
+
+  /// The provider, as the section names it. One name in one place: it is
+  /// on the key's field, in its note and in the chooser's.
+  static const String provider = 'Google AI Studio';
+
+  /// How the measured default is marked in the chooser.
+  static String label(String model) =>
+      model == defaultSimilarModel ? '$model · measured' : model;
 
   @override
   State<RecommendationsSection> createState() => _RecommendationsSectionState();
@@ -93,11 +135,33 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
   /// provider's own message, which can quote the request back.
   String? _failure;
 
+  /// The models the key can see, or null while there is no list: no key
+  /// pasted, a listing in flight, or one that failed. Null is what puts
+  /// the by-hand box on screen, so the three cases need not be told apart
+  /// to answer "can this viewer still name a model".
+  List<String>? _listed;
+
+  /// The key a listing is out for, or null.
+  ///
+  /// The key rather than a flag, because a listing is answered long after
+  /// it was asked for and the question it answers is "is this still the
+  /// key we are waiting on" — a flag would have said only that *something*
+  /// was in flight, which is the shape of bug where a value is read once
+  /// and trusted later.
+  String? _listingFor;
+
+  bool get _listing => _listingFor != null;
+
+  /// A listing was asked for and did not arrive. Kept apart from
+  /// `_listed == null`, which is also what having no key looks like.
+  bool _listFailed = false;
+
   @override
   void initState() {
     super.initState();
     _apiKey.text = widget.prefs.similarApiKey ?? '';
     _model.text = widget.prefs.similarModel;
+    unawaited(_listModels());
   }
 
   @override
@@ -112,26 +176,75 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
 
   bool get _hasKey => widget.prefs.similarApiKey != null;
 
-  /// A key changed is a check that no longer describes anything.
+  /// A key changed is a check that no longer describes anything, and a
+  /// list that was somebody else's account's.
   Future<void> _saveApiKey() async {
     setState(() {
       _report = null;
       _failure = null;
       _running?.cancel();
       _running = null;
+      _listed = null;
+      // Whatever is out is out for the old key, and is dropped when it
+      // arrives rather than filling a menu with somebody else's account.
+      _listingFor = null;
+      _listFailed = false;
     });
     await widget.prefs.setSimilarApiKey(_apiKey.text);
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    await _listModels();
   }
 
-  Future<void> _saveModel() async {
+  /// Asks the provider what this key can see.
+  ///
+  /// **With no key nothing is asked**, which is the rule the whole section
+  /// is built on: there is no probe, no default key and no request until a
+  /// viewer has pasted one of their own.
+  ///
+  /// Asked when the section is built and when Save is pressed, and from
+  /// nowhere else: a rebuild is not another account to ask about. So a
+  /// listing that failed needs no button of its own -- Save is the press
+  /// that is already there, and pressing it is another go.
+  Future<void> _listModels() async {
+    final apiKey = widget.prefs.similarApiKey;
+    if (apiKey == null || _listingFor == apiKey) return;
+    setState(() {
+      _listingFor = apiKey;
+      _listFailed = false;
+      _listed = null;
+    });
+    List<String>? listed;
+    try {
+      listed = await widget.listModels(apiKey);
+    } on Object {
+      // Whatever the provider said is neither shown nor kept: a message
+      // from there can quote the request back, and the request carries
+      // the key. What the screen says is that there is no list.
+      listed = null;
+    }
+    // The key changed under it, or the screen is gone: a list fetched
+    // with a key nobody is using is not this screen's answer, and a newer
+    // listing is the one this screen is waiting on.
+    if (!mounted || _listingFor != apiKey) return;
+    setState(() {
+      _listingFor = null;
+      _listFailed = listed == null;
+      _listed = listed;
+    });
+  }
+
+  Future<void> _saveModel() => _setModel(_model.text);
+
+  /// Writes which model is asked, from the chooser or from the box.
+  Future<void> _setModel(String? value) async {
     setState(() {
       _report = null;
       _failure = null;
       _running?.cancel();
       _running = null;
     });
-    await widget.prefs.setSimilarModel(_model.text);
+    await widget.prefs.setSimilarModel(value);
     // An emptied box is the default, and the box says so rather than
     // staying blank over a setting that is not blank.
     if (!mounted) return;
@@ -187,9 +300,9 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
           leading: Icon(Icons.auto_awesome_outlined),
           title: Text('More like this'),
           subtitle: Text(
-            'A row of suggestions under a title, from a model you hold the '
-            'key to. With no key here the row does not appear and nothing '
-            'is asked of anybody.',
+            'A row of suggestions under a title, from a Google Gemini model '
+            'asked with a key of your own. With no key here the row does '
+            'not appear and nothing is asked of anybody.',
           ),
         ),
         _field(
@@ -197,46 +310,43 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
           saveKey: RecommendationsSection.saveApiKeyKey,
           controller: _apiKey,
           kind: TvTextKind.password,
-          label: 'API key',
+          // Two words, because the label is laid out in what is left of a
+          // phone's width once the Save button has had its share — 171 dp
+          // at 320 — and a label does not wrap. "Gemini key" is what will
+          // fit that says whose it is; where one comes from is on the line
+          // under the field, which has the whole width to say it in.
+          label: 'Gemini key',
           // No hint text. The box is what is left of a phone's width once
           // the Save button has had its share, and a sentence in there is
           // a sentence laid out in 170 dp; what to paste is on the line
           // under the field, which has the whole width to say it in.
           hint: null,
-          // Said here because it is what a viewer is deciding about when
-          // they paste it, and because it is true: the key is stored on
-          // this device, goes into one request, and is kept out of the
-          // log and out of a copied diagnostics report.
+          // Where a key comes from, said before anything else, because a
+          // key from somewhere else is the mistake this section is most
+          // likely to be handed: they all look alike and none of the
+          // others answers here.
+          //
+          // Then what a viewer is deciding about when they paste it, and
+          // it is true: the key is stored on this device, goes into the
+          // provider's own requests, and is kept out of the log and out of
+          // a copied diagnostics report.
+          //
+          // The site's name rather than its address: `aistudio.google.com`
+          // is one nineteen-character word, no line under this field on a
+          // 320 dp phone is wide enough to break it across, and the name
+          // is the half somebody can search for anyway.
           note:
-              'Paste the key for your provider. It is kept on this device '
-              'and sent only to that provider, and is never written to the '
-              'log or to a diagnostics report.',
+              'Made in ${RecommendationsSection.provider} and spent against '
+              'the Gemini API. An OpenAI or OpenRouter key will not work '
+              'here. It is kept on this device and sent only to Google, and '
+              'is never written to the log or to a diagnostics report.',
           onSave: _saveApiKey,
           onClear: () async {
             _apiKey.clear();
             await _saveApiKey();
           },
         ),
-        _field(
-          fieldKey: RecommendationsSection.modelFieldKey,
-          saveKey: RecommendationsSection.saveModelKey,
-          controller: _model,
-          kind: TvTextKind.text,
-          label: 'Model',
-          hint: defaultSimilarModel,
-          // Why the box exists at all: in one afternoon of measuring, two
-          // of the models this might have defaulted to began answering
-          // "404, no longer available to new users".
-          note:
-              'Emptied, it goes back to $defaultSimilarModel, which is what '
-              'was measured. Model names rot; this is where the name of one '
-              'that still answers goes.',
-          onSave: _saveModel,
-          onClear: () async {
-            _model.clear();
-            await _saveModel();
-          },
-        ),
+        ..._modelChooser(theme),
         ListTile(
           key: RecommendationsSection.testKey,
           leading: const Icon(Icons.science_outlined),
@@ -271,6 +381,91 @@ class _RecommendationsSectionState extends State<RecommendationsSection> {
         if (report != null) ..._results(theme, report),
       ],
     );
+  }
+
+  /// Which model is asked: a menu of what the key can see, the line under
+  /// it saying what the menu is and is not, and — when there is no list —
+  /// a box to name one in.
+  ///
+  /// A [SettingMenu] because that is what a choice between several values
+  /// already is on this screen, and because a television can walk to one
+  /// and press it: select opens a route listing every option with the
+  /// current one focused, up and down walk them, select picks. A list
+  /// nobody could reach with a D-pad would have replaced a box nobody can
+  /// type into on a television with something no better.
+  ///
+  /// The menu is never empty and never shorter than the truth: with no
+  /// list it still offers the measured default, and [SettingMenu] adds
+  /// whatever is configured when the list does not have it.
+  List<Widget> _modelChooser(ThemeData theme) {
+    final listed = _listed;
+    final configured = widget.prefs.similarModel;
+    return [
+      SettingTile(
+        icon: Icons.smart_toy_outlined,
+        title: 'Gemini model',
+        subtitle: _listing
+            ? 'Asking ${RecommendationsSection.provider} what this key can '
+                  'use.'
+            : listed == null
+            ? _listFailed
+                  ? 'The list could not be fetched. What is set here stands.'
+                  : 'The measured default, until a key is pasted.'
+            : listed.length == 1
+            ? 'One model this key can see.'
+            : '${listed.length} models this key can see.',
+        menu: SettingMenu<String>(
+          setting: AppPrefs.similarModelKey,
+          value: configured,
+          options: listed == null || listed.isEmpty
+              ? [defaultSimilarModel]
+              : listed,
+          label: RecommendationsSection.label,
+          onPicked: (model) => unawaited(_setModel(model)),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Text(
+          // Both halves are measured and neither is obvious. The mark says
+          // which model the evidence is about; the second sentence says
+          // that the list is where a model is found and the check is where
+          // it is settled.
+          'The one marked measured is what the measuring settled on: the '
+          'best coverage of the answer keys of anything that answers '
+          'inside the five seconds the row waits. Being listed is not '
+          'being usable — 20 of 33 listed models could not answer when '
+          'they were asked something — so Test this model below is what '
+          'settles it.',
+          style: theme.textTheme.bodySmall,
+        ),
+      ),
+      // No list, so a name can still go in by hand: a fetch that failed
+      // must not lock a viewer out of a model we failed to list.
+      if (listed == null && !_listing)
+        _field(
+          fieldKey: RecommendationsSection.modelFieldKey,
+          saveKey: RecommendationsSection.saveModelKey,
+          controller: _model,
+          kind: TvTextKind.text,
+          // One word, and it can afford fewer than the key's: a label over
+          // a box with something in it floats up at three quarters size,
+          // and the box under the chooser is 124 dp of a 320 dp phone.
+          // The tile above it is what says which models these are.
+          label: 'Model',
+          hint: defaultSimilarModel,
+          note: _listFailed
+              ? 'The list could not be fetched, so the name goes in by '
+                    'hand. Emptied, it goes back to $defaultSimilarModel.'
+              : 'Until a key is pasted there is no list to choose from. '
+                    'Emptied, it goes back to $defaultSimilarModel.',
+          onSave: _saveModel,
+          onClear: () async {
+            _model.clear();
+            await _saveModel();
+          },
+        ),
+    ];
   }
 
   /// One labelled box with a Save beside it, and a line under it saying
