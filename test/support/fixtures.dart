@@ -11,6 +11,22 @@ Map<String, dynamic> loadFixture(String name) =>
 Map<String, dynamic> loadDiscoverFixture() =>
     loadFixture('discover_cinemeta_top.json');
 
+/// The streams the live addons answered with on 2026-09-23 — Torrentio for
+/// The Matrix (`tt0133093`) and Breaking Bad (`tt0903747:1:1`), WatchHub
+/// and Public Domain Movies — trimmed from 122 to one row per field-shape,
+/// plus the WatchHub and Public Domain Movies rows already recorded in
+/// `meta_details_public_domain.json`.
+///
+/// Each row is `{addon, kind, stream}`, `stream` exactly as it came off the
+/// wire. It is the specification the source parser is written against and
+/// the table `stream_facts_test.dart` walks; anything the parser believes
+/// that this contradicts is the parser being wrong.
+List<Map<String, dynamic>> loadRecordedStreams() => [
+  for (final row
+      in loadFixture('addon_streams_recorded.json')['streams'] as List<dynamic>)
+    row as Map<String, dynamic>,
+];
+
 /// `meta_details` for Night of the Living Dead (tt0063350): Cinemeta meta,
 /// WatchHub externals, a pubdomainmovies torrent, a failed local addon.
 Map<String, dynamic> loadMetaDetailsFixture() =>
