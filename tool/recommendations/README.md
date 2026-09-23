@@ -14,7 +14,7 @@ disappeared from the paid tier while we watched.
 
 ## The answer keys
 
-`keys/gold_*.json` -- 528 films across seven target titles, each rated on
+`keys/gold_*.json` -- 557 titles across seven target titles, each rated on
 two axes that are deliberately **not** averaged together:
 
 * **`grade`** 3 essential / 2 strong / 1 defensible / 0 not a reasonable
@@ -58,7 +58,9 @@ the app learned to ask about series.
 `ASK_FOR_ALSO_SERIES=0` asks the old film-only question instead, so the
 cost of admitting series can be measured rather than argued about. The
 app's *series* question is still unmeasured, and cannot be measured
-against these keys: all 528 researched titles are films.
+against these keys: every one of the seven **targets** is a film. (Some
+answers in the keys are series now -- pooling added them, and they are
+rated like anything else. It is the target that is never a series.)
 
 **`recommend_bench.py`** -- the honest one. Asks for ten films, scores the
 answer against the key, and reports five things, because one number hides
@@ -156,13 +158,19 @@ the same afternoon with the same key:
 
 | `gemini-3.1-flash-lite` | series admitted | film-only |
 |---|---|---|
-| relevance lift | +0.17 | +0.15 |
-| tone lift | +0.16 | +0.15 |
-| in key | 0.87 | 0.90 |
-| real | 1.00 | 0.95 |
-| consistent | 0.59 | 0.52 |
-| breadth | 0.48 | 0.51 |
-| slowest | 2.9 s | 2.8 s |
+| relevance lift | +0.18 | +0.16 |
+| tone lift | +0.18 | +0.13 |
+| in key | 0.95 | 0.94 |
+| real | 0.90 | 1.00 |
+| consistent | 0.59 | 0.50 |
+| breadth | 0.53 | 0.56 |
+| slowest | 2.9 s | 3.2 s |
+
+Taken *after* the 33 suggestions both columns turned up were rated and
+folded in, and after the matching below was fixed. Coverage went from
+0.87 to 0.95 between the provisional run and this one, so both columns
+now rest on almost all of what the model said rather than seven eighths
+of it.
 
 **The two are indistinguishable**, and that is the finding. One run each is
 nowhere near enough to call +0.17 better than +0.15 -- this benchmark's
@@ -172,20 +180,22 @@ that nothing collapsed. Nothing collapsed.
 
 Three cautions, none of them about series:
 
-* **Both columns are provisional.** 27 and 20 suggestions are in no key
-  and are simply left out of the scoring, which flatters a model that
-  wanders. Pooling is what settles it, and it is not optional -- see above.
+* **13 suggestions are still unrated** and left out of the scoring, which
+  flatters a model that wanders. That is down from 27 and 20 before this
+  round of pooling, and it never reaches zero: a new run turns up new
+  titles. It is the *size* of the unrated remainder that decides how much
+  a number can be trusted.
 * **The film-only column is below this README's own row for the same
   model on the same question** (+0.15 against +0.19). Either run-to-run
   noise, or `gemini-3.1-flash-lite` has moved behind a stable name. The
   second is the reason the app treats the model as a preference and every
   failure as classified rather than fatal.
-* **`The Call of Cthulhu` is below chance on tone in both columns** (0.26
-  and 0.32 against 0.44), and `The American Astronaut` is at or below
-  chance on both axes. The obscure targets are still where this model
-  fails, and admitting series did not change that either way.
+* **`The Call of Cthulhu` is below chance on tone** (0.36 against 0.41),
+  and it was in every run all day. The model hears "Lovecraft" and misses
+  "silent, 47 minutes, 1920s pastiche". The obscure targets are where this
+  model fails, and admitting series changed that neither way.
 
-Two bugs were found by running it, both of which had made earlier runs
+Four bugs were found by running it, all of which had made earlier runs
 worse than useless:
 
 * `recommend_bench.py` and `vibe_sort.py` globbed `gold_*.json` beside
@@ -196,3 +206,27 @@ worse than useless:
   question said "films only"; against the question as it is asked now it
   would have scored every correct series as an invented title and blamed
   the wording for it. It searches `/search/tv` as well.
+* **`norm()` matched one spelling of a title and the keys hold several.**
+  A model naming a film the key already rates was scored as naming
+  something nobody had rated: dropped from the result and sent to the
+  pool to be rated a second time. Three ways it happened, ~9% of the
+  entries between them: accents were deleted rather than folded, so
+  `Caché` and `Cache` were different films (10 entries); the `aka` the
+  keys record was never read (17); and a subtitle had to match exactly, so
+  `Tetsuo` missed `Tetsuo: The Iron Man` (22). Every spelling is indexed
+  now -- title, `aka`, the part before a colon, and the part before a
+  trailing `or (...)`.
+* **`fold_pool.py` deduped on that same single spelling**, so a rated
+  suggestion under a variant name was appended beside the entry it
+  duplicated, rated twice and counted twice. It folds on every spelling
+  now. One duplicate (`Birdman`) got in before the rule covered the
+  `or (...)` form and was removed by hand.
+
+## Still open
+
+* The **series question** has never been measured. Every target is a film,
+  and rating a key for a series target is the work that would fix it.
+* **13 suggestions are unrated** in `pool_unrated.json` from the last run.
+* The table above is **one run per column**. A claim that one question or
+  one model beats another needs the repeats and the paired sign test that
+  `model_bench.py` does, not this.

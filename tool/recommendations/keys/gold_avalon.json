@@ -822,6 +822,67 @@
    "basis": "form",
    "source": "judgement",
    "pooled": true
+  },
+  {
+   "title": "Serial Experiments Lain",
+   "year": 1998,
+   "kind": "series",
+   "grade": 3,
+   "tone": 2,
+   "what": "Ryūtarō Nakamura's thirteen-episode Japanese series, written by Chiaki J. Konaka and designed by Yoshitoshi ABe: a withdrawn fourteen-year-old gets mail from a classmate who has killed herself, follows it into the network called the Wired, and stops being able to locate the edge of it",
+   "why": "The strongest thing on this list that Oshii had no hand in, and it earns grade 3 on the work alone. It asks Avalon's question in Avalon's terms — what remains of a person who is maintained across a network rather than housed in a body — and it answers the way Oshii does, by refusing to restore an outside for her to be returned to; by the end the boundary between the Wired and the world is simply gone, which is the position Ash is left in at Class Real. Where the key holds eXistenZ at 3 for having the premise and none of the temperature, Lain has both: long held shots of empty rooms and pavements, the hum of overhead power lines carried at the level of dialogue, a palette pushed down into brown and shadow, and a girl alone with a machine in a flat, which is Avalon's opening scene for nine hours. Rate it as a film and it is the closest non-Oshii match here.",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Serial_Experiments_Lain",
+   "pooled": true
+  },
+  {
+   "title": "Kairo",
+   "year": 2001,
+   "kind": "film",
+   "aka": "Pulse",
+   "grade": 2,
+   "tone": 2,
+   "what": "Kiyoshi Kurosawa's Japanese horror film, released the same year as Avalon: ghosts begin arriving over dial-up connections, the people who see them fade into greasy stains on the wall, and Tokyo empties",
+   "why": "The other 2001 film about a network that holds the people who have left, and much the better tonal companion of the two. Kurosawa builds dread the way Oshii does — the camera parked far back in a grey, underlit wide while something moves slowly in the depth of frame, almost no score, and a flat refusal to explain the mechanism at any point. The reason it is not 3 is what the two networks are for: Kairo's is a contagion and its subject is loneliness, while Avalon's is a job with a rank structure, a payout and an administration, and Ash's problem is professional rather than existential. The feeling matches before the premise does.",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Pulse_(2001_film)",
+   "pooled": true
+  },
+  {
+   "title": "Phase IV",
+   "year": 1974,
+   "kind": "film",
+   "grade": 1,
+   "tone": 1,
+   "what": "Saul Bass's only feature, photographed by Dick Bush with extensive macro insect footage: ants in the Arizona desert acquire a collective intelligence and build seven geometric towers, and two scientists sealed in a research dome try to out-think them",
+   "why": "There is a real structural rhyme under the unlikely surface. A sealed installation, a system that has already anticipated every move the humans make, and an ending in which the protagonist is not defeated but absorbed into the design — both films finish by turning the human into the object of a process rather than its agent, and both decline to say what the process is for. Bass's film is also genuinely cold, nearly wordless and, as one critic had it, designed rather than directed, which is not a bad description of Avalon either. It stays at 1 because nothing else connects: no shared lineage, no simulation, no constructed memory, and the register is a daylight lab procedural with an electronic score where Avalon is sepia dusk, a military hierarchy and a full orchestra. Defensible, and a long way from strong.",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Phase_IV_(1974_film)",
+   "pooled": true
+  },
+  {
+   "title": "Primer",
+   "year": 2004,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Shane Carruth's American debut, made for seven thousand dollars and running seventy-seven minutes: two engineers building error-checking hardware in a garage accidentally produce a time machine and begin editing their own week",
+   "why": "The label is cerebral, demanding, unflashy science fiction, and it comes apart the moment either film is actually described. I gave the one genuine echo a hearing — both are films whose rules you must reconstruct unaided, and neither will confirm which version of its protagonist you have been watching — and it does not hold, because the two withhold by opposite means: Primer talks faster than anyone can follow for seventy-seven minutes, Avalon barely talks at all. The claim about a grounded, non-flashy technical aesthetic is simply wrong about the target. Carruth shot flat, overexposed fluorescent daylight in suburban garages and parking lots; Avalon's entire surface is a digital grade laid on shot by shot, over Kawai's orchestra and chorus, with tanks, gunships and a helicopter gunner in it. Nothing about sitting through one is preparation for the other, and no viewer who wanted more Avalon is served by this.",
+   "basis": "form",
+   "source": "https://en.wikipedia.org/wiki/Primer_(film)",
+   "pooled": true
+  },
+  {
+   "title": "Blade Runner",
+   "year": 1982,
+   "kind": "film",
+   "grade": 2,
+   "tone": 1,
+   "what": "Ridley Scott's American film from Philip K. Dick: a retired police detective hunts four escaped replicants through a rain-lit Los Angeles and is left unable to establish that his own memories are his",
+   "why": "The least surprising pick anyone could make for this target, and it holds up anyway, because Oshii says it outright: when you make a film about humans and cyborgs, he told Midnight Eye, you have no choice but to refer back to Ridley Scott's Blade Runner. The implanted-memory problem is Ash's problem, and the origami unicorn and Avalon's arrival at Class Real are the same manoeuvre — a late image whose only function is to tell you the ground you were standing on was issued to you. Tone is where it separates, and the key's neighbours show the size of it: Blade Runner is wet, neon, crowded and Vangelis-scored, with chases and a fight in it, where Avalon is dry, depopulated, sepia and keeps its violence in the middle distance. Slow and mournful in the same way, and in no other way at all.",
+   "basis": "influence",
+   "source": "https://www.midnighteye.com/interviews/mamoru-oshii/",
+   "pooled": true
   }
  ]
 }

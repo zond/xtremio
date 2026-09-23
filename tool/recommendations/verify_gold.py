@@ -11,18 +11,24 @@ def tmdb(path, **params):
 
 def check(title, year):
     """Exact-ish title match within a year either side, searching both the
-    stated year and none: TMDB dates some films by festival, some by release."""
+    stated year and none: TMDB dates some films by festival, some by
+    release. Films and series both, because the keys hold series now --
+    the app's question admits them, so pooling folds them in, and a check
+    that knew only /search/movie would report every one of them missing.
+    """
     seen = []
-    for params in ({"query": title, "year": year}, {"query": title}):
-        try:
-            results = tmdb("search/movie", **params).get("results", [])
-        except Exception as e:
-            return None, f"search failed: {str(e)[:40]}"
-        for m in results[:8]:
-            got = (m.get("release_date") or "")[:4]
-            seen.append(f"{m['title']} ({got or '?'})")
-            if abs(int(got) - year) <= 1 if got.isdigit() else False:
-                return m, None
+    for kind, titled, dated in (("movie", "title", "release_date"),
+                                ("tv", "name", "first_air_date")):
+        for params in ({"query": title, "year": year}, {"query": title}):
+            try:
+                results = tmdb(f"search/{kind}", **params).get("results", [])
+            except Exception as e:
+                return None, f"search failed: {str(e)[:40]}"
+            for m in results[:8]:
+                got = (m.get(dated) or "")[:4]
+                seen.append(f"{m.get(titled)} ({got or '?'})")
+                if abs(int(got) - year) <= 1 if got.isdigit() else False:
+                    return m, None
     return None, "no match; TMDB offers " + (", ".join(seen[:4]) or "nothing")
 
 path = sys.argv[1]

@@ -1,7 +1,7 @@
 /// The answer keys as the app carries them, and the question built from
 /// one.
 ///
-/// `tool/recommendations/` holds 528 films across seven target titles,
+/// `tool/recommendations/` holds 557 rated titles across seven targets,
 /// each rated on two axes that are deliberately not averaged: `grade` for
 /// how relevant the connection is (3 essential … 0 not a reasonable
 /// recommendation) and `tone` for what the film is like *to sit through*

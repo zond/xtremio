@@ -785,6 +785,78 @@
    "basis": "lineage",
    "source": "judgement",
    "pooled": true
+  },
+  {
+   "title": "Cabinet of Curiosities",
+   "year": 2022,
+   "kind": "series",
+   "grade": 2,
+   "tone": 0,
+   "what": "Guillermo del Toro's eight-part Netflix anthology, one hour per director and introduced by del Toro from a physical cabinet, of which two instalments are Lovecraft: 'Pickman's Model' from the 1919 story and 'Dreams in the Witch House' from 1933",
+   "why": "The strongest claim recent television has on this target. It is a portmanteau that actually adapts Lovecraft rather than borrowing his adjectives, made in an avowedly Gothic and Grand Guignol house style, and the key already holds Necronomicon at this grade for doing the same job in 1993. Everything about the watching is the other way round: lavish colour, a score, dialogue throughout, prosthetic horror delivered in full, and an hour per story in which to explain itself, against forty-seven wordless minutes that spend their entire effects budget on one withheld stop-motion reveal. Grades well above its tone.",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Guillermo_del_Toro%27s_Cabinet_of_Curiosities",
+   "pooled": true
+  },
+  {
+   "title": "Hagazussa",
+   "year": 2017,
+   "kind": "film",
+   "grade": 1,
+   "tone": 1,
+   "what": "Lukas Feigelfeld's Austrian-German debut: a goatherd in the fifteenth-century Alps, shunned by her village after her mother's death, is driven through isolation, assault and mushrooms into drowning her own child and dying alone on a mountainside, told with almost no dialogue over a dark-ambient score by MMMD",
+   "why": "The folk-horror label on its own would earn a zero here, and nearly does. What saves it is a real formal property rather than a genre word: it is close to wordless, it refuses to explain, and it lets dread accumulate for long stretches with nothing but a picture and a drone to carry it, which is the discipline the target works under by necessity. The connection stops there. Hagazussa is colour, it is a naturalistic study of one woman's degradation with the supernatural left optional, and it has no interest whatever in film technique as subject matter, where the target's whole project is rebuilding 1920s silent grammar shot by shot. A shared taste for slowness is not a lineage. Defensible on register, no more.",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Hagazussa",
+   "pooled": true
+  },
+  {
+   "title": "Archive 81",
+   "year": 2022,
+   "kind": "series",
+   "grade": 2,
+   "tone": 0,
+   "what": "Netflix's eight-episode series from the 2016 podcast, cancelled after one season: a video conservator restores deteriorating Hi8 tapes shot by a graduate student in 1994, whose documentary on an apartment building leads to the Baldung coven and Kaelego, a thing the series calls both god and demon, with the roots of it reaching back to 1924",
+   "why": "The architecture is the target's own, and nothing else on this list can say that. A man inherits a dead stranger's records, assembles from them a coherent account of a cult devoted to an entity older than anyone left alive, and is destroyed by the place that account turns out to give him in it - which is Thurston with his great-uncle's papers, down to the nested layers of testimony and material dated to the 1920s. The key rates The Empty Man at this grade on exactly that structural claim. It is the opposite end of the medium to sit through: eight hours of glossy digital colour with a romance, cliffhangers, jump scares and a mythology narrated aloud as it goes. The 1994 tape material is the only texture the two share, and it is a fraction of the running time. Grades on its shape, tones nothing like it.",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Archive_81",
+   "pooled": true
+  },
+  {
+   "title": "The Head Hunter",
+   "year": 2018,
+   "kind": "film",
+   "grade": 2,
+   "tone": 1,
+   "what": "Jordan Downey's seventy-two-minute film, made for thirty thousand dollars in Portugal, Norway and California: a lone medieval bounty hunter keeps his kills' heads nailed to the wall of his hut, waiting for the creature that took his daughter. The script ran forty pages and has barely a line of dialogue in it, and the heads were built out of clearance Halloween masks stained and sealed under melted plastic",
+   "why": "The closest thing here to the target's method rather than its subject. A feature-length horror film with no money, effectively one actor and almost no speech, which converts its poverty into a style: long silences, a monster kept off screen until the last reel, and creature work visibly hand-made from whatever was going cheap. That is what Mythoscope was - a constraint dressed up as a choice - and the key rewards Die Farbe and Skinamarink for the same economy. It parts from the target on everything else: muddy digital colour, sound design doing the work the target had to do with pictures alone, and a final act that hands over the gore a silent-era pastiche would never show.",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/The_Head_Hunter_(2018_film)",
+   "pooled": true
+  },
+  {
+   "title": "Errementari: The Blacksmith and the Devil",
+   "year": 2017,
+   "kind": "film",
+   "grade": 0,
+   "tone": 0,
+   "what": "Paul Urkijo Alijo's first feature, in Alavese Basque: in Araba in 1843, in the wake of the First Carlist War, a blacksmith keeps a demon chained in his forge and an orphan girl lets it out. Taken from the Basque telling of the Smith and the Devil collected by Joxemiel Barandiaran",
+   "why": "Arrives on 'folklore-driven horror with an antique texture', which describes several hundred films, and nothing survives contact with the target. Errementari is a colour period fable with a score, continuous dialogue, a rescue plot, an expedition to Hell and a devil who bargains, loses and can be outwitted - which is the exact inverse of an intelligence to which mankind is beneath notice. The key does admit modern folk horror, but on specific grounds it can name: November for its monochrome and its creatures assembled out of farm tools, The Witch for a research method that is a genuine cousin of the HPLHS's shot-by-shot reconstruction. Errementari offers neither, and a viewer who came out of the target wanting more of what it was doing would find none of it here.",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Errementari",
+   "pooled": true
+  },
+  {
+   "title": "Picnic at Hanging Rock",
+   "year": 1975,
+   "kind": "film",
+   "grade": 1,
+   "tone": 1,
+   "what": "Peter Weir's Australian film: on Valentine's Day 1900 three schoolgirls and a teacher walk up a volcanic outcrop in Victoria and are never found, shot through bridal veil stretched over the lens and scored to Gheorghe Zamfir's pan flute",
+   "why": "One real point of contact and it is a good one - an inquiry that yields nothing, a disappearance the film flatly declines to explain, and an old landscape that is indifferent to the Europeans standing on it and will not account for itself. That is nearer Lovecraft's actual proposition than most of the films that carry his name. Against it, and it is decisive: the target is not an unexplained film at all. Thurston's papers assemble a complete account, name the cult, date the events and finally show you the thing; its horror is in what the explanation means, not in its absence. And where the target is high-contrast monochrome composed for dread, Weir's is a warm, diffused, unhurried reverie. Defensible.",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Picnic_at_Hanging_Rock_(film)",
+   "pooled": true
   }
  ]
 }

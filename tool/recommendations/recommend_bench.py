@@ -24,7 +24,7 @@ quietly rewards models that agree with our researchers.
 
   G_KEY=... TMDB=... python3 recommend_bench.py [model ...]
 """
-import glob, json, os, re, statistics, sys, time, urllib.error, urllib.parse, urllib.request
+import glob, json, os, re, statistics, sys, time, unicodedata, urllib.error, urllib.parse, urllib.request
 
 TMDB = os.environ["TMDB"]
 KEYS = {"google": os.environ.get("G_KEY"), "anthropic": os.environ.get("A_KEY"),
@@ -48,11 +48,52 @@ SYSTEM = ("You recommend films and television. Real, released titles only. "
           "JSON only.")
 
 def norm(text):
+    """A title reduced to what two spellings of it share, plus its year.
+
+    Accents are folded rather than deleted. Stripping non-ASCII turned
+    `Cache` into "cache" and `Cach\u00e9` into "cach", so a model naming
+    Haneke's film the way Haneke spells it did not match the key entry for
+    it -- it was scored as a title nobody had rated and sent to the pool.
+    Ten of the 528 entries are spelled with an accent.
+    """
+    text = unicodedata.normalize("NFKD", str(text))
+    text = "".join(c for c in text if not unicodedata.combining(c))
     years = re.findall(r"(1[89]\d\d|20\d\d)", text)
     year = years[-1] if years else None
     title = re.sub(r"\(?\b(1[89]\d\d|20\d\d)\b\)?", "", text) if year else text
     title = re.sub(r"^(the|a|an)\b", "", title.strip().lower())
     return re.sub(r"[^a-z0-9]", "", title), year
+
+def aliases(entry):
+    """Every name this entry should answer to.
+
+    A key entry is one film under one spelling, and a model naming that
+    film is not obliged to pick the same one. Three ways it legitimately
+    differs, all of which used to count as a miss:
+
+      * the `aka` the key already records (17 entries carry one, and
+        nothing read it);
+      * the part before a colon -- `Tetsuo` for `Tetsuo: The Iron Man`,
+        `Innocence` for `Ghost in the Shell 2: Innocence` (22 entries);
+      * an accent, which [norm] now folds.
+
+    The cost of a miss is not neutral: the suggestion is dropped from
+    scoring and sent to the pool to be rated a second time, so the model
+    is neither credited nor charged for an answer already in the key.
+    """
+    names = [entry["title"], *([entry["aka"]] if entry.get("aka") else [])]
+    for name in list(names):
+        head = str(name).split(":")[0].strip()
+        if head and head != name:
+            names.append(head)
+    for name in list(names):
+        # `Birdman or (The Unexpected Virtue of Ignorance)` -- a trailing
+        # alternative title, which is the other way a film carries two
+        # names and has no colon in it.
+        head = re.sub(r"\s+or\s+\(.*\)\s*$", "", str(name)).strip()
+        if head and head != name:
+            names.append(head)
+    return names
 
 def load_keys():
     """Each key, plus what drawing from it at random would score.
@@ -71,8 +112,11 @@ def load_keys():
         data = json.load(open(path))
         index = {}
         for e in data["entries"]:
-            title, year = norm(f"{e['title']} ({e['year']})")
-            index[(title, year)] = e
+            # The canonical title first, so an alias can never displace a
+            # real entry that happens to collide with one.
+            for name in aliases(e):
+                key = norm(f"{name} ({e['year']})")
+                index.setdefault(key, e)
         entries = list(index.values())
         keys[data["target"]] = {
             "index": index,

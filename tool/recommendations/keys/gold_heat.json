@@ -652,6 +652,54 @@
    "basis": "mode",
    "source": "judgement",
    "pooled": true
+  },
+  {
+   "title": "The Wire",
+   "year": 2002,
+   "kind": "series",
+   "grade": 3,
+   "tone": 1,
+   "what": "David Simon and Ed Burns's HBO series, sixty episodes across five seasons from 2002 to 2008: a Baltimore detail works a wiretap against a west-side drug organisation, and each season widens the frame to another institution - the port, city hall, the schools, the newspaper",
+   "why": "The best answer to Heat that television has, and it is built on the same two commitments. The pursuers and the pursued are given equal weight and equal intelligence, Stringer Bell running his crew like a business against Daniels running his detail like one, and the work is shown as work: the pole camera, the clone pager, the affidavit that has to survive a judge, procedure carrying the story the way Mann's telemetry van and lock-up surveillance do. Its provenance matches too - Burns spent twenty years in the Baltimore police running wiretap cases, which is the same kind of source Mann had in Chuck Adamson, and both bodies of work are finally about men whose competence has eaten everything else in their lives. Tone is 1 and not 2 for reasons of length and register: sixty hours of dense street vernacular and squad-room comedy, no orchestral score at all and only diegetic music, shot flat and naturalistically, where Heat is ninety minutes of plot inside three hours of blue widescreen night, silence and operatic distance.",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/The_Wire",
+   "pooled": true
+  },
+  {
+   "title": "Reservoir Dogs",
+   "year": 1992,
+   "kind": "film",
+   "grade": 2,
+   "tone": 0,
+   "what": "Tarantino's debut, made for under three million dollars: eight men hired under colour aliases for a Los Angeles diamond robbery regroup in a warehouse after it goes wrong and try to work out which of them is a cop",
+   "why": "It belongs to the lineage the key already holds at this grade - Tarantino has said outright it is his take on The Killing, and The Killing, Rififi and The Asphalt Jungle all sit at 2 here - and it shares Heat's real subject where the famous crime pictures at grade 1 do not: a crew assembled by a professional for one score, a code about what you do and do not tell each other, an undercover man inside it, and a job that fails because one member cannot hold to the standard. Los Angeles, and the same pair of hands in Harvey Keitel as the crew's senior professional. The tone is 0 and the gap is not small: Heat's whole value is procedure shown, and Reservoir Dogs deliberately does not show the robbery at all. What it has instead is one warehouse, continuous motormouth pop-culture talk, a torture scene staged to a radio single, no police perspective of any weight and no city - the opposite of Mann's cool, literal, mostly silent professionalism.",
+   "basis": "lineage",
+   "source": "https://en.wikipedia.org/wiki/Reservoir_Dogs",
+   "pooled": true
+  },
+  {
+   "title": "City of Industry",
+   "year": 1997,
+   "kind": "film",
+   "grade": 2,
+   "tone": 1,
+   "what": "John Irvin's neo-noir, released two years after Heat: Harvey Keitel's retired thief comes out for his brother's Palm Springs jewel job, the wheelman murders the crew for the take, and the survivor hunts him back across Los Angeles",
+   "why": "An eight-million-dollar Los Angeles crime picture that does the parts of Heat it can afford and does them straight. The score is planned and executed as a job by men with specific competences, the aftermath plays out through real industrial geography - the title is a real city in the county, and the film treats that kind of address as its natural habitat - and Keitel is exactly the ageing professional the key rates Straight Time and The Outfit for. Sits beside those two rather than beside The Town, because what it becomes is a revenge picture: the pursuer is another thief, not a detective, so the cop-and-criminal symmetry that is the whole architecture of Heat is simply absent, and there is no institutional counterweight and no domestic strand with any weight on it. Leaner, meaner and faster than Mann, with none of the formality.",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/City_of_Industry_(film)",
+   "pooled": true
+  },
+  {
+   "title": "Dragged Across Concrete",
+   "year": 2018,
+   "kind": "film",
+   "grade": 2,
+   "tone": 1,
+   "what": "S. Craig Zahler's 159-minute crime film, premiered at Venice in 2018 and released in March 2019: two suspended detectives sit on a robbery crew intending to take the money themselves, while a man just out of prison takes a driving job on the same score",
+   "why": "One of the few post-Heat films that will actually spend its running time on the parts Mann cared about. Cops and criminals run on parallel tracks toward the same armoured-van job, the surveillance is given in real duration with the boredom left in, the logistics of the vehicle, the gear and the getaway are worked through properly, and the violence lands in a second and is permanent rather than choreographed; Zahler cites The Killing and Lumet, which is the same shelf the key already holds. Where it parts from Heat is everything to do with temperature. Zahler is glacial, sour and deliberately unlovely, shot flat in a fictional city, with long comic digressions about sandwiches, protagonists the film declines to admire and no romance whatever about excellence - Mann's men are beautiful at their work and the camera says so, and this film would regard that as sentimentality.",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Dragged_Across_Concrete",
+   "pooled": true
   }
  ]
 }

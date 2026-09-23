@@ -768,6 +768,54 @@
    "basis": "subject",
    "source": "judgement",
    "pooled": true
+  },
+  {
+   "title": "Legion",
+   "year": 2017,
+   "kind": "series",
+   "grade": 3,
+   "tone": 0,
+   "what": "Noah Hawley's three-season FX series, twenty-seven episodes in a parallel corner of the X-Men films: David Haller, diagnosed schizophrenic as a child and institutionalised repeatedly since, discovers inside a psychiatric hospital that the voices and the moving furniture are a parasite in his head and that he is the most powerful mutant alive",
+   "why": "The closest thing to Glass's premise anyone has made, and it is not close - a comic-book character whose powers have been treated as a psychiatric diagnosis his entire life, held in a hospital where clinicians explain his own history back to him, with the plot turning on whether the institution or the patient has the right account of what he is. That is Dr. Staple's thesis with an FX budget behind it. Relevant and tonally opposite, which is the whole reason this key carries two numbers: Legion is maximalist and psychedelic, dressed in 1960s British pop, with dance numbers, silent-film pastiche, rotating-corridor set pieces and an edit that lies to you on purpose, where Glass is static, drab, evenly lit, colour-blocked one hue per character, and deliberately anticlimactic. Nobody who wanted more of how Glass felt should be handed this.",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Legion_(TV_series)",
+   "pooled": true
+  },
+  {
+   "title": "Dark",
+   "year": 2017,
+   "kind": "series",
+   "grade": 0,
+   "tone": 1,
+   "what": "Baran bo Odar and Jantje Friese's German Netflix series, twenty-six episodes over three seasons: a child vanishes in the town of Winden and a cave beneath the nuclear plant turns out to move people in thirty-three-year steps between 1921 and 2053, entangling four families in every one of those years",
+   "why": "Suggested on 'mind-bending' and there is nothing behind the word. Glass has one reality, one city and three men in a hospital, and its argument is whether a belief a man holds about himself is a diagnosis; it has no time travel, no branching, no puzzle box, and the key already grades Tenet and Coherence at zero for arriving on precisely this ticket. What Dark does have is the register, and the split is worth recording: sunless, rain-soaked, desaturated, entirely humourless, performed flat and taken very seriously indeed, which is recognisably what sitting in Glass is like. Tone survives the cut, the grade does not.",
+   "basis": "mode",
+   "source": "https://en.wikipedia.org/wiki/Dark_(TV_series)",
+   "pooled": true
+  },
+  {
+   "title": "The Jacket",
+   "year": 2005,
+   "kind": "film",
+   "grade": 1,
+   "tone": 1,
+   "what": "John Maybury's film: Adrien Brody as a Gulf War veteran who comes home to Vermont with a head wound and no memory, is convicted of a killing he cannot account for, and is committed to an institution where a doctor injects him with experimental drugs, straitjackets him and shuts him in a morgue drawer - from which he finds himself fifteen years in the future",
+   "why": "A locked ward, a patient whose account of himself nobody will accept, and a clinician running an unsanctioned programme on him: the furniture of Raven Hill, and the same question of who holds the right to say what is happening to a man. The key holds Jacob's Ladder at this grade for the identical claim - unreliable perception plus a suspected institutional experiment - and The Jacket is the weaker of the two. It goes no further because its time travel is simply true and mechanical, settling the is-he-mad question in the first act, where Glass keeps its own live until the final minutes and then answers it in public. Cold, grey, wintry and grave in the watching, which is part of the target's temperature, though Maybury's flash-cut sensory-deprivation sequences are a long way from Glass's held wide shots.",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/The_Jacket",
+   "pooled": true
+  },
+  {
+   "title": "Frailty",
+   "year": 2001,
+   "kind": "film",
+   "grade": 3,
+   "tone": 2,
+   "what": "Bill Paxton's directorial debut: a man walks into an FBI office in Dallas and confesses, in flashback to 1979 Texas, that his father woke one night certain an angel had handed him a list of demons wearing human faces, and set about destroying them with an axe while his two sons watched",
+   "why": "The best of this batch by some distance, and essentially the Unbreakable thesis with the polarity reversed. The whole film is whether a man's conviction that he has been singled out is illness or fact, held in balance for ninety-nine minutes and then decided for the believer: the victims were guilty, the agent taking the confession is himself on the list, and the office cameras will not hold an image of the son's face. That is what Glass does in its last reel when the footage gets out, and it is a far rarer move than the twist ending it usually gets filed under. Tone agrees for once, which on this key is worth saying: quiet, grave, dusty and unhurried, more talking than incident, the violence kept mostly out of frame, and the revelation delivered calmly to a man sitting at a desk. Glass's chamber-piece stillness and its refusal of spectacle are both here.",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Frailty_(2001_film)",
+   "pooled": true
   }
  ]
 }

@@ -1,6 +1,6 @@
 """Cut the answer keys down to what ships in the app.
 
-`keys/gold_*.json` carries, for every one of the 528 films, what it is,
+`keys/gold_*.json` carries, for every one of the 557 titles, what it is,
 why it is on the list, which of the seven kinds of connection it rests on
 and a source URL for the claim. None of that is any use on a television:
 the check the app runs -- "is the model you configured any good" --

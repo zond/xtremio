@@ -55,3 +55,7 @@ rust/target/
 
 # The bench writes it; it is an input to rating, not a result.
 tool/recommendations/pool_unrated.json
+
+# The rated pool is an intermediate: fold_pool.py copies it into the keys,
+# which are what the benchmark and the shipped asset are built from.
+tool/recommendations/pool_rated.json
