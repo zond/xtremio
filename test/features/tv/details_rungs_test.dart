@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_episode_row.dart';
+import 'package:xtremio/features/details/tv_meta_header.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/shell/device_profile.dart';
@@ -47,6 +48,27 @@ Map<String, dynamic> torrent(String hash, String name, String description) => {
 };
 
 String hash(int seed) => seed.toRadixString(16).padLeft(40, '0');
+
+/// A plot that runs past the header's two lines, whatever the fixture
+/// records: that is what makes the description a stop of the walk, and a
+/// walk that depends on how a recorded synopsis happens to wrap is a walk
+/// that changes when somebody re-records it.
+const String longPlot =
+    'A chemistry teacher diagnosed with inoperable lung cancer turns to '
+    'manufacturing and selling methamphetamine with a former student to '
+    'secure his family\'s future. Everybody in it lies to somebody, at '
+    'length, and the synopsis says so at greater length still, which is '
+    'the whole of why the words are worth a press of their own.';
+
+/// [fixture] with [longPlot] as the title's description.
+Map<String, dynamic> plotted(Map<String, dynamic> fixture) {
+  final content =
+      ((fixture['metaItems'] as List<dynamic>).first
+              as Map<String, dynamic>)['content']['content']
+          as Map<String, dynamic>;
+  content['description'] = longPlot;
+  return fixture;
+}
 
 /// The film, with one addon answering.
 Map<String, dynamic> film() => loadMetaDetailsFixture()
@@ -398,6 +420,68 @@ void main() {
         drawn.reversed.toList(),
       );
       expect(await walkRungs(tester, LogicalKeyboardKey.arrowDown), drawn);
+    });
+
+    testWidgets('and it still does with the header\'s description standing '
+        'in the walk', (tester) async {
+      // The description became a focus stop so the plot could be unfolded
+      // with a remote, and a stop added to the top of a ladder is exactly
+      // how a rung gets stepped over: the header is the row at level 0,
+      // and a press out of it has to reach the rung drawn under it and
+      // come back. So the whole ladder is walked again from up there.
+      await mount(
+        tester,
+        plotted(playedSeries()),
+        type: 'series',
+        id: seriesId,
+      );
+      final drawn = rungs(tester);
+      expect(drawn, [
+        kEpisodesLabel,
+        kContinueWatchingLabel,
+        kSourcesLabel,
+        kSourceAccountingLabel,
+      ]);
+
+      for (var i = 0; i < 8 && !focusIn<TvMetaHeader>(); i++) {
+        await press(tester, LogicalKeyboardKey.arrowUp);
+      }
+      expect(focusIn<TvMetaHeader>(), isTrue, reason: 'the top of the walk');
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focusIn<TvDescription>(), isTrue, reason: 'beside the bookmark');
+
+      expect(
+        await walkRungs(tester, LogicalKeyboardKey.arrowDown),
+        drawn,
+        reason:
+            'down from the plot is the panel\'s own order, with the '
+            'rung drawn under the header first',
+      );
+
+      // And back up, by hand at the top: what the rungs know nothing about
+      // is the header's own two stops, and the walk has to reach both and
+      // leave again.
+      await stepUpToRung(tester, kEpisodesLabel);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        focusIn<TvDescription>(),
+        isTrue,
+        reason: 'above the top rung is the plot the walk left',
+      );
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        focusedTooltip(),
+        TvMetaHeader.addTooltip,
+        reason: 'and above that the bookmark, which is the top of the walk',
+      );
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(
+        focusedLabel(tester),
+        kEpisodesLabel,
+        reason:
+            'and one press out of the header is the rung drawn under '
+            'it, not the one after that',
+      );
     });
   });
 
