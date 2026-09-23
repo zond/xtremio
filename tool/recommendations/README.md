@@ -14,7 +14,7 @@ disappeared from the paid tier while we watched.
 
 ## The answer keys
 
-`keys/gold_*.json` -- 557 titles across seven target titles, each rated on
+`keys/gold_*.json` -- 568 titles across seven target titles, each rated on
 two axes that are deliberately **not** averaged together:
 
 * **`grade`** 3 essential / 2 strong / 1 defensible / 0 not a reasonable
@@ -166,6 +166,12 @@ the same afternoon with the same key:
 | breadth | 0.53 | 0.56 |
 | slowest | 2.9 s | 3.2 s |
 
+A second round of pooling (12 more rated, one of them a 0) took the
+series-admitted column to **+0.18 relevance, +0.14 tone, coverage 0.96,
+real 1.00**, with 8 suggestions left unrated. The lift did not move; the
+coverage did, which is the only thing a second round was ever going to
+settle.
+
 Taken *after* the 33 suggestions both columns turned up were rated and
 folded in, and after the matching below was fixed. Coverage went from
 0.87 to 0.95 between the provisional run and this one, so both columns
@@ -226,7 +232,7 @@ worse than useless:
 
 * The **series question** has never been measured. Every target is a film,
   and rating a key for a series target is the work that would fix it.
-* **13 suggestions are unrated** in `pool_unrated.json` from the last run.
+* The pool is empty as of the last fold; a new run will refill it.
 * The table above is **one run per column**. A claim that one question or
   one model beats another needs the repeats and the paired sign test that
   `model_bench.py` does, not this.

@@ -23,11 +23,11 @@ void main() {
   });
 
   test('the shipped asset parses and carries every field the check needs', () {
-    // 557 titles across seven targets, as `tool/recommendations/README.md`
+    // 568 titles across seven targets, as `tool/recommendations/README.md`
     // says. A key short of its films would not fail anything loudly; it
     // would quietly make the check easier.
     expect(shipped, hasLength(7));
-    expect(shipped.fold<int>(0, (all, key) => all + key.films.length), 557);
+    expect(shipped.fold<int>(0, (all, key) => all + key.films.length), 568);
     for (final key in shipped) {
       expect(key.target, matches(RegExp(r'^.+ \((1[89]|20)\d\d\)$')));
       for (final film in key.films) {

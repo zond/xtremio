@@ -149,7 +149,8 @@
    "what": "Stuart Gordon's expansion of a short Lovecraft story into a feature about a resonator that lets its users see the creatures sharing the room with them",
    "why": "A central Lovecraft adaptation and a literal treatment of the target's governing idea - that what is really there is next to us and simply not perceived. Gordon's answer is to make it luridly visible in purple light; the target's answer is to keep it off screen - a strong connection scoring nothing on tone.",
    "basis": "subject",
-   "source": "https://en.wikipedia.org/wiki/From_Beyond_(film)"
+   "source": "https://en.wikipedia.org/wiki/From_Beyond_(film)",
+   "aka": "H.P. Lovecraft's From Beyond"
   },
   {
    "title": "The Dunwich Horror",
@@ -856,6 +857,43 @@
    "why": "One real point of contact and it is a good one - an inquiry that yields nothing, a disappearance the film flatly declines to explain, and an old landscape that is indifferent to the Europeans standing on it and will not account for itself. That is nearer Lovecraft's actual proposition than most of the films that carry his name. Against it, and it is decisive: the target is not an unexplained film at all. Thurston's papers assemble a complete account, name the cult, date the events and finally show you the thing; its horror is in what the explanation means, not in its absence. And where the target is high-contrast monochrome composed for dread, Weir's is a warm, diffused, unhurried reverie. Defensible.",
    "basis": "subject",
    "source": "https://en.wikipedia.org/wiki/Picnic_at_Hanging_Rock_(film)",
+   "pooled": true
+  },
+  {
+   "title": "The City of the Dead",
+   "year": 1960,
+   "kind": "film",
+   "aka": "Horror Hotel",
+   "grade": 2,
+   "tone": 2,
+   "what": "John Llewellyn Moxey's British black-and-white feature, seventy-eight minutes on a handful of studio sets under permanent dry ice: a history student sent by her professor to research witchcraft in Whitewood, Massachusetts is sacrificed by the coven that has run the village since 1692, and her brother and her fiance follow her there",
+   "why": "The Lovecraft geography without the Lovecraft credit, and a great deal nearer the target than most films that print the name. A New England village given over to a cult that has outlived everyone who might have stopped it, an academic who dispatches an investigator into it, and an account assembled afterwards by the people who come looking — that is the architecture of The Call of Cthulhu, with Whitewood standing in for Innsmouth. It was made in England for almost nothing and conjures the place entirely out of fog, shadow and a slope of dry ice, which is the target's economy exactly: the money is not there, so the withholding becomes the style. It sits naturally beside the key's Carnival of Souls and Island of Lost Souls, monochrome horror made outside the prestige system by people who understood that a thing half-seen is worse than a thing shown. Where it parts is the cosmology — Elizabeth Selwyn bargained with a devil for her life and is destroyed at the end by the shadow of a cross, which is a universe that notices you, wants something from you and can be beaten, and the target's does none of the three. Tone stays at 2 despite continuous dialogue and Douglas Gamley's score: the pace, the hard monochrome, the total absence of jokes and the readiness to give minutes of screen time to a woman walking through fog put a viewer in very nearly the same seat.",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/The_City_of_the_Dead_(film)",
+   "pooled": true
+  },
+  {
+   "title": "The Last Will and Testament of Rosalind Leigh",
+   "year": 2012,
+   "kind": "film",
+   "grade": 2,
+   "tone": 1,
+   "what": "Rodrigo Gudino's Canadian debut, eighty-two minutes and effectively a one-hander with Aaron Poole: an antiques dealer inherits the house of the estranged mother he has not spoken to in years, finds it converted into a shrine to the angel cult she belonged to, and is narrated at throughout by her recorded voice, spoken by Vanessa Redgrave",
+   "why": "The architecture is the target's own, and the key has rewarded it twice already in The Empty Man and Archive 81: a man inherits a dead relative's estate and records, assembles from them a coherent account of the sect she served, and is destroyed by the place that account turns out to give him in it. That is Thurston with his great-uncle Angell's papers, and Gudino's version is the tightest of the three — barely another actor in it, a house catalogued object by object, and a voice doing precisely the work the target hands to intertitles. Both films are also, at bottom, about a collection: a man alone in a room full of somebody else's things, working out what they add up to. Where it stops is the cosmology. Rosalind's faith is vindicated, which makes this a universe with an angel in it that wants a particular family, not one in which mankind is beneath notice, and the last reel produces a figure rather than declining to. Tone 1 rather than 2 because the manners are modern: it is quiet, slow and contained, but it is digital colour with jump scares and a score doing the pushing, where the target's dread is composed into the frame and cued by nothing at all.",
+   "basis": "subject",
+   "source": "https://letterboxd.com/film/the-last-will-and-testament-of-rosalind-leigh/",
+   "pooled": true
+  },
+  {
+   "title": "Baskin",
+   "year": 2015,
+   "kind": "film",
+   "grade": 1,
+   "tone": 0,
+   "what": "Can Evrenol's Turkish debut, expanded from his own 2013 short: five provincial riot police answering a call at night crash into a lake, walk into a derelict Ottoman building and find a congregation at work under a figure called Father, played by the first-time actor Mehmet Cerrahoglu",
+   "why": "This came within a line of a zero and what saved it is narrow. There is a genuine object at the centre of it — an entity whose design the film flatly declines to resolve, served by a congregation performing a rite that outsiders blunder into and do not leave — which is the ground the key holds The Ritual on, and the shape of the target's swamp clearing. Against that, nearly everything. Father takes a personal interest in these five men, addresses them, explains his own nature at length and has a plan for each of them: that is a hell with a proprietor, the Christian bargain the key already zeroed Errementari for, and the exact inverse of an intelligence to which mankind is beneath notice. The register is further off again. The target is forty-seven silent minutes that spend their whole effects budget on a few seconds of withheld stop-motion; Baskin is ninety-seven minutes of red and green light, viscera, eye trauma and sound design held at volume, and it shows you everything and then keeps showing it. The Lovecraftian label critics hung on this film is doing most of the work in the suggestion, and the label is not a connection.",
+   "basis": "subject",
+   "source": "https://en.wikipedia.org/wiki/Baskin_(film)",
    "pooled": true
   }
  ]

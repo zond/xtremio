@@ -3,7 +3,7 @@
 ///
 /// The model is the cheap half of "More like this" and the half that is
 /// wrong. What is measured about it lives in `tool/recommendations/` --
-/// seven target titles, 557 rated titles, every model scored on
+/// seven target titles, 568 rated titles, every model scored on
 /// relevance, on *tone*, on how many of its answers are films that exist,
 /// and on how much its own repeated runs agree. Three findings from that
 /// measurement are built into this file rather than left to taste:
@@ -29,7 +29,7 @@
 /// where it lives: the question is now two questions, one for a film and
 /// one for a series, and only the film one has ever been measured. The
 /// 528 researched titles are films, asked about films. (The keys hold
-/// 557 now; the 29 added by pooling include series, but no *target* is
+/// 568 now; the 40 added by pooling include series, but no *target* is
 /// a series, which is the part that is unmeasured.)
 library;
 

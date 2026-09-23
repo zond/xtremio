@@ -1,0 +1,381 @@
+{
+ "note": "Recorded from the live addons on 2026-09-23 (Torrentio for The Matrix tt0133093 and Breaking Bad tt0903747:1:1, WatchHub and Public Domain Movies for those titles). Trimmed to cover every field-shape seen across 122 real streams. Every one of them carries its text in the legacy `title` field, which stremio-core reads as `description` by serde alias -- no addon here sets `description` itself. Rows marked `from` were already recorded in that fixture by the network tests in rust/tests/ and are kept because they carry shapes today capture missed: a third kind of availability (`ADS`), a smaller set of platform URL fields, and a torrent that carries `announce` trackers.",
+ "streams": [
+  {
+   "addon": "torrentio",
+   "kind": "movie",
+   "stream": {
+    "name": "Torrentio\n4k HDR",
+    "title": "The.Matrix.1999.RERIP.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE\n👤 99 💾 35.09 GB ⚙️ RARBG",
+    "infoHash": "03dd34fea0ff15a451c1723062a901aa3a0ad458",
+    "fileIdx": 2,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+     "filename": "The.Matrix.1999.RERIP.2160p.UHD.BluRay.X265-IAMABLE.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "movie",
+   "stream": {
+    "name": "Torrentio\n4k HDR",
+    "title": "The.Matrix.1999.2160p.YouTubeMovies.WEB-DL.DDP5.1.HDR.VP9-SomniWare\n👤 96 💾 19.47 GB ⚙️ ThePirateBay\n🇬🇧 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇭🇺 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩",
+    "infoHash": "32dde1f88cb0d890b7e8dd5064c91f30477f2c94",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|4k|WEB-DL|HDR",
+     "filename": "The.Matrix.1999.2160p.YouTubeMovies.WEB-DL.DDP5.1.HDR.VP9-SomniWare.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "movie",
+   "stream": {
+    "name": "Torrentio\n4k HDR",
+    "title": "The Matrix 1999 UHD Blu-ray 2160p HDR Remux Multi Atmos 7.1-DTOne\n👤 83 💾 51.3 GB ⚙️ 1337x\nMulti Audio / 🇬🇧 / 🇮🇹 / 🇵🇹 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇸🇦",
+    "infoHash": "8dc393c100ef0c0d010cfefdcebe572e26c4f775",
+    "behaviorHints": {
+     "bingeGroup": "torrentio|4k|BluRay REMUX|HDR"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "movie",
+   "stream": {
+    "name": "Torrentio\n4k HDR",
+    "title": "[PACK] The Matrix 4K UHD Collection (1999-2003) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT]\nThe Matrix (1999) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT].mkv\n👤 80 💾 4.98 GB ⚙️ 1337x",
+    "infoHash": "17e40c4a20a021a52f43550912879e19b75c2c47",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|4k|BDRip|x265|10bit|HDR",
+     "filename": "The Matrix (1999) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT].mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "movie",
+   "stream": {
+    "name": "Torrentio\n4k DV",
+    "title": "The Matrix 1999 UHD BluRay 2160p TrueHD Atmos 7 1 DV HEVC REMUX-FraMeSToR\n👤 43 💾 52.91 GB ⚙️ 1337x",
+    "infoHash": "1a65cebb895ccd66a9f3fd2e76eb0958ba7a74db",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|4k|BluRay REMUX|hevc|DV",
+     "filename": "The.Matrix.1999.UHD.BluRay.2160p.TrueHD.Atmos.7.1.DV.HEVC.REMUX-FraMeSToR.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "movie",
+   "stream": {
+    "name": "Torrentio\n4k DV | HDR",
+    "title": "The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.MULTi.DDP5.1.Atmos.H265.MP4-BEN.THE.MEN\n👤 11 💾 24.45 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇫🇷 / 🇮🇳",
+    "infoHash": "060a7e1f7c05e1040889f4e25cbd603605e8c3ce",
+    "fileIdx": 3,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|4k|WEB-DL|h265|DV|HDR",
+     "filename": "The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.ENG.LATINO.CASTELLANO.ITA.FRE.HINDI.PORTUGUESE.DDP5.1.Atmos.H265.MP4-BEN.THE.MEN.mp4"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "movie",
+   "stream": {
+    "name": "Torrentio\n1080p",
+    "title": "Imdb top 263 movies hindi english gdrive\nThe.Matrix.1999.1080p.BrRip.x264.YIFY.mp4\n👤 2081 💾 1.86 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+    "infoHash": "66672b822002b6f19af478fb7c886787afee5f9f",
+    "fileIdx": 222,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|1080p|BRRip|x264",
+     "filename": "The.Matrix.1999.1080p.BrRip.x264.YIFY.mp4"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "movie",
+   "stream": {
+    "name": "Torrentio\n1080p",
+    "title": "Dual Japanese dubbed English movies super pack\nThe.Matrix.1999.Bluray.1080p.BluRay.x264 (DUAL En5.1-Ja)/The.Matrix.1999.Bluray.1080p.BluRay.x264 (DUAL En5.1-Ja).mkv\n👤 1202 💾 2.4 GB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇯🇵",
+    "infoHash": "ea55ba3decb7e929bcb112b6b52882e3ddd1ec46",
+    "fileIdx": 203,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|1080p|BluRay|x264",
+     "filename": "The.Matrix.1999.Bluray.1080p.BluRay.x264 (DUAL En5.1-Ja).mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "movie",
+   "stream": {
+    "name": "Torrentio\n720p",
+    "title": "The Matrix Trilogy (1999-2003) Remastered RiffTrax multi audio 720p.10bit.BluRay.x265-budgetbits\nThe Matrix (1999) Remastered RiffTrax sextuple audio 720p.10bit.BluRay.x265-budgetbits.mkv\n👤 6 💾 1.11 GB ⚙️ 1337x\nMulti Audio / 🇬🇧",
+    "infoHash": "d69391e5623f3b8c4be333674e3621aeff772446",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+     "filename": "The Matrix (1999) Remastered RiffTrax sextuple audio 720p.10bit.BluRay.x265-budgetbits.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n4k",
+    "title": "Breaking Bad (2008) S01 (2160p AMZN WEB-DL H265 SDR DDP 5.1 English - HONE)\nBreaking Bad (2008) S01E01 (2160p AMZN WEB-DL H265 SDR DDP 5.1 English - HONE).mkv\n👤 83 💾 6.27 GB ⚙️ ThePirateBay",
+    "infoHash": "f0fd1cad0e24b69ff6aaadb9df40c50286327188",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|f0fd1cad0e24b69ff6aaadb9df40c50286327188",
+     "filename": "Breaking Bad (2008) S01E01 (2160p AMZN WEB-DL H265 SDR DDP 5.1 English - HONE).mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n4k",
+    "title": "Breaking Bad. S01. 2008 2160P.Ai Upscaled.BluRay.60FPS.H265.SDR.AC3.5.1_Marjenbo\nBreaking Bad  S01E01  Pilot.mkv\n👤 63 💾 9.53 GB ⚙️ ThePirateBay",
+    "infoHash": "a584351126afcf50d32be068f3c9a62550d41ecc",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|a584351126afcf50d32be068f3c9a62550d41ecc",
+     "filename": "Breaking Bad  S01E01  Pilot.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n4k",
+    "title": "Breaking Bad COMPLETE S01-S05 2160p WEB-DL Rus Ukr Eng DTS-HD MA5.1 x264-TrollUHD [RiCK]\nBreaking.Bad.S01.2160p.WEBRip.DTS-HD.MA5.1.x264-TrollUHD/Breaking.Bad.S01E01.2160p.WEBRip.DTS-HD.MA5.1.x264-TrollUHD.mkv\n👤 49 💾 50.81 GB ⚙️ 1337x\n🇬🇧 / 🇷🇺 / 🇺🇦",
+    "infoHash": "1b42b99b9fbc0e0416a379787f250eb73b7434e3",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|1b42b99b9fbc0e0416a379787f250eb73b7434e3",
+     "filename": "Breaking.Bad.S01E01.2160p.WEBRip.DTS-HD.MA5.1.x264-TrollUHD.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n4k",
+    "title": "Во все тяжкие / Breaking Bad / Сезон: 1 / Серии: 1-7 из 7 [2008 WEB-DL 2160p 4k] MVO (LostFilm FoxCrime) + DVO (Кубик в Кубе) + Original + Sub (Rus Eng)\nBreaking.Bad.S01E01.Pilot.2160p.AMZN.WEB-DL.DTS-HD.MA.5.1.SDR.HEVC.mkv\n👤 35 💾 12.42 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+    "infoHash": "e2b01ba1df534cb007869cfb7e121a8e18e573ea",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|e2b01ba1df534cb007869cfb7e121a8e18e573ea",
+     "filename": "Breaking.Bad.S01E01.Pilot.2160p.AMZN.WEB-DL.DTS-HD.MA.5.1.SDR.HEVC.mkv"
+    },
+    "sources": [
+     "tracker:http://bt3.t-ru.org/ann?magnet",
+     "dht:e2b01ba1df534cb007869cfb7e121a8e18e573ea",
+     "tracker:udp://tracker.opentrackr.org:1337/announce",
+     "tracker:udp://open.stealth.si:80/announce",
+     "tracker:udp://open.demonii.com:1337/announce",
+     "tracker:http://tracker.qu.ax:6969/announce",
+     "tracker:udp://exodus.desync.com:6969/announce",
+     "tracker:udp://tracker.plx.im:6969/announce",
+     "tracker:udp://tracker.tryhackx.org:6969/announce",
+     "tracker:udp://tracker.nyaa.vc:6969/announce",
+     "tracker:udp://explodie.org:6969/announce",
+     "tracker:udp://tracker.gmi.gd:6969/announce",
+     "tracker:udp://tracker.corpscorp.online:80/announce",
+     "tracker:udp://tracker.bittor.pw:1337/announce",
+     "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+     "tracker:udp://tracker-udp.gbitt.info:80/announce",
+     "tracker:udp://tracker.ducks.party:1984/announce",
+     "tracker:udp://tracker.0x7c0.com:6969/announce",
+     "tracker:udp://tracker2.dler.org:80/announce",
+     "tracker:http://tracker.dler.com:6969/announce",
+     "tracker:http://tracker.dler.org:6969/announce",
+     "tracker:http://tracker.renfei.net:8080/announce",
+     "tracker:udp://opentor.net:6969",
+     "tracker:http://bt.t-ru.org/ann?magnet",
+     "tracker:http://bt2.t-ru.org/ann?magnet",
+     "tracker:http://bt4.t-ru.org/ann?magnet"
+    ]
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n4k",
+    "title": "Breaking Bad S01E01 Pilot 2160p NF WEB-DL DDP5 1 H 265-XEBEC\n👤 17 💾 6.82 GB ⚙️ ThePirateBay",
+    "infoHash": "0d9b239b02f5fa8c4cdda71f3ccfde93ae918bd9",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|4k|XEBEC",
+     "filename": "Breaking Bad S01E01 Pilot 2160p NF WEB-DL DDP5 1 H 265-XEBEC.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n1080p",
+    "title": "Breaking.Bad.S01E01.Pilot.1080p.HEVC.x265-MeGusta\n👤 33 💾 1.09 GB ⚙️ ThePirateBay",
+    "infoHash": "0c9fa2cb87da2d5fccd4af71fb1e0a7e7638b4e9",
+    "fileIdx": 0,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|1080p|MeGusta",
+     "filename": "Breaking.Bad.S01E01.Pilot.1080p.HEVC.x265-MeGusta.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n1080p",
+    "title": "Breaking.Bad.iNTEGRALE.MULTi.1080p.WEB.DDP5.1.x264-TFA\nBreaking.Bad.S01.MULTi.1080p.WEB.DDP5.1.x264-TFA/Breaking.Bad.S01E01.MULTi.1080p.WEB.DDP5.1.x264-TFA.mkv\n👤 6 💾 2.69 GB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+    "infoHash": "681c48656da9c20bb2b72dad9bdb3b55bf1bc3d3",
+    "fileIdx": 1,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|681c48656da9c20bb2b72dad9bdb3b55bf1bc3d3",
+     "filename": "Breaking.Bad.S01E01.MULTi.1080p.WEB.DDP5.1.x264-TFA.mkv"
+    }
+   }
+  },
+  {
+   "addon": "watchhub",
+   "kind": "movie",
+   "stream": {
+    "name": "Amazon Prime Video",
+    "title": "Subscription, Rent, Buy",
+    "externalUrl": "https://app.primevideo.com/detail?gti=amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0",
+    "rokuUrl": "launch/13?contentID=amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0&MediaType=movie",
+    "androidUrl": "https://app.primevideo.com/detail?gti=amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0",
+    "androidTvUrl": "intent://app.primevideo.com/watch?asin=amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0&time=0&territory=SE#Intent;package=com.amazon.amazonvideo.livingroom;scheme=https;end",
+    "tizenUrl": "{\"id\":\"org.tizen.primevideo\",\"action_data\":\"amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0\"}",
+    "webosUrl": "{ \"id\": \"amazon\", \"params\": { \"contentTarget\": \"amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0\" }}",
+    "iosUrl": "https://app.primevideo.com/detail?gti=amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0",
+    "tvOsUrl": "aiv://aiv/watch?gti=amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0&territory=SE&time=auto",
+    "fireTvUrl": "intent://com.amazon.tv.launcher/detail?provider=aiv&providerId=amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0#Intent;package=com.amazon.tv.launcher;scheme=amzn;end",
+    "xboxUrl": "https://app.primevideo.com/detail?gti=amzn1.dv.gti.dea9f6b7-e0a0-38c9-7467-d6079c6fb4f0",
+    "titanOsUrl": "prime_video",
+    "vidaaOsUrl": "PRIMEVIDEO"
+   }
+  },
+  {
+   "addon": "watchhub",
+   "kind": "movie",
+   "stream": {
+    "name": "Rakuten TV",
+    "title": "Rent, Buy",
+    "externalUrl": "https://www.rakuten.tv/movies/matrix",
+    "rokuUrl": null,
+    "androidUrl": "https://www.rakuten.tv/movies/matrix",
+    "androidTvUrl": "intent://rakuten.tv/movies/matrix#Intent;launchFlags=0x00800000;scheme=tv.wuaki.apptv;component=tv.wuaki.apptv/.activity.TVLaunchActivity;end",
+    "tizenUrl": "{\"id\":\"vbUQClczfR.Wuakitv\",\"action_data\":\"\"}",
+    "webosUrl": "{ \"id\": \"ui30\", \"params\": { \"contentTarget\": \"\" }}",
+    "iosUrl": "https://www.rakuten.tv/movies/matrix",
+    "tvOsUrl": null,
+    "fireTvUrl": null,
+    "xboxUrl": null,
+    "titanOsUrl": "rakuten_tv",
+    "vidaaOsUrl": null
+   }
+  },
+  {
+   "addon": "publicdomainmovies",
+   "kind": "movie",
+   "stream": {
+    "infoHash": "11ea02584fa6351956f35671962ab46354d99060",
+    "title": "💾 1.51 GB",
+    "fileIdx": 0,
+    "name": "1080p"
+   }
+  },
+  {
+   "addon": "watchhub",
+   "kind": "movie",
+   "from": "meta_details_public_domain.json",
+   "stream": {
+    "androidTvUrl": "intent://app.primevideo.com/watch?asin=amzn1.dv.gti.6ca9f72b-eade-89d7-a0e2-09ee5ae14d17&time=0&territory=SE#Intent;package=com.amazon.amazonvideo.livingroom;scheme=https;end",
+    "description": "Subscription",
+    "externalUrl": "https://app.primevideo.com/detail?gti=amzn1.dv.gti.6ca9f72b-eade-89d7-a0e2-09ee5ae14d17",
+    "name": "Amazon Prime Video",
+    "tizenUrl": "{\"id\":\"org.tizen.primevideo\",\"action_data\":\"amzn1.dv.gti.6ca9f72b-eade-89d7-a0e2-09ee5ae14d17\"}",
+    "webosUrl": "{ \"id\": \"amazon\", \"params\": { \"contentTarget\": \"amzn1.dv.gti.6ca9f72b-eade-89d7-a0e2-09ee5ae14d17\" }}"
+   }
+  },
+  {
+   "addon": "watchhub",
+   "kind": "movie",
+   "from": "meta_details_public_domain.json",
+   "stream": {
+    "androidTvUrl": "intent://play.google.com/movies/movies?sh=QLRi6sBpMyc#Intent;launchFlags=0x00800000;scheme=https;end",
+    "description": "Rent, Buy",
+    "externalUrl": "https://play.google.com/store/movies/details/Night_of_the_Living_Dead_In_Color_Restored?gl=US&hl=en&id=QLRi6sBpMyc",
+    "name": "Google Play Movies",
+    "tizenUrl": "{\"id\":\"QizQxC7CUf.PlayMovies\",\"action_data\":\"yt:movie:QLRi6sBpMyc\"}",
+    "webosUrl": "{ \"id\": \"googleplaymovieswebos\", \"params\": { \"contentTarget\": \"https://play.google.com/store/movies/details/Night_of_the_Living_Dead_In_Color_Restored?gl=US&hl=en&id=QLRi6sBpMyc\" }}"
+   }
+  },
+  {
+   "addon": "watchhub",
+   "kind": "movie",
+   "from": "meta_details_public_domain.json",
+   "stream": {
+    "androidTvUrl": "intent://watch.plex.tv/movie/night-of-the-living-dead?autoplay=1#Intent;launchFlags=0x00800000;scheme=https;end",
+    "description": "ADS",
+    "externalUrl": "https://watch.plex.tv/movie/night-of-the-living-dead?autoplay=1",
+    "name": "Plex",
+    "tizenUrl": "{\"id\":\"kIciSQlYEM.plex\",\"action_data\":\"{\\\"assetId\\\":\\\"https://watch.plex.tv/movie/night-of-the-living-dead?autoplay=1\\\"}\"}"
+   }
+  },
+  {
+   "addon": "watchhub",
+   "kind": "movie",
+   "from": "meta_details_public_domain.json",
+   "stream": {
+    "androidTvUrl": "intent://app.primevideo.com/watch?asin=amzn1.dv.gti.2df29025-1fdd-47e7-9350-a9b9e0affe9e&time=0&territory=SE#Intent;package=com.amazon.amazonvideo.livingroom;scheme=https;end",
+    "description": "Subscription",
+    "externalUrl": "https://app.primevideo.com/detail?gti=amzn1.dv.gti.2df29025-1fdd-47e7-9350-a9b9e0affe9e",
+    "name": "MUBI Amazon Channel",
+    "tizenUrl": "{\"id\":\"org.tizen.primevideo\",\"action_data\":\"amzn1.dv.gti.2df29025-1fdd-47e7-9350-a9b9e0affe9e\"}",
+    "webosUrl": "{ \"id\": \"amazon\", \"params\": { \"contentTarget\": \"amzn1.dv.gti.2df29025-1fdd-47e7-9350-a9b9e0affe9e\" }}"
+   }
+  },
+  {
+   "addon": "watchhub",
+   "kind": "movie",
+   "from": "meta_details_public_domain.json",
+   "stream": {
+    "androidTvUrl": "intent://mubi.com/films/night-of-the-living-dead#Intent;launchFlags=0x00800000;scheme=https;end",
+    "description": "Subscription",
+    "externalUrl": "https://mubi.com/films/night-of-the-living-dead",
+    "name": "MUBI",
+    "tizenUrl": "{\"id\":\"dChOJK7EJA.mubi\",\"action_data\":\"\"}",
+    "webosUrl": "{ \"id\": \"com.mubi\", \"params\": { \"contentTarget\": \"\" }}"
+   }
+  },
+  {
+   "addon": "publicdomainmovies",
+   "kind": "movie",
+   "from": "meta_details_public_domain.json",
+   "stream": {
+    "announce": [],
+    "description": "💾 1.51 GB",
+    "fileIdx": 0,
+    "infoHash": "11ea02584fa6351956f35671962ab46354d99060",
+    "name": "1080p"
+   }
+  }
+ ]
+}
