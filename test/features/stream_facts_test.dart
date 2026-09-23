@@ -40,8 +40,15 @@ StreamFacts facts({
   StreamResolution? resolution,
   int? sizeBytes,
   int? seeders,
-}) =>
-    StreamFacts(resolution: resolution, sizeBytes: sizeBytes, seeders: seeders);
+  List<String> languages = const [],
+  String? tracker,
+}) => StreamFacts(
+  resolution: resolution,
+  sizeBytes: sizeBytes,
+  seeders: seeders,
+  languages: languages,
+  tracker: tracker,
+);
 
 void main() {
   group('parses', () {
@@ -228,20 +235,43 @@ void main() {
     });
   });
 
-  group('badges', () {
+  group('pills', () {
     test('name only what is known, in display order', () {
       expect(
         facts(
           resolution: StreamResolution.uhd2160,
           sizeBytes: 3 * gb,
           seeders: 42,
-        ).badges,
-        ['2160p', '3 GB', '42 seeders'],
+          languages: const ['\u{1F1EC}\u{1F1E7}', '\u{1F1F8}\u{1F1EA}'],
+          tracker: 'RARBG',
+        ).pills,
+        [
+          '2160p',
+          '3 GB',
+          '42 seeders',
+          '\u{1F1EC}\u{1F1E7} \u{1F1F8}\u{1F1EA}',
+          'RARBG',
+        ],
       );
-      expect(facts(sizeBytes: 700 * mb).badges, ['700 MB']);
-      expect(facts().badges, isEmpty);
-      expect(facts(seeders: 1).badges, ['1 seeder']);
-      expect(facts(seeders: 0).badges, ['0 seeders']);
+      expect(facts(sizeBytes: 700 * mb).pills, ['700 MB']);
+      expect(facts().pills, isEmpty);
+      expect(facts(seeders: 1).pills, ['1 seeder']);
+      expect(facts(seeders: 0).pills, ['0 seeders']);
+      // The two the sort and the sections never had a pill for. An addon
+      // that says nothing about either draws neither, which is a
+      // different thing from saying "English" or "no indexer".
+      expect(facts(languages: const ['\u{1F1F8}\u{1F1EA}']).pills, [
+        '\u{1F1F8}\u{1F1EA}',
+      ]);
+      expect(facts(tracker: '1337x').pills, ['1337x']);
+      // Every flag in one pill, not a pill each: seventeen of them is
+      // what recorded row 2 carries, and seventeen boxes wrap to six rows
+      // on a television card 260 wide.
+      expect(
+        facts(languages: const ['\u{1F1EC}\u{1F1E7}', '\u{1F1F7}\u{1F1FA}'])
+            .pills,
+        hasLength(1),
+      );
     });
 
     test('sizes read the way the addons write them', () {

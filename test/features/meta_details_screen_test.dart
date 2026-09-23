@@ -199,7 +199,12 @@ void main() {
       expect(find.text('caching.stremio.net'), findsOneWidget);
       expect(find.text('1080p'), findsOneWidget);
       expect(find.text('1.51 GB'), findsOneWidget);
-      expect(find.text('💾 1.51 GB'), findsNothing);
+      // And the line the addon wrote it on, above the chip. This used to
+      // read `findsNothing`: the row drew one line of the addon's text and
+      // threw the rest away, so a size that had been parsed was taken out
+      // of the words it was parsed from. It is drawn now, and the chip
+      // under it is how a viewer sees the two agree.
+      expect(find.text('💾 1.51 GB'), findsOneWidget);
       expect(find.text('Amazon Prime Video'), findsOneWidget);
       final external = tester.widget<ListTile>(
         find.ancestor(
@@ -881,11 +886,19 @@ void main() {
       // catch. Counting every Text the release appears *in* is what
       // catches it: the title, and nothing else.
       expect(find.textContaining(kTileRelease), findsOneWidget);
-      // And the addon's raw blurb is not drawn at all. Both lists read
-      // the stream now and draw badges out of what they read, so the free
-      // text -- the tracker, whatever else an addon writes after the
-      // release -- is no longer a thing either list puts on screen.
-      expect(find.textContaining('ThePirateBay'), findsNothing);
+      // And the rest of what the addon wrote *is* drawn, on the line it
+      // wrote it on. This read `findsNothing` -- "the addon's raw blurb is
+      // not drawn at all", because both lists parsed the stream and were
+      // held to show only the parse. The parse turned out to be the thing
+      // worth checking against the text rather than the thing worth
+      // showing instead of it: `⚙️ ThePirateBay` is the only statement in
+      // the whole answer about where the file came from, and nothing in
+      // the app had ever put it on screen.
+      expect(
+        find.text('👤 42 💾 1.51 GB ⚙️ ThePirateBay'),
+        findsOneWidget,
+        reason: 'the stats line, whole and on its own line',
+      );
       expect(find.byTooltip('Breaking.Bad.S01E01.1080p.mkv'), findsOneWidget);
       expect(find.text('1080p'), findsOneWidget);
       expect(find.text('1.51 GB'), findsOneWidget);

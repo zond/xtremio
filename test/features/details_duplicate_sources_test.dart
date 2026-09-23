@@ -255,7 +255,10 @@ void main() {
 
       expect(find.text('Release A 1080p'), findsOneWidget);
       expect(find.text('Release B 1080p'), findsOneWidget);
+      // The addon's own line now sits between the release and the badges,
+      // which is why the first of these is the line and not the addon.
       expect(badgesOf('Release A 1080p').sublist(1), [
+        '👤 42 💾 2 GB',
         'alpha.example',
         '1080p',
         '2 GB',

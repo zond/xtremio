@@ -160,6 +160,29 @@ Future<List<String>> walkRungs(
   return stood;
 }
 
+/// Walks [key] to the end of the ladder and says every stop the remote
+/// stood on along the way, counting the one it started on.
+///
+/// Every stop, not only the rung headers: what a rung *holds* is on the
+/// ladder too, and a walk that only looked at headers would not notice a
+/// row of cards nothing can reach or a line under one that swallows a
+/// press.
+Future<List<String>> walkStops(
+  WidgetTester tester,
+  LogicalKeyboardKey key,
+) async {
+  final stood = <String>[focusedLabel(tester) ?? '(nothing focused)'];
+  for (var i = 0; i < 16; i++) {
+    await press(tester, key);
+    final here = focusedLabel(tester) ?? '(nothing focused)';
+    // A press nothing can take leaves the remote where it was, which is
+    // how the top and the foot of the ladder answer.
+    if (here == stood.last) break;
+    stood.add(here);
+  }
+  return stood;
+}
+
 /// Walks up until the remote is on the header of the rung called [label].
 Future<void> stepUpToRung(WidgetTester tester, String label) async {
   for (var i = 0; i < 6 && focusedLabel(tester) != label; i++) {
@@ -422,6 +445,79 @@ void main() {
       expect(await walkRungs(tester, LogicalKeyboardKey.arrowDown), drawn);
     });
 
+    testWidgets('and so does every stop inside the open rung, now that the '
+        'line under the sources has gone', (tester) async {
+      // A readout used to sit under the row of sources -- not a rung, no
+      // level of its own, and kept out of the walk by an `ExcludeFocus`.
+      // Deleting it takes something off the panel that the ladder walks
+      // *past*, which is exactly the shape of the mistake that made "up"
+      // skip Episodes: the ladder counts levels and the viewer counts
+      // things on the screen, and they only agree while everything drawn
+      // between two levels can be stepped over.
+      //
+      // So this walks the stops rather than the headers, down and back up,
+      // with the sources rung open and a rung below it to walk on to.
+      await mount(
+        tester,
+        film()
+          ..['streams'] = [
+            ...(film()['streams'] as List<dynamic>),
+            {
+              ...streamGroup('quiet.example', 'movie', movieId, const []),
+              'content': {
+                'type': 'Err',
+                'content': {'type': 'EmptyContent'},
+              },
+            },
+          ],
+        sectioned: true,
+      );
+      await stepUpToRung(tester, kSourcesLabel);
+
+      final down = await walkStops(tester, LogicalKeyboardKey.arrowDown);
+      expect(
+        down,
+        [
+          kSourcesLabel,
+          kStreamsSectionedLabel,
+          StreamOrder.peersPerSize.label,
+          '1080p',
+          'Alpha 1080p',
+          kSourceAccountingLabel,
+        ],
+        reason:
+            'the header, its two controls, the pill, the card, the '
+            'rung below -- and nothing between the card and that rung',
+      );
+
+      final up = await walkStops(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        up.take(down.length),
+        down.reversed,
+        reason: 'and back over the same stops, none skipped, none stranded',
+      );
+      // Up does not stop at the top rung: above it is the title's own
+      // header, whose bookmark has no text of its own.
+      expect(up.skip(down.length), ['(nothing focused)']);
+      expect(focusIn<TvMetaHeader>(), isTrue);
+      // And nothing the rung holds is stranded off the walk: every pill
+      // and every card drawn under the sources header is one of the stops
+      // above, which a row reachable only sideways would not be.
+      expect(
+        down,
+        containsAll([
+          for (final pill in tester.widgetList<TvSourceGroupPill>(
+            find.byType(TvSourceGroupPill),
+          ))
+            pill.group.label,
+          for (final card in tester.widgetList<TvSourceCard>(
+            find.byType(TvSourceCard),
+          ))
+            card.source.title,
+        ]),
+      );
+    });
+
     testWidgets('and it still does with the header\'s description standing '
         'in the walk', (tester) async {
       // The description became a focus stop so the plot could be unfolded
@@ -576,15 +672,22 @@ void main() {
       expect(pill.width, lessThanOrEqualTo(TvSourceRows.maxPillWidth));
     });
 
-    testWidgets('a source is a card two lines of release tall', (tester) async {
+    testWidgets('a source is a card as tall as what the addon wrote, and '
+        'never below the floor', (tester) async {
       await mount(tester, film());
       await press(tester, LogicalKeyboardKey.select);
 
       final card = tester.getRect(find.byType(TvSourceCard).first);
       expect(card.width, TvSourceRows.sourceCardWidth);
-      expect(card.height, TvSourceRows.sourceCardHeight);
+      // This read `card.height == sourceCardHeight`, a fixed 96: two lines
+      // of release over one line of facts, with everything that did not
+      // fit handed to a readout under the row. The card carries the
+      // addon's whole answer now, so 96 is the floor rather than the box
+      // -- the cost of that is measured card by card in
+      // `details_sources_row_test.dart`.
+      expect(card.height, greaterThan(TvSourceRows.minSourceCardHeight));
       expect(TvSourceRows.sourceCardWidth, 260);
-      expect(TvSourceRows.sourceCardHeight, 96);
+      expect(TvSourceRows.minSourceCardHeight, 96);
     });
 
     testWidgets('and a header line is what the sources are headed with, '

@@ -146,9 +146,36 @@ final class StreamFacts {
     );
   }
 
-  /// The badges a row should draw, in display order, with an unknown
-  /// omitted entirely rather than shown as a placeholder.
-  List<String> get badges => [?resolutionLabel, ?sizeLabel, ?seedersLabel];
+  /// The pills a card draws, in display order, with an unknown omitted
+  /// entirely rather than shown as a placeholder.
+  ///
+  /// **These are the parse, drawn beside the text it was read out of.** A
+  /// card carries the addon's own lines whole ([StreamPresentation]), so a
+  /// `💾 4.98 GB` in that text and a `4.98 GB` pill next to it say the same
+  /// thing twice on purpose: the repetition is how a viewer sees the
+  /// reading agree with what was written -- or catch it not agreeing. The
+  /// values a sort and a section are built out of are in this list, so
+  /// "why is this row here" is answered on the row.
+  ///
+  /// [languages] is **one** pill holding every flag, not a pill each. A
+  /// pill each was drawn and measured first: recorded row 2 carries
+  /// seventeen flags, which is seventeen boxes wrapping to six rows on a
+  /// 260 dp television card -- 130 dp of pills over two lines of text, and
+  /// the flags are the one thing on the card that is already legible as a
+  /// run. [audioTracks] is deliberately not here: `Multi Audio` is a claim
+  /// about a file rather than a value anything sorts by, and it is already
+  /// on the card in the line it was read from.
+  List<String> get pills => [
+    ?resolutionLabel,
+    ?sizeLabel,
+    ?seedersLabel,
+    ?languagesLabel,
+    ?tracker,
+  ];
+
+  /// Every flag the addon wrote, in its order, as one pill's worth of
+  /// text; null when it wrote none, which is not "English".
+  String? get languagesLabel => languages.isEmpty ? null : languages.join(' ');
 
   String? get resolutionLabel => resolution?.label;
 

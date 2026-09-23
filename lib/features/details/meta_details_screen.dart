@@ -2009,7 +2009,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
               if (waiting)
                 SizedBox(
                   key: const ValueKey('tv-sources-waiting'),
-                  height: TvSourceRows.sourceRowHeight(context),
+                  height: TvSourceRows.minSourceRowHeight(context),
                   // The spinner alone: the rung's own header line is
                   // saying what it is waiting for, and saying it twice on
                   // one screen reads as two different waits.
@@ -2214,8 +2214,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           (
             icon: Icons.extension_outlined,
             title: _NoStreamsNotice.addonsLabel,
-            facts: [_NoStreamsNotice.explanation],
-            details: const [],
+            lines: [_NoStreamsNotice.explanation],
+            pills: const [],
+            notes: const [],
             highlighted: false,
             download: null,
             downloading: false,
@@ -2226,8 +2227,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           (
             icon: Icons.cloud_off_outlined,
             title: failure.name,
-            facts: [failure.message],
-            details: const [],
+            lines: [failure.message],
+            pills: const [],
+            notes: const [],
             highlighted: false,
             download: null,
             downloading: false,
@@ -2248,8 +2250,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
           (
             icon: Icons.inbox_outlined,
             title: addon.name,
-            facts: const [kAddonHadNothing],
-            details: const [],
+            lines: const [kAddonHadNothing],
+            pills: const [],
+            notes: const [],
             highlighted: false,
             download: null,
             downloading: false,
@@ -2260,29 +2263,30 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     );
   }
 
-  /// One row of the sources list as a television card draws it: the
-  /// release it is, and under it the one line of facts a 96 dp card has
-  /// room for.
+  /// One row of the sources list as a television card draws it: the whole
+  /// of what the addon sent, the parse of it as pills, and a quiet line of
+  /// provenance under both.
   ///
   /// **The release leads.** The engine has no field for it, and what the
   /// list showed instead was the stream's `name` -- which for Torrentio is
   /// the addon and the quality, so four cards read "Torrentio" four times
   /// and the thing that actually tells them apart was nowhere on the
-  /// screen. [releaseNameOf] is where it comes from now.
+  /// screen. [StreamPresentation.lead] is where it comes from now, and
+  /// [StreamPresentation.rest] is everything else the addon wrote, which
+  /// used to be thrown away.
   ///
-  /// **The facts line says what the pill above it does not.** The pills
-  /// are the resolutions in the sectioned layout and the addons in the
-  /// grouped one, so exactly one of those two is worth repeating on the
-  /// card, and the other would be the same word on every card in the row.
-  /// The rest -- the seeders, the size -- is on every card either way.
+  /// **Nothing is dropped to save room any more.** The card used to say
+  /// one line of facts and hand the rest -- the release tags, the other
+  /// addons offering the same file -- to a readout under the row. The
+  /// readout is gone ([TvSourceCard]): it described one card at a time,
+  /// and a viewer walking a row of cards is comparing them.
   ///
-  /// What no longer fits is the release tags and the addons that offered
-  /// the same source: another addon having it is a `+1` after the addon's
-  /// name, which is the fact without the sentence. Both are carried whole
-  /// in [TvSource.details] instead, which the strip under the row draws
-  /// for the one card the remote is on ([TvSourceDetailStrip]).
+  /// The one thing still decided here is which of the two the pill above
+  /// already says. The pills are the resolutions in the sectioned layout
+  /// and the addons in the grouped one, so the notes name the addon only
+  /// where the group does not.
   ///
-  /// A source the player cannot open leads the line with which kind it is
+  /// A source the player cannot open leads the notes with which kind it is
   /// instead of taking a press, so it is not a focus stop and the remote
   /// steps over it -- the disabled row, in the shape a card has.
   TvSource _tvSource(
@@ -2293,46 +2297,32 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     required _StreamDownloads? downloads,
   }) {
     final stream = row.stream;
-    final facts = row.facts;
-    final hints = facts == null ? StreamHints.of(stream) : null;
     final bound = downloads?.forGroup(row.group);
-    final addon = facts?.addonName ?? _addonNameOf(_profileNow, row.group);
-    final others = row.alsoFrom.length;
+    final addon = row.facts?.addonName ?? _addonNameOf(_profileNow, row.group);
     // The grouped layout ranks inside one addon's own answer and so reads
-    // nothing out of the streams; the strip under the row wants the tags
+    // nothing out of the streams; the card wants the pills and the tags
     // either way, and reading them twice is cheaper than carrying a second
-    // list through the derivation for the sake of one card.
-    final read = facts ?? StreamFacts.of(stream, addonName: addon);
+    // list through the derivation for the sake of one row.
+    final read = row.facts ?? StreamFacts.of(stream, addonName: addon);
+    final shown = StreamPresentation.of(stream, addonName: addon);
     return (
       icon: _StreamTile._iconFor(stream.kind),
-      title: releaseNameOf(stream, addonName: addon),
-      facts: [
-        if (!stream.isPlayable) stream.kind.label,
-        if (facts != null) ...[
-          ?facts.seedersLabel,
-          ?facts.sizeLabel,
-        ] else ...[
-          ?hints!.resolution,
-          if (hints.seeders != null) '${hints.seeders} seeders',
-          ?hints.size,
-        ],
-        // The pill says the other one of these two on every card below it.
-        if (isSectioned)
-          others == 0 ? addon : '$addon +$others'
-        else if (facts?.resolutionLabel != null)
-          facts!.resolutionLabel!,
-      ],
-      details: [
+      title: shown.lead,
+      lines: shown.rest,
+      pills: read.pills,
+      notes: [
         // What kind of source it is, which a playable card says with an
         // icon and nothing else -- an icon is a glyph a viewer has to
-        // have learnt. One that is not playable already leads its facts
-        // line with the word, and saying it twice on one panel reads as
-        // two different things.
-        if (stream.isPlayable) stream.kind.label,
-        // The release tags, which are what went when the card was cut to
-        // two lines of name over one of facts.
+        // have learnt.
+        stream.kind.label,
+        // The release tags. Not pills: they are what a release calls
+        // itself rather than a value anything is sorted or sectioned by,
+        // and a dozen of them would be a wall of boxes over the words
+        // they were read out of.
         ...read.tags,
-        // The `+1` on the card's facts line, spelled out: which addon.
+        // The addon, where the group above is not already the addon, and
+        // the others that offered the very same file.
+        if (isSectioned) addon,
         if (row.alsoFrom.isNotEmpty) 'also from ${row.alsoFrom.join(', ')}',
       ],
       highlighted: lastUsed != null && stream.isSameSource(lastUsed),
@@ -2362,12 +2352,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     return (
       icon: Icons.history,
       title: kContinueWithLastSource,
-      facts: [
+      lines: [
         releaseNameOf(stream, addonName: _addonNameOf(_profileNow, group)),
       ],
-      // A rung of one card with nothing under it: the strip is the
-      // sources row's, and this card's whole line is the release already.
-      details: const [],
+      // A shortcut, not a listing: the card says what pressing it does and
+      // which release it would carry on with, and the row it is a
+      // shortcut *to* is where that release is described.
+      pills: const [],
+      notes: const [],
       highlighted: true,
       download: bound?.entryOf(stream),
       downloading: bound?.isPending(stream) ?? false,
@@ -3879,10 +3871,22 @@ class _EmptyAddonsSummaryState extends State<_EmptyAddonsSummary> {
   }
 }
 
-/// One stream: its name, what is left of the description once the quality
-/// hints are pulled out into chips, a download affordance for a torrent,
-/// and a play affordance (or the kind of source when the player cannot
-/// open it).
+/// One stream: the line that names what a press would start, the whole of
+/// what the addon wrote under it, the parse of that as chips, a download
+/// affordance for a torrent, and a play affordance (or the kind of source
+/// when the player cannot open it).
+///
+/// **The row carries the addon's text entire.** It used to carry one line
+/// of it -- whichever the derivation picked for a headline -- and throw the
+/// rest away, so a pack's collection line, the `⚙️` it was indexed on and
+/// the flags saying which dubs are on it were read, sorted by, and never
+/// shown. They are lines of their own now, in the order the addon wrote
+/// them ([StreamPresentation.rest]).
+///
+/// The chips are the parse of that text drawn under it ([StreamFacts.pills]),
+/// which means a `💾 1.51 GB` and a `1.51 GB` chip are on the same row on
+/// purpose: it is the one place a viewer can see the reading the list is
+/// ordered by agree with what the addon actually said.
 class _StreamTile extends StatelessWidget {
   const _StreamTile({
     required this.stream,
@@ -3941,8 +3945,8 @@ class _StreamTile extends StatelessWidget {
     // the flat list and only as a subtitle in the grouped one. The
     // television was given [releaseNameOf] when its cards were rebuilt;
     // this is the same derivation, in the list the phone draws.
-    final release = releaseNameOf(stream, addonName: facts?.addonName);
-    final title = titleOverride ?? release;
+    final shown = StreamPresentation.of(stream, addonName: facts?.addonName);
+    final title = titleOverride ?? shown.lead;
     // A row whose whole name is the hint ("1080p", which is all some
     // addons call a stream) needs no badge saying it again. The badges
     // are read now rather than pulled out of the free text, so this is
@@ -3951,23 +3955,26 @@ class _StreamTile extends StatelessWidget {
     // reading "1080p / 1080p / 2 GB" is what it looks like when nobody
     // checks.
     final chips = [
-      for (final chip in facts?.badges ?? hints.chips)
+      for (final chip in facts?.pills ?? hints.chips)
         if (chip.toLowerCase() != title.toLowerCase()) chip,
     ];
-    // Which fact the heading above has not already said. For the
-    // "continue" row, which has no heading and no reading, it is what the
-    // source calls itself.
-    final description = facts == null
-        ? stream.title
-        : headedByAddon
-        ? null
-        : facts.addonName;
+    // The addon's own lines under the one the row is headed with. The
+    // "continue" row has no reading behind it and is headed with what it
+    // does rather than with a release, so it says what the source calls
+    // itself and nothing more.
+    final said = facts == null ? [stream.title] : shown.rest;
+    // Which fact the heading above has not already said.
+    final description = facts == null || headedByAddon ? null : facts.addonName;
     final isTv = DeviceScope.isTv(context);
     final alsoFrom = this.alsoFrom.isEmpty
         ? null
         : alsoFromLabel(this.alsoFrom);
+    final quiet = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
     final lines =
-        [description, alsoFrom].nonNulls.length + (chips.isEmpty ? 0 : 1);
+        said.length +
+        [description, alsoFrom].nonNulls.length +
+        (chips.isEmpty ? 0 : 1);
     final tile = ListTile(
       enabled: onTap != null,
       selected: highlighted,
@@ -3979,20 +3986,24 @@ class _StreamTile extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Whole, and not squeezed onto one line: a stats line, a
+                // collection a file came out of and a line of flags are
+                // three different things, and the addon put them on three
+                // lines because they are.
+                for (final line in said) Text(line),
                 if (description != null)
                   Text(
                     description,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                    style: quiet,
                   ),
                 if (alsoFrom != null)
                   Text(
                     alsoFrom,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                    style: quiet,
                   ),
                 if (chips.isNotEmpty)
                   Padding(
