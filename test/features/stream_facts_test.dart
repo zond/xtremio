@@ -470,6 +470,7 @@ void main() {
   });
 
   releaseNameTests();
+  recordedAddonAnswers();
 }
 
 /// The four shapes real addons send, and what a card leads with for each.
@@ -589,6 +590,606 @@ void releaseNameTests() {
 
     test('and adds nothing to a name that already has spaces in it', () {
       expect(breakableRelease('Alpha 1080p'), 'Alpha 1080p');
+    });
+  });
+}
+
+/// One recorded addon answer and every value the app reads out of it.
+///
+/// Written out, never computed: an expectation derived by running the
+/// parser would agree with the parser whatever the parser did. These were
+/// read off the addons' own text by hand, and where the answer is a
+/// judgement rather than a reading the row says so in [why].
+typedef Recorded = ({
+  /// The `addon` key of the fixture row, asserted so an inserted row shows
+  /// up as a misalignment here rather than silently shifting the table.
+  String addon,
+
+  /// What this row is in the fixture, and what it is evidence of.
+  String why,
+
+  StreamResolution? resolution,
+  int? size,
+  int? seeders,
+  List<String> tags,
+  List<String> languages,
+  String? audioTracks,
+
+  /// The `⚙️` indexer of the stats line.
+  String? tracker,
+
+  /// How many announce URLs the stream carries ([StreamInfo.trackers]) -- a
+  /// different field from [tracker] and, on all but one row, a different
+  /// answer.
+  int announce,
+
+  /// The line that names what a press would start.
+  String lead,
+
+  /// The rest of what the addon wrote, in its order, with [lead] gone.
+  List<String> rest,
+});
+
+Recorded recorded(
+  String addon,
+  String why, {
+  required String lead,
+  List<String> rest = const [],
+  StreamResolution? resolution,
+  int? size,
+  int? seeders,
+  List<String> tags = const [],
+  List<String> languages = const [],
+  String? audioTracks,
+  String? tracker,
+  int announce = 0,
+}) => (
+  addon: addon,
+  why: why,
+  resolution: resolution,
+  size: size,
+  seeders: seeders,
+  tags: tags,
+  languages: languages,
+  audioTracks: audioTracks,
+  tracker: tracker,
+  announce: announce,
+  lead: lead,
+  rest: rest,
+);
+
+/// The parser over every stream in `addon_streams_recorded.json`, which is
+/// what the live addons actually answered rather than what a shape we
+/// invented would look like.
+///
+/// The fixture is trimmed from 122 real streams to one row per field-shape
+/// and it is the specification: where it and the parser disagree, the
+/// parser is what changes. The table below is index-aligned with it, and
+/// the first test in the group is what stops a newly recorded addon
+/// slipping in unchecked.
+void recordedAddonAnswers() {
+  const gb = 1024 * 1024 * 1024;
+
+  final table = <Recorded>[
+    recorded(
+      'torrentio',
+      'a single-file torrent -- the release on line one, the stats on line '
+          'two, no languages. The filename is a shorter spelling of the same '
+          'release, so line one is not the lead over again and stays',
+      resolution: StreamResolution.uhd2160,
+      size: 37677600604,
+      seeders: 99,
+      tags: const ['BluRay', 'HDR', 'HEVC', '10bit', 'Atmos'],
+      tracker: 'RARBG',
+      lead: 'The.Matrix.1999.RERIP.2160p.UHD.BluRay.X265-IAMABLE',
+      rest: const [
+        'The.Matrix.1999.RERIP.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1'
+            '.Atmos-IAMABLE',
+        '👤 99 💾 35.09 GB ⚙️ RARBG',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'seventeen flags on a line of their own with no audio phrase in '
+          'front of them; the filename and line one are the same string, so '
+          'the lead is not repeated underneath',
+      resolution: StreamResolution.uhd2160,
+      size: 20905753313,
+      seeders: 96,
+      tags: const ['WEB-DL', 'HDR'],
+      languages: const [
+        '🇬🇧',
+        '🇷🇺',
+        '🇮🇹',
+        '🇵🇹',
+        '🇪🇸',
+        '🇰🇷',
+        '🇨🇳',
+        '🇫🇷',
+        '🇩🇪',
+        '🇳🇱',
+        '🇭🇺',
+        '🇩🇰',
+        '🇸🇪',
+        '🇳🇴',
+        '🇹🇷',
+        '🇸🇦',
+        '🇮🇩',
+      ],
+      tracker: 'ThePirateBay',
+      lead:
+          'The.Matrix.1999.2160p.YouTubeMovies.WEB-DL.DDP5.1.HDR'
+          '.VP9-SomniWare',
+      rest: const [
+        '👤 96 💾 19.47 GB ⚙️ ThePirateBay',
+        '🇬🇧 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇭🇺 / 🇩🇰 / '
+            '🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the one recorded stream with no behaviorHints.filename at all, so '
+          'the lead has to come out of the text -- and line one is a release, '
+          'so it does. Also the first `Multi Audio /` line',
+      resolution: StreamResolution.uhd2160,
+      size: 55082955571,
+      seeders: 83,
+      tags: const ['REMUX', 'BluRay', 'HDR', 'Atmos'],
+      languages: const [
+        '🇬🇧',
+        '🇮🇹',
+        '🇵🇹',
+        '🇰🇷',
+        '🇨🇳',
+        '🇫🇷',
+        '🇩🇪',
+        '🇸🇦',
+      ],
+      audioTracks: 'Multi Audio',
+      tracker: '1337x',
+      lead: 'The Matrix 1999 UHD Blu-ray 2160p HDR Remux Multi Atmos 7.1-DTOne',
+      rest: const [
+        '👤 83 💾 51.3 GB ⚙️ 1337x',
+        'Multi Audio / 🇬🇧 / 🇮🇹 / 🇵🇹 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇸🇦',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'THE PACK ROW -- line one is `[PACK] The Matrix 4K UHD Collection '
+          '(1999-2003) ...`, a box set and not a film and not what a press '
+          'would start. The lead is the film, off behaviorHints.filename; the '
+          'collection stays underneath, because which pack a file came out of '
+          'is worth knowing, and the duplicate file line goes',
+      resolution: StreamResolution.uhd2160,
+      size: 5347234284,
+      seeders: 80,
+      tags: const ['BDRip', 'HDR', 'HEVC', '10bit', 'DTS'],
+      tracker: '1337x',
+      lead: 'The Matrix (1999) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT]',
+      rest: const [
+        '[PACK] The Matrix 4K UHD Collection (1999-2003) '
+            '(2160p HDR BDRip x265 10bit DTS) [4KLiGHT]',
+        '👤 80 💾 4.98 GB ⚙️ 1337x',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the same release spelled two ways -- spaces in the text, dots in '
+          'the filename -- so only the stats survive underneath; a card that '
+          'drew both would be drawing its own headline again',
+      resolution: StreamResolution.uhd2160,
+      size: 56811679908,
+      seeders: 43,
+      tags: const ['REMUX', 'BluRay', 'DV', 'HEVC', 'Atmos'],
+      tracker: '1337x',
+      lead:
+          'The.Matrix.1999.UHD.BluRay.2160p.TrueHD.Atmos.7.1.DV.HEVC'
+          '.REMUX-FraMeSToR',
+      rest: const ['👤 43 💾 52.91 GB ⚙️ 1337x'],
+    ),
+    recorded(
+      'torrentio',
+      'the filename spells every dub out (ENG LATINO CASTELLANO ...) where '
+          'the text says only MULTi, so the two differ and both are shown. The '
+          'lead is the long one because it is the file that plays -- a '
+          'judgement the layout may yet want to soften, not a reading',
+      resolution: StreamResolution.uhd2160,
+      size: 26252987597,
+      seeders: 11,
+      tags: const ['WEB-DL', 'HDR', 'DV', 'HEVC', 'Atmos'],
+      languages: const ['🇬🇧', '🇮🇹', '🇵🇹', '🇪🇸', '🇲🇽', '🇫🇷', '🇮🇳'],
+      audioTracks: 'Multi Audio',
+      tracker: 'ThePirateBay',
+      lead:
+          'The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.ENG.LATINO.CASTELLANO'
+          '.ITA.FRE.HINDI.PORTUGUESE.DDP5.1.Atmos.H265.MP4-BEN.THE.MEN',
+      rest: const [
+        'The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.MULTi.DDP5.1.Atmos.H265'
+            '.MP4-BEN.THE.MEN',
+        '👤 11 💾 24.45 GB ⚙️ ThePirateBay',
+        'Multi Audio / 🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇫🇷 / 🇮🇳',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'line one is not a title at all -- `Imdb top 263 movies hindi '
+          'english gdrive`, somebody\'s drive dump. Two thousand seeders hang '
+          'off it, so it is a row a viewer would pick, and heading it with '
+          'that line would say nothing about the film',
+      resolution: StreamResolution.fhd1080,
+      size: 1997159793,
+      seeders: 2081,
+      tags: const ['BDRip', 'AVC'],
+      languages: const ['🇬🇧', '🇮🇳'],
+      tracker: '1337x',
+      lead: 'The.Matrix.1999.1080p.BrRip.x264.YIFY',
+      rest: const [
+        'Imdb top 263 movies hindi english gdrive',
+        '👤 2081 💾 1.86 GB ⚙️ 1337x',
+        '🇬🇧 / 🇮🇳',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the file line carries a directory in front of it that the filename '
+          'does not, and the two are still one file. `Dual Audio` as the '
+          'phrase leading the flags',
+      resolution: StreamResolution.fhd1080,
+      size: 2576980378,
+      seeders: 1202,
+      tags: const ['BluRay', 'AVC'],
+      languages: const ['🇬🇧', '🇯🇵'],
+      audioTracks: 'Dual Audio',
+      tracker: '1337x',
+      lead: 'The.Matrix.1999.Bluray.1080p.BluRay.x264 (DUAL En5.1-Ja)',
+      rest: const [
+        'Dual Japanese dubbed English movies super pack',
+        '👤 1202 💾 2.4 GB ⚙️ 1337x',
+        'Dual Audio / 🇬🇧 / 🇯🇵',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'a trilogy pack, and `Multi Audio / 🇬🇧` -- six audio tracks under '
+          'one flag, which is why the phrase is a fact of its own and not '
+          'something counted off the flags',
+      resolution: StreamResolution.hd720,
+      size: 1191853425,
+      seeders: 6,
+      tags: const ['BluRay', 'HEVC', '10bit'],
+      languages: const ['🇬🇧'],
+      audioTracks: 'Multi Audio',
+      tracker: '1337x',
+      lead:
+          'The Matrix (1999) Remastered RiffTrax sextuple audio 720p.10bit'
+          '.BluRay.x265-budgetbits',
+      rest: const [
+        'The Matrix Trilogy (1999-2003) Remastered RiffTrax multi audio '
+            '720p.10bit.BluRay.x265-budgetbits',
+        '👤 6 💾 1.11 GB ⚙️ 1337x',
+        'Multi Audio / 🇬🇧',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'a season pack -- S01 on line one, S01E01 in the filename. One '
+          'character apart, and it is the difference between naming the '
+          'episode and naming the season',
+      resolution: StreamResolution.uhd2160,
+      size: 6732361236,
+      seeders: 83,
+      tags: const ['WEB-DL', 'HEVC'],
+      tracker: 'ThePirateBay',
+      lead:
+          'Breaking Bad (2008) S01E01 '
+          '(2160p AMZN WEB-DL H265 SDR DDP 5.1 English - HONE)',
+      rest: const [
+        'Breaking Bad (2008) S01 '
+            '(2160p AMZN WEB-DL H265 SDR DDP 5.1 English - HONE)',
+        '👤 83 💾 6.27 GB ⚙️ ThePirateBay',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the filename is a plain episode title with double spaces in it, '
+          'kept exactly as the addon wrote them',
+      resolution: StreamResolution.uhd2160,
+      size: 10232759583,
+      seeders: 63,
+      tags: const ['BluRay', 'HEVC'],
+      tracker: 'ThePirateBay',
+      lead: 'Breaking Bad  S01E01  Pilot',
+      rest: const [
+        'Breaking Bad. S01. 2008 2160P.Ai Upscaled.BluRay.60FPS.H265.SDR'
+            '.AC3.5.1_Marjenbo',
+        '👤 63 💾 9.53 GB ⚙️ ThePirateBay',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'a complete-series pack whose own line says WEB-DL and whose files '
+          'say WEBRip: both are tags, because the addon said both',
+      resolution: StreamResolution.uhd2160,
+      size: 54556822077,
+      seeders: 49,
+      tags: const ['WEB-DL', 'WEBRip', 'AVC', 'DTS'],
+      languages: const ['🇬🇧', '🇷🇺', '🇺🇦'],
+      tracker: '1337x',
+      lead: 'Breaking.Bad.S01E01.2160p.WEBRip.DTS-HD.MA5.1.x264-TrollUHD',
+      rest: const [
+        'Breaking Bad COMPLETE S01-S05 2160p WEB-DL Rus Ukr Eng DTS-HD '
+            'MA5.1 x264-TrollUHD [RiCK]',
+        '👤 49 💾 50.81 GB ⚙️ 1337x',
+        '🇬🇧 / 🇷🇺 / 🇺🇦',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the only row carrying announce URLs, twenty-six of them, next to a '
+          '`⚙️ Rutracker` that is not one of them. Line one is Russian prose '
+          'about the season and stays: the flags do not say there is a '
+          'LostFilm dub on it and that line does',
+      resolution: StreamResolution.uhd2160,
+      size: 13335873454,
+      seeders: 35,
+      tags: const ['WEB-DL', 'HEVC', 'DTS'],
+      languages: const ['🇬🇧', '🇷🇺'],
+      tracker: 'Rutracker',
+      announce: 26,
+      lead:
+          'Breaking.Bad.S01E01.Pilot.2160p.AMZN.WEB-DL.DTS-HD.MA.5.1.SDR'
+          '.HEVC',
+      rest: const [
+        'Во все тяжкие / Breaking Bad / Сезон: 1 / Серии: 1-7 из 7 '
+            '[2008 WEB-DL 2160p 4k] MVO (LostFilm FoxCrime) + DVO '
+            '(Кубик в Кубе) + Original + Sub (Rus Eng)',
+        '👤 35 💾 12.42 GB ⚙️ Rutracker',
+        '🇬🇧 / 🇷🇺',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'text and filename agree exactly, so nothing is left but the stats',
+      resolution: StreamResolution.uhd2160,
+      size: 7322919240,
+      seeders: 17,
+      tags: const ['WEB-DL'],
+      tracker: 'ThePirateBay',
+      lead: 'Breaking Bad S01E01 Pilot 2160p NF WEB-DL DDP5 1 H 265-XEBEC',
+      rest: const ['👤 17 💾 6.82 GB ⚙️ ThePirateBay'],
+    ),
+    recorded(
+      'torrentio',
+      'the same at 1080p: the plainest shape Torrentio sends',
+      resolution: StreamResolution.fhd1080,
+      size: 1170378588,
+      seeders: 33,
+      tags: const ['HEVC'],
+      tracker: 'ThePirateBay',
+      lead: 'Breaking.Bad.S01E01.Pilot.1080p.HEVC.x265-MeGusta',
+      rest: const ['👤 33 💾 1.09 GB ⚙️ ThePirateBay'],
+    ),
+    recorded(
+      'torrentio',
+      'a release name that is itself the pack -- `iNTEGRALE` where the '
+          'file says S01E01 -- and `Multi Audio / 🇫🇷` on one flag, off a '
+          'French indexer: between them the two facts say what the dub is',
+      resolution: StreamResolution.fhd1080,
+      size: 2888365507,
+      seeders: 6,
+      tags: const ['AVC'],
+      languages: const ['🇫🇷'],
+      audioTracks: 'Multi Audio',
+      tracker: 'Torrent9',
+      lead: 'Breaking.Bad.S01E01.MULTi.1080p.WEB.DDP5.1.x264-TFA',
+      rest: const [
+        'Breaking.Bad.iNTEGRALE.MULTi.1080p.WEB.DDP5.1.x264-TFA',
+        '👤 6 💾 2.69 GB ⚙️ Torrent9',
+        'Multi Audio / 🇫🇷',
+      ],
+    ),
+    recorded(
+      'watchhub',
+      'no filename, no bingeGroup, one line of text, twelve platform URL '
+          'keys. The lead is the service -- `Amazon Prime Video` -- and not '
+          '`Subscription, Rent, Buy`, which is an availability phrase and here '
+          'carries three of them at once',
+      lead: 'Amazon Prime Video',
+      rest: const ['Subscription, Rent, Buy'],
+    ),
+    recorded(
+      'watchhub',
+      'the same with half the platform keys null: the field set varies per '
+          'row and nothing may read a fixed shape out of it',
+      lead: 'Rakuten TV',
+      rest: const ['Rent, Buy'],
+    ),
+    recorded(
+      'publicdomainmovies',
+      'a name that is only a resolution and a description that is only a '
+          'size. Seeders stay null -- that addon never says -- which is not a '
+          'swarm of zero and draws no badge',
+      resolution: StreamResolution.fhd1080,
+      size: 1621350154,
+      lead: '1080p',
+      rest: const ['💾 1.51 GB'],
+    ),
+    recorded(
+      'watchhub',
+      'recorded through the engine rather than off the wire, so this one '
+          'really does have a `description` key -- the alias already applied. '
+          'Four platform URL keys, not twelve',
+      lead: 'Amazon Prime Video',
+      rest: const ['Subscription'],
+    ),
+    recorded(
+      'watchhub',
+      'a rental-only service',
+      lead: 'Google Play Movies',
+      rest: const ['Rent, Buy'],
+    ),
+    recorded(
+      'watchhub',
+      '`ADS` as the whole text: a third availability beside Subscription '
+          'and Rent, Buy, and the plainest proof that the field is a phrase '
+          'and not a release. Also the only row with no webosUrl',
+      lead: 'Plex',
+      rest: const ['ADS'],
+    ),
+    recorded(
+      'watchhub',
+      'a channel sold through another service -- the name says both, and '
+          'it is still the name that leads',
+      lead: 'MUBI Amazon Channel',
+      rest: const ['Subscription'],
+    ),
+    recorded(
+      'watchhub',
+      'and the same service direct',
+      lead: 'MUBI',
+      rest: const ['Subscription'],
+    ),
+    recorded(
+      'publicdomainmovies',
+      'the same torrent again, carrying an empty `announce` array. An '
+          'empty tracker list and no tracker list read alike, and neither has '
+          'anything to do with the `⚙️` field, which this addon never writes',
+      resolution: StreamResolution.fhd1080,
+      size: 1621350154,
+      lead: '1080p',
+      rest: const ['💾 1.51 GB'],
+    ),
+  ];
+
+  group('the recorded addon answers', () {
+    final streams = loadRecordedStreams();
+
+    test('every recorded row has an expectation written for it', () {
+      // Recording a new addon must not slip through unchecked: add the row
+      // to the table above, by hand, from what the addon actually said.
+      expect(
+        table,
+        hasLength(streams.length),
+        reason:
+            'addon_streams_recorded.json holds ${streams.length} streams and '
+            'the table holds ${table.length} -- write the missing '
+            'expectation rather than widening this check',
+      );
+    });
+
+    for (final (index, expected) in table.indexed) {
+      test('row ${index + 1}: ${expected.why}', () {
+        final row = streams[index];
+        // A fixture row inserted above this one shifts every expectation
+        // after it; the addon name is the cheapest thing that notices.
+        expect(row['addon'], expected.addon, reason: 'the table is misaligned');
+        final stream = StreamInfo(row['stream'] as Map<String, dynamic>);
+        final facts = StreamFacts.of(stream, addonName: expected.addon);
+
+        expect(facts.resolution, expected.resolution, reason: 'resolution');
+        expect(facts.sizeBytes, expected.size, reason: 'size');
+        expect(facts.seeders, expected.seeders, reason: 'seeders');
+        expect(facts.tags, expected.tags, reason: 'tags');
+        expect(facts.languages, expected.languages, reason: 'languages');
+        expect(facts.audioTracks, expected.audioTracks, reason: 'audio');
+        expect(facts.tracker, expected.tracker, reason: 'the ⚙️ indexer');
+        expect(
+          stream.trackers,
+          hasLength(expected.announce),
+          reason: 'announce URLs, which are not the ⚙️ indexer',
+        );
+
+        final shown = StreamPresentation.of(stream, addonName: expected.addon);
+        expect(shown.lead, expected.lead, reason: 'the lead line');
+        expect(shown.rest, expected.rest, reason: 'the rest, in order');
+        // The two halves are one read: whatever the lead turned out to be,
+        // it is not also sitting in the lines under it.
+        expect(shown.rest, isNot(contains(shown.lead)));
+        expect(releaseNameOf(stream, addonName: expected.addon), shown.lead);
+      });
+    }
+
+    test('no addon sets `description`: they all write `title`', () {
+      // The serde alias in stremio-core is what makes the app see a
+      // description at all, and it is invisible from Dart. Only the rows
+      // re-recorded through the engine carry the normalized key.
+      final live = [
+        for (final row in streams)
+          if (!row.containsKey('from')) row['stream'] as Map<String, dynamic>,
+      ];
+      expect(live, isNotEmpty);
+      for (final stream in live) {
+        expect(stream.containsKey('description'), isFalse);
+        expect(stream.containsKey('title'), isTrue);
+        expect(StreamInfo(stream).description, stream['title']);
+      }
+    });
+
+    test('an unknown is null and never zero, on every row that has one', () {
+      // The distinction the sort and the badges both hang on. Nine of the
+      // recorded rows say nothing about seeders, and none of them is a
+      // swarm of zero.
+      final silent = [
+        for (final row in streams)
+          if (StreamFacts.of(StreamInfo(row['stream'] as Map<String, dynamic>))
+                  .seeders ==
+              null)
+            row['addon'],
+      ];
+      expect(silent, hasLength(9));
+      expect(silent, everyElement(isNot('torrentio')));
+      for (final row in streams) {
+        final facts = StreamFacts.of(
+          StreamInfo(row['stream'] as Map<String, dynamic>),
+        );
+        expect(facts.sizeBytes, isNot(0));
+        expect(facts.seeders, isNot(0));
+      }
+    });
+
+    test('the facts the list sorts and sections by come out usable', () {
+      final all = [
+        for (final row in streams)
+          StreamFacts.of(
+            StreamInfo(row['stream'] as Map<String, dynamic>),
+            addonName: row['addon'] as String,
+          ),
+      ];
+      // Every resolution a recorded stream has, highest first, with the
+      // nine that have none in a section of their own at the end.
+      final sections = sectionsByResolution(all, (f) => f);
+      expect(sections.map((s) => s.label), [
+        '2160p',
+        '1080p',
+        '720p',
+        'Unknown resolution',
+      ]);
+      expect(sections.last.rows, hasLength(7));
+      expect(sections.last.bestSeeders, isNull);
+      expect(sections.first.summary, '11 streams · best 99 seeders');
+      // The deepest swarm leads the most-peers order, without the streams
+      // nobody counted getting in front of it.
+      final ranked = sortedByStreamOrder(all, (f) => f, StreamOrder.mostPeers);
+      expect(ranked.first.seeders, 2081);
+      expect(ranked.last.seeders, isNull);
+      // A size sort is the same shape: the 52.91 GB remux first.
+      expect(
+        sortedByStreamOrder(all, (f) => f, StreamOrder.largest).first.sizeBytes,
+        greaterThan(52 * gb),
+      );
+    });
+
+    test('the languages are the pill a Swedish viewer is looking for', () {
+      final withSwedish = [
+        for (final row in streams)
+          if (StreamFacts.of(StreamInfo(row['stream'] as Map<String, dynamic>))
+              .languages
+              .contains('🇸🇪'))
+            row['addon'],
+      ];
+      // Exactly one recorded stream offers it, which is the point: before
+      // this parser nothing in the app could have said so.
+      expect(withSwedish, ['torrentio']);
     });
   });
 }

@@ -17,9 +17,21 @@ import '../../core/core.dart';
 ///   write into the name and the filename (`1080p`, `WEB-DL`, `x265`), and
 ///   the size from the `💾 1.51 GB` convention when `videoSize` is absent
 ///   — that exact convention is in our own recorded fixture.
-/// - **A guess, by convention only**: seeders. No addon protocol carries
-///   them; torrent addons write `👤 42` into the description. A parse that
-///   finds nothing is [seeders] null, never zero.
+/// - **A guess, by convention only**: seeders, [languages], [audioTracks]
+///   and [tracker]. No addon protocol carries any of them; torrent addons
+///   write `👤 42 💾 35.09 GB ⚙️ RARBG` on one description line and the
+///   flags on another. A parse that finds nothing is null (or empty),
+///   never zero.
+///
+/// **`description` is where every addon writes, and none of them sets it.**
+/// Not one row of `rust/tests/fixtures/addon_streams_recorded.json` has a
+/// `description` key as it came off the wire: they all carry their text in
+/// the legacy `title`, which stremio-core reads as `description` through a
+/// serde alias (`types/resource/stream.rs`) and [StreamInfo.description]
+/// reads the same way. So "the description" below always means "whatever
+/// the addon wrote, whichever of the two keys it used", and a reader who
+/// expects addons to populate `description` themselves will find none that
+/// do.
 ///
 /// Every field is nullable and nothing is ever defaulted: an absent value
 /// means "not known", which is a different thing from "none" and sorts and
@@ -30,6 +42,9 @@ final class StreamFacts {
     this.sizeBytes,
     this.seeders,
     this.tags = const [],
+    this.languages = const [],
+    this.audioTracks,
+    this.tracker,
     this.sourceKind,
     this.addonName,
     this.releaseTag,
@@ -52,6 +67,39 @@ final class StreamFacts {
   /// table that recognises them (never the order they appeared in), so the
   /// same release always reads the same way.
   final List<String> tags;
+
+  /// The flags an addon writes on a line of its own — `🇬🇧 / 🇷🇺 / 🇮🇹`
+  /// (fixture row 2) — in the order it wrote them, and as it wrote them: a
+  /// flag is what a pill draws, and the country it names is the only thing
+  /// the addon actually said.
+  ///
+  /// Empty is "the addon said nothing about language", which is not
+  /// "English" and not "one track". Nine of the twenty-five recorded rows
+  /// carry this line and sixteen do not, so an empty list is the common
+  /// case and must never be drawn as a claim.
+  final List<String> languages;
+
+  /// The phrase that leads the language line when there is one: `Multi
+  /// Audio` (row 3), `Dual Audio` (row 8).
+  ///
+  /// Kept as its own fact because it is *not* derivable from [languages]:
+  /// row 9 is `Multi Audio / 🇬🇧`, six English tracks under one flag, and
+  /// row 16 is `Multi Audio / 🇫🇷`. Counting the flags would call both of
+  /// those single-audio.
+  final String? audioTracks;
+
+  /// The site the torrent was indexed on, from the `⚙️ RARBG` field of the
+  /// stats line (rows 1, 2, 3 — `RARBG`, `ThePirateBay`, `1337x`,
+  /// `Rutracker`, `Torrent9`).
+  ///
+  /// **Not a BitTorrent tracker**, however it is spelled. The announce URLs
+  /// are [StreamInfo.trackers], off the stream's own `announce` / `sources`
+  /// array (row 13 carries twenty-six of them, row 25 an empty one, and
+  /// most rows none at all). This is a search index's name, with nothing to
+  /// announce to; it is worth showing because it is the only thing a
+  /// listing says about where it came from, and worth never handing to the
+  /// streaming server.
+  final String? tracker;
 
   /// The `StreamSource` variant, or null for [StreamKind.unknown] — the
   /// engine could not tell either.
@@ -82,11 +130,15 @@ final class StreamFacts {
     // description is free text that happens to often repeat both.
     final ranked = [?name, ?filename, ?releaseTag, ?description];
     final all = ranked.join('\n');
+    final spoken = _parseLanguages(description);
     return StreamFacts(
       resolution: _firstResolution(ranked),
       sizeBytes: _videoSize(hints['videoSize']) ?? _parseSize(all),
       seeders: _parseSeeders(all),
       tags: _parseTags(all),
+      languages: spoken.flags,
+      audioTracks: spoken.audio,
+      tracker: _parseTracker(all),
       sourceKind: stream.kind == StreamKind.unknown ? null : stream.kind,
       addonName: addonName,
       releaseTag: releaseTag,
@@ -188,6 +240,53 @@ final class StreamFacts {
       if (pattern.hasMatch(text)) label,
   ];
 
+  /// The language line of [description], read for what is on it.
+  ///
+  /// Found by **what it contains, not where it is**: it is line 3 on
+  /// fixture row 2 and line 4 on row 7, and on the rows with no filename
+  /// line it moves up again. The one thing true of every one of them is a
+  /// flag, and no other line in any recorded row has one — the release
+  /// lines, the file lines and the `👤 … 💾 … ⚙️ …` stats lines are all
+  /// flagless. So the flag is the marker.
+  ///
+  /// Split on `/`, which is what the addon joined them with. An item that
+  /// is a flag and nothing else is a language; the one item that is not is
+  /// the audio phrase that leads the line (`Multi Audio`, `Dual Audio`).
+  /// Only the first such item is taken: no recorded row has two, and a row
+  /// that did would be saying something this does not yet understand.
+  static ({List<String> flags, String? audio}) _parseLanguages(
+    String? description,
+  ) {
+    for (final line in (description ?? '').split('\n')) {
+      if (!_flagPattern.hasMatch(line)) continue;
+      final flags = <String>[];
+      String? audio;
+      for (final part in line.split('/')) {
+        final item = part.trim();
+        if (item.isEmpty) continue;
+        if (_flagOnlyPattern.hasMatch(item)) {
+          flags.add(item);
+        } else {
+          audio ??= item;
+        }
+      }
+      return (flags: flags, audio: audio);
+    }
+    return (flags: const <String>[], audio: null);
+  }
+
+  /// The indexer after the `⚙️` on the stats line, to the end of that line.
+  ///
+  /// To the end of the line and not to the next space: every recorded name
+  /// happens to be one token (`RARBG`, `ThePirateBay`, `1337x`,
+  /// `Rutracker`, `Torrent9`) and `⚙️` is the last field Torrentio writes,
+  /// so a site whose name has a space in it survives whole rather than
+  /// arriving as its first word.
+  static String? _parseTracker(String text) {
+    final name = _trackerPattern.firstMatch(text)?.group(1)?.trim();
+    return name == null || name.isEmpty ? null : name;
+  }
+
   static final RegExp _resolutionPattern = RegExp(
     r'\b(2160p|4k|uhd|1440p|1080p|720p|576p|480p|360p|240p)\b',
     caseSensitive: false,
@@ -232,6 +331,31 @@ final class StreamFacts {
     RegExp(r'\bseeder?s?\s*[:=]\s*(\d+)', caseSensitive: false),
     RegExp(r'\b(\d+)\s?seeders?\b', caseSensitive: false),
   ];
+
+  /// A flag: two regional indicator symbols, which is how every addon in
+  /// the recorded fixture writes a language.
+  ///
+  /// `unicode: true` for the reason [StreamHints.strip] spells out at
+  /// length: these are astral code points, and without the flag a Dart
+  /// character class matches UTF-16 *code units* — the halves of a flag,
+  /// not the flag — which is how an emoji ends up cut in two and drawn as
+  /// a replacement character.
+  static final RegExp _flagPattern = RegExp(
+    r'[\u{1F1E6}-\u{1F1FF}]{2}',
+    unicode: true,
+  );
+
+  /// A line item that is a flag and nothing else, so `Multi Audio` is told
+  /// from `🇬🇧` without a list of the phrases an addon might lead with.
+  static final RegExp _flagOnlyPattern = RegExp(
+    r'^[\u{1F1E6}-\u{1F1FF}]{2}$',
+    unicode: true,
+  );
+
+  /// `⚙️ RARBG`, to the end of its line. The variation selector is optional
+  /// because it is a presentation hint an addon may or may not have sent;
+  /// the gear itself is the field marker.
+  static final RegExp _trackerPattern = RegExp('⚙️?[ \t]*([^\n]+)');
 
   /// Canonical label to what spells it. Iteration order is the display
   /// order of [tags], so the source comes before the dynamic range before
@@ -444,38 +568,106 @@ List<StreamSection<T>> sectionsByResolution<T>(
   ];
 }
 
-/// The release a stream is of — `Avalon.2001.1080p.BluRay.x264-CiNEFiLE` —
-/// as the one line a card can lead with.
+/// What a card says about one stream, in the two registers a card has: the
+/// [lead] line that names the thing a press would start, and the [rest] of
+/// what the addon said under it.
+///
+/// It is a pair and not one string because addons answer in two registers
+/// too. Torrentio's `title` is a little document — a release, sometimes a
+/// file under it, a stats line, sometimes a line of flags — and the app has
+/// been picking one line out of it and throwing the document away. Both
+/// halves come from the same read of the same fields, so the lead can never
+/// be a line the rest also shows.
+///
+/// **This is values, not layout.** Where the two go on a card, how many
+/// lines each gets, whether the rest is folded away — none of that is
+/// settled here.
+final class StreamPresentation {
+  const StreamPresentation({required this.lead, required this.rest});
+
+  /// The one line that names what would play. Never empty: see [leadLineOf].
+  final String lead;
+
+  /// The addon's own text, line by line, in the order it wrote it, with
+  /// [lead] taken out of it wherever it appears — and nothing else taken
+  /// out. Empty when the addon said nothing beyond the lead.
+  ///
+  /// "Wherever it appears" and not "the line it came from": on fixture row
+  /// 4 the lead comes from `behaviorHints.filename` and the second text
+  /// line is that same file with `.mkv` on it, and on row 12 it is that
+  /// same file with a directory in front of it. Neither is a string match
+  /// for the lead, and both are the lead ([_asLeadKey]).
+  final List<String> rest;
+
+  /// Reads [stream]. [addonName] is the label the card shows elsewhere; see
+  /// [leadLineOf] for what it is used for.
+  factory StreamPresentation.of(StreamInfo stream, {String? addonName}) {
+    final lead = leadLineOf(stream, addonName: addonName);
+    final key = _asLeadKey(lead);
+    return StreamPresentation(
+      lead: lead,
+      rest: [
+        for (final line in (stream.description ?? '').split('\n'))
+          if (line.trim() case final text when text.isNotEmpty)
+            if (_asLeadKey(text) != key) text,
+      ],
+    );
+  }
+}
+
+/// The one line a card leads with — `Avalon.2001.1080p.BluRay.x264-CiNEFiLE`
+/// — chosen by **which fields this stream actually has**.
 ///
 /// The engine models a stream as a source plus a `name`, a `description`
-/// and `behaviorHints`, and *none* of them is the release. What addons
-/// actually put where, on the answers this app has recorded:
+/// and `behaviorHints`, and *none* of them is "the release". So the branch
+/// is on what is there, most trustworthy first, and every branch below
+/// names the row of `rust/tests/fixtures/addon_streams_recorded.json` that
+/// is the evidence for it.
 ///
-/// - **`behaviorHints.filename`** is the file the addon says it will play.
-///   It is the only structured field that ever carries a release, so it is
-///   read first, with its extension taken off because a card is not a
-///   directory listing.
-/// - **The first line of `description`** is where Torrentio and the addons
-///   that copy it write the release, with the numbers on the lines below
-///   (`👤 716 💾 10.69 GB ⚙️ ThePirateBay`). The markers and the numbers
-///   are stripped off it ([StreamHints.strip]), because an addon that
-///   writes them inline would otherwise put a size in the headline that
-///   the facts line repeats. A description is free text, though, and most
-///   addons put prose in it -- WatchHub says `Subscription` -- so it is
-///   taken only when it *looks* like a release ([_looksLikeARelease]).
-/// - **`name`** is last, and is what the app showed before this existed:
-///   for Torrentio it is `"Torrentio\n4k"` — the addon and the quality,
-///   which is not a release at all but is better than an empty card.
+/// 1. **`behaviorHints.filename` is set** → that, minus its container
+///    extension (a card is not a directory listing).
+///
+///    This is the branch the packs need. Row 4 leads its text with
+///    `[PACK] The Matrix 4K UHD Collection (1999-2003) …` and puts
+///    `The Matrix (1999) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT].mkv`
+///    on the line below it — so line one names a **collection** and only
+///    the filename names the film. Nine of the sixteen recorded Torrentio
+///    rows are that shape: a pack (4), a trilogy (9), a season (10, 11, 12,
+///    13, 16), a complete series, and an `Imdb top 263 movies hindi english
+///    gdrive` dump (7, 8) where line one is not even a title. Heading any
+///    of them with line one names something a press would not start.
+///
+/// 2. **No filename, but the first description line looks like a release**
+///    → that line, with the `💾`/`👤` markers and their numbers taken off
+///    ([StreamHints.strip]) so a size does not land in the headline that
+///    the badges repeat.
+///
+///    Row 3 is the only recorded stream in this branch: no
+///    `behaviorHints.filename` at all, and `The Matrix 1999 UHD Blu-ray
+///    2160p HDR Remux Multi Atmos 7.1-DTOne` on line one. "Looks like a
+///    release" ([_looksLikeARelease]) is what keeps prose out — see 3.
+///
+/// 3. **Otherwise `name`**, on one line.
+///
+///    This is every WatchHub row (17, 18, 20–24) and both Public Domain
+///    Movies rows (19, 25). WatchHub's text is an availability phrase —
+///    `Subscription`, `Rent, Buy`, `ADS`, `Subscription, Rent, Buy` — never
+///    a release and never a closed set, and its `name` is the service:
+///    `Amazon Prime Video`, `Plex`, `MUBI`. Public Domain Movies writes
+///    `💾 1.51 GB`, which strips to nothing at all, and names the stream
+///    `1080p`. Leading with the text would head those cards `Subscription`
+///    and blank.
+///
+/// 4. **Nothing usable anywhere** → what kind of source it is, which is
+///    what the list showed for such a stream before any of this existed.
 ///
 /// [addonName] is what the card says elsewhere, and a candidate equal to it
 /// is skipped rather than drawn: an addon whose description is its own name
 /// would otherwise have the card say that name twice, once as the release
 /// it does not have and once as the addon that answered.
 ///
-/// Never empty: a stream nothing could be read from falls all the way back
-/// to what kind of source it is, which is what the list showed for it
-/// before.
-String releaseNameOf(StreamInfo stream, {String? addonName}) {
+/// Never empty.
+String leadLineOf(StreamInfo stream, {String? addonName}) {
   final hints = StreamHints.of(stream);
   final described = hints.strip(_firstLine(stream.description));
   final candidates = [
@@ -494,6 +686,42 @@ String releaseNameOf(StreamInfo stream, {String? addonName}) {
   return _oneLine(stream.name) ??
       _oneLine(stream.description) ??
       stream.kind.label;
+}
+
+/// [leadLineOf] under the name the screens have always called it. Kept
+/// because four call sites read it and a card's headline *is* the release
+/// wherever an addon named one; [leadLineOf] is the honest name for what it
+/// returns on the rows where no addon did.
+String releaseNameOf(StreamInfo stream, {String? addonName}) =>
+    leadLineOf(stream, addonName: addonName);
+
+/// [line] reduced to what makes two spellings of one file the same file, so
+/// a card does not draw its own headline again underneath itself.
+///
+/// Three reductions, each with a recorded row behind it:
+///
+/// - **the last path segment**, because row 12's file line is
+///   `Breaking.Bad.S01…-TrollUHD/Breaking.Bad.S01E01…-TrollUHD.mkv` and
+///   `behaviorHints.filename` is only the part after the slash;
+/// - **without the container extension**, because that file line ends
+///   `.mkv` and the filename the lead came from was stripped of it;
+/// - **every run of `.`, `_`, `-` and space as one space, lower-cased**,
+///   because row 5 writes the release with spaces on its text line and with
+///   dots in its filename — `The Matrix 1999 UHD BluRay 2160p TrueHD Atmos
+///   7 1 DV HEVC REMUX-FraMeSToR` against
+///   `The.Matrix.1999.UHD.BluRay.2160p.TrueHD.Atmos.7.1.DV.HEVC.REMUX-FraMeSToR`
+///   — and row 11 writes `Breaking Bad  S01E01  Pilot.mkv` with the double
+///   spaces its filename also has.
+///
+/// It is deliberately blunt about separators and deliberately blind to
+/// everything else: row 1's text line has `10bit.HDR.TrueHD.7.1.Atmos` in
+/// it that its filename does not, so it is a different line and stays.
+String _asLeadKey(String line) {
+  final base = line.substring(line.lastIndexOf('/') + 1);
+  return (_withoutExtension(base) ?? base)
+      .toLowerCase()
+      .replaceAll(RegExp(r'[ ._-]+'), ' ')
+      .trim();
 }
 
 /// Whether a line of free text is a release rather than a sentence about
