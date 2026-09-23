@@ -37,12 +37,9 @@ import 'focusable_tile.dart';
 /// that could not be reached.
 ///
 /// **A focused readout is brought fully into view, not merely touched.**
-/// Flutter's traversal reveals a stop with one edge against one edge of
-/// the viewport, which is right for a row and wrong for a paragraph: the
-/// last lines of a tall one stay off the screen, and the press that would
-/// scroll further moves focus past it instead. [_reveal] scrolls the least
-/// it can to hold *both* of this block's edges inside the viewport, and a
-/// block too tall for that is walked instead -- see [_onKey].
+/// That is [ReadableBlock]'s, which is where the two halves of it are
+/// written down: bringing the whole block on screen, and walking one that
+/// is taller than the screen a part-screenful at a time.
 ///
 /// **A phone is left alone.** Focus there is for a keyboard and for
 /// accessibility, where the words are already reachable by touch and by
@@ -74,6 +71,42 @@ class Readout extends StatefulWidget {
   /// readout sits among rows.
   final BorderRadius borderRadius;
 
+  @override
+  State<Readout> createState() => _ReadoutState();
+}
+
+/// Where a block sits in the scroll view around it: the offsets at which
+/// its top would be at the top of the viewport and its bottom at the
+/// bottom of it.
+///
+/// For a block that fits, [bottom] is the smaller of the two and the pair
+/// is the range of offsets that show the whole of it. For one that does
+/// not, they are the other way round and the pair is the range over which
+/// any of it is on screen, which is what walking it means.
+typedef _Where = ({ScrollPosition position, double top, double bottom});
+
+/// The scrolling a block of words needs before a viewer can read it with a
+/// remote, for the [State] of a widget that makes one a focus stop.
+///
+/// Two halves. [revealBlock] brings the whole of the block on screen,
+/// moving as little as it can: Flutter's traversal reveals a stop with one
+/// edge against one edge of the viewport, which is enough for a row and is
+/// not a promise about the other edge, so the last lines of a tall block
+/// stay off the screen and the press that would scroll to them moves focus
+/// past it instead. [walkBlock] answers the D-pad for a block taller than
+/// the viewport, which cannot be shown at once and whose middle is
+/// otherwise off the screen for good.
+///
+/// *When* to reveal is the caller's: a readout does it on taking focus, and
+/// the details header's description does it when the viewer folds the plot
+/// back up and the page is left scrolled through words that are gone.
+///
+/// Two widgets mix this in, and they disagree about everything else: a
+/// [Readout] is words the remote can stand on and select does nothing to,
+/// and the details header's description is a control that expands under
+/// select. Where the words are on the screen is the same question for
+/// both, and answering it twice is how the second copy goes wrong.
+mixin ReadableBlock<T extends StatefulWidget> on State<T> {
   /// How long a scroll this asks for takes. The same as a tile's, so a
   /// walk down a screen that mixes the two moves at one speed.
   static const Duration scrollDuration = Duration(milliseconds: 200);
@@ -86,37 +119,19 @@ class Readout extends StatefulWidget {
   /// A scroll shorter than this is not worth asking for, and -- far more
   /// importantly -- is not worth taking a press for. Sub-pixel rounding
   /// out of [RenderAbstractViewport.getOffsetToReveal] would otherwise
-  /// leave a readout swallowing every press of the down key with nothing
+  /// leave a block swallowing every press of the down key with nothing
   /// moving, which is a remote trapped on a paragraph.
   static const double slack = 0.5;
 
-  @override
-  State<Readout> createState() => _ReadoutState();
-}
-
-/// Where a readout sits in the scroll view around it: the offsets at which
-/// its top would be at the top of the viewport and its bottom at the
-/// bottom of it.
-///
-/// For a block that fits, [bottom] is the smaller of the two and the pair
-/// is the range of offsets that show the whole of it. For one that does
-/// not, they are the other way round and the pair is the range over which
-/// any of it is on screen, which is what walking it means.
-typedef _Where = ({ScrollPosition position, double top, double bottom});
-
-class _ReadoutState extends State<Readout> {
-  bool _focused = false;
-
-  void _onFocusChange(bool focused) {
-    if (!mounted || focused == _focused) return;
-    setState(() => _focused = focused);
-    // After the frame this setState asks for: the ring changes the block's
-    // painting and not its size, but a readout can also take focus while
-    // the list around it is still laying itself out, and an offset read
-    // then is an offset into the wrong tree.
-    if (focused) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal());
-    }
+  /// [revealBlock] once the frame that is being built has been laid out.
+  ///
+  /// A block takes focus while the list around it is still laying itself
+  /// out, and grows and shrinks when the viewer expands it; an offset read
+  /// before that frame is an offset into the wrong tree.
+  void revealBlockAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) revealBlock();
+    });
   }
 
   _Where? _where() {
@@ -147,10 +162,10 @@ class _ReadoutState extends State<Readout> {
   /// what it must not do is land on its *last* line -- which is exactly
   /// what the traversal does with it on the way down the page, and what a
   /// Tab does with it in either direction. So it starts at its first line,
-  /// whichever way the remote came, and [_onKey] walks the rest: reading
-  /// starts at the top of a paragraph and there is only one way to be
-  /// predictable about this.
-  void _reveal() {
+  /// whichever way the remote came, and [walkBlock] walks the rest:
+  /// reading starts at the top of a paragraph and there is only one way to
+  /// be predictable about this.
+  void revealBlock() {
     final at = _where();
     if (at == null) return;
     final position = at.position;
@@ -174,11 +189,11 @@ class _ReadoutState extends State<Readout> {
   /// This is the half that makes the tall case readable at all: revealing
   /// such a block can only ever show one end of it, and the press that
   /// would show the rest is the press that moves focus to whatever is
-  /// below -- so without this the middle of a long readout is off the
-  /// screen for good. A block that fits takes none of this: after
-  /// [_reveal] there is nothing of it past either edge, so the test below
-  /// answers false and the key goes where it always went.
-  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+  /// below -- so without this the middle of a long block is off the screen
+  /// for good. A block that fits takes none of this: after [revealBlock]
+  /// there is nothing of it past either edge, so the test below answers
+  /// false and the key goes where it always went.
+  KeyEventResult walkBlock(KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final forward = event.logicalKey == LogicalKeyboardKey.arrowDown;
     final back = event.logicalKey == LogicalKeyboardKey.arrowUp;
@@ -191,10 +206,10 @@ class _ReadoutState extends State<Readout> {
     // direction of travel, there is still some of this block over there.
     final edge = forward ? at.bottom : at.top;
     final left = edge - position.pixels;
-    if (forward ? left <= Readout.slack : left >= -Readout.slack) {
+    if (forward ? left <= slack : left >= -slack) {
       return KeyEventResult.ignored;
     }
-    final step = position.viewportDimension * Readout.screenful;
+    final step = position.viewportDimension * screenful;
     final target = _clamp(
       forward
           ? math.min(edge, position.pixels + step)
@@ -204,7 +219,7 @@ class _ReadoutState extends State<Readout> {
     );
     // Nothing to give: the list is against its end, and a press taken for
     // a scroll that cannot happen is the remote stuck here.
-    if ((target - position.pixels).abs() < Readout.slack) {
+    if ((target - position.pixels).abs() < slack) {
       return KeyEventResult.ignored;
     }
     _scrollTo(position, target);
@@ -212,23 +227,32 @@ class _ReadoutState extends State<Readout> {
   }
 
   void _scrollTo(ScrollPosition position, double target) {
-    if ((target - position.pixels).abs() < Readout.slack) return;
-    position.animateTo(
-      target,
-      duration: Readout.scrollDuration,
-      curve: Curves.easeOut,
-    );
+    if ((target - position.pixels).abs() < slack) return;
+    position.animateTo(target, duration: scrollDuration, curve: Curves.easeOut);
   }
 
   static double _clamp(double value, double low, double high) =>
       math.min(math.max(value, low), high);
+}
+
+class _ReadoutState extends State<Readout> with ReadableBlock<Readout> {
+  bool _focused = false;
+
+  void _onFocusChange(bool focused) {
+    if (!mounted || focused == _focused) return;
+    setState(() => _focused = focused);
+    // The ring changes the block's painting and not its size, but a
+    // readout can take focus while the list around it is still laying
+    // itself out -- so the offsets are read after the frame, never in it.
+    if (focused) revealBlockAfterFrame();
+  }
 
   @override
   Widget build(BuildContext context) {
     if (!DeviceScope.isTv(context)) return widget.child;
     return Focus(
       onFocusChange: _onFocusChange,
-      onKeyEvent: _onKey,
+      onKeyEvent: (node, event) => walkBlock(event),
       child: FocusHighlight(
         focused: _focused,
         borderRadius: widget.borderRadius,

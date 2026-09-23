@@ -203,15 +203,22 @@ void main() {
       expect(facts.overflow, TextOverflow.ellipsis);
     });
 
-    testWidgets('clips the description to a couple of lines, with no way to '
-        'unfold it', (tester) async {
+    testWidgets('clips the description to a couple of lines, and the way '
+        'past the clip is the words rather than a button under them', (
+      tester,
+    ) async {
       await pump(tester, movieWith({}));
 
       final meta = MetaDetailsState.fromJson(loadMetaDetailsFixture()).meta!;
       final description = textOf(tester, meta.description!);
       expect(description.maxLines, TvMetaHeader.descriptionLines);
       expect(description.overflow, TextOverflow.ellipsis);
+      // The phone's More is a focus stop of its own, and a remote spends a
+      // press walking past every stop between it and the rows; here the
+      // block of words is the control. What it does, and what focus does
+      // across it, is `details_description_test.dart`.
       expect(find.text('More'), findsNothing);
+      expect(find.byType(TvDescription), findsOneWidget);
     });
 
     testWidgets('drops the poster: the artwork is already the backdrop', (
