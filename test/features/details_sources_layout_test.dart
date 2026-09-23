@@ -407,8 +407,14 @@ void main() {
           text.data ?? '',
       ];
 
+      // The release, then the line the addon wrote under it, then the
+      // addon, then a badge per thing that was read out of that line.
+      // The addon's line is new here: the row used to draw the release and
+      // the badges and nothing in between, so the numbers the list is
+      // sorted by were on screen and the sentence they came from was not.
       expect(labels('Alpha 2160p'), [
         'Alpha 2160p',
+        '👤 3 💾 20 GB',
         'alpha.example',
         '2160p',
         '20 GB',
@@ -416,13 +422,15 @@ void main() {
       ]);
       expect(labels('Beta 1080p'), [
         'Beta 1080p',
+        '👤 100 💾 2 GB',
         'beta.example',
         '1080p',
         '2 GB',
         '100 seeders',
       ]);
       // Nothing readable: the addon name and no badge at all, rather than
-      // a row of placeholders.
+      // a row of placeholders -- and no line either, because that addon
+      // wrote none.
       expect(labels('Beta mystery release'), [
         'Beta mystery release',
         'beta.example',
@@ -478,12 +486,14 @@ void main() {
       ];
       expect(badges('Sizeless 1080p'), [
         'Sizeless 1080p',
+        '👤 90',
         'alpha.example',
         '1080p',
         '90 seeders',
       ]);
       expect(badges('Peerless 1080p'), [
         'Peerless 1080p',
+        '💾 3 GB',
         'alpha.example',
         '1080p',
         '3 GB',
@@ -783,11 +793,27 @@ void main() {
         reason: 'the heading, and not the row underneath it as well',
       );
 
-      // And the addon's raw blurb is drawn by neither. It was what the
-      // grouped list used to put under the release: the filename again,
-      // with whatever the hint parser did not recognise trailing it.
-      expect(sectioned, isNot(contains('ThePirateBay')));
-      expect(grouped, isNot(contains('ThePirateBay')));
+      // And the line the addon actually wrote is drawn by both, whole.
+      // This read `isNot(contains(...))` on either side: the blurb was
+      // what the grouped list used to put under the release -- the
+      // filename again, with whatever the hint parser did not recognise
+      // trailing it -- and the fix was to stop drawing the text at all.
+      // Drawing the text is right; drawing the lead twice was the bug, and
+      // the lead being taken out of it is what settles that (the file line
+      // is the release again with `.mkv` on it, and it is not here).
+      const stats = '👤 42 💾 1.51 GB ⚙️ ThePirateBay';
+      expect(sectioned, contains(stats));
+      expect(grouped, contains(stats));
+      // Twice, and deliberately: once in the line the addon wrote and
+      // once as the chip that was read out of it. That pairing is the
+      // whole design -- it is where a viewer can see the parse agree with
+      // the text, or catch it not agreeing.
+      for (final list in [sectioned, grouped]) {
+        expect(list.where((line) => line.contains('ThePirateBay')), [
+          stats,
+          'ThePirateBay',
+        ]);
+      }
     });
   });
 

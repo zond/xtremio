@@ -198,12 +198,37 @@ List<String> sourceTitles(WidgetTester tester) => [
     card.source.title,
 ];
 
-/// The one line of facts the card titled [title] carries, in order.
-List<String> factsOf(WidgetTester tester, String title) => tester
+/// The card titled [title].
+TvSource cardFor(WidgetTester tester, String title) => tester
     .widgetList<TvSourceCard>(find.byType(TvSourceCard))
     .firstWhere((card) => card.source.title == title)
-    .source
-    .facts;
+    .source;
+
+/// The addon's own lines on that card, under the release.
+List<String> linesOf(WidgetTester tester, String title) =>
+    cardFor(tester, title).lines;
+
+/// The pills on that card: the parse, in display order.
+List<String> pillsOf(WidgetTester tester, String title) =>
+    cardFor(tester, title).pills;
+
+/// Its quiet last line, in order.
+List<String> notesOf(WidgetTester tester, String title) =>
+    cardFor(tester, title).notes;
+
+/// Every string the card titled [title] actually draws, top to bottom,
+/// with the break opportunities taken back out ([breakableRelease]).
+List<String> drawnOn(WidgetTester tester, String title) => [
+  for (final text in tester.widgetList<Text>(
+    find.descendant(
+      of: find.byWidgetPredicate(
+        (w) => w is TvSourceCard && w.source.title == title,
+      ),
+      matching: find.byType(Text),
+    ),
+  ))
+    text.data!.replaceAll('​', ''),
+];
 
 /// Walks down the ladder to the header of the rung called [label] and
 /// presses select on it, which opens that rung and shuts whichever was
@@ -219,19 +244,6 @@ Future<void> openRung(
   expect(focusedLabel(tester), label, reason: 'the walk reached $label');
   await press(tester, LogicalKeyboardKey.select);
 }
-
-/// What the strip under the row of sources is saying, top line first: the
-/// release in full, and -- when there is one -- the line of everything the
-/// card had to drop.
-List<String> stripLines(WidgetTester tester) => [
-  for (final text in tester.widgetList<Text>(
-    find.descendant(
-      of: find.byType(TvSourceDetailStrip),
-      matching: find.byType(Text),
-    ),
-  ))
-    text.data!,
-];
 
 /// Everything drawn inside the card titled [title].
 Finder inSource(String title, Finder matching) => find.descendant(
@@ -323,8 +335,8 @@ void main() {
     expect(sourceTitles(tester), ['Alpha 1080p', 'Alpha 720p']);
   });
 
-  testWidgets('a source card leads with the release and says the rest on '
-      'one line', (tester) async {
+  testWidgets('a source card leads with the release and carries the parse '
+      'as pills', (tester) async {
     // Written the way Torrentio writes them: the name is the addon and
     // the quality, and the release is the first line of the description.
     // The card that led with the name read "Torrentio" four times over.
@@ -346,68 +358,64 @@ void main() {
     // release is the headline, with somewhere to break it at every dot.
     expect(sourceTitles(tester), [release]);
     expect(inSource(release, find.text(breakableRelease(release))), findsOne);
-    // The pill above says the resolution, so the card says the two facts
-    // it cannot, and the addon that answered -- with a +1 for the other
-    // one that offered the very same source.
-    expect(factsOf(tester, release), [
-      '42 seeders',
-      '1.5 GB',
-      'alpha.example +1',
+    // Every pill the parse produced, including the resolution the group
+    // pill above already says: a card says what it is wherever it is
+    // standing, and the two layouts put the same card under different
+    // headings. The quiet line names the kind, the tags and the addon --
+    // with the other addon that offered the very same source spelled out
+    // rather than counted `+1`, which is what the deleted readout was for.
+    expect(pillsOf(tester, release), ['1080p', '1.5 GB', '42 seeders']);
+    expect(notesOf(tester, release), [
+      'Torrent',
+      'BluRay',
+      'AVC',
+      'alpha.example',
+      'also from beta.example',
     ]);
     expect(
-      inSource(release, find.text('42 seeders · 1.5 GB · alpha.example +1')),
+      inSource(
+        release,
+        find.text(
+          'Torrent · BluRay · AVC · alpha.example · '
+          'also from beta.example',
+        ),
+      ),
       findsOne,
     );
   });
 
-  testWidgets('says everything the card had to drop, and nothing it '
-      'already says', (tester) async {
-    await mount(tester, sharedByTwoAddons(), sectioned: true);
-
-    // The card leads with the release and truncates it at two lines;
-    // the strip carries it in full and on one, and under it the tags
-    // that went when the card was cut to 260x96 -- with the `+1` on the
-    // card's own line spelled out into which addon it was.
-    expect(stripLines(tester), [
-      sharedRelease,
-      'Torrent · WEB-DL · HDR · HEVC · Atmos · also from beta.example',
-    ]);
-    expect(
-      tester.getRect(find.byType(TvSourceDetailStrip)).height,
-      TvSourceRows.detailHeight,
-    );
-    // And none of what the card is already saying: the swarm, the size
-    // and the addon that answered are on it, an arm's length above.
-    expect(factsOf(tester, sharedRelease), [
-      '42 seeders',
-      '1.5 GB',
-      'alpha.example +1',
-    ]);
-  });
-
-  testWidgets('is right on the first frame, with nothing pressed', (
+  testWidgets('says everything, on the card, with nothing pressed', (
     tester,
   ) async {
-    // The trap: a strip driven only by cards reporting focus is blank
-    // here. The remote starts on the group pill above the row, so no
-    // card holds focus at all -- and the tile that autofocuses is
-    // deliberately silent about it either way. A film nobody has played
-    // opens exactly like this, so blank would be the common case.
+    // This was a readout under the row (`TvSourceDetailStrip`, deleted):
+    // the tags, the kind and the other addons lived there because a
+    // 260x96 card had no room for them, and it described one card at a
+    // time -- the one the remote was on, which on arrival is no card at
+    // all. Everything it carried is on every card now, before anything is
+    // pressed, which is what lets a viewer compare two of them.
     await mount(tester, sharedByTwoAddons(), sectioned: true);
 
     expect(focusIn<TvSourceCard>(), isFalse, reason: 'still on the pill');
     expect(focusIn<TvSourceGroupPill>(), isTrue);
-    expect(
-      stripLines(tester).first,
-      sourceTitles(tester).first,
-      reason: 'the card the row would hand the remote back',
-    );
+    expect(drawnOn(tester, sharedRelease), [
+      sharedRelease,
+      '👤 42 💾 1.5 GB',
+      '1080p',
+      '1.5 GB',
+      '42 seeders',
+      'Torrent · WEB-DL · HDR · HEVC · Atmos · alpha.example · '
+          'also from beta.example',
+    ]);
   });
 
-  testWidgets('follows the remote along the row', (tester) async {
+  testWidgets('every card says its own, wherever the remote is', (
+    tester,
+  ) async {
     // The grouped layout, where a pill is an addon: it ranks inside one
     // addon's own answer and reads nothing out of the streams, so the
-    // tags the strip carries are read here and nowhere else.
+    // tags are read on the card and nowhere else. Two cards, two
+    // different sets of tags, both on screen at once -- which is the one
+    // thing a readout for the focused card could never do.
     await mount(
       tester,
       movieWith([
@@ -418,67 +426,60 @@ void main() {
       ]),
     );
 
+    expect(notesOf(tester, 'Alpha 1080p'), ['Torrent']);
+    expect(notesOf(tester, 'Beta 1080p WEB-DL x265'), [
+      'Torrent',
+      'WEB-DL',
+      'HEVC',
+    ]);
+    // And walking to one changes nothing about either.
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedLabel(tester), 'Alpha 1080p');
-    expect(stripLines(tester), ['Alpha 1080p', 'Torrent']);
-
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusedLabel(tester), 'Beta 1080p WEB-DL x265');
-    expect(stripLines(tester), [
-      'Beta 1080p WEB-DL x265',
-      'Torrent · WEB-DL · HEVC',
+    expect(notesOf(tester, 'Beta 1080p WEB-DL x265'), [
+      'Torrent',
+      'WEB-DL',
+      'HEVC',
     ]);
   });
 
-  testWidgets('a source with nothing more to say still draws its release '
-      'rather than an empty box', (tester) async {
+  testWidgets('an unknown draws no pill at all', (tester) async {
     await mount(
       tester,
       movieWith([
-        group('alpha.example', [
-          torrent(hash(1), 'Alpha 1080p', '👤 20 💾 2 GB'),
-        ]),
+        group('alpha.example', [torrent(hash(1), 'Alpha 1080p', '👤 20')]),
       ]),
       sectioned: true,
     );
 
-    // No tags, no other addon, and the addon sent no filename: what is
-    // left is the release and what kind of source it is, which the card
-    // says with an icon and nothing else. Not a placeholder for what is
-    // not known, and not a box of the same height with nothing in it.
-    expect(stripLines(tester), ['Alpha 1080p', 'Torrent']);
-    expect(
-      tester.getRect(find.byType(TvSourceDetailStrip)).height,
-      TvSourceRows.detailHeight,
-    );
+    // A size nobody stated is not a pill saying zero and not a pill
+    // saying "unknown": it is not there. What is known is.
+    expect(pillsOf(tester, 'Alpha 1080p'), ['1080p', '20 seeders']);
+    expect(inSource('Alpha 1080p', find.text('0 B')), findsNothing);
   });
 
-  testWidgets('a row the remote cannot enter still says what its first '
-      'card is', (tester) async {
+  testWidgets('a row the remote cannot enter still says everything about '
+      'every card in it', (tester) async {
     // WatchHub answers with `externalUrl`s: not one card in the row is a
     // focus stop, so there is no card the remote is on and none it will
-    // be handed. The strip is about the only card it could mean, and it
-    // has nothing to say under the name -- which is a line left out, not
-    // a line of placeholders for what is not known.
+    // be handed. Nothing about the row depends on that any more.
     await mount(tester, loadMetaDetailsFixture());
 
     expect(groupLabels(tester).first, 'watchhub.strem.io');
-    expect(stripLines(tester), [sourceTitles(tester).first]);
-    // And the box is the full reserved height with one line in it, the
-    // same as the two-line one above: what the strip says changes as the
-    // remote walks, and nothing about the panel does.
+    final title = sourceTitles(tester).first;
+    expect(drawnOn(tester, title).first, title);
     expect(
-      tester.getRect(find.byType(TvSourceDetailStrip)).height,
-      TvSourceRows.detailHeight,
+      pillsOf(tester, title),
+      isEmpty,
+      reason: 'WatchHub states no resolution, size, swarm, language or index',
     );
+    expect(notesOf(tester, title).first, 'External');
   });
 
-  testWidgets('a group whose sources have not arrived has nothing to '
-      'describe, and draws no strip', (tester) async {
+  testWidgets('a group whose sources have not arrived draws no cards', (
+    tester,
+  ) async {
     // A pill is out for an addon that is still answering, and landing on
-    // it opens a row with no cards in it. The strip is nothing but what
-    // it says about a card, so there is none -- rather than a box asking
-    // an empty list for its first entry.
+    // it opens a row with no cards in it.
     await mount(
       tester,
       movieWith([
@@ -490,7 +491,7 @@ void main() {
       settle: false,
     );
     expect(groupLabels(tester), ['alpha.example', 'slow.example']);
-    expect(find.byType(TvSourceDetailStrip), findsOneWidget);
+    expect(find.byType(TvSourceCard), findsOneWidget);
 
     // Raw presses: a rung with an addon still out spins, and settling
     // never comes back.
@@ -499,11 +500,9 @@ void main() {
 
     expect(focusedLabel(tester), 'slow.example');
     expect(find.byType(TvSourceCard), findsNothing);
-    expect(find.byType(TvSourceDetailStrip), findsNothing);
   });
 
-  testWidgets('down from a source card lands on the next rung, never on '
-      'the strip', (tester) async {
+  testWidgets('down from a source card lands on the next rung', (tester) async {
     await mount(
       tester,
       movieWith([
@@ -522,21 +521,15 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowDown);
 
     expect(focusedLabel(tester), kSourceAccountingLabel);
-    expect(
-      focusIn<TvSourceDetailStrip>(),
-      isFalse,
-      reason: 'a readout is not somewhere the D-pad can be left standing',
-    );
   });
 
-  testWidgets('another group is another set of cards, and the strip is '
-      'about the one that row will hand back', (tester) async {
-    // The card the remote was on is an index into the row it was in, and
-    // the row a sideways press puts out is a different list -- with a
-    // card no press can reach at the head of it. Carried across, that
-    // index is a readout about a card the viewer is not about to land on:
-    // a value read once and trusted after the thing it was read from has
-    // been replaced.
+  testWidgets('another group is another set of cards, and down still lands '
+      'on the one that row will hand back', (tester) async {
+    // The row a sideways press puts out is a different list -- with a card
+    // no press can reach at the head of it -- and the ladder's note of
+    // where the remote was in that row counts focus stops, not cards. It
+    // is what `down` consults a moment later, and it has to land on the
+    // card the viewer left rather than one index along.
     await mount(
       tester,
       movieWith([
@@ -565,7 +558,6 @@ void main() {
       'Alpha 1080p a',
       'Alpha 1080p b',
     ]);
-    expect(stripLines(tester).first, 'Alpha 1080p b');
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(
       focusedLabel(tester),
@@ -574,14 +566,10 @@ void main() {
     );
   });
 
-  testWidgets('a rung opened again describes the card it will hand back, '
-      'not the first one', (tester) async {
-    // Closing the rung takes the row -- and everything this widget was
-    // keeping about it -- off the screen, but not the ladder's own note of
-    // where the remote was in that row. Two answers to "which card is this
-    // row on" disagree the moment one of them is wrong, and what the
-    // viewer sees then is a readout for a card they are not about to
-    // reach.
+  testWidgets('a rung opened again hands the remote back the card it was '
+      'on, not the first one', (tester) async {
+    // Closing the rung takes the row off the screen, but not the ladder's
+    // own note of where the remote was in it.
     await mount(
       tester,
       movieWith([
@@ -600,12 +588,11 @@ void main() {
 
     // Away into the rung below, which shuts this one, and back.
     await openRung(tester, kSourceAccountingLabel);
-    expect(find.byType(TvSourceDetailStrip), findsNothing);
+    expect(find.byType(TvSourceCard), findsWidgets);
     await press(tester, LogicalKeyboardKey.arrowUp);
     await press(tester, LogicalKeyboardKey.select);
 
-    expect(stripLines(tester).first, 'Alpha 1080p b');
-    // The walk back down to the row it is describing: the header, the two
+    // The walk back down to the row: the header, the two
     // rungs of the heading's own controls, and the pills.
     for (var i = 0; i < 6 && !focusIn<TvSourceCard>(); i++) {
       await press(tester, LogicalKeyboardKey.arrowDown);
@@ -619,19 +606,17 @@ void main() {
 
   testWidgets('walking up to the pills and back leaves the panel where it '
       'was', (tester) async {
-    // The reason it is not opened and closed with focus: a strip that
-    // came and went as the remote entered and left the row would reflow
-    // the panel on every step of that walk, with the row below jumping
-    // and the scroll that keeps a focused card visible fighting it.
+    // The rows are as tall as their content and their content does not
+    // depend on where the remote is, so walking into the row and out of
+    // it moves nothing. It is worth a test because the thing this
+    // replaced -- a readout that said more about a focused card than an
+    // unfocused one -- reflowed the panel on exactly this walk, and was
+    // given a reserved height to stop it.
     await mount(tester, sharedByTwoAddons(), sectioned: true);
 
     // Measured against the rows themselves rather than the panel, so
     // that the scroll a focused card asks for is not read as a reflow.
-    ({Size rows, Size strip, double gap}) layout() {
-      final rows = tester.getRect(find.byType(TvSourceRows));
-      final strip = tester.getRect(find.byType(TvSourceDetailStrip));
-      return (rows: rows.size, strip: strip.size, gap: strip.top - rows.top);
-    }
+    Size layout() => tester.getRect(find.byType(TvSourceRows)).size;
 
     final onThePills = layout();
     await press(tester, LogicalKeyboardKey.arrowDown);
@@ -642,7 +627,7 @@ void main() {
     expect(layout(), onThePills, reason: 'and back up to the pill');
   });
 
-  testWidgets('is not drawn when the sources rung is shut', (tester) async {
+  testWidgets('the last-used rung is one card and no pills', (tester) async {
     await mount(
       tester,
       withLastUsed(
@@ -656,11 +641,14 @@ void main() {
     );
 
     // The title has been played, so the rung that is open is the
-    // last-used source -- one card, on a row of its own, with nothing
-    // under it to strip.
+    // last-used source: one card, on a row of its own, saying what a press
+    // does and which release it would carry on with. It is a shortcut to
+    // the row below rather than a listing, so it draws no pills -- the
+    // card for that source, with everything on it, is in the sources rung.
     expect(find.text(kContinueWithLastSource), findsOneWidget);
     expect(find.byType(TvSourceGroupPill), findsNothing);
-    expect(find.byType(TvSourceDetailStrip), findsNothing);
+    expect(cardFor(tester, kContinueWithLastSource).pills, isEmpty);
+    expect(linesOf(tester, kContinueWithLastSource), ['Alpha 1080p']);
   });
   testWidgets('a source the player cannot open takes no press and no focus', (
     tester,
@@ -680,7 +668,7 @@ void main() {
       reason: 'nothing in the row it opened can be reached',
     );
     // And the card says why, at the head of its line of facts.
-    expect(factsOf(tester, 'Amazon Prime Video').first, 'External');
+    expect(notesOf(tester, 'Amazon Prime Video').first, 'External');
   });
 
   testWidgets('a title that has been played opens on the last-used source, '

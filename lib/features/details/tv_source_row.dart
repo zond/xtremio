@@ -49,12 +49,12 @@ import '../../widgets/tv_ladder.dart';
 /// row and the row of sources it opens are two rungs of the screen's
 /// ladder, and each hands the remote back to the card it was last on.
 ///
-/// Under the sources is a third thing that is not a rung at all: the
-/// [TvSourceDetailStrip], which says what a 260x96 card has no room for
-/// about whichever card the remote is on. It is drawn for as long as there
-/// is a row of sources and takes exactly the same height whatever it says,
-/// so the panel does not reflow as the remote walks -- see the strip
-/// itself for why that matters more than closing it would.
+/// There used to be a third thing under the sources that was not a rung at
+/// all -- a readout saying what a 260x96 card had no room for about
+/// whichever card the remote was on. The card has the room now ([TvSourceCard]),
+/// so the readout is gone: nothing on a television is described anywhere
+/// but on the card it is about, and the panel has one fewer thing on it
+/// that a press could not reach.
 ///
 /// Closing the second row takes the card the remote was on off the screen
 /// with it, and nothing here puts the remote back: the enclosing
@@ -122,16 +122,17 @@ class TvSourceRows extends StatefulWidget {
   /// the row is really for.
   static const double sourceCardWidth = 260;
 
-  /// The box a source card is drawn in at text scale 1: two lines of
-  /// release name over one line of facts.
-  static const double sourceCardHeight = 96;
-
-  /// The box the [TvSourceDetailStrip] is drawn in at text scale 1: the
-  /// release name in full on one line, and everything else on one more.
+  /// The shortest a source card is drawn at text scale 1: two lines of
+  /// release name over one line under it.
   ///
-  /// A constant and not what the text happens to need, because it is
-  /// reserved rather than fitted: see the strip.
-  static const double detailHeight = 48;
+  /// A **floor**, not the box. A card carries whatever the addon wrote
+  /// ([TvSourceCard]) and the addons write between one line and five, so a
+  /// card is as tall as its own content and every card in a row is as tall
+  /// as the tallest of them. This is what the shortest of them still
+  /// measures, so a row of one-line answers (WatchHub says a service and a
+  /// word) is the same row it has always been rather than a strip of
+  /// slivers.
+  static const double minSourceCardHeight = 96;
 
   /// The gap between two cards.
   static const double gap = 12;
@@ -148,14 +149,11 @@ class TvSourceRows extends StatefulWidget {
   static double groupRowHeight(BuildContext context) =>
       focusSlack * 2 + pillHeight * _textFactor(context);
 
-  /// The height of the row of sources under it.
-  static double sourceRowHeight(BuildContext context) =>
-      focusSlack * 2 + sourceCardHeight * _textFactor(context);
-
-  /// The height of the strip under that, which is the same whether it has
-  /// two lines to draw or one.
-  static double detailStripHeight(BuildContext context) =>
-      detailHeight * _textFactor(context);
+  /// The shortest the row of sources under it is drawn: the floor a card
+  /// keeps ([minSourceCardHeight]), which is also the box the spinner that
+  /// stands in for a row still arriving is centred in.
+  static double minSourceRowHeight(BuildContext context) =>
+      focusSlack * 2 + minSourceCardHeight * _textFactor(context);
 
   /// How much bigger text is here than at the size these boxes were picked
   /// for, never below 1: the boxes are an exact fit at 1 and the padding
@@ -178,11 +176,6 @@ class _TvSourceRowsState extends State<TvSourceRows> {
   /// answering -- so this cannot simply be done in [initState].
   bool _shownOnArrival = false;
 
-  /// Which card of the open row the remote has come to rest on, as an
-  /// index into that row's sources; null while it has not been in the row
-  /// at all, which is what [_described] answers for.
-  int? _focused;
-
   @override
   void initState() {
     super.initState();
@@ -192,10 +185,6 @@ class _TvSourceRowsState extends State<TvSourceRows> {
   @override
   void didUpdateWidget(TvSourceRows oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Another group is another set of cards: the one the remote was on is
-    // not among them, so the strip goes back to describing whatever the
-    // row would hand back rather than a card that has gone.
-    if (oldWidget.openLabel != widget.openLabel) _focused = null;
     _showOnArrival();
   }
 
@@ -220,37 +209,6 @@ class _TvSourceRowsState extends State<TvSourceRows> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) (widget.onFocusGroup ?? widget.onOpen)(first.label);
     });
-  }
-
-  /// The card the strip describes: the one the remote is on, or -- before
-  /// it has ever been in this row -- the one the row will hand it.
-  ///
-  /// **The second half is the whole difficulty.** A strip driven only by
-  /// cards reporting focus is blank on arrival, because the card that
-  /// autofocuses is deliberately silent ([FocusableTile.onFocused]: where
-  /// focus starts is the screen's choice, not the viewer's) and because
-  /// the remote usually starts on the group pill *above* this row, where
-  /// no card holds focus at all. A film nobody has played opens exactly
-  /// that way, so blank would be the common case rather than the corner.
-  ///
-  /// So the answer is asked of the thing that knows it: the ladder, which
-  /// keeps the stop each row will hand back and is what `down` will
-  /// consult a moment later ([TvLadderController.rememberedStop]). Its
-  /// index counts focus stops, so it is mapped back through the cards a
-  /// press can actually reach; a row where none of them can be reached
-  /// (every source an `externalUrl`) describes its first card, which is
-  /// the only one it could mean.
-  TvSource _described(List<TvSource> sources) {
-    final focused = _focused;
-    if (focused != null && focused < sources.length) return sources[focused];
-    final stops = [
-      for (final source in sources)
-        if (source.onSelect != null) source,
-    ];
-    if (stops.isEmpty) return sources.first;
-    final remembered =
-        TvLadder.maybeOf(context)?.rememberedStop(widget.sourceLevel) ?? 0;
-    return stops[remembered.clamp(0, stops.length - 1)];
   }
 
   @override
@@ -288,20 +246,11 @@ class _TvSourceRowsState extends State<TvSourceRows> {
             ),
           ),
         ),
-        if (open != null) ...[
+        if (open != null)
           TvLadderRow(
             level: widget.sourceLevel,
-            child: TvSourceRow(
-              sources: open.sources,
-              onFocusedCard: (index) => setState(() => _focused = index),
-            ),
+            child: TvSourceRow(sources: open.sources),
           ),
-          // A group whose sources have not arrived has no card to say
-          // anything about, and the strip is nothing but what it says
-          // about one.
-          if (open.sources.isNotEmpty)
-            TvSourceDetailStrip(source: _described(open.sources)),
-        ],
       ],
     );
   }
@@ -316,15 +265,9 @@ class TvSourceRow extends StatelessWidget {
     required this.sources,
     this.defaultFocus = false,
     this.focusNode,
-    this.onFocusedCard,
   });
 
   final List<TvSource> sources;
-
-  /// The remote has come to rest on the card at this index. For the strip
-  /// under the row ([TvSourceDetailStrip]); the rows drawn on their own
-  /// have nothing below them to tell.
-  final ValueChanged<int>? onFocusedCard;
 
   /// Whether the first card is where the remote starts on this screen.
   final bool defaultFocus;
@@ -336,9 +279,18 @@ class TvSourceRow extends StatelessWidget {
   final FocusNode? focusNode;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: TvSourceRows.sourceRowHeight(context),
+  Widget build(BuildContext context) => ConstrainedBox(
+    // A floor rather than a box: the cards carry whatever the addon wrote,
+    // so the row is as tall as the tallest of them and never shorter than
+    // the row it has always been.
+    constraints: BoxConstraints(
+      minHeight: TvSourceRows.minSourceRowHeight(context),
+    ),
     child: TvCardStrip(
+      // Every card in a row is the height of the tallest one in it. The
+      // alternative is a row of ragged bottoms, which reads as cards half
+      // drawn rather than as addons with different amounts to say.
+      equalHeights: true,
       children: [
         for (final (index, source) in sources.indexed)
           SizedBox(
@@ -347,9 +299,6 @@ class TvSourceRow extends StatelessWidget {
               source: source,
               defaultFocus: defaultFocus && index == 0,
               focusNode: index == 0 ? focusNode : null,
-              onFocused: onFocusedCard == null
-                  ? null
-                  : () => onFocusedCard!(index),
             ),
           ),
       ],
@@ -374,9 +323,23 @@ class TvSourceRow extends StatelessWidget {
 /// with posters in it, and a second copy of the end-swallowing would be a
 /// second place for it to be wrong.
 class TvCardStrip extends StatelessWidget {
-  const TvCardStrip({super.key, required this.children});
+  const TvCardStrip({
+    super.key,
+    required this.children,
+    this.equalHeights = false,
+  });
 
   final List<Widget> children;
+
+  /// Every card is drawn the height of the tallest one, rather than the
+  /// height it happens to want.
+  ///
+  /// For the strips whose cards hold text an addon wrote and so are not
+  /// all the same size ([TvSourceRow]). It costs an [IntrinsicHeight] --
+  /// a second layout pass over the row -- which is why it is asked for
+  /// rather than always done: a strip of posters is a strip of one shape
+  /// and has nothing to reconcile.
+  final bool equalHeights;
 
   /// Left at the first card and right at the last stay where they are.
   /// The cards a source cannot be played from are not focus stops and so
@@ -399,17 +362,23 @@ class TvCardStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final row = Row(
+      spacing: TvSourceRows.gap,
+      crossAxisAlignment: equalHeights
+          ? CrossAxisAlignment.stretch
+          : CrossAxisAlignment.center,
+      children: children,
+    );
     final strip = SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(
         horizontal: TvSourceRows.sidePadding,
         vertical: TvSourceRows.focusSlack,
       ),
-      child: Row(
-        spacing: TvSourceRows.gap,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: children,
-      ),
+      // `stretch` needs a height to stretch to, and a row inside a
+      // sideways scroll view is given none: the intrinsic pass is what
+      // asks the cards how tall the tallest of them is.
+      child: equalHeights ? IntrinsicHeight(child: row) : row,
     );
     if (!DeviceScope.isTv(context)) return strip;
     return Focus(
@@ -535,25 +504,40 @@ class TvSourceGroupPill extends StatelessWidget {
 /// One card of the second row: a source to play, or a line of the
 /// accounting that has nowhere else to go (see [TvSourceRows]).
 ///
-/// The release name leads, because it is the one thing on the card that
-/// tells two sources apart, and under it one line of facts -- seeders,
-/// size, and whichever of the resolution and the addon the pill above does
-/// not already say. What used to be a second and a third line (the badges,
-/// the addon, "Also from ...") is that one line now: the card is 96 dp
-/// tall so that the episodes and the last-used source can be on the panel
-/// with it.
+/// **The card carries the whole of what the addon sent.** The lead names
+/// what a press would start ([StreamPresentation.lead]) and under it are
+/// the addon's remaining lines, in the order it wrote them and none of
+/// them shortened. That is a change of mind: the card was cut to two lines
+/// of release over one line of facts, and everything else -- the release
+/// tags, the other addons offering the same file, the release the file
+/// came out of -- was moved to a readout under the row, where it described
+/// one card at a time and could not be pointed at. A television fits more
+/// than that, and a viewer reading a row of cards is comparing them, which
+/// is a thing one readout cannot be used for.
+///
+/// **The pills are the parse, beside the text it was read out of**
+/// ([StreamFacts.pills]): resolution, size, seeders, the languages and the
+/// indexer. A `💾 4.98 GB` on the addon's own line with a `4.98 GB` pill
+/// under it is the repetition working -- it is how a viewer sees that the
+/// sort and the sections are built on a reading that agrees with what was
+/// written. Nothing is taken out of the text to avoid saying it twice.
+///
+/// **Its height is its own.** The recorded addons answer with between one
+/// line and five, so a card is as tall as it needs and every card in a row
+/// is as tall as the tallest ([TvCardStrip.equalHeights]) -- the price of
+/// a horizontal strip, and measured in `details_sources_row_test.dart`
+/// rather than guessed at.
 ///
 /// A source that the player cannot open takes no press, and so is not a
 /// focus stop either -- the remote steps over it, exactly as the vertical
-/// list's disabled row does. What kind of source it is leads the facts
-/// line instead, since there is no play arrow to replace.
+/// list's disabled row does. What kind of source it is leads the quiet
+/// last line instead, since there is no play arrow to replace.
 class TvSourceCard extends StatelessWidget {
   const TvSourceCard({
     super.key,
     required this.source,
     this.defaultFocus = false,
     this.focusNode,
-    this.onFocused,
   });
 
   final TvSource source;
@@ -562,19 +546,40 @@ class TvSourceCard extends StatelessWidget {
   /// See [TvSourceRow.focusNode]; one is made for the card when null.
   final FocusNode? focusNode;
 
-  /// The remote has come to rest on this card. Beside [TvSource.onSelect]
-  /// and never instead of it: landing on a source chooses nothing, it only
-  /// says which one the strip below is about.
-  final VoidCallback? onFocused;
+  /// How many lines the lead and each of the addon's own lines are given
+  /// before they are ellipsized.
+  ///
+  /// **Measured, not chosen.** Uncapped, the twenty-five recorded rows
+  /// come out between 72 and 439 dp tall on a 720p television, and a row
+  /// is as tall as its tallest card -- 463 dp of a 648 dp panel, so a
+  /// viewer walking from a group pill to a card would scroll the screen.
+  /// Recorded row 6 is what drives it: its
+  /// `behaviorHints.filename` spells out every dub (~120 characters) where
+  /// the addon's own line says `MULTi`, and at 260 dp wide that is six
+  /// lines of one card. Two for the lead and three for each line under it
+  /// is what brings the tallest recorded card back under 260 dp while
+  /// leaving twenty-two of the twenty-five uncut, which
+  /// `details_sources_row_test.dart` measures rather than trusts.
+  static const int leadLines = 2;
+  static const int bodyLines = 3;
+
+  /// And how many the quiet provenance line gets. Two, not one: the
+  /// release tags are on it, and they are what the deleted readout used to
+  /// carry -- a line that ellipsized them would have made them unreachable
+  /// rather than moved.
+  static const int noteLines = 2;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final quiet = theme.textTheme.labelSmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final mark = _downloadMark(source);
     return FocusableTile(
       onTap: source.onSelect,
       onLongPress: source.onHold,
-      onFocused: onFocused,
       defaultFocus: defaultFocus,
       focusNode: focusNode,
       borderRadius: _cardRadius,
@@ -585,43 +590,63 @@ class TvSourceCard extends StatelessWidget {
         borderColor: source.highlighted ? scheme.secondary : Colors.transparent,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 4,
           children: [
-            Expanded(
-              child: Row(
-                spacing: 6,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(source.icon, size: 16, color: scheme.onSurfaceVariant),
-                  Expanded(
-                    child: Text(
-                      breakableRelease(source.title),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurface,
-                        height: 1.25,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             Row(
               spacing: 6,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Icon(source.icon, size: 16, color: scheme.onSurfaceVariant),
                 Expanded(
                   child: Text(
-                    source.facts.join(' · '),
-                    maxLines: 1,
+                    breakableRelease(source.title),
+                    maxLines: leadLines,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurface,
+                      height: 1.25,
                     ),
                   ),
                 ),
-                ?_downloadMark(source),
               ],
             ),
+            // The addon's own lines. [breakableRelease] for the same
+            // reason the lead has it: a file line is one unbreakable word
+            // to Unicode, and a card 260 wide would otherwise break it
+            // wherever the line happened to run out.
+            for (final line in source.lines)
+              Text(
+                breakableRelease(line),
+                maxLines: bodyLines,
+                overflow: TextOverflow.ellipsis,
+                style: quiet,
+              ),
+            if (source.pills.isNotEmpty)
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [for (final pill in source.pills) _Pill(pill)],
+              ),
+            // What is left is provenance: which addon answered, who else
+            // offered the same file, the release tags, and -- for a source
+            // no press can open -- what kind it is. Quiet, last, and on
+            // one line, because it is what a viewer checks rather than
+            // what they read.
+            if (source.notes.isNotEmpty || mark != null)
+              Row(
+                spacing: 6,
+                children: [
+                  Expanded(
+                    child: Text(
+                      source.notes.join(' · '),
+                      maxLines: noteLines,
+                      overflow: TextOverflow.ellipsis,
+                      style: quiet,
+                    ),
+                  ),
+                  ?mark,
+                ],
+              ),
           ],
         ),
       ),
@@ -645,94 +670,31 @@ class TvSourceCard extends StatelessWidget {
   }
 }
 
-/// The quiet line or two under the row of sources: everything known about
-/// the card the remote is on that the card itself has no room to say.
+/// One pill: a value the parser read, drawn beside the text it was read
+/// out of ([StreamFacts.pills]).
 ///
-/// The cards were cut to 260x96 so that the episodes, the last-used source
-/// and the sources could share a 720p panel, and two lines of release name
-/// over one line of facts is what fits in that. The release tags
-/// (`WEB-DL`, `x265`, `HDR`, the audio) went, and the other addons
-/// offering the very same source went from a sentence to a `+1`. They are
-/// here instead, once, for the one card that is being looked at, rather
-/// than on every card in the row.
-///
-/// Three things about it are not cosmetic:
-///
-/// - **It is not a focus stop.** A press down from a source card has to
-///   reach the next rung, so this registers no level with the [TvLadder]
-///   and nothing drawn in it can be landed on ([ExcludeFocus], the same
-///   guard a [FocusableTile] puts over its own contents and for the same
-///   reason: a ring that says a row is focused while the D-pad is really
-///   sitting on a line of text in it). So it wears no part of the focus
-///   indicator, not even [FocusTreatment.readout] -- that member is for
-///   something that does take focus and is read while the remote is
-///   elsewhere, and what it really settles is the dimming, which is drawn
-///   on the *unfocused* surface and is only a cue where the neighbours
-///   fade with it. A line under a row, fading on its own, reads as
-///   something that has gone away.
-/// - **Its height is reserved, not fitted.** A strip that appeared as
-///   focus entered the row and went as it left would reflow the panel on
-///   every walk between the group pills and the cards -- with the row
-///   below jumping and the strip itself fighting the scroll that keeps a
-///   focused card visible. So it is drawn for as long as there is a row of
-///   sources, at [TvSourceRows.detailHeight] whether it has two lines to
-///   draw or one, and what changes as the remote moves is only what it
-///   says. It "closes" when the row does, which is what a viewer reads as
-///   closing anyway.
-/// - **What it says is never what the card says.** The size, the swarm and
-///   the addon are on the card; the release name is on it too, but cut off
-///   at two lines, so it is repeated here in full and on one line. What
-///   the addon sent as `behaviorHints.filename` is that release name:
-///   [releaseNameOf] prefers it over everything else, so a line for the
-///   file would be the same string again with `.mkv` on the end.
-class TvSourceDetailStrip extends StatelessWidget {
-  const TvSourceDetailStrip({super.key, required this.source});
+/// The same shape the phone's chips are, because they are the same thing:
+/// what the sort and the sections are built on, said on the row so that
+/// "why is this one here" never needs another screen.
+class _Pill extends StatelessWidget {
+  const _Pill(this.label);
 
-  /// The card being described -- the one the remote is on, or the one the
-  /// row would hand it back ([TvSourceRows]).
-  final TvSource source;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return ExcludeFocus(
-      child: SizedBox(
-        height: TvSourceRows.detailStripHeight(context),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: TvSourceRows.sidePadding,
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Not [breakableRelease]: the panel is five cards wide, so
-              // there is nothing to break -- and the breaks the cards need
-              // are what would make this the same string twice over to
-              // anything reading the screen.
-              Text(
-                source.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurface,
-                ),
-              ),
-              // A card with nothing more to say leaves this line out
-              // rather than filling it with a placeholder for what is not
-              // known; the release above it is still the thing the strip
-              // is for, and the box is the same height either way.
-              if (source.details.isNotEmpty)
-                Text(
-                  source.details.join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSecondaryContainer,
           ),
         ),
       ),
@@ -801,22 +763,24 @@ typedef TvSource = ({
   /// The kind of source, or what the line is about.
   IconData icon,
 
-  /// The release name ([releaseNameOf]), or what the accounting has to
-  /// say.
+  /// The line that names what a press would start
+  /// ([StreamPresentation.lead]), or what the accounting has to say.
   String title,
 
-  /// The one line under it, already in the order it reads and with only
-  /// what is actually known in it -- never a placeholder for what is not.
-  /// Joined with a middle dot by the card.
-  List<String> facts,
+  /// The addon's remaining lines, in the order it wrote them and whole
+  /// ([StreamPresentation.rest]) -- or, for an accounting card, the one
+  /// thing there is to say about that addon. Each on a line of its own.
+  List<String> lines,
 
-  /// The line the [TvSourceDetailStrip] draws under the row while the
-  /// remote is on this card: what the 260x96 card had to drop -- the
-  /// release tags, the other addons offering the same source, what kind of
-  /// source it is where the card has only an icon for it. In reading
-  /// order, with only what is known in it, and empty for a card that has
-  /// nothing more to say than it already does.
-  List<String> details,
+  /// The parse, as pills ([StreamFacts.pills]): only what is actually
+  /// known, and never a placeholder for what is not.
+  List<String> pills,
+
+  /// The quiet last line: which addon answered, which others offered the
+  /// same file, the release tags, and what kind of source it is where no
+  /// press can open it. In reading order, with only what is known in it,
+  /// and joined with a middle dot by the card.
+  List<String> notes,
 
   /// This is the source the title was last played from.
   bool highlighted,
