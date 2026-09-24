@@ -766,46 +766,36 @@ class MediaKitEngine implements PlaybackEngine {
     }
   }
 
-  /// What mpv keeps in memory ahead of the play head: 16 MiB of packets.
+  /// What mpv keeps in memory ahead of the play head: 32 MiB of packets.
   ///
   /// `PlayerConfiguration.bufferSize` is set on both `demuxer-max-bytes`
   /// and `demuxer-max-back-bytes` (media_kit 1.2.6,
   /// `player/native/player/real.dart`), so on its own this number is per
   /// side and the player's ceiling is twice it. It is not on its own any
   /// more: [backCacheBytes] takes the back side down through
-  /// [mpvOverrides], and the ceiling is the sum of the two, 24 MiB.
+  /// [mpvOverrides], and the ceiling is the sum of the two, 40 MiB.
   ///
-  /// **This was 32 MiB, and the argument written here for keeping it was
-  /// an argument against *raising* it.** Two measurements since say it can
-  /// come down instead.
+  /// **This was briefly halved to 16 MiB and put back.** The halving was
+  /// argued from a measurement of the heaviest torrent this television has
+  /// played, read as 4 Mb/s; it is 4 **MB**/s, about 32 Mbps. At that rate
+  /// 32 MiB is 8.4 seconds of read-ahead and 16 MiB is 4.2, and this is
+  /// the buffer that absorbs a swarm going quiet -- on the one kind of
+  /// file that has actually stalled on this device. The eight-fold error
+  /// made a thin window look generous.
   ///
-  /// The first is what this app actually plays. The reasoning for 32 MiB
-  /// quoted 9 seconds of a 30 Mbps remux as the thin case; the owner's
-  /// television has never been given one. The largest torrent it has
-  /// played measured about 4 Mbps, where 16 MiB is 33 seconds of
-  /// read-ahead -- a number chosen for content nobody streams was buying
-  /// headroom at the price of the resource that is actually short.
-  ///
-  /// The second is where the memory goes. A fresh launch holds 14 MB of
-  /// native heap; after a stream has played and stopped it settles at
-  /// 85 MB and stays there, and the low-memory killer has taken this app
-  /// at 203 MB and 147 MB resident. The player's buffers are not the
-  /// largest thing in that process, but they are the part whose size is
-  /// ours to choose, and they are chosen now for the film in front of
-  /// this viewer rather than for one they do not have.
-  ///
-  /// What does not change is why a smaller window is affordable at all:
-  /// every stream reaches this player through the embedded server's own
-  /// cache ([proxiedThroughServer]), which keeps what it fetched around
-  /// the play head on disk. Running past this window is a range request
-  /// answered locally, not a re-fetch from the swarm.
+  /// So the original reasoning stands, and its "nine seconds of a 30 Mbps
+  /// remux" turns out to describe real content rather than a hypothetical
+  /// one. Raising it is still the wrong answer: the room is not there on a
+  /// 2 GB television, and the cushion belongs in the server's cache, where
+  /// it is bounded and reclaimable. What is affordable is the *back*
+  /// window, for the reasons on [backCacheBytes].
   ///
   /// It is written out rather than inherited because it is the player's
-  /// only buffer, and the only buffer should not be somebody else's
-  /// default: a media_kit release that changed `bufferSize` would change
-  /// what a television holds, silently. mpv's own default for the forward
-  /// side is 150 MiB and for the back side 50 MiB.
-  static const int memoryCacheBytes = 16 * 1024 * 1024;
+  /// only forward buffer, and the only buffer should not be somebody
+  /// else's default: a media_kit release that changed `bufferSize` would
+  /// change what a television holds, silently. mpv's own default for the
+  /// forward side is 150 MiB and for the back side 50 MiB.
+  static const int memoryCacheBytes = 32 * 1024 * 1024;
 
   /// What mpv keeps in memory *behind* the play head: 8 MiB, half of what
   /// it keeps ahead, where media_kit would have made the two the same.
@@ -819,16 +809,20 @@ class MediaKitEngine implements PlaybackEngine {
   ///
   /// **The size is set by one press of the remote.** The seek step is ten
   /// seconds (`SeekBar.defaultSeekStep`), so what matters is the bitrate
-  /// at which one press back still lands inside the window: 8 MiB covers
-  /// a press up to about 6.7 Mbps, and this app's heaviest measured
-  /// content is about 4 Mbps, where 8 MiB is 17 seconds.
+  /// at which one press back still lands inside the window. 8 MiB covers
+  /// a press to about 6.7 Mbps: 13 seconds at 5 Mbps, 45 at an SD 1.5.
   ///
-  /// 16 MiB, which this was, covered a press up to about 13 Mbps -- a
-  /// margin for content the owner's television has never been given. 4 MiB
-  /// is the number *not* to take: it covers a press only to 3.3 Mbps, so
-  /// it would start missing on the very films this is sized for, and the
-  /// first thing a viewer would notice is the second that a press back
-  /// suddenly costs.
+  /// Above that neither size covers a press, and that is what makes the
+  /// halving free rather than cheap. The heaviest torrent this television
+  /// has played runs at about 4 MB/s -- 32 Mbps -- where 16 MiB is 4.2
+  /// seconds and 8 MiB is 2.1: both far short of a press, so a backward
+  /// seek on that file was always a range request to the server, before
+  /// this change and after it. What the halving gives up is nothing any
+  /// bitrate actually pays.
+  ///
+  /// 4 MiB is the number *not* to take: it covers a press only to
+  /// 3.3 Mbps, so it would start missing on ordinary 1080p, where a press
+  /// back costs a second of demuxer re-open that it need not.
   static const int backCacheBytes = 8 * 1024 * 1024;
 
   /// media_kit's own defaults with [memoryCacheBytes] named, and the log
