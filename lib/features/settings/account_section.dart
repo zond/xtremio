@@ -468,7 +468,7 @@ class _AccountSectionState extends State<AccountSection> {
     // whatever the viewer uploaded, and a picture forty points across is
     // no reason to hold a photograph in memory. The width alone keeps the
     // picture's own aspect, and `cover` crops it into the circle as it
-    // did; `ResizeImage` counts physical pixels, hence the ratio.
+    // did; the bound counts physical pixels, hence the ratio.
     const diameter = AccountSection.avatarRadius * 2;
     final pixels = (diameter * MediaQuery.devicePixelRatioOf(context)).round();
     return Column(
@@ -480,7 +480,7 @@ class _AccountSectionState extends State<AccountSection> {
               radius: AccountSection.avatarRadius,
               foregroundImage: avatar == null
                   ? null
-                  : ResizeImage(NetworkImage(avatar), width: pixels),
+                  : DiskCachedImage.bounded(avatar, cacheWidth: pixels),
               onForegroundImageError: avatar == null ? null : (_, _) {},
               child: const Icon(Icons.person_outline),
             ),

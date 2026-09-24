@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/image_disk_cache.dart';
 import '../core/state/meta_item_preview.dart';
 import 'focusable_tile.dart';
 
@@ -104,12 +105,14 @@ class PosterImage extends StatelessWidget {
                   final pixels = width.isFinite && width > 0
                       ? (width * MediaQuery.devicePixelRatioOf(context)).round()
                       : 0;
-                  return Image.network(
-                    url,
+                  return Image(
+                    image: DiskCachedImage.bounded(
+                      url,
+                      cacheWidth: pixels > 0 ? pixels : null,
+                    ),
                     fit: BoxFit.cover,
                     width: double.infinity,
                     height: double.infinity,
-                    cacheWidth: pixels > 0 ? pixels : null,
                     errorBuilder: (_, _, _) => const _PosterFallback(),
                   );
                 },

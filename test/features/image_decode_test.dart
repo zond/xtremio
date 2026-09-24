@@ -269,7 +269,7 @@ void main() {
         avatar.foregroundImage,
         isA<ResizeImage>()
             .having(
-              (image) => (image.imageProvider as NetworkImage).url,
+              (image) => (image.imageProvider as DiskCachedImage).url,
               'url',
               url,
             )
@@ -285,12 +285,21 @@ void main() {
 
   group('nothing decodes at the source resolution', () {
     test('every network image in lib/ names the size it decodes at', () {
-      // The guard against a sixth. Every `Image.network` in the app is
+      // The guard against a sixth. Every network image the app builds is
       // read, and one that names neither `cacheWidth` nor `cacheHeight`
       // fails this: a provider is otherwise decoded at whatever the addon
-      // served, which is the whole bug. A bare `NetworkImage` counts as
-      // bounded only inside a `ResizeImage`, which cannot be built without
-      // a width or a height of its own.
+      // served, which is the whole bug. A bare provider counts as bounded
+      // only inside a `ResizeImage`, which cannot be built without a width
+      // or a height of its own.
+      //
+      // Three names, because there are three ways to reach a network
+      // fetch from a widget: the framework's `Image.network` and
+      // `NetworkImage` (which nothing in `lib/` builds any more, and which
+      // are still watched so that going back to them is caught), and
+      // `DiskCachedImage.bounded`, which is what every call site uses now.
+      // The bare `DiskCachedImage` constructor is *not* on this list
+      // because no call site may reach it at all -- the test below is what
+      // holds that.
       //
       // Read as text rather than as a widget tree, because the point is
       // to catch the call nobody has written a screen test for. What it
@@ -298,11 +307,7 @@ void main() {
       // is not network artwork, and a provider assembled through a
       // variable would need a compiler.
       final unbounded = <String>[];
-      final files = Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.dart'));
-      for (final file in files) {
+      for (final file in _dartFiles()) {
         for (final call in _networkImages(_code(file))) {
           if (call.startsWith('ResizeImage(') ||
               call.contains('cacheWidth') ||
@@ -322,8 +327,60 @@ void main() {
             'MediaQuery.devicePixelRatioOf(context)',
       );
     });
+
+    test('and every one of them goes through the disk cache', () {
+      // The other half of the bound, and the reason the names above are
+      // still watched although nothing builds them. `Image.network` and a
+      // bare `NetworkImage` fetch through `dart:io`'s `HttpClient`, which
+      // implements no HTTP cache at all -- so a screen that goes back to
+      // one is a screen whose every eviction is a round trip to the addon
+      // again, which is exactly what `ImageDiskCache` was written to stop
+      // and exactly the kind of regression nothing about the picture on
+      // screen would show.
+      final uncached = <String>[];
+      for (final file in _dartFiles()) {
+        final code = _code(file);
+        for (final name in const ['Image.network(', 'NetworkImage(']) {
+          if (code.contains(name)) uncached.add('${file.path}: $name');
+        }
+      }
+
+      expect(
+        uncached,
+        isEmpty,
+        reason:
+            'a network image that keeps nothing on disk: build it with '
+            'DiskCachedImage.bounded(url, cacheWidth: ...) instead',
+      );
+    });
+
+    test('and the one unbounded constructor is only in the file that '
+        'wraps it', () {
+      // `DiskCachedImage(url)` on its own decodes at the source's
+      // resolution, and it is the one call the guard above cannot judge --
+      // it is what `DiskCachedImage.bounded` wraps, and inside `bounded`
+      // the bound is a parameter rather than a literal. So the constructor
+      // is allowed in exactly one file, and every screen goes through
+      // `bounded`, which cannot be called without naming a dimension
+      // without the guard above catching it.
+      final built = [
+        for (final file in _dartFiles())
+          if (_code(file).contains('DiskCachedImage(')) file.path,
+      ];
+      expect(built, ['lib/core/image_disk_cache.dart']);
+    });
   });
 }
+
+/// Every Dart file under `lib/`, in a stable order so a failure names the
+/// same file twice running.
+List<File> _dartFiles() =>
+    Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
 
 /// [file]'s code with its comments taken out, so that a line *about*
 /// `Image.network` is not read as a call to it.
@@ -338,7 +395,11 @@ String _code(File file) => file
 List<String> _networkImages(String code) {
   const wrapper = 'ResizeImage(';
   final found = <String>[];
-  for (final name in const ['Image.network(', 'NetworkImage(']) {
+  for (final name in const [
+    'Image.network(',
+    'NetworkImage(',
+    'DiskCachedImage.bounded(',
+  ]) {
     var at = code.indexOf(name);
     while (at >= 0) {
       var depth = 0;

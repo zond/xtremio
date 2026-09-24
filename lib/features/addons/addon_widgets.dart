@@ -49,10 +49,12 @@ class AddonLogo extends StatelessWidget {
         color: theme.colorScheme.surfaceContainerHighest,
         child: url == null
             ? fallback
-            : Image.network(
-                url!,
+            : Image(
+                image: DiskCachedImage.bounded(
+                  url!,
+                  cacheWidth: pixels > 0 ? pixels : null,
+                ),
                 fit: BoxFit.contain,
-                cacheWidth: pixels > 0 ? pixels : null,
                 errorBuilder: (_, _, _) => fallback,
               ),
       ),

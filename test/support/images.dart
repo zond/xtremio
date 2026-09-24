@@ -2,16 +2,24 @@
 ///
 /// Both questions have to see through a [ResizeImage]: `cacheWidth` and
 /// `cacheHeight` are not kept on the widget, they are the wrapper
-/// `Image.network` puts round its provider, so a test that looks straight
-/// at `image.image` for a [NetworkImage] stops finding one the moment a
+/// [DiskCachedImage.bounded] puts round its provider, so a test that looks
+/// straight at `image.image` for a provider stops finding one the moment a
 /// decode is bounded.
+///
+/// Flutter's own [NetworkImage] is still read here although nothing in
+/// `lib/` builds one any more: a screen that went back to `Image.network`
+/// should fail on the URL it fetches or the bound it names, not on a null
+/// from this file.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:xtremio/core/core.dart';
 
 /// What [image] is fetching, through the wrapper a bounded decode adds.
 String? networkUrlOf(Image? image) => switch (image?.image) {
+  ResizeImage(:final DiskCachedImage imageProvider) => imageProvider.url,
   ResizeImage(:final NetworkImage imageProvider) => imageProvider.url,
+  DiskCachedImage(:final url) => url,
   NetworkImage(:final url) => url,
   _ => null,
 };

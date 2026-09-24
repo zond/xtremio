@@ -63,10 +63,12 @@ class EpisodeThumbnail extends StatelessWidget {
           children: [
             ColoredBox(color: theme.colorScheme.surfaceContainerHighest),
             if (thumbnail != null)
-              Image.network(
-                thumbnail,
+              Image(
+                image: DiskCachedImage.bounded(
+                  thumbnail,
+                  cacheWidth: pixels > 0 ? pixels : null,
+                ),
                 fit: BoxFit.cover,
-                cacheWidth: pixels > 0 ? pixels : null,
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             if (episode != null)

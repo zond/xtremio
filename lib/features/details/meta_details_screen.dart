@@ -2634,10 +2634,12 @@ class _Backdrop extends StatelessWidget {
           children: [
             ColoredBox(color: scheme.surfaceContainerHighest),
             if (url != null)
-              Image.network(
-                url,
+              Image(
+                image: DiskCachedImage.bounded(
+                  url,
+                  cacheWidth: pixels > 0 ? pixels : null,
+                ),
                 fit: BoxFit.cover,
-                cacheWidth: pixels > 0 ? pixels : null,
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             DecoratedBox(
@@ -2660,12 +2662,14 @@ class _Backdrop extends StatelessWidget {
                 bottom: 64,
                 child: Align(
                   alignment: Alignment.bottomLeft,
-                  child: Image.network(
-                    logo,
+                  child: Image(
+                    image: DiskCachedImage.bounded(
+                      logo,
+                      cacheHeight: (logoHeight * ratio).round(),
+                    ),
                     height: logoHeight,
                     fit: BoxFit.contain,
                     alignment: Alignment.bottomLeft,
-                    cacheHeight: (logoHeight * ratio).round(),
                     errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
                 ),
