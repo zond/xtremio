@@ -137,7 +137,8 @@ String redactSecrets(
     );
 
 /// The text the Diagnostics screen copies: a short header saying what this
-/// build is and what the embedded server is doing, then the core's log
+/// build is, what the embedded server is doing and what the app is holding
+/// on a device with little to hold it in, then the core's log
 /// lines, oldest first. Everything in it has been through [redactSecrets],
 /// unless [redact] is false -- by default, while Verbose logging is on
 /// ([DiagnosticsLog.unredacted]), when the report is for chasing a problem
@@ -148,6 +149,7 @@ String formatDiagnostics({
   required String osVersion,
   required DateTime at,
   ServerStorage? storage,
+  ImageCacheUsage? images,
   DhtStatus? dht,
   String appVersion = kAppVersion,
   String gitCommit = kGitCommit,
@@ -167,6 +169,13 @@ String formatDiagnostics({
     // and a line nobody could read is `unknown` rather than absent.
     ...?storage?.reportLines,
     if (storage == null) ...ServerStorage.unknownReportLines,
+    // Under the disk lines, because it is the same question one step in:
+    // what this device is spending. The cache the app caps and the images
+    // no cap reaches, both as of the `taken:` stamp above -- they are read
+    // with nothing awaited between them and the clock, so this is one
+    // instant and not a minute-old figure beside a fresh one.
+    ...?images?.reportLines,
+    if (images == null) ...ImageCacheUsage.unknownReportLines,
     // Information, not a failure, and only worth a line when it is the one
     // state that explains a slow start: a DHT that never found a node this
     // session. A bootstrapped or disabled DHT (or one nobody could ask)

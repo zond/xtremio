@@ -1,14 +1,68 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_report.dart';
 import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
+import 'package:xtremio/main.dart' show XtremioBootstrap;
 
 import '../support/diagnostics_capture.dart';
 import '../support/fake_diagnostics_client.dart';
+
+/// Puts one decoded picture into the framework's image cache and keeps it
+/// *live*, the state a poster is in while the screen showing it is still in
+/// the navigator stack.
+///
+/// The listener is the whole point. A mounted widget's `ImageStream` holds
+/// one for as long as it is on screen, and while it is there the completer
+/// never drops to zero listeners -- which is what keeps the entry in the
+/// cache's live set, where no eviction and no `clear` can reach it. Drop the
+/// listener (the returned callback, or the widget going away) and it leaves.
+/// Without one, as in `app_background_test.dart`, the picture is cached and
+/// not live: the other half of the same split.
+///
+/// The decode is real engine work, so it runs outside the test's fake
+/// clock -- but putting the result in the cache is synchronous, which is
+/// what lets [show] be called from anywhere, including from inside the
+/// awaits the report is gathered over.
+///
+/// Answers [show] (put it in the cache), [release] (let go of it, the way a
+/// widget leaving the tree does) and how many bytes it is worth.
+Future<({VoidCallback show, VoidCallback release, int bytes})> decodeOneImage(
+  WidgetTester tester,
+  Object key,
+) async {
+  const width = 100;
+  const height = 100;
+  final image = (await tester.runAsync(
+    () => createTestImage(width: width, height: height),
+  ))!;
+  final completer = OneFrameImageStreamCompleter(
+    SynchronousFuture(ImageInfo(image: image)),
+  );
+  // Each listener is handed its own clone to dispose of; the cache disposes
+  // the one it takes, and this disposes this one.
+  final listener = ImageStreamListener((info, _) => info.dispose());
+  completer.addListener(listener);
+  return (
+    show: () => imageCache.putIfAbsent(key, () => completer),
+    release: () => completer.removeListener(listener),
+    bytes: width * height * 4,
+  );
+}
+
+/// [decodeOneImage], already in the cache.
+Future<({VoidCallback show, VoidCallback release, int bytes})> showOneImage(
+  WidgetTester tester,
+  Object key,
+) async {
+  final one = await decodeOneImage(tester, key);
+  one.show();
+  return one;
+}
 
 /// The in-app diagnostics: what the core's log ring says, what it must
 /// never say, and the copy button that ships in release builds.
@@ -502,6 +556,18 @@ void main() {
             totalBytes: 57000000000,
           ),
         ),
+        // The other memory on the same device: the image cache a long way
+        // under its ceiling while ninety-six images are held by widgets on
+        // screens still in the stack. That shape -- a small cached figure
+        // and a large live count -- is the one the two lines exist to make
+        // readable, and a total alone would have said the opposite.
+        images: const ImageCacheUsage(
+          cachedBytes: 18200000,
+          cachedImages: 214,
+          ceilingBytes: 33554432,
+          liveImages: 96,
+          decodingImages: 3,
+        ),
         appVersion: '1.0.0+1',
         gitCommit: '577fe03',
       );
@@ -515,6 +581,9 @@ void main() {
         'cache: 17.0 GB of 10.7 GB limit · '
             '/data/user/0/com.zond.xtremio/cache/server',
         'disk: 403 MB free of 57.0 GB',
+        'image cache: 18.2 MB of 33.6 MB ceiling · 214 images',
+        'images in use: 96 held by a live widget, which no eviction frees '
+            '· 3 decoding',
         'stream-server: 7c46427bc09075b98f5febe10f2a90143e44d826',
         'stremio-core: 00265b3bad7158535fccf1e119e10d6ad492183e',
         'log: 2 lines, oldest first',
@@ -537,8 +606,13 @@ void main() {
       expect(text, contains('app: unknown'));
       // A server that is not running costs those two lines their numbers
       // and nothing else.
-      expect(text, contains('cache: unknown'));
+      expect(text, contains('\ncache: unknown'));
       expect(text, contains('disk: unknown'));
+      // And a cache nobody could read keeps its shape too, rather than
+      // leaving a reader to wonder whether the app holds no images or
+      // nobody looked.
+      expect(text, contains('image cache: unknown'));
+      expect(text, contains('images in use: unknown'));
       expect(text, isNot(contains('(commit')));
       expect(text, contains('server: not running'));
       expect(text, contains('stream-server: unknown'));
@@ -601,6 +675,127 @@ void main() {
           );
           expect(text, isNot(contains('dht:')), reason: '$dht');
         }
+      });
+    });
+
+    /// The two image-cache lines, read off the real framework cache.
+    ///
+    /// Nothing in the app used to observe this at all: the 32 MiB ceiling
+    /// was reasoned about carefully and then never watched, so whether it
+    /// ever bound was a guess. These run against the process-wide cache
+    /// rather than a fake, because a figure a test can invent is not
+    /// evidence that the report says what the cache holds.
+    group('the image cache lines', () {
+      setUp(() {
+        final ceiling = imageCache.maximumSizeBytes;
+        addTearDown(() {
+          imageCache.clear();
+          imageCache.clearLiveImages();
+          imageCache.maximumSizeBytes = ceiling;
+        });
+        imageCache.clear();
+        imageCache.clearLiveImages();
+      });
+
+      testWidgets('move with what the cache actually holds', (tester) async {
+        expect(
+          ImageCacheUsage.read().reportLines.first,
+          startsWith('image cache: 0 B of'),
+          reason: 'an empty cache reads as empty, not as unknown',
+        );
+
+        final one = await showOneImage(tester, 'poster');
+        addTearDown(one.release);
+        final held = ImageCacheUsage.read();
+        expect(held.cachedBytes, one.bytes);
+        expect(held.cachedImages, 1);
+        expect(held.liveImages, 1);
+        expect(held.reportLines, [
+          'image cache: 40.0 kB of '
+              '${DownloadView.humanSize(imageCache.maximumSizeBytes)} '
+              'ceiling · 1 images',
+          'images in use: 1 held by a live widget, which no eviction frees '
+              '· 0 decoding',
+        ]);
+      });
+
+      testWidgets('tell the live half from the cached half', (tester) async {
+        final one = await showOneImage(tester, 'poster');
+        expect(ImageCacheUsage.read().cachedBytes, greaterThan(0));
+
+        // What `XtremioApp` does when the app goes to the background, and
+        // what the ceiling does when it is crossed. It empties the half an
+        // LRU bounds and leaves the other one standing -- so the report
+        // now says 0 B cached beside an image still resident, which is the
+        // distinction a single total could never have shown.
+        imageCache.clear();
+        final after = ImageCacheUsage.read();
+        expect(after.cachedBytes, 0);
+        expect(after.cachedImages, 0);
+        expect(after.liveImages, 1, reason: 'a live widget still holds it');
+        expect(after.reportLines.first, startsWith('image cache: 0 B of'));
+        expect(
+          after.reportLines.last,
+          'images in use: 1 held by a live widget, which no eviction frees '
+          '· 0 decoding',
+        );
+
+        // And letting go is what frees it: the widget, never the cache.
+        one.release();
+        expect(ImageCacheUsage.read().liveImages, 0);
+      });
+
+      testWidgets('reading the report leaves the cache as it found it', (
+        tester,
+      ) async {
+        final one = await showOneImage(tester, 'poster');
+        addTearDown(one.release);
+        final before = ImageCacheUsage.read();
+
+        // Five whole reports, which is more than a person leaning on
+        // Refresh will manage. A diagnostics screen that evicted, decoded
+        // or resized anything would be a memory bug of its own, on the one
+        // screen somebody opens when memory is already the problem.
+        for (var i = 0; i < 5; i++) {
+          formatDiagnostics(
+            snapshot: const DiagnosticsSnapshot(
+              coreVersion: '0.1.0',
+              logLines: [],
+            ),
+            platform: 'android',
+            osVersion: 'Android 14',
+            at: DateTime.utc(2026),
+            images: ImageCacheUsage.read(),
+          );
+        }
+
+        final after = ImageCacheUsage.read();
+        expect(after.cachedBytes, before.cachedBytes);
+        expect(after.cachedBytes, one.bytes);
+        expect(after.cachedImages, before.cachedImages);
+        expect(after.liveImages, before.liveImages);
+        expect(after.ceilingBytes, before.ceilingBytes);
+        expect(after.decodingImages, before.decodingImages);
+        expect(
+          imageCache.containsKey('poster'),
+          isTrue,
+          reason: 'the reads did not evict it',
+        );
+      });
+
+      testWidgets('quote the ceiling in force, not the one asked for', (
+        tester,
+      ) async {
+        // The report has to be able to show a build where the ceiling was
+        // never applied -- which is one of the things worth learning from a
+        // device nobody can attach a debugger to -- so it reads the cache
+        // rather than quoting the constant.
+        imageCache.maximumSizeBytes = 4 << 20;
+        expect(
+          ImageCacheUsage.read().reportLines.first,
+          contains('of 4.2 MB ceiling'),
+        );
+        expect(XtremioBootstrap.imageCacheCeilingBytes, isNot(4 << 20));
       });
     });
   });
@@ -753,5 +948,97 @@ void main() {
         expect(copied.single, isNot(contains('dht:')));
       },
     );
+
+    testWidgets('reports the image cache as it stands at each read', (
+      tester,
+    ) async {
+      addTearDown(() {
+        imageCache.clear();
+        imageCache.clearLiveImages();
+      });
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      final copied = interceptClipboard(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DiagnosticsScreen(
+            client: FakeDiagnosticsClient(),
+            now: () => DateTime.utc(2026, 9, 3),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Copy diagnostics'));
+      await tester.pumpAndSettle();
+      expect(copied.single, contains('image cache: 0 B of'));
+      expect(copied.single, contains('images in use: 0 held by a live widget'));
+
+      // Now put a poster in it and ask again. The screen reads the cache
+      // itself rather than being handed a figure, so this is the whole
+      // path: an empty report, a picture decoded, and a Refresh that says
+      // so. A number that did not move here would be a number taken once
+      // and trusted afterwards, which is the opposite of what a snapshot
+      // beside a `taken:` stamp claims to be.
+      final one = await showOneImage(tester, 'poster');
+      addTearDown(one.release);
+      await tester.tap(find.byIcon(Icons.refresh));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Copy diagnostics'));
+      await tester.pumpAndSettle();
+      expect(copied.last, contains('image cache: 40.0 kB of'));
+      expect(copied.last, contains('· 1 images'));
+      expect(copied.last, contains('images in use: 1 held by a live widget'));
+      expect(one.bytes, 40000);
+    });
+
+    testWidgets('reads the cache at the moment it stamps taken:, not before '
+        'the awaits', (tester) async {
+      addTearDown(() {
+        imageCache.clear();
+        imageCache.clearLiveImages();
+      });
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      // Decoded up front, because the decode is real engine work; put in
+      // the cache from inside the report's own gathering, which is where a
+      // board resolving a row of posters would put it. A report is gathered
+      // over a platform-channel call for the device and an FFI call for the
+      // storage, and a screenful of images resolves in less than that.
+      final one = await decodeOneImage(tester, 'poster');
+      addTearDown(one.release);
+      final copied = interceptClipboard(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DiagnosticsScreen(
+            client: _CachesWhileAsked(one.show),
+            now: () => DateTime.utc(2026, 9, 3),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Copy diagnostics'));
+      await tester.pumpAndSettle();
+
+      // A reading taken before the awaits would say 0 B here, under a
+      // `taken:` stamp written after them: a figure from the wrong moment,
+      // in exactly the situation this line exists to diagnose.
+      expect(copied.single, contains('image cache: 40.0 kB of'));
+    });
   });
+}
+
+/// A client whose device lookup puts a picture in the image cache before it
+/// answers: the report is gathered over awaits, and the cache does not hold
+/// still across them.
+class _CachesWhileAsked extends FakeDiagnosticsClient {
+  _CachesWhileAsked(this.decoded);
+
+  /// Called while the screen is waiting on this client.
+  final VoidCallback decoded;
+
+  @override
+  Future<String> osVersion() async {
+    decoded();
+    return super.osVersion();
+  }
 }

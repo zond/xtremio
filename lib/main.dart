@@ -200,6 +200,11 @@ class XtremioBootstrap extends StatefulWidget {
   /// The other half is `XtremioApp`, which empties the cache when the app
   /// goes to the background: a ceiling bounds what a foreground app holds,
   /// and the kill is of a background one.
+  ///
+  /// Whether this number ever binds is not a thing to reason about twice:
+  /// [ImageCacheUsage] puts what the cache actually holds against it into
+  /// the diagnostics report, on the device, alongside the count of images a
+  /// live widget is holding that no ceiling here can reach.
   static const int imageCacheCeilingBytes = 32 * 1024 * 1024;
 
   /// How the core comes up; [bootCore] (the Rust library) unless a test
