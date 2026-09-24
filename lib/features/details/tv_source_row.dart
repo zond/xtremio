@@ -555,25 +555,30 @@ class TvSourceCard extends StatelessWidget {
   /// A strip cannot do that -- every card in it is the height of the
   /// tallest, on a panel that has five other rungs to fit.
   ///
-  /// **Measured, not chosen.** Uncapped, the twenty-five recorded rows
-  /// come out between 72 and 423 dp tall on a 720p television, and a row
-  /// is as tall as its tallest card -- 447 dp of a 648 dp panel, so a
-  /// viewer walking from a group pill to a card would scroll the screen.
-  /// Recorded row 6 is what drives it: its
-  /// `behaviorHints.filename` spells out every dub (~120 characters) where
-  /// the addon's own line says `MULTi`, and at 260 dp wide that is six
-  /// lines of one card.
+  /// **Measured, not chosen.** Uncapped, the thirty-one recorded rows come
+  /// out between 72 and 403 dp tall on a 720p television, and a row is as
+  /// tall as its tallest card -- 427 dp of a 648 dp panel, so a viewer
+  /// walking from a group pill to a card would scroll the screen. Recorded
+  /// row 6 is what drives it: its `behaviorHints.filename` spells out every
+  /// dub (~120 characters) where the addon's own line says `MULTi`, and at
+  /// 260 dp wide that is nine lines of one card.
   ///
   /// Three lines for the lead and three for each line under it hold the
   /// tallest recorded card to 313 dp and its row to 337, which
   /// `details_recorded_sources_test.dart` measures rather than trusts. The
-  /// lead had two until the repeat of it was subtracted out of the line
+  /// lead had two until the repeat of it was taken out of the line
   /// underneath ([StreamPresentation.rest]): that took 20 dp off the
   /// tallest row (342 to 322) and the third line of the lead spends 15 of
   /// it, which is the right place for it -- the lead is the one line that
-  /// says which file a press would start. A fourth body line was measured
-  /// for the same 20 dp and does not fit: 353, past the 342 this panel is
-  /// known to carry.
+  /// says which file a press would start.
+  ///
+  /// **Re-measured when the parser was rebuilt around one tokenisation**,
+  /// which shortened six recorded second lines and added six rows. Uncapped
+  /// the tallest row fell 20 dp (447 to 427); capped, both numbers are
+  /// exactly where they were, because what binds them is row 6's lead and
+  /// not any line under it. So neither cap could be raised on the room: a
+  /// fourth lead line is 352 and a fourth body line 353, both past the 342
+  /// this panel is known to carry.
   static const int leadLines = 3;
   static const int bodyLines = 3;
 

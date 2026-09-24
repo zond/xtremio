@@ -19,7 +19,7 @@ import '../support/fake_torrent_stats_client.dart';
 import '../support/fixtures.dart';
 import '../support/tv.dart';
 
-/// The twenty-five recorded addon answers, drawn.
+/// The thirty-one recorded addon answers, drawn.
 ///
 /// `stream_facts_test.dart` walks the same fixture for what is *read* out
 /// of each row; this one walks it for what a card *says*, on a phone and on
@@ -93,7 +93,7 @@ Widget harness(FakeCoreClient core, AppPrefs prefs, {DeviceProfile? device}) {
 
 void main() {
   group('on a phone', () {
-    /// Tall enough that every one of the twenty-five rows is built: the
+    /// Tall enough that every one of the thirty-one rows is built: the
     /// list is a sliver and an unbuilt row is not a row this can look at.
     /// Grouped by addon, with the one group open, so the rows are a flat
     /// list and no resolution heading shares a word with a release.
@@ -191,8 +191,8 @@ void main() {
       }
     });
 
-    testWidgets('a line that is the lead spelled more fully says only what '
-        'it adds, and a line that is not is untouched', (tester) async {
+    testWidgets('a line about the lead says only what it adds, and a line '
+        'about something else is untouched', (tester) async {
       await pump(tester);
       final streams = recordedStreams();
 
@@ -223,16 +223,22 @@ void main() {
         isNot(contains(startsWith('The Matrix 1999 UHD BluRay'))),
       );
 
-      // And the lines that are not the lead, whole, in the addon's words.
-      // Row 4's pack shares ten of its fifteen words with the lead; row
-      // 13's line shares two and is not even in the same language.
+      // Row 4's pack: ten of its fifteen words were the lead over again
+      // and the card is down to the five that name the box set. The old
+      // rule drew the whole line, which is what a phone showed.
       expect(
         rowFor(tester, shownOf(streams[3])),
-        contains(
-          '[PACK] The Matrix 4K UHD Collection (1999-2003) '
-          '(2160p HDR BDRip x265 10bit DTS) [4KLiGHT]',
-        ),
+        contains('PACK 4K UHD Collection 1999-2003'),
       );
+      // Row 26 is the same shape at its worst -- `30.Rock.S02` under
+      // `30.Rock.S02E11`, thirty-eight characters for a difference of
+      // three -- and it is the row this parser was rebuilt for.
+      expect(rowFor(tester, shownOf(streams[25])), contains('S02'));
+
+      // And the line that is about something else, whole, in the addon's
+      // own words: row 13's opens `Во все тяжкие` where the lead opens
+      // `Breaking Bad`, so nothing of it belongs to the lead however many
+      // of the lead's words turn up further along it.
       expect(
         rowFor(tester, shownOf(streams[12])),
         contains(
@@ -241,6 +247,37 @@ void main() {
           '(Кубик в Кубе) + Original + Sub (Rus Eng)',
         ),
       );
+    });
+
+    testWidgets('the scope of a pack is what survives on the second line', (
+      tester,
+    ) async {
+      await pump(tester);
+      final streams = recordedStreams();
+      // Every spelling of "which pack this file came out of" the recorded
+      // addons use, on the row it came from. These words are the reason
+      // the second line of a card exists, and the reduction is worth
+      // nothing if it takes them with the repetition.
+      const scopes = {
+        3: 'PACK 4K UHD Collection 1999-2003',
+        8: 'Trilogy 1999-2003 multi',
+        9: 'S01',
+        11: 'COMPLETE S01-S05 WEB-DL Rus Ukr Eng RiCK',
+        15: 'iNTEGRALE',
+        25: 'S02',
+        26: 'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
+        27: 'Complete',
+        28: 'COMPLETE.SERIES.S01-S07',
+        29: 'Season 2',
+        30: 'S01-S07 + Specials 10bit',
+      };
+      for (final MapEntry(key: index, value: scope) in scopes.entries) {
+        expect(
+          rowFor(tester, shownOf(streams[index])),
+          contains(scope),
+          reason: 'recorded row ${index + 1}: the scope',
+        );
+      }
     });
 
     for (final sectioned in [false, true]) {
@@ -414,9 +451,9 @@ void main() {
     ) async {
       await pump(tester);
       final drawn = cards(tester);
-      // Twenty-four and not twenty-five: two recorded rows are the same
-      // torrent from Public Domain Movies, and one source is one card.
-      expect(drawn, hasLength(24));
+      // Thirty and not thirty-one: two recorded rows are the same torrent
+      // from Public Domain Movies, and one source is one card.
+      expect(drawn, hasLength(30));
 
       for (final (index, stream) in recordedStreams().indexed) {
         final shown = shownOf(stream);
@@ -436,15 +473,13 @@ void main() {
       }
 
       // And the card draws them. Recorded row 4 is the pack: the film is
-      // the lead, off `behaviorHints.filename`, and the collection it came
-      // out of is the line under it -- which is the one thing on that card
-      // a viewer cannot work out from the file name.
+      // the lead, off `behaviorHints.filename`, and what the collection it
+      // came out of adds to that is the line under it -- which is the one
+      // thing on that card a viewer cannot work out from the file name.
       const film =
           'The Matrix (1999) (2160p HDR BDRip x265 10bit DTS) '
           '[4KLiGHT]';
-      const pack =
-          '[PACK] The Matrix 4K UHD Collection (1999-2003) '
-          '(2160p HDR BDRip x265 10bit DTS) [4KLiGHT]';
+      const pack = 'PACK 4K UHD Collection 1999-2003';
       expect(drawnOn(tester, film), containsAllInOrder([film, pack]));
       // Row 6 is the wall of text: ~120 characters of spelled-out dubs in
       // the filename where the addon's own line says `MULTi`. The lead is
@@ -465,16 +500,23 @@ void main() {
       // share a 720p television with the rung headers above them, the
       // heading's own two rungs of controls, and the row of group pills.
       //
-      // Uncapped, the tallest recorded card comes out at 423 dp and the
-      // row at 447 -- most of a 648 dp safe area, so walking from a pill
+      // Uncapped, the tallest recorded card comes out at 403 dp and the
+      // row at 427 -- most of a 648 dp safe area, so walking from a pill
       // to a card would scroll the screen. Three lines for the lead and
       // three for each line under it ([TvSourceCard.leadLines],
       // [TvSourceCard.bodyLines]) bring the 2160p row to 337.
       //
       // It was 342 at two lines of lead, before the repeat of the release
-      // was subtracted out of the line underneath it: that took the row to
-      // 322, and the third line of the lead spent 15 dp of the 20. A
-      // fourth body line was measured for the rest and does not fit (353).
+      // was taken out of the line underneath it: that took the row to 322,
+      // and the third line of the lead spent 15 dp of the 20.
+      //
+      // Rebuilding the parser around one tokenisation shortened six of
+      // these second lines and added six rows, and moved neither capped
+      // number: 313 and 337 before, 313 and 337 after. What binds them is
+      // row 6's lead, which no line under it can shorten -- uncapped the
+      // row did fall, 447 to 427. So the room does not buy a taller cap
+      // either: a fourth lead line measures 352 and a fourth body line
+      // 353, both past the 342 this panel is known to carry.
       //
       // These numbers are the widget test's own font, whose glyphs are
       // square and therefore wider than any real one: a conservative

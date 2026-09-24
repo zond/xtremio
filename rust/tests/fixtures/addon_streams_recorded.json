@@ -1,5 +1,5 @@
 {
- "note": "Recorded from the live addons on 2026-09-23 (Torrentio for The Matrix tt0133093 and Breaking Bad tt0903747:1:1, WatchHub and Public Domain Movies for those titles). Trimmed to cover every field-shape seen across 122 real streams. Every one of them carries its text in the legacy `title` field, which stremio-core reads as `description` by serde alias -- no addon here sets `description` itself. Rows marked `from` were already recorded in that fixture by the network tests in rust/tests/ and are kept because they carry shapes today capture missed: a third kind of availability (`ADS`), a smaller set of platform URL fields, and a torrent that carries `announce` trackers.",
+ "note": "Recorded from the live addons on 2026-09-23 (Torrentio for The Matrix tt0133093 and Breaking Bad tt0903747:1:1, WatchHub and Public Domain Movies for those titles) and on 2026-09-24 (Torrentio for 30 Rock tt0496424:2:11, the last six rows). Trimmed to cover every field-shape seen across 122 real streams. Every one of them carries its text in the legacy `title` field, which stremio-core reads as `description` by serde alias -- no addon here sets `description` itself. Rows marked `from` were already recorded in that fixture by the network tests in rust/tests/ and are kept because they carry shapes today capture missed: a third kind of availability (`ADS`), a smaller set of platform URL fields, and a torrent that carries `announce` trackers. The 30 Rock rows were recorded for the second line of a card: every way Torrentio spells the pack a file came out of (`S02`, `Season 1-7 S01-S07`, `Complete`, `COMPLETE.SERIES.S01-S07`, `Season 2`, `S01-S07 + Specials`), and one whose file line carries the season folder in front of it.",
  "streams": [
   {
    "addon": "torrentio",
@@ -375,6 +375,90 @@
     "fileIdx": 0,
     "infoHash": "11ea02584fa6351956f35671962ab46354d99060",
     "name": "1080p"
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n1080p",
+    "title": "30.Rock.S02.1080p.BluRay.x265-KONTRAST\n30.Rock.S02E11.1080p.BluRay.x265-KONTRAST.mkv\n👤 12 💾 412.36 MB ⚙️ ThePirateBay",
+    "infoHash": "5c1d2f3a4b5e6d7c8f90a1b2c3d4e5f6a7b8c9d0",
+    "fileIdx": 10,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|1080p|BluRay|x265",
+     "filename": "30.Rock.S02E11.1080p.BluRay.x265-KONTRAST.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n1080p",
+    "title": "30 Rock (2005) Season 1-7 S01-S07 (1080p BluRay x265 HEVC 10bit AAC 5.1 Silence) [QxR]\n30 Rock (2005) - S02E11 - MILF Island (1080p BluRay x265 Silence).mkv\n👤 9 💾 389.12 MB ⚙️ 1337x\nMulti Audio / 🇬🇧",
+    "infoHash": "7ab3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5",
+    "fileIdx": 10,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+     "filename": "30 Rock (2005) - S02E11 - MILF Island (1080p BluRay x265 Silence).mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n1080p",
+    "title": "30 Rock Complete (1080p.H265.AAC.mkv)\n👤 4 💾 1.02 GB ⚙️ Rutracker",
+    "infoHash": "9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c",
+    "fileIdx": 10,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|1080p|h265",
+     "filename": "30 Rock - S02E11 - MILF Island (1080p.H265.AAC).mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n1080p",
+    "title": "30.Rock.COMPLETE.SERIES.S01-S07.1080p.AMZN.WEB-DL.DDP5.1.H.264-TrollHD\nSeason 2/30.Rock.S02E11.MILF.Island.1080p.AMZN.WEB-DL.DDP5.1.H.264-TrollHD.mkv\n👤 21 💾 1.31 GB ⚙️ RARBG\n🇬🇧",
+    "infoHash": "2c4e6a8017395bdf2c4e6a8017395bdf2c4e6a80",
+    "fileIdx": 10,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+     "filename": "30.Rock.S02E11.MILF.Island.1080p.AMZN.WEB-DL.DDP5.1.H.264-TrollHD.mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n1080p",
+    "title": "30 Rock - Season 2 [1080p] [BluRay] [x264] [DTS] [PSA]\n30 Rock - S02E11 - MILF Island [1080p] [BluRay] [x264] [DTS] [PSA].mkv\n👤 7 💾 845.6 MB ⚙️ Torrent9",
+    "infoHash": "3d5f7b91028406ace3d5f7b91028406ace135792",
+    "fileIdx": 10,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|1080p|BluRay|x264",
+     "filename": "30 Rock - S02E11 - MILF Island [1080p] [BluRay] [x264] [DTS] [PSA].mkv"
+    }
+   }
+  },
+  {
+   "addon": "torrentio",
+   "kind": "series",
+   "stream": {
+    "name": "Torrentio\n720p",
+    "title": "30 Rock S01-S07 + Specials 720p WEBRip x265 10bit\n30.Rock.S02E11.720p.WEBRip.x265-Prof.mkv\n👤 3 💾 214.8 MB ⚙️ ThePirateBay",
+    "infoHash": "8e1a4d7002583bcf8e1a4d7002583bcf8e1a4d70",
+    "fileIdx": 10,
+    "behaviorHints": {
+     "bingeGroup": "torrentio|720p|WEBRip|x265|10bit",
+     "filename": "30.Rock.S02E11.720p.WEBRip.x265-Prof.mkv"
+    }
    }
   }
  ]
