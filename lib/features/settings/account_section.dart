@@ -62,6 +62,11 @@ class AccountSection extends StatefulWidget {
     'account-library-missing',
   );
 
+  /// How large the signed-in viewer's picture is drawn, and so how large
+  /// it is decoded. Material's own default radius, said out loud: nothing
+  /// about the circle changes, and the bound has something to come from.
+  static const double avatarRadius = 20;
+
   /// The `source.event` of an `Error` event, when it has one.
   static String? errorSourceOf(RuntimeCoreEvent event) {
     final source = _sourceOf(event);
@@ -458,13 +463,24 @@ class _AccountSectionState extends State<AccountSection> {
     UserInfo user,
   ) {
     final avatar = user.avatar;
+    // The decode is bounded to the circle the picture is drawn in, like
+    // every other network image in the app: the account service serves
+    // whatever the viewer uploaded, and a picture forty points across is
+    // no reason to hold a photograph in memory. The width alone keeps the
+    // picture's own aspect, and `cover` crops it into the circle as it
+    // did; `ResizeImage` counts physical pixels, hence the ratio.
+    const diameter = AccountSection.avatarRadius * 2;
+    final pixels = (diameter * MediaQuery.devicePixelRatioOf(context)).round();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Readout(
           child: ListTile(
             leading: CircleAvatar(
-              foregroundImage: avatar == null ? null : NetworkImage(avatar),
+              radius: AccountSection.avatarRadius,
+              foregroundImage: avatar == null
+                  ? null
+                  : ResizeImage(NetworkImage(avatar), width: pixels),
               onForegroundImageError: avatar == null ? null : (_, _) {},
               child: const Icon(Icons.person_outline),
             ),

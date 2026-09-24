@@ -184,6 +184,14 @@ class TvMetaHeader extends StatelessWidget {
   /// the screen settled, under a focus ring the viewer is already using.
   /// A missing image may never disturb the layout, and a *late* missing
   /// image is the case that rule is really about.
+  ///
+  /// The height is also what the decode is bounded to. Metahub serves a
+  /// logo at the artwork's own scale, and one decoded at that scale is
+  /// megabytes of texture for a strip [logoHeight] tall on a television
+  /// with two gigabytes for the whole system. The height is the dimension
+  /// to give, because it is the one the logo is drawn at -- the width
+  /// follows it and the lettering keeps its shape. `cacheHeight` counts
+  /// physical pixels, which is why the device's ratio is in it.
   Widget _title(BuildContext context) {
     final logo = meta.logo;
     final name = ConstrainedBox(
@@ -200,12 +208,14 @@ class TvMetaHeader extends StatelessWidget {
       ),
     );
     if (logo == null) return name;
+    final ratio = MediaQuery.devicePixelRatioOf(context);
     return Image.network(
       logo,
       height: logoHeight,
       fit: BoxFit.contain,
       alignment: Alignment.centerLeft,
       semanticLabel: meta.name,
+      cacheHeight: (logoHeight * ratio).round(),
       errorBuilder: (_, _, _) => name,
     );
   }

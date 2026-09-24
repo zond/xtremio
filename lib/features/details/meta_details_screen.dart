@@ -2595,57 +2595,84 @@ class _AboveTheLadder extends StatelessWidget {
   }
 }
 
+/// The artwork behind the collapsing app bar on a phone and a desktop,
+/// with the title's logo standing on it.
+///
+/// Both decodes are bounded to the boxes they are drawn in, for the reason
+/// [TvBackdrop] gives: this artwork is never drawn wider than the bar, so
+/// decoding it wider only costs memory, and a metahub background decoded
+/// at its own size is several megabytes of texture. The bar is not the
+/// screen, though -- the wide layout gives it what is left beside the
+/// sources pane -- so the width comes from the bar's own constraints
+/// rather than from [MediaQuery]. The logo is the other way round: its
+/// height is the one dimension it is drawn at, so its height is what is
+/// bounded and the width follows, keeping the lettering's shape. Both
+/// counts are physical pixels, which is why the device's ratio is in them.
 class _Backdrop extends StatelessWidget {
   const _Backdrop({required this.url, required this.logo});
 
   final String? url;
   final String? logo;
 
+  /// How tall the logo is drawn over the artwork.
+  static const double logoHeight = 56;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final url = this.url;
     final logo = this.logo;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        ColoredBox(color: scheme.surfaceContainerHighest),
-        if (url != null)
-          Image.network(
-            url,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.black26,
-                Colors.black38,
-                scheme.surface.withValues(alpha: 0.85),
-              ],
-            ),
-          ),
-        ),
-        if (logo != null)
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 64,
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              child: Image.network(
-                logo,
-                height: 56,
-                fit: BoxFit.contain,
-                alignment: Alignment.bottomLeft,
+    final ratio = MediaQuery.devicePixelRatioOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final pixels = width.isFinite && width > 0
+            ? (width * ratio).round()
+            : 0;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(color: scheme.surfaceContainerHighest),
+            if (url != null)
+              Image.network(
+                url,
+                fit: BoxFit.cover,
+                cacheWidth: pixels > 0 ? pixels : null,
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black26,
+                    Colors.black38,
+                    scheme.surface.withValues(alpha: 0.85),
+                  ],
+                ),
+              ),
             ),
-          ),
-      ],
+            if (logo != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 64,
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Image.network(
+                    logo,
+                    height: logoHeight,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.bottomLeft,
+                    cacheHeight: (logoHeight * ratio).round(),
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

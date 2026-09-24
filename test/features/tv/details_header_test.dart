@@ -16,6 +16,7 @@ import '../../support/fake_core_client.dart';
 import '../../support/fake_playback_engine.dart';
 import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
+import '../../support/images.dart';
 import '../../support/tv.dart';
 
 const String movieId = 'tt0063350';
@@ -114,7 +115,7 @@ void main() {
 
       final logo = logoImage(tester);
       expect(
-        (logo?.image as NetworkImage?)?.url,
+        networkUrlOf(logo),
         'https://images.metahub.space/logo/medium/$movieId/img',
       );
       expect(logo?.semanticLabel, movieName);
