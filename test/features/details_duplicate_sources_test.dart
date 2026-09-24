@@ -210,6 +210,15 @@ void main() {
       expect(find.text('alpha.example'), findsOneWidget);
       expect(find.text(alsoFromLabel(const ['beta.example'])), findsOneWidget);
       expect(find.text('beta.example'), findsNothing);
+      // And it names them all: six addons offering one file is a line six
+      // names long, and a line cut after the first two would be a row
+      // saying the opposite of what it is for. Nothing on a source row is
+      // capped -- the list scrolls and the row grows.
+      final also = tester.widget<Text>(
+        find.text(alsoFromLabel(const ['beta.example'])),
+      );
+      expect(also.maxLines, isNull);
+      expect(also.overflow, isNull);
     });
 
     testWidgets('an addon repeating itself collapses without a word', (

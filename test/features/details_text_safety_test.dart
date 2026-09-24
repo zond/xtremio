@@ -105,11 +105,11 @@ void main() {
     expect(find.text('1.51 GB'), findsOneWidget);
   });
 
-  testWidgets('an emoji in a title that is too long to fit survives whole', (
+  testWidgets('an emoji in a title too long for one line survives whole', (
     tester,
   ) async {
-    // Long enough that the tile has to shorten it, with the emoji where a
-    // truncation by code units would land between its two halves.
+    // Long enough that the tile has to break it over lines, with the emoji
+    // where a truncation by code units would land between its two halves.
     final title = 'Torrentio 👤 ${'the same very long release name ' * 4}';
     // A release is trimmed where it is derived, and this fixture ends in a
     // space; what the row draws is the trimmed string.
@@ -123,12 +123,16 @@ void main() {
 
     expect(tester.takeException(), isNull);
     final drawn = tester.widget<Text>(find.text(drawnTitle));
-    // The string reaches the widget entire; the *painted* line is what is
-    // shortened, by the widget, which cannot cut a character in half.
+    // The string reaches the widget entire, and nothing shortens it: a
+    // row of this list may be any height, so the line wraps and the row
+    // grows. Where it wraps is the widget's business and the widget cannot
+    // break a character in half -- which is the whole of what this is
+    // about, whether the line is cut for an ellipsis or carried onto the
+    // next one.
     expect(drawn.data, drawnTitle);
     expect(drawn.data, contains('👤'));
-    expect(drawn.maxLines, isNotNull);
-    expect(drawn.overflow, TextOverflow.ellipsis);
+    expect(drawn.maxLines, isNull);
+    expect(drawn.overflow, isNull);
   });
 
   testWidgets('a plain ASCII release is untouched', (tester) async {
