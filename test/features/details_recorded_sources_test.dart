@@ -230,10 +230,10 @@ void main() {
         rowFor(tester, shownOf(streams[3])),
         contains('PACK 4K UHD Collection 1999-2003'),
       );
-      // Row 26 is the same shape at its worst -- `30.Rock.S02` under
+      // Row 27 is the same shape at its worst -- `30.Rock.S02` under
       // `30.Rock.S02E11`, thirty-eight characters for a difference of
       // three -- and it is the row this parser was rebuilt for.
-      expect(rowFor(tester, shownOf(streams[25])), contains('S02'));
+      expect(rowFor(tester, shownOf(streams[26])), contains('S02'));
 
       // And the line that is about something else, whole, in the addon's
       // own words: row 13's opens `Во все тяжкие` where the lead opens
@@ -264,12 +264,14 @@ void main() {
         9: 'S01',
         11: 'COMPLETE S01-S05 WEB-DL Rus Ukr Eng RiCK',
         15: 'iNTEGRALE',
-        25: 'S02',
-        26: 'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
-        27: 'Complete',
-        28: 'COMPLETE.SERIES.S01-S07',
-        29: 'Season 2',
-        30: 'S01-S07 + Specials 10bit',
+        // The six recorded live from Torrentio for 30 Rock S02E11, in the
+        // order that addon answered in.
+        25: 'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
+        26: 'S02',
+        27: 'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
+        28: 'S02 WEB-DL DD H.264',
+        29: 'Complete',
+        30: 'S02',
       };
       for (final MapEntry(key: index, value: scope) in scopes.entries) {
         expect(

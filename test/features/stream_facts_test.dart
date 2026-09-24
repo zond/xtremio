@@ -1324,42 +1324,77 @@ void recordedAddonAnswers() {
     ),
     recorded(
       'torrentio',
-      'the row this parser was rebuilt for: the season pack and the '
-          'episode differ by three characters in thirty-eight, and the three '
-          'are the whole reason the line is on the card. `S02`',
+      'the pack states the scope twice over -- `Season 1-7 S01-S07` -- '
+          'and says four things about the encode that the file name never '
+          'does. Both ranges survive whole and so do the four facts. The '
+          'middle line, the file with its season folder in front of it, is '
+          'the lead again and goes, folder and all',
       resolution: StreamResolution.fhd1080,
-      size: 432390799,
-      seeders: 12,
-      tags: const ['BluRay', 'HEVC'],
-      tracker: 'ThePirateBay',
-      lead: '30.Rock.S02E11.1080p.BluRay.x265-KONTRAST',
+      size: 407130604,
+      seeders: 117,
+      tags: const ['WEBRip', 'HEVC', '10bit'],
+      tracker: '1337x',
+      lead:
+          '30 Rock (2006) - S02E11 - MILF Island '
+          '(1080p AMZN WEBRip x265 Silence)',
       rest: const [
-        // Was `30.Rock.S02.1080p.BluRay.x265-KONTRAST`.
-        'S02',
-        '👤 12 💾 412.36 MB ⚙️ ThePirateBay',
+        // Was `30 Rock (2006) Season 1-7 S01-S07 (1080p AMZN WEBRip x265
+        // HEVC 10bit AAC 5.1 Silence) [QxR]`.
+        'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
+        '\u{1F464} 117 \u{1F4BE} 388.27 MB \u2699\uFE0F 1337x',
       ],
     ),
     recorded(
       'torrentio',
-      'the same show from a group that spells the scope twice over -- '
-          '`Season 1-7 S01-S07` -- and states more about the encode on the '
-          'pack line than on the file. Both ranges survive whole and so do '
-          'the four facts about the audio that the file name never mentions',
+      'the row this parser was rebuilt for: the season pack and the '
+          'episode differ by three characters in thirty-eight, and the three '
+          'are the whole reason the line is on the card. `S02`',
       resolution: StreamResolution.fhd1080,
-      size: 408021893,
-      seeders: 9,
-      tags: const ['BluRay', 'HEVC', '10bit'],
-      languages: const ['🇬🇧'],
-      audioTracks: 'Multi Audio',
-      tracker: '1337x',
-      lead: '30 Rock (2005) - S02E11 - MILF Island (1080p BluRay x265 Silence)',
+      size: 433743462,
+      seeders: 106,
+      tags: const ['BluRay', 'HEVC'],
+      tracker: 'TorrentGalaxy',
+      lead: '30.Rock.S02E11.1080p.BluRay.x265-KONTRAST',
       rest: const [
-        // Was `30 Rock (2005) Season 1-7 S01-S07 (1080p BluRay x265 HEVC
-        // 10bit AAC 5.1 Silence) [QxR]`, of which seven words were the
-        // lead's.
+        // Was `30.Rock.S02.1080p.BluRay.x265-KONTRAST`.
+        'S02',
+        '\u{1F464} 106 \u{1F4BE} 413.65 MB \u2699\uFE0F TorrentGalaxy',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the same show and the same group a year apart in the title, which '
+          'is the addon\'s own disagreement and not ours to correct',
+      resolution: StreamResolution.fhd1080,
+      size: 540865987,
+      seeders: 70,
+      tags: const ['BluRay', 'HEVC', '10bit'],
+      tracker: '1337x',
+      lead:
+          '30 Rock (2005) - S02E11 - MILF Island '
+          '(1080p BluRay x265 Silence)',
+      rest: const [
         'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
-        '👤 9 💾 389.12 MB ⚙️ 1337x',
-        'Multi Audio / 🇬🇧',
+        '\u{1F464} 70 \u{1F4BE} 515.81 MB \u2699\uFE0F 1337x',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the pack names a different source and a different codec from the '
+          'file (`WEB-DL`/`H.264` against `WEBRip`/`x264`), so both survive '
+          'the reduction. `DD+` comes back as `DD`, which is the one place '
+          'in the recorded set where a word loses meaning: `DD+` is E-AC3 '
+          'and `DD` is AC-3',
+      resolution: StreamResolution.fhd1080,
+      size: 2330019758,
+      seeders: 19,
+      tags: const ['WEB-DL', 'WEBRip', 'AVC'],
+      tracker: 'ThePirateBay',
+      lead: '30 Rock - S02E11 - 1080p WEBRip AMZN [EAC3 5.1 x264-NTb]',
+      rest: const [
+        // Was `30 Rock S02 1080p AMZN WEB-DL DD+ 5 1 H.264-NTb`.
+        'S02 WEB-DL DD H.264',
+        '\u{1F464} 19 \u{1F4BE} 2.17 GB \u2699\uFE0F ThePirateBay',
       ],
     ),
     recorded(
@@ -1368,75 +1403,33 @@ void recordedAddonAnswers() {
           'inside a bracket (`(1080p.H265.AAC.mkv)`) where a regexp over the '
           'end of the line would never have found it. One word left',
       resolution: StreamResolution.fhd1080,
-      size: 1095216660,
-      seeders: 4,
+      size: 176706028,
+      seeders: 5,
       tags: const ['HEVC'],
-      tracker: 'Rutracker',
+      tracker: 'ThePirateBay',
       lead: '30 Rock - S02E11 - MILF Island (1080p.H265.AAC)',
       rest: const [
         // Was `30 Rock Complete (1080p.H265.AAC.mkv)`.
         'Complete',
-        '👤 4 💾 1.02 GB ⚙️ Rutracker',
+        '\u{1F464} 5 \u{1F4BE} 168.52 MB \u2699\uFE0F ThePirateBay',
       ],
     ),
     recorded(
       'torrentio',
-      'the file line carries the season folder in front of it -- `Season '
-          '2/30.Rock.S02E11...` -- and is still the lead, so it goes, folder '
-          'and all: the line above it already says which pack this came out '
-          'of, in the addon\'s own words',
+      'a remux whose pack line is the file line with the episode taken '
+          'out, so `S02` is the whole of what it adds',
       resolution: StreamResolution.fhd1080,
-      size: 1406601789,
-      seeders: 21,
-      tags: const ['WEB-DL', 'AVC'],
-      languages: const ['🇬🇧'],
-      tracker: 'RARBG',
-      lead: '30.Rock.S02E11.MILF.Island.1080p.AMZN.WEB-DL.DDP5.1.H.264-TrollHD',
-      rest: const [
-        // Was `30.Rock.COMPLETE.SERIES.S01-S07.1080p.AMZN.WEB-DL.DDP5.1
-        // .H.264-TrollHD`, in the addon's dots, which is what is left of
-        // them.
-        'COMPLETE.SERIES.S01-S07',
-        '👤 21 💾 1.31 GB ⚙️ RARBG',
-        '🇬🇧',
-      ],
-    ),
-    recorded(
-      'torrentio',
-      'the scope written out as words (`Season 2`) and every tag in a '
-          'bracket of its own, so the whole line but two words is the lead in '
-          'square brackets',
-      resolution: StreamResolution.fhd1080,
-      size: 886675866,
-      seeders: 7,
-      tags: const ['BluRay', 'AVC', 'DTS'],
-      tracker: 'Torrent9',
+      size: 5315022029,
+      seeders: 4,
+      tags: const ['REMUX', 'AVC', 'DTS'],
+      tracker: '1337x',
       lead:
-          '30 Rock - S02E11 - MILF Island [1080p] [BluRay] [x264] [DTS] '
-          '[PSA]',
+          '30.Rock.S02E11.MILF.Island.1080p.DTS-HD.MA.5.1.AVC.'
+          'REMUX-FraMeSToR',
       rest: const [
-        // Was `30 Rock - Season 2 [1080p] [BluRay] [x264] [DTS] [PSA]`.
-        'Season 2',
-        '👤 7 💾 845.6 MB ⚙️ Torrent9',
-      ],
-    ),
-    recorded(
-      'torrentio',
-      'the one 30 Rock row at another resolution, and the scope spelled a '
-          'sixth way: a range plus what is outside it (`S01-S07 + Specials`), '
-          'with the addon\'s own `+` between them because it wrote those two '
-          'words next to each other',
-      resolution: StreamResolution.hd720,
-      size: 225234125,
-      seeders: 3,
-      tags: const ['WEBRip', 'HEVC', '10bit'],
-      tracker: 'ThePirateBay',
-      lead: '30.Rock.S02E11.720p.WEBRip.x265-Prof',
-      rest: const [
-        // Was `30 Rock S01-S07 + Specials 720p WEBRip x265 10bit`. The bit
-        // depth is this line's own: the file name never says it.
-        'S01-S07 + Specials 10bit',
-        '👤 3 💾 214.8 MB ⚙️ ThePirateBay',
+        // Was `30 Rock S02 1080p DTS-HD MA 5.1 AVC REMUX-FraMeSToR`.
+        'S02',
+        '\u{1F464} 4 \u{1F4BE} 4.95 GB \u2699\uFE0F 1337x',
       ],
     ),
   ];
