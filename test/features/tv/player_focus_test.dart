@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,20 +74,51 @@ void main() {
   }
 
   group('D-pad centre', () {
-    testWidgets('brings hidden controls up, toggles play/pause once shown', (
-      tester,
-    ) async {
+    testWidgets('over a hidden OSD stops the film, and the next press '
+        'starts it', (tester) async {
+      // The two presses a viewer makes without looking: one to stop the
+      // film, one to start it again. The first brings the bar up as it
+      // always did, but it also stops the film, and it leaves the remote
+      // on the button the second press needs -- so the second press is the
+      // same key again, with no hunting in between.
       final harness = await pumpOnTv(tester);
       final engine = harness.engine;
       await playUntilHidden(tester, harness);
 
       await press(tester, LogicalKeyboardKey.select);
       expect(controlsOpacity(tester), 1);
-      expect(engine.playOrPauseCalls, 0, reason: 'only showed the controls');
+      expect(engine.playOrPauseCalls, 1);
+      expect(focusedTooltip(), 'Pause (Space)');
+      expect(
+        engine.seeks,
+        isEmpty,
+        reason: 'the press that stops the film is not also a seek',
+      );
+      expect(engine.scans, isEmpty);
+
+      // The engine reports it, as mpv does a few milliseconds later.
+      engine.emitPlaying(false);
+      await pumpEvents(tester);
+      expect(focusedTooltip(), 'Play (Space)');
+
+      // Which is the button the second press presses.
+      await press(tester, LogicalKeyboardKey.select);
+      expect(engine.playOrPauseCalls, 2);
+      expect(controlsOpacity(tester), 1);
+    });
+
+    testWidgets('with the OSD up it toggles play/pause', (tester) async {
+      final harness = await pumpOnTv(tester);
+      final engine = harness.engine;
+      expect(controlsOpacity(tester), 1);
 
       await press(tester, LogicalKeyboardKey.select);
       expect(engine.playOrPauseCalls, 1);
-      expect(controlsOpacity(tester), 1);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'player',
+        reason: 'a press with the bar already up moves nothing',
+      );
 
       // Enter is the same key on a remote with a keyboard; a held centre
       // key toggles once, not on every repeat.
@@ -98,6 +130,36 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
       await tester.pump();
       expect(engine.playOrPauseCalls, 3);
+    });
+
+    testWidgets('the OSD it brought up stays up while the film is stopped', (
+      tester,
+    ) async {
+      // What a paused player draws is not on a timer: the bar only fades
+      // while something is playing, so the button the second press is
+      // aimed at is still there however long the viewer takes over it.
+      final harness = await pumpOnTv(tester);
+      await playUntilHidden(tester, harness);
+
+      await press(tester, LogicalKeyboardKey.select);
+      harness.engine.emitPlaying(false);
+      await pumpEvents(tester);
+
+      await tester.pump(PlayerScreen.controlsTimeout * 3);
+      await tester.pumpAndSettle();
+      expect(controlsOpacity(tester), 1);
+      expect(focusedTooltip(), 'Play (Space)');
+
+      // And playing again puts it back on its timer, with the remote
+      // handed back to the video rather than left on a button nobody can
+      // see any more.
+      await press(tester, LogicalKeyboardKey.select);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      await tester.pump(PlayerScreen.controlsTimeout);
+      await tester.pumpAndSettle();
+      expect(controlsOpacity(tester), 0);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
     });
 
     testWidgets('off a TV the centre key does nothing to playback', (
@@ -112,6 +174,42 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       await press(tester, LogicalKeyboardKey.enter);
       expect(harness.engine.playOrPauseCalls, 0);
+      expect(harness.engine.pauseCalls, 0, reason: 'nor does it pause');
+
+      // Space is what a keyboard plays and pauses with, here as anywhere.
+      await press(tester, LogicalKeyboardKey.space);
+      expect(harness.engine.playOrPauseCalls, 1);
+    });
+
+    testWidgets('a touch screen still shows and hides the OSD by tapping', (
+      tester,
+    ) async {
+      // The phone has no D-pad and no centre key: a tap on the picture is
+      // how the OSD comes and goes, and it says nothing about playback.
+      useWideViewport(tester);
+      final harness = PlayerHarness();
+      await harness.pump(tester);
+      harness.engine.emitDuration(total);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      await tester.pump(PlayerScreen.controlsTimeout);
+      await tester.pumpAndSettle();
+      expect(controlsOpacity(tester), 0);
+
+      // The video takes double taps too (they seek), so a single one is
+      // only a single one once the second has not come.
+      await tester.tapAt(tester.getCenter(find.byType(PlayerScreen)));
+      await tester.pump(kDoubleTapTimeout);
+      await tester.pumpAndSettle();
+      expect(controlsOpacity(tester), 1);
+      expect(harness.engine.pauseCalls, 0);
+      expect(harness.engine.playOrPauseCalls, 0);
+
+      await tester.tapAt(tester.getCenter(find.byType(PlayerScreen)));
+      await tester.pump(kDoubleTapTimeout);
+      await tester.pumpAndSettle();
+      expect(controlsOpacity(tester), 0);
+      expect(harness.engine.pauseCalls, 0);
     });
   });
 
@@ -259,13 +357,15 @@ void main() {
   });
 
   group('the control bar', () {
-    testWidgets('down lands on play/pause, up walks the bar and stops', (
+    testWidgets('down lands on the seek bar, then on play/pause', (
       tester,
     ) async {
       final harness = await pumpOnTv(tester);
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'player');
 
-      // Down: play/pause in the bottom bar, and select presses it.
+      // Down: the seek bar. Down again: play/pause, and select presses it.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<SeekBar>(), isTrue);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusIn<PlayerBottomBar>(), isTrue);
       expect(find.byTooltip('Play (Space)'), findsOneWidget);
@@ -288,9 +388,178 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<PlayerTopBar>(), isTrue);
 
-      // Down walks back down the same stops.
+      // And down from the top of the bar is the seek bar again: the two
+      // stops down knows are the two the whole bar leads back to.
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusIn<SeekBar>(), isTrue);
+    });
+
+    testWidgets('down over a hidden OSD brings it up on the seek bar', (
+      tester,
+    ) async {
+      // One press, and the viewer sees where they landed. The stop is
+      // named rather than measured from wherever focus happens to be, so
+      // there is nothing invisible being walked: the bar comes up with the
+      // remote already on it.
+      final harness = await pumpOnTv(tester);
+      await playUntilHidden(tester, harness);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(controlsOpacity(tester), 1);
+      expect(focusIn<SeekBar>(), isTrue);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedTooltip(), 'Pause (Space)', reason: 'the film is playing');
+
+      expect(
+        harness.engine.playOrPauseCalls,
+        0,
+        reason: 'a direction is not a transport key',
+      );
+      expect(harness.engine.seeks, isEmpty);
+    });
+
+    testWidgets('and up over a hidden OSD brings it up on the top bar', (
+      tester,
+    ) async {
+      // The same bargain in the other direction: one press, one named
+      // stop, and the viewer is shown it.
+      final harness = await pumpOnTv(tester);
+      await playUntilHidden(tester, harness);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(controlsOpacity(tester), 1);
+      expect(focusIn<PlayerTopBar>(), isTrue);
+      expect(harness.engine.playOrPauseCalls, 0);
+      expect(harness.engine.volumes, isEmpty);
+    });
+
+    testWidgets('a press landing as the bar goes strands nothing', (
+      tester,
+    ) async {
+      // The instant the fade starts is a coin toss between the two modes,
+      // and the viewer is content with either answer -- so this pins
+      // neither. What it pins is that whichever one runs, the press is not
+      // also a seek and does not leave the remote on something that is not
+      // drawn.
+      final harness = await pumpOnTv(tester);
+      harness.engine.emitPlaying(true);
+      await pumpEvents(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<SeekBar>(), isTrue);
+
+      // Exactly the timeout: the timer and the key in the same instant.
+      await tester.pump(PlayerScreen.controlsTimeout);
+      await press(tester, LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+
+      expect(controlsOpacity(tester), 1, reason: 'the press brings it back');
+      expect(harness.engine.seeks, isEmpty);
+      expect(harness.engine.scans, isEmpty);
+      final focused = FocusManager.instance.primaryFocus;
+      expect(focused?.context, isNotNull, reason: 'focus is on something');
+      expect(
+        focused?.debugLabel == 'player' || focusIn<PlayerBottomBar>(),
+        isTrue,
+        reason: 'on the video or on a control of the bar that is up',
+      );
+    });
+
+    testWidgets('down stays on the seek bar where no transport is drawn', (
+      tester,
+    ) async {
+      // A television narrow enough for the phone layout draws the
+      // transport in the middle of the picture, where it is not a focus
+      // stop at all: there is no play/pause on the bar to go down to. A
+      // press that cannot reach its stop moves nothing, which is what the
+      // rest of the bar does at its edges -- it does not climb back up to
+      // the top bar, which would be the one direction the viewer did not
+      // ask for.
+      useScreen(tester, const Size(640, 360));
+      final harness = PlayerHarness(device: tv);
+      await harness.pump(tester);
+      harness.engine.emitDuration(total);
+      await pumpEvents(tester);
+      expect(find.byType(PlayerCenterControls), findsOneWidget);
+      expect(find.byTooltip('Play (Space)'), findsNothing);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<SeekBar>(), isTrue);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<SeekBar>(), isTrue);
+      expect(focusIn<PlayerTopBar>(), isFalse);
+    });
+
+    testWidgets('down reaches the seek bar from every stop on the bar', (
+      tester,
+    ) async {
+      // The rule stated over the whole OSD rather than over one column of
+      // it: wherever the remote is, one down press is the seek bar and the
+      // next is play/pause. Geometry cannot promise that -- directional
+      // traversal ranks by distance, so down from a button on the right of
+      // the transport row found whatever lay under it -- which is why the
+      // two stops are named instead of measured.
+      final harness = await pumpOnTv(tester);
+
+      /// Parks the remote on the [index]th stop of the top bar, counting
+      /// from the back arrow: up onto the bar, left to its start, then
+      /// [index] presses right.
+      Future<String?> parkOnTopBar(int index) async {
+        for (var i = 0; i < 3 && !focusIn<PlayerTopBar>(); i++) {
+          await press(tester, LogicalKeyboardKey.arrowUp);
+        }
+        for (var i = 0; i < 8; i++) {
+          await press(tester, LogicalKeyboardKey.arrowLeft);
+        }
+        for (var i = 0; i < index; i++) {
+          await press(tester, LogicalKeyboardKey.arrowRight);
+        }
+        return focusedTooltip();
+      }
+
+      /// The same for the transport row, whose start is play/pause: the
+      /// two down presses under test are how it is reached.
+      Future<String?> parkOnTransport(int index) async {
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        await press(tester, LogicalKeyboardKey.arrowDown);
+        for (var i = 0; i < index; i++) {
+          await press(tester, LogicalKeyboardKey.arrowRight);
+        }
+        return focusedTooltip() ?? '${focusedLabel(tester)}';
+      }
+
+      final visited = <String>[];
+      for (final park in [parkOnTopBar, parkOnTransport]) {
+        final seen = <String>[];
+        for (var i = 0; i < 8; i++) {
+          final here = await park(i);
+          // The row's last stop swallows a further right, so a repeat is
+          // the end of it.
+          if (here == null || seen.contains(here)) break;
+          seen.add(here);
+          await press(tester, LogicalKeyboardKey.arrowDown);
+          expect(
+            focusIn<SeekBar>(),
+            isTrue,
+            reason: 'down from $here missed the seek bar',
+          );
+          await press(tester, LogicalKeyboardKey.arrowDown);
+          expect(
+            focusedTooltip(),
+            'Play (Space)',
+            reason: 'down from the seek bar missed play/pause (from $here)',
+          );
+        }
+        expect(seen.length, greaterThan(2), reason: 'the walk ran: $seen');
+        visited.addAll(seen);
+      }
+      expect(visited, contains('Playback settings'));
+      expect(visited, contains('Mute (M)'));
+      expect(
+        harness.engine.seeks,
+        isEmpty,
+        reason: 'walking the bar never seeks',
+      );
+      expect(harness.engine.scans, isEmpty);
     });
 
     testWidgets('right walks the top bar to the menus and select opens one', (
@@ -473,6 +742,7 @@ void main() {
       // `FocusTheme.lift` is written for this bar by name.
       await pumpOnTv(tester, prefs: bold());
       await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedTooltip(), 'Play (Space)');
 
       final visited = <String>[];
@@ -527,7 +797,6 @@ void main() {
       expect(lit(tester, ring), isFalse, reason: 'focus starts on the video');
 
       await press(tester, LogicalKeyboardKey.arrowDown);
-      await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<SeekBar>(), isTrue);
       expect(lit(tester, ring), isTrue);
 
@@ -549,7 +818,9 @@ void main() {
       final harness = await pumpOnTv(tester, prefs: bold());
       expect(seekBarOpacity(tester), 1, reason: 'nothing is focused yet');
 
-      // Down onto the transport row, then right along all of it.
+      // Down onto the seek bar and down again onto the transport row,
+      // then right along all of it.
+      await press(tester, LogicalKeyboardKey.arrowDown);
       await press(tester, LogicalKeyboardKey.arrowDown);
       final visited = <String>[];
       for (var i = 0; i < 10; i++) {
@@ -590,7 +861,6 @@ void main() {
     ) async {
       final harness = await pumpOnTv(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
-      await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<SeekBar>(), isTrue);
 
       await press(tester, LogicalKeyboardKey.arrowRight);
@@ -611,7 +881,6 @@ void main() {
       // its own.
       final harness = await pumpOnTv(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
-      await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<SeekBar>(), isTrue);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
@@ -631,7 +900,6 @@ void main() {
     ) async {
       final harness = await pumpOnTv(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
-      await press(tester, LogicalKeyboardKey.arrowUp);
       expect(focusIn<SeekBar>(), isTrue);
 
       // The bar has nothing to press, so the centre key means there what
@@ -652,6 +920,7 @@ void main() {
     ) async {
       final harness = await pumpOnTv(tester);
       await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedTooltip(), 'Play (Space)');
 
       // Neither the volume slider nor the fullscreen button is drawn on a
@@ -670,9 +939,13 @@ void main() {
         reason: 'walking the bar never touches the volume',
       );
 
-      // Down from the last row of the bar stays on it; Back is the way out.
+      // Down from the end of the transport row is the seek bar, as it is
+      // from every other stop, and down again is play/pause: the far end
+      // of the bar is two presses from the control the viewer wants most.
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusedTooltip(), 'Mute (M)');
+      expect(focusIn<SeekBar>(), isTrue);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedTooltip(), 'Play (Space)');
     });
 
     testWidgets('the volume slider stays a focus stop off a TV', (
