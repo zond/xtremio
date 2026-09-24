@@ -1382,9 +1382,12 @@ void recordedAddonAnswers() {
       'torrentio',
       'the pack names a different source and a different codec from the '
           'file (`WEB-DL`/`H.264` against `WEBRip`/`x264`), so both survive '
-          'the reduction. `DD+` comes back as `DD`, which is the one place '
-          'in the recorded set where a word loses meaning: `DD+` is E-AC3 '
-          'and `DD` is AC-3',
+          'the reduction -- and `DD+` keeps its `+`. A word is letters and '
+          'digits, so the mark falls to the separator side and was written '
+          'only when the next word was kept too; the lead had already taken '
+          'the `5 1` after it, so what came back was `DD`, which is AC-3 '
+          'where `DD+` is E-AC-3 -- a claim about the file that the addon '
+          'never made',
       resolution: StreamResolution.fhd1080,
       size: 2330019758,
       seeders: 19,
@@ -1393,7 +1396,7 @@ void recordedAddonAnswers() {
       lead: '30 Rock - S02E11 - 1080p WEBRip AMZN [EAC3 5.1 x264-NTb]',
       rest: const [
         // Was `30 Rock S02 1080p AMZN WEB-DL DD+ 5 1 H.264-NTb`.
-        'S02 WEB-DL DD H.264',
+        'S02 WEB-DL DD+ H.264',
         '\u{1F464} 19 \u{1F4BE} 2.17 GB \u2699\uFE0F ThePirateBay',
       ],
     ),

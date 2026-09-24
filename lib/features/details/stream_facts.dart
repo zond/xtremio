@@ -945,7 +945,24 @@ bool _countable(String token) =>
     _episodeToken.hasMatch(token) ||
     _plainNumber.hasMatch(token);
 
-/// [file]'s kept words quoted back out of [text].
+/// Marks that belong to the word in front of them rather than between two
+/// words: the `+` of `DD+`, the `#` of `#1`.
+///
+/// A word is a run of letters and digits, so these fall to the separator
+/// side of the line and are written only when the next word is kept as
+/// well. That lost the only meaning the recorded set has ever lost to this
+/// parser: row 28's pack line says `DD+ 5 1`, the lead already said `5.1`,
+/// and what came back was `DD` — **which is a different codec**. `DD+` is
+/// E-AC-3 and `DD` is AC-3, so the card was making a claim about the file
+/// that the addon had not made.
+///
+/// Only marks that cannot begin a separator are listed. A trailing `.`,
+/// `-` or `/` is punctuation *between* things and keeping it would put a
+/// dangling dot on the end of every reduced line.
+const String _clingingMarks = '+#';
+
+/// [file]'s kept words quoted back out of [text], each with any mark that
+/// clings to it ([_clingingMarks]).
 ///
 /// Between two words the addon wrote next to each other, the separator the
 /// addon put there, so what is left reads the way the line it came out of
@@ -955,18 +972,29 @@ bool _countable(String token) =>
 /// alternative is to borrow the punctuation of a word that has gone, which
 /// is how `[RiCK]` came out as `[RiCK`.
 String _quoted(String text, List<_Token> file, List<bool> kept) {
+  /// Where [token] ends once the marks clinging to it are counted in.
+  int endOf(_Token token) {
+    var end = token.end;
+    while (end < text.length && _clingingMarks.contains(text[end])) {
+      end++;
+    }
+    return end;
+  }
+
   final quoted = StringBuffer();
   int? previous;
   for (final (index, token) in file.indexed) {
     if (!kept[index]) continue;
     if (previous != null) {
+      // From the end of the previous word *and its marks*, so a mark is
+      // written once rather than twice when the next word is kept too.
       quoted.write(
         previous == index - 1
-            ? text.substring(file[previous].end, token.start)
+            ? text.substring(endOf(file[previous]), token.start)
             : ' ',
       );
     }
-    quoted.write(text.substring(token.start, token.end));
+    quoted.write(text.substring(token.start, endOf(token)));
     previous = index;
   }
   return _withoutHalfBrackets(quoted.toString());

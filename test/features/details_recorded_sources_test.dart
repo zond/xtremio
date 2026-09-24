@@ -269,7 +269,7 @@ void main() {
         25: 'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
         26: 'S02',
         27: 'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
-        28: 'S02 WEB-DL DD H.264',
+        28: 'S02 WEB-DL DD+ H.264',
         29: 'Complete',
         30: 'S02',
       };
