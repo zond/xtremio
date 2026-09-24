@@ -12,7 +12,10 @@ import '../../core/core.dart';
 /// the line on what a file's reads look like -- is behind a setting of its
 /// own, because it is in the server's log filter and nothing else can
 /// reach that. The player's half ([MediaKitEngine.verboseLog]) reads the
-/// same preference directly when a player opens.
+/// same preference directly when a player opens. The app's own two halves
+/// are set from here, since neither has anywhere else to read a preference
+/// from: whole URLs in the log (`DiagnosticsLog.unredacted`) and a line
+/// per image as it decodes ([ImageCacheLog.perImage]).
 ///
 /// One of these for the whole app, built by `XtremioApp`, on the pattern
 /// of `IdleSharingPolicy` and for the same reason: nothing else in the app
@@ -33,8 +36,8 @@ class DiagnosticsTraceSync {
   /// opens up. (A longer version said why and when; on a settings tile
   /// about verbosity that read as a joke.)
   static const String description =
-      'Adds cache and player detail and full stream links (which can hold '
-      'account keys) to the report.';
+      'Adds cache, image and player detail and full stream links (which can '
+      'hold account keys) to the report.';
 
   /// The viewer's choice, and what tells this when it changes.
   final AppPrefs prefs;
@@ -71,6 +74,12 @@ class DiagnosticsTraceSync {
     // while it is on. Here and not in [_push], because this side needs no
     // server and must not wait for one.
     DiagnosticsLog.unredacted = wanted;
+    // And the app's other half: a line per image as it resolves, saying
+    // what it decoded to ([ImageCacheLog.perImage]). A line per picture is
+    // a hundred for one screen of posters, which is why it is here and not
+    // on by default; it is set beside the redaction because the same
+    // switch is what keeps the URL in those lines whole.
+    ImageCacheLog.perImage = wanted;
     if (wanted == _sent) return;
     _sent = wanted;
     _writes = _writes.then((_) => _push(wanted));

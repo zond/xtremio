@@ -116,6 +116,16 @@ class ImageCacheUsage {
   final int? diskFiles;
   final int? diskCeilingBytes;
 
+  /// What one cached image costs on average: [cachedBytes] over
+  /// [cachedImages], and 0 for an empty cache.
+  ///
+  /// The figure the whole question turned on. A reading of 33 MB over 80
+  /// images is 410 kB each, which is three times what a poster decoded at
+  /// a television tile's width should be -- and nothing in the two totals
+  /// says so until somebody divides them, which is not a thing to leave to
+  /// whoever is reading a log at the time.
+  int get averageBytes => cachedImages == 0 ? 0 : cachedBytes ~/ cachedImages;
+
   /// `18.2 MB of 33.6 MB ceiling`, in the decimal units every other size
   /// in this app is shown in -- so 32 MiB of ceiling reads as 33.6 MB,
   /// the same convention as the `cache:` and `disk:` lines above it.
@@ -151,6 +161,27 @@ class ImageCacheUsage {
         'frees · $decodingImages decoding',
     'image files: $diskLabel',
   ];
+
+  /// The same figures as one line for the log ([ImageCacheLog]), where
+  /// there is no header above them to say what they are.
+  ///
+  /// Everything the two report lines carry, and the average with it, in
+  /// the order a reader needs it: how full the cache is, how many pictures
+  /// that is and what one costs, then the half no ceiling reaches. Each
+  /// figure says in words what it is, because a log line is read months
+  /// later by somebody who was not here -- `0 live` next to `80 images`
+  /// means nothing until it says that a live image is one a widget holds
+  /// and no eviction can take.
+  ///
+  /// One line rather than the report's two: logcat interleaves the
+  /// engine's lines with ours, and a pair that has to be found together to
+  /// be read is a pair that will be read apart.
+  String get logLine =>
+      'image cache: $cachedLabel · $cachedImages images'
+      '${cachedImages == 0 ? '' : ', ${DownloadView.humanSize(averageBytes)} '
+                'each on average'}'
+      ' · $liveImages held live by a widget, which no eviction frees'
+      ' · $decodingImages decoding';
 
   /// What those lines say when the cache could not be read at all -- the
   /// binding not up, which on a running app it always is. The header keeps

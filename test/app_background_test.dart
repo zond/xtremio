@@ -5,6 +5,7 @@ import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/main.dart';
 
+import 'support/diagnostics_capture.dart';
 import 'support/fake_core_client.dart';
 import 'support/fake_deep_links.dart';
 import 'support/fake_downloads_client.dart';
@@ -80,6 +81,37 @@ void main() {
     expect(XtremioBootstrap.imageCacheCeilingBytes, 32 << 20);
     await tester.pumpAndSettle();
     expect(imageCache.maximumSizeBytes, 32 << 20);
+  });
+
+  testWidgets('the app writes what that cache holds into the log, from the '
+      'moment it comes up', (tester) async {
+    // The figures were on the Diagnostics screen and nowhere else, which
+    // on the device this app is measured on means somebody reading them
+    // off a television out loud. This is the app putting them where
+    // `adb logcat -s xtremio` can follow them, beside the engine's own.
+    final lines = captureDiagnostics();
+    final downloads = FakeDownloadsClient();
+    addTearDown(downloads.dispose);
+    await tester.pumpWidget(
+      XtremioApp(
+        core: emptyBoardCore(),
+        deepLinks: FakeDeepLinks(),
+        downloads: downloads,
+        prefs: AppPrefs(client: FakePrefsClient()),
+        serverSettings: RecordingServerSettings(),
+        sharingActivity: FakeSharingActivity(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      lines.where((line) => line.startsWith('info images image cache:')),
+      hasLength(1),
+    );
+    // And it is stopped with the app: a timer still ticking after the tree
+    // is gone fails this test on its own, which is the check working.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(ImageCacheLog.defaultPeriod * 3);
   });
 
   testWidgets('going to the background empties the image cache', (
