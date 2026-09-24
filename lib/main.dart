@@ -60,6 +60,29 @@ Future<Directory> dataDirectory({
   Future<Directory> Function() appCache = getApplicationCacheDirectory,
 }) async => (isAndroid ? await externalFiles() : null) ?? await appCache();
 
+/// Opens the artwork store under [purgeable], the app's cache directory.
+///
+/// **This is the one thing that belongs in a directory the system may
+/// reclaim, and it is the opposite of [dataDirectory]'s case.** A kept
+/// download reclaimed halfway through is not a download, which is why
+/// torrent data is kept out of `getCacheDir()` on Android; a poster
+/// reclaimed is a poster fetched again, which is exactly what the store
+/// exists to make cheap and exactly what Android is entitled to take when
+/// the device is full. So the store goes where the platform puts throwaway
+/// bytes on all four platforms this app builds for -- `getCacheDir()` on
+/// Android, `XDG_CACHE_HOME` on Linux, the caches directory on macOS,
+/// `LOCALAPPDATA` on Windows -- and the app's own ceiling
+/// ([ImageDiskCache.defaultCeilingBytes]) bounds it whether or not the
+/// system ever bothers.
+///
+/// Answers null when it cannot be opened, which leaves the app fetching
+/// every picture the way it always did.
+@visibleForTesting
+Future<ImageDiskCache?> imageDiskCacheIn(Directory purgeable) =>
+    ImageDiskCache.openIn(
+      Directory('${purgeable.path}${Platform.pathSeparator}images'),
+    );
+
 /// Moves the torrent-data root off a directory the system may reclaim,
 /// and answers the root it wrote (null when it wrote nothing).
 ///
@@ -187,8 +210,17 @@ class XtremioBootstrap extends StatefulWidget {
   /// latent 100 MiB is the second-largest single number in the
   /// attribution after the torrent engine. What the ceiling costs is a
   /// re-decode when a row is scrolled back to, from a bounded-size source
-  /// that is already on disk in the HTTP cache: cheap, and visible only as
-  /// a poster fading in a second time.
+  /// that is already on disk in [ImageDiskCache]: cheap, and visible only
+  /// as a poster fading in a second time.
+  ///
+  /// **That last sentence was false when it was written.** It said "on
+  /// disk in the HTTP cache", and there is no HTTP cache: `dart:io`'s
+  /// `HttpClient` implements none and Flutter's `NetworkImage` adds none,
+  /// so until [ImageDiskCache] existed every eviction this ceiling caused
+  /// cost a round trip to the addon rather than a read. The premise the
+  /// number was chosen under is only now true, which is what makes
+  /// lowering it a cheap thing to measure rather than a trade against the
+  /// network.
   ///
   /// One number on every device rather than a television's own. A phone
   /// decodes at three times the density, so 32 MiB there is a few dozen
@@ -245,13 +277,15 @@ class XtremioBootstrap extends StatefulWidget {
     final client = RustCoreClient();
     final Directory support = await getApplicationSupportDirectory();
     final Directory data = await dataDirectory(isAndroid: Platform.isAndroid);
+    final Directory purgeable = await getApplicationCacheDirectory();
     final info = await client.init(support: support, cache: data);
     await moveOffPurgeableRoot(
       server: const ServerClient(),
       wanted: '${data.path}/server',
-      purgeable: await getApplicationCacheDirectory(),
+      purgeable: purgeable,
       safe: data,
     );
+    ImageDiskCache.install(await imageDiskCacheIn(purgeable));
     return (client, info);
   }
 

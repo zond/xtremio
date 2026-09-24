@@ -13,6 +13,7 @@ export 'downloads_client.dart';
 export 'fields.dart';
 export 'focus_emphasis.dart';
 export 'image_cache_usage.dart';
+export 'image_disk_cache.dart';
 export 'prefs_client.dart';
 export 'resource.dart';
 export 'server_client.dart';

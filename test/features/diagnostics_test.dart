@@ -567,6 +567,9 @@ void main() {
           ceilingBytes: 33554432,
           liveImages: 96,
           decodingImages: 3,
+          diskBytes: 12400000,
+          diskFiles: 331,
+          diskCeilingBytes: 67108864,
         ),
         appVersion: '1.0.0+1',
         gitCommit: '577fe03',
@@ -584,6 +587,7 @@ void main() {
         'image cache: 18.2 MB of 33.6 MB ceiling · 214 images',
         'images in use: 96 held by a live widget, which no eviction frees '
             '· 3 decoding',
+        'image files: 12.4 MB of 67.1 MB on disk · 331 files',
         'stream-server: 7c46427bc09075b98f5febe10f2a90143e44d826',
         'stremio-core: 00265b3bad7158535fccf1e119e10d6ad492183e',
         'log: 2 lines, oldest first',
@@ -613,6 +617,7 @@ void main() {
       // nobody looked.
       expect(text, contains('image cache: unknown'));
       expect(text, contains('images in use: unknown'));
+      expect(text, contains('image files: unknown'));
       expect(text, isNot(contains('(commit')));
       expect(text, contains('server: not running'));
       expect(text, contains('stream-server: unknown'));
@@ -716,7 +721,35 @@ void main() {
               'ceiling · 1 images',
           'images in use: 1 held by a live widget, which no eviction frees '
               '· 0 decoding',
+          // No store was opened here, which is what a test that never
+          // boots the app has -- and what every build before the store
+          // existed had, on a device as much as in a test.
+          'image files: none kept',
         ]);
+      });
+
+      testWidgets('and say what is on disk to refill them with', (
+        tester,
+      ) async {
+        final dir = Directory.systemTemp.createTempSync('xtremio-report');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        addTearDown(() => ImageDiskCache.install(null));
+        // Opening a store and writing to it is real file work, so it runs
+        // outside the test's fake clock, the way the decode above does.
+        await tester.runAsync(() async {
+          final store = (await ImageDiskCache.openIn(dir, ceilingBytes: 1000))!;
+          ImageDiskCache.install(store);
+          await store.write('https://posters.example/one.jpg', Uint8List(400));
+        });
+
+        // The line the other two are read against: a cache pinned at its
+        // ceiling costs nothing if what it evicts is a file away, and
+        // everything if it is not. Both figures come off the store's own
+        // index, so the whole header is still one instant.
+        expect(
+          ImageCacheUsage.read().reportLines.last,
+          'image files: 400 B of 1.0 kB on disk · 1 files',
+        );
       });
 
       testWidgets('tell the live half from the cached half', (tester) async {
@@ -735,7 +768,7 @@ void main() {
         expect(after.liveImages, 1, reason: 'a live widget still holds it');
         expect(after.reportLines.first, startsWith('image cache: 0 B of'));
         expect(
-          after.reportLines.last,
+          after.reportLines[1],
           'images in use: 1 held by a live widget, which no eviction frees '
           '· 0 decoding',
         );

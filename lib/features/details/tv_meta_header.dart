@@ -175,7 +175,7 @@ class TvMetaHeader extends StatelessWidget {
   /// The logo, or the name when there is none and when the logo will not
   /// load, in a box [logoHeight] tall either way.
   ///
-  /// The height is the whole point of the box. An [Image.network] given
+  /// The height is the whole point of the box. An [Image] given
   /// only a height occupies exactly that from its first frame, before a
   /// byte has arrived; the name that replaces it when the fetch fails is
   /// about half as tall. Without a floor under it the header, the season
@@ -209,13 +209,15 @@ class TvMetaHeader extends StatelessWidget {
     );
     if (logo == null) return name;
     final ratio = MediaQuery.devicePixelRatioOf(context);
-    return Image.network(
-      logo,
+    return Image(
+      image: DiskCachedImage.bounded(
+        logo,
+        cacheHeight: (logoHeight * ratio).round(),
+      ),
       height: logoHeight,
       fit: BoxFit.contain,
       alignment: Alignment.centerLeft,
       semanticLabel: meta.name,
-      cacheHeight: (logoHeight * ratio).round(),
       errorBuilder: (_, _, _) => name,
     );
   }

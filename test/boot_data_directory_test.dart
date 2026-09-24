@@ -195,4 +195,26 @@ void migration() {
     );
     expect(server.patches, isEmpty);
   });
+
+  group('the artwork store', () {
+    test('is opened under the directory the system may reclaim', () async {
+      final under = Directory.systemTemp.createTempSync('xtremio-boot');
+      addTearDown(() => under.deleteSync(recursive: true));
+
+      final store = await boot.imageDiskCacheIn(under);
+
+      // Not the torrent-data root above: a poster reclaimed is a poster
+      // fetched again, which is what the store makes cheap, and a kept
+      // download reclaimed is not a download. They are deliberately
+      // opposite cases with deliberately opposite directories.
+      expect(store, isNotNull);
+      expect(store!.ceilingBytes, ImageDiskCache.defaultCeilingBytes);
+      expect(store.maxAge, ImageDiskCache.defaultMaxAge);
+      expect(store.files, 0);
+      expect(
+        Directory('${under.path}${Platform.pathSeparator}images').existsSync(),
+        isTrue,
+      );
+    });
+  });
 }

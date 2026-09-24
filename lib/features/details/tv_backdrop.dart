@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/image_disk_cache.dart';
+
 /// The title's own artwork behind everything on a television, with the
 /// scrim that keeps white text and a focus ring readable over it.
 ///
@@ -112,12 +114,11 @@ class TvBackdrop extends StatelessWidget {
   static Widget _image(List<String> urls, int index, int? cacheWidth) =>
       index >= urls.length
       ? const SizedBox.shrink()
-      : Image.network(
-          urls[index],
+      : Image(
+          image: DiskCachedImage.bounded(urls[index], cacheWidth: cacheWidth),
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
-          cacheWidth: cacheWidth,
           errorBuilder: (_, _, _) => _image(urls, index + 1, cacheWidth),
         );
 }
