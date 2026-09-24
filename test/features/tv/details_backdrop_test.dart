@@ -188,6 +188,26 @@ void main() {
       );
     });
 
+    testWidgets('decodes at half the panel, which is the one picture here '
+        'that may be smaller than the box it fills', (tester) async {
+      await pump(tester, movieWith());
+
+      // Every other picture in the app decodes at its box. This one is
+      // under a scrim with solid text on top, and at panel width it
+      // measured 1920x1080, 8.3 MB resident on the owner's television --
+      // as much as fifteen posters. Half is a two-fold upscale nobody
+      // reading the screen is looking at.
+      // The number is written out rather than computed from
+      // `decodeFraction`: a test that derives its expectation from the
+      // constant it is pinning passes at every value of it, which this one
+      // did until it was checked by putting the old value back.
+      // `tvSize` is 1280x720 at a ratio of 1, so half is 640.
+      expect(decodeOf(backdropImage(tester)!)?.width, 640);
+      // And the height is left to the source, so the aspect is the
+      // picture's own and `cover` crops as it did.
+      expect(decodeOf(backdropImage(tester)!)?.height, isNull);
+    });
+
     testWidgets('falls back to the poster when there is no background', (
       tester,
     ) async {

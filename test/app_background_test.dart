@@ -57,7 +57,7 @@ void main() {
     });
   });
 
-  testWidgets('the bootstrap caps the image cache at 32 MiB', (tester) async {
+  testWidgets('the bootstrap caps the image cache at 16 MiB', (tester) async {
     // Flutter's own ceiling, which is what the app ran under until now.
     expect(imageCache.maximumSizeBytes, 100 << 20);
     final core = emptyBoardCore();
@@ -78,9 +78,9 @@ void main() {
       imageCache.maximumSizeBytes,
       XtremioBootstrap.imageCacheCeilingBytes,
     );
-    expect(XtremioBootstrap.imageCacheCeilingBytes, 32 << 20);
+    expect(XtremioBootstrap.imageCacheCeilingBytes, 16 << 20);
     await tester.pumpAndSettle();
-    expect(imageCache.maximumSizeBytes, 32 << 20);
+    expect(imageCache.maximumSizeBytes, 16 << 20);
   });
 
   testWidgets('the app writes what that cache holds into the log, from the '

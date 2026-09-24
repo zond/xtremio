@@ -202,8 +202,22 @@ class XtremioBootstrap extends StatefulWidget {
   final DeviceProfile device;
 
   /// What decoded images Flutter may keep for pictures no widget is showing:
-  /// 32 MiB, in place of the framework's 100 MiB (`ImageCache`, 1000
+  /// 16 MiB, in place of the framework's 100 MiB (`ImageCache`, 1000
   /// images / 100 MiB).
+  ///
+  /// **It was 32 MiB, and two measurements took it down.** The device's
+  /// own report read `image cache: 33 MB of 33.6 MB ceiling - 80 images`
+  /// with a settled native heap of 42 MB for the whole process, so the
+  /// cache was pinned at its ceiling and was most of what the app
+  /// retained. And the per-image log said what those 80 were: posters at
+  /// `300x450 px, 540 kB`, correctly bounded to their tile, in quantity --
+  /// there was no oversized decode to find, only a lot of right-sized
+  /// ones. So the number of them is the lever, and this is the number.
+  ///
+  /// What made it affordable is [ImageDiskCache], which landed first: an
+  /// eviction used to be a re-download over a television's wifi and is now
+  /// a read out of the app's cache directory. Lowering this before that
+  /// existed would have traded memory for latency on every scroll back.
   ///
   /// Every poster, backdrop and episode thumbnail is decoded at the box it
   /// is drawn in (`cacheWidth`), so no single picture is large any more; a
@@ -243,7 +257,7 @@ class XtremioBootstrap extends StatefulWidget {
   /// [ImageCacheUsage] puts what the cache actually holds against it into
   /// the diagnostics report, on the device, alongside the count of images a
   /// live widget is holding that no ceiling here can reach.
-  static const int imageCacheCeilingBytes = 32 * 1024 * 1024;
+  static const int imageCacheCeilingBytes = 16 * 1024 * 1024;
 
   /// How the core comes up; [bootCore] (the Rust library) unless a test
   /// hands in a fake.

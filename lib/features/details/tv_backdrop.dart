@@ -66,6 +66,28 @@ class TvBackdrop extends StatelessWidget {
   /// stop is still most of the way to opaque: the whole point is that a
   /// white logo and a white focus ring read over *any* frame of any film,
   /// and the frame is the part nothing here gets to choose.
+  /// How much of the panel's width the backdrop is decoded at: half.
+  ///
+  /// Every other picture in this app is decoded at the box it is drawn in,
+  /// because every other picture is meant to be looked at. This one is
+  /// not: it is covered by [scrim] and has solid text and a focus ring on
+  /// top of it, and its job is to be the colour and shape of the title
+  /// rather than a photograph anybody reads. So it is the one image whose
+  /// decode may be smaller than its box, and it upscales into the panel.
+  ///
+  /// Measured on the owner's television, off the app's own per-image log:
+  /// a backdrop at panel width is `1920x1080 px, 8.3 MB resident` -- as
+  /// much as fifteen posters, and more than the whole board costs. At half
+  /// that it is 2.1 MB, so opening a title costs 6.2 MB less. The device
+  /// has 2 GB for the whole system and its low-memory killer has taken
+  /// this app at 147 MB resident.
+  ///
+  /// Half rather than a quarter deliberately: a quarter saves another
+  /// 1.6 MB and is a four-fold upscale, which is where a gradient in a
+  /// dark sky starts to band on a large panel. Half is a two-fold upscale
+  /// under a scrim, and the saving is nearly all of what there is to take.
+  static const double decodeFraction = 0.5;
+
   static const LinearGradient scrim = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
@@ -93,11 +115,13 @@ class TvBackdrop extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final urls = [?atSize(background, imageSize), ?atSize(poster, imageSize)];
-    // The panel's own pixels: a backdrop is never drawn larger than the
-    // screen, so decoding it larger only costs memory. `cacheWidth` counts
+    // Half the panel's pixels, upscaled to fill it -- see
+    // [decodeFraction] for why a backdrop is the one picture here that
+    // may be decoded smaller than it is drawn. `cacheWidth` counts
     // physical pixels, which is why the ratio is in here.
     final media = MediaQuery.of(context);
-    final decodeWidth = (media.size.width * media.devicePixelRatio).round();
+    final decodeWidth =
+        (media.size.width * media.devicePixelRatio * decodeFraction).round();
     return Stack(
       fit: StackFit.expand,
       children: [
