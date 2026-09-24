@@ -13,8 +13,8 @@ import 'diagnostics_report.dart';
 /// The Rust core keeps its last few hundred `tracing` lines in memory --
 /// its own and the embedded stream-server's, which share the one
 /// subscriber -- and this screen shows them under a short header (build,
-/// device, server, the pinned revisions) and copies the lot to the
-/// clipboard. With Verbose logging off, everything shown and copied has
+/// device, server, what the disk and Flutter's image cache are holding, the
+/// pinned revisions) and copies the lot to the clipboard. With Verbose logging off, everything shown and copied has
 /// been through [redactSecrets]: the server's bearer token, auth keys and
 /// passwords never leave the process, and every URL is cut down to its
 /// origin unless its path is this app's own. With it on, the report is
@@ -101,6 +101,20 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       dht = null;
     }
     if (!mounted) return;
+    // Read last, with nothing awaited between it and the clock below.
+    // Flutter's image cache is a live figure -- a screenful of posters
+    // resolves in the time one platform channel call takes -- so a reading
+    // from before the awaits would be stamped `taken:` at a moment it was
+    // not true of, in exactly the situation this exists to diagnose. It is
+    // framework state, not the core's, so it is read here rather than
+    // asked of the client: there is no platform to reach and a seam would
+    // only let a test disagree with the cache the app is really running.
+    ImageCacheUsage? images;
+    try {
+      images = ImageCacheUsage.read();
+    } catch (error) {
+      images = null;
+    }
     setState(() {
       _lines = snapshot.logLines.length;
       _dht = dht;
@@ -109,6 +123,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
         platform: widget.client.platform,
         osVersion: osVersion,
         storage: storage,
+        images: images,
         dht: dht,
         at: widget.now(),
       );
