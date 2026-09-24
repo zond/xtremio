@@ -13,6 +13,7 @@ import '../../support/fake_core_client.dart';
 import '../../support/fake_playback_engine.dart';
 import '../../support/fake_torrent_stats_client.dart';
 import '../../support/fixtures.dart';
+import '../../support/images.dart';
 import '../../support/tv.dart';
 
 const String movieId = 'tt0063350';
@@ -105,12 +106,6 @@ void main() {
   Image? backdropImage(WidgetTester tester) =>
       layers(tester).whereType<Image>().singleOrNull;
 
-  String? urlOf(Image? image) => switch (image?.image) {
-    ResizeImage(:final NetworkImage imageProvider) => imageProvider.url,
-    NetworkImage(:final url) => url,
-    _ => null,
-  };
-
   group('what the backdrop asks for', () {
     test('a metahub URL is asked for the size a full screen needs', () {
       expect(
@@ -188,7 +183,7 @@ void main() {
       await pump(tester, movieWith());
 
       expect(
-        urlOf(backdropImage(tester)),
+        networkUrlOf(backdropImage(tester)),
         'https://images.metahub.space/background/medium/$movieId/img',
       );
     });
@@ -201,7 +196,7 @@ void main() {
       // Cinemeta sends the *small* poster, which is what would otherwise be
       // stretched across the whole panel.
       expect(
-        urlOf(backdropImage(tester)),
+        networkUrlOf(backdropImage(tester)),
         'https://images.metahub.space/poster/medium/$movieId/img',
       );
     });
@@ -216,7 +211,7 @@ void main() {
       expect(afterBackground, isA<Image>());
       final poster = afterBackground as Image;
       expect(
-        urlOf(poster),
+        networkUrlOf(poster),
         'https://images.metahub.space/poster/medium/$movieId/img',
       );
 
