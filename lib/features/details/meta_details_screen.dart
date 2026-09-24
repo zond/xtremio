@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
@@ -306,6 +307,13 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// entirely: the ladder walks these numbers and the viewer walks the
   /// panel, so a number out of order is a rung the D-pad cannot reach from
   /// its neighbour.
+  ///
+  /// [_ladderAppBar] is the one number with no row under it. The bar's Back
+  /// and its actions sit in the bar's own slots, which no one widget can
+  /// wrap, so they are not a row of the ladder -- but a press down out of
+  /// one has to land on the ladder all the same, and this is the level it
+  /// enters from ([_AboveTheLadder]).
+  static const int _ladderAppBar = -10;
   static const int _ladderInfo = 0;
   static const int _ladderEpisodesHeader = 20;
   static const int _ladderSeasons = 24;
@@ -1342,14 +1350,20 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         // something to go back to, as the implied one is, so it is never
         // an arrow that does nothing.
         leading: Navigator.of(context).canPop()
-            ? BackButton(onPressed: () => Navigator.of(context).pop())
+            ? _AboveTheLadder(
+                isTv: isTv,
+                child: BackButton(onPressed: () => Navigator.of(context).pop()),
+              )
             : null,
         actions: [
           if (_downloadsClient != null)
-            IconButton(
-              tooltip: kDownloadsScreenTooltip,
-              onPressed: _openDownloads,
-              icon: const Icon(Icons.download_outlined),
+            _AboveTheLadder(
+              isTv: isTv,
+              child: IconButton(
+                tooltip: kDownloadsScreenTooltip,
+                onPressed: _openDownloads,
+                icon: const Icon(Icons.download_outlined),
+              ),
             ),
         ],
         flexibleSpace: isTv
@@ -2518,6 +2532,66 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             alsoFrom: sources.alsoFrom(addonOf(row), row.stream),
           ),
     ];
+  }
+}
+
+/// An app bar control on a television, handing a press down to the ladder
+/// drawn below the bar.
+///
+/// The bar is not on the ladder and cannot easily be put on it -- Back and
+/// the actions are separate slots of the bar, and one [TvLadderRow] wraps
+/// one subtree -- so a press down out of one of them was left to Flutter's
+/// directional traversal, which takes the nearest node in the direction
+/// pressed. The downloads button is at the far right of the bar and the
+/// bookmark is at the far right of the header, directly under it; the
+/// description is a block that stops well short of both. So down from
+/// downloads landed on the bookmark and down from Back on the description,
+/// and reading the plot from the downloads button meant going left to Back
+/// first and then down -- which is the report this answers.
+///
+/// Distance is the wrong question here for the same reason it is wrong
+/// between the rows ([TvLadder]): what is under the bar is the header,
+/// whatever each control happens to line up with. So the press enters the
+/// ladder at [_MetaDetailsScreenState._ladderAppBar] and the header row
+/// says where in itself the remote lands -- the plot on a first arrival,
+/// and afterwards whichever of its two stops the viewer left it on, the
+/// way every other row of the ladder hands the remote back.
+///
+/// A press the ladder cannot answer is **left alone** rather than
+/// swallowed, so directional focus still gets its go: the bar of a screen
+/// whose ladder has not been built yet still walks.
+///
+/// Off a television this is its child and nothing else: a phone's app bar
+/// is reached by touch and a desktop's by Tab, and neither asks this
+/// question.
+class _AboveTheLadder extends StatelessWidget {
+  const _AboveTheLadder({required this.isTv, required this.child});
+
+  final bool isTv;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isTv) return child;
+    final ladder = TvLadder.maybeOf(context);
+    return Focus(
+      // Not a stop of its own: it watches the key on its way up from the
+      // button below it, the way [TvLadderRow] watches its own row's.
+      canRequestFocus: false,
+      skipTraversal: true,
+      includeSemantics: false,
+      onKeyEvent: (node, event) {
+        if (event is KeyUpEvent ||
+            event.logicalKey != LogicalKeyboardKey.arrowDown) {
+          return KeyEventResult.ignored;
+        }
+        final moved =
+            ladder?.move(_MetaDetailsScreenState._ladderAppBar, up: false) ??
+            false;
+        return moved ? KeyEventResult.handled : KeyEventResult.ignored;
+      },
+      child: child,
+    );
   }
 }
 

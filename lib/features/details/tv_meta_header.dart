@@ -40,6 +40,18 @@ import '../../widgets/remote_press.dart';
 /// The bookmark stays: it is the one thing on this screen that is about
 /// the title rather than about what to play, and the remote has to be
 /// able to reach it.
+///
+/// **The header says which of its two stops comes first**, because nothing
+/// else here can be trusted to. The description is built inside a
+/// [LayoutBuilder] -- it measures the words against the width it is given
+/// -- so its focus node is attached at layout, after the bookmark beside
+/// it, and both the ladder's walk and reading order then made the bookmark
+/// the header's first stop: the narrow button in the corner rather than
+/// the block spanning the panel. A viewer coming down out of the app bar
+/// landed on the bookmark and had to walk back for the plot, which is the
+/// report this order answers. So the order is declared
+/// ([FocusTraversalOrder]) and both walks read the declaration: the
+/// [OrderedTraversalPolicy] here for Tab, [TvLadderRow] for the D-pad.
 class TvMetaHeader extends StatelessWidget {
   const TvMetaHeader({
     super.key,
@@ -62,6 +74,11 @@ class TvMetaHeader extends StatelessWidget {
   /// both layouts say the same thing about the same button.
   static const String addTooltip = 'Add to library';
   static const String removeTooltip = 'Remove from library';
+
+  /// Where the header's two stops stand in its walk, low first: the plot
+  /// the viewer came to read, and then the button in the corner.
+  static const double stopOrderDescription = 1;
+  static const double stopOrderBookmark = 2;
 
   /// How tall a logo is drawn. Wide logos are letterboxed into whatever
   /// width is left rather than overflowing it.
@@ -93,53 +110,64 @@ class TvMetaHeader extends StatelessWidget {
     final description = meta.description;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _title(context),
-                const SizedBox(height: 10),
-                Text(
-                  facts(meta),
-                  style: theme.textTheme.titleMedium,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+      // The header's two stops, walked in the order they are read rather
+      // than in the order they happen to be assembled: see the class.
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _title(context),
+                  const SizedBox(height: 10),
+                  Text(
+                    facts(meta),
+                    style: theme.textTheme.titleMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (downloads.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    DownloadSummary(downloads: downloads, metaId: meta.id),
+                  ],
+                  if (description != null) ...[
+                    // Two short of the ten the other gaps are: the block
+                    // holds itself off its own ring by [FocusRing.textInset]
+                    // on every side, and that padding is part of the gap.
+                    const SizedBox(height: 2),
+                    FocusTraversalOrder(
+                      order: const NumericFocusOrder(stopOrderDescription),
+                      child: TvDescription(text: description),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            // The same indicator every focusable thing on a television
+            // wears, rather than the circular tint Material gives a focused
+            // icon button: a tint of about a tenth over a darkened backdrop
+            // is the one cue a bright room takes away, and this is a control
+            // the remote can land on.
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(stopOrderBookmark),
+              child: FocusHighlighted(
+                borderRadius: const BorderRadius.all(Radius.circular(24)),
+                builder: (context, node) => IconButton(
+                  focusNode: node,
+                  tooltip: isInLibrary ? removeTooltip : addTooltip,
+                  isSelected: isInLibrary,
+                  icon: const Icon(Icons.bookmark_border),
+                  selectedIcon: const Icon(Icons.bookmark),
+                  onPressed: onToggleLibrary,
                 ),
-                if (downloads.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  DownloadSummary(downloads: downloads, metaId: meta.id),
-                ],
-                if (description != null) ...[
-                  // Two short of the ten the other gaps are: the block
-                  // holds itself off its own ring by [FocusRing.textInset]
-                  // on every side, and that padding is part of the gap.
-                  const SizedBox(height: 2),
-                  TvDescription(text: description),
-                ],
-              ],
+              ),
             ),
-          ),
-          const SizedBox(width: 16),
-          // The same indicator every focusable thing on a television
-          // wears, rather than the circular tint Material gives a focused
-          // icon button: a tint of about a tenth over a darkened backdrop
-          // is the one cue a bright room takes away, and this is a control
-          // the remote can land on.
-          FocusHighlighted(
-            borderRadius: const BorderRadius.all(Radius.circular(24)),
-            builder: (context, node) => IconButton(
-              focusNode: node,
-              tooltip: isInLibrary ? removeTooltip : addTooltip,
-              isSelected: isInLibrary,
-              icon: const Icon(Icons.bookmark_border),
-              selectedIcon: const Icon(Icons.bookmark),
-              onPressed: onToggleLibrary,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

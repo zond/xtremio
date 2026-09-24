@@ -210,8 +210,51 @@ class TvLadderRowState extends State<TvLadderRow> {
     super.dispose();
   }
 
-  /// This row's focus stops, in the order the D-pad walks them.
-  List<FocusNode> get _stops => _node.traversalDescendants.toList();
+  /// This row's focus stops, in the order the D-pad walks them: the order
+  /// they were built in, unless the row says otherwise.
+  ///
+  /// Built order is drawn order nearly everywhere, because a row builds its
+  /// cards in the order it draws them. It is not drawn order where a stop
+  /// is built during *layout*: the details header's description measures
+  /// the words against the width it is given ([LayoutBuilder]), and a node
+  /// attached at layout is attached after everything beside it that was
+  /// attached at build. The row's first stop was then the bookmark drawn to
+  /// the description's right, which is what a press down out of the app bar
+  /// landed on -- a stop three metres away is read left to right, and the
+  /// order the walk knew was the order the frame happened to be assembled
+  /// in.
+  ///
+  /// A row that knows better declares its order with [FocusTraversalOrder],
+  /// the same annotation an [OrderedTraversalPolicy] above those stops
+  /// walks Tab by, so the two walks read one declaration rather than
+  /// agreeing by luck. All of a row's stops or none of them: an order that
+  /// covers half a row is two orders.
+  List<FocusNode> get _stops {
+    final stops = _node.traversalDescendants.toList();
+    final declared = [for (final stop in stops) _declaredOrder(stop)];
+    if (!declared.any((order) => order != null)) return stops;
+    assert(
+      !declared.any((order) => order == null),
+      'a row declares an order for all of its stops or for none of them',
+    );
+    // Position breaks a tie, which is what makes the sort a stable one:
+    // Dart's own is not, and a row whose stops changed places between two
+    // reads of this is a row whose memory names a different card each time.
+    final walked = [for (var i = 0; i < stops.length; i++) i]
+      ..sort((a, b) {
+        final byOrder = declared[a]!.compareTo(declared[b]!);
+        return byOrder != 0 ? byOrder : a.compareTo(b);
+      });
+    return [for (final at in walked) stops[at]];
+  }
+
+  /// The order [stop] was declared with, null where it was not. Reads the
+  /// annotation without depending on it, which is what lets this be asked
+  /// from a key handler rather than only while building.
+  static FocusOrder? _declaredOrder(FocusNode stop) {
+    final context = stop.context;
+    return context == null ? null : FocusTraversalOrder.maybeOf(context);
+  }
 
   /// Puts the remote back where it was in this row, or on its first card.
   /// False when the row has nothing to take it -- a season with no
