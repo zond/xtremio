@@ -50,13 +50,17 @@ void main() {
     expect(MediaKitEngine.mpvOverrides['network-timeout'], '300');
   });
 
-  test('what it keeps instead is 32 MiB of memory ahead of the play head', () {
+  test('what it keeps instead is 16 MiB of memory ahead of the play head', () {
     // media_kit 1.2.6 puts `PlayerConfiguration.bufferSize` on both
     // `demuxer-max-bytes` and `demuxer-max-back-bytes`; this is the window
     // ahead, and the one behind is set apart from it below. Written out
     // rather than inherited: it is the only buffer the player has now, and
     // the only buffer should not be a dependency's default.
-    expect(MediaKitEngine.memoryCacheBytes, 32 * 1024 * 1024);
+    //
+    // Was 32 MiB, sized against a 30 Mbps remux this app has never been
+    // given. At the ~4 Mbps its heaviest measured torrent actually runs
+    // at, 16 MiB is 33 seconds of read-ahead.
+    expect(MediaKitEngine.memoryCacheBytes, 16 * 1024 * 1024);
     for (final verbose in [false, true]) {
       expect(
         MediaKitEngine.playerConfigurationFor(verboseLog: verbose).bufferSize,
@@ -65,15 +69,14 @@ void main() {
     }
   });
 
-  test('and 16 MiB behind it, set apart from the 32 media_kit would copy '
+  test('and 8 MiB behind it, set apart from the 16 media_kit would copy '
       'there', () {
     // The window behind the play head is what a backward seek lands in
     // without going to the server, and nothing else; a seek that misses it
     // is a range request answered from the server's own cache. So it is
-    // half the forward window, and the player's ceiling is 48 MiB instead
-    // of the 64 the shared number gave it -- 16 MiB back on a television
-    // whose low-memory killer took the app at 311-379 MB.
-    expect(MediaKitEngine.backCacheBytes, 16 * 1024 * 1024);
+    // half the forward window, and the player's ceiling is 24 MiB instead
+    // of the 32 the shared number would give it.
+    expect(MediaKitEngine.backCacheBytes, 8 * 1024 * 1024);
     expect(
       MediaKitEngine.backCacheBytes,
       lessThan(MediaKitEngine.memoryCacheBytes),
@@ -84,12 +87,23 @@ void main() {
       MediaKitEngine.mpvOverrides['demuxer-max-back-bytes'],
       '${MediaKitEngine.backCacheBytes}',
     );
-    // What it buys, at the bitrates this app plays: the remote's seek step
-    // is ten seconds, and one press back stays in memory at 8 Mbps.
-    const eightMbps = 8 * 1000 * 1000 / 8;
+    // What it buys, and why the number is this one: the remote's seek step
+    // is ten seconds, and one press back has to stay in memory at the
+    // bitrate this app is actually given. The heaviest torrent measured on
+    // the owner's television ran at about 4 Mbps; 8 MiB covers a press up
+    // to roughly 6.7 Mbps, so there is margin. Halving again would not:
+    // 4 MiB covers a press only to 3.3 Mbps, and would start missing on
+    // the very films this is sized for.
+    const fourMbps = 4 * 1000 * 1000 / 8;
     expect(
-      MediaKitEngine.backCacheBytes / eightMbps,
+      MediaKitEngine.backCacheBytes / fourMbps,
       greaterThan(SeekBar.defaultSeekStep.inSeconds),
+    );
+    const halfAgain = 4 * 1024 * 1024;
+    expect(
+      halfAgain / fourMbps,
+      lessThan(SeekBar.defaultSeekStep.inSeconds),
+      reason: 'which is why 4 MiB was not taken',
     );
     // And the forward side is not touched by the override.
     expect(
@@ -98,10 +112,6 @@ void main() {
     );
   });
 
-  /// What a running libmpv did once the memory cache filled and there was
-  /// nowhere else to put the payload -- which is every playback now.
-  ///
-  /// libmpv 0.41.0 over a 155 MB Matroska served from localhost through a
   /// 2,000,000 B/s throttle, both byte limits at media_kit's 32 MiB and the
   /// disk cache off. Seconds since the open, the file (frozen: the disk
   /// cache had been turned off at 15.02), the memory cache, and
