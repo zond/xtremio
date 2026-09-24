@@ -500,7 +500,141 @@ void main() {
   });
 
   releaseNameTests();
+  leadSubtractionTests();
   recordedAddonAnswers();
+}
+
+/// The rule that decides what a line under the lead still has to say.
+///
+/// The recorded rows are the specification and [recordedAddonAnswers] walks
+/// every one of them; this group is the rule stated on its own, with the
+/// two ways it can go wrong -- taking words out of a line that is not the
+/// lead, and leaving the lead's own words in one that is -- written as
+/// cases rather than inferred from a table.
+void leadSubtractionTests() {
+  StreamInfo torrent(String description, {String? filename}) =>
+      StreamInfo(<String, dynamic>{
+        'infoHash': 'a',
+        'name': 'Torrentio\n4k',
+        'description': description,
+        if (filename != null)
+          'behaviorHints': <String, dynamic>{'filename': filename},
+      });
+
+  List<String> restOf(StreamInfo stream) =>
+      StreamPresentation.of(stream, addonName: 'Torrentio').rest;
+
+  group('a line that is the lead again, more fully spelled', () {
+    test("keeps only what it adds, in the addon's own separators", () {
+      expect(
+        restOf(
+          torrent(
+            'Movie.Name.2019.2160p.BluRay.x265.10bit.HDR.TrueHD.7.1'
+            '.Atmos-GROUP',
+            filename: 'Movie.Name.2019.2160p.BluRay.X265-GROUP.mkv',
+          ),
+        ),
+        ['10bit.HDR.TrueHD.7.1.Atmos'],
+      );
+    });
+
+    test('and goes entirely when it adds nothing, which is what it always '
+        'did', () {
+      expect(
+        restOf(
+          torrent(
+            'Movie Name 2019 2160p BluRay x265-GROUP',
+            filename: 'Movie.Name.2019.2160p.BluRay.x265-GROUP.mkv',
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a word the line has twice and the lead has once is the line saying '
+        'something the second time', () {
+      // The lead's `PROPER` is accounted for by the line's first one; the
+      // second is not the lead's and stays.
+      expect(
+        restOf(
+          torrent(
+            'Movie.Name.2019.PROPER.1080p.PROPER.WEB-DL-GROUP',
+            filename: 'Movie.Name.2019.PROPER.1080p.WEB-DL-GROUP.mkv',
+          ),
+        ),
+        ['PROPER'],
+      );
+    });
+  });
+
+  group('and the lines that are not', () {
+    test('a pack is not its own files, however much of them it spells', () {
+      // Recorded row 4 without the `[PACK]` in front of it, to show what
+      // keeps the line whole is what it names and not the word: the head
+      // of the lead is `Movie Name 2019` and the head of the line is
+      // `Movie Name Collection 2019 2021`.
+      expect(
+        restOf(
+          torrent(
+            'Movie Name Collection (2019-2021) (2160p HDR BDRip x265 DTS) '
+            '[GROUP]',
+            filename:
+                'Movie Name (2019) (2160p HDR BDRip x265 DTS) '
+                '[GROUP].mkv',
+          ),
+        ),
+        [
+          'Movie Name Collection (2019-2021) (2160p HDR BDRip x265 DTS) '
+              '[GROUP]',
+        ],
+      );
+    });
+
+    test('and neither is the season a file came out of', () {
+      expect(
+        restOf(
+          torrent(
+            'Series Name (2008) S01 (2160p AMZN WEB-DL H265 - GROUP)',
+            filename:
+                'Series Name (2008) S01E01 (2160p AMZN WEB-DL H265 - '
+                'GROUP).mkv',
+          ),
+        ),
+        ['Series Name (2008) S01 (2160p AMZN WEB-DL H265 - GROUP)'],
+      );
+    });
+
+    test('a line that shares a word or two is left alone: half a line is '
+        'worse than a repeated one', () {
+      // The same film at another resolution, which is a different release
+      // and not this one spelled out. More of it is its own than is the
+      // lead's, and that is where this stops.
+      expect(
+        restOf(
+          torrent(
+            'Movie.Name.2019.720p.HDTV.XviD.AC3-OTHER',
+            filename: 'Movie.Name.2019.2160p.BluRay.x265.TrueHD-GROUP.mkv',
+          ),
+        ),
+        ['Movie.Name.2019.720p.HDTV.XviD.AC3-OTHER'],
+      );
+    });
+
+    test("a line with no title in it at all is nobody's release", () {
+      // The public-domain addon: the whole stream name is `1080p`, so
+      // there is no title in front of the resolution to agree about. No
+      // head, no claim that two lines are one release.
+      final stream = StreamInfo(const {
+        'infoHash': 'a',
+        'name': '1080p',
+        'description': '💾 1.51 GB',
+      });
+      expect(
+        StreamPresentation.of(stream, addonName: 'caching.stremio.net').rest,
+        ['💾 1.51 GB'],
+      );
+    });
+  });
 }
 
 /// The four shapes real addons send, and what a card leads with for each.
@@ -656,7 +790,8 @@ typedef Recorded = ({
   /// The line that names what a press would start.
   String lead,
 
-  /// The rest of what the addon wrote, in its order, with [lead] gone.
+  /// The rest of what the addon wrote, in its order, with what [lead]
+  /// already said taken out of it.
   List<String> rest,
 });
 
@@ -704,8 +839,10 @@ void recordedAddonAnswers() {
     recorded(
       'torrentio',
       'a single-file torrent -- the release on line one, the stats on line '
-          'two, no languages. The filename is a shorter spelling of the same '
-          'release, so line one is not the lead over again and stays',
+          'two, no languages. Line one is the same release as the filename '
+          'spelled more fully, so what is left of it is the five words the '
+          'filename does not have: the bit depth, the dynamic range and the '
+          'audio',
       resolution: StreamResolution.uhd2160,
       size: 37677600604,
       seeders: 99,
@@ -713,8 +850,10 @@ void recordedAddonAnswers() {
       tracker: 'RARBG',
       lead: 'The.Matrix.1999.RERIP.2160p.UHD.BluRay.X265-IAMABLE',
       rest: const [
-        'The.Matrix.1999.RERIP.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1'
-            '.Atmos-IAMABLE',
+        // Was `The.Matrix.1999.RERIP.2160p.UHD.BluRay.x265.10bit.HDR
+        // .TrueHD.7.1.Atmos-IAMABLE`, four fifths of it the lead over
+        // again, in the addon's own dots.
+        '10bit.HDR.TrueHD.7.1.Atmos',
         '👤 99 💾 35.09 GB ⚙️ RARBG',
       ],
     ),
@@ -788,8 +927,10 @@ void recordedAddonAnswers() {
       'THE PACK ROW -- line one is `[PACK] The Matrix 4K UHD Collection '
           '(1999-2003) ...`, a box set and not a film and not what a press '
           'would start. The lead is the film, off behaviorHints.filename; the '
-          'collection stays underneath, because which pack a file came out of '
-          'is worth knowing, and the duplicate file line goes',
+          'collection stays underneath *whole* -- it shares ten of its '
+          'fifteen words with the lead and is still not the lead, because it '
+          'names the box set and not the film, which is worth knowing -- and '
+          'the duplicate file line goes',
       resolution: StreamResolution.uhd2160,
       size: 5347234284,
       seeders: 80,
@@ -820,9 +961,9 @@ void recordedAddonAnswers() {
     recorded(
       'torrentio',
       'the filename spells every dub out (ENG LATINO CASTELLANO ...) where '
-          'the text says only MULTi, so the two differ and both are shown. The '
-          'lead is the long one because it is the file that plays -- a '
-          'judgement the layout may yet want to soften, not a reading',
+          'the text says only MULTi. The lead is the long one because it is '
+          'the file that plays, and the whole of what the short one adds is '
+          'the word MULTi -- which is what is left of it',
       resolution: StreamResolution.uhd2160,
       size: 26252987597,
       seeders: 11,
@@ -834,8 +975,10 @@ void recordedAddonAnswers() {
           'The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.ENG.LATINO.CASTELLANO'
           '.ITA.FRE.HINDI.PORTUGUESE.DDP5.1.Atmos.H265.MP4-BEN.THE.MEN',
       rest: const [
-        'The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.MULTi.DDP5.1.Atmos.H265'
-            '.MP4-BEN.THE.MEN',
+        // Was `The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.MULTi.DDP5.1.Atmos
+        // .H265.MP4-BEN.THE.MEN`: seventeen words of the lead and one of
+        // its own.
+        'MULTi',
         '👤 11 💾 24.45 GB ⚙️ ThePirateBay',
         'Multi Audio / 🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇫🇷 / 🇮🇳',
       ],

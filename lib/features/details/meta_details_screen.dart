@@ -3881,7 +3881,12 @@ class _EmptyAddonsSummaryState extends State<_EmptyAddonsSummary> {
 /// rest away, so a pack's collection line, the `⚙️` it was indexed on and
 /// the flags saying which dubs are on it were read, sorted by, and never
 /// shown. They are lines of their own now, in the order the addon wrote
-/// them ([StreamPresentation.rest]).
+/// them ([StreamPresentation.rest]), and the only thing taken out of them
+/// is what the line the row is headed with has already said.
+///
+/// **And none of it is cut.** Not the release, not the addon's lines, not
+/// the addon's name: the list scrolls, so a row is as tall as what is on
+/// it. A television card is the one that cannot do that ([TvSourceCard]).
 ///
 /// The chips are the parse of that text drawn under it ([StreamFacts.pills]),
 /// which means a `💾 1.51 GB` and a `1.51 GB` chip are on the same row on
@@ -3979,7 +3984,14 @@ class _StreamTile extends StatelessWidget {
       enabled: onTap != null,
       selected: highlighted,
       leading: Icon(leadingIcon ?? _iconFor(stream.kind)),
-      title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+      // Nothing on this row is cut short. A release name is read token by
+      // token -- the resolution, the source, the codec, the group -- and
+      // `The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.ENG.LATIN…` says less
+      // about which file it is than the whole of it does. The list scrolls
+      // and a row may be any height, so the text wraps and the row grows;
+      // the television, whose row is a strip of fixed-height cards with no
+      // scroll to grow into, keeps its caps ([TvSourceCard]).
+      title: Text(title),
       isThreeLine: lines > 1,
       subtitle: lines == 0
           ? null
@@ -3991,20 +4003,8 @@ class _StreamTile extends StatelessWidget {
                 // three different things, and the addon put them on three
                 // lines because they are.
                 for (final line in said) Text(line),
-                if (description != null)
-                  Text(
-                    description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: quiet,
-                  ),
-                if (alsoFrom != null)
-                  Text(
-                    alsoFrom,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: quiet,
-                  ),
+                if (description != null) Text(description, style: quiet),
+                if (alsoFrom != null) Text(alsoFrom, style: quiet),
                 if (chips.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),

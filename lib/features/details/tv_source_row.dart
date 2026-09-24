@@ -549,18 +549,32 @@ class TvSourceCard extends StatelessWidget {
   /// How many lines the lead and each of the addon's own lines are given
   /// before they are ellipsized.
   ///
+  /// **A television only.** The phone's list scrolls and a row of it may be
+  /// any height, so nothing there is cut at all: a release name cut
+  /// mid-token says less about which file it is than the whole of it does.
+  /// A strip cannot do that -- every card in it is the height of the
+  /// tallest, on a panel that has five other rungs to fit.
+  ///
   /// **Measured, not chosen.** Uncapped, the twenty-five recorded rows
-  /// come out between 72 and 439 dp tall on a 720p television, and a row
-  /// is as tall as its tallest card -- 463 dp of a 648 dp panel, so a
+  /// come out between 72 and 423 dp tall on a 720p television, and a row
+  /// is as tall as its tallest card -- 447 dp of a 648 dp panel, so a
   /// viewer walking from a group pill to a card would scroll the screen.
   /// Recorded row 6 is what drives it: its
   /// `behaviorHints.filename` spells out every dub (~120 characters) where
   /// the addon's own line says `MULTi`, and at 260 dp wide that is six
-  /// lines of one card. Two for the lead and three for each line under it
-  /// is what brings the tallest recorded card back under 260 dp while
-  /// leaving twenty-two of the twenty-five uncut, which
-  /// `details_sources_row_test.dart` measures rather than trusts.
-  static const int leadLines = 2;
+  /// lines of one card.
+  ///
+  /// Three lines for the lead and three for each line under it hold the
+  /// tallest recorded card to 313 dp and its row to 337, which
+  /// `details_recorded_sources_test.dart` measures rather than trusts. The
+  /// lead had two until the repeat of it was subtracted out of the line
+  /// underneath ([StreamPresentation.rest]): that took 20 dp off the
+  /// tallest row (342 to 322) and the third line of the lead spends 15 of
+  /// it, which is the right place for it -- the lead is the one line that
+  /// says which file a press would start. A fourth body line was measured
+  /// for the same 20 dp and does not fit: 353, past the 342 this panel is
+  /// known to carry.
+  static const int leadLines = 3;
   static const int bodyLines = 3;
 
   /// And how many the quiet provenance line gets. Two, not one: the

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -50,6 +51,15 @@ Map<String, dynamic> recordedGroup() => {
 Map<String, dynamic> recordedMovie() =>
     loadMetaDetailsFixture()..['streams'] = [recordedGroup()];
 
+/// Recorded row 6's lead: `behaviorHints.filename` with every dub spelled
+/// out, a hundred and twenty characters of it, where the addon's own line
+/// says `MULTi`. The longest release in the fixture and the one every cap
+/// on a television card was measured against.
+const dubs =
+    'The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.ENG.LATINO'
+    '.CASTELLANO.ITA.FRE.HINDI.PORTUGUESE.DDP5.1.Atmos.H265'
+    '.MP4-BEN.THE.MEN';
+
 /// The recorded streams as the app models them, in fixture order.
 List<StreamInfo> recordedStreams() => [
   for (final row in loadRecordedStreams())
@@ -87,12 +97,31 @@ void main() {
     /// list is a sliver and an unbuilt row is not a row this can look at.
     /// Grouped by addon, with the one group open, so the rows are a flat
     /// list and no resolution heading shares a word with a release.
-    Future<void> pump(WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1200, 24000);
+    ///
+    /// [width] is a phone's when a test is about what the text does when
+    /// it runs out of room; the default is wide enough that most of these
+    /// rows fit on one line and the assertions are about the words
+    /// themselves.
+    ///
+    /// [sectioned] takes the other layout, with every section open: the
+    /// rows are the same rows, and the one thing that differs is that a
+    /// row under a resolution heading names the addon that answered it.
+    Future<void> pump(
+      WidgetTester tester, {
+      double width = 1200,
+      bool sectioned = false,
+    }) async {
+      tester.view.physicalSize = Size(width, 24000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final prefs = AppPrefs.inMemory();
-      unawaited(prefs.setStreamsSectioned(false));
+      unawaited(prefs.setStreamsSectioned(sectioned));
+      unawaited(
+        prefs.setOpenStreamSections({
+          for (final resolution in StreamResolution.values) resolution.label,
+          'unknown',
+        }),
+      );
       unawaited(
         prefs.setOpenStreamAddons({'https://$addonHost/manifest.json'}),
       );
@@ -112,26 +141,31 @@ void main() {
         ?text.data,
     ];
 
-    /// Everything the row for [shown] draws.
+    /// The row for [shown].
     ///
     /// Found by its *title*, and then by what is under it: two recorded
     /// rows are `Amazon Prime Video` with different availability under
     /// them, so the title alone names two rows and only one of them is
     /// this stream's.
-    List<String> rowFor(WidgetTester tester, StreamPresentation shown) {
+    ListTile tileFor(WidgetTester tester, StreamPresentation shown) {
       final led = [
         for (final tile in tester.widgetList<ListTile>(find.byType(ListTile)))
-          if ((tile.title as Text?)?.data == shown.lead) drawnOn(tester, tile),
+          if ((tile.title as Text?)?.data == shown.lead) tile,
       ];
       expect(led, isNotEmpty, reason: 'a row led by ${shown.lead}');
       return led.firstWhere(
-        (drawn) => shown.rest.every(drawn.contains),
+        (tile) => shown.rest.every(drawnOn(tester, tile).contains),
         orElse: () => fail(
           'no row led by ${shown.lead} carries ${shown.rest}; '
-          'the rows led by it draw $led',
+          'the rows led by it draw '
+          '${[for (final tile in led) drawnOn(tester, tile)]}',
         ),
       );
     }
+
+    /// Everything that row draws.
+    List<String> rowFor(WidgetTester tester, StreamPresentation shown) =>
+        drawnOn(tester, tileFor(tester, shown));
 
     testWidgets('every recorded row draws its lead and every line under it', (
       tester,
@@ -155,6 +189,136 @@ void main() {
           reason: '$why: the lead is not repeated underneath',
         );
       }
+    });
+
+    testWidgets('a line that is the lead spelled more fully says only what '
+        'it adds, and a line that is not is untouched', (tester) async {
+      await pump(tester);
+      final streams = recordedStreams();
+
+      // Row 1: the addon sent the release twice, once as the filename and
+      // once with the bit depth and the audio on the end of it. The row
+      // says the second one's own five words and not the release again.
+      final first = rowFor(tester, shownOf(streams[0]));
+      expect(first, contains('10bit.HDR.TrueHD.7.1.Atmos'));
+      expect(
+        first,
+        isNot(
+          contains(
+            startsWith(
+              'The.Matrix.1999.RERIP.2160p.UHD.BluRay.'
+              'x265',
+            ),
+          ),
+        ),
+      );
+      // Row 6: a hundred and twenty characters of filename, and the line
+      // under it adds one word to it.
+      expect(rowFor(tester, shownOf(streams[5])), contains('MULTi'));
+      // Row 5: the same release spelled with spaces instead of dots adds
+      // nothing at all, so it is not on the row in any form -- which is
+      // what the app already did and must keep doing.
+      expect(
+        rowFor(tester, shownOf(streams[4])),
+        isNot(contains(startsWith('The Matrix 1999 UHD BluRay'))),
+      );
+
+      // And the lines that are not the lead, whole, in the addon's words.
+      // Row 4's pack shares ten of its fifteen words with the lead; row
+      // 13's line shares two and is not even in the same language.
+      expect(
+        rowFor(tester, shownOf(streams[3])),
+        contains(
+          '[PACK] The Matrix 4K UHD Collection (1999-2003) '
+          '(2160p HDR BDRip x265 10bit DTS) [4KLiGHT]',
+        ),
+      );
+      expect(
+        rowFor(tester, shownOf(streams[12])),
+        contains(
+          'Во все тяжкие / Breaking Bad / Сезон: 1 / Серии: 1-7 из 7 '
+          '[2008 WEB-DL 2160p 4k] MVO (LostFilm FoxCrime) + DVO '
+          '(Кубик в Кубе) + Original + Sub (Rus Eng)',
+        ),
+      );
+    });
+
+    for (final sectioned in [false, true]) {
+      testWidgets(
+        'nothing a row says is cut short, ${sectioned ? 'under a '
+                  'resolution heading' : 'under an addon heading'}',
+        (tester) async {
+          // A phone, at the width one actually is. The list scrolls and a
+          // row may be any height, so there is nothing for a cap to buy
+          // here: a release name cut mid-token says less about which file it
+          // is than the whole of it does, and the viewer cannot get the rest
+          // of it back from anywhere.
+          //
+          // Both layouts, because they draw different lines: the sectioned
+          // one names the addon under the release and the grouped one has
+          // said it in the heading already.
+          await pump(tester, width: 400, sectioned: sectioned);
+
+          for (final (index, stream) in recordedStreams().indexed) {
+            final tile = tileFor(tester, shownOf(stream));
+            final texts = tester.widgetList<Text>(
+              find.descendant(
+                of: find.byWidget(tile),
+                matching: find.byType(Text),
+              ),
+            );
+            expect(
+              [for (final text in texts) text.data],
+              sectioned ? contains(addonHost) : isNot(contains(addonHost)),
+              reason: 'which heading has named the addon already',
+            );
+            for (final text in texts) {
+              expect(
+                text.maxLines,
+                isNull,
+                reason: 'recorded row ${index + 1}: "${text.data}" is capped',
+              );
+              expect(
+                text.overflow ?? TextOverflow.clip,
+                TextOverflow.clip,
+                reason: 'recorded row ${index + 1}: "${text.data}" is elided',
+              );
+            }
+          }
+        },
+      );
+    }
+
+    testWidgets('so a long release wraps, and the row grows to hold it', (
+      tester,
+    ) async {
+      await pump(tester, width: 400);
+      // Recorded row 6: `behaviorHints.filename` spells out every dub, 120
+      // characters of it, which is what a viewer picking between two
+      // 2160p rips is reading.
+      final long = shownOf(recordedStreams()[5]).lead;
+      final title = tester.getSize(find.text(long));
+      final shortest = tester.getSize(find.text('MUBI'));
+      expect(
+        title.height,
+        greaterThan(shortest.height * 3),
+        reason: 'four lines and more of release name, none of them dropped',
+      );
+      expect(
+        tester
+            .getSize(
+              find.byWidget(tileFor(tester, shownOf(recordedStreams()[5]))),
+            )
+            .height,
+        greaterThan(
+          tester
+              .getSize(
+                find.byWidget(tileFor(tester, shownOf(recordedStreams()[23]))),
+              )
+              .height,
+        ),
+        reason: 'the row is as tall as what is on it',
+      );
     });
 
     testWidgets('and a chip for everything that was read, and for nothing '
@@ -282,23 +446,13 @@ void main() {
           '[PACK] The Matrix 4K UHD Collection (1999-2003) '
           '(2160p HDR BDRip x265 10bit DTS) [4KLiGHT]';
       expect(drawnOn(tester, film), containsAllInOrder([film, pack]));
-      // Row 6 is the wall of text: ~120 characters of spelled-out dubs
-      // where the addon's own line says `MULTi`. Both are on the card,
-      // whole -- what the card does about the length is wrap at the
-      // release's own separators and stop at
-      // [TvSourceCard.leadLines]/[TvSourceCard.bodyLines].
-      const dubs =
-          'The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.ENG.LATINO'
-          '.CASTELLANO.ITA.FRE.HINDI.PORTUGUESE.DDP5.1.Atmos.H265'
-          '.MP4-BEN.THE.MEN';
-      expect(
-        drawnOn(tester, dubs),
-        containsAllInOrder([
-          dubs,
-          'The.Matrix.1999.2160p.MAX.WEB-DL.DV.HDR.MULTi.DDP5.1.Atmos'
-              '.H265.MP4-BEN.THE.MEN',
-        ]),
-      );
+      // Row 6 is the wall of text: ~120 characters of spelled-out dubs in
+      // the filename where the addon's own line says `MULTi`. The lead is
+      // on the card whole -- what the card does about the length is wrap
+      // at the release's own separators and stop at
+      // [TvSourceCard.leadLines] -- and the line under it is the one word
+      // of it that is not the lead already.
+      expect(drawnOn(tester, dubs), containsAllInOrder([dubs, 'MULTi']));
     });
 
     testWidgets('a card is never taller than a row of them is allowed to '
@@ -311,14 +465,21 @@ void main() {
       // share a 720p television with the rung headers above them, the
       // heading's own two rungs of controls, and the row of group pills.
       //
-      // Uncapped, the tallest recorded card came out at 439 dp and the row
-      // at 463 -- most of a 648 dp safe area, so walking from a pill to a
-      // card would have scrolled the screen. Two lines for the lead and
+      // Uncapped, the tallest recorded card comes out at 423 dp and the
+      // row at 447 -- most of a 648 dp safe area, so walking from a pill
+      // to a card would scroll the screen. Three lines for the lead and
       // three for each line under it ([TvSourceCard.leadLines],
-      // [TvSourceCard.bodyLines]) brings the 2160p row to 342. These
-      // numbers are the widget test's own font, whose glyphs are square
-      // and therefore wider than any real one: a conservative measure, and
-      // the reason this asserts a ceiling rather than an equality.
+      // [TvSourceCard.bodyLines]) bring the 2160p row to 337.
+      //
+      // It was 342 at two lines of lead, before the repeat of the release
+      // was subtracted out of the line underneath it: that took the row to
+      // 322, and the third line of the lead spent 15 dp of the 20. A
+      // fourth body line was measured for the rest and does not fit (353).
+      //
+      // These numbers are the widget test's own font, whose glyphs are
+      // square and therefore wider than any real one: a conservative
+      // measure, and the reason this asserts a ceiling rather than an
+      // equality.
       final heights = tester
           .widgetList<TvSourceCard>(find.byType(TvSourceCard))
           .map((card) => tester.getRect(find.byWidget(card)).height)
@@ -336,6 +497,14 @@ void main() {
         lessThanOrEqualTo(tvSize.height / 2),
         reason: 'the sources are a row of the panel, not the panel',
       );
+
+      // And the room the subtraction bought is spent, not banked: the
+      // longest recorded release is painted over three lines
+      // ([TvSourceCard.leadLines]), written out here rather than read off
+      // the constant so that lowering the cap fails this. Two was what the
+      // panel could afford while the line underneath was the release over
+      // again; six is what the release would take uncut.
+      expect(linesOf(tester, breakableRelease(dubs)), 3);
     });
 
     testWidgets('the card the remote is on is whole on the panel, with the '
@@ -389,6 +558,19 @@ void main() {
     });
   });
 }
+
+/// How many lines the paragraph drawing [text] is painted over -- the
+/// boxes a selection of the whole string lands in, counted by how many
+/// heights they sit at. A paragraph that was cut short has boxes for the
+/// lines it drew and none for the rest, which is the number this is for.
+int linesOf(WidgetTester tester, String text) => tester
+    .renderObject<RenderParagraph>(find.text(text))
+    .getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: text.length),
+    )
+    .map((box) => box.top)
+    .toSet()
+    .length;
 
 /// Which group pill is chosen.
 String? groupLabel(WidgetTester tester) => tester

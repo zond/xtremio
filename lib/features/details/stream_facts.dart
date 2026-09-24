@@ -616,27 +616,34 @@ final class StreamPresentation {
   final String lead;
 
   /// The addon's own text, line by line, in the order it wrote it, with
-  /// [lead] taken out of it wherever it appears — and nothing else taken
-  /// out. Empty when the addon said nothing beyond the lead.
+  /// what [lead] already said taken out of it — and nothing else taken out.
+  /// Empty when the addon said nothing beyond the lead.
   ///
-  /// "Wherever it appears" and not "the line it came from": on fixture row
-  /// 4 the lead comes from `behaviorHints.filename` and the second text
-  /// line is that same file with `.mkv` on it, and on row 12 it is that
-  /// same file with a directory in front of it. Neither is a string match
-  /// for the lead, and both are the lead ([_asLeadKey]).
+  /// **Taken out, not matched out.** A line that *is* the lead goes, as it
+  /// always did: on fixture row 4 the lead comes from
+  /// `behaviorHints.filename` and the second text line is that same file
+  /// with `.mkv` on it, and on row 12 it is that same file with a directory
+  /// in front of it — neither is a string match for the lead, and both are
+  /// the lead ([_asLeadKey]). A line that names the same release *spelled
+  /// more fully* is reduced to the part the lead has not already said
+  /// ([_beyondTheLead]): row 1 sends the release twice, once as
+  /// `…UHD.BluRay.X265-IAMABLE` and once as
+  /// `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE`, and what the
+  /// second one is actually for is `10bit.HDR.TrueHD.7.1.Atmos`.
+  ///
+  /// Everything else is untouched, whole, in the addon's own words.
   final List<String> rest;
 
   /// Reads [stream]. [addonName] is the label the card shows elsewhere; see
   /// [leadLineOf] for what it is used for.
   factory StreamPresentation.of(StreamInfo stream, {String? addonName}) {
     final lead = leadLineOf(stream, addonName: addonName);
-    final key = _asLeadKey(lead);
     return StreamPresentation(
       lead: lead,
       rest: [
         for (final line in (stream.description ?? '').split('\n'))
           if (line.trim() case final text when text.isNotEmpty)
-            if (_asLeadKey(text) != key) text,
+            ?_beyondTheLead(text, lead),
       ],
     );
   }
@@ -743,13 +750,171 @@ String releaseNameOf(StreamInfo stream, {String? addonName}) =>
 /// It is deliberately blunt about separators and deliberately blind to
 /// everything else: row 1's text line has `10bit.HDR.TrueHD.7.1.Atmos` in
 /// it that its filename does not, so it is a different line and stays.
-String _asLeadKey(String line) {
+String _asLeadKey(String line) =>
+    _asFile(line).toLowerCase().replaceAll(RegExp(r'[ ._-]+'), ' ').trim();
+
+/// [line] as the file it names: its last path segment, without a container
+/// extension. The two reductions [_asLeadKey] spells out, on their own,
+/// because [_beyondTheLead] has to compare the same thing and then quote
+/// from it.
+String _asFile(String line) {
   final base = line.substring(line.lastIndexOf('/') + 1);
-  return (_withoutExtension(base) ?? base)
-      .toLowerCase()
-      .replaceAll(RegExp(r'[ ._-]+'), ' ')
-      .trim();
+  return _withoutExtension(base) ?? base;
 }
+
+/// What [line] still has to say once [lead] has said its piece: the line
+/// itself when it is not about the lead's release at all, what is left of
+/// it when it is the same release spelled more fully, and null when nothing
+/// of it is left.
+///
+/// **Why a line needs subtracting and not just dropping.** Torrentio
+/// routinely sends the release twice, in two spellings, and the fuller of
+/// the two is not the one the lead comes from: recorded row 1 leads with
+/// `The.Matrix.1999.RERIP.2160p.UHD.BluRay.X265-IAMABLE` (the filename) and
+/// writes `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE` on the line
+/// under it. Eighty per cent of that line is the line above it; the fifth
+/// that is not — `10bit HDR TrueHD 7.1 Atmos` — is the audio and the bit
+/// depth, which are on the card nowhere else.
+///
+/// **What counts as the same release.** Two names say the same release when
+/// they agree on the *identity head* ([_identityHead]): the title, the year
+/// and the episode, which is everything before the first word about the
+/// picture. It is not equality (the two spellings differ by definition) and
+/// it is not a shared prefix (`The Matrix` is shared by a film and by the
+/// box set it came in). It is the head *and only the head* because that is
+/// exactly what a pack line changes: row 4 says `[PACK] The Matrix 4K UHD
+/// Collection (1999-2003) …`, row 9 `The Matrix Trilogy (1999-2003) …`, row
+/// 10 `S01` where the file says `S01E01`, row 12 `COMPLETE S01-S05`, row 16
+/// `iNTEGRALE`. Every one of those shares most of its words with the lead
+/// and names something else, and every one of them survives here whole,
+/// because which pack a file came out of is worth knowing.
+///
+/// **And a second guard, for the lines nothing is known about.** More of
+/// the line has to be the lead than is not. A line that merely shares a
+/// word or two — a different release of the same film, say — is left alone:
+/// the failure that matters is mangling a line, not repeating one.
+///
+/// What is subtracted is tokens, not characters ([_tokensOf]), because
+/// addons separate with `.`, `_`, `-` and spaces interchangeably and wrap a
+/// year in brackets as the mood takes them. A token the line has twice and
+/// the lead has once is removed *once*: the lead said it once, and the
+/// second one is the line saying something more. What comes back is the
+/// addon's own text — its own spelling, its own separators — with the
+/// removed words lifted out of it, never a normalised rewrite.
+String? _beyondTheLead(String line, String lead) {
+  // The line that simply is the lead again, which is the common case and
+  // was the only case this handled before.
+  if (_asLeadKey(line) == _asLeadKey(lead)) return null;
+  final file = _asFile(line);
+  final tokens = _tokensOf(file);
+  final said = _tokensOf(lead);
+  final head = _identityHead(tokens);
+  // An empty head is a line with no title in it at all -- a stats line, a
+  // line of flags, `Subscription` -- and two empty heads are not an
+  // agreement about anything.
+  if (head.isEmpty || !_sameTokens(head, _identityHead(said))) return line;
+  final budget = <String, int>{};
+  for (final token in said) {
+    budget[token.text] = (budget[token.text] ?? 0) + 1;
+  }
+  final kept = <int>[];
+  var removed = 0;
+  for (final (index, token) in tokens.indexed) {
+    final spoken = budget[token.text] ?? 0;
+    if (spoken == 0) {
+      kept.add(index);
+    } else {
+      budget[token.text] = spoken - 1;
+      removed++;
+    }
+  }
+  if (removed <= kept.length) return line;
+  if (kept.isEmpty) return null;
+  final remainder = StringBuffer();
+  for (final (position, index) in kept.indexed) {
+    // The separator the addon itself put in front of this word, so what is
+    // left reads the way the line it came out of does. The one in front of
+    // the first word separates it from nothing and stays behind with it.
+    if (position > 0) {
+      remainder.write(
+        file.substring(tokens[index - 1].end, tokens[index].start),
+      );
+    }
+    remainder.write(file.substring(tokens[index].start, tokens[index].end));
+  }
+  return remainder.toString();
+}
+
+/// One word of a release name, lower-cased, and where it sat in the line it
+/// was read out of so the line can be quoted back.
+typedef _Token = ({String text, int start, int end});
+
+/// The words of [line]: its runs of letters and digits.
+///
+/// Everything else is a separator, because everything else is one somewhere
+/// — the same release arrives as `The.Matrix.1999` from one addon,
+/// `The Matrix (1999)` from the next and `The_Matrix_1999` from a third,
+/// and a comparison that can be told apart by that is a comparison of
+/// punctuation. Letters are taken by Unicode class and not by `[a-z]`:
+/// recorded row 13's text line is Russian, and a tokeniser that dropped it
+/// would have that line agreeing with anything.
+List<_Token> _tokensOf(String line) => [
+  for (final match in _tokenPattern.allMatches(line))
+    (text: match[0]!.toLowerCase(), start: match.start, end: match.end),
+];
+
+final RegExp _tokenPattern = RegExp(r'[\p{L}\p{N}]+', unicode: true);
+
+/// The part of [tokens] that says *what* this is rather than what it looks
+/// like: the title, its year and its episode.
+///
+/// Read as "everything up to the picture": a release name is a title, then
+/// a resolution, then the tags, and the first resolution word is the most
+/// reliable mark of where the title stopped in a string nobody agreed a
+/// format for. Anything after the last year or season/episode inside that
+/// head is dropped with it (`RERIP`, an edition, a scene word), so two
+/// spellings that differ only in what edition they announce still agree on
+/// what film they are.
+///
+/// Empty when there is no title before the first resolution — `1080p` is a
+/// whole recorded stream name (row 19) — and an empty head is never an
+/// agreement (see [_beyondTheLead]).
+List<String> _identityHead(List<_Token> tokens) {
+  var end = tokens.length;
+  for (final (index, token) in tokens.indexed) {
+    if (StreamFacts._resolutionTokens.containsKey(token.text)) {
+      end = index;
+      break;
+    }
+  }
+  var last = -1;
+  for (var index = 0; index < end; index++) {
+    final text = tokens[index].text;
+    if (_yearToken.hasMatch(text) || _episodeToken.hasMatch(text)) last = index;
+  }
+  return [
+    for (final token in tokens.take(last >= 0 ? last + 1 : end)) token.text,
+  ];
+}
+
+bool _sameTokens(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (final (index, token) in a.indexed) {
+    if (token != b[index]) return false;
+  }
+  return true;
+}
+
+/// A year a film could have come out in, which is also the one number in a
+/// release name that is part of what it is rather than how it looks.
+final RegExp _yearToken = RegExp(r'^(?:19|20)\d{2}$');
+
+/// `S01`, `S01E01`, `1x01` — the other half of what a release *is*, and the
+/// one character between naming an episode and naming the season it came in
+/// (recorded row 10).
+final RegExp _episodeToken = RegExp(
+  r'^(?:s\d{1,3}(?:e\d{1,4})?|\d{1,2}x\d{1,3})$',
+);
 
 /// Whether a line of free text is a release rather than a sentence about
 /// the stream.
