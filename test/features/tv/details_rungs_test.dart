@@ -6,12 +6,14 @@ import 'package:xtremio/features/details/meta_details_screen.dart';
 import 'package:xtremio/features/details/tv_episode_row.dart';
 import 'package:xtremio/features/details/tv_meta_header.dart';
 import 'package:xtremio/features/details/tv_source_row.dart';
+import 'package:xtremio/features/downloads/download_labels.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/widgets/focusable_tile.dart';
 import 'package:xtremio/widgets/tv_ladder.dart';
 
 import '../../support/fake_core_client.dart';
+import '../../support/fake_downloads_client.dart';
 import '../../support/fake_playback_engine.dart';
 import '../../support/fake_prefs_client.dart';
 import '../../support/fake_torrent_stats_client.dart';
@@ -198,6 +200,14 @@ Future<void> mount(
   String id = movieId,
   bool sectioned = false,
   FakeCoreClient? client,
+  DeviceProfile device = tv,
+  // The screen as a viewer really meets it: pushed over the one they came
+  // from, so the app bar draws Back, and with a downloads client, so it
+  // draws the button at the other end of the bar. Both are drawn only
+  // where there is something behind them, so a screen mounted as the whole
+  // app has a bar with nothing on it and no press down out of one to make.
+  bool overRoute = false,
+  DownloadsClient? downloads,
   // A spinner never stops, so a screen that is still waiting cannot be
   // settled; it is pumped a frame at a time instead.
   bool settle = true,
@@ -208,9 +218,28 @@ Future<void> mount(
   );
   addTearDown(prefs.dispose);
   await prefs.load();
+  final screen = MetaDetailsScreen(type: type, id: id);
+  Widget app = MaterialApp(
+    home: overRoute
+        ? Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context)
+                      .push(MaterialPageRoute<void>(builder: (_) => screen)),
+                  child: const Text(openDetails),
+                ),
+              ),
+            ),
+          )
+        : screen,
+  );
+  if (downloads != null) {
+    app = DownloadsScope(client: downloads, child: app);
+  }
   await tester.pumpWidget(
     DeviceScope(
-      profile: tv,
+      profile: device,
       child: CoreScope(
         client:
             client ?? FakeCoreClient(state: {CoreField.metaDetails: fixture}),
@@ -219,9 +248,7 @@ Future<void> mount(
           child: PlaybackScope(
             createEngine: FakePlaybackEngine.new,
             torrentStats: FakeTorrentStatsClient(),
-            child: MaterialApp(
-              home: MetaDetailsScreen(type: type, id: id),
-            ),
+            child: app,
           ),
         ),
       ),
@@ -233,7 +260,13 @@ Future<void> mount(
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
   }
+  if (!overRoute) return;
+  await tester.tap(find.text(openDetails));
+  await tester.pumpAndSettle();
 }
+
+/// The button on the screen [mount] pushes the details screen from.
+const String openDetails = 'open';
 
 /// The label of every rung header on the panel, top to bottom.
 List<String> rungs(WidgetTester tester) => [
@@ -497,8 +530,12 @@ void main() {
         reason: 'and back over the same stops, none skipped, none stranded',
       );
       // Up does not stop at the top rung: above it is the title's own
-      // header, whose bookmark has no text of its own.
-      expect(up.skip(down.length), ['(nothing focused)']);
+      // header, and its two stops are the plot the header declares first
+      // and then the bookmark, which has no text of its own.
+      expect(up.skip(down.length), [
+        tester.widget<TvDescription>(find.byType(TvDescription)).text,
+        '(nothing focused)',
+      ]);
       expect(focusIn<TvMetaHeader>(), isTrue);
       // And nothing the rung holds is stranded off the walk: every pill
       // and every card drawn under the sources header is one of the stops
@@ -753,4 +790,193 @@ void main() {
     expect(openRungLabel(tester), kSourcesLabel);
     expect(focusedLabel(tester), kSourcesLabel);
   });
+
+  /// The app bar is above the ladder without being on it, so a press down
+  /// out of it was Flutter's to answer rather than the ladder's -- and
+  /// Flutter answers by distance. The downloads button is at the far right
+  /// of the bar and the bookmark at the far right of the header directly
+  /// under it, while the plot is a block that stops well short of both, so
+  /// down from downloads landed on the bookmark: reading the plot meant
+  /// going left to Back first and then down, reported from a Chromecast.
+  ///
+  /// These press the real bar, which means the screen has to be pushed
+  /// over another one -- Back is drawn only where there is something to go
+  /// back to -- and to have a downloads client, since the button at the
+  /// other end is drawn only where there is one.
+  group('down out of the app bar', () {
+    Future<void> mountUnderTheBar(WidgetTester tester) => mount(
+      tester,
+      plotted(film()),
+      overRoute: true,
+      downloads: FakeDownloadsClient(),
+    );
+
+    testWidgets('lands on the plot from the downloads button, which is the '
+        'press that landed on the bookmark', (tester) async {
+      await mountUnderTheBar(tester);
+      await standOn(tester, kDownloadsScreenTooltip);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      expect(focusIn<TvDescription>(), isTrue);
+    });
+
+    testWidgets('and from Back at the other end of the bar, which is where '
+        'the viewer had to walk first', (tester) async {
+      await mountUnderTheBar(tester);
+      await standOn(tester, kBackTooltip);
+
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      expect(focusIn<TvDescription>(), isTrue);
+    });
+
+    testWidgets('and the bookmark is one press right of the plot, and one '
+        'press under the button it sits below', (tester) async {
+      await mountUnderTheBar(tester);
+      await standOn(tester, kBackTooltip);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedTooltip(), TvMetaHeader.addTooltip);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        focusedTooltip(),
+        kDownloadsScreenTooltip,
+        reason: 'and the way back to the bar from there is one press too',
+      );
+      // And the header hands the remote back where it left it, the way
+      // every other row of the ladder does: a viewer who went to the
+      // bookmark does not pay for it twice, from either end of the bar.
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedTooltip(), TvMetaHeader.addTooltip);
+      await standOn(tester, kBackTooltip);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusedTooltip(), TvMetaHeader.addTooltip);
+    });
+
+    testWidgets('and Tab walks the header the same way, because it is one '
+        'declared order and not two', (tester) async {
+      // Tab rather than the D-pad, which is the point: the header states
+      // its order once and both walks read the statement. Two walks that
+      // agree by luck are two answers to the same question, and the one
+      // that is wrong is wrong quietly.
+      await mountUnderTheBar(tester);
+      await standOn(tester, kBackTooltip);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<TvDescription>(), isTrue, reason: 'on the plot');
+
+      await press(tester, LogicalKeyboardKey.tab);
+
+      expect(focusedTooltip(), TvMetaHeader.addTooltip);
+    });
+
+    testWidgets('and up from the plot is the app bar again, so the header '
+        'is a row the walk leaves as well as arrives in', (tester) async {
+      await mountUnderTheBar(tester);
+      await standOn(tester, kDownloadsScreenTooltip);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIn<TvDescription>(), isTrue);
+
+      await press(tester, LogicalKeyboardKey.arrowUp);
+
+      expect(focusedTooltip(), kBackTooltip);
+    });
+
+    testWidgets('and the whole ladder still walks, from the bar down and '
+        'back up, with nothing stepped over', (tester) async {
+      await mountUnderTheBar(tester);
+      await standOn(tester, kDownloadsScreenTooltip);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+
+      final down = await walkStops(tester, LogicalKeyboardKey.arrowDown);
+      expect(
+        down,
+        [
+          tester.widget<TvDescription>(find.byType(TvDescription)).text,
+          kSourcesLabel,
+          kStreamsSectionedLabel,
+          'alpha.example',
+          'Alpha 1080p',
+        ],
+        reason:
+            'the plot, the rung under it, the rung\'s own control, the '
+            'one group there is and the one source in it',
+      );
+
+      final up = await walkStops(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        up.take(down.length),
+        down.reversed,
+        reason: 'and back over the same stops, none skipped, none stranded',
+      );
+      // One stop further than it came down, and off the ladder: above the
+      // plot is the bar the walk entered from, whose buttons have no text
+      // of their own.
+      expect(up.skip(down.length), ['(nothing focused)']);
+      expect(focusedTooltip(), kBackTooltip);
+    });
+  });
+
+  group('a phone has none of this', () {
+    testWidgets('no declared order, and an app bar that answers the touch '
+        'on it and nothing else', (tester) async {
+      await mount(
+        tester,
+        plotted(film()),
+        device: phone,
+        overRoute: true,
+        downloads: FakeDownloadsClient(),
+      );
+
+      expect(find.byType(TvMetaHeader), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(MetaDetailsScreen),
+          matching: find.byType(FocusTraversalOrder),
+        ),
+        findsNothing,
+        reason: 'the order is the television header\'s and nobody else\'s',
+      );
+      // And nothing stands between the press and the button: the bar's
+      // Back still leaves the screen.
+      await tester.tap(find.byTooltip(kBackTooltip));
+      await tester.pumpAndSettle();
+      expect(find.text(openDetails), findsOneWidget);
+    });
+  });
+}
+
+/// A phone: a touchscreen and no remote.
+const DeviceProfile phone = DeviceProfile(isTv: false, hasTouch: true);
+
+/// What Material calls the app bar's own Back button.
+const String kBackTooltip = 'Back';
+
+/// Walks the remote up out of the ladder and onto the app bar's button
+/// called [tooltip].
+///
+/// Which end of the bar a press up out of the header reaches depends on
+/// which of the header's stops it was made from, and that is the thing
+/// under test -- so this asks only to be *on* the bar and then walks to
+/// the end it wants: Back is at the left of the bar and the downloads
+/// button at the right, so one press that way reaches either from either.
+Future<void> standOn(WidgetTester tester, String tooltip) async {
+  for (var i = 0; i < 8 && !focusIn<TvMetaHeader>(); i++) {
+    await press(tester, LogicalKeyboardKey.arrowUp);
+  }
+  expect(focusIn<TvMetaHeader>(), isTrue, reason: 'the top of the ladder');
+  await press(tester, LogicalKeyboardKey.arrowUp);
+  expect(
+    focusedTooltip(),
+    anyOf(kBackTooltip, kDownloadsScreenTooltip),
+    reason: 'and up out of the header is the app bar',
+  );
+  final sideways = tooltip == kBackTooltip
+      ? LogicalKeyboardKey.arrowLeft
+      : LogicalKeyboardKey.arrowRight;
+  for (var i = 0; i < 2 && focusedTooltip() != tooltip; i++) {
+    await press(tester, sideways);
+  }
+  expect(focusedTooltip(), tooltip, reason: 'standing on the app bar');
 }
