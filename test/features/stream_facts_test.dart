@@ -567,12 +567,13 @@ void leadSubtractionTests() {
     });
   });
 
-  group('and the lines that are not', () {
-    test('a pack is not its own files, however much of them it spells', () {
-      // Recorded row 4 without the `[PACK]` in front of it, to show what
-      // keeps the line whole is what it names and not the word: the head
-      // of the lead is `Movie Name 2019` and the head of the line is
-      // `Movie Name Collection 2019 2021`.
+  group('a line that names the pack the lead came out of', () {
+    test('keeps the pack and gives the rest back to the lead', () {
+      // Recorded row 4's shape. Ten of its fifteen words are the lead over
+      // again; the pack is the five that are not, and the whole reason the
+      // line is on the card. The old rule kept all fifteen to protect
+      // those five, which is how a phone came to show two lines that were
+      // ninety per cent the same string.
       expect(
         restOf(
           torrent(
@@ -583,14 +584,26 @@ void leadSubtractionTests() {
                 '[GROUP].mkv',
           ),
         ),
-        [
-          'Movie Name Collection (2019-2021) (2160p HDR BDRip x265 DTS) '
-              '[GROUP]',
-        ],
+        ['Collection 2019-2021'],
       );
     });
 
-    test('and neither is the season a file came out of', () {
+    test('and a year range is kept whole, though the lead said half of it', () {
+      // `2019` is the lead's and `2021` is not, and lifting the first out
+      // of `(2019-2021)` would leave a pack that began nowhere. Half a
+      // range is a wrong range, so the lead's half stays where it is.
+      expect(
+        restOf(
+          torrent(
+            'Movie Name Collection (2019-2021) 1080p-GROUP',
+            filename: 'Movie Name (2019) 1080p-GROUP.mkv',
+          ),
+        ),
+        ['Collection 2019-2021'],
+      );
+    });
+
+    test('and the season a file came out of is the one word it adds', () {
       expect(
         restOf(
           torrent(
@@ -600,15 +613,15 @@ void leadSubtractionTests() {
                 'GROUP).mkv',
           ),
         ),
-        ['Series Name (2008) S01 (2160p AMZN WEB-DL H265 - GROUP)'],
+        ['S01'],
       );
     });
 
-    test('a line that shares a word or two is left alone: half a line is '
-        'worse than a repeated one', () {
-      // The same film at another resolution, which is a different release
-      // and not this one spelled out. More of it is its own than is the
-      // lead's, and that is where this stops.
+    test('and a different release of the same title keeps what makes it '
+        'different', () {
+      // The same film at another resolution. The card is already headed
+      // with the film, so what this line is for is the other rip -- and a
+      // line that repeated the title to say so would be the bug again.
       expect(
         restOf(
           torrent(
@@ -616,14 +629,74 @@ void leadSubtractionTests() {
             filename: 'Movie.Name.2019.2160p.BluRay.x265.TrueHD-GROUP.mkv',
           ),
         ),
-        ['Movie.Name.2019.720p.HDTV.XviD.AC3-OTHER'],
+        ['720p.HDTV.XviD.AC3-OTHER'],
+      );
+    });
+  });
+
+  group('and the lines that are about something else', () {
+    test('a line that opens on other words is untouched, however many of '
+        "the lead's words are further along it", () {
+      // Recorded row 7's shape: somebody's drive dump, which happens to
+      // spell the film out in the middle of itself. It opens on `Imdb`
+      // and the lead opens on `Movie`, so nothing of it is the lead's.
+      expect(
+        restOf(
+          torrent(
+            'Imdb top 263 movies: Movie Name 2019 1080p and 262 more',
+            filename: 'Movie.Name.2019.1080p.BrRip.x264-GROUP.mkv',
+          ),
+        ),
+        ['Imdb top 263 movies: Movie Name 2019 1080p and 262 more'],
       );
     });
 
-    test("a line with no title in it at all is nobody's release", () {
-      // The public-domain addon: the whole stream name is `1080p`, so
-      // there is no title in front of the resolution to agree about. No
-      // head, no claim that two lines are one release.
+    test('a bracketed word in front of a title is a scope tag and is '
+        'stepped over; a bracketed phrase is not', () {
+      // `[PACK]` is recorded row 4's, and a line that opens with it is
+      // still a line about the lead. A bracketed *phrase* in front is not
+      // a tag but a title of its own, and the line keeps all of itself.
+      expect(
+        restOf(
+          torrent(
+            '[PACK] Movie Name 2019 1080p-GROUP',
+            filename: 'Movie.Name.2019.1080p-GROUP.mkv',
+          ),
+        ),
+        ['PACK'],
+      );
+      expect(
+        restOf(
+          torrent(
+            '[Some Uploader] Movie Name 2019 1080p-GROUP',
+            filename: 'Movie.Name.2019.1080p-GROUP.mkv',
+          ),
+        ),
+        ['[Some Uploader] Movie Name 2019 1080p-GROUP'],
+      );
+    });
+
+    test('but a line that simply is the lead goes, whatever the lead is', () {
+      // A lead of one word opens on nothing two lines could share, so the
+      // reduction never looks at that addon's lines at all -- and a line
+      // that is the whole of the lead would sail through it. Public Domain
+      // Movies names a stream `1080p`, which is exactly one word, so this
+      // is the shape that would have the card say it twice.
+      final stream = StreamInfo(const {
+        'infoHash': 'a',
+        'name': '1080p',
+        'description': '1080p\n💾 1.51 GB',
+      });
+      expect(
+        StreamPresentation.of(stream, addonName: 'caching.stremio.net').rest,
+        ['💾 1.51 GB'],
+      );
+    });
+
+    test('a lead of one word can agree with nothing, so every line stands', () {
+      // The public-domain addon: the whole stream name is `1080p`. Two
+      // release names say the same release when they open on the same two
+      // words, and a lead with one word has no two to open on.
       final stream = StreamInfo(const {
         'infoHash': 'a',
         'name': '1080p',
@@ -926,11 +999,12 @@ void recordedAddonAnswers() {
       'torrentio',
       'THE PACK ROW -- line one is `[PACK] The Matrix 4K UHD Collection '
           '(1999-2003) ...`, a box set and not a film and not what a press '
-          'would start. The lead is the film, off behaviorHints.filename; the '
-          'collection stays underneath *whole* -- it shares ten of its '
-          'fifteen words with the lead and is still not the lead, because it '
-          'names the box set and not the film, which is worth knowing -- and '
-          'the duplicate file line goes',
+          'would start. The lead is the film, off behaviorHints.filename, and '
+          'the collection keeps the five words of itself that the film does '
+          'not have. Ten of its fifteen were the lead over again and are '
+          'gone; the year range stays whole though the lead said `1999`, '
+          'because a pack that ran to 2003 and began nowhere is a wrong '
+          'statement',
       resolution: StreamResolution.uhd2160,
       size: 5347234284,
       seeders: 80,
@@ -938,8 +1012,9 @@ void recordedAddonAnswers() {
       tracker: '1337x',
       lead: 'The Matrix (1999) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT]',
       rest: const [
-        '[PACK] The Matrix 4K UHD Collection (1999-2003) '
-            '(2160p HDR BDRip x265 10bit DTS) [4KLiGHT]',
+        // Was the whole of `[PACK] The Matrix 4K UHD Collection
+        // (1999-2003) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT]`.
+        'PACK 4K UHD Collection 1999-2003',
         '👤 80 💾 4.98 GB ⚙️ 1337x',
       ],
     ),
@@ -1037,8 +1112,12 @@ void recordedAddonAnswers() {
           'The Matrix (1999) Remastered RiffTrax sextuple audio 720p.10bit'
           '.BluRay.x265-budgetbits',
       rest: const [
-        'The Matrix Trilogy (1999-2003) Remastered RiffTrax multi audio '
-            '720p.10bit.BluRay.x265-budgetbits',
+        // Was `The Matrix Trilogy (1999-2003) Remastered RiffTrax multi
+        // audio 720p.10bit.BluRay.x265-budgetbits`: eleven of its fourteen
+        // words are the lead's, and the three that are not say it is the
+        // trilogy, that the trilogy runs to 2003, and that the audio on it
+        // is `multi` where the file's own name says `sextuple`.
+        'Trilogy 1999-2003 multi',
         '👤 6 💾 1.11 GB ⚙️ 1337x',
         'Multi Audio / 🇬🇧',
       ],
@@ -1057,8 +1136,9 @@ void recordedAddonAnswers() {
           'Breaking Bad (2008) S01E01 '
           '(2160p AMZN WEB-DL H265 SDR DDP 5.1 English - HONE)',
       rest: const [
-        'Breaking Bad (2008) S01 '
-            '(2160p AMZN WEB-DL H265 SDR DDP 5.1 English - HONE)',
+        // Was the whole line over again with `S01` where the lead has
+        // `S01E01`. Seventy-eight characters for a difference of three.
+        'S01',
         '👤 83 💾 6.27 GB ⚙️ ThePirateBay',
       ],
     ),
@@ -1073,8 +1153,11 @@ void recordedAddonAnswers() {
       tracker: 'ThePirateBay',
       lead: 'Breaking Bad  S01E01  Pilot',
       rest: const [
-        'Breaking Bad. S01. 2008 2160P.Ai Upscaled.BluRay.60FPS.H265.SDR'
-            '.AC3.5.1_Marjenbo',
+        // Only the show's name was the lead's. The season, the year and
+        // the whole of the encode are this line's own and it keeps them,
+        // in its own dots -- the widest gap in the fixture between what a
+        // filename says and what the release it came out of says.
+        'S01. 2008 2160P.Ai Upscaled.BluRay.60FPS.H265.SDR.AC3.5.1_Marjenbo',
         '👤 63 💾 9.53 GB ⚙️ ThePirateBay',
       ],
     ),
@@ -1090,8 +1173,13 @@ void recordedAddonAnswers() {
       tracker: '1337x',
       lead: 'Breaking.Bad.S01E01.2160p.WEBRip.DTS-HD.MA5.1.x264-TrollUHD',
       rest: const [
-        'Breaking Bad COMPLETE S01-S05 2160p WEB-DL Rus Ukr Eng DTS-HD '
-            'MA5.1 x264-TrollUHD [RiCK]',
+        // Was `Breaking Bad COMPLETE S01-S05 2160p WEB-DL Rus Ukr Eng
+        // DTS-HD MA5.1 x264-TrollUHD [RiCK]`. Half of it was the lead. The
+        // half that stays is the scope, the three dubs and the group that
+        // put it together -- `[RiCK]` without its brackets, because the
+        // words between them and it have gone and a bracket with no
+        // partner is not punctuation any more.
+        'COMPLETE S01-S05 WEB-DL Rus Ukr Eng RiCK',
         '👤 49 💾 50.81 GB ⚙️ 1337x',
         '🇬🇧 / 🇷🇺 / 🇺🇦',
       ],
@@ -1156,7 +1244,9 @@ void recordedAddonAnswers() {
       tracker: 'Torrent9',
       lead: 'Breaking.Bad.S01E01.MULTi.1080p.WEB.DDP5.1.x264-TFA',
       rest: const [
-        'Breaking.Bad.iNTEGRALE.MULTi.1080p.WEB.DDP5.1.x264-TFA',
+        // Was `Breaking.Bad.iNTEGRALE.MULTi.1080p.WEB.DDP5.1.x264-TFA`:
+        // fifty-three characters, one word of which the lead had not said.
+        'iNTEGRALE',
         '👤 6 💾 2.69 GB ⚙️ Torrent9',
         'Multi Audio / 🇫🇷',
       ],
@@ -1232,6 +1322,123 @@ void recordedAddonAnswers() {
       lead: '1080p',
       rest: const ['💾 1.51 GB'],
     ),
+    recorded(
+      'torrentio',
+      'the row this parser was rebuilt for: the season pack and the '
+          'episode differ by three characters in thirty-eight, and the three '
+          'are the whole reason the line is on the card. `S02`',
+      resolution: StreamResolution.fhd1080,
+      size: 432390799,
+      seeders: 12,
+      tags: const ['BluRay', 'HEVC'],
+      tracker: 'ThePirateBay',
+      lead: '30.Rock.S02E11.1080p.BluRay.x265-KONTRAST',
+      rest: const [
+        // Was `30.Rock.S02.1080p.BluRay.x265-KONTRAST`.
+        'S02',
+        '👤 12 💾 412.36 MB ⚙️ ThePirateBay',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the same show from a group that spells the scope twice over -- '
+          '`Season 1-7 S01-S07` -- and states more about the encode on the '
+          'pack line than on the file. Both ranges survive whole and so do '
+          'the four facts about the audio that the file name never mentions',
+      resolution: StreamResolution.fhd1080,
+      size: 408021893,
+      seeders: 9,
+      tags: const ['BluRay', 'HEVC', '10bit'],
+      languages: const ['🇬🇧'],
+      audioTracks: 'Multi Audio',
+      tracker: '1337x',
+      lead: '30 Rock (2005) - S02E11 - MILF Island (1080p BluRay x265 Silence)',
+      rest: const [
+        // Was `30 Rock (2005) Season 1-7 S01-S07 (1080p BluRay x265 HEVC
+        // 10bit AAC 5.1 Silence) [QxR]`, of which seven words were the
+        // lead's.
+        'Season 1-7 S01-S07 HEVC 10bit AAC 5.1 QxR',
+        '👤 9 💾 389.12 MB ⚙️ 1337x',
+        'Multi Audio / 🇬🇧',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      '`Complete` as the whole of the scope, and the container extension '
+          'inside a bracket (`(1080p.H265.AAC.mkv)`) where a regexp over the '
+          'end of the line would never have found it. One word left',
+      resolution: StreamResolution.fhd1080,
+      size: 1095216660,
+      seeders: 4,
+      tags: const ['HEVC'],
+      tracker: 'Rutracker',
+      lead: '30 Rock - S02E11 - MILF Island (1080p.H265.AAC)',
+      rest: const [
+        // Was `30 Rock Complete (1080p.H265.AAC.mkv)`.
+        'Complete',
+        '👤 4 💾 1.02 GB ⚙️ Rutracker',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the file line carries the season folder in front of it -- `Season '
+          '2/30.Rock.S02E11...` -- and is still the lead, so it goes, folder '
+          'and all: the line above it already says which pack this came out '
+          'of, in the addon\'s own words',
+      resolution: StreamResolution.fhd1080,
+      size: 1406601789,
+      seeders: 21,
+      tags: const ['WEB-DL', 'AVC'],
+      languages: const ['🇬🇧'],
+      tracker: 'RARBG',
+      lead: '30.Rock.S02E11.MILF.Island.1080p.AMZN.WEB-DL.DDP5.1.H.264-TrollHD',
+      rest: const [
+        // Was `30.Rock.COMPLETE.SERIES.S01-S07.1080p.AMZN.WEB-DL.DDP5.1
+        // .H.264-TrollHD`, in the addon's dots, which is what is left of
+        // them.
+        'COMPLETE.SERIES.S01-S07',
+        '👤 21 💾 1.31 GB ⚙️ RARBG',
+        '🇬🇧',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the scope written out as words (`Season 2`) and every tag in a '
+          'bracket of its own, so the whole line but two words is the lead in '
+          'square brackets',
+      resolution: StreamResolution.fhd1080,
+      size: 886675866,
+      seeders: 7,
+      tags: const ['BluRay', 'AVC', 'DTS'],
+      tracker: 'Torrent9',
+      lead:
+          '30 Rock - S02E11 - MILF Island [1080p] [BluRay] [x264] [DTS] '
+          '[PSA]',
+      rest: const [
+        // Was `30 Rock - Season 2 [1080p] [BluRay] [x264] [DTS] [PSA]`.
+        'Season 2',
+        '👤 7 💾 845.6 MB ⚙️ Torrent9',
+      ],
+    ),
+    recorded(
+      'torrentio',
+      'the one 30 Rock row at another resolution, and the scope spelled a '
+          'sixth way: a range plus what is outside it (`S01-S07 + Specials`), '
+          'with the addon\'s own `+` between them because it wrote those two '
+          'words next to each other',
+      resolution: StreamResolution.hd720,
+      size: 225234125,
+      seeders: 3,
+      tags: const ['WEBRip', 'HEVC', '10bit'],
+      tracker: 'ThePirateBay',
+      lead: '30.Rock.S02E11.720p.WEBRip.x265-Prof',
+      rest: const [
+        // Was `30 Rock S01-S07 + Specials 720p WEBRip x265 10bit`. The bit
+        // depth is this line's own: the file name never says it.
+        'S01-S07 + Specials 10bit',
+        '👤 3 💾 214.8 MB ⚙️ ThePirateBay',
+      ],
+    ),
   ];
 
   group('the recorded addon answers', () {
@@ -1281,6 +1488,52 @@ void recordedAddonAnswers() {
         expect(releaseNameOf(stream, addonName: expected.addon), shown.lead);
       });
     }
+
+    test('nothing the lead said is said again under it, on any row', () {
+      // The property the parser is built to have, asserted over the whole
+      // fixture rather than row by row: a word goes to the lead or to the
+      // line it was written on, never to both, so a card cannot say one
+      // release twice however an addon spelled it.
+      //
+      // Stated as two things, because the literal "not one word of the
+      // lead appears below it" is false and should be. Recorded row 13's
+      // line is a Russian sentence with `Breaking Bad` in the middle of
+      // it; row 29's stats line says `1`; row 3's language line opens
+      // `Multi Audio` under a lead that says `Multi`. None of those is the
+      // release being said twice, and cutting them is exactly the mangling
+      // this parser exists not to do.
+      for (final (index, row) in streams.indexed) {
+        final why = 'recorded row ${index + 1}';
+        final stream = StreamInfo(row['stream'] as Map<String, dynamic>);
+        final shown = StreamPresentation.of(
+          stream,
+          addonName: row['addon'] as String,
+        );
+        final lead = wordsOf(shown.lead);
+        for (final line in shown.rest) {
+          final words = wordsOf(line);
+          // Nothing below the lead opens the way the lead opens. Two
+          // spellings of one release share their title, so a line that
+          // still has it is a line still saying what the lead said. A line
+          // of flags has no words to open on and is nobody's release.
+          if (words.isNotEmpty) {
+            expect(
+              opening(words, line),
+              isNot(opening(lead, shown.lead)),
+              reason: '$why: "$line" opens on the release again',
+            );
+          }
+          // And nowhere further along it either: three of the lead's words
+          // running in the lead's order is the shortest thing that reads
+          // as the release name a second time.
+          expect(
+            longestRunOf(lead, words),
+            lessThan(3),
+            reason: '$why: "$line" quotes the lead back',
+          );
+        }
+      }
+    });
 
     test('no addon sets `description`: they all write `title`', () {
       // The serde alias in stremio-core is what makes the app see a
@@ -1365,4 +1618,38 @@ void recordedAddonAnswers() {
       expect(withSwedish, ['torrentio']);
     });
   });
+}
+
+/// [text] cut into words the way the parser cuts it: runs of letters and
+/// digits, lower-cased, with everything else a separator. Written out here
+/// rather than reached for in the library, so that a change to the
+/// parser's own tokeniser cannot quietly change what these assertions mean.
+List<String> wordsOf(String text) => [
+  for (final match in RegExp(r'[\p{L}\p{N}]+', unicode: true).allMatches(text))
+    match[0]!.toLowerCase(),
+];
+
+/// The two words [words] opens on, stepping over a single bracketed word in
+/// front of them -- `[PACK]`, which is a scope tag and not a title.
+List<String> opening(List<String> words, String text) {
+  final from =
+      RegExp(r'^\s*[[(][\p{L}\p{N}]+[\])]', unicode: true).hasMatch(text)
+      ? 1
+      : 0;
+  return words.skip(from).take(2).toList();
+}
+
+/// The longest run of [lead]'s words, in [lead]'s order, that [words] holds
+/// somewhere in it.
+int longestRunOf(List<String> lead, List<String> words) {
+  var longest = 0;
+  final run = List.filled(lead.length + 1, 0);
+  for (final word in words) {
+    for (var index = lead.length; index > 0; index--) {
+      run[index] = lead[index - 1] == word ? run[index - 1] + 1 : 0;
+      if (run[index] > longest) longest = run[index];
+    }
+    run[0] = 0;
+  }
+  return longest;
 }

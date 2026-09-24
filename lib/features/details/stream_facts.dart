@@ -74,8 +74,8 @@ final class StreamFacts {
   /// the addon actually said.
   ///
   /// Empty is "the addon said nothing about language", which is not
-  /// "English" and not "one track". Nine of the twenty-five recorded rows
-  /// carry this line and sixteen do not, so an empty list is the common
+  /// "English" and not "one track". Eleven of the thirty-one recorded rows
+  /// carry this line and twenty do not, so an empty list is the common
   /// case and must never be drawn as a claim.
   final List<String> languages;
 
@@ -602,9 +602,15 @@ List<StreamSection<T>> sectionsByResolution<T>(
 /// It is a pair and not one string because addons answer in two registers
 /// too. Torrentio's `title` is a little document — a release, sometimes a
 /// file under it, a stats line, sometimes a line of flags — and the app has
-/// been picking one line out of it and throwing the document away. Both
-/// halves come from the same read of the same fields, so the lead can never
-/// be a line the rest also shows.
+/// been picking one line out of it and throwing the document away.
+///
+/// **One tokenisation, and every word given one place to be.** The answer's
+/// strings are read into words exactly once ([_Words]); the lead is chosen
+/// out of them; and then every word of every line is sent either to the
+/// lead — which has already said it, so the line does not — or to the line
+/// it was written on. There is no pass afterwards that takes a finished
+/// lead back out of finished lines, which is what this replaces and what
+/// let a card say one release twice.
 ///
 /// **This is values, not layout.** Where the two go on a card, how many
 /// lines each gets, whether the rest is folded away — none of that is
@@ -615,36 +621,42 @@ final class StreamPresentation {
   /// The one line that names what would play. Never empty: see [leadLineOf].
   final String lead;
 
-  /// The addon's own text, line by line, in the order it wrote it, with
-  /// what [lead] already said taken out of it — and nothing else taken out.
-  /// Empty when the addon said nothing beyond the lead.
+  /// The addon's own text, line by line, in the order it wrote it, holding
+  /// only the words [lead] did not take — and nothing else taken out. Empty
+  /// when the addon said nothing beyond the lead.
   ///
-  /// **Taken out, not matched out.** A line that *is* the lead goes, as it
-  /// always did: on fixture row 4 the lead comes from
-  /// `behaviorHints.filename` and the second text line is that same file
-  /// with `.mkv` on it, and on row 12 it is that same file with a directory
-  /// in front of it — neither is a string match for the lead, and both are
-  /// the lead ([_asLeadKey]). A line that names the same release *spelled
-  /// more fully* is reduced to the part the lead has not already said
-  /// ([_beyondTheLead]): row 1 sends the release twice, once as
-  /// `…UHD.BluRay.X265-IAMABLE` and once as
-  /// `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE`, and what the
-  /// second one is actually for is `10bit.HDR.TrueHD.7.1.Atmos`.
+  /// Three things can become of a line, and [_beyondTheLead] is where they
+  /// are decided:
   ///
-  /// Everything else is untouched, whole, in the addon's own words.
+  /// - **It is the lead, and goes.** Fixture row 1's second line is the
+  ///   lead's file with `.mkv` on it and row 12's is that file with a
+  ///   directory in front of it; neither is a string match for the lead and
+  ///   both are the lead.
+  /// - **It is about the lead's release, and keeps what it adds.** Row 1
+  ///   sends the release twice — `…UHD.BluRay.X265-IAMABLE` and
+  ///   `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE` — and what the
+  ///   second one is for is `10bit.HDR.TrueHD.7.1.Atmos`. This is the case
+  ///   the pack lines are in: the whole point of row 26's line is `S02`, and
+  ///   it used to arrive with thirty-five characters of the lead wrapped
+  ///   around it.
+  /// - **It is about something else, and is untouched.** Row 13's line is
+  ///   Russian prose about the season and row 7's is a drive dump's name.
+  ///
+  /// Everything that survives is in the addon's own words and the addon's
+  /// own separators.
   final List<String> rest;
 
   /// Reads [stream]. [addonName] is the label the card shows elsewhere; see
   /// [leadLineOf] for what it is used for.
   factory StreamPresentation.of(StreamInfo stream, {String? addonName}) {
-    final lead = leadLineOf(stream, addonName: addonName);
+    final lines = [
+      for (final line in (stream.description ?? '').split('\n'))
+        if (line.trim() case final text when text.isNotEmpty) _Words(text),
+    ];
+    final lead = _leadWordsOf(stream, addonName: addonName);
     return StreamPresentation(
-      lead: lead,
-      rest: [
-        for (final line in (stream.description ?? '').split('\n'))
-          if (line.trim() case final text when text.isNotEmpty)
-            ?_beyondTheLead(text, lead),
-      ],
+      lead: lead.text,
+      rest: [for (final line in lines) ?_beyondTheLead(line, lead)],
     );
   }
 }
@@ -701,7 +713,12 @@ final class StreamPresentation {
 /// it does not have and once as the addon that answered.
 ///
 /// Never empty.
-String leadLineOf(StreamInfo stream, {String? addonName}) {
+String leadLineOf(StreamInfo stream, {String? addonName}) =>
+    _leadWordsOf(stream, addonName: addonName).text;
+
+/// [leadLineOf] with its words already found, because everything that reads
+/// the lead after this reads it a word at a time.
+_Words _leadWordsOf(StreamInfo stream, {String? addonName}) {
   final hints = StreamHints.of(stream);
   final described = hints.strip(_firstLine(stream.description));
   final candidates = [
@@ -715,11 +732,11 @@ String leadLineOf(StreamInfo stream, {String? addonName}) {
     if (addonName != null && release.toLowerCase() == addonName.toLowerCase()) {
       continue;
     }
-    return release;
+    return _Words(release);
   }
-  return _oneLine(stream.name) ??
-      _oneLine(stream.description) ??
-      stream.kind.label;
+  return _Words(
+    _oneLine(stream.name) ?? _oneLine(stream.description) ?? stream.kind.label,
+  );
 }
 
 /// [leadLineOf] under the name the screens have always called it. Kept
@@ -729,135 +746,48 @@ String leadLineOf(StreamInfo stream, {String? addonName}) {
 String releaseNameOf(StreamInfo stream, {String? addonName}) =>
     leadLineOf(stream, addonName: addonName);
 
-/// [line] reduced to what makes two spellings of one file the same file, so
-/// a card does not draw its own headline again underneath itself.
-///
-/// Three reductions, each with a recorded row behind it:
-///
-/// - **the last path segment**, because row 12's file line is
-///   `Breaking.Bad.S01…-TrollUHD/Breaking.Bad.S01E01…-TrollUHD.mkv` and
-///   `behaviorHints.filename` is only the part after the slash;
-/// - **without the container extension**, because that file line ends
-///   `.mkv` and the filename the lead came from was stripped of it;
-/// - **every run of `.`, `_`, `-` and space as one space, lower-cased**,
-///   because row 5 writes the release with spaces on its text line and with
-///   dots in its filename — `The Matrix 1999 UHD BluRay 2160p TrueHD Atmos
-///   7 1 DV HEVC REMUX-FraMeSToR` against
-///   `The.Matrix.1999.UHD.BluRay.2160p.TrueHD.Atmos.7.1.DV.HEVC.REMUX-FraMeSToR`
-///   — and row 11 writes `Breaking Bad  S01E01  Pilot.mkv` with the double
-///   spaces its filename also has.
-///
-/// It is deliberately blunt about separators and deliberately blind to
-/// everything else: row 1's text line has `10bit.HDR.TrueHD.7.1.Atmos` in
-/// it that its filename does not, so it is a different line and stays.
-String _asLeadKey(String line) =>
-    _asFile(line).toLowerCase().replaceAll(RegExp(r'[ ._-]+'), ' ').trim();
-
-/// [line] as the file it names: its last path segment, without a container
-/// extension. The two reductions [_asLeadKey] spells out, on their own,
-/// because [_beyondTheLead] has to compare the same thing and then quote
-/// from it.
-String _asFile(String line) {
-  final base = line.substring(line.lastIndexOf('/') + 1);
-  return _withoutExtension(base) ?? base;
-}
-
-/// What [line] still has to say once [lead] has said its piece: the line
-/// itself when it is not about the lead's release at all, what is left of
-/// it when it is the same release spelled more fully, and null when nothing
-/// of it is left.
-///
-/// **Why a line needs subtracting and not just dropping.** Torrentio
-/// routinely sends the release twice, in two spellings, and the fuller of
-/// the two is not the one the lead comes from: recorded row 1 leads with
-/// `The.Matrix.1999.RERIP.2160p.UHD.BluRay.X265-IAMABLE` (the filename) and
-/// writes `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE` on the line
-/// under it. Eighty per cent of that line is the line above it; the fifth
-/// that is not — `10bit HDR TrueHD 7.1 Atmos` — is the audio and the bit
-/// depth, which are on the card nowhere else.
-///
-/// **What counts as the same release.** Two names say the same release when
-/// they agree on the *identity head* ([_identityHead]): the title, the year
-/// and the episode, which is everything before the first word about the
-/// picture. It is not equality (the two spellings differ by definition) and
-/// it is not a shared prefix (`The Matrix` is shared by a film and by the
-/// box set it came in). It is the head *and only the head* because that is
-/// exactly what a pack line changes: row 4 says `[PACK] The Matrix 4K UHD
-/// Collection (1999-2003) …`, row 9 `The Matrix Trilogy (1999-2003) …`, row
-/// 10 `S01` where the file says `S01E01`, row 12 `COMPLETE S01-S05`, row 16
-/// `iNTEGRALE`. Every one of those shares most of its words with the lead
-/// and names something else, and every one of them survives here whole,
-/// because which pack a file came out of is worth knowing.
-///
-/// **And a second guard, for the lines nothing is known about.** More of
-/// the line has to be the lead than is not. A line that merely shares a
-/// word or two — a different release of the same film, say — is left alone:
-/// the failure that matters is mangling a line, not repeating one.
-///
-/// What is subtracted is tokens, not characters ([_tokensOf]), because
-/// addons separate with `.`, `_`, `-` and spaces interchangeably and wrap a
-/// year in brackets as the mood takes them. A token the line has twice and
-/// the lead has once is removed *once*: the lead said it once, and the
-/// second one is the line saying something more. What comes back is the
-/// addon's own text — its own spelling, its own separators — with the
-/// removed words lifted out of it, never a normalised rewrite.
-String? _beyondTheLead(String line, String lead) {
-  // The line that simply is the lead again, which is the common case and
-  // was the only case this handled before.
-  if (_asLeadKey(line) == _asLeadKey(lead)) return null;
-  final file = _asFile(line);
-  final tokens = _tokensOf(file);
-  final said = _tokensOf(lead);
-  final head = _identityHead(tokens);
-  // An empty head is a line with no title in it at all -- a stats line, a
-  // line of flags, `Subscription` -- and two empty heads are not an
-  // agreement about anything.
-  if (head.isEmpty || !_sameTokens(head, _identityHead(said))) return line;
-  final budget = <String, int>{};
-  for (final token in said) {
-    budget[token.text] = (budget[token.text] ?? 0) + 1;
-  }
-  final kept = <int>[];
-  var removed = 0;
-  for (final (index, token) in tokens.indexed) {
-    final spoken = budget[token.text] ?? 0;
-    if (spoken == 0) {
-      kept.add(index);
-    } else {
-      budget[token.text] = spoken - 1;
-      removed++;
-    }
-  }
-  if (removed <= kept.length) return line;
-  if (kept.isEmpty) return null;
-  final remainder = StringBuffer();
-  for (final (position, index) in kept.indexed) {
-    // The separator the addon itself put in front of this word, so what is
-    // left reads the way the line it came out of does. The one in front of
-    // the first word separates it from nothing and stays behind with it.
-    if (position > 0) {
-      remainder.write(
-        file.substring(tokens[index - 1].end, tokens[index].start),
-      );
-    }
-    remainder.write(file.substring(tokens[index].start, tokens[index].end));
-  }
-  return remainder.toString();
-}
-
-/// One word of a release name, lower-cased, and where it sat in the line it
-/// was read out of so the line can be quoted back.
+/// One word, lower-cased, and where it sat in the string it was read out of
+/// so that string can be quoted back verbatim.
 typedef _Token = ({String text, int start, int end});
 
-/// The words of [line]: its runs of letters and digits.
+/// A string of an addon's answer with its words found — **once**.
 ///
-/// Everything else is a separator, because everything else is one somewhere
-/// — the same release arrives as `The.Matrix.1999` from one addon,
-/// `The Matrix (1999)` from the next and `The_Matrix_1999` from a third,
-/// and a comparison that can be told apart by that is a comparison of
-/// punctuation. Letters are taken by Unicode class and not by `[a-z]`:
-/// recorded row 13's text line is Russian, and a tokeniser that dropped it
-/// would have that line agreeing with anything.
+/// Every comparison and every reduction below works on these lists and
+/// never on the text again, which is what "one tokenisation" means here: a
+/// line is read into words when it arrives, the lead is read into words
+/// when it is chosen, and from then on the only thing that happens is that
+/// each of those words is given somewhere to be.
+final class _Words {
+  _Words(this.text) : tokens = _tokensOf(text);
+
+  final String text;
+
+  /// The words of [text]: its runs of letters and digits.
+  ///
+  /// Everything else is a separator, because everything else is one
+  /// somewhere — the same release arrives as `The.Matrix.1999` from one
+  /// addon, `The Matrix (1999)` from the next and `The_Matrix_1999` from a
+  /// third, and a comparison that can be told apart by that is a comparison
+  /// of punctuation. Letters are taken by Unicode class and not by `[a-z]`:
+  /// recorded row 13's text line is Russian, and a tokeniser that dropped it
+  /// would have that line agreeing with anything.
+  final List<_Token> tokens;
+
+  /// The words of the file [text] names, which is the part of it that can
+  /// be the lead: [tokens] after the last `/` and without a container
+  /// extension on the end.
+  ///
+  /// Both cuts have a recorded row behind them. Row 12's file line is
+  /// `Breaking.Bad.S01…-TrollUHD/Breaking.Bad.S01E01…-TrollUHD.mkv` where
+  /// `behaviorHints.filename` is only the part after the slash, and row 31's
+  /// is `Season 2/30.Rock.S02E11…` (row 29). The extension goes because the
+  /// stripped of its own (a card is not a directory listing) — and it is cut
+  /// here as a *word* rather than by a regexp over the text, so row 28's
+  /// `30 Rock Complete (1080p.H265.AAC.mkv)`, where the extension is inside
+  /// a bracket, loses it too.
+  late final List<_Token> file = _fileWords(this);
+}
+
 List<_Token> _tokensOf(String line) => [
   for (final match in _tokenPattern.allMatches(line))
     (text: match[0]!.toLowerCase(), start: match.start, end: match.end),
@@ -865,42 +795,222 @@ List<_Token> _tokensOf(String line) => [
 
 final RegExp _tokenPattern = RegExp(r'[\p{L}\p{N}]+', unicode: true);
 
-/// The part of [tokens] that says *what* this is rather than what it looks
-/// like: the title, its year and its episode.
-///
-/// Read as "everything up to the picture": a release name is a title, then
-/// a resolution, then the tags, and the first resolution word is the most
-/// reliable mark of where the title stopped in a string nobody agreed a
-/// format for. Anything after the last year or season/episode inside that
-/// head is dropped with it (`RERIP`, an edition, a scene word), so two
-/// spellings that differ only in what edition they announce still agree on
-/// what film they are.
-///
-/// Empty when there is no title before the first resolution — `1080p` is a
-/// whole recorded stream name (row 19) — and an empty head is never an
-/// agreement (see [_beyondTheLead]).
-List<String> _identityHead(List<_Token> tokens) {
-  var end = tokens.length;
-  for (final (index, token) in tokens.indexed) {
-    if (StreamFacts._resolutionTokens.containsKey(token.text)) {
-      end = index;
-      break;
-    }
+List<_Token> _fileWords(_Words words) {
+  final slash = words.text.lastIndexOf('/');
+  var from = 0;
+  while (from < words.tokens.length && words.tokens[from].start < slash) {
+    from++;
   }
-  var last = -1;
-  for (var index = 0; index < end; index++) {
-    final text = tokens[index].text;
-    if (_yearToken.hasMatch(text) || _episodeToken.hasMatch(text)) last = index;
+  var to = words.tokens.length;
+  if (to > from) {
+    final last = words.tokens[to - 1];
+    final dotted = last.start > 0 && words.text[last.start - 1] == '.';
+    if (dotted && _containers.contains(last.text)) to--;
   }
-  return [
-    for (final token in tokens.take(last >= 0 ? last + 1 : end)) token.text,
-  ];
+  return words.tokens.sublist(from, to);
 }
 
-bool _sameTokens(List<String> a, List<String> b) {
+/// What [line] still has to say once [lead] has said its piece: null when
+/// the line was the lead or had nothing else on it, what it adds when it is
+/// about the lead's release, and the line itself when it is about something
+/// else.
+///
+/// **Why a line is reduced and not just dropped.** Torrentio routinely
+/// sends the release twice, in two spellings, and the fuller of the two is
+/// not the one the lead comes from: recorded row 1 leads with
+/// `The.Matrix.1999.RERIP.2160p.UHD.BluRay.X265-IAMABLE` (the filename) and
+/// writes `…UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-IAMABLE` on the line
+/// under it. Eighty per cent of that line is the line above it; the fifth
+/// that is not — `10bit HDR TrueHD 7.1 Atmos` — is the audio and the bit
+/// depth, which are on the card nowhere else.
+///
+/// **And why the pack lines are reduced too, which they were not.** The
+/// same holds, harder, for the line that names the pack a file came out of:
+/// row 26 sends `30.Rock.S02E11.1080p.BluRay.x265-KONTRAST` and, under it,
+/// `30.Rock.S02.1080p.BluRay.x265-KONTRAST`. Thirty-seven characters, of
+/// which three are the news. The old rule kept that line whole to protect
+/// the `S02`, and protected it by burying it; the `S02` is what this keeps.
+///
+/// **What makes a line about the lead: it opens the way the lead opens**
+/// ([_opensAsTheLeadDoes]). Two spellings of one release start with the
+/// same title, and a line about anything else does not — row 13's starts
+/// `Во все тяжкие`, row 7's `Imdb top 263 movies`, row 3's language line
+/// `Multi Audio`, and every stats line starts with a number. It is
+/// deliberately a weaker claim than the identity head this replaces, which
+/// asked the title *and the season* to agree and so refused exactly the
+/// pack lines it was supposed to read.
+///
+/// What is taken is words, not characters, because addons separate with
+/// `.`, `_`, `-` and spaces interchangeably and bracket a year as the mood
+/// takes them. A word the line has twice and the lead has once is taken
+/// *once*: the lead said it once, and the second one is the line saying
+/// something more. What comes back is the addon's own text — its own
+/// spelling, its own separators — with the lead's words lifted out of it,
+/// never a normalised rewrite.
+String? _beyondTheLead(_Words line, _Words lead) {
+  final file = line.file;
+  // No words at all is a line of flags, and there is nothing in it that
+  // the lead could have said.
+  if (file.isEmpty) return line.text;
+  // The line that simply is the lead again, in whatever spelling and under
+  // whatever directory. Its directory goes with it: in every recorded row
+  // that has one it is the season or the pack, and the line above already
+  // says so in the addon's own words (row 12 `COMPLETE S01-S05`, row 16
+  // `iNTEGRALE`, row 29 `COMPLETE.SERIES.S01-S07`).
+  if (_sameWords(file, lead.file)) return null;
+  if (!_opensAsTheLeadDoes(line, lead)) return line.text;
+  final kept = _unspokenBy(file, lead.file, line.text);
+  return kept.contains(true) ? _quoted(line.text, file, kept) : null;
+}
+
+/// Whether [line]'s file opens on the same two words [lead] does.
+///
+/// Two, not one: `The` and `Breaking` open half the releases there are.
+/// Not three, because row 26's line is `30.Rock.S02…` against a lead of
+/// `30.Rock.S02E11…` and the third word is the one thing it came to say.
+///
+/// A bracketed word in front of the title is stepped over, because it is a
+/// scope tag and not a title: recorded row 4 opens `[PACK] The Matrix 4K
+/// UHD Collection …` against a lead of `The Matrix (1999) …`. One word
+/// only, and only when the brackets close around it immediately, so a line
+/// that opens with a bracketed *phrase* is a line about something else.
+bool _opensAsTheLeadDoes(_Words line, _Words lead) {
+  final said = lead.file;
+  if (said.length < 2) return false;
+  final file = line.file;
+  final from = _afterAnOpeningTag(line.text, file);
+  if (file.length - from < 2) return false;
+  return file[from].text == said[0].text && file[from + 1].text == said[1].text;
+}
+
+int _afterAnOpeningTag(String text, List<_Token> file) {
+  const closing = {'[': ']', '(': ')'};
+  final first = file.first;
+  if (first.start == 0) return 0;
+  final close = closing[text[first.start - 1]];
+  return close != null && text.startsWith(close, first.end) ? 1 : 0;
+}
+
+/// One flag per word of [file]: true for the words [said] did not already
+/// say, which are the ones the line still has to say for itself.
+///
+/// The lead is a budget and not a set. A word the lead used once pays for
+/// one of the line's, so `Movie.Name.PROPER.1080p.PROPER.WEB-DL` under a
+/// lead that says `PROPER` once keeps the second `PROPER`: the line said it
+/// twice and the lead only answered for one.
+List<bool> _unspokenBy(List<_Token> file, List<_Token> said, String text) {
+  final budget = <String, int>{};
+  for (final token in said) {
+    budget[token.text] = (budget[token.text] ?? 0) + 1;
+  }
+  final kept = <bool>[];
+  for (final token in file) {
+    final spoken = budget[token.text] ?? 0;
+    if (spoken > 0) budget[token.text] = spoken - 1;
+    kept.add(spoken == 0);
+  }
+  _keepRangesWhole(file, kept, text);
+  return kept;
+}
+
+/// A range is one statement and half of one is a wrong statement, so a
+/// number the lead already said stays where it is hyphenated to a number
+/// that is staying.
+///
+/// `(1999-2003)` on recorded rows 4 and 9 is what this is for: the lead
+/// says `1999`, so the budget would pay for the first half of the range and
+/// leave `-2003`, which reads as a pack that began nowhere. Both halves
+/// have to be countable — a year, a plain number, or `S01` — so
+/// `Atmos-IAMABLE` and `MP4-BEN` are untouched by it and the group tag on
+/// the end of row 1's line still goes.
+void _keepRangesWhole(List<_Token> file, List<bool> kept, String text) {
+  for (var again = true; again;) {
+    again = false;
+    for (var index = 0; index + 1 < file.length; index++) {
+      final left = file[index];
+      final right = file[index + 1];
+      if (kept[index] == kept[index + 1]) continue;
+      if (!_rangePattern.hasMatch(text.substring(left.end, right.start))) {
+        continue;
+      }
+      if (!_countable(left.text) || !_countable(right.text)) continue;
+      kept[kept[index] ? index + 1 : index] = true;
+      again = true;
+    }
+  }
+}
+
+bool _countable(String token) =>
+    _yearToken.hasMatch(token) ||
+    _episodeToken.hasMatch(token) ||
+    _plainNumber.hasMatch(token);
+
+/// [file]'s kept words quoted back out of [text].
+///
+/// Between two words the addon wrote next to each other, the separator the
+/// addon put there, so what is left reads the way the line it came out of
+/// does — `10bit.HDR.TrueHD.7.1.Atmos` in dots, `Season 1-7 S01-S07` in
+/// spaces and hyphens. Between two words it never wrote next to each other
+/// there is no separator of its own to keep, so a single space: the
+/// alternative is to borrow the punctuation of a word that has gone, which
+/// is how `[RiCK]` came out as `[RiCK`.
+String _quoted(String text, List<_Token> file, List<bool> kept) {
+  final quoted = StringBuffer();
+  int? previous;
+  for (final (index, token) in file.indexed) {
+    if (!kept[index]) continue;
+    if (previous != null) {
+      quoted.write(
+        previous == index - 1
+            ? text.substring(file[previous].end, token.start)
+            : ' ',
+      );
+    }
+    quoted.write(text.substring(token.start, token.end));
+    previous = index;
+  }
+  return _withoutHalfBrackets(quoted.toString());
+}
+
+/// [text] with every bracket whose partner left with a lifted word taken
+/// out of it — `Collection (1999-2003` for `Collection 1999-2003`.
+///
+/// Dropped and never closed: a closing bracket the addon did not write is a
+/// character we invented, and the rule everywhere here is that what a card
+/// shows is what an addon wrote. Two spaces left where one bracket sat
+/// between two others collapse to one, which is the only whitespace this
+/// touches and only on a line it has already cut.
+String _withoutHalfBrackets(String text) {
+  const closing = {'(': ')', '[': ']', '{': '}'};
+  final open = <int>[];
+  final drop = <int>{};
+  for (var index = 0; index < text.length; index++) {
+    final character = text[index];
+    if (closing.containsKey(character)) {
+      open.add(index);
+    } else if (closing.values.contains(character)) {
+      final at = open.lastIndexWhere((j) => closing[text[j]] == character);
+      if (at < 0) {
+        drop.add(index);
+      } else {
+        drop.addAll(open.skip(at + 1));
+        open.removeRange(at, open.length);
+      }
+    }
+  }
+  drop.addAll(open);
+  if (drop.isEmpty) return text;
+  final kept = StringBuffer();
+  for (var index = 0; index < text.length; index++) {
+    if (!drop.contains(index)) kept.write(text[index]);
+  }
+  return kept.toString().replaceAll(RegExp(r' {2,}'), ' ').trim();
+}
+
+bool _sameWords(List<_Token> a, List<_Token> b) {
   if (a.length != b.length) return false;
   for (final (index, token) in a.indexed) {
-    if (token != b[index]) return false;
+    if (token.text != b[index].text) return false;
   }
   return true;
 }
@@ -915,6 +1025,13 @@ final RegExp _yearToken = RegExp(r'^(?:19|20)\d{2}$');
 final RegExp _episodeToken = RegExp(
   r'^(?:s\d{1,3}(?:e\d{1,4})?|\d{1,2}x\d{1,3})$',
 );
+
+/// The bare numbers a range can be written out of: `Season 1-7`.
+final RegExp _plainNumber = RegExp(r'^\d{1,4}$');
+
+/// What joins the two halves of a range, and nothing else: a single hyphen
+/// or dash, with no space around it.
+final RegExp _rangePattern = RegExp(r'^[-‒-―−]$');
 
 /// Whether a line of free text is a release rather than a sentence about
 /// the stream.
