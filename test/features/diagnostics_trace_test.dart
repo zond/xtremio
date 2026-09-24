@@ -43,6 +43,26 @@ void main() {
     expect(DiagnosticsLog.unredacted, isFalse);
   });
 
+  test('a picture says what it decoded to exactly while it is on', () async {
+    // The other half of the app's own verbosity: a line per image as it
+    // resolves, which is what can explain 80 cached pictures at 410 kB
+    // each. Off by default, because it is a line per tile of every row
+    // somebody scrolls past.
+    addTearDown(() => ImageCacheLog.perImage = false);
+    final prefs = AppPrefs.inMemory();
+    final sync = started(prefs: prefs, server: RecordingServerSettings());
+    await settle(sync);
+    expect(ImageCacheLog.perImage, isFalse);
+
+    await prefs.setVerboseDiagnostics(true);
+    await settle(sync);
+    expect(ImageCacheLog.perImage, isTrue);
+
+    await prefs.setVerboseDiagnostics(false);
+    await settle(sync);
+    expect(ImageCacheLog.perImage, isFalse);
+  });
+
   test('the default is off, and the server is told so at start', () async {
     final server = RecordingServerSettings();
     final sync = started(prefs: AppPrefs.inMemory(), server: server);

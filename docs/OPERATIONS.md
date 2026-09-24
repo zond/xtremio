@@ -134,6 +134,37 @@ With Verbose logging **on**, the report is copied as it was logged, with
 no scrub: full stream links, which can carry an addon's debrid key. The
 switch's own description says so.
 
+### What the image cache is holding, over ADB
+
+The same figures the Diagnostics header carries also go into the log, so
+they can be followed while somebody drives the app rather than read off a
+television by hand (`ImageCacheLog`, `lib/core/image_cache_log.dart`).
+Every thirty seconds, in every build:
+
+```
+$ adb logcat -s xtremio
+… INFO xtremio_core::app: images: image cache: 33.0 MB of 33.6 MB ceiling ·
+  80 images, 413 kB each on average · 0 held live by a widget, which no
+  eviction frees · 0 decoding
+```
+
+Behind **Verbose logging**, one line more per picture as it decodes -- the
+size it decoded to, what that costs, and the URL with the bound the widget
+asked for on the end of it:
+
+```
+… INFO xtremio_core::app: images: image decoded: 312×468 px, 584 kB
+  resident · https://images.metahub.space/poster/medium/tt0063350/img -
+  Resized(312×null)
+```
+
+That is the line that says whether a picture decoded larger than the box it
+is drawn in. It is a line per tile of every row scrolled past, so it is off
+by default, and it is read as an image is submitted to the cache: turning
+the switch on says nothing about pictures that are already decoded. To make
+a screen decode again, put the app in the background and come back -- that
+empties the cache (`XtremioApp`) -- then browse.
+
 The header's app version and commit are whatever the build passed in as
 `--dart-define`s, and with nothing passed they read `unknown` -- which is
 the one line that says which build the rest of the report is about. A plain

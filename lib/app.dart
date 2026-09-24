@@ -89,6 +89,12 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// preferences are in so that the first thing the server hears is the
 /// viewer's own choice rather than the default it overrides.
 ///
+/// It runs the image cache's log too ([ImageCacheLog]): what that cache
+/// holds, against the ceiling it is held against, written into the same
+/// log the engine writes to for as long as the app is up. The figures were
+/// on the Diagnostics screen and nowhere else, and this app is measured on
+/// a television that can only be reached over `adb logcat`.
+///
 /// And the [SharingScope], which is that policy and one
 /// [SharingActivityMonitor] where the shell can reach them: what the light
 /// in the corner is drawn from, and what its popup presses. The monitor
@@ -222,6 +228,13 @@ class _XtremioAppState extends State<XtremioApp> {
   late final IdleSharingPolicy _sharing;
   late final DiagnosticsTraceSync _trace;
 
+  /// The image cache's figures in the log, on the same terms: one of them
+  /// for the app, started when it comes up and stopped when it goes away.
+  /// Not waiting for the preferences, unlike [_sharing] and [_trace] --
+  /// the periodic line is not behind any choice, and the first reading of
+  /// a session is worth more than the moment it is taken is.
+  late final ImageCacheLog _imageCacheLog;
+
   /// The one activity monitor, on the same terms: one server to ask, so one
   /// thing asking it. The shell turns it on and off with what is on screen.
   late final SharingActivityMonitor _activity;
@@ -255,6 +268,7 @@ class _XtremioAppState extends State<XtremioApp> {
     _sharing = IdleSharingPolicy(prefs: _prefs, server: widget.serverSettings);
     _trace = DiagnosticsTraceSync(prefs: _prefs, server: widget.serverSettings);
     _activity = SharingActivityMonitor(client: widget.sharingActivity);
+    _imageCacheLog = ImageCacheLog()..start();
     // After the load, not beside it: a stored choice arriving a moment
     // later would otherwise be preceded by a push of the default it was
     // made to override, and the server would hear both.
@@ -485,6 +499,7 @@ class _XtremioAppState extends State<XtremioApp> {
     _trace.dispose();
     // Stops the polling with it; nothing else holds the timer.
     _activity.dispose();
+    _imageCacheLog.dispose();
     if (_ownsPrefs) _prefs.dispose();
     _ctx.dispose();
     _lifecycle.dispose();
