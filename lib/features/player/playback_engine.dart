@@ -869,6 +869,31 @@ class MediaKitEngine implements PlaybackEngine {
     hwdec: hardwareDecoding ? 'mediacodec,mediacodec-copy' : 'no',
   );
 
+  /// Which codecs may go to the hardware decoder.
+  ///
+  /// **MPEG-4 Part 2 and MPEG-2 are deliberately not on it**, and that is
+  /// the whole of this constant. media_kit's Android controller sets
+  /// `hwdec-codecs=h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1`
+  /// (`android_video_controller/real.dart`), which is wider than mpv's own
+  /// default, and with the direct `mediacodec` hwdec this app asks for
+  /// ([configurationFor]) an MPEG-4 file fails at decoder init:
+  ///
+  ///     mpeg4_mediacodec: Both surface and native_window are NULL
+  ///     mpeg4_mediacodec: MediaCodec 0x0 failed to start
+  ///     vd: Could not open codec.
+  ///
+  /// The player's own retry then recovers, so it *plays* -- after about
+  /// three seconds of stalling and an error on screen, which is how it was
+  /// found: a viewer reported "a codec error, but the video plays".
+  ///
+  /// Taking the two off the list costs nothing worth having. They are old,
+  /// low-bitrate formats that software decodes comfortably on the weakest
+  /// thing this app runs on, and the codecs the hardware is actually needed
+  /// for -- h264, hevc, vp9, av1 -- are all still on it. The alternative,
+  /// dropping back to `mediacodec-copy` for everything, would undo the
+  /// judder fix that direct decoding is there for.
+  static const String hwdecCodecs = 'h264,hevc,vp8,vp9,av1';
+
   /// How often [stats] samples while listened to.
   static const Duration statsInterval = Duration(milliseconds: 500);
 
@@ -1189,6 +1214,12 @@ class MediaKitEngine implements PlaybackEngine {
     // `force-seekable` once, when it builds the demuxer, so it has to be
     // set for the stream about to be opened and not for the last one.
     await _setProperty('force-seekable', forcesSeekable(url) ? 'yes' : 'no');
+    // And which codecs the hardware is allowed to have. Here rather than in
+    // [mpvOverrides] for two reasons: mpv reads it when it picks a decoder,
+    // which is at the `loadfile` below, and media_kit's Android controller
+    // writes its own value while *it* initialises -- so a value set once at
+    // construction is racing something that has not run yet.
+    await _setProperty('hwdec-codecs', hwdecCodecs);
     await _player.open(Media(url.toString(), start: start));
   }
 
