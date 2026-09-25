@@ -368,14 +368,12 @@ app.post(['/session/:id/files', '/session/:id/file'], async (req, res) => {
   // so a file Drive would not describe is linked with what the Picker said
   // rather than not linked at all.
   const accessToken = session.data().accessToken;
-  const described = [];
-  for (const file of files) {
-    const answer = accessToken
-        ? await describeFile(file.fileId, accessToken)
-        : {ok: false};
-    described.push(answer.ok ? answer.file : {...file, height: null,
-      durationMillis: null});
-  }
+  const answers = await Promise.all(files.map((file) => accessToken
+      ? describeFile(file.fileId, accessToken)
+      : Promise.resolve({ok: false})));
+  const described = answers.map((answer, at) => answer.ok
+      ? answer.file
+      : {...files[at], height: null, durationMillis: null});
   await ref.update({status: 'ready', files: described});
   res.json({ok: true, files: described.length});
 });
@@ -508,22 +506,26 @@ app.post('/session/:id/android', async (req, res) => {
     return res.status(502).json({error: 'no refresh token in the exchange'});
   }
 
-  const files = [];
-  for (const fileId of fileIds) {
-    if (typeof fileId !== 'string' || !fileId) continue;
-    const described = await describeFile(fileId, granted.access_token);
-    if (!described.ok) {
-      // The one failure worth naming: the grant did not reach this client,
-      // so the television would be handed ids it cannot open. Refuse the
-      // whole pairing rather than write half of one.
-      return res.status(502).json({
-        error: 'the grant does not reach this client',
-        fileId,
-        readStatus: described.status,
-      });
-    }
-    files.push(described.file);
+  // All at once, not one after another. A viewer is watching a spinner while
+  // this happens, and a season of twelve episodes is twelve round trips to
+  // Drive: in a row that is twelve latencies, together it is one. They are
+  // independent reads of different files, so there is nothing to serialise
+  // them for.
+  const wanted = fileIds.filter((id) => typeof id === 'string' && id);
+  const described = await Promise.all(
+      wanted.map((id) => describeFile(id, granted.access_token)));
+  const refused = described.findIndex((one) => !one.ok);
+  if (refused !== -1) {
+    // The one failure worth naming: the grant did not reach this client, so
+    // the television would be handed ids it cannot open. Refuse the whole
+    // pairing rather than write half of one.
+    return res.status(502).json({
+      error: 'the grant does not reach this client',
+      fileId: wanted[refused],
+      readStatus: described[refused].status,
+    });
   }
+  const files = described.map((one) => one.file);
   if (files.length === 0) return res.status(400).json({error: 'no fileIds'});
 
   await ref.update({

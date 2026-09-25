@@ -740,6 +740,21 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
             PairingQrCode(link: session.link)
           else if (_openedBrowser)
             ..._openedSession(session, theme),
+          // Drawn while this device is doing the work itself, because that
+          // is the only part of the wait that looks like nothing happening.
+          // A television waiting for a phone has a QR to look at and a
+          // viewer who knows they have not scanned it yet; here the viewer
+          // has done their part, the app is talking to Google about every
+          // file they chose, and a line of text that does not move reads as
+          // stuck. It is: a season of twelve is twelve files to ask about.
+          if (_picking != _Picking.no) ...[
+            const SizedBox(height: 8),
+            const SizedBox.square(
+              dimension: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(height: 4),
+          ],
           _Line(switch (_picking) {
             _Picking.choosing => DrivePairingScreen.pickingMessage,
             _Picking.adding => DrivePairingScreen.addingMessage,

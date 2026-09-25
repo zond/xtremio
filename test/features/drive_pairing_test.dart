@@ -342,6 +342,11 @@ void main() {
       expect(find.text(DrivePairingScreen.inBrowserMessage), findsNothing);
       expect(find.text(DrivePairingScreen.openAgainLabel), findsNothing);
       expect(opener.opened, isEmpty);
+      // And something that moves. This is the only part of the wait that
+      // looks like nothing happening -- the viewer has done their part and
+      // the app is asking Google about every file they chose -- so a line of
+      // text that sits still reads as stuck.
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
       gate.complete();
       await tester.pumpAndSettle();
     });
