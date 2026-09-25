@@ -197,6 +197,7 @@ class MetaDetailsScreen extends StatefulWidget {
     required this.type,
     required this.id,
     this.videoId,
+    this.driveOpener = const ServerDriveFileOpener(),
   });
 
   final String type;
@@ -205,6 +206,11 @@ class MetaDetailsScreen extends StatefulWidget {
   /// The video to show streams for straight away (the continue-watching
   /// row knows it); without it the engine guesses, or the screen picks.
   final String? videoId;
+
+  /// How a linked Drive file listed among the sources is turned into
+  /// something playable. A parameter for the reason `LibraryScreen.driveOpener`
+  /// is one: a widget test must not be pointed at the deployed server.
+  final DriveFileOpener driveOpener;
 
   /// Above this width the streams sit in a side pane next to the details.
   static const double wideBreakpoint = 720;
@@ -247,6 +253,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// The sources list as last derived, kept while its inputs stand (see
   /// [_deriveStreams]).
   _StreamDerivation? _derived;
+
+  /// This device's Google Drive pairing, when the app put one above this
+  /// screen. Null leaves the linked files out of the sources list
+  /// entirely -- which is also what a paired account with nothing matched
+  /// to this title draws.
+  DriveAccount? _driveAccount;
 
   /// The app's preferences, for the sources list's layout. From the
   /// [PrefsScope] the app puts above every screen; a screen mounted
@@ -639,6 +651,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       _prefs?.removeListener(_onPrefsChanged);
       _prefs = prefs..addListener(_onPrefsChanged);
     }
+    // Read here for the reason the preferences above are: [DriveAccountScope]
+    // is an `InheritedNotifier` too, so a match landing while this screen is
+    // up runs this again and the Drive row appears without anything here
+    // subscribing to anything.
+    _driveAccount = DriveAccountScope.maybeOf(context);
     final downloads = DownloadsScope.maybeOf(context);
     if (_downloadsClient != downloads) {
       _downloads
@@ -1000,6 +1017,70 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// between the tap and the push: a second tap is dropped rather than
   /// pushing a second player, each of which would load the shared `player`
   /// field and start an engine of its own.
+  /// Plays one row of the sources list, whichever kind of source it is and
+  /// whichever of the two layouts drew it.
+  ///
+  /// One dispatcher and not a branch per sliver: the two layouts draw the
+  /// same row from the same reading, and a press on it has to *do* the same
+  /// thing in both as well. A row with no addon group behind it is a linked
+  /// Drive file and there is exactly one other kind of row, which is why
+  /// this is a null check rather than a switch.
+  Future<void> _playRow(MetaDetailsState state, _SourceRow row) {
+    final drive = row.drive;
+    if (drive != null) return _playDrive(state, drive);
+    return _play(state, row.group!, row.stream);
+  }
+
+  /// Opens a linked Drive file and pushes the player at it: the same route
+  /// the library's Remote list takes, by the same two calls, with this
+  /// title's meta and subtitles attached -- which is the whole of what
+  /// being on a details page adds.
+  ///
+  /// **No `streamRequest`.** That is the addon request a stream came from,
+  /// and there is no addon here; handing the engine an invented one would
+  /// be an addon that does not exist, written down where the engine reads
+  /// addons.
+  ///
+  /// What this knows about the credential is that it does not have it:
+  /// [openLinkedDriveFile] asks the account, which is the only thing that
+  /// holds one, and writes a dead pairing down on the way past -- so a
+  /// refusal here is a line to read and never a state to manage.
+  Future<void> _playDrive(MetaDetailsState state, LinkedDriveFile file) async {
+    final account = _driveAccount;
+    if (account == null || _playing) return;
+    _playing = true;
+    try {
+      final opened = await openLinkedDriveFile(
+        account: account,
+        file: file,
+        opener: widget.driveOpener,
+      );
+      if (!mounted) return;
+      switch (opened) {
+        case DriveFilePlayable():
+          final videoId = state.streamPath?.id ?? state.meta?.id ?? widget.id;
+          await Navigator.of(context).push<PlayerScreenResult>(
+            MaterialPageRoute<PlayerScreenResult>(
+              settings: const RouteSettings(name: PlayerScreen.routeName),
+              builder: (_) => PlayerScreen(
+                stream: driveStreamJson(file: file, playable: opened),
+                metaRequest: state.metaRequest,
+                subtitlesPath: ResourcePath(
+                  resource: 'subtitles',
+                  type: widget.type,
+                  id: videoId,
+                ),
+              ),
+            ),
+          );
+        case DriveFileRefused(:final reason):
+          _tell(driveFailureMessage(reason));
+      }
+    } finally {
+      _playing = false;
+    }
+  }
+
   Future<void> _play(
     MetaDetailsState state,
     StreamGroup group,
@@ -1054,6 +1135,15 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// Identifies one stream of one video while its pin is in flight. The
   /// state is reloaded while the call runs, so the tile the user tapped is
   /// a different widget by the time it comes back.
+  ///
+  /// **Only a torrent has one.** The info hash and the file index are the
+  /// whole of the key, so every stream of a video that is not a torrent
+  /// shares `$videoId|null|null` -- which is harmless only because
+  /// [_StreamDownloads.starter] refuses anything that is not a torrent and
+  /// so no such pin is ever in flight. A linked Drive file is not a torrent
+  /// and has no addon request for a pin to record either, so it is handed
+  /// no [_StreamDownloads] at all ([_downloadsFor]) rather than being let
+  /// near this key.
   static String _streamKey(String videoId, StreamInfo stream) =>
       '$videoId|${stream.infoHash}|${stream.fileIdx}';
 
@@ -1520,17 +1610,26 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final order = _prefs?.streamsOrder ?? StreamOrder.peersPerSize;
     final lastUsed = state.lastUsedStream;
     final groups = state.allStreamGroups;
+    final videoId = state.streamPath?.id ?? meta.id;
+    final driveFiles = _driveFilesFor(videoId);
     final noneYet =
         state.hasVideos && state.streamPath == null && groups.isEmpty;
     // Every addon that was asked has answered and none of them offered
     // anything the player can open. On a fresh profile that is the normal
     // answer rather than a fault, so it is explained rather than left as
     // an empty list under a heading.
+    //
+    // A linked Drive file makes this false, notice included: the notice
+    // reads "None of your sources had anything to play", and with a file
+    // of the viewer's own listed above it that sentence is not true --
+    // one of their sources has exactly this title, and the row to press
+    // is on the screen saying so.
     final foundNothing =
         state.streamPath != null &&
         groups.isNotEmpty &&
         !state.isLoadingStreams &&
         lastUsed == null &&
+        driveFiles.isEmpty &&
         state.playableStreams.isEmpty;
     // A tapped episode whose streams have not arrived: everything below is
     // still the previous selection's, so show none of it.
@@ -1569,6 +1668,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       state,
       isSectioned: isSectioned,
       order: order,
+      driveFiles: driveFiles,
     );
     final profile = derived.profile;
     final empties = derived.empties;
@@ -1584,7 +1684,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         ? null
         : sources.merged(lastUsed.$2);
     if (isTv && lastUsedStream != null) _takeTheRemoteToTheLastUsed();
-    final videoId = state.streamPath?.id ?? meta.id;
     final downloads = _downloadsClient == null
         ? null
         : _StreamDownloads(
@@ -1610,6 +1709,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         lastUsed: lastUsed,
         lastUsedStream: lastUsedStream,
         sourceCount: sources.length,
+        driveCount: derived.driveRows.length,
         downloads: downloads,
       );
     }
@@ -1656,20 +1756,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             expanded: openSections.contains(section.resolution),
             onExpand: () => _toggleSection(section.resolution),
             lastUsed: lastUsed?.$2,
-            onPlay: (row) => _play(state, row.group, row.stream),
+            onPlay: (row) => _playRow(state, row),
             downloads: downloads,
           )
       else ...[
         for (final entry in grouped)
           _StreamGroupSliver(
-            group: entry.$1,
-            name: _addonNameOf(_profileNow, entry.$1),
-            rows: entry.$2,
-            expanded: openAddons.contains(_addonStorageLabel(entry.$1)),
-            onExpand: () => _toggleAddon(entry.$1),
+            group: entry,
+            expanded: openAddons.contains(entry.storageLabel),
+            onExpand: () => _toggleGroup(entry.storageLabel),
             lastUsed: lastUsed?.$2,
-            onPlay: (stream) => _play(state, entry.$1, stream),
-            downloads: downloads?.forGroup(entry.$1),
+            onPlay: (row) => _playRow(state, row),
+            downloads: _downloadsFor(downloads, entry.group),
           ),
       ],
       if (empties.isNotEmpty)
@@ -1715,11 +1813,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     MetaDetailsState state, {
     required bool isSectioned,
     required StreamOrder order,
+    required List<LinkedDriveFile> driveFiles,
   }) {
     final ctx = _ctx?.value;
     final derived = _derived;
     if (derived != null &&
-        derived.isFor(state, ctx, isSectioned: isSectioned, order: order)) {
+        derived.isFor(
+          state,
+          ctx,
+          isSectioned: isSectioned,
+          order: order,
+          driveFiles: driveFiles,
+        )) {
       return derived;
     }
     MetaDetailsScreen.debugStreamDerivations++;
@@ -1762,6 +1867,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         for (final stream in group.streams)
           (addon: _addonNameOf(profile, group), stream: stream),
     ]);
+    // The viewer's own linked files for this video, as rows of the shape
+    // an addon's answer becomes.
+    //
+    // **Read after the accounting above is settled, and deliberately so.**
+    // [answered], [listed], [empties], [failures] and [sources] are all
+    // built out of [groups] alone, so nothing a Drive file does can change
+    // what this screen says about the addons: a title with a linked file
+    // still reports the same four addons having had nothing, is unaffected
+    // by an addon being dead, and does not count as one more thing an
+    // addon offered. It is not an addon result and is not accounted as
+    // one; it is one more source, which is a different sentence.
+    final driveRows = [for (final file in driveFiles) _driveRow(file)];
     // The sectioned layout: every listed addon's streams together, put in
     // the chosen order ([StreamOrder], the same one for every section) and
     // then split into a collapsible section per resolution. Each row names
@@ -1775,15 +1892,25 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // collapse is across the whole list so a source two addons described
     // differently cannot appear in two sections, and sectioning keeps the
     // order it is handed, so each section is already sorted.
+    //
+    // A linked Drive file is one more row in that run and nothing more: it
+    // lands in the section its own name reads a resolution out of (the
+    // unknown one, for a file named like a holiday video), and it takes
+    // its place in the chosen order along with everything else. It is not
+    // pinned to the top of its section -- the order is the chip the viewer
+    // pressed, and a row that ignored it would be the list disobeying the
+    // control that claims to set it.
     final sections = isSectioned
         ? sectionsByResolution(
             _collapse(
               sortedByStreamOrder(
                 [
+                  ...driveRows,
                   for (final group in listed)
                     for (final stream in group.streams)
                       (
                         group: group,
+                        drive: null,
                         stream: stream,
                         facts: StreamFacts.of(
                           stream,
@@ -1805,13 +1932,37 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // repeats collapsed. A source two addons both offered stays in both
     // groups -- the groups are the point of this layout -- and each row
     // says the other addon has it too.
+    //
+    // The linked Drive files are a group of their own, **first**. Their
+    // heading is [driveSourceLabel] -- `Google Drive`, the same three words
+    // the Remote list and the player's own description use -- because the
+    // headings in this layout are display names and that is the true
+    // display name of where these files are. It is not an addon and is not
+    // dressed as one: it has no manifest, no host, and nothing below ever
+    // resolves this heading against the profile. First, and not somewhere
+    // among the addons, because the run below is the *profile's* order --
+    // the order the viewer arranged their addons in -- and a thing that is
+    // not an addon has no place inside it.
     final grouped = isSectioned
-        ? const <(StreamGroup, List<_SourceRow>)>[]
+        ? const <_SourceGroup>[]
         : [
+            if (driveRows.isNotEmpty)
+              (
+                group: null,
+                name: driveSourceLabel,
+                storageLabel: driveSourceStorageLabel,
+                isFromMeta: false,
+                isLoading: false,
+                rows: driveRows,
+              ),
             for (final group in listed)
               (
-                group,
-                _collapse(
+                group: group,
+                name: _addonNameOf(profile, group),
+                storageLabel: _addonStorageLabel(group),
+                isFromMeta: group.isFromMeta,
+                isLoading: group.isLoading,
+                rows: _collapse(
                   [
                     // Read, the same as the sectioned layout reads. This
                     // list does not *rank* by what is in a stream -- it
@@ -1825,6 +1976,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
                     for (final stream in group.streams)
                       (
                         group: group,
+                        drive: null,
                         stream: stream,
                         facts: StreamFacts.of(
                           stream,
@@ -1843,6 +1995,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       ctx: ctx,
       isSectioned: isSectioned,
       order: order,
+      driveFiles: driveFiles,
+      driveRows: driveRows,
       profile: profile,
       empties: empties,
       failures: failures,
@@ -1871,7 +2025,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     required bool isSectioned,
     required StreamOrder order,
     required List<StreamSection<_SourceRow>> sections,
-    required List<(StreamGroup, List<_SourceRow>)> grouped,
+    required List<_SourceGroup> grouped,
     required ProfileState? profile,
     required List<StreamGroup> empties,
     required List<AddonFailure> failures,
@@ -1880,6 +2034,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     required (StreamGroup, StreamInfo)? lastUsed,
     required StreamInfo? lastUsedStream,
     required int sourceCount,
+
+    /// How many of the rows below are linked Drive files. Counted apart
+    /// from [sourceCount], which is what the addons between them offered;
+    /// see [_sourcesSummary].
+    required int driveCount,
     required _StreamDownloads? downloads,
   }) {
     TvSource source(_SourceRow row) => _tvSource(
@@ -1899,16 +2058,18 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             sources: [for (final row in section.rows) source(row)],
           )
       else
-        for (final (group, rows) in grouped)
+        for (final group in grouped)
           (
-            label: _addonNameOf(profile, group),
+            label: group.name,
             // A group with nothing in it is here only while its answer is
             // still coming: one that settled on no streams was taken out
             // of the list above. A pill has no room to say so in words,
             // so it says nothing rather than a zero that reads as "none".
-            count: rows.isEmpty && group.isLoading ? null : '${rows.length}',
+            count: group.rows.isEmpty && group.isLoading
+                ? null
+                : '${group.rows.length}',
             icon: null,
-            sources: [for (final row in rows) source(row)],
+            sources: [for (final row in group.rows) source(row)],
           ),
     ];
     // Every addon is still answering and there is not a pill to draw yet.
@@ -1991,9 +2152,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
             label: kSourcesLabel,
             // Nothing to count yet and addons still out: say what is
             // being waited for rather than "0 from 0 addons".
-            summary: sourceCount == 0 && state.isLoadingStreams
+            summary:
+                sourceCount == 0 && driveCount == 0 && state.isLoadingStreams
                 ? kLookingForStreams
-                : _sourcesSummary(state, sources: sourceCount),
+                : _sourcesSummary(
+                    state,
+                    sources: sourceCount,
+                    drive: driveCount,
+                  ),
             // The heading's own small spinner had nowhere left to go once
             // the heading became this line, and a line that says how many
             // sources there are while more are still arriving has to say
@@ -2174,12 +2340,24 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// grouped layout would otherwise say: one release two addons both
   /// offered is one thing a viewer can watch, and the pills below it say
   /// the same by both wearing it.
-  String _sourcesSummary(MetaDetailsState state, {required int sources}) {
+  String _sourcesSummary(
+    MetaDetailsState state, {
+    required int sources,
+    required int drive,
+  }) {
     final addons = state.allStreamGroups
         .where((group) => group.streams.isNotEmpty)
         .length;
     final from = addons == 1 ? '1 addon' : '$addons addons';
-    return '$sources from $from';
+    // The linked files are counted apart rather than added in. "4 from 2
+    // addons" over a row holding three addon sources and one Drive file is
+    // a lie in whichever direction it is told -- either the count is short
+    // of what the row holds, or two addons are credited with a file that
+    // came off the viewer's own Drive.
+    return [
+      '$sources from $from',
+      if (drive > 0) '$drive from $driveSourceLabel',
+    ].join(' · ');
   }
 
   /// What the addons did other than answer with streams, as a rung of its
@@ -2311,8 +2489,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     required _StreamDownloads? downloads,
   }) {
     final stream = row.stream;
-    final bound = downloads?.forGroup(row.group);
-    final addon = row.facts?.addonName ?? _addonNameOf(_profileNow, row.group);
+    final group = row.group;
+    final bound = _downloadsFor(downloads, group);
+    final addon =
+        row.facts?.addonName ??
+        (group == null ? driveSourceLabel : _addonNameOf(_profileNow, group));
     // The grouped layout ranks inside one addon's own answer and so reads
     // nothing out of the streams; the card wants the pills and the tags
     // either way, and reading them twice is cheaper than carrying a second
@@ -2342,9 +2523,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       highlighted: lastUsed != null && stream.isSameSource(lastUsed),
       download: bound?.entryOf(stream),
       downloading: bound?.isPending(stream) ?? false,
-      onSelect: stream.isPlayable
-          ? () => _play(state, row.group, stream)
-          : null,
+      onSelect: stream.isPlayable ? () => _playRow(state, row) : null,
       onHold: bound?.remoteAction(stream),
     );
   }
@@ -2475,8 +2654,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// otherwise closing a group here could silently drop an addon another
   /// title still remembers, one that had nothing for this title in the
   /// first place.
-  void _toggleAddon(StreamGroup group) {
-    final label = _addonStorageLabel(group);
+  void _toggleGroup(String label) {
     final full = _rememberedOpenAddons();
     _prefs?.setOpenStreamAddons({
       for (final addon in full)
@@ -2507,6 +2685,44 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   static bool _answeredEmpty(StreamGroup group) =>
       group.streams.isEmpty && !group.isLoading;
 
+  /// The linked Drive files that are [videoId] of this title, in the shape
+  /// [LinkedDriveFiles.matching] already answers the question in.
+  ///
+  /// One call for a film and for an episode alike: [LinkedDriveMatch.isFor]
+  /// reads a film's video id as its meta id, so passing the meta id for a
+  /// film and `tt0903747:1:1` for an episode is the same question asked
+  /// twice. A series with no episode chosen yet asks with the meta id and
+  /// matches nothing, which is right -- no episode is selected, so no
+  /// episode's file is offered.
+  ///
+  /// Empty with no pairing above this screen, and empty for a title nothing
+  /// is linked to. Both draw nothing at all.
+  List<LinkedDriveFile> _driveFilesFor(String videoId) =>
+      _driveAccount?.files.matching(widget.id, videoId: videoId) ??
+      const <LinkedDriveFile>[];
+
+  /// One linked file as a row of the sources list.
+  ///
+  /// The reading is [StreamFacts.of], the same parser every addon's stream
+  /// goes through, over the name Drive gave the file -- so a file whose
+  /// name happens to carry `1080p` is sectioned and badged like anything
+  /// else, and one named `holiday video 2.avi` draws no pills, which is
+  /// the honest rendering of a file nothing is known about.
+  ///
+  /// `addonName` is [driveSourceLabel]: that slot is "where this row came
+  /// from", which is the sectioned layout's provenance line and the grouped
+  /// layout's heading, and `Google Drive` is the true answer to it.
+  static _SourceRow _driveRow(LinkedDriveFile file) {
+    final stream = driveSourceStream(file);
+    return (
+      group: null,
+      drive: file,
+      stream: stream,
+      facts: StreamFacts.of(stream, addonName: driveSourceLabel),
+      alsoFrom: const <String>[],
+    );
+  }
+
   /// [rows] with every source listed once: the first row naming a source
   /// stays and the later ones go, which after a sort is the best-ranked
   /// instance. What survives carries the union of every listing's trackers
@@ -2527,6 +2743,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
         if (row.stream.sourceKey == null || seen.add(row.stream.sourceKey!))
           (
             group: row.group,
+            drive: row.drive,
             stream: sources.merged(row.stream),
             facts: row.facts,
             alsoFrom: sources.alsoFrom(addonOf(row), row.stream),
@@ -2534,6 +2751,30 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     ];
   }
 }
+
+/// What [AppPrefs.openStreamAddons] stores the Drive group under.
+///
+/// Every other label there is a transport URL ([_addonStorageLabel]), and
+/// this one deliberately is not: there is no addon to name, and inventing a
+/// URL-shaped one would put an addon that does not exist into the
+/// preferences file. Nothing resolves a label back to an addon -- the set is
+/// compared string to string and nothing else -- so a plain word is enough,
+/// and it cannot collide with a URL or with a `meta:` prefixed one.
+const String driveSourceStorageLabel = 'drive';
+
+/// The download affordances for one row, or none at all for a row no addon
+/// answered with.
+///
+/// A linked Drive file is already on the viewer's own Drive, is not a
+/// torrent the server could keep (so [_StreamDownloads.starter] would
+/// refuse it anyway), and has no addon request for a pin to record. Handing
+/// it a bound [_StreamDownloads] would still let it read the video's
+/// download as one to *replace* and let [_streamKey] key it on a null info
+/// hash, so it is handed none.
+_StreamDownloads? _downloadsFor(
+  _StreamDownloads? downloads,
+  StreamGroup? group,
+) => group == null ? null : downloads?.forGroup(group);
 
 /// An app bar control on a television, handing a press down to the ladder
 /// drawn below the bar.
@@ -3557,6 +3798,8 @@ final class _StreamDerivation {
     required this.ctx,
     required this.isSectioned,
     required this.order,
+    required this.driveFiles,
+    required this.driveRows,
     required this.profile,
     required this.empties,
     required this.failures,
@@ -3569,6 +3812,15 @@ final class _StreamDerivation {
   final Map<String, dynamic>? ctx;
   final bool isSectioned;
   final StreamOrder order;
+
+  /// The linked Drive files this was derived from, and the rows they became.
+  ///
+  /// The files are an input and are kept to be compared against the next
+  /// build's ([isFor]); the rows are the output, kept because the two
+  /// layouts and the television all want to know how many there are without
+  /// walking the sections again.
+  final List<LinkedDriveFile> driveFiles;
+  final List<_SourceRow> driveRows;
 
   /// The profile behind [ctx]; null until its first pull comes back.
   final ProfileState? profile;
@@ -3583,22 +3835,64 @@ final class _StreamDerivation {
   /// The rows of the sectioned layout, and of the grouped one; whichever
   /// [isSectioned] did not choose is empty.
   final List<StreamSection<_SourceRow>> sections;
-  final List<(StreamGroup, List<_SourceRow>)> grouped;
+  final List<_SourceGroup> grouped;
 
   /// Whether this was derived from exactly these inputs. The state and the
   /// `ctx` map are one object per pull ([SharedFieldScreen.ownState],
   /// [CoreFieldNotifier.value]), so identity says whether anything landed.
+  ///
+  /// The linked files are the exception and are compared by **value**:
+  /// [LinkedDriveFiles.matching] builds a fresh list on every call, so
+  /// identity would say "changed" on every build and this cache would never
+  /// hit again. [LinkedDriveFile] is a value, and a match landing on one is
+  /// exactly the change that has to be noticed.
   bool isFor(
     MetaDetailsState state,
     Map<String, dynamic>? ctx, {
     required bool isSectioned,
     required StreamOrder order,
+    required List<LinkedDriveFile> driveFiles,
   }) =>
       identical(this.state, state) &&
       identical(this.ctx, ctx) &&
       this.isSectioned == isSectioned &&
-      this.order == order;
+      this.order == order &&
+      listEquals(this.driveFiles, driveFiles);
 }
+
+/// One group of the **grouped by addon** layout: an addon's answer, or the
+/// linked Drive files, which are not an addon's answer and cannot be
+/// described as one.
+///
+/// A record and not the `(StreamGroup, rows)` pair it was, because
+/// everything the layout needs used to be read back off the [StreamGroup]
+/// -- its name, the label its open state is stored under, whether it is
+/// still answering -- and a group with no addon behind it can supply every
+/// one of those and has no [StreamGroup] to be asked for them.
+typedef _SourceGroup = ({
+  /// The addon group, or null for the linked Drive files. Null is what says
+  /// there is no addon request to record a pin against and no addon health
+  /// to be affected by; see [_downloadsFor].
+  StreamGroup? group,
+
+  /// The heading, as a viewer reads it: the addon's own name, or
+  /// [driveSourceLabel].
+  String name,
+
+  /// What [AppPrefs.openStreamAddons] remembers this group's open state
+  /// under -- the addon's transport URL, or [driveSourceStorageLabel].
+  String storageLabel,
+
+  /// Whether the heading says "From ..." -- streams a *meta* addon attached
+  /// to the video itself. Never true of the Drive group.
+  bool isFromMeta,
+
+  /// Whether the answer is still on its way, which is what a group with no
+  /// rows draws a spinner for. Never true of the Drive group: the files are
+  /// read off the preferences and are either there or not.
+  bool isLoading,
+  List<_SourceRow> rows,
+});
 
 /// One row of the sources list, in either layout: the stream as it will be
 /// played -- with the trackers every listing of it named -- the addon group
@@ -3606,8 +3900,15 @@ final class _StreamDerivation {
 /// the group has to travel with it), what could be read out of it (the flat
 /// list only; the grouped one has a heading and [StreamHints]) and the
 /// other addons that offered the same source.
+/// A row with no [group] is a linked Google Drive file and carries [drive]
+/// instead: the two are exactly the two kinds of row, which is why a null
+/// check on either settles it. [stream] is then the placeholder
+/// [driveSourceStream] builds -- enough to read, section and draw the row,
+/// and never something a player is handed; the press goes through
+/// [_MetaDetailsScreenState._playRow] to the real open.
 typedef _SourceRow = ({
-  StreamGroup group,
+  StreamGroup? group,
+  LinkedDriveFile? drive,
   StreamInfo stream,
   StreamFacts? facts,
   List<String> alsoFrom,
@@ -3763,7 +4064,7 @@ class _ResolutionSectionSliver extends StatelessWidget {
                 highlighted:
                     lastUsed != null && row.stream.isSameSource(lastUsed),
                 onTap: row.stream.isPlayable ? () => onPlay(row) : null,
-                downloads: downloads?.forGroup(row.group),
+                downloads: _downloadsFor(downloads, row.group),
               );
             },
           ),
@@ -3791,8 +4092,6 @@ class _ResolutionSectionSliver extends StatelessWidget {
 class _StreamGroupSliver extends StatelessWidget {
   const _StreamGroupSliver({
     required this.group,
-    required this.name,
-    required this.rows,
     required this.expanded,
     required this.onExpand,
     required this.lastUsed,
@@ -3800,25 +4099,19 @@ class _StreamGroupSliver extends StatelessWidget {
     this.downloads,
   });
 
-  final StreamGroup group;
-
-  /// What to call the addon: the name out of its own manifest, which is
-  /// what it calls itself and what the Addons screen calls it.
+  /// The group and everything drawing it needs: its heading, the label its
+  /// open state is stored under, and its rows.
   ///
-  /// The heading used to be `group.addonLabel`, which is the host of the
-  /// manifest URL -- so a list of "Torrentio", "Comet" and "MediaFusion"
-  /// read as "torrentio.strem.fun", "comet.elfhosted.com" and
-  /// "mediafusion.elfhosted.com": the hosting arrangement rather than the
-  /// addon, and three of them sharing a domain look like one thing.
-  /// Everything else on this screen already resolved the name and only
-  /// the heading did not ([_addonNameOf], which falls back to the host
-  /// for an addon the profile has never heard of).
-  final String name;
-
-  /// What to list under the heading: the group's streams with this addon's
-  /// own repeats collapsed and every one of them carrying the trackers the
-  /// other addons named for the same source.
-  final List<_SourceRow> rows;
+  /// The heading is a **name** -- the addon's own, out of its manifest, or
+  /// `Google Drive` for the viewer's own linked files. It used to be
+  /// `group.addonLabel`, which is the host of the manifest URL -- so a list
+  /// of "Torrentio", "Comet" and "MediaFusion" read as "torrentio.strem.fun",
+  /// "comet.elfhosted.com" and "mediafusion.elfhosted.com": the hosting
+  /// arrangement rather than the addon, and three of them sharing a domain
+  /// look like one thing. That is also why the Drive group is headed with
+  /// three words a viewer reads rather than with anything URL-shaped: there
+  /// is no addon here at all, and the heading has to say what is true.
+  final _SourceGroup group;
 
   /// Whether the rows are on screen. Remembered across titles and restarts
   /// in [AppPrefs.openStreamAddons]; with nothing remembered every group is
@@ -3828,15 +4121,17 @@ class _StreamGroupSliver extends StatelessWidget {
 
   /// The stream pinned as "Continue with last source", highlighted here too.
   final StreamInfo? lastUsed;
-  final ValueChanged<StreamInfo> onPlay;
+  final ValueChanged<_SourceRow> onPlay;
 
-  /// The downloads, when there is a client above this screen.
+  /// The downloads, when there is a client above this screen and this group
+  /// is an addon's ([_downloadsFor]).
   final _StreamDownloads? downloads;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = group.isFromMeta ? 'From $name' : name;
+    final rows = group.rows;
+    final label = group.isFromMeta ? 'From ${group.name}' : group.name;
     // Nothing yet, as opposed to nothing at all: a group that settled on
     // no streams is not listed here at all any more, so the label with a
     // spinner under it can only mean the answer is still coming.
@@ -3845,7 +4140,7 @@ class _StreamGroupSliver extends StatelessWidget {
       slivers: [
         SliverToBoxAdapter(
           child: ListTile(
-            key: streamAddonKey(_addonStorageLabel(group)),
+            key: streamAddonKey(group.storageLabel),
             leading: Icon(
               expanded ? Icons.expand_more : Icons.chevron_right,
               color: theme.colorScheme.primary,
@@ -3884,15 +4179,16 @@ class _StreamGroupSliver extends StatelessWidget {
           SliverList.builder(
             itemCount: rows.length,
             itemBuilder: (context, index) {
-              final stream = rows[index].stream;
+              final row = rows[index];
+              final stream = row.stream;
               final lastUsed = this.lastUsed;
               return _StreamTile(
                 stream: stream,
-                facts: rows[index].facts,
+                facts: row.facts,
                 headedByAddon: true,
-                alsoFrom: rows[index].alsoFrom,
+                alsoFrom: row.alsoFrom,
                 highlighted: lastUsed != null && stream.isSameSource(lastUsed),
-                onTap: stream.isPlayable ? () => onPlay(stream) : null,
+                onTap: stream.isPlayable ? () => onPlay(row) : null,
                 downloads: downloads,
               );
             },

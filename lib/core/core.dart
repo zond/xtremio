@@ -15,6 +15,7 @@ export 'drive_link.dart';
 export 'drive_listing.dart';
 export 'drive_pairing.dart';
 export 'drive_playback.dart';
+export 'drive_source.dart';
 export 'fields.dart';
 export 'focus_emphasis.dart';
 export 'image_cache_log.dart';
