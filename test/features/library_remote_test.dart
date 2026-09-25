@@ -376,8 +376,19 @@ void main() {
 
       await tapReload(tester);
 
-      expect(find.text(LinkedDriveFilesView.emptyTitle), findsOneWidget);
+      // The pill goes with the last file, and the filter goes with the pill:
+      // a grid still narrowed to linked files, with no control left on
+      // screen to widen it, is a page a viewer cannot get out of.
       expect(find.text('A Film 2019.mkv'), findsNothing);
+      expect(
+        find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
+        findsNothing,
+      );
+      expect(
+        find.text('Lanterns'),
+        findsOneWidget,
+        reason: 'the library is back, unfiltered',
+      );
     });
 
     testWidgets('a matched file is drawn as its title, a poster and its '
@@ -400,13 +411,16 @@ void main() {
       await tapRemote(tester);
 
       expect(find.text('Breaking Bad'), findsOneWidget);
-      expect(find.text('S1E1 · 2008'), findsOneWidget);
       expect(
         find.text('Breaking.Bad.S01E01.1080p.mkv'),
         findsNothing,
         reason: 'the point of matching is not to show the filename',
       );
       expect(find.byType(PosterImage), findsOneWidget);
+      // No episode under the poster: the card is the *show*, and a season
+      // of linked episodes is one card, so naming one of them would be a
+      // claim the card cannot make. The press still carries the episode.
+      expect(find.text('S1E1 · 2008'), findsNothing);
       expect(find.byIcon(LinkedDriveFilesView.unmatchedIcon), findsNothing);
     });
 
@@ -426,11 +440,20 @@ void main() {
       await tapRemote(tester);
 
       expect(find.text('ep6.avi'), findsOneWidget);
-      expect(find.byIcon(LinkedDriveFilesView.unmatchedIcon), findsOneWidget);
+      // A card of its own, drawn from the only thing known about it: its
+      // name. It has no title, so it has nothing to be filtered *by* -- and
+      // without a card of its own it would be linked, would have cost a
+      // grant, and would be reachable from nowhere in the app.
+      expect(find.byType(LibraryItemTile), findsOneWidget);
+      // No poster on the card, rather than a poster of something else: the
+      // tile draws its own fallback, which is what "nothing is known about
+      // this" should look like.
       expect(
-        find.byType(PosterImage),
-        findsNothing,
-        reason: 'no poster, rather than a poster of something else',
+        tester
+            .widget<LibraryItemTile>(find.byType(LibraryItemTile))
+            .item
+            .poster,
+        isNull,
       );
     });
 
@@ -511,8 +534,11 @@ void main() {
       expect(find.byType(LibraryItemTile), findsNWidgets(2));
 
       await tapRemote(tester);
-      expect(find.byType(LibraryItemTile), findsNothing);
+      // Narrowed to what is linked: the engine's own two titles have no
+      // linked file, so what is left is the one card the file itself is.
+      expect(find.text('Lanterns'), findsNothing);
       expect(find.text('ep6.avi'), findsOneWidget);
+      expect(find.byType(LibraryItemTile), findsOneWidget);
 
       await tapRemote(tester);
       expect(find.byType(LibraryItemTile), findsNWidgets(2));
@@ -779,7 +805,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Arrival.2016.mkv'), findsOneWidget);
-      expect(find.byIcon(LinkedDriveFilesView.unmatchedIcon), findsOneWidget);
+      // Still just the file, drawn as itself: a search that failed leaves a
+      // card with the raw name and no poster, which is the same picture as a
+      // file nothing could match.
+      expect(
+        tester
+            .widget<LibraryItemTile>(find.byType(LibraryItemTile))
+            .item
+            .poster,
+        isNull,
+      );
       expect(find.byType(SnackBar), findsNothing);
       expect(find.textContaining('could not'), findsNothing);
     });

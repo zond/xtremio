@@ -782,12 +782,16 @@ void main() {
 
     await tapRemote(tester);
 
+    // Remote narrows the same grid rather than replacing it: what is left
+    // is the titles that have a linked file, plus a card for the file
+    // nothing matched -- which has no title to be narrowed by and would
+    // otherwise be reachable from nowhere.
     expect(find.text('Arrival'), findsOneWidget);
     expect(find.text('ep6.avi'), findsOneWidget);
     expect(
-      find.byType(LibraryItemTile),
-      findsNothing,
-      reason: 'Remote replaces the body; it does not merge into it',
+      cards(tester),
+      isNot(contains('Lanterns')),
+      reason: 'the engine\'s own titles have no linked file',
     );
   });
 }

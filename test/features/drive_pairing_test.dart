@@ -209,6 +209,68 @@ void main() {
       expect(account.files.entries, hasLength(2));
     });
 
+    testWidgets('and goes back where it came from rather than saying it '
+        'happened', (tester) async {
+      // The viewer chose their files a second ago and the screen behind this
+      // one is the library those files are now in. A confirmation would be a
+      // page whose only content is "yes, that worked", with a Done to press
+      // before they can look at what they came for.
+      final observer = _Pops();
+      final account = await _account();
+      final service = FakeDrivePairingService(
+        answers: [
+          DrivePairingCollected(
+            refreshToken: fakeRefreshToken,
+            files: [
+              (
+                fileId: 'drive-file-1',
+                name: 'One.mkv',
+                mimeType: 'video/x-matroska',
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        DeviceScope(
+          profile: _phone,
+          child: ExternalLinkScope(
+            opener: FakeLinkOpener(),
+            child: DriveAccountScope(
+              account: account,
+              child: MaterialApp(
+                navigatorObservers: [observer],
+                home: Builder(
+                  builder: (context) => ElevatedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => DrivePairingScreen(
+                          service: service,
+                          now: () => pairingNow,
+                          picker: _FakeNativePicker(_picked),
+                        ),
+                      ),
+                    ),
+                    child: const Text('link'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('link'));
+      await tester.pumpAndSettle();
+
+      expect(account.files.entries, isNotEmpty, reason: 'it did pair');
+      expect(
+        find.byType(DrivePairingScreen),
+        findsNothing,
+        reason: 'and took itself off the screen once it had',
+      );
+      expect(observer.popped, 1);
+    });
+
     testWidgets('and a phone with no native picker opens the page, as every '
         'phone did before', (tester) async {
       final opener = FakeLinkOpener();
@@ -901,4 +963,16 @@ void main() {
       );
     });
   });
+}
+
+/// Counts the routes popped, so "it went back" is an assertion rather than
+/// an absence.
+class _Pops extends NavigatorObserver {
+  int popped = 0;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    popped++;
+    super.didPop(route, previousRoute);
+  }
 }

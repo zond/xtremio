@@ -185,6 +185,14 @@ class DrivePairingScreen extends StatefulWidget {
   static const String scanHeading = 'Scan this with your phone';
   static const String browserHeading = 'Finish this in your browser';
   static const String openingMessage = 'Asking for a code…';
+
+  /// What a device picking *here* says, which is neither of the above: no
+  /// code is being scanned and no browser is being finished in. The picker
+  /// is a window on top of this screen, so what is behind it is a sentence
+  /// about what happens when it closes.
+  static const String pickingHeading = 'Choose what to play';
+  static const String pickingMessage = 'Google Drive is open…';
+  static const String addingMessage = 'Adding what you chose…';
   static const String waitingMessage = 'Waiting for your phone…';
 
   /// Said out loud, because nothing in the Picker suggests it: a viewer who
@@ -254,6 +262,15 @@ class DrivePairingScreen extends StatefulWidget {
 
 /// Where the screen is, which is also which of the three outcomes it landed
 /// on once it stops moving.
+/// Whether this device is doing its own picking, and how far it has got.
+///
+/// Drawn instead of the scan/browser wording, which is about somebody
+/// else's screen and is a lie here. It is a *phase of waiting* rather than
+/// a [_Stage]: the session is open and being polled throughout, and every
+/// way the wait can end -- the window closing, the service refusing -- still
+/// ends it.
+enum _Picking { no, choosing, adding }
+
 enum _Stage {
   /// Asking the service for a session.
   opening,
@@ -302,6 +319,15 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// session when it answered, so a second hand-over is a second write of
   /// the same token at best and a lost one at worst.
   bool _collected = false;
+
+  /// See [_Picking]. Only ever anything but `no` on a device that picks
+  /// without a browser.
+  _Picking _picking = _Picking.no;
+
+  /// This device did the picking itself, so the pairing ends by going back
+  /// rather than by saying it happened. Latched, because by the time the
+  /// answer arrives [_picking] is over.
+  bool _pickedHere = false;
 
   /// Guards against two `POST /session` calls overlapping -- a press on
   /// "New code" while the first is still out.
@@ -437,8 +463,13 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// arguing with itself.
   Future<bool> _pickHere(DrivePairingSession session) async {
     if (!await widget.picker.available()) return false;
+    setState(() {
+      _picking = _Picking.choosing;
+      _pickedHere = true;
+    });
     final picked = await widget.picker.pick();
     if (!mounted) return true;
+    setState(() => _picking = _Picking.no);
     switch (picked) {
       case DriveNativePickUnavailable():
         return false;
@@ -454,6 +485,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         });
         return true;
       case DriveNativePicked(:final serverAuthCode, :final fileIds):
+        setState(() => _picking = _Picking.adding);
         final handover = await widget.service.handOverNativePick(
           sessionId: session.sessionId,
           serverAuthCode: serverAuthCode,
@@ -461,6 +493,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         );
         if (!mounted) return true;
         if (handover != DrivePairingHandover.taken) {
+          _picking = _Picking.no;
           setState(() {
             _stage = _Stage.refused;
             _refusal = DrivePairingScreen.handoverRefused;
@@ -561,6 +594,21 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
       files: collected.files,
     );
     if (!mounted) return;
+    // A device that did its own picking goes straight back to where the
+    // viewer pressed the button, because it is already there: they chose
+    // their files a second ago and the screen behind this one is the
+    // library those files are now in. A confirmation would be a page whose
+    // only content is "yes, the thing you just did happened", with a Done
+    // to press before they can look.
+    //
+    // Not when the store refused to keep the credential ([thisRunOnly]):
+    // that is news, it is about *later*, and it is the one thing this
+    // screen has to say that the library cannot.
+    final quietly = _pickedHere && outcome != DriveLinkOutcome.thisRunOnly;
+    if (quietly) {
+      Navigator.of(context).maybePop();
+      return;
+    }
     setState(() {
       _stage = _Stage.linked;
       _linked = collected.files;
@@ -662,7 +710,9 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         final session = _session!;
         return [
           Text(
-            isTv
+            _picking != _Picking.no
+                ? DrivePairingScreen.pickingHeading
+                : isTv
                 ? DrivePairingScreen.scanHeading
                 : DrivePairingScreen.browserHeading,
             textAlign: TextAlign.center,
@@ -672,12 +722,14 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
             PairingQrCode(link: session.link)
           else
             ..._openedSession(session, theme),
-          _Line(
-            _signedIn
-                ? DrivePairingScreen.signedInMessage
-                : DrivePairingScreen.waitingMessage,
-            theme: theme,
-          ),
+          _Line(switch (_picking) {
+            _Picking.choosing => DrivePairingScreen.pickingMessage,
+            _Picking.adding => DrivePairingScreen.addingMessage,
+            _Picking.no =>
+              _signedIn
+                  ? DrivePairingScreen.signedInMessage
+                  : DrivePairingScreen.waitingMessage,
+          }, theme: theme),
           _Line(DrivePairingScreen.windowMessage, theme: theme, quiet: true),
         ];
       case _Stage.linked:

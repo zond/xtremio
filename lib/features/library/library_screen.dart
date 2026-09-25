@@ -14,6 +14,7 @@ import '../downloads/downloads_screen.dart';
 import '../drive/drive_match.dart';
 import '../drive/linked_files.dart';
 import '../drive/remote_files.dart';
+import '../player/player_screen.dart';
 import '../similar/similar_resolver.dart';
 
 /// The library (`library`, a `LibraryWithFilters<NotRemovedFilter>`): every
@@ -282,6 +283,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ? null
           : DriveMatchRun(account: drive, search: widget.driveSearch);
     }
+    // The filter cannot outlive the pill that works it. A reload that finds
+    // every file gone -- the grant revoked, the files deleted -- takes the
+    // Remote pill with it, and a grid still narrowed to linked files with no
+    // control on screen to widen it again is a page a viewer cannot leave.
+    // The same rule [_onDownloadsChanged] keeps for the other local filter.
+    if (_remote && (drive?.files.entries.isEmpty ?? true)) {
+      _remote = false;
+    }
     _matchLinkedFiles();
   }
 
@@ -545,7 +554,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final files = DriveAccountScope.maybeOf(context)?.files;
     if (files == null) return const [];
     return files.unlistedMatches(
-      listed: {for (final item in state.items) item.id},
+      // What is *drawn*, not what the engine sent: under Remote the grid is
+      // already narrowed to titles that have a linked file, so a match whose
+      // title was filtered out of it is one this list has to put back.
+      listed: {for (final item in _shown(state)) item.id},
       type: state.selected!.type,
     );
   }
@@ -628,13 +640,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   state != null &&
                   !state.isLibraryEmpty)
                 const _SignInHint(),
+              // What the naming note used to sit above, kept where it was
+              // useful: a viewer looking at their linked files is the one
+              // who needs to know that renaming is how a file gets matched.
+              if (_remote) const _NamingNote(),
               Expanded(
-                child: _remote
-                    ? _tvGroup(
-                        context,
-                        LinkedDriveFilesView(opener: widget.driveOpener),
-                      )
-                    : state == null || !state.isLoaded
+                child: state == null || !state.isLoaded
                     ? const Center(child: CircularProgressIndicator())
                     // Both "nothing here" messages are about an empty
                     // *body*, and the body is no longer the engine's
@@ -645,10 +656,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     // one merge away is the worst answer on this screen.
                     // The engine still decides *which* message, because it
                     // is the engine's filter either one is about.
-                    : _shown(state).isNotEmpty || appended.isNotEmpty
+                    : _shown(state).isNotEmpty ||
+                          appended.isNotEmpty ||
+                          _unmatched().isNotEmpty
                     ? _tvGroup(
                         context,
-                        _buildGrid(state, _shown(state), appended),
+                        _buildGrid(
+                          state,
+                          _shown(state),
+                          appended,
+                          _unmatched(),
+                        ),
                       )
                     : state.isFilteredEmpty
                     ? _EmptyFilter(type: state.selected!.type!)
@@ -674,17 +692,73 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// a pass over what is in memory and nothing more. There is no way to ask
   /// the engine for it: downloads are this device's and the engine has
   /// never heard of them.
-  List<LibraryItemView> _shown(LibraryState state) => _downloadedOnly
-      ? [
-          for (final item in state.items)
-            if (_isDownloaded(item.id)) item,
-        ]
-      : state.items;
+  List<LibraryItemView> _shown(LibraryState state) {
+    if (_downloadedOnly) {
+      return [
+        for (final item in state.items)
+          if (_isDownloaded(item.id)) item,
+      ];
+    }
+    if (_remote) {
+      final files = _drive?.files;
+      if (files == null) return const [];
+      return [
+        for (final item in state.items)
+          if (files.matching(item.id).isNotEmpty) item,
+      ];
+    }
+    return state.items;
+  }
+
+  /// Plays a linked file nothing matched, and says so in one line when it
+  /// will not play. The same two calls the Remote list has always made.
+  Future<void> _playUnmatched(LinkedDriveFile file) async {
+    final account = _drive;
+    if (account == null) return;
+    final opened = await openLinkedDriveFile(
+      account: account,
+      file: file,
+      opener: widget.driveOpener,
+    );
+    if (!mounted) return;
+    switch (opened) {
+      case DriveFilePlayable():
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            settings: const RouteSettings(name: PlayerScreen.routeName),
+            builder: (_) => PlayerScreen(
+              stream: driveStreamJson(file: file, playable: opened),
+            ),
+          ),
+        );
+      case DriveFileRefused(:final reason):
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(SnackBar(content: Text(driveFailureMessage(reason))));
+    }
+  }
+
+  /// The linked files nothing matched, which have no title to filter by and
+  /// so have no card of their own anywhere else.
+  ///
+  /// Only under Remote. They are drawn as themselves -- the raw name, no
+  /// poster -- because that is all that is known about them, and pressing
+  /// one plays it: there is no details page to send anybody to. Without
+  /// this a file whose name Cinemeta cannot read would be linked, would
+  /// have cost a grant, and would be reachable from nowhere in the app.
+  List<LinkedDriveFile> _unmatched() {
+    if (!_remote) return const [];
+    return [
+      for (final file in _drive?.files.entries ?? const <LinkedDriveFile>[])
+        if (file.match == null) file,
+    ];
+  }
 
   Widget _buildGrid(
     LibraryState state,
     List<LibraryItemView> items,
     List<LinkedDriveMatch> appended,
+    List<LinkedDriveFile> unmatched,
   ) {
     return NotificationListener<ScrollNotification>(
       onNotification: (n) => _onScroll(n, state),
@@ -696,8 +770,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
         ),
-        itemCount: items.length + appended.length,
+        itemCount: items.length + appended.length + unmatched.length,
         itemBuilder: (context, index) {
+          if (index >= items.length + appended.length) {
+            final file = unmatched[index - items.length - appended.length];
+            return LibraryItemTile(
+              item: _cardForFile(file),
+              // Straight into the film: there is no details page for a file
+              // nothing identified, and inventing one would be a page about
+              // a title nobody knows.
+              onTap: () => unawaited(_playUnmatched(file)),
+              memoryId: 'linked-file-${file.fileId}',
+            );
+          }
           if (index >= items.length) {
             final match = appended[index - items.length];
             return LibraryItemTile(
@@ -735,6 +820,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// of it are one card, so naming one of them under the poster would be a
   /// claim about the card that the card cannot make. The press still opens
   /// the episode, because that is what the file is.
+  /// A linked file nothing matched, as a card. Its own name and no poster,
+  /// because that is the whole of what is known about it.
+  static LibraryItemView _cardForFile(LinkedDriveFile file) => LibraryItemView({
+    // Not a meta id and deliberately not shaped like one: nothing looks this
+    // up, and a card keyed on a Drive id must never collide with a title's.
+    '_id': 'drive-file:${file.fileId}',
+    'type': 'other',
+    'name': file.name.isEmpty ? file.fileId : file.name,
+  });
+
   static LibraryItemView _cardFor(LinkedDriveMatch match) => LibraryItemView({
     '_id': match.cinemetaId,
     'type': match.type,
@@ -1096,6 +1191,42 @@ class _EmptyLibrary extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// How a linked file gets a title, said where the linked files are.
+///
+/// Worth its place because the answer is not guessable: nothing about a row
+/// suggests that the *name in Drive* is what was looked up, or that renaming
+/// it and pressing Reload is how to try again. The examples are shown rather
+/// than described -- somebody skimming copies one and does not read the
+/// sentence -- and `drive_match_test.dart` walks both, so a parser change
+/// that stopped either parsing fails there rather than leaving this telling
+/// a lie.
+class _NamingNote extends StatelessWidget {
+  const _NamingNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final quiet = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(LinkedDriveFilesView.matchedByNameNote, style: quiet),
+          const SizedBox(height: 2),
+          for (final example in LinkedDriveFilesView.nameExamples)
+            Text(
+              example,
+              style: quiet?.copyWith(fontFamily: 'monospace'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
       ),
     );
   }
