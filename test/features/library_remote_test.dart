@@ -33,6 +33,12 @@ import '../support/fixtures.dart';
 /// exactly where it was, and it survives the field arriving again.
 void main() {
   /// A linked Drive file, matched or not.
+  /// One linked file, which is now what makes the Remote pill exist: a
+  /// control with nothing to act on is not drawn.
+  const linkedOne = [
+    (id: 'drive-file-1', name: 'A Film 2019.mkv', match: null),
+  ];
+
   Future<DriveAccount> account({
     List<({String id, String name, LinkedDriveMatch? match})> files = const [],
   }) async {
@@ -131,6 +137,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> tapReload(WidgetTester tester) async {
+    await tester.tap(
+      find.widgetWithText(ActionChip, LibraryScreen.reloadLabel),
+    );
+    await tester.pumpAndSettle();
+  }
+
   bool remoteIsOn(WidgetTester tester) => tester
       .widget<FilterChip>(
         find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
@@ -155,7 +168,9 @@ void main() {
       tester,
     ) async {
       useNarrowScreen(tester);
-      await tester.pumpWidget(harness(fakeCore()));
+      await tester.pumpWidget(
+        harness(fakeCore(), drive: await account(files: linkedOne)),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -169,51 +184,73 @@ void main() {
       );
     });
 
-    testWidgets(
-      'is drawn with nothing linked and with no engine state at all',
-      (tester) async {
-        // The other half of not vanishing. The row used to appear only once a
-        // non-empty library had loaded, which is fine for controls that are the
-        // engine's and is exactly how a local one disappears -- and a viewer
-        // with an empty library is the most likely to be looking for the file
-        // they just linked.
-        useNarrowScreen(tester);
-        await tester.pumpWidget(
-          harness(
-            FakeCoreClient(
-              state: {
-                CoreField.library: {
-                  'selected': null,
-                  'selectable': {'types': [], 'sorts': [], 'next_page': null},
-                  'catalog': <Object>[],
-                },
-                CoreField.ctx: loadCtxLoggedOutFixture(),
+    testWidgets('is drawn with a file linked and no engine state at all', (
+      tester,
+    ) async {
+      // The other half of not vanishing. The row used to appear only once a
+      // non-empty library had loaded, which is fine for controls that are the
+      // engine's and is exactly how a local one disappears -- and a viewer
+      // with an empty library is the most likely to be looking for the file
+      // they just linked. What the pill now waits for is a linked *file*,
+      // not a loaded library: the engine having nothing to say is not a
+      // reason to hide a control that is not the engine's.
+      useNarrowScreen(tester);
+      await tester.pumpWidget(
+        harness(
+          FakeCoreClient(
+            state: {
+              CoreField.library: {
+                'selected': null,
+                'selectable': {'types': [], 'sorts': [], 'next_page': null},
+                'catalog': <Object>[],
               },
-            ),
+              CoreField.ctx: loadCtxLoggedOutFixture(),
+            },
           ),
-        );
-        // `pump` and not `pumpAndSettle`: an unloaded library draws a
-        // spinner, which never settles -- and the row above it is the point.
-        await tester.pump();
+          drive: await account(files: linkedOne),
+        ),
+      );
+      // `pump` and not `pumpAndSettle`: an unloaded library draws a
+      // spinner, which never settles -- and the row above it is the point.
+      await tester.pump();
 
-        expect(
-          find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
-          findsOneWidget,
-        );
-        expect(
-          find.byType(ChoiceChip),
-          findsNothing,
-          reason: 'nothing to filter',
-        );
-      },
-    );
+      expect(
+        find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
+        findsOneWidget,
+      );
+      expect(
+        find.byType(ChoiceChip),
+        findsNothing,
+        reason: 'nothing to filter',
+      );
+    });
+
+    testWidgets('and is not drawn at all with nothing linked', (tester) async {
+      // A control with nothing to act on is not drawn. Pressing a Remote
+      // pill on a device that has linked nothing shows an empty list and
+      // takes a second press to escape -- so the cloud button in the bar,
+      // which is always there, is the whole way in until there is something
+      // to come back to.
+      useNarrowScreen(tester);
+      await tester.pumpWidget(harness(fakeCore(), drive: await account()));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
+        findsNothing,
+      );
+      // And the engine's own controls are untouched by its absence.
+      expect(find.byType(ChoiceChip), findsWidgets);
+    });
 
     testWidgets('selecting it dispatches nothing to the engine', (
       tester,
     ) async {
       useNarrowScreen(tester);
       final core = fakeCore();
-      await tester.pumpWidget(harness(core));
+      await tester.pumpWidget(
+        harness(core, drive: await account(files: linkedOne)),
+      );
       await tester.pumpAndSettle();
       final before = core.dispatched.length;
 
@@ -231,7 +268,9 @@ void main() {
       tester,
     ) async {
       useNarrowScreen(tester);
-      await tester.pumpWidget(harness(fakeCore()));
+      await tester.pumpWidget(
+        harness(fakeCore(), drive: await account(files: linkedOne)),
+      );
       await tester.pumpAndSettle();
       expect(selectedTypes(tester), {LibraryScreen.allTypesLabel});
 
@@ -253,7 +292,9 @@ void main() {
       useNarrowScreen(tester);
       final core = fakeCore();
       final fixture = loadLibraryFixture();
-      await tester.pumpWidget(harness(core));
+      await tester.pumpWidget(
+        harness(core, drive: await account(files: linkedOne)),
+      );
       await tester.pumpAndSettle();
       await tapRemote(tester);
 
@@ -277,7 +318,9 @@ void main() {
       // touch the engine's either.
       useNarrowScreen(tester);
       final core = fakeCore();
-      await tester.pumpWidget(harness(core));
+      await tester.pumpWidget(
+        harness(core, drive: await account(files: linkedOne)),
+      );
       await tester.pumpAndSettle();
       await tapRemote(tester);
       expect(remoteIsOn(tester), isTrue);
@@ -311,15 +354,30 @@ void main() {
   });
 
   group('what Remote shows', () {
-    testWidgets('nothing linked is a line saying so, not an empty grid', (
-      tester,
-    ) async {
-      await tester.pumpWidget(harness(fakeCore(), drive: await account()));
+    testWidgets('a list emptied under the viewer is a line saying so, not an '
+        'empty grid', (tester) async {
+      // The pill only exists while something is linked, so the empty list is
+      // reached the one way it still can be: the files go away *while* it is
+      // open. A reload that finds the grant revoked or the files deleted
+      // does exactly that, and leaving the viewer looking at an empty grid
+      // with no word about it is the case this line is for.
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(files: linkedOne),
+          lister: FakeDriveFileLister(
+            answers: [FakeDriveFileLister.listing(const {})],
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       await tapRemote(tester);
+      expect(find.text('A Film 2019.mkv'), findsOneWidget);
+
+      await tapReload(tester);
 
       expect(find.text(LinkedDriveFilesView.emptyTitle), findsOneWidget);
-      expect(find.byType(LibraryItemTile), findsNothing);
+      expect(find.text('A Film 2019.mkv'), findsNothing);
     });
 
     testWidgets('a matched file is drawn as its title, a poster and its '
@@ -461,15 +519,19 @@ void main() {
       expect(find.text('ep6.avi'), findsNothing);
     });
 
-    testWidgets('with no Drive scope above it at all, it is the same picture '
-        'as nothing linked', (tester) async {
+    testWidgets('with no Drive scope above it at all there is no pill, which '
+        'is the same picture as nothing linked', (tester) async {
       // A build of the app that cannot link anything is not a failure to
-      // report; it is a device with no linked files.
+      // report; it is a device with no linked files, and a device with no
+      // linked files has no Remote pill.
       await tester.pumpWidget(harness(fakeCore()));
       await tester.pumpAndSettle();
-      await tapRemote(tester);
 
-      expect(find.text(LinkedDriveFilesView.emptyTitle), findsOneWidget);
+      expect(
+        find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
+        findsNothing,
+      );
+      expect(find.byType(LibraryItemTile), findsWidgets, reason: 'the engine');
     });
   });
 
@@ -724,13 +786,6 @@ void main() {
   });
 
   group('Reload', () {
-    Future<void> tapReload(WidgetTester tester) async {
-      await tester.tap(
-        find.widgetWithText(ActionChip, LibraryScreen.reloadLabel),
-      );
-      await tester.pumpAndSettle();
-    }
-
     Finder reloadChip() =>
         find.widgetWithText(ActionChip, LibraryScreen.reloadLabel);
 
@@ -1061,9 +1116,32 @@ void main() {
       expect(find.byType(SnackBar), findsOneWidget);
     });
 
-    testWidgets('with no Drive scope above it at all, it is one line and not '
-        'a crash', (tester) async {
+    testWidgets('with no Drive scope above it at all there is nothing to '
+        'press: no pill, and so no Reload beside it', (tester) async {
       await tester.pumpWidget(harness(fakeCore()));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
+        findsNothing,
+      );
+      expect(
+        find.widgetWithText(ActionChip, LibraryScreen.reloadLabel),
+        findsNothing,
+      );
+    }, skip: false);
+
+    testWidgets('and a linked device whose grant is gone says so in one line, '
+        'not a crash', (tester) async {
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(files: linkedOne),
+          lister: FakeDriveFileLister(
+            answers: [const DriveListingFailed(DriveListingFailure.notLinked)],
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       await tapRemote(tester);
 
@@ -1084,13 +1162,26 @@ void main() {
     tester,
   ) async {
     // The two halves of the same job on one screen: the button links a file
-    // and Remote is where it turns up.
+    // and Remote is where it turns up. The button is in the bar whether or
+    // not anything is linked -- it is the only way to link a first file, so
+    // it cannot be the thing that waits for one.
     await tester.pumpWidget(harness(fakeCore(), drive: await account()));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip(RemoteFilesButton.label), findsOneWidget);
+    expect(
+      find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
+      findsNothing,
+      reason: 'nothing linked yet',
+    );
+
+    await tester.pumpWidget(
+      harness(fakeCore(), drive: await account(files: linkedOne)),
+    );
     await tester.pumpAndSettle();
     await tapRemote(tester);
 
     expect(find.byTooltip(RemoteFilesButton.label), findsOneWidget);
-    expect(find.text(LinkedDriveFilesView.emptyTitle), findsOneWidget);
+    expect(find.text('A Film 2019.mkv'), findsOneWidget);
   });
 }
 

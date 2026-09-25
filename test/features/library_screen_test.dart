@@ -742,18 +742,83 @@ void main() {
     });
   });
 
-  testWidgets('the Downloaded chip opens what is kept on the device', (
+  /// The downloads fixture, pointed at a title the library fixture holds, so
+  /// that "downloaded" and "in the library" are true of the same card.
+  DownloadsRegistry downloadOf(String metaId) {
+    final json = loadDownloadsFixture();
+    final items = Map<String, dynamic>.from(json['items'] as Map);
+    final key = items.keys.first;
+    final entry = Map<String, dynamic>.from(items[key] as Map)
+      ..['metaId'] = metaId;
+    return DownloadsRegistry.fromJson({
+      'version': json['version'],
+      'items': {key: entry},
+    });
+  }
+
+  testWidgets('Downloaded filters the library down to what is on disk', (
     tester,
   ) async {
+    // The pill's whole job, and the half that could be deleted without any
+    // other test noticing: the controls would still appear, still toggle,
+    // still hide themselves, and show the same grid either way.
+    useNarrowScreen(tester);
+    final downloads = FakeDownloadsClient(registry: downloadOf('tt26545992'));
+    addTearDown(downloads.dispose);
+    await tester.pumpWidget(harness(fakeCore(), downloads: downloads));
+    await tester.pumpAndSettle();
+    expect(find.text('Lanterns'), findsOneWidget);
+    expect(find.text('The Whisper Man'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Downloaded'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lanterns'), findsOneWidget, reason: 'it is downloaded');
+    expect(
+      find.text('The Whisper Man'),
+      findsNothing,
+      reason: 'it is in the library but not on this device',
+    );
+
+    // And off again puts the rest back: nothing was dispatched to make the
+    // list shorter, so nothing has to be dispatched to make it whole.
+    await tester.tap(find.widgetWithText(FilterChip, 'Downloaded'));
+    await tester.pumpAndSettle();
+    expect(find.text('The Whisper Man'), findsOneWidget);
+  });
+
+  testWidgets('and neither the pill nor the way to the downloads screen is '
+      'drawn with nothing on disk', (tester) async {
+    useNarrowScreen(tester);
+    final downloads = FakeDownloadsClient();
+    addTearDown(downloads.dispose);
+    await tester.pumpWidget(harness(fakeCore(), downloads: downloads));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilterChip, 'Downloaded'), findsNothing);
+    expect(find.byTooltip(LibraryScreen.downloadsLabel), findsNothing);
+    // The engine's own controls are untouched by their absence.
+    expect(find.byType(ChoiceChip), findsWidgets);
+  });
+
+  testWidgets('the app bar is what opens what is kept on the device', (
+    tester,
+  ) async {
+    // The chip used to be the way here, which made one control mean both
+    // "show me these" and "let me delete these". Browsing is the pill;
+    // housekeeping is a button in the bar, which is a place you go
+    // deliberately.
     useNarrowScreen(tester);
     final core = fakeCore();
-    final downloads = FakeDownloadsClient();
+    final downloads = FakeDownloadsClient(
+      registry: DownloadsRegistry.fromJson(loadDownloadsFixture()),
+    );
     addTearDown(downloads.dispose);
     await tester.pumpWidget(harness(core, downloads: downloads));
     await tester.pumpAndSettle();
     final before = core.dispatched.length;
 
-    await tester.tap(find.widgetWithText(ActionChip, 'Downloaded'));
+    await tester.tap(find.byTooltip(LibraryScreen.downloadsLabel));
     await tester.pumpAndSettle();
 
     expect(find.byType(DownloadsScreen), findsOneWidget);

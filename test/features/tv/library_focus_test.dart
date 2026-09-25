@@ -11,6 +11,7 @@ import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/widgets/remote_press.dart';
 
 import '../../support/fake_core_client.dart';
+import '../../support/fake_downloads_client.dart';
 import '../../support/fake_drive_file_lister.dart';
 import '../../support/fake_drive_file_opener.dart';
 import '../../support/fake_secret_store.dart';
@@ -31,17 +32,63 @@ FakeCoreClient fakeCore() => FakeCoreClient(
 /// [theme] is for the one test that cares what the app's own theme draws
 /// on a control; the rest get Material's default, which has no focus floor
 /// and no ten-foot density in it.
+/// The library, with a device that has something to show every control it
+/// draws.
+///
+/// **Downloads are seeded by default**, because the Downloaded pill and the
+/// button that cleans downloads up are only drawn when there is something on
+/// disk -- a control with nothing to act on is not drawn, and a walk over a
+/// row is a walk over the controls that are really there.
 Widget harness(
   FakeCoreClient core, {
   Widget home = const LibraryScreen(),
   ThemeData? theme,
-}) => DeviceScope(
-  profile: tv,
-  child: CoreScope(
-    client: core,
-    child: MaterialApp(theme: theme, home: home),
-  ),
-);
+  DownloadsClient? downloads,
+  DriveAccount? drive,
+}) {
+  final client = downloads ?? FakeDownloadsClient(registry: someDownloads());
+  final app = DeviceScope(
+    profile: tv,
+    child: CoreScope(
+      client: core,
+      child: DownloadsScope(
+        client: client,
+        child: MaterialApp(theme: theme, home: home),
+      ),
+    ),
+  );
+  return drive == null ? app : DriveAccountScope(account: drive, child: app);
+}
+
+/// A registry with something in it: what makes the two download controls
+/// exist at all.
+DownloadsRegistry someDownloads() =>
+    DownloadsRegistry.fromJson(loadDownloadsFixture());
+
+/// A device with one linked file: what makes the Remote pill exist, the way
+/// [someDownloads] makes the download controls exist.
+Future<DriveAccount> driveWithOneFile(WidgetTester tester) async {
+  final prefs = AppPrefs.inMemory();
+  await prefs.load();
+  final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
+  await drive.load();
+  addTearDown(() {
+    drive.dispose();
+    prefs.dispose();
+  });
+  await drive.link(
+    refreshToken: 'a-refresh-token',
+    files: [
+      LinkedDriveFile(
+        fileId: 'drive-file-1',
+        name: 'ep6.avi',
+        mimeType: 'video/x-matroska',
+        linkedAt: DateTime.utc(2026, 9, 20),
+      ),
+    ],
+  );
+  return drive;
+}
 
 /// Every `Ctx` action dispatched so far, by its `action` name.
 List<String> ctxActions(FakeCoreClient core) => [
@@ -82,15 +129,22 @@ void main() {
     // on the way in rather than a change of behaviour further down: every
     // assertion below the first two is what it was.
     useScreen(tester, tvSize);
-    await tester.pumpWidget(harness(fakeCore()));
+    await tester.pumpWidget(
+      harness(fakeCore(), drive: await driveWithOneFile(tester)),
+    );
     await tester.pumpAndSettle();
     // Nothing takes focus by itself: the tab keeps focus on the rail until
     // the user steps in.
     expect(focusedLabel(tester), isNull);
 
-    // Down from nowhere lands on the topmost control, which is the link
-    // button in the bar.
+    // Down from nowhere lands on the topmost control. The bar holds two now
+    // -- the way to the downloads and the way to a remote service -- and
+    // the leftmost of them is what "down from nowhere" reaches.
     await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedTooltip(), RemoteFilesButton.label);
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedTooltip(), LibraryScreen.downloadsLabel);
+    await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTooltip(), RemoteFilesButton.label);
 
     // Down again is the filter row. The bar's button is at the right, so
@@ -148,7 +202,14 @@ void main() {
     );
     expect(focusedLabel(tester), 'Downloaded');
     await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusedTooltip(), RemoteFilesButton.label);
+    // Back into the bar, on whichever of its two buttons is nearest above
+    // the chip that was left. Which one is geometry's answer and not this
+    // test's business -- what it is about is that the row is not stepped
+    // over in either direction.
+    expect(
+      focusedTooltip(),
+      anyOf(RemoteFilesButton.label, LibraryScreen.downloadsLabel),
+    );
   });
 
   testWidgets('the Downloaded chip is marked like every other chip', (
@@ -185,6 +246,7 @@ void main() {
     await tester.pumpWidget(
       harness(
         fakeCore(),
+        drive: await driveWithOneFile(tester),
         theme: XtremioApp.themeFor(isTv: true, emphasis: FocusEmphasis.bold),
       ),
     );

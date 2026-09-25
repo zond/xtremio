@@ -9,6 +9,7 @@ import '../../widgets/filter_controls.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
 import '../details/meta_details_screen.dart';
+import '../downloads/downloads_controller.dart';
 import '../downloads/downloads_screen.dart';
 import '../drive/drive_match.dart';
 import '../drive/linked_files.dart';
@@ -129,6 +130,12 @@ class LibraryScreen extends StatefulWidget {
   /// sixty times a second.
   static const String reloadLabel = 'Reload';
 
+  /// What the app bar's way to the downloads screen is called. Not
+  /// "Downloaded": that is the pill beside the types, and it says what to
+  /// *look at*. This one is where downloads are removed and disk is got
+  /// back, which is a different thing to go and do.
+  static const String downloadsLabel = 'Manage downloads';
+
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
@@ -188,6 +195,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// merge *adds to* it, without touching this row at all.
   bool _remote = false;
 
+  /// Whether the body is filtered down to what is on this device's disk.
+  ///
+  /// A filter over the engine's own items and not a body of its own, which
+  /// is what tells it from [_remote]: a downloaded title *is* a library
+  /// title, so it belongs in the engine's list with the rest, while a
+  /// linked Drive file is not one and replaces the list. Nothing is
+  /// dispatched for either -- the engine knows nothing about downloads.
+  bool _downloadedOnly = false;
+
   /// A reload is in flight, so a second press is dropped. Nothing is drawn
   /// from it: a chip that turned into a spinner under a viewer's thumb is a
   /// chip a remote loses its focus on, and the answer to "did that do
@@ -234,6 +250,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _nextPageRequestedAt = -1;
       client.dispatch(CoreActions.loadLibrary(LibraryScreen.initialRequest));
     }
+    // What is on disk, for the Downloaded pill and the button that cleans
+    // it up. `maybeOf`, not `of`: a screen that can be drawn without a
+    // downloads client -- a widget test, a build with the service off --
+    // answers "nothing is downloaded", which is true and draws neither
+    // control, rather than throwing on the way to a library.
+    final downloadsClient = DownloadsScope.maybeOf(context);
+    if (_downloadsClient != downloadsClient) {
+      _downloads
+        ?..removeListener(_onDownloadsChanged)
+        ..dispose();
+      _downloadsClient = downloadsClient;
+      _downloads = downloadsClient == null
+          ? null
+          : (DownloadsController(downloadsClient)
+              ..addListener(_onDownloadsChanged));
+    }
     // The Drive account is depended on *here* and not only inside the build
     // that merges its matches, and that is what makes this method the
     // driver. [DriveAccountScope] is an [InheritedNotifier], so the
@@ -271,11 +303,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   void dispose() {
+    _downloads
+      ?..removeListener(_onDownloadsChanged)
+      ..dispose();
     _client?.dispatch(CoreActions.unload(CoreField.library));
     _events?.cancel();
     _library?.dispose();
     _ctx?.dispose();
     super.dispose();
+  }
+
+  /// A download finished, started or was removed. Both controls this
+  /// screen draws about downloads are derived from that list, and one of
+  /// them can appear or vanish on it, so the row is rebuilt.
+  void _onDownloadsChanged() {
+    if (!mounted) return;
+    // The filter cannot outlive the thing it filters: with the last
+    // download gone the pill goes with it, and a body still filtered by it
+    // would be empty with no control on screen to explain why.
+    setState(() {
+      if (!_hasDownloads) _downloadedOnly = false;
+    });
   }
 
   void _onEvent(CoreEvent event) {
@@ -306,7 +354,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _showRemote({required bool remote}) {
-    if (_remote != remote) setState(() => _remote = remote);
+    if (_remote == remote) return;
+    // The two local filters are alternatives, not layers: Remote replaces
+    // the body outright, so "downloaded, among the remote files" would be a
+    // filter over a list it does not apply to.
+    setState(() {
+      _remote = remote;
+      if (remote) _downloadedOnly = false;
+    });
+  }
+
+  void _showDownloaded({required bool downloaded}) {
+    if (_downloadedOnly == downloaded) return;
+    setState(() {
+      _downloadedOnly = downloaded;
+      if (downloaded) _remote = false;
+    });
   }
 
   /// Asks Drive what the linked files are called now, and says what came of
@@ -380,6 +443,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void _openDownloads() {
     Navigator.of(context).push(DownloadsScreen.route());
   }
+
+  /// What is on this device's disk, for the two controls that are about it.
+  ///
+  /// One per screen, from the shared client, which is what the details
+  /// screen and the downloads screen already do. The engine knows nothing
+  /// about downloads -- they are this device's, not the account's -- so
+  /// there is nowhere else this could come from.
+  DownloadsController? _downloads;
+  DownloadsClient? _downloadsClient;
+
+  /// Whether anything is on disk at all, finished or still arriving.
+  ///
+  /// **In progress counts.** A download that is still running is the one a
+  /// viewer most needs to reach -- to watch it land, or to stop it -- and a
+  /// control that appeared only once it finished would hide the running one
+  /// behind a screen with no way to it.
+  bool get _hasDownloads => _downloads?.registry.items.isNotEmpty ?? false;
+
+  /// Whether [item] is one of them.
+  bool _isDownloaded(String metaId) =>
+      _downloads?.ofMeta(metaId).isNotEmpty ?? false;
 
   void _open(LibraryItemView item) {
     Navigator.of(context).push(
@@ -498,6 +582,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         icon: const Icon(Icons.sync),
                         onPressed: _sync,
                       ),
+              // Where the Downloaded chip used to go, and only while there
+              // is something to clean up. Housekeeping is a different
+              // intention from browsing: the pill below says what to look
+              // at, this says what to get rid of, and a control that did
+              // both was the thing that made them hard to tell apart.
+              if (_hasDownloads)
+                IconButton(
+                  tooltip: LibraryScreen.downloadsLabel,
+                  icon: const Icon(Icons.download_done_outlined),
+                  onPressed: _openDownloads,
+                ),
               const RemoteFilesButton(),
             ],
           ),
@@ -516,10 +611,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ? state.selectable
                       : const LibrarySelectable.empty(),
                   remote: _remote,
+                  downloaded: _downloadedOnly,
+                  // A control with nothing to act on is not drawn. Neither
+                  // of these is the engine's, so neither appears merely
+                  // because a library did.
+                  hasRemote: (_drive?.files.entries.isNotEmpty ?? false),
+                  hasDownloads: _hasDownloads,
                   onSelect: _select,
                   onRemote: (on) => _showRemote(remote: on),
+                  onDownloaded: (on) => _showDownloaded(downloaded: on),
                   onReload: () => unawaited(_reloadRemote()),
-                  onDownloads: _openDownloads,
                 ),
               ),
               if (!isLoggedIn &&
@@ -544,8 +645,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     // one merge away is the worst answer on this screen.
                     // The engine still decides *which* message, because it
                     // is the engine's filter either one is about.
-                    : !state.isEmpty || appended.isNotEmpty
-                    ? _tvGroup(context, _buildGrid(state, appended))
+                    : _shown(state).isNotEmpty || appended.isNotEmpty
+                    ? _tvGroup(
+                        context,
+                        _buildGrid(state, _shown(state), appended),
+                      )
                     : state.isFilteredEmpty
                     ? _EmptyFilter(type: state.selected!.type!)
                     : _EmptyLibrary(isLoggedIn: isLoggedIn),
@@ -562,8 +666,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// scrolled to. The count grows by what was appended and the builder
   /// picks the list by index; nothing walks the engine's items to build
   /// them.
-  Widget _buildGrid(LibraryState state, List<LinkedDriveMatch> appended) {
-    final items = state.items;
+  /// The engine's items as this screen draws them: all of them, or only
+  /// the ones this device has on disk.
+  ///
+  /// The walk is over the page the engine has already handed over, not over
+  /// a library -- the engine pages as the grid is scrolled -- so this costs
+  /// a pass over what is in memory and nothing more. There is no way to ask
+  /// the engine for it: downloads are this device's and the engine has
+  /// never heard of them.
+  List<LibraryItemView> _shown(LibraryState state) => _downloadedOnly
+      ? [
+          for (final item in state.items)
+            if (_isDownloaded(item.id)) item,
+        ]
+      : state.items;
+
+  Widget _buildGrid(
+    LibraryState state,
+    List<LibraryItemView> items,
+    List<LinkedDriveMatch> appended,
+  ) {
     return NotificationListener<ScrollNotification>(
       onNotification: (n) => _onScroll(n, state),
       child: GridView.builder(
@@ -657,7 +779,10 @@ class _FilterRow extends StatelessWidget {
     required this.onSelect,
     required this.onRemote,
     required this.onReload,
-    required this.onDownloads,
+    required this.downloaded,
+    required this.hasRemote,
+    required this.hasDownloads,
+    required this.onDownloaded,
   });
 
   final LibrarySelectable selectable;
@@ -680,7 +805,16 @@ class _FilterRow extends StatelessWidget {
   /// would be a button whose subject a viewer has to guess.
   final VoidCallback onReload;
 
-  final VoidCallback onDownloads;
+  /// Whether the Downloaded pill is current.
+  final bool downloaded;
+
+  /// Whether there is anything for each local pill to be about. A pill that
+  /// filters to nothing is a control a viewer presses once, learns nothing
+  /// from, and has to press again to escape.
+  final bool hasRemote;
+  final bool hasDownloads;
+
+  final ValueChanged<bool> onDownloaded;
 
   static const String downloadedLabel = 'Downloaded';
 
@@ -728,15 +862,16 @@ class _FilterRow extends StatelessWidget {
           // in both layouts: at wide widths the engine's types become one
           // segmented button, and a local option added as a segment of it
           // would be inside the control whose selection is the engine's.
-          FocusMarked(
-            borderRadius: FocusMarked.stadium,
-            child: FilterChip(
-              avatar: const Icon(Icons.cloud_outlined, size: 18),
-              label: const Text(LibraryScreen.remoteLabel),
-              selected: remote,
-              onSelected: onRemote,
+          if (hasRemote)
+            FocusMarked(
+              borderRadius: FocusMarked.stadium,
+              child: FilterChip(
+                avatar: const Icon(Icons.cloud_outlined, size: 18),
+                label: const Text(LibraryScreen.remoteLabel),
+                selected: remote,
+                onSelected: onRemote,
+              ),
             ),
-          ),
           // Next to the pill it belongs to, and only while that pill is on.
           // It is an [ActionChip] and not a second [FilterChip] for the
           // reason Downloaded is one: pressing it does something and then it
@@ -754,16 +889,24 @@ class _FilterRow extends StatelessWidget {
             ),
           if (sorts.isNotEmpty)
             FilterMenu(label: 'Sort', options: sorts, onSelect: onSelect),
-          // Wrapped for the same reason the filter chips are: the floor
+          // A pill, like Remote, and for the same reason: it says what the
+          // body is showing. It used to be an [ActionChip] that navigated to
+          // the downloads screen, which made one control mean two things --
+          // "show me these" and "let me delete these" -- and left Remote and
+          // Downloaded looking alike while behaving differently. The way to
+          // that screen is now an icon in the app bar, where housekeeping
+          // belongs. Wrapped for the same reason the rest are: the floor
           // fills a chip and cannot outline one.
-          FocusMarked(
-            borderRadius: FocusMarked.stadium,
-            child: ActionChip(
-              avatar: const Icon(Icons.download_done_outlined, size: 18),
-              label: const Text(downloadedLabel),
-              onPressed: onDownloads,
+          if (hasDownloads)
+            FocusMarked(
+              borderRadius: FocusMarked.stadium,
+              child: FilterChip(
+                avatar: const Icon(Icons.download_done_outlined, size: 18),
+                label: const Text(downloadedLabel),
+                selected: downloaded,
+                onSelected: onDownloaded,
+              ),
             ),
-          ),
         ],
       ),
     );
