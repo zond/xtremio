@@ -75,6 +75,18 @@ final class LinkedDriveMatch {
   /// id, which callers already have.
   String? get videoId => isEpisode ? '$cinemetaId:$season:$episode' : null;
 
+  /// The poster of the title this file matched.
+  ///
+  /// **Derived and not stored**, which is the same call [videoId] makes one
+  /// line up: Cinemeta's own `poster` is a metahub URL of exactly this shape
+  /// (`small` is what a 160 dp tile wants and what the engine's own library
+  /// items carry), so keeping the string would be a second copy of the id
+  /// that can rot while the id cannot. Two places draw a matched file --
+  /// the Remote list and the library grid it is merged into -- and one
+  /// derivation is what keeps them the same picture.
+  String get posterUrl =>
+      'https://images.metahub.space/poster/small/$cinemetaId/img';
+
   /// Whether this match is [cinemetaId], and [videoId] when one is asked
   /// for. The reverse lookup, in one place: see [LinkedDriveFiles.matching].
   bool isFor(String cinemetaId, {String? videoId}) =>
@@ -491,6 +503,43 @@ final class LinkedDriveFiles {
     for (final entry in entries)
       if (entry.isFor(cinemetaId, videoId: videoId)) entry,
   ];
+
+  /// The matched titles among these files that [listed] does not already
+  /// hold -- one per title, in recency order, of [type] when one is named.
+  ///
+  /// **This is the library merge, and the whole of its rule.** A linked file
+  /// that Cinemeta matched belongs under the ordinary type options as well
+  /// as under Remote, and the way it gets there is a merge of *the list*:
+  /// the engine hands over its items, this says which matched files have no
+  /// card among them, and those are drawn after them. Nothing is written to
+  /// the engine -- a write would sync to a Stremio account and put a title
+  /// on a phone that cannot play it, and would make "remove from library"
+  /// and "unlink" two acts a viewer expects to be one.
+  ///
+  /// **The unit is the card and not the file**, which is the whole reason
+  /// [listed] is meta ids rather than video ids. A linked episode of a
+  /// series already in the library adds nothing, because the card it
+  /// belongs to is the show and the show is there: link three episodes of a
+  /// season somebody already follows and the grid is identical. Two files
+  /// that matched the same title add one card for the same reason, which is
+  /// what [listed] growing as this walks is for.
+  ///
+  /// [type] is the engine's *own* current selection (`selected.request.type`,
+  /// null for every type) and is compared against the match's own type word.
+  /// It is read and never re-derived: a second opinion about which option is
+  /// current is two options drawn as current the first time they disagree.
+  List<LinkedDriveMatch> unlistedMatches({
+    required Set<String> listed,
+    String? type,
+  }) {
+    final cards = <String>{...listed};
+    return [
+      for (final entry in entries)
+        if (entry.match case final match?)
+          if (type == null || match.type == type)
+            if (cards.add(match.cinemetaId)) match,
+    ];
+  }
 
   List<Map<String, Object>> toJson() => [
     for (final entry in entries) entry.toJson(),

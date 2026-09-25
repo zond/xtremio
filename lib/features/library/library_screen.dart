@@ -36,6 +36,13 @@ import '../similar/similar_resolver.dart';
 /// difference is the whole of why that option is built the way it is: see
 /// [_FilterRow] and [_remote].
 ///
+/// A matched linked Drive file appears under the ordinary options too, and
+/// that is a merge of *the list* and of nothing else: the cards the engine
+/// sent are checked for the one a matched file belongs to, and only the
+/// missing ones are drawn after them. No pill is invented, nothing is
+/// dispatched and nothing is written to the engine's library. See
+/// [_appended].
+///
 /// The app bar carries the [RemoteFilesButton]. A file on the viewer's own
 /// Drive is theirs; the board is what an addon catalogue offers, which is
 /// why the button moved here.
@@ -171,35 +178,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// The row that holds it is drawn whether or not the engine has anything
   /// to say, which is the other half of not vanishing: see [_FilterRow].
   ///
-  /// **What this is not, and what is still owed.** A matched linked file is
-  /// meant to appear under the ordinary type options as well -- a matched
-  /// film under Movies and All, a matched episode under Series -- merged
-  /// app-side and never written into the engine's library, because a write
-  /// would sync to a Stremio account and put a film on a phone that cannot
-  /// play it, and would make "remove from library" and "unlink" two acts a
-  /// viewer expects to be one. That is **not built here**, deliberately, and
-  /// it is a larger piece than it looks:
-  ///
-  ///  * It is not this mechanism. Remote *replaces* the body and dispatches
-  ///    nothing; a merged item *joins* a body whose selection is live, so
-  ///    the engine's own filter has to be read and applied app-side rather
-  ///    than sidestepped.
-  ///  * A type may exist only because of a linked file -- one matched
-  ///    episode and no series in the library at all -- so `selectable.types`
-  ///    has to be added to, and pressing that added option cannot dispatch
-  ///    the engine's request for a type the engine says it has none of.
-  ///  * The grid is lazy and the engine sorts, by `lastwatched` among
-  ///    others. A linked file has no watch history in the engine's
-  ///    accounting, so where it lands in that order is a decision nothing
-  ///    here has made.
-  ///  * And a merged item gets nothing the engine derives from its own
-  ///    library: no continue-watching row, no notifications, no place in a
-  ///    sync. That is the accepted price of not writing, and it belongs
-  ///    beside the merge when the merge is written.
-  ///
-  /// What is ready for it is the stored side: [LinkedDriveMatch] records the
-  /// identity rather than a drawn row, and [LinkedDriveFiles.matching]
-  /// answers "which linked files are this meta id and video id" as a lookup.
+  /// **What this is not: the merge is not this.** A matched linked file also
+  /// appears under the ordinary type options -- see [_appended] -- and that
+  /// is a different mechanism on purpose. This flag *replaces* the body; the
+  /// merge *adds to* it, without touching this row at all.
   bool _remote = false;
 
   /// A reload is in flight, so a second press is dropped. Nothing is drawn
@@ -365,6 +347,58 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
+  /// The matched linked files that belong in the body being drawn, after the
+  /// engine's own items.
+  ///
+  /// **A merge of the list, and nothing else.** The engine answers with a
+  /// page of cards; each matched linked file asks whether the card it
+  /// belongs to is among them, and only the ones with no card there are
+  /// drawn. Nothing is dispatched, nothing is written to the engine's
+  /// library, and [LibrarySelectable.types] is untouched -- so there is no
+  /// second opinion anywhere about which option is current, which is the
+  /// one thing an arrangement like this has to avoid.
+  ///
+  /// [LinkedDriveFiles.unlistedMatches] holds the rule: the card and not the
+  /// file, one card per title, and the engine's own `selected.request.type`
+  /// compared against the match's own type word. Read from the engine and
+  /// never re-derived.
+  ///
+  /// The order is link order, newest first, after everything the engine
+  /// sent. A linked file has never been watched, so interleaving it into a
+  /// `lastwatched` sort would be inventing the one thing it does not have.
+  ///
+  /// Nothing is subtracted for **Remote**, and nothing needs to be: that
+  /// option replaces the body rather than filtering it, so this list simply
+  /// is not the thing drawn while it is on.
+  ///
+  /// **What a merged card does not get** is everything the engine derives
+  /// from its own library: no continue-watching row, no notifications, no
+  /// place in a sync, and no long-press actions -- "remove from library" on
+  /// a title the library does not hold is an offer that cannot be kept.
+  /// That is the accepted price of not writing, and the alternative was
+  /// worse: a write syncs to a Stremio account and puts a title on a phone
+  /// that cannot play it, and makes "remove from library" and "unlink" two
+  /// acts a viewer expects to be one.
+  ///
+  /// [context] is the one being built rather than the screen's own, so that
+  /// the [DriveAccountScope] dependency is registered where it is read: the
+  /// account notifies when a match is written, and this list is what has to
+  /// be recomputed when it does.
+  List<LinkedDriveMatch> _appended(BuildContext context, LibraryState? state) {
+    // An unloaded field has no selection to read, and a merge that guessed
+    // at one would be the second opinion this whole arrangement avoids.
+    if (state == null || !state.isLoaded) return const [];
+    // A build of the app that cannot link anything has nothing to merge,
+    // which is not a failure to report -- the same reading the Remote list
+    // makes of a missing scope.
+    final files = DriveAccountScope.maybeOf(context)?.files;
+    if (files == null) return const [];
+    return files.unlistedMatches(
+      listed: {for (final item in state.items) item.id},
+      type: state.selected!.type,
+    );
+  }
+
   bool get _isLoggedIn {
     final ctx = _ctx?.value;
     return ctx != null && ProfileState.fromCtx(ctx).isLoggedIn;
@@ -377,6 +411,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       builder: (context, _) {
         final json = _library!.value;
         final state = json == null ? null : LibraryState.fromJson(json);
+        final appended = _appended(context, state);
         final isLoggedIn = _isLoggedIn;
         return Scaffold(
           appBar: AppBar(
@@ -437,11 +472,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       )
                     : state == null || !state.isLoaded
                     ? const Center(child: CircularProgressIndicator())
+                    // Both "nothing here" messages are about an empty
+                    // *body*, and the body is no longer the engine's
+                    // catalog alone: a viewer who has just linked a film
+                    // into an otherwise empty library is the most likely
+                    // of anybody to be hunting for it, and a page saying
+                    // there is nothing with the thing they are looking for
+                    // one merge away is the worst answer on this screen.
+                    // The engine still decides *which* message, because it
+                    // is the engine's filter either one is about.
+                    : !state.isEmpty || appended.isNotEmpty
+                    ? _tvGroup(context, _buildGrid(state, appended))
                     : state.isFilteredEmpty
                     ? _EmptyFilter(type: state.selected!.type!)
-                    : state.isEmpty
-                    ? _EmptyLibrary(isLoggedIn: isLoggedIn)
-                    : _tvGroup(context, _buildGrid(state)),
+                    : _EmptyLibrary(isLoggedIn: isLoggedIn),
               ),
             ],
           ),
@@ -450,7 +494,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Widget _buildGrid(LibraryState state) {
+  /// The engine's items, then [appended] -- one lazy grid and not two, so
+  /// that merging a card does not cost a page of tiles that nobody has
+  /// scrolled to. The count grows by what was appended and the builder
+  /// picks the list by index; nothing walks the engine's items to build
+  /// them.
+  Widget _buildGrid(LibraryState state, List<LinkedDriveMatch> appended) {
     final items = state.items;
     return NotificationListener<ScrollNotification>(
       onNotification: (n) => _onScroll(n, state),
@@ -462,8 +511,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
         ),
-        itemCount: items.length,
+        itemCount: items.length + appended.length,
         itemBuilder: (context, index) {
+          if (index >= items.length) {
+            final match = appended[index - items.length];
+            return LibraryItemTile(
+              item: _cardFor(match),
+              // The Remote list's press, shared rather than written twice.
+              onTap: () => openDriveMatch(context, match),
+              // And no long press: every action in that sheet is a `Ctx`
+              // action about a library item, and this title is not one.
+              memoryId: 'linked-${match.cinemetaId}',
+            );
+          }
           final item = items[index];
           return LibraryItemTile(
             item: item,
@@ -475,6 +535,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ),
     );
   }
+
+  /// [match] as the card it belongs to.
+  ///
+  /// A [LibraryItemView] and not a tile of its own, so that a merged card is
+  /// drawn by the same widget as its neighbours and cannot drift from them:
+  /// the poster treatment, the caption and the shape are the grid's, not a
+  /// second copy of them. The poster is [LinkedDriveMatch.posterUrl], which
+  /// is the id and not a stored string.
+  ///
+  /// **What is deliberately absent is everything that would be invented.**
+  /// No `state`: no progress bar, no watched mark, no notification badge and
+  /// no episode caption -- the card is the *show*, and three linked episodes
+  /// of it are one card, so naming one of them under the poster would be a
+  /// claim about the card that the card cannot make. The press still opens
+  /// the episode, because that is what the file is.
+  static LibraryItemView _cardFor(LinkedDriveMatch match) => LibraryItemView({
+    '_id': match.cinemetaId,
+    'type': match.type,
+    'name': match.name,
+    'poster': match.posterUrl,
+  });
 
   /// [child] as its own traversal group on a TV; [child] itself elsewhere.
   static Widget _tvGroup(BuildContext context, Widget child) =>

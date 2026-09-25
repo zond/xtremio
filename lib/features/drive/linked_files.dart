@@ -40,6 +40,26 @@ import '../player/player_screen.dart';
 import '../similar/similar_resolver.dart';
 import 'drive_match.dart';
 
+/// The ordinary details screen for [match], reached the ordinary way.
+///
+/// **One call, shared by everything that draws a matched file.** A matched
+/// file is a row in the Remote list and a card in the library grid it is
+/// merged into, and both are the same press: the route a search result
+/// takes, with the type, the meta id and -- for an episode -- the video id.
+/// Two ways into one title is two things to keep agreeing, so there is one
+/// of them and no flag for the details screen to read.
+void openDriveMatch(BuildContext context, LinkedDriveMatch match) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => MetaDetailsScreen(
+        type: match.type,
+        id: match.cinemetaId,
+        videoId: match.videoId,
+      ),
+    ),
+  );
+}
+
 /// Every linked file as a poster tile, most recently linked first.
 class LinkedDriveFilesView extends StatefulWidget {
   const LinkedDriveFilesView({
@@ -168,19 +188,6 @@ class _LinkedDriveFilesViewState extends State<LinkedDriveFilesView> {
     if (matching != null) unawaited(matching.run());
   }
 
-  /// The ordinary details screen, reached the ordinary way.
-  void _openDetails(LinkedDriveMatch match) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => MetaDetailsScreen(
-          type: match.type,
-          id: match.cinemetaId,
-          videoId: match.videoId,
-        ),
-      ),
-    );
-  }
-
   /// Opens [file] on the embedded server and pushes the player at it.
   ///
   /// What this knows about the credential is that it does not have it:
@@ -257,8 +264,9 @@ class _LinkedDriveFilesViewState extends State<LinkedDriveFilesView> {
       final match = file.match;
       return _LinkedFileTile(
         file: file,
-        onTap: () =>
-            match == null ? unawaited(_play(file)) : _openDetails(match),
+        onTap: () => match == null
+            ? unawaited(_play(file))
+            : openDriveMatch(context, match),
       );
     },
   );
@@ -303,20 +311,14 @@ class _MatchedByNameNote extends StatelessWidget {
 /// One linked file: its poster and matched title when it has one, a generic
 /// file icon and the name Drive gave it when it does not.
 ///
-/// The poster is asked for by id rather than kept from the search answer.
-/// Cinemeta's own `poster` is a metahub URL of exactly this shape, so there
-/// is nothing to be had by storing the string except a second copy of it
-/// that can rot while the id cannot.
+/// The poster is asked for by id rather than kept from the search answer:
+/// [LinkedDriveMatch.posterUrl] is where that derivation lives, and it is
+/// the same one the library grid draws a merged card with.
 class _LinkedFileTile extends StatelessWidget {
   const _LinkedFileTile({required this.file, required this.onTap});
 
   final LinkedDriveFile file;
   final VoidCallback onTap;
-
-  /// Where Cinemeta's posters live. `small` is what a 160 dp tile wants and
-  /// what the library's own items carry.
-  static String posterFor(String cinemetaId) =>
-      'https://images.metahub.space/poster/small/$cinemetaId/img';
 
   /// `S1E1`, for a file whose name named an episode. Empty otherwise --
   /// including for a matched film, which has nothing more to say than its
@@ -357,7 +359,7 @@ class _LinkedFileTile extends StatelessWidget {
                       ),
                     ),
                   )
-                : PosterImage(url: posterFor(match.cinemetaId)),
+                : PosterImage(url: match.posterUrl),
           ),
           const SizedBox(height: 6),
           Text(
