@@ -9,25 +9,85 @@ LinkedDriveFile _file({
   String name = 'one.mkv',
   String mime = 'video/x-matroska',
   DateTime? at,
-  String? cinemetaId,
+  LinkedDriveMatch? match,
 }) => LinkedDriveFile(
   fileId: id,
   name: name,
   mimeType: mime,
   linkedAt: at ?? _first,
-  cinemetaId: cinemetaId,
+  match: match,
+);
+
+/// A film's match, which is the shape with the fewest fields in it.
+const LinkedDriveMatch _arrival = LinkedDriveMatch(
+  cinemetaId: 'tt2543164',
+  type: 'movie',
+  name: 'Arrival',
+  year: 2016,
+);
+
+/// An episode's: the same plus the two numbers the filename gave.
+const LinkedDriveMatch _episode = LinkedDriveMatch(
+  cinemetaId: 'tt0903747',
+  type: 'series',
+  name: 'Breaking Bad',
+  year: 2008,
+  season: 1,
+  episode: 1,
 );
 
 void main() {
   test('a row round-trips through the preferences file', () {
-    final file = _file(cinemetaId: 'tt2543164');
-
-    expect(LinkedDriveFile.fromJson(file.toJson()), file);
+    expect(
+      LinkedDriveFile.fromJson(_file(match: _arrival).toJson()),
+      _file(match: _arrival),
+    );
+    // The episode numbers are half of what a lookup asks for, so the trip
+    // is made twice: a film has neither of them and a row that dropped them
+    // would still round-trip.
+    expect(
+      LinkedDriveFile.fromJson(_file(match: _episode).toJson()),
+      _file(match: _episode),
+    );
   });
 
-  test('the Cinemeta id is written only when there is one', () {
-    expect(_file().toJson().containsKey('cinemeta'), isFalse);
-    expect(_file(cinemetaId: 'tt2543164').toJson()['cinemeta'], 'tt2543164');
+  test('the match is written only when there is one', () {
+    expect(_file().toJson().containsKey('match'), isFalse);
+    expect(_file(match: _arrival).toJson()['match'], {
+      'id': 'tt2543164',
+      'type': 'movie',
+      'name': 'Arrival',
+      'year': 2016,
+    });
+  });
+
+  test('half a match is no match: an id with no type, an episode with no '
+      'season', () {
+    // Both halves of the video id, or neither: a season with no episode
+    // number is a claim about which video this is that names no video.
+    expect(
+      LinkedDriveMatch.fromJson({'id': 'tt0903747', 'type': 'series'}),
+      isNotNull,
+    );
+    expect(LinkedDriveMatch.fromJson({'id': 'tt0903747'}), isNull);
+    expect(LinkedDriveMatch.fromJson({'type': 'series'}), isNull);
+    final halved = LinkedDriveMatch.fromJson({
+      'id': 'tt0903747',
+      'type': 'series',
+      'season': 1,
+    })!;
+    expect(halved.season, isNull);
+    expect(halved.isEpisode, isFalse);
+  });
+
+  test('a match answers the lookup a details screen makes', () {
+    expect(_episode.videoId, 'tt0903747:1:1');
+    expect(_arrival.videoId, isNull, reason: "a film's video is the film");
+    expect(_episode.isFor('tt0903747', videoId: 'tt0903747:1:1'), isTrue);
+    expect(_episode.isFor('tt0903747', videoId: 'tt0903747:1:2'), isFalse);
+    expect(_episode.isFor('tt0903747'), isTrue, reason: 'the series, at all');
+    expect(_arrival.isFor('tt2543164', videoId: 'tt2543164'), isTrue);
+    expect(_arrival.isFor('tt0903747'), isFalse);
   });
 
   test('a row with no id is no row at all', () {
@@ -80,7 +140,7 @@ void main() {
 
   test('the same file picked twice keeps when it was first linked', () {
     final files = LinkedDriveFiles.empty
-        .linking(_file(name: 'one.mkv', cinemetaId: 'tt2543164'))
+        .linking(_file(name: 'one.mkv', match: _arrival))
         .linking(_file(name: 'renamed.mkv', at: _later));
 
     final row = files.entries.single;
@@ -91,17 +151,34 @@ void main() {
     expect(row.cinemetaId, 'tt2543164');
   });
 
-  test('a Cinemeta id can be set, cleared, and asked for by file', () {
+  test('a match can be set, cleared, and asked for by file', () {
     final files = LinkedDriveFiles.empty.linking(_file());
 
-    final matched = files.withCinemetaId('drive-file-1', 'tt2543164');
-    expect(matched.forFile('drive-file-1')!.cinemetaId, 'tt2543164');
+    final matched = files.withMatch('drive-file-1', _arrival);
+    expect(matched.forFile('drive-file-1')!.match, _arrival);
     expect(
-      matched.withCinemetaId('drive-file-1', null).entries.single.cinemetaId,
+      matched.withMatch('drive-file-1', null).entries.single.match,
       isNull,
     );
-    // A file nothing has linked is not added by writing an id against it.
-    expect(files.withCinemetaId('nothing', 'tt0000000'), same(files));
+    // A file nothing has linked is not added by writing a match against it.
+    expect(files.withMatch('nothing', _arrival), same(files));
     expect(files.forFile('nothing'), isNull);
+  });
+
+  test('the reverse lookup finds the files a meta id and a video id are', () {
+    final files = LinkedDriveFiles.empty
+        .linking(_file(id: 'drive-file-1', match: _arrival))
+        .linking(_file(id: 'drive-file-2', match: _episode))
+        .linking(_file(id: 'drive-file-3'));
+
+    expect(
+      files.matching('tt0903747', videoId: 'tt0903747:1:1').single.fileId,
+      'drive-file-2',
+    );
+    expect(files.matching('tt0903747', videoId: 'tt0903747:1:2'), isEmpty);
+    expect(files.matching('tt2543164').single.fileId, 'drive-file-1');
+    // A file nothing matched is in no title's list, which is the whole
+    // reason it needs a list of its own.
+    expect(files.matching('tt0000000'), isEmpty);
   });
 }

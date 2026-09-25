@@ -4,12 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/details/meta_details_screen.dart';
+import 'package:xtremio/features/drive/remote_files.dart';
 import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/widgets/remote_press.dart';
 
 import '../../support/fake_core_client.dart';
+import '../../support/fake_drive_file_opener.dart';
+import '../../support/fake_secret_store.dart';
 import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
@@ -46,15 +49,21 @@ List<String> ctxActions(FakeCoreClient core) => [
       (action.action['args'] as Map<String, dynamic>)['action'] as String,
 ];
 
-/// Mounts the library and walks the D-pad down into the filter row, down
-/// again into the grid and left to its first tile.
+/// Mounts the library and walks the D-pad down through the app bar and the
+/// filter row into the grid, then left to its first tile.
+///
+/// Three downs and not two: the bar has a control in it now (the link
+/// button), so it is a stop on the way in. The walk itself is what
+/// `'the D-pad walks the bar, the filter row, then the grid'` asserts
+/// step by step; this only has to arrive.
 Future<FakeCoreClient> mountOnFirstTile(WidgetTester tester) async {
   useScreen(tester, tvSize);
   final core = fakeCore();
   await tester.pumpWidget(harness(core));
   await tester.pumpAndSettle();
-  await press(tester, LogicalKeyboardKey.arrowDown);
-  await press(tester, LogicalKeyboardKey.arrowDown);
+  for (var i = 0; i < 4 && focusedTileName(tester) == null; i++) {
+    await press(tester, LogicalKeyboardKey.arrowDown);
+  }
   for (var i = 0; i < 2 && focusedTileName(tester) != 'Lanterns'; i++) {
     await press(tester, LogicalKeyboardKey.arrowLeft);
   }
@@ -63,7 +72,14 @@ Future<FakeCoreClient> mountOnFirstTile(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('the D-pad walks the filter row, then the grid', (tester) async {
+  testWidgets('the D-pad walks the bar, the filter row, then the grid', (
+    tester,
+  ) async {
+    // **Before this change the first press down landed on the type
+    // segments**, because the anonymous library's app bar had nothing in it
+    // to focus. The link button is in it now, which makes the bar a region
+    // on the way in rather than a change of behaviour further down: every
+    // assertion below the first two is what it was.
     useScreen(tester, tvSize);
     await tester.pumpWidget(harness(fakeCore()));
     await tester.pumpAndSettle();
@@ -71,20 +87,32 @@ void main() {
     // the user steps in.
     expect(focusedLabel(tester), isNull);
 
-    // Down from nowhere lands on the topmost control: the type segments.
+    // Down from nowhere lands on the topmost control, which is the link
+    // button in the bar.
     await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusIn<SegmentedButton<int>>(), isTrue);
-    expect(focusedLabel(tester), 'All');
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusedLabel(tester), 'Movies');
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusedLabel(tester), 'Series');
-    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedTooltip(), RemoteFilesButton.label);
+
+    // Down again is the filter row. The bar's button is at the right, so
+    // "nearest below" is the rightmost control on the row; left walks back
+    // along it, which is how the whole row is reached from the bar.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedLabel(tester), 'Downloaded');
+    await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusedLabel(tester), 'Sort: Last watched');
     expect(find.byType(DropdownMenu<int>), findsNothing);
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusIn<SegmentedButton<int>>(), isTrue);
+    expect(focusedLabel(tester), 'Series');
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedLabel(tester), 'Movies');
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedLabel(tester), 'All');
 
-    // Down enters the grid (the filter row is centred, so on the tile
-    // under the sort button); left and right walk it; up is the filters.
+    // Down enters the grid; left and right walk it; up is the filter row
+    // again. The same assertions as before the local option was added -- it
+    // is a stop on the row, not a change to what the row does.
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedTileName(tester), 'The Whisper Man');
     await press(tester, LogicalKeyboardKey.arrowLeft);
@@ -93,16 +121,33 @@ void main() {
     expect(focusedTileName(tester), 'Lanterns', reason: 'first column');
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTileName(tester), 'The Whisper Man');
-    // Traversal is geometric: with nothing beside the last tile, right goes
-    // up to the nearest filter control that is further right.
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusedTileName(tester), isNull);
-    expect(focusIn<SegmentedButton<int>>(), isTrue);
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedTileName(tester), 'The Whisper Man');
     await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusIn<SegmentedButton<int>>(), isTrue);
     expect(focusedTileName(tester), isNull);
+    expect(focusIn<SegmentedButton<int>>(), isTrue);
+  });
+
+  testWidgets('and up out of the filter row is the link button, with the '
+      'row in between never stepped over', (tester) async {
+    // The press this is about is the one the board needed two rungs of a
+    // [TvLadder] for. Here the filter row spans the width directly under the
+    // bar, so it is genuinely the nearest thing in each direction and
+    // geometry answers both presses -- which is a claim about the drawing,
+    // and so has to be walked rather than reasoned about.
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(harness(fakeCore()));
+    await tester.pumpAndSettle();
+
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedTooltip(), RemoteFilesButton.label);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(
+      focusedTileName(tester),
+      isNull,
+      reason: 'down out of the bar landed in the grid, past the whole row',
+    );
+    expect(focusedLabel(tester), 'Downloaded');
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusedTooltip(), RemoteFilesButton.label);
   });
 
   testWidgets('the Downloaded chip is marked like every other chip', (
@@ -120,11 +165,39 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // Two downs: the bar, then the rightmost control on the row under it,
+    // which is this chip. It used to be one down and five rights.
     await press(tester, LogicalKeyboardKey.arrowDown);
-    for (var i = 0; i < 6 && focusedLabel(tester) != 'Downloaded'; i++) {
-      await press(tester, LogicalKeyboardKey.arrowRight);
-    }
+    await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedLabel(tester), 'Downloaded');
+    expect(focusMarks(), {FocusMark.ring, FocusMark.fill});
+  });
+
+  testWidgets('and so is the Remote pill, which is the local one', (
+    tester,
+  ) async {
+    // A [FilterChip] rather than the [ChoiceChip]s beside it, so it is worth
+    // proving separately that the floor and the ring both reach it: a pill
+    // the remote can stand on with nothing drawn on it is unfindable from
+    // three metres whichever widget it is built out of.
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(
+      harness(
+        fakeCore(),
+        theme: XtremioApp.themeFor(isTv: true, emphasis: FocusEmphasis.bold),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    for (
+      var i = 0;
+      i < 8 && focusedLabel(tester) != LibraryScreen.remoteLabel;
+      i++
+    ) {
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+    }
+    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
     expect(focusMarks(), {FocusMark.ring, FocusMark.fill});
   });
 
@@ -133,8 +206,13 @@ void main() {
     final core = fakeCore();
     await tester.pumpWidget(harness(core));
     await tester.pumpAndSettle();
+    // Down twice for the bar and the row, then left along the row: the
+    // segments are at its left-hand end.
     await press(tester, LogicalKeyboardKey.arrowDown);
-    await press(tester, LogicalKeyboardKey.arrowRight);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    for (var i = 0; i < 6 && focusedLabel(tester) != 'Movies'; i++) {
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+    }
     expect(focusedLabel(tester), 'Movies');
 
     await press(tester, LogicalKeyboardKey.select);
@@ -142,6 +220,79 @@ void main() {
         core.dispatched.last.action['args']['args']['request']
             as Map<String, dynamic>;
     expect(request['type'], 'movie');
+  });
+
+  testWidgets('a remote reaches the Remote pill, selects it, and walks to a '
+      'linked file', (tester) async {
+    // The whole of the local option from a remote: the pill is a stop on the
+    // row, select turns it on, and what it puts in the body is reachable
+    // from there without anything in between being stepped over.
+    useScreen(tester, tvSize);
+    final prefs = AppPrefs.inMemory();
+    await prefs.load();
+    final drive = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
+    await drive.load();
+    addTearDown(() {
+      drive.dispose();
+      prefs.dispose();
+    });
+    await drive.link(
+      refreshToken: 'a-refresh-token',
+      files: [
+        LinkedDriveFile(
+          fileId: 'drive-file-1',
+          name: 'ep6.avi',
+          mimeType: 'video/x-matroska',
+          linkedAt: DateTime.utc(2026, 9, 20),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      DriveAccountScope(
+        account: drive,
+        child: harness(
+          fakeCore(),
+          home: LibraryScreen(
+            driveOpener: FakeDriveFileOpener(),
+            driveSearch: (type, query) async => const [],
+          ),
+          theme: XtremioApp.themeFor(isTv: true, emphasis: FocusEmphasis.bold),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Down into the bar, down onto the row, then left along it to the pill.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedTooltip(), RemoteFilesButton.label);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    for (
+      var i = 0;
+      i < 8 && focusedLabel(tester) != LibraryScreen.remoteLabel;
+      i++
+    ) {
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+    }
+    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
+    expect(focusMarks(), isNotEmpty);
+
+    await press(tester, LogicalKeyboardKey.select);
+    expect(find.text('ep6.avi'), findsOneWidget);
+
+    // And down into the list it put there, onto a tile the remote can see
+    // it is standing on.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedTileName(tester), 'ep6.avi');
+    expect(
+      focusMarks(),
+      isNotEmpty,
+      reason: 'a linked file the remote can land on with nothing drawn on it',
+    );
+    // Up comes back to the row, so the pill and its list are not a one-way
+    // trip.
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusedTileName(tester), isNull);
+    expect(focusedLabel(tester), isNotNull);
   });
 
   testWidgets('select on a tile opens its details', (tester) async {

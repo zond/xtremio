@@ -746,6 +746,113 @@ _Words _leadWordsOf(StreamInfo stream, {String? addonName}) {
 String releaseNameOf(StreamInfo stream, {String? addonName}) =>
     leadLineOf(stream, addonName: addonName);
 
+/// What a release name says it **is**, as opposed to how it looks: the
+/// title, the year, and the season and episode where it names one.
+///
+/// The same tokenisation as everything else in this file ([_Words]), and
+/// deliberately so -- addons and Drive folders separate with `.`, `_`, `-`
+/// and spaces interchangeably and bracket a year as the mood takes them, and
+/// a second parser written beside this one would disagree with it on the
+/// day one of them was fixed. What this adds is only where the title stops.
+///
+/// **The title stops at the first word that is about how the file looks**
+/// ([_aboutHowItLooks]): a year, a season or episode marker, a resolution,
+/// or a source or codec tag this file already knows how to spell
+/// ([StreamFacts._resolutionTokens], [StreamFacts._tagPatterns]). Nothing is
+/// added to those tables for this, which has a consequence worth stating: a
+/// name whose first non-title word is something they do not list --
+/// `Some.Film.WEB-DL.mkv`, where `WEB` and `DL` are two words and neither
+/// matches `web-?dl` alone -- keeps that word in the title, and a title with
+/// a stray word in it matches no catalogue entry. That is a miss, and a miss
+/// is the safe direction: the reader of this is
+/// `drive_match.dart`, where a wrong title is a wrong poster on somebody's
+/// film and no title at all is a generic icon.
+final class ReleaseIdentity {
+  const ReleaseIdentity({
+    required this.title,
+    this.year,
+    this.season,
+    this.episode,
+  });
+
+  /// The leading words, in the name's own case, single-spaced -- whatever
+  /// the name separated them with, since the separator is the one thing two
+  /// spellings of a release never agree on. Empty when the name opens with a
+  /// word about how it looks, which is a name with no title in it.
+  final String title;
+
+  /// The first year in the name, `19xx` or `20xx`.
+  final int? year;
+
+  /// From `S01E01`, `S01` or `1x01`. [episode] is null for a name that
+  /// numbers a season and no episode within it, which a pack does.
+  final int? season;
+  final int? episode;
+
+  /// The name says which episode it is, so it is one episode of a series.
+  bool get isEpisode => season != null && episode != null;
+
+  /// There is no title to look anything up by.
+  bool get hasNoTitle => title.isEmpty;
+
+  /// Reads [name] -- a filename, a release, either.
+  ///
+  /// A directory in front of it and a container extension on the end are
+  /// dropped by [_Words.file], which already has a recorded row behind each
+  /// of those two cuts.
+  factory ReleaseIdentity.ofName(String name) {
+    final words = _Words(name);
+    final file = words.file;
+    final title = <String>[];
+    var open = true;
+    int? year;
+    int? season;
+    int? episode;
+    for (final token in file) {
+      if (year == null && _yearToken.hasMatch(token.text)) {
+        year = int.tryParse(token.text);
+      }
+      if (season == null) {
+        if (_episodeToken.firstMatch(token.text) case final numbered?) {
+          season = int.tryParse(numbered[1] ?? numbered[3] ?? '');
+          episode = int.tryParse(numbered[2] ?? numbered[4] ?? '');
+        }
+      }
+      if (!_aboutHowItLooks(token.text)) {
+        if (open) title.add(name.substring(token.start, token.end));
+        continue;
+      }
+      open = false;
+    }
+    return ReleaseIdentity(
+      title: title.join(' '),
+      year: year,
+      season: season,
+      episode: episode,
+    );
+  }
+
+  @override
+  String toString() =>
+      'ReleaseIdentity($title, ${year ?? '-'}, '
+      '${season == null ? '-' : 's$season'}'
+      '${episode == null ? '' : 'e$episode'})';
+}
+
+/// Whether one word is about how a file looks rather than about what it is.
+///
+/// A tag pattern is matched against the single word, not against the name:
+/// `\bblu-?ray\b` answers for `bluray`, and a word no pattern answers for is
+/// left in the title. See [ReleaseIdentity] for what that costs.
+bool _aboutHowItLooks(String word) {
+  if (_yearToken.hasMatch(word) || _episodeToken.hasMatch(word)) return true;
+  if (StreamFacts._resolutionTokens.containsKey(word)) return true;
+  for (final pattern in StreamFacts._tagPatterns.values) {
+    if (pattern.hasMatch(word)) return true;
+  }
+  return false;
+}
+
 /// One word, lower-cased, and where it sat in the string it was read out of
 /// so that string can be quoted back verbatim.
 typedef _Token = ({String text, int start, int end});
@@ -1051,7 +1158,7 @@ final RegExp _yearToken = RegExp(r'^(?:19|20)\d{2}$');
 /// one character between naming an episode and naming the season it came in
 /// (recorded row 10).
 final RegExp _episodeToken = RegExp(
-  r'^(?:s\d{1,3}(?:e\d{1,4})?|\d{1,2}x\d{1,3})$',
+  r'^(?:s(\d{1,3})(?:e(\d{1,4}))?|(\d{1,2})x(\d{1,3}))$',
 );
 
 /// The bare numbers a range can be written out of: `Season 1-7`.

@@ -18,6 +18,122 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+/// Which catalogue title a linked file turned out to be.
+///
+/// **The identity and not the decoration.** The one question asked of this
+/// record is not "what does the row draw" but "given a meta id and a video
+/// id, which linked files are that?" -- a linked `Breaking Bad S01E01`
+/// belongs under that episode on the ordinary details screen, and a match
+/// that recorded only enough to draw a poster would leave whatever asks
+/// that question to redo the matching. So the id, the type and, for an
+/// episode, the season and the episode are all here, and [videoId] answers
+/// the question in the shape the engine already asks it in.
+///
+/// [name] and [year] are the catalogue's own, kept so that a list of linked
+/// files can say what each one matched without asking Cinemeta again. They
+/// are what the answer *said*, not a second opinion about it.
+///
+/// [season] and [episode] come from the **filename**, not from Cinemeta:
+/// the search catalogue answers with titles and has no videos in it, and
+/// the file is the only thing that knows which episode it holds. They are
+/// either both set (an episode) or both null (a film).
+@immutable
+final class LinkedDriveMatch {
+  const LinkedDriveMatch({
+    required this.cinemetaId,
+    required this.type,
+    required this.name,
+    this.year,
+    this.season,
+    this.episode,
+  });
+
+  /// The catalogue's id, an `tt`-prefixed IMDb id for everything Cinemeta
+  /// answers. What every other addon in the app is keyed on.
+  final String cinemetaId;
+
+  /// stremio's own type word: `movie` or `series`. Not derived from the
+  /// presence of an episode, because a route needs it either way and
+  /// guessing it later is the migration this record exists to avoid.
+  final String type;
+
+  /// What the catalogue calls the title.
+  final String name;
+
+  /// The year the catalogue gave, when it gave one.
+  final int? year;
+
+  final int? season;
+  final int? episode;
+
+  /// Both halves of an episode are known, so this file is one episode of a
+  /// series rather than a whole title.
+  bool get isEpisode => season != null && episode != null;
+
+  /// The engine's own id for the video this file holds
+  /// (`tt0903747:1:1`), or null for a film -- whose video id *is* its meta
+  /// id, which callers already have.
+  String? get videoId => isEpisode ? '$cinemetaId:$season:$episode' : null;
+
+  /// Whether this match is [cinemetaId], and [videoId] when one is asked
+  /// for. The reverse lookup, in one place: see [LinkedDriveFiles.matching].
+  bool isFor(String cinemetaId, {String? videoId}) =>
+      this.cinemetaId == cinemetaId &&
+      (videoId == null || videoId == (this.videoId ?? cinemetaId));
+
+  Map<String, Object> toJson() => {
+    'id': cinemetaId,
+    'type': type,
+    'name': name,
+    'year': ?year,
+    'season': ?season,
+    'episode': ?episode,
+  };
+
+  /// One stored match, or null when it is not one this build can use.
+  ///
+  /// An id and a type are what a lookup and a route need, and a match
+  /// missing either is not a match -- it is a row claiming one. A season
+  /// without an episode, or the reverse, is half a claim about which video
+  /// this is, so both are dropped together rather than one being invented.
+  static LinkedDriveMatch? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'];
+    final type = json['type'];
+    if (id is! String || id.trim().isEmpty) return null;
+    if (type is! String || type.trim().isEmpty) return null;
+    final name = json['name'];
+    final season = json['season'];
+    final episode = json['episode'];
+    final whole = season is int && episode is int;
+    return LinkedDriveMatch(
+      cinemetaId: id.trim(),
+      type: type.trim(),
+      name: name is String ? name : '',
+      year: json['year'] is int ? json['year'] as int : null,
+      season: whole ? season : null,
+      episode: whole ? episode : null,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is LinkedDriveMatch &&
+      other.cinemetaId == cinemetaId &&
+      other.type == type &&
+      other.name == name &&
+      other.year == year &&
+      other.season == season &&
+      other.episode == episode;
+
+  @override
+  int get hashCode =>
+      Object.hash(cinemetaId, type, name, year, season, episode);
+
+  @override
+  String toString() => 'LinkedDriveMatch(${videoId ?? cinemetaId}, $name)';
+}
+
 /// One file a pairing linked.
 @immutable
 final class LinkedDriveFile {
@@ -26,7 +142,7 @@ final class LinkedDriveFile {
     required this.name,
     required this.mimeType,
     required this.linkedAt,
-    this.cinemetaId,
+    this.match,
   });
 
   /// Drive's own id for the file, which is what a byte-range request is
@@ -47,33 +163,47 @@ final class LinkedDriveFile {
   /// list is on the same clock.
   final DateTime linkedAt;
 
-  /// Which Cinemeta title this file turned out to be, once something
-  /// matches filenames against the catalogue -- **nothing writes this
-  /// yet**. It is here because the alternative, discovering the id
-  /// somewhere else and keeping it in a second list keyed by [fileId], is
-  /// how two records of the same thing start disagreeing. Null until a
-  /// match is made, and null for a file no match is ever found for, which
-  /// is an ordinary outcome and not a failure.
-  final String? cinemetaId;
+  /// Which catalogue title this file turned out to be, or null.
+  ///
+  /// It is here rather than in a second list keyed by [fileId] because two
+  /// records of the same thing start disagreeing the moment one of them is
+  /// written and the other is not. One field and not three loose ones for
+  /// the same reason a level narrower: a season with no id, or an id with
+  /// no type, is a half-answer nothing can act on, and a
+  /// [LinkedDriveMatch] cannot half-exist.
+  ///
+  /// Null until a match is made, and null for a file no match is ever
+  /// found for, which is an ordinary outcome and not a failure -- see
+  /// `drive_match.dart`.
+  final LinkedDriveMatch? match;
 
-  /// This row with [cinemetaId] filled in, or cleared when it is null.
-  LinkedDriveFile withCinemetaId(String? cinemetaId) => LinkedDriveFile(
+  /// The matched title's id, for the readers that want only that.
+  String? get cinemetaId => match?.cinemetaId;
+
+  /// Whether this file is the video [videoId] of [cinemetaId] (or the film
+  /// [cinemetaId], when no video is named). False for a file nothing has
+  /// matched.
+  bool isFor(String cinemetaId, {String? videoId}) =>
+      match?.isFor(cinemetaId, videoId: videoId) ?? false;
+
+  /// This row with [match] recorded, or cleared when it is null.
+  LinkedDriveFile withMatch(LinkedDriveMatch? match) => LinkedDriveFile(
     fileId: fileId,
     name: name,
     mimeType: mimeType,
     linkedAt: linkedAt,
-    cinemetaId: cinemetaId,
+    match: match,
   );
 
-  /// The row as it is written to the preferences file. The Cinemeta id is
-  /// written only when there is one, so a file somebody reads does not
-  /// claim a match that was never made.
+  /// The row as it is written to the preferences file. The match is written
+  /// only when there is one, so a file somebody reads does not claim one
+  /// that was never made.
   Map<String, Object> toJson() => {
     'id': fileId,
     'name': name,
     'mime': mimeType,
     'linkedAt': linkedAt.toUtc().toIso8601String(),
-    'cinemeta': ?cinemetaId,
+    'match': ?match?.toJson(),
   };
 
   /// One stored row, or null when it is not one this build can use.
@@ -91,7 +221,6 @@ final class LinkedDriveFile {
     final name = json['name'];
     final mime = json['mime'];
     final linkedAt = json['linkedAt'];
-    final cinemeta = json['cinemeta'];
     return LinkedDriveFile(
       fileId: id.trim(),
       name: name is String ? name : '',
@@ -99,9 +228,7 @@ final class LinkedDriveFile {
       linkedAt:
           (linkedAt is String ? DateTime.tryParse(linkedAt) : null)?.toUtc() ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-      cinemetaId: cinemeta is String && cinemeta.trim().isNotEmpty
-          ? cinemeta.trim()
-          : null,
+      match: LinkedDriveMatch.fromJson(json['match']),
     );
   }
 
@@ -112,10 +239,10 @@ final class LinkedDriveFile {
       other.name == name &&
       other.mimeType == mimeType &&
       other.linkedAt == linkedAt &&
-      other.cinemetaId == cinemetaId;
+      other.match == match;
 
   @override
-  int get hashCode => Object.hash(fileId, name, mimeType, linkedAt, cinemetaId);
+  int get hashCode => Object.hash(fileId, name, mimeType, linkedAt, match);
 
   @override
   String toString() => 'LinkedDriveFile($fileId, $name)';
@@ -156,10 +283,15 @@ final class LinkedDriveFiles {
   ///
   /// A file picked twice keeps the [LinkedDriveFile.linkedAt] of the first
   /// time -- that is when it became reachable, and it has been reachable
-  /// ever since -- and keeps a Cinemeta id already matched against it,
-  /// since a second pairing knows no more about the title than the first
-  /// did. The name and the mime type are taken from the new row: those are
-  /// what Drive says *now*, and a file can be renamed.
+  /// ever since -- and keeps a match already made against it, since a
+  /// second pairing knows no more about the title than the first did. The
+  /// name and the mime type are taken from the new row: those are what
+  /// Drive says *now*, and a file can be renamed.
+  ///
+  /// A renamed file therefore keeps the match its old name earned, which is
+  /// the right way round: a rename is the viewer tidying up, not new
+  /// evidence about which film it is, and re-matching on every rename would
+  /// spend a search to reach the same answer or a worse one.
   LinkedDriveFiles linking(LinkedDriveFile file) {
     final known = forFile(file.fileId);
     final row = known == null
@@ -169,7 +301,7 @@ final class LinkedDriveFiles {
             name: file.name,
             mimeType: file.mimeType,
             linkedAt: known.linkedAt,
-            cinemetaId: known.cinemetaId ?? file.cinemetaId,
+            match: known.match ?? file.match,
           );
     return LinkedDriveFiles([
       row,
@@ -195,16 +327,29 @@ final class LinkedDriveFiles {
     return all;
   }
 
-  /// This list with [fileId]'s Cinemeta id set, or this list unchanged
-  /// when no such file is linked or it already says that.
-  LinkedDriveFiles withCinemetaId(String fileId, String? cinemetaId) {
+  /// This list with [fileId]'s match recorded, or this list unchanged when
+  /// no such file is linked or it already says that.
+  LinkedDriveFiles withMatch(String fileId, LinkedDriveMatch? match) {
     final known = forFile(fileId);
-    if (known == null || known.cinemetaId == cinemetaId) return this;
+    if (known == null || known.match == match) return this;
     return LinkedDriveFiles([
       for (final entry in entries)
-        if (entry.fileId == fileId) entry.withCinemetaId(cinemetaId) else entry,
+        if (entry.fileId == fileId) entry.withMatch(match) else entry,
     ]);
   }
+
+  /// Every linked file matched to [cinemetaId], and to [videoId] when one
+  /// is named -- the reverse of what [LinkedDriveMatch] records.
+  ///
+  /// **This is the lookup a details screen makes**, which is why the match
+  /// is stored as an identity rather than as a drawn row: asking "which of
+  /// my linked files is this episode" must not mean matching filenames
+  /// against the catalogue a second time. In recency order, like everything
+  /// else here; there is normally one.
+  List<LinkedDriveFile> matching(String cinemetaId, {String? videoId}) => [
+    for (final entry in entries)
+      if (entry.isFor(cinemetaId, videoId: videoId)) entry,
+  ];
 
   List<Map<String, Object>> toJson() => [
     for (final entry in entries) entry.toJson(),
