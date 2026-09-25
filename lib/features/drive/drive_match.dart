@@ -225,7 +225,16 @@ final class DriveMatchRun {
       final LinkedDriveMatch? match;
       try {
         match = await matchDriveFile(file.name, search: search);
+        DiagnosticsLog.info(
+          DrivePairingJob.target,
+          'match: ${file.name} -> ${match?.videoId ?? match?.cinemetaId ?? 'nothing'}',
+        );
       } on DriveCatalogueUnreachable {
+        DiagnosticsLog.info(
+          DrivePairingJob.target,
+          'match: ${file.name} -> the catalogue could not be asked, '
+          'will ask again',
+        );
         // Unclaimed, so the next pass asks again. A refusal is remembered
         // and a failure is not: the first is an answer about this file, the
         // second is the absence of one, and treating them alike is what left

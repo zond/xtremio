@@ -74,12 +74,14 @@ class DiagnosticsTraceSync {
     // while it is on. Here and not in [_push], because this side needs no
     // server and must not wait for one.
     DiagnosticsLog.unredacted = wanted;
-    // And the app's other half: a line per image as it resolves, saying
-    // what it decoded to ([ImageCacheLog.perImage]). A line per picture is
-    // a hundred for one screen of posters, which is why it is here and not
-    // on by default; it is set beside the redaction because the same
-    // switch is what keeps the URL in those lines whole.
-    ImageCacheLog.perImage = wanted;
+    // **Not the per-image line.** [ImageCacheLog.perImage] used to follow
+    // this switch, and a line per picture is a hundred for one screen of
+    // posters -- which drowned the log somebody had turned verbose logging
+    // on to read. It answered the question it was built for (what a poster
+    // costs resident, measured on the television) and nothing is asking it
+    // now, so it stays off and the machinery stays dormant: turning it on
+    // is a line of code for whoever next needs to measure decodes, and
+    // costs nothing while it is off.
     if (wanted == _sent) return;
     _sent = wanted;
     _writes = _writes.then((_) => _push(wanted));

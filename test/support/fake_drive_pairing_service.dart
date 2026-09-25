@@ -48,6 +48,10 @@ class FakeDrivePairingService implements DrivePairingService {
   /// page words its confirmation from.
   final List<DrivePairingShape> shapes = [];
 
+  /// Called on every collect, for a test that counts them without caring
+  /// which id each one used.
+  void Function()? onCollect;
+
   /// Every `GET /session/{id}`, by the id it was made with.
   final List<String> collects = [];
 
@@ -88,6 +92,7 @@ class FakeDrivePairingService implements DrivePairingService {
   @override
   Future<DrivePairingAnswer> collect(String sessionId) async {
     collects.add(sessionId);
+    onCollect?.call();
     final holding = hold;
     if (holding != null) {
       hold = null;

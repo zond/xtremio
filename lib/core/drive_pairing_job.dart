@@ -28,6 +28,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'diagnostics_log.dart';
 import 'drive_account.dart';
 import 'drive_pairing.dart';
 
@@ -80,17 +81,41 @@ class DrivePairingJob extends ChangeNotifier {
   /// more. Two of these never run at once — a second call while one is in
   /// flight is dropped, because the collecting read is destructive and two
   /// of them would turn one pairing into one pairing and one `404`.
+  /// What these lines are written under: `drive`, beside the app's
+  /// `images`, `player` and `boot`. In logcat that reads as
+  /// `xtremio_core::app: drive: …`.
+  ///
+  /// **What is never in them.** No refresh token, no access token, no
+  /// server auth code -- not their values and not their lengths. A session
+  /// id *is* written: it is a uuid the service invented, useless without a
+  /// pairing waiting behind it, and it is the one thing that makes a log
+  /// line join up with a row in the service's records. Every pairing fault
+  /// in this app so far was diagnosed by matching those two, and doing it
+  /// without these lines took an hour each time.
+  static const String target = 'drive';
+
   Future<void> finish({
     required String sessionId,
     required String serverAuthCode,
     required List<String> fileIds,
   }) async {
-    if (running) return;
+    if (running) {
+      DiagnosticsLog.info(target, 'pairing: already finishing $_sessionId');
+      return;
+    }
+    DiagnosticsLog.info(
+      target,
+      'pairing: handing over ${fileIds.length} files on $sessionId',
+    );
     _start(sessionId);
     final handover = await service.handOverNativePick(
       sessionId: sessionId,
       serverAuthCode: serverAuthCode,
       fileIds: fileIds,
+    );
+    DiagnosticsLog.info(
+      target,
+      'pairing: handover $sessionId -> ${handover.name}',
     );
     if (handover != DrivePairingHandover.taken) {
       return _end(switch (handover) {
@@ -107,12 +132,39 @@ class DrivePairingJob extends ChangeNotifier {
   /// already happened — so all this needs is the id.
   Future<void> resume(String sessionId) async {
     if (running) return;
+    // Bounded, because the thing that asks is woken by this job finishing:
+    // a collect that keeps failing would otherwise wake the library, which
+    // would ask again, for ever. Three goes is enough for a blip and short
+    // of a loop, and a fourth comes with the next start of the app -- the
+    // id is still written down.
+    final tries = _tries[sessionId] ?? 0;
+    if (tries >= maxTries) {
+      DiagnosticsLog.info(
+        target,
+        'pairing: giving up on $sessionId for this run after $tries tries',
+      );
+      return;
+    }
+    DiagnosticsLog.info(
+      target,
+      'pairing: collecting what was left behind on $sessionId',
+    );
+    _tries[sessionId] = tries + 1;
     _start(sessionId);
     await _collect(sessionId);
   }
 
+  /// How many times one outstanding pairing is asked for in a run.
+  static const int maxTries = 3;
+
+  final Map<String, int> _tries = {};
+
   Future<void> _collect(String sessionId) async {
     final answer = await service.collect(sessionId);
+    DiagnosticsLog.info(
+      target,
+      'pairing: collect $sessionId -> ${answer.runtimeType}',
+    );
     switch (answer) {
       case DrivePairingCollected():
         // One statement, from the answer into the account. The token is in
@@ -149,12 +201,28 @@ class DrivePairingJob extends ChangeNotifier {
     // survive a process that stops in the middle of it.
     unawaited(account.prefs.setDrivePendingSession(sessionId));
     notifyListeners();
+    _wakeAccount();
   }
 
+  /// Wakes everything that depends on the account, **after** whatever is
+  /// running now.
+  ///
+  /// A microtask and not a call: the thing that starts a resume is the
+  /// library building, and an account that notified from inside that build
+  /// would be marking its own dependents dirty mid-frame. The wake is not
+  /// urgent -- it only has to happen before anybody could look again.
+  void _wakeAccount() => scheduleMicrotask(account.notePairingChanged);
+
   void _end(DrivePairingJobOutcome outcome, {bool forget = true}) {
+    DiagnosticsLog.info(
+      target,
+      'pairing: $_sessionId finished ${outcome.name}'
+      '${forget ? '' : ', still outstanding'}',
+    );
     _sessionId = null;
     _outcome = outcome;
     if (forget) unawaited(account.prefs.setDrivePendingSession(null));
     notifyListeners();
+    _wakeAccount();
   }
 }

@@ -43,11 +43,14 @@ void main() {
     expect(DiagnosticsLog.unredacted, isFalse);
   });
 
-  test('a picture says what it decoded to exactly while it is on', () async {
-    // The other half of the app's own verbosity: a line per image as it
-    // resolves, which is what can explain 80 cached pictures at 410 kB
-    // each. Off by default, because it is a line per tile of every row
-    // somebody scrolls past.
+  test('and verbose logging no longer buys a line per picture', () async {
+    // It used to. A line per image is a hundred for one screen of posters,
+    // and it drowned the log of somebody who had turned verbose logging on
+    // to read something else -- which is what it was doing while a Drive
+    // pairing was being debugged through it. The line answered the question
+    // it was built for (what a poster costs resident on the television) and
+    // nothing is asking it now, so the machinery stays and the switch lets
+    // go of it.
     addTearDown(() => ImageCacheLog.perImage = false);
     final prefs = AppPrefs.inMemory();
     final sync = started(prefs: prefs, server: RecordingServerSettings());
@@ -56,11 +59,13 @@ void main() {
 
     await prefs.setVerboseDiagnostics(true);
     await settle(sync);
-    expect(ImageCacheLog.perImage, isTrue);
-
-    await prefs.setVerboseDiagnostics(false);
-    await settle(sync);
-    expect(ImageCacheLog.perImage, isFalse);
+    expect(
+      ImageCacheLog.perImage,
+      isFalse,
+      reason: 'verbose logging is about the log, not about posters',
+    );
+    // And the half of the switch that is still its own is untouched.
+    expect(DiagnosticsLog.unredacted, isTrue);
   });
 
   test('the default is off, and the server is told so at start', () async {

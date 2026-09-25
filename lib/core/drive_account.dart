@@ -97,6 +97,17 @@ class DriveAccount extends ChangeNotifier {
   /// starts one, which is the whole point -- see [DrivePairingJob].
   final DrivePairingService pairingService;
 
+  /// Told by [DrivePairingJob] that a pairing started, finished or was left
+  /// outstanding.
+  ///
+  /// The job has listeners of its own, but they are the ones that *watch* a
+  /// pairing. This is what wakes everything that merely depends on the
+  /// account -- the library among them, which is where an outstanding
+  /// pairing gets collected. Without it the library was only ever told by a
+  /// change it had already seen, so a pairing left behind sat there until
+  /// the screen happened to be built again.
+  void notePairingChanged() => notifyListeners();
+
   /// The pairing being finished, if any. Outlives every screen, because the
   /// credential and the file list are this object's and a widget only ever
   /// happened to start the work.

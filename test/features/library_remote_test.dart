@@ -1242,6 +1242,49 @@ void main() {
     );
   });
 
+  testWidgets('a pairing left behind is collected when the job that left it '
+      'wakes the library, and is not asked for for ever', (tester) async {
+    // The gap that made the recovery useless: the id was written to the
+    // preferences and the job told its own listeners, and neither of those
+    // is what the library depends on. Coming back from the pairing screen
+    // changed nothing the library was watching, so it never looked, and a
+    // pairing with seventeen files sat on the service until it expired.
+    //
+    // And bounded, because the waking is circular by construction: a collect
+    // that fails wakes the library, which asks again.
+    var collects = 0;
+    final service = FakeDrivePairingService(
+      answers: [const DrivePairingUnreachable()],
+    )..onCollect = () => collects++;
+    final prefs = AppPrefs(client: FakePrefsClient());
+    await prefs.load();
+    await prefs.setDrivePendingSession('left-behind');
+    final drive = DriveAccount(
+      prefs: prefs,
+      secrets: FakeSecretStore(),
+      pairingService: service,
+    );
+    await drive.load();
+    addTearDown(() {
+      drive.dispose();
+      prefs.dispose();
+    });
+
+    await tester.pumpWidget(harness(fakeCore(), drive: drive));
+    await tester.pumpAndSettle();
+
+    expect(
+      collects,
+      DrivePairingJob.maxTries,
+      reason: 'it kept trying, and then stopped',
+    );
+    expect(
+      prefs.drivePendingSession,
+      'left-behind',
+      reason: 'and it is still written down, for the next start',
+    );
+  });
+
   testWidgets('the link button is above the list that button fills', (
     tester,
   ) async {

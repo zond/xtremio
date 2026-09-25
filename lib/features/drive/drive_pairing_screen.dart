@@ -576,6 +576,15 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
       _pickedHere = true;
     });
     final picked = await picker.pick();
+    DiagnosticsLog.info(
+      DrivePairingJob.target,
+      'pick: ${switch (picked) {
+        DriveNativePicked(:final fileIds) => '${fileIds.length} files',
+        DriveNativePickCancelled() => 'nothing chosen',
+        DriveNativePickUnavailable() => 'no native picker here',
+        DriveNativePickFailed(:final reason) => 'failed: $reason',
+      }}',
+    );
     _say(() => _picking = _Picking.no);
     switch (picked) {
       case DriveNativePickUnavailable():
