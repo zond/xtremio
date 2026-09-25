@@ -202,6 +202,19 @@ void main() {
     expect(row.cinemetaId, 'tt2543164');
   });
 
+  test('and keeps what Drive measured, which a Picker never knows', () {
+    // A pairing hands over a name and a mime type; `videoMediaMetadata`
+    // comes from a listing. So re-picking a file must not blank the height
+    // a reload had already written down.
+    final files = LinkedDriveFiles.empty
+        .linking(_file(height: 2160, durationMillis: 6960000))
+        .linking(_file(name: 'renamed.mkv', at: _later));
+
+    final row = files.entries.single;
+    expect(row.height, 2160);
+    expect(row.durationMillis, 6960000);
+  });
+
   test('a match can be set, cleared, and asked for by file', () {
     final files = LinkedDriveFiles.empty.linking(_file());
 

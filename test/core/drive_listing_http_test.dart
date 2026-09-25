@@ -39,6 +39,9 @@ void main() {
     /// repeats.
     late List<(int, Object?)> pages;
 
+    /// Where a `302` sends whoever follows it, when one is answered.
+    String? redirectTo;
+
     late XtremioDriveFileLister lister;
 
     setUp(() async {
@@ -48,6 +51,7 @@ void main() {
       HttpOverrides.global = null;
       seen = [];
       authorised = [];
+      redirectTo = null;
       refreshStatus = HttpStatus.ok;
       refreshBody = {'accessToken': _accessToken, 'expiresIn': 3599};
       pages = [
@@ -75,6 +79,9 @@ void main() {
           final page = pages.length == 1 ? pages.first : pages.removeAt(0);
           response.statusCode = page.$1;
           body = page.$2;
+          if (page.$1 == HttpStatus.found && redirectTo != null) {
+            response.headers.set(HttpHeaders.locationHeader, redirectTo!);
+          }
         }
         if (body != null) {
           response.headers.contentType = ContentType.json;
@@ -293,7 +300,22 @@ void main() {
       () async {
         // A followed redirect is how an `Authorization` header ends up at a
         // host nobody meant to send it to. It reads as a non-200 instead.
-        pages = [(HttpStatus.found, null)];
+        //
+        // The redirect points at something that answers a perfectly good
+        // page, so the refusal to follow it is the only thing making this a
+        // refusal: a 302 into nowhere would have failed either way.
+        redirectTo = '/drive/v3/somewhere-else';
+        pages = [
+          (HttpStatus.found, null),
+          (
+            HttpStatus.ok,
+            {
+              'files': [
+                {'id': 'drive-file-1', 'name': 'ep6.avi'},
+              ],
+            },
+          ),
+        ];
 
         final listing = await lister.listFiles(refreshToken: _refreshToken);
 
@@ -308,8 +330,18 @@ void main() {
     test(
       'an answer too big to be a page is refused rather than read',
       () async {
+        // A page this build reads perfectly well but for its size, so the
+        // cap is the only thing refusing it.
         pages = [
-          (HttpStatus.ok, {'filler': 'x' * (600 * 1024)}),
+          (
+            HttpStatus.ok,
+            {
+              'files': [
+                {'id': 'drive-file-1', 'name': 'ep6.avi'},
+              ],
+              'filler': 'x' * (600 * 1024),
+            },
+          ),
         ];
 
         final listing = await lister.listFiles(refreshToken: _refreshToken);
