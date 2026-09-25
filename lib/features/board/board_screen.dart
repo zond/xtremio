@@ -9,12 +9,10 @@ import '../../shell/tv_density.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
 import '../../widgets/poster_tile.dart';
-import '../../widgets/tv_ladder.dart';
 import '../addons/addons_screen.dart';
 import '../addons/failed_addons.dart';
 import '../details/meta_details_screen.dart';
 import '../discover/discover_screen.dart';
-import '../drive/remote_files.dart';
 
 /// Home: a "Continue watching" row over `continue_watching_preview` followed
 /// by one horizontal row per catalog of every installed addon (`board`).
@@ -55,36 +53,18 @@ class BoardScreen extends StatefulWidget {
       ? '1 catalog could not be loaded'
       : '$count catalogs could not be loaded';
 
-  /// The app bar's controls, as a rung of the [TvLadder] this screen hangs
-  /// on a television.
-  ///
-  /// The board is the one screen with something to press *above* its rows,
-  /// and geometric traversal is not how a region is entered here: up from a
-  /// poster takes the nearest node in that direction, and when the only
-  /// node above sits in the far corner of the app bar "nearest" is a fact
-  /// about where the poster happened to be rather than about what the
-  /// viewer meant. Coming back down is worse -- with nothing in the
-  /// button's own vertical band, Flutter re-sorts every node below it by
-  /// horizontal distance, so down out of the app bar can land three rows
-  /// into the page. This app has been bitten by that twice in a week.
-  ///
-  /// So two levels, and only two. [appBarLevel] is the bar; [topRowLevel]
-  /// is the topmost row of the board and nothing else. Up from the top row
-  /// goes to the bar and down from the bar comes back to the card the row
-  /// was last on; every other press in the body is left to directional
-  /// traversal exactly as it was, which is why the rows below carry no
-  /// level at all. A ladder that numbered every row would be a second
-  /// scheme disagreeing with the one the page is drawn in -- the levels
-  /// would have to be renumbered whenever the continue-watching row came or
-  /// went -- and a level scheme that disagrees with what is drawn is
-  /// precisely what makes "up" skip a rung.
-  static const int appBarLevel = 0;
-
-  /// The topmost row of the board, whichever row that is: continue watching
-  /// when there is something to continue, else the first catalog. Read off
-  /// what is drawn (`index == 0`) and not off which kind of row it is, for
-  /// the reason above.
-  static const int topRowLevel = 10;
+  // No [TvLadder] here, and that is a deletion rather than an omission.
+  //
+  // The board carried two rungs -- the app bar and the topmost row -- for
+  // one control: the link button, which now lives in the library's app bar
+  // where the files it links belong ([RemoteFilesButton]). With it gone the
+  // board's bar holds a title and nothing that can take focus, so there was
+  // nothing above the rows to reach and nothing for a rung to be about. A
+  // ladder whose upper level wraps an empty bar is a level scheme
+  // disagreeing with what is drawn, which is the failure the ladder exists
+  // to prevent; the reasoning itself moved with the button, to
+  // [LibraryScreen.appBarLevel]. The rows are back to the directional
+  // traversal they always had between them.
 
   @override
   State<BoardScreen> createState() => _BoardScreenState();
@@ -272,34 +252,11 @@ class _BoardScreenState extends State<BoardScreen> {
   @override
   Widget build(BuildContext context) {
     final layout = _RowLayout.of(context);
-    return TvLadder(
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Board'),
-          actions: const [
-            TvLadderRow(
-              level: BoardScreen.appBarLevel,
-              child: RemoteFilesButton(),
-            ),
-          ],
-        ),
-        body: _body(layout),
-      ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Board')),
+      body: _body(layout),
     );
   }
-
-  /// The topmost row, as the ladder's lower rung; every other row as it
-  /// was.
-  ///
-  /// Only the top one, because only the top one has anywhere to go up to.
-  /// A [TvLadderRow] answers up and down made inside it and leaves a press
-  /// nothing can take alone, so down out of this row falls through to
-  /// directional traversal and lands on the row below exactly as before --
-  /// which is why the rest of the board needs no levels and keeps the
-  /// column-preserving walk it has.
-  Widget _topRung(int index, Widget row) => index == 0
-      ? TvLadderRow(level: BoardScreen.topRowLevel, child: row)
-      : row;
 
   Widget _body(_RowLayout layout) => ListenableBuilder(
     listenable: Listenable.merge([_board!, _continueWatching!, _ctx]),
@@ -325,25 +282,22 @@ class _BoardScreenState extends State<BoardScreen> {
           SliverFixedExtentList.builder(
             itemExtent: layout.extent,
             itemCount: rows.length,
-            itemBuilder: (context, index) => _topRung(
-              index,
-              switch (rows[index]) {
-                _ContinueWatchingRow(:final state) => _ContinueWatchingRowView(
-                  state: state,
-                  layout: layout,
-                  isFirstRow: index == 0,
-                  onOpen: (item) =>
-                      _openDetails(item.type, item.id, videoId: item.videoId),
-                ),
-                _CatalogRow(:final row) => _CatalogRowView(
-                  row: row,
-                  layout: layout,
-                  isFirstRow: index == 0,
-                  onOpen: (item) => _openDetails(item.type, item.id),
-                  onSeeAll: () => _openCatalog(row),
-                ),
-              },
-            ),
+            itemBuilder: (context, index) => switch (rows[index]) {
+              _ContinueWatchingRow(:final state) => _ContinueWatchingRowView(
+                state: state,
+                layout: layout,
+                isFirstRow: index == 0,
+                onOpen: (item) =>
+                    _openDetails(item.type, item.id, videoId: item.videoId),
+              ),
+              _CatalogRow(:final row) => _CatalogRowView(
+                row: row,
+                layout: layout,
+                isFirstRow: index == 0,
+                onOpen: (item) => _openDetails(item.type, item.id),
+                onSeeAll: () => _openCatalog(row),
+              ),
+            },
           ),
           // What the rows above do not account for, once, at the end:
           // a catalog that simply vanished is a bug report nobody can

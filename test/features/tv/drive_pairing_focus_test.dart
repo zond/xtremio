@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
-import 'package:xtremio/features/board/board_screen.dart';
 import 'package:xtremio/features/drive/drive_pairing_screen.dart';
 import 'package:xtremio/features/drive/remote_files.dart';
+import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/shell/device_profile.dart';
 import 'package:xtremio/shell/tv_density.dart';
 
@@ -15,35 +15,33 @@ import '../../support/fake_secret_store.dart';
 import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
-/// Reaching the link button on a television, and coming back.
+/// Reaching the link button on a television, and getting from it to a code to
+/// scan.
 ///
-/// The board is the one screen in this app with something to press *above*
-/// its rows, and that is the arrangement geometric focus is worst at: up
-/// from a poster takes the nearest node in that direction, and coming back
-/// down out of a control with nothing in its own vertical band, Flutter
-/// re-sorts every node below by horizontal distance and can land three rows
-/// into the page. Two rungs of a [TvLadder] are what make it an answer
-/// about regions instead. This walks it.
+/// **This file used to walk the board**, because that is where the button was:
+/// three of its tests were about the two rungs of a [TvLadder] the board hung
+/// on for this one control, and the fourth was the press that opens the list
+/// of services. The button is in the library's app bar now, and so is the
+/// walk. The rung tests did not come with it and are not replaced here:
+/// there is no ladder to test on the library (`library_screen.dart` says
+/// why), and the claim they were making about regions -- up out of the row
+/// reaches the bar, down out of the bar does not land in the grid -- is made
+/// against the library in `library_focus_test.dart`, where the rest of that
+/// screen's walk already lives.
+///
+/// What is here is the part that is about this feature rather than about the
+/// screen under it: the button, the dialog it opens, the one row on that
+/// dialog, and the pairing screen beyond it.
 void main() {
-  /// The board fixture with nothing to continue, so the topmost row is a
-  /// catalog with more than one card in it -- which is what makes "down
-  /// came back to the card it left" say anything.
-  FakeCoreClient board({bool continueWatching = false}) => FakeCoreClient(
+  /// The anonymous library of the fixture: two titles, every type, last
+  /// watched first. Its contents matter only in that the app bar is drawn
+  /// whatever the engine says.
+  FakeCoreClient library() => FakeCoreClient(
     state: {
-      CoreField.board: loadBoardFixture(),
-      CoreField.continueWatchingPreview: continueWatching
-          ? loadContinueWatchingFixture()
-          : {'items': <Object>[]},
+      CoreField.library: loadLibraryFixture(),
+      CoreField.ctx: loadCtxLoggedOutFixture(),
     },
   );
-
-  /// The names in catalog row [index] of the board fixture.
-  List<String> rowNames(int index) => [
-    for (final item in CatalogsWithExtraState.fromJson(
-      loadBoardFixture(),
-    ).rows[index].items)
-      item.name,
-  ];
 
   Future<DriveAccount> account() async {
     final prefs = AppPrefs.inMemory();
@@ -66,28 +64,28 @@ void main() {
         child: MaterialApp(
           theme: XtremioApp.themeFor(isTv: true),
           builder: TvMediaQuery.builder,
-          home: const BoardScreen(),
+          home: const LibraryScreen(),
         ),
       ),
     ),
   );
 
-  testWidgets('up from the top row reaches the link button, and down comes '
-      'back to the card it left', (tester) async {
-    useScreen(tester, tvSize);
-    await tester.pumpWidget(harness(board(), await account()));
-    await tester.pumpAndSettle();
-    final movies = rowNames(0);
-    expect(focusedTileName(tester), movies[0]);
-
-    // Two steps along the top row, so "came back" is a claim about the
-    // card and not about the row.
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusedTileName(tester), movies[2]);
-
-    await press(tester, LogicalKeyboardKey.arrowUp);
+  /// Presses down until the link button has the remote.
+  Future<void> reachTheButton(WidgetTester tester) async {
+    for (var i = 0; i < 4 && focusedTooltip() != RemoteFilesButton.label; i++) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+    }
     expect(focusedTooltip(), RemoteFilesButton.label);
+  }
+
+  testWidgets('the link button is in the library, and the remote finds it', (
+    tester,
+  ) async {
+    useScreen(tester, tvSize);
+    await tester.pumpWidget(harness(library(), await account()));
+    await tester.pumpAndSettle();
+
+    await reachTheButton(tester);
     expect(
       focusMarks(),
       isNotEmpty,
@@ -95,71 +93,23 @@ void main() {
           'the remote is standing on the link button with nothing drawn '
           'to say so',
     );
-
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedTileName(tester), movies[2]);
   });
 
-  testWidgets('and nothing is stepped over: down out of the bar walks the '
-      'rows in the order they are drawn', (tester) async {
+  testWidgets('select opens the list of services, and its row is a control '
+      'a remote can land on', (tester) async {
     useScreen(tester, tvSize);
-    await tester.pumpWidget(harness(board(), await account()));
+    await tester.pumpWidget(harness(library(), await account()));
     await tester.pumpAndSettle();
 
-    await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusedTooltip(), RemoteFilesButton.label);
-
-    // The first press out of the bar lands on the topmost row and not on
-    // whatever happened to be horizontally nearest further down; the
-    // presses after it are directional traversal, unchanged.
-    for (var row = 0; row < 3; row++) {
-      await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(
-        rowNames(row),
-        contains(focusedTileName(tester)),
-        reason: 'the walk down the board skipped row $row',
-      );
-    }
-  });
-
-  testWidgets('the same holds when continue watching is the topmost row', (
-    tester,
-  ) async {
-    // Which row is on top is a property of the state, not of the code, so
-    // the rung is keyed on being drawn first rather than on being a
-    // catalog.
-    useScreen(tester, tvSize);
-    await tester.pumpWidget(
-      harness(board(continueWatching: true), await account()),
-    );
-    await tester.pumpAndSettle();
-    expect(focusedTileName(tester), 'Night of the Living Dead');
-
-    await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusedTooltip(), RemoteFilesButton.label);
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedTileName(tester), 'Night of the Living Dead');
-  });
-
-  testWidgets('select opens the list of services, and the remote can reach '
-      'the one row on it', (tester) async {
-    useScreen(tester, tvSize);
-    await tester.pumpWidget(harness(board(), await account()));
-    await tester.pumpAndSettle();
-
-    await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusedTooltip(), RemoteFilesButton.label);
+    await reachTheButton(tester);
     await press(tester, LogicalKeyboardKey.select);
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.text('Google Drive'), findsOneWidget);
 
-    await pressUntil(
-      tester,
-      LogicalKeyboardKey.tab,
-      () => focusedLabel(tester) == 'Google Drive',
-      target: 'the Google Drive row',
-      limit: 8,
-    );
+    // The row takes the remote on arrival, so a dialog whose only
+    // button-shaped control used to be Cancel now opens with the remote on
+    // the thing to do.
+    expect(focusedLabel(tester), 'Google Drive');
     expect(
       focusMarks(),
       isNotEmpty,
@@ -177,7 +127,7 @@ void main() {
     tester,
   ) async {
     // Mounted with a fake service rather than reached through the dialog:
-    // what the board hands it is the deployed one, and a widget test must
+    // what the library hands it is the deployed one, and a widget test must
     // not be pointed at that.
     useScreen(tester, tvSize);
     final drive = await account();
@@ -200,19 +150,4 @@ void main() {
     expect(find.byType(PairingQrCode), findsOneWidget);
     expect(find.text(service.session.code), findsOneWidget);
   });
-}
-
-/// Presses [key] until [reached] answers true, or fails naming [target].
-Future<void> pressUntil(
-  WidgetTester tester,
-  LogicalKeyboardKey key,
-  bool Function() reached, {
-  required String target,
-  int limit = 30,
-}) async {
-  for (var i = 0; i < limit; i++) {
-    if (reached()) return;
-    await press(tester, key);
-  }
-  expect(reached(), isTrue, reason: 'never reached $target');
 }

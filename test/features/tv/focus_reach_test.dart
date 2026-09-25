@@ -898,26 +898,27 @@ void main() {
       await openUninstallDialog(tester, '1 catalog could not be loaded');
       await walkEveryStop(tester, stops: 12);
     }),
-    walk('board_screen.dart', 'the list of services the link button opens', (
+    walk('library_screen.dart', 'the list of services the link button opens', (
       tester,
     ) async {
+      // The button moved off the board and into the library's app bar, so
+      // this walk moved with it. Down rather than up: the bar is above the
+      // filter row here, and down from nothing lands on it first.
       useScreen(tester, tvSize);
       await tester.pumpWidget(
         DriveAccountScope(
           account: drive(),
           child: CoreScope(
             client: fullCore(),
-            child: onTv(const BoardScreen()),
+            child: onTv(const LibraryScreen()),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Up out of the top row is how the remote gets into the app bar here
-      // -- see BoardScreen.appBarLevel.
       await pressUntil(
         tester,
-        LogicalKeyboardKey.arrowUp,
+        LogicalKeyboardKey.arrowDown,
         () => focusedTooltip() == RemoteFilesButton.label,
         target: 'the link button',
         limit: 4,

@@ -260,14 +260,14 @@ class DriveAccount extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Writes down which Cinemeta title [fileId] turned out to be, for
-  /// whatever comes to match filenames against the catalogue. Does
-  /// nothing when that file is not linked.
-  Future<void> noteCinemetaId({
+  /// Writes down which catalogue title [fileId] turned out to be, so the
+  /// search behind it happens once and not once a screen. Does nothing when
+  /// that file is not linked, or when the match is already what it says.
+  Future<void> noteMatch({
     required String fileId,
-    required String? cinemetaId,
+    required LinkedDriveMatch? match,
   }) async {
-    final linked = prefs.driveLinkedFiles.withCinemetaId(fileId, cinemetaId);
+    final linked = prefs.driveLinkedFiles.withMatch(fileId, match);
     if (linked == prefs.driveLinkedFiles) return;
     await prefs.setDriveLinkedFiles(linked);
     notifyListeners();

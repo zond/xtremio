@@ -147,7 +147,7 @@ void main() {
       ]);
     });
 
-    test('a Cinemeta id can be written against a linked file', () async {
+    test('a match can be written against a linked file', () async {
       final prefsClient = FakePrefsClient();
       final account = await _account(
         prefsClient: prefsClient,
@@ -160,16 +160,28 @@ void main() {
         mimeType: 'video/x-matroska',
       );
 
-      await account.noteCinemetaId(
+      await account.noteMatch(
         fileId: 'drive-file-1',
-        cinemetaId: 'tt2543164',
+        match: const LinkedDriveMatch(
+          cinemetaId: 'tt2543164',
+          type: 'movie',
+          name: 'Arrival',
+          year: 2016,
+        ),
       );
       var notified = 0;
       account.addListener(() => notified++);
       // And a file nobody linked is not quietly added -- and does not
       // notify, because a notify nothing changed is a screen rebuilt for
       // nothing.
-      await account.noteCinemetaId(fileId: 'nothing', cinemetaId: 'tt0000000');
+      await account.noteMatch(
+        fileId: 'nothing',
+        match: const LinkedDriveMatch(
+          cinemetaId: 'tt0000000',
+          type: 'movie',
+          name: 'Nothing',
+        ),
+      );
 
       expect(notified, 0);
       expect(account.files.entries.single.cinemetaId, 'tt2543164');
