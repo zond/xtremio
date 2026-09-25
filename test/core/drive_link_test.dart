@@ -245,4 +245,104 @@ void main() {
     // reason it needs a list of its own.
     expect(files.matching('tt0000000'), isEmpty);
   });
+
+  test('a match knows where its poster is, from its id and not a stored '
+      'string', () {
+    // Written out rather than built from the id: a test that composes the
+    // URL the way the code does passes at every URL.
+    expect(
+      _arrival.posterUrl,
+      'https://images.metahub.space/poster/small/tt2543164/img',
+    );
+    expect(
+      _episode.posterUrl,
+      'https://images.metahub.space/poster/small/tt0903747/img',
+    );
+  });
+
+  group('the matches the library has no card for', () {
+    /// The three files the merge has to tell apart, newest linked first:
+    /// an episode, a film, and a file nothing matched.
+    final files = LinkedDriveFiles.empty
+        .linking(_file(id: 'drive-file-3'))
+        .linking(_file(id: 'drive-file-2', match: _arrival))
+        .linking(_file(id: 'drive-file-1', match: _episode));
+
+    test('is every matched one when the library holds none of them', () {
+      expect(files.unlistedMatches(listed: const {}), [_episode, _arrival]);
+    });
+
+    test('is in link order, newest first', () {
+      // The engine's items come first and these after, so the order here is
+      // the only one they have. A linked file has never been watched, so
+      // `lastwatched` has nothing to say about it.
+      final older = LinkedDriveFiles.empty
+          .linking(_file(id: 'drive-file-1', match: _episode))
+          .linking(_file(id: 'drive-file-2', match: _arrival));
+      expect(older.unlistedMatches(listed: const {}), [_arrival, _episode]);
+    });
+
+    test('drops a film whose card the engine already sent', () {
+      expect(files.unlistedMatches(listed: const {'tt2543164'}), [_episode]);
+    });
+
+    test('drops an episode whose *show* the engine sent, because the card it '
+        'belongs to is the show', () {
+      expect(files.unlistedMatches(listed: const {'tt0903747'}), [_arrival]);
+    });
+
+    test('so a season linked into a library that already follows the show '
+        'adds nothing at all', () {
+      const second = LinkedDriveMatch(
+        cinemetaId: 'tt0903747',
+        type: 'series',
+        name: 'Breaking Bad',
+        year: 2008,
+        season: 1,
+        episode: 2,
+      );
+      const third = LinkedDriveMatch(
+        cinemetaId: 'tt0903747',
+        type: 'series',
+        name: 'Breaking Bad',
+        year: 2008,
+        season: 1,
+        episode: 3,
+      );
+      final season = LinkedDriveFiles.empty
+          .linking(_file(id: 'drive-file-1', match: _episode))
+          .linking(_file(id: 'drive-file-2', match: second))
+          .linking(_file(id: 'drive-file-3', match: third));
+
+      expect(season.unlistedMatches(listed: const {'tt0903747'}), isEmpty);
+      // And with the show absent they are one card, not three: two files of
+      // one title is one title.
+      expect(season.unlistedMatches(listed: const {}), hasLength(1));
+      expect(
+        season.unlistedMatches(listed: const {}).single.cinemetaId,
+        'tt0903747',
+      );
+    });
+
+    test('is filtered by the type the engine has selected, and only by it', () {
+      expect(files.unlistedMatches(listed: const {}, type: 'movie'), [
+        _arrival,
+      ]);
+      expect(files.unlistedMatches(listed: const {}, type: 'series'), [
+        _episode,
+      ]);
+      // Null is the engine's "All", and a type nothing matched is empty
+      // rather than everything.
+      expect(files.unlistedMatches(listed: const {}, type: null), hasLength(2));
+      expect(files.unlistedMatches(listed: const {}, type: 'channel'), isEmpty);
+    });
+
+    test('never holds a file nothing matched: there is no card to add', () {
+      // The Remote list is where an unmatched file lives, and the only
+      // place it can: it has no title, so it has no card.
+      final unmatched = LinkedDriveFiles.empty.linking(_file(id: 'ep6'));
+      expect(unmatched.unlistedMatches(listed: const {}), isEmpty);
+      expect(LinkedDriveFiles.empty.unlistedMatches(listed: const {}), isEmpty);
+    });
+  });
 }
