@@ -58,6 +58,14 @@ dependencies:
   # `DriveAccount` what happens where there is none. A Linux build needs
   # `libsecret-1-dev` (docs/OPERATIONS.md).
   flutter_secure_storage: ^11.2.0
+  # The QR a television draws for a Drive pairing. Pure Dart over `qr`, by
+  # the same author: a CustomPainter and no platform channel, so a widget
+  # test lays one out like anything else. A hand-rolled encoder was the
+  # alternative and was not worth it -- Reed-Solomon, the mask scoring and
+  # the version tables are a page of arithmetic whose failure mode is a code
+  # that looks right on the panel and no camera reads, which is a bug found
+  # in a living room rather than in this suite.
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
