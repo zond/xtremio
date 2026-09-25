@@ -113,6 +113,7 @@ class DrivePairingScreen extends StatefulWidget {
     super.key,
     this.service = const XtremioDrivePairingService(),
     this.opener = const ServerDriveFileOpener(),
+    this.picker = const MethodChannelDriveNativePicker(),
     this.pollEvery = defaultPollEvery,
     this.now = DateTime.now,
   });
@@ -120,6 +121,10 @@ class DrivePairingScreen extends StatefulWidget {
   /// Where the sessions come from; a widget test hands in a fake rather
   /// than reaching the deployed service.
   final DrivePairingService service;
+
+  /// What picks Drive files without a browser, when this device can. See
+  /// [_pickHere] for when that is and why it matters.
+  final DriveNativePicker picker;
 
   /// What turns a linked file into a URL the player can open. Injected for
   /// the same reason [service] is: a widget test plays a file without
@@ -171,6 +176,12 @@ class DrivePairingScreen extends StatefulWidget {
   /// a test quotes by hand is one that can be changed without the test
   /// noticing.
   static const String title = 'Link files';
+
+  /// The service would not take what this device picked. Both causes read
+  /// the same to a viewer: Google refused the one-time code, or the grant it
+  /// minted could not open the files that were picked.
+  static const String handoverRefused =
+      'That could not be confirmed with Google. Try again.';
   static const String scanHeading = 'Scan this with your phone';
   static const String browserHeading = 'Finish this in your browser';
   static const String openingMessage = 'Asking for a code…';
@@ -392,11 +403,77 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
           _closeWindow,
         );
         _armPoll();
-        // A phone has no second screen to scan with, so the app is the one
-        // that opens the page. Once, here, rather than on every rebuild.
-        if (!device.isTv) {
+        // A phone has no second screen to scan with, so this device does the
+        // picking itself -- natively where it can, and in a browser where it
+        // cannot. Once, here, rather than on every rebuild.
+        if (!device.isTv && !await _pickHere(session)) {
+          if (!mounted) return;
           await openInBrowser(context, session.link);
         }
+    }
+  }
+
+  /// Picks on *this* device, and whether that happened.
+  ///
+  /// **The bug this exists to kill.** A phone used to open its own pairing
+  /// link in a browser. With the link now an App Link, Android handed it
+  /// straight back to this app, which picked natively, posted to the session
+  /// -- and left *this* screen to poll the result back. That works only
+  /// while this screen is alive, and by then the viewer has pressed Done on
+  /// the screen in front of it and gone back to their library. The session
+  /// sat at `ready` until it expired, three times in a row, with every other
+  /// part of the flow working perfectly.
+  ///
+  /// So a phone pairing with itself never leaves this screen: the picker is
+  /// an activity on top of it, not a place to navigate to, so the poll that
+  /// collects is still running when the answer lands. The App Link path is
+  /// then only what it was ever for -- a phone scanning a *television's* QR,
+  /// where the files really are going somewhere else.
+  ///
+  /// False means "not done here": no native picker on this device, or one
+  /// that turned out not to be there after all, and the browser is the
+  /// answer. Every other outcome is true, because the viewer has already
+  /// been shown a picker and sending them to a second one would be the app
+  /// arguing with itself.
+  Future<bool> _pickHere(DrivePairingSession session) async {
+    if (!await widget.picker.available()) return false;
+    final picked = await widget.picker.pick();
+    if (!mounted) return true;
+    switch (picked) {
+      case DriveNativePickUnavailable():
+        return false;
+      case DriveNativePickCancelled():
+        // Nothing was chosen. The code is still good and the screen is still
+        // waiting, so this is not a refusal -- it is a viewer who changed
+        // their mind, and the window is what ends it.
+        return true;
+      case DriveNativePickFailed(:final reason):
+        setState(() {
+          _stage = _Stage.refused;
+          _refusal = reason;
+        });
+        return true;
+      case DriveNativePicked(:final serverAuthCode, :final fileIds):
+        final handover = await widget.service.handOverNativePick(
+          sessionId: session.sessionId,
+          serverAuthCode: serverAuthCode,
+          fileIds: fileIds,
+        );
+        if (!mounted) return true;
+        if (handover != DrivePairingHandover.taken) {
+          setState(() {
+            _stage = _Stage.refused;
+            _refusal = DrivePairingScreen.handoverRefused;
+          });
+          return true;
+        }
+        // Collected now rather than on the next tick: the answer is already
+        // there, and the timer is cancelled first so that the destructive
+        // read happens once -- a second one would be a `404` read as a lost
+        // pairing.
+        _poll?.cancel();
+        await _pollOnce();
+        return true;
     }
   }
 

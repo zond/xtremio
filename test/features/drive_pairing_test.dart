@@ -41,6 +41,7 @@ Widget _harness({
   required DrivePairingService service,
   required DriveAccount account,
   ExternalLinkOpener? opener,
+  DriveNativePicker? picker,
 }) => DeviceScope(
   profile: isTv ? _tv : _phone,
   child: ExternalLinkScope(
@@ -48,10 +49,50 @@ Widget _harness({
     child: DriveAccountScope(
       account: account,
       child: MaterialApp(
-        home: DrivePairingScreen(service: service, now: () => pairingNow),
+        home: DrivePairingScreen(
+          service: service,
+          now: () => pairingNow,
+          picker: picker ?? const _NoNativePicker(),
+        ),
       ),
     ),
   ),
+);
+
+/// A device with no native picker: what every desktop is, and what a phone
+/// without Play services is. The browser is the answer there, which is what
+/// this app did everywhere before the native path existed.
+class _NoNativePicker implements DriveNativePicker {
+  const _NoNativePicker();
+
+  @override
+  Future<bool> available() async => false;
+
+  @override
+  Future<DriveNativePickResult> pick() async =>
+      const DriveNativePickUnavailable();
+}
+
+/// A device that picks natively, answering what a test tells it to.
+class _FakeNativePicker implements DriveNativePicker {
+  _FakeNativePicker(this.answer);
+
+  final DriveNativePickResult answer;
+  int picks = 0;
+
+  @override
+  Future<bool> available() async => true;
+
+  @override
+  Future<DriveNativePickResult> pick() async {
+    picks++;
+    return answer;
+  }
+}
+
+const _picked = DriveNativePicked(
+  serverAuthCode: 'fake-server-auth-code-for-tests-only',
+  fileIds: ['drive-file-1', 'drive-file-2'],
 );
 
 /// One polling interval, and a frame to draw what it brought back.
@@ -112,6 +153,105 @@ void main() {
       expect(DrivePairingShape.phone.handsBack, isTrue);
     });
 
+    testWidgets('a phone that can pick natively never leaves this screen, '
+        'and collects what it picked', (tester) async {
+      // The bug this is here for: the phone used to open its own pairing
+      // link, Android handed it back to this app as an App Link, the app
+      // picked natively and posted to the session -- and left *this* screen
+      // to poll the answer back. By then the viewer had pressed Done on the
+      // screen in front of it and gone to their library, so nothing was
+      // polling and the session sat at `ready` until it expired. Measured on
+      // a real phone, three times, with every other part working.
+      final picker = _FakeNativePicker(_picked);
+      final opener = FakeLinkOpener();
+      final account = await _account();
+      final service = FakeDrivePairingService(
+        answers: [
+          DrivePairingCollected(
+            refreshToken: fakeRefreshToken,
+            files: [
+              (
+                fileId: 'drive-file-1',
+                name: 'One.mkv',
+                mimeType: 'video/x-matroska',
+              ),
+              (
+                fileId: 'drive-file-2',
+                name: 'Two.mkv',
+                mimeType: 'video/x-matroska',
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _harness(
+          isTv: false,
+          service: service,
+          account: account,
+          opener: opener,
+          picker: picker,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(picker.picks, 1, reason: 'it picked here');
+      expect(
+        opener.opened,
+        isEmpty,
+        reason: 'and never sent the viewer to a browser to do it again',
+      );
+      expect(service.handovers, [
+        (sessionId: service.session.sessionId, files: 2),
+      ]);
+      // Collected without waiting for a tick: the answer was already there,
+      // and waiting is what left three real pairings to expire.
+      expect(account.files.entries, hasLength(2));
+    });
+
+    testWidgets('and a phone with no native picker opens the page, as every '
+        'phone did before', (tester) async {
+      final opener = FakeLinkOpener();
+      final service = FakeDrivePairingService();
+      await tester.pumpWidget(
+        _harness(
+          isTv: false,
+          service: service,
+          account: await _account(),
+          opener: opener,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(opener.opened.map((url) => url.toString()), [
+        service.session.link,
+      ]);
+      expect(service.handovers, isEmpty);
+    });
+
+    testWidgets('a television picks nothing here: its viewer has the phone', (
+      tester,
+    ) async {
+      // Even with a picker that says it is available -- a television running
+      // Play services is not a lie -- the QR is the point, because the
+      // Picker is a thing you touch and a remote is not.
+      final picker = _FakeNativePicker(_picked);
+      final service = FakeDrivePairingService();
+      await tester.pumpWidget(
+        _harness(
+          isTv: true,
+          service: service,
+          account: await _account(),
+          picker: picker,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(picker.picks, 0);
+      expect(service.handovers, isEmpty);
+      expect(find.byType(PairingQrCode), findsOneWidget);
+    });
+
     testWidgets('a desktop opens the page too, and says it is a desktop', (
       tester,
     ) async {
@@ -138,13 +278,16 @@ void main() {
                 home: DrivePairingScreen(
                   service: service,
                   now: () => pairingNow,
+                  // A desktop has no native picker; said out loud so the
+                  // test is not at the mercy of a platform channel.
+                  picker: const _NoNativePicker(),
                 ),
               ),
             ),
           ),
         ),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(opener.opened, hasLength(1));
       expect(service.shapes, [DrivePairingShape.desktop]);
