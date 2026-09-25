@@ -570,6 +570,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // An unloaded field has no selection to read, and a merge that guessed
     // at one would be the second opinion this whole arrangement avoids.
     if (state == null || !state.isLoaded) return const [];
+    // Downloaded is a filter on what is on this device, and a linked file
+    // is by definition not: a matched title with no download has no card
+    // under it, and one with a download is already in the grid. Without
+    // this the pill narrowed the engine's list and this merge put every
+    // matched remote title straight back -- Downloaded read as Remote.
+    if (_downloadedOnly) return const [];
     // A build of the app that cannot link anything has nothing to merge,
     // which is not a failure to report -- the same reading the Remote list
     // makes of a missing scope.

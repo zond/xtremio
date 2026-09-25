@@ -137,8 +137,9 @@ void main() {
     FakeCoreClient core, {
     DriveAccount? drive,
     CatalogueSearch? search,
+    DownloadsRegistry? downloaded,
   }) {
-    final downloads = FakeDownloadsClient();
+    final downloads = FakeDownloadsClient(registry: downloaded);
     addTearDown(downloads.dispose);
     final screen = LibraryScreen(
       driveOpener: FakeDriveFileOpener(),
@@ -173,6 +174,19 @@ void main() {
       find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
     );
     await tester.pumpAndSettle();
+  }
+
+  /// The downloads fixture pointed at a title the library fixture holds.
+  DownloadsRegistry downloadOf(String metaId) {
+    final json = loadDownloadsFixture();
+    final items = Map<String, dynamic>.from(json['items'] as Map);
+    final key = items.keys.first;
+    final entry = Map<String, dynamic>.from(items[key] as Map)
+      ..['metaId'] = metaId;
+    return DownloadsRegistry.fromJson({
+      'version': json['version'],
+      'items': {key: entry},
+    });
   }
 
   group('a matched file the library has no card for', () {
@@ -762,6 +776,34 @@ void main() {
 
       expect(asked, ['movie/ep6']);
     });
+  });
+
+  testWidgets('and under Downloaded it is not drawn: a linked file is not on '
+      'this device', (tester) async {
+    // Downloaded narrows the engine's list, and the merge put every matched
+    // remote title straight back after it -- so the pill showed remote and
+    // downloaded alike, which is what Remote is for.
+    await tester.pumpWidget(
+      harness(
+        fakeCore(),
+        downloaded: downloadOf('tt26545992'),
+        drive: await account(
+          files: [
+            (id: 'drive-file-1', name: 'Arrival.2016.mkv', match: arrival),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(cards(tester), ['Lanterns', 'The Whisper Man', 'Arrival']);
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Downloaded'));
+    await tester.pumpAndSettle();
+    expect(cards(tester), ['Lanterns'], reason: 'only what is on the device');
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Downloaded'));
+    await tester.pumpAndSettle();
+    expect(cards(tester), ['Lanterns', 'The Whisper Man', 'Arrival']);
   });
 
   testWidgets('the Remote list is unchanged: every linked file, matched and '
