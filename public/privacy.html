@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>xtremio — privacy</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0 auto; max-width: 42rem; padding: 32px 24px 64px;
+         line-height: 1.6; }
+  h1 { font-size: 1.5rem; margin-bottom: .25rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; }
+  .when { opacity: .6; font-size: .9rem; margin-top: 0; }
+  code { font-size: .9em; }
+  ul { padding-left: 1.2rem; }
+</style>
+
+<h1>xtremio — privacy</h1>
+<p class="when">Last updated 25 September 2026</p>
+
+<p>xtremio is a media player. This page describes the one part of it that
+touches a Google Account: connecting a television to a file in your
+Google&nbsp;Drive by scanning a code with your phone.</p>
+
+<h2>What it asks Google for</h2>
+<p>One permission, <code>drive.file</code>. In Google's words, it lets an
+app "see, edit, create and delete only the specific Google Drive files you
+use with this app". It cannot list your Drive, search it, or read anything
+you have not handed over. The file chooser you see is Google's own, runs
+on Google's servers, and tells this service nothing except which file you
+picked.</p>
+
+<h2>What is stored, and for how long</h2>
+<ul>
+  <li><strong>While you are pairing</strong> — a short-lived record holding
+    the access and refresh tokens Google issued, and the id, name and type
+    of the file you chose. It is <strong>deleted the moment your television
+    collects it</strong>, and in any case automatically after ten
+    minutes.</li>
+  <li><strong>After pairing</strong> — nothing. This service keeps no
+    account, no history of what you played, and no copy of your
+    tokens.</li>
+  <li><strong>A counter</strong> — to stop the service being used to run up
+    a bill, it counts requests per hour against a one-way hash, never
+    against you or your account. It expires within two hours.</li>
+</ul>
+
+<h2>What your television keeps</h2>
+<p>The refresh token goes to your television and stays there, so it can ask
+for a fresh access token while a long film is playing. It is stored by the
+app on that device. Nothing else is kept.</p>
+
+<h2>Who else sees it</h2>
+<p>Nobody. There is no analytics, no advertising, no tracking, and no third
+party of any kind. The only servers involved are Google's and this one,
+which runs on Google Cloud. Your file's contents are read by your
+television directly from Google Drive and never pass through this
+service.</p>
+
+<h2>Taking it back</h2>
+<p>Revoke this app's access at any time at
+<a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.
+That invalidates the token on your television immediately; the next thing
+it tries to play will stop and ask you to pair again. To remove what is on
+the television, clear the app's data or uninstall it.</p>
+
+<h2>This is a personal project</h2>
+<p>xtremio is free software, written in the open. What this page describes
+is what the code does, and the code is at
+<a href="https://github.com/zond/xtremio">github.com/zond/xtremio</a>,
+where anything here can be checked rather than taken on trust. Questions
+and complaints belong in that project's issues.</p>

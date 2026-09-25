@@ -2,11 +2,13 @@
   "name": "xtremio-drive-link",
   "description": "Pairing a television with one Google Drive file, over a QR code",
   "main": "index.js",
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "22"
+  },
   "dependencies": {
     "express": "^4.19.2",
     "firebase-admin": "^12.3.0",
-    "firebase-functions": "^5.0.1"
+    "firebase-functions": "^7.4.0"
   },
   "private": true
 }

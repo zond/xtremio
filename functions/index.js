@@ -54,9 +54,22 @@ const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const app = express();
 app.use(express.json());
 
-/** Where this is deployed, for the redirect that must match the console. */
-function origin(req) {
-  return `https://${req.hostname}`;
+/**
+ * Where this service lives, as a viewer's phone sees it.
+ *
+ * Written down rather than read off the request. Behind a Hosting rewrite
+ * the function is reached at its Cloud Run hostname
+ * (`api-....a.run.app`), so `req.hostname` is not where the pages are
+ * served, is not what the QR code should point at, and is not a redirect
+ * URI the OAuth client knows -- the first `link` this returned sent a
+ * phone to a host with nothing on it. This constant is the one the
+ * console is configured with, and the exchange below has to present the
+ * same one it authorised with or Google refuses the code.
+ */
+const PUBLIC_ORIGIN = 'https://xtremio-drive.web.app';
+
+function origin() {
+  return PUBLIC_ORIGIN;
 }
 
 /** A short code a viewer could type if the camera will not read the QR. */
@@ -107,7 +120,7 @@ app.post('/session', async (req, res) => {
   res.json({
     sessionId: id,
     code: session.data().code,
-    link: `${origin(req)}/link?s=${id}`,
+    link: `${origin()}/link?s=${id}`,
     expiresAt: expiresAt.toISOString(),
   });
 });
@@ -140,7 +153,7 @@ app.get('/oauth/callback', async (req, res) => {
       code: String(code),
       client_id: CLIENT_ID.value(),
       client_secret: CLIENT_SECRET.value(),
-      redirect_uri: `${origin(req)}/oauth/callback`,
+      redirect_uri: `${origin()}/oauth/callback`,
       grant_type: 'authorization_code',
     }),
   });
