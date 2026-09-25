@@ -138,6 +138,7 @@ final class _ListingRefused implements Exception {
 class XtremioDriveFileLister implements DriveFileLister {
   const XtremioDriveFileLister({
     this.origin = XtremioDrivePairingService.defaultOrigin,
+    this.filesEndpoint,
     this.timeout = const Duration(seconds: 15),
   });
 
@@ -145,14 +146,23 @@ class XtremioDriveFileLister implements DriveFileLister {
   /// used, written down in one place ([XtremioDrivePairingService]).
   final String origin;
 
+  /// Where Drive's own API is, or null for [driveFiles] -- which is what
+  /// the app builds this with, and the only value any shipped build has.
+  ///
+  /// A parameter for the reason [origin] is one and no further: the paging,
+  /// the statuses and the two JSON types Google's fields arrive in are
+  /// where this can go wrong, and a test proves those against a server on
+  /// the loopback rather than against a stub of the parsing.
+  final Uri? filesEndpoint;
+
   /// How long any one of the calls is given.
   final Duration timeout;
 
-  /// Where Drive's own API is. Not configurable: it is Google's host, and a
-  /// build that pointed this somewhere else would be handing an access
-  /// token to whoever answered.
-  static const String driveApiHost = 'www.googleapis.com';
-  static const String driveApiPath = '/drive/v3/files';
+  /// Google's own listing endpoint.
+  static final Uri driveFiles = Uri.https(
+    'www.googleapis.com',
+    '/drive/v3/files',
+  );
 
   /// What is asked of each file, as Drive's field mask.
   ///
@@ -264,14 +274,16 @@ class XtremioDriveFileLister implements DriveFileLister {
     String accessToken,
     String? pageToken,
   ) async {
-    final url = Uri.https(driveApiHost, driveApiPath, {
-      // A file in the bin cannot be played, so it is not in the listing
-      // and its row goes the way a deleted file's does.
-      'q': 'trashed = false',
-      'fields': fields,
-      'pageSize': '$pageSize',
-      'pageToken': ?pageToken,
-    });
+    final url = (filesEndpoint ?? driveFiles).replace(
+      queryParameters: {
+        // A file in the bin cannot be played, so it is not in the listing
+        // and its row goes the way a deleted file's does.
+        'q': 'trashed = false',
+        'fields': fields,
+        'pageSize': '$pageSize',
+        'pageToken': ?pageToken,
+      },
+    );
     final answer = await _send(
       client,
       'GET',
