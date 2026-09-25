@@ -275,12 +275,25 @@ void main() {
     });
 
     test(
-      'a search that throws is a file with no match, not an error',
+      'a search that throws is not the same as a catalogue that said no',
       () async {
+        // These used to be the same answer -- `null`, both of them -- and a
+        // file that hit a slow Cinemeta once stayed unmatched for the rest
+        // of the run with nothing on screen to say why. Measured on a real
+        // phone, on a file that matched perfectly one Reload later.
+        await expectLater(
+          matchDriveFile(
+            'The.Matrix.1999.mkv',
+            search: (type, query) async => throw StateError('no network'),
+          ),
+          throwsA(isA<DriveCatalogueUnreachable>()),
+        );
+        // While a catalogue that answered, with nothing in it, is still a
+        // file with no match and no error.
         expect(
           await matchDriveFile(
             'The.Matrix.1999.mkv',
-            search: (type, query) async => throw StateError('no network'),
+            search: (type, query) async => const [],
           ),
           isNull,
         );
@@ -318,6 +331,43 @@ void main() {
       }
       return drive;
     }
+
+    test('a catalogue that could not be reached is asked again, while one '
+        'that said no is not', () async {
+      // The distinction that makes this worth an exception: a refusal is an
+      // answer *about this file* and is remembered; a failure is the absence
+      // of one and is not. Treating them alike left a file that matches
+      // perfectly unmatched for the whole run, with nothing on screen to say
+      // why and only Reload to cure it.
+      final drive = await account(names: ['The.Matrix.1999.1080p.mkv']);
+      var reachable = false;
+      var asked = 0;
+      Future<List<Map<String, dynamic>>> search(String type, String query) {
+        asked++;
+        if (!reachable) throw StateError('no network');
+        return Future.value([meta('The Matrix', releaseInfo: '1999')]);
+      }
+
+      final run = DriveMatchRun(account: drive, search: search);
+      await run.run();
+      expect(asked, 1);
+      expect(drive.files.entries.single.match, isNull);
+
+      // The same run, the same file, the same name -- and asked again,
+      // because nothing was ever learned about it.
+      await run.run();
+      expect(asked, 2, reason: 'a failure is not an answer to remember');
+
+      reachable = true;
+      await run.run();
+      expect(asked, 3);
+      expect(drive.files.entries.single.match?.cinemetaId, 'tt0133093');
+
+      // And now it is remembered, because now there is something to
+      // remember.
+      await run.run();
+      expect(asked, 3);
+    });
 
     test('a match is written down once and never asked for again', () async {
       final drive = await account(names: ['The.Matrix.1999.1080p.mkv']);

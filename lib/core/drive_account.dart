@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 
 import 'diagnostics_log.dart';
 import 'drive_link.dart';
+import 'drive_pairing.dart';
+import 'drive_pairing_job.dart';
 import 'prefs_client.dart';
 import 'secret_store.dart';
 
@@ -84,7 +86,24 @@ enum DriveLinkOutcome {
 /// leak it through a log line either. The report's scrub is the second
 /// lock and knows [refreshTokenKey] by name (`redactSecrets`).
 class DriveAccount extends ChangeNotifier {
-  DriveAccount({required this.prefs, this.secrets, this.now = DateTime.now});
+  DriveAccount({
+    required this.prefs,
+    this.secrets,
+    this.now = DateTime.now,
+    this.pairingService = const XtremioDrivePairingService(),
+  });
+
+  /// Where a pairing is finished. Held here rather than by the screen that
+  /// starts one, which is the whole point -- see [DrivePairingJob].
+  final DrivePairingService pairingService;
+
+  /// The pairing being finished, if any. Outlives every screen, because the
+  /// credential and the file list are this object's and a widget only ever
+  /// happened to start the work.
+  late final DrivePairingJob pairing = DrivePairingJob(
+    account: this,
+    service: pairingService,
+  );
 
   /// Where the half of this that is not secret lives: which files are
   /// linked, and whether the token has been rejected.

@@ -20,13 +20,20 @@ const DeviceProfile _desktop = DeviceProfile(isTv: false, hasTouch: false);
 
 /// A [DriveAccount] over fakes, with the preferences loaded first the way
 /// the app loads them.
-Future<DriveAccount> _account({FakeSecretStore? secrets}) async {
+/// [service] is the account's *own*: finishing a pairing is the account's
+/// work now and not a screen's, so a test that watches one through has to
+/// hand the same fake to both.
+Future<DriveAccount> _account({
+  FakeSecretStore? secrets,
+  DrivePairingService? service,
+}) async {
   final prefs = AppPrefs.inMemory();
   await prefs.load();
   final account = DriveAccount(
     prefs: prefs,
     secrets: secrets ?? FakeSecretStore(),
     now: () => pairingNow,
+    pairingService: service ?? FakeDrivePairingService(),
   );
   await account.load();
   addTearDown(() {
@@ -168,7 +175,6 @@ void main() {
       // a real phone, three times, with every other part working.
       final picker = _FakeNativePicker(_picked);
       final opener = FakeLinkOpener();
-      final account = await _account();
       final service = FakeDrivePairingService(
         answers: [
           DrivePairingCollected(
@@ -188,6 +194,7 @@ void main() {
           ),
         ],
       );
+      final account = await _account(service: service);
       await tester.pumpWidget(
         _harness(
           isTv: false,
@@ -213,14 +220,15 @@ void main() {
       expect(account.files.entries, hasLength(2));
     });
 
-    testWidgets('and goes back where it came from rather than saying it '
-        'happened', (tester) async {
-      // The viewer chose their files a second ago and the screen behind this
-      // one is the library those files are now in. A confirmation would be a
-      // page whose only content is "yes, that worked", with a Done to press
-      // before they can look at what they came for.
-      final observer = _Pops();
-      final account = await _account();
+    testWidgets('and the pairing finishes even when the screen is gone', (
+      tester,
+    ) async {
+      // The whole reason this work moved off the screen. Three pairings were
+      // lost in one afternoon because the only thing collecting them was a
+      // screen the viewer had already walked away from -- a Google sign-in,
+      // a consent and a list of files, gone with no error anywhere, because
+      // nothing had failed.
+      final gate = Completer<void>();
       final service = FakeDrivePairingService(
         answers: [
           DrivePairingCollected(
@@ -235,6 +243,83 @@ void main() {
           ),
         ],
       );
+      final account = await _account(service: service);
+      await tester.pumpWidget(
+        _harness(
+          isTv: false,
+          service: service,
+          account: account,
+          picker: _FakeNativePicker(_picked, gate: gate),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // The viewer leaves while the picker is still up.
+      await tester.pumpWidget(const SizedBox());
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(
+        account.files.entries,
+        isNotEmpty,
+        reason: 'the account finished it without a screen to do it on',
+      );
+      expect(
+        account.prefs.drivePendingSession,
+        isNull,
+        reason: 'and stopped remembering a pairing that is done',
+      );
+    });
+
+    testWidgets('a pairing left on the service is written down until it is '
+        'collected', (tester) async {
+      // What survives the process being killed. The id is written *before*
+      // the work, not after: the point is to survive stopping in the middle
+      // of it, and an id is not a credential -- it is a uuid the service made
+      // up, useless without a pairing waiting behind it.
+      final gate = Completer<void>();
+      final service = FakeDrivePairingService();
+      final account = await _account(service: service);
+      await tester.pumpWidget(
+        _harness(
+          isTv: false,
+          service: service,
+          account: account,
+          picker: _FakeNativePicker(_picked, gate: gate),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      gate.complete();
+      await tester.pump();
+
+      expect(account.prefs.drivePendingSession, service.session.sessionId);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('and goes back where it came from rather than saying it '
+        'happened', (tester) async {
+      // The viewer chose their files a second ago and the screen behind this
+      // one is the library those files are now in. A confirmation would be a
+      // page whose only content is "yes, that worked", with a Done to press
+      // before they can look at what they came for.
+      final observer = _Pops();
+      final service = FakeDrivePairingService(
+        answers: [
+          DrivePairingCollected(
+            refreshToken: fakeRefreshToken,
+            files: [
+              (
+                fileId: 'drive-file-1',
+                name: 'One.mkv',
+                mimeType: 'video/x-matroska',
+              ),
+            ],
+          ),
+        ],
+      );
+      final account = await _account(service: service);
       await tester.pumpWidget(
         DeviceScope(
           profile: _phone,
@@ -282,7 +367,6 @@ void main() {
       // the files in the library, the screen still saying "adding". Here the
       // screen is the first route of its navigator, which is one of the ways
       // it refuses.
-      final account = await _account();
       final service = FakeDrivePairingService(
         answers: [
           DrivePairingCollected(
@@ -297,6 +381,7 @@ void main() {
           ),
         ],
       );
+      final account = await _account(service: service);
       await tester.pumpWidget(
         _harness(
           isTv: false,

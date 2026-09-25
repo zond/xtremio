@@ -16,6 +16,7 @@ import 'package:xtremio/widgets/poster_tile.dart';
 import '../support/fake_core_client.dart';
 import '../support/fake_downloads_client.dart';
 import '../support/fake_drive_file_lister.dart';
+import '../support/fake_drive_pairing_service.dart';
 import '../support/fake_drive_file_opener.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_prefs_client.dart';
@@ -1191,6 +1192,54 @@ void main() {
         findsOneWidget,
       );
     });
+  });
+
+  testWidgets('a pairing the service still holds is collected on the next '
+      'library, without anybody asking', (tester) async {
+    // What survives the app being killed. The id of a pairing that reached
+    // the service and was never taken is written down; the next library asks
+    // for it. Three pairings were lost in one afternoon for want of this --
+    // each a Google sign-in, a consent and a list of files, gone with no
+    // error anywhere because nothing had failed.
+    final service = FakeDrivePairingService(
+      answers: [
+        DrivePairingCollected(
+          refreshToken: 'a-refresh-token',
+          files: [
+            (
+              fileId: 'drive-file-9',
+              name: 'Left Behind 2019.mkv',
+              mimeType: 'video/x-matroska',
+            ),
+          ],
+        ),
+      ],
+    );
+    final prefs = AppPrefs(client: FakePrefsClient());
+    await prefs.load();
+    await prefs.setDrivePendingSession('a-session-nobody-collected');
+    final drive = DriveAccount(
+      prefs: prefs,
+      secrets: FakeSecretStore(),
+      pairingService: service,
+    );
+    await drive.load();
+    addTearDown(() {
+      drive.dispose();
+      prefs.dispose();
+    });
+    expect(drive.files.entries, isEmpty);
+
+    await tester.pumpWidget(harness(fakeCore(), drive: drive));
+    await tester.pumpAndSettle();
+
+    expect(service.collects, ['a-session-nobody-collected']);
+    expect(drive.files.entries.single.name, 'Left Behind 2019.mkv');
+    expect(
+      prefs.drivePendingSession,
+      isNull,
+      reason: 'and it stops being remembered once it is in',
+    );
   });
 
   testWidgets('the link button is above the list that button fills', (

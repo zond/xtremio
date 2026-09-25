@@ -213,6 +213,14 @@ class DrivePairingScreen extends StatefulWidget {
   static const String nothingChosenMessage =
       'Nothing chosen yet. Open Google Drive to pick what to play.';
   static const String chooseFilesLabel = 'Choose files';
+
+  /// The service could not be reached while finishing. Unlike the others
+  /// this is worth retrying rather than re-pairing: the pairing is still
+  /// sitting on the service, its id is written down, and the next library
+  /// will ask for it again.
+  static const String unreachableMessage =
+      'Could not reach the service just now. This will finish by itself '
+      'when it can.';
   static const String expiredMessage =
       'That code has expired before anybody '
       'finished with it.';
@@ -347,6 +355,9 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// the one thing on that screen they should not press.
   bool _openedBrowser = false;
 
+  /// This screen is listening to the account's pairing job.
+  bool _watchingJob = false;
+
   /// Guards against two `POST /session` calls overlapping -- a press on
   /// "New code" while the first is still out.
   bool _opening = false;
@@ -359,7 +370,14 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _account ??= DriveAccountScope.of(context);
+    final account = _account ??= DriveAccountScope.of(context);
+    // Watched, not owned. The job belongs to the account and runs whether or
+    // not this screen is here; what this listener is for is the one thing
+    // the screen still does -- getting out of the way when it is done.
+    if (!_watchingJob) {
+      _watchingJob = true;
+      account.pairing.addListener(_onPairingJob);
+    }
     if (_stage != _Stage.opening || _session != null || _opening) return;
     // A code every time, on a device that has never paired and on one that
     // linked a season last week alike.
@@ -386,6 +404,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
 
   @override
   void dispose() {
+    if (_watchingJob) _account?.pairing.removeListener(_onPairingJob);
     // Leaving the screen stops the asking. The answer to a poll already out
     // is still handed over (see the class comment); what stops is arming
     // another one.
@@ -458,6 +477,56 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     }
   }
 
+  /// The account's job finished. All this screen does about it is stop
+  /// being in the way.
+  ///
+  /// It never *stores* anything: the job did that, on the account, before
+  /// this ran. A screen that had gone away by now missed only this step,
+  /// which is the point.
+  void _onPairingJob() {
+    final job = _account?.pairing;
+    if (!mounted || job == null || job.running) return;
+    final outcome = job.outcome;
+    if (outcome == null) return;
+    switch (outcome) {
+      case DrivePairingJobOutcome.linked:
+        unawaited(_leave());
+      case DrivePairingJobOutcome.thisRunOnly:
+        // Said out loud rather than slipped past: the pairing works now and
+        // is gone after a restart, which a viewer wants to know before they
+        // settle in.
+        setState(() {
+          _picking = _Picking.no;
+          _stage = _Stage.linked;
+          _thisRunOnly = true;
+        });
+      case DrivePairingJobOutcome.gone:
+        _refuse(DrivePairingScreen.lostMessage);
+      case DrivePairingJobOutcome.refused:
+        _refuse(DrivePairingScreen.handoverRefused);
+      case DrivePairingJobOutcome.unreachable:
+        _refuse(DrivePairingScreen.unreachableMessage);
+    }
+  }
+
+  void _refuse(String said) => setState(() {
+    _picking = _Picking.no;
+    _stage = _Stage.refused;
+    _refusal = said;
+  });
+
+  /// Goes back where this screen was pushed from, or says it is done when
+  /// it cannot. `maybePop` is allowed to refuse, and a screen that trusted
+  /// it stayed on a spinner over work that had finished.
+  Future<void> _leave() async {
+    if (await Navigator.of(context).maybePop()) return;
+    if (!mounted) return;
+    setState(() {
+      _picking = _Picking.no;
+      _stage = _Stage.linked;
+    });
+  }
+
   /// Opens the picker again on a session that is still good.
   ///
   /// Not a fresh session: the one this screen holds is still open, still
@@ -492,14 +561,22 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// been shown a picker and sending them to a second one would be the app
   /// arguing with itself.
   Future<bool> _pickHere(DrivePairingSession session) async {
-    if (!await widget.picker.available()) return false;
-    setState(() {
+    // Everything the pick needs is taken *before* the first await, and
+    // nothing after it reads `widget` or `_account`. A viewer can leave
+    // while the picker is up -- that is the ordinary case this whole
+    // arrangement is for -- and a method that went looking for its own
+    // widget afterwards would drop the pairing on the floor exactly where
+    // the old one did, one level further in.
+    final picker = widget.picker;
+    final account = _account;
+    if (account == null) return false;
+    if (!await picker.available()) return false;
+    _say(() {
       _picking = _Picking.choosing;
       _pickedHere = true;
     });
-    final picked = await widget.picker.pick();
-    if (!mounted) return true;
-    setState(() => _picking = _Picking.no);
+    final picked = await picker.pick();
+    _say(() => _picking = _Picking.no);
     switch (picked) {
       case DriveNativePickUnavailable():
         return false;
@@ -509,35 +586,37 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         // their mind, and the window is what ends it.
         return true;
       case DriveNativePickFailed(:final reason):
-        setState(() {
+        _say(() {
           _stage = _Stage.refused;
           _refusal = reason;
         });
         return true;
       case DriveNativePicked(:final serverAuthCode, :final fileIds):
-        setState(() => _picking = _Picking.adding);
-        final handover = await widget.service.handOverNativePick(
-          sessionId: session.sessionId,
-          serverAuthCode: serverAuthCode,
-          fileIds: fileIds,
-        );
-        if (!mounted) return true;
-        if (handover != DrivePairingHandover.taken) {
-          _picking = _Picking.no;
-          setState(() {
-            _stage = _Stage.refused;
-            _refusal = DrivePairingScreen.handoverRefused;
-          });
-          return true;
-        }
-        // Collected now rather than on the next tick: the answer is already
-        // there, and the timer is cancelled first so that the destructive
-        // read happens once -- a second one would be a `404` read as a lost
-        // pairing.
+        _say(() => _picking = _Picking.adding);
+        // Handed to the account, which outlives this screen, and **not
+        // awaited here**. This screen's own polling stops first, so the
+        // collecting read -- destructive, and answering exactly once --
+        // happens in one place.
         _poll?.cancel();
-        await _pollOnce();
+        _window?.cancel();
+        unawaited(
+          account.pairing.finish(
+            sessionId: session.sessionId,
+            serverAuthCode: serverAuthCode,
+            fileIds: fileIds,
+          ),
+        );
         return true;
     }
+  }
+
+  /// `setState`, or nothing at all when this screen has gone.
+  ///
+  /// The distinction the old code got wrong: a viewer who has walked away
+  /// should stop the *drawing*, not the work.
+  void _say(VoidCallback change) {
+    if (!mounted) return;
+    setState(change);
   }
 
   /// The window closed. Said plainly, with a way on.

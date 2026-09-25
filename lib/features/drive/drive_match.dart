@@ -125,9 +125,24 @@ Future<LinkedDriveMatch?> matchDriveFile(
   try {
     metas = await search(type, identity.title);
   } on Object {
-    return null;
+    // Rethrown as the one thing a caller has to be able to tell apart from
+    // a refusal, and nothing more. `null` means the catalogue answered and
+    // none of its answers was this file; this means nobody answered, which
+    // is worth asking again about. They looked identical, and a file that
+    // hit a slow Cinemeta once stayed unmatched for the rest of the run with
+    // nothing on screen saying why -- measured, on a real phone, on a file
+    // that matches perfectly a second later.
+    throw const DriveCatalogueUnreachable();
   }
   return acceptMatch(metas, identity, type: type);
+}
+
+/// The catalogue could not be asked. Not "this file has no match".
+class DriveCatalogueUnreachable implements Exception {
+  const DriveCatalogueUnreachable();
+
+  @override
+  String toString() => 'DriveCatalogueUnreachable';
 }
 
 /// Fills in the match of every linked file that has none, once each.
@@ -207,7 +222,18 @@ final class DriveMatchRun {
     for (final file in account.files.entries) {
       if (file.match != null) continue;
       if (!_asked.add((file.fileId, file.name))) continue;
-      final match = await matchDriveFile(file.name, search: search);
+      final LinkedDriveMatch? match;
+      try {
+        match = await matchDriveFile(file.name, search: search);
+      } on DriveCatalogueUnreachable {
+        // Unclaimed, so the next pass asks again. A refusal is remembered
+        // and a failure is not: the first is an answer about this file, the
+        // second is the absence of one, and treating them alike is what left
+        // a perfectly matchable file unmatched until somebody pressed
+        // Reload.
+        _asked.remove((file.fileId, file.name));
+        continue;
+      }
       if (match == null) continue;
       await account.noteMatch(fileId: file.fileId, match: match);
     }

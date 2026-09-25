@@ -291,7 +291,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (_remote && (drive?.files.entries.isEmpty ?? true)) {
       _remote = false;
     }
+    _resumePairing();
     _matchLinkedFiles();
+  }
+
+  /// Collects a pairing the service is still holding.
+  ///
+  /// **This is where a lost pairing gets found.** A finished pairing sits on
+  /// the service for about ten minutes and is handed over exactly once, to
+  /// whoever asks; the id of one that has not been collected is written down
+  /// (`PrefsClient.drivePendingSessionKey`), so if the app was killed, or
+  /// the network went away at the wrong second, the next library asks for
+  /// it. Three pairings were lost in one afternoon for want of this -- each
+  /// a Google sign-in, a consent and a list of files, gone with no error
+  /// anywhere because nothing had failed.
+  ///
+  /// Nothing waits for it and nothing is drawn from it: the files simply
+  /// appear, which is what the viewer expected when they picked them.
+  void _resumePairing() {
+    final account = _drive;
+    if (account == null) return;
+    final pending = account.prefs.drivePendingSession;
+    if (pending == null || account.pairing.running) return;
+    unawaited(account.pairing.resume(pending));
   }
 
   /// Asks about every linked file that has no match yet, without being

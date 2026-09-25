@@ -248,6 +248,21 @@ class AppPrefs extends ChangeNotifier {
   /// list above.
   static const String driveTokenDeadKey = 'driveTokenDead';
 
+  /// The `drivePendingSession` key: a pairing this device started and has
+  /// not finished collecting.
+  ///
+  /// **Written down because losing one costs a whole Google sign-in.** The
+  /// service holds a finished pairing for about ten minutes and hands it
+  /// over exactly once, to whoever asks; if nothing asks, it expires and
+  /// the files, the consent and the picking are all gone. That happened
+  /// three times in one afternoon, because the only thing that asked was
+  /// the screen the viewer had already walked away from.
+  ///
+  /// A session id is not a credential -- it is a uuid the service made up,
+  /// useless without a pairing waiting behind it -- so it belongs here with
+  /// the preferences rather than in the secure store.
+  static const String drivePendingSessionKey = 'drivePendingSession';
+
   bool _streamsSectioned = true;
 
   bool get streamsSectioned => _streamsSectioned;
@@ -325,6 +340,12 @@ class AppPrefs extends ChangeNotifier {
   /// [driveTokenDeadKey]. False on a fresh install, and false again the
   /// moment a new pairing stores a token.
   bool get driveTokenDead => _driveTokenDead;
+
+  String? _drivePendingSession;
+
+  /// See [drivePendingSessionKey]. Null when nothing is outstanding, which
+  /// is the ordinary state.
+  String? get drivePendingSession => _drivePendingSession;
   bool _driveTokenDead = false;
 
   /// Reads every stored preference. Called once at start-up, before any
@@ -448,6 +469,14 @@ class AppPrefs extends ChangeNotifier {
     final tokenDead = stored[driveTokenDeadKey];
     if (tokenDead is bool && tokenDead != _driveTokenDead) {
       _driveTokenDead = tokenDead;
+      changed = true;
+    }
+    final pending = stored[drivePendingSessionKey];
+    final pendingSession = pending is String && pending.isNotEmpty
+        ? pending
+        : null;
+    if (pendingSession != _drivePendingSession) {
+      _drivePendingSession = pendingSession;
       changed = true;
     }
     if (changed) notifyListeners();
@@ -593,6 +622,13 @@ class AppPrefs extends ChangeNotifier {
     _driveTokenDead = value;
     notifyListeners();
     await _write(driveTokenDeadKey, value ? true : null);
+  }
+
+  Future<void> setDrivePendingSession(String? value) async {
+    if (_drivePendingSession == value) return;
+    _drivePendingSession = value;
+    notifyListeners();
+    await _write(drivePendingSessionKey, value);
   }
 
   Future<void> _write(String key, Object? value) async {
