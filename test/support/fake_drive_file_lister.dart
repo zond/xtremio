@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:xtremio/core/core.dart';
 
 /// A [DriveFileLister] a test drives by hand, and the record of what was
@@ -21,6 +23,10 @@ class FakeDriveFileLister implements DriveFileLister {
   /// Every token this was asked with, in order.
   final List<String> asked = [];
 
+  /// Held open, no call finishes until it is completed -- which is how a
+  /// test presses a button twice while the first press is still in flight.
+  Completer<void>? gate;
+
   /// A complete listing naming [namesById] and measuring nothing -- what
   /// the real one answers after the page that carries no `nextPageToken`,
   /// for files Drive has not processed.
@@ -37,6 +43,7 @@ class FakeDriveFileLister implements DriveFileLister {
   @override
   Future<DriveListing> listFiles({required String refreshToken}) async {
     asked.add(refreshToken);
+    await gate?.future;
     if (answers.isEmpty) {
       return const DriveListingFailed(DriveListingFailure.unreachable);
     }

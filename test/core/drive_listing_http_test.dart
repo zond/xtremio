@@ -121,11 +121,13 @@ void main() {
       await lister.listFiles(refreshToken: _refreshToken);
 
       final asked = Uri.parse(seen.last.split(' ').last);
-      expect(asked.queryParameters['fields'], XtremioDriveFileLister.fields);
+      // Written out rather than compared against the constant it is
+      // pinning: a test that reads the mask off the code it is checking
+      // passes at every value of it.
       expect(
         asked.queryParameters['fields'],
-        contains('videoMediaMetadata'),
-        reason: 'the height is measured by Drive or guessed by nobody',
+        'nextPageToken,files(id,name,mimeType,'
+        'videoMediaMetadata(width,height,durationMillis))',
       );
       expect(asked.queryParameters['q'], 'trashed = false');
     });
@@ -284,6 +286,67 @@ void main() {
         DriveListingFailure.notUnderstood,
       );
       expect(seen, ['POST /refresh']);
+    });
+
+    test(
+      'a redirect is not followed, so no header follows it anywhere',
+      () async {
+        // A followed redirect is how an `Authorization` header ends up at a
+        // host nobody meant to send it to. It reads as a non-200 instead.
+        pages = [(HttpStatus.found, null)];
+
+        final listing = await lister.listFiles(refreshToken: _refreshToken);
+
+        expect(
+          (listing as DriveListingFailed).reason,
+          DriveListingFailure.unreachable,
+        );
+        expect(seen.where((one) => one.startsWith('GET')), hasLength(1));
+      },
+    );
+
+    test(
+      'an answer too big to be a page is refused rather than read',
+      () async {
+        pages = [
+          (HttpStatus.ok, {'filler': 'x' * (600 * 1024)}),
+        ];
+
+        final listing = await lister.listFiles(refreshToken: _refreshToken);
+
+        expect(
+          (listing as DriveListingFailed).reason,
+          DriveListingFailure.notUnderstood,
+        );
+      },
+    );
+
+    test('a page token that never ends is refused, never trimmed', () async {
+      // Past the cap the answer is a refusal and **nothing is written**: a
+      // truncated listing is the partial answer this whole design keeps
+      // away from the store.
+      pages = [
+        (
+          HttpStatus.ok,
+          {
+            'files': [
+              {'id': 'drive-file-1', 'name': 'ep6.avi'},
+            ],
+            'nextPageToken': 'and-another',
+          },
+        ),
+      ];
+
+      final listing = await lister.listFiles(refreshToken: _refreshToken);
+
+      expect(
+        (listing as DriveListingFailed).reason,
+        DriveListingFailure.notUnderstood,
+      );
+      expect(
+        seen.where((one) => one.startsWith('GET')),
+        hasLength(XtremioDriveFileLister.maxPages),
+      );
     });
 
     test(

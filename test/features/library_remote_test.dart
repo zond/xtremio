@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -1015,6 +1017,42 @@ void main() {
       await tapReload(tester);
 
       expect(asked, ['movie/ep6']);
+    });
+
+    testWidgets('a second press while the first is in flight is dropped', (
+      tester,
+    ) async {
+      // The service allows sixty refreshes an hour per credential, and a
+      // chip on a television gets pressed twice by anybody who is not sure
+      // it registered. The answer to that is the sentence at the end, not
+      // a second listing.
+      final lister = FakeDriveFileLister(
+        answers: [
+          FakeDriveFileLister.listing({'drive-file-1': 'ep6.avi'}),
+        ],
+      )..gate = Completer<void>();
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+          lister: lister,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+
+      await tester.tap(reloadChip());
+      await tester.pump();
+      await tester.tap(reloadChip());
+      await tester.pump();
+      expect(lister.asked, hasLength(1));
+
+      lister.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(lister.asked, hasLength(1));
+      expect(find.byType(SnackBar), findsOneWidget);
     });
 
     testWidgets('with no Drive scope above it at all, it is one line and not '
