@@ -162,7 +162,7 @@ class ImageCacheUsage {
     'image files: $diskLabel',
   ];
 
-  /// The same figures as one line for the log ([ImageCacheLog]), where
+  /// The same figures as one line, for wherever they are wanted --
   /// there is no header above them to say what they are.
   ///
   /// Everything the two report lines carry, and the average with it, in

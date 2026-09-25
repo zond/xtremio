@@ -20,7 +20,6 @@ export 'drive_playback.dart';
 export 'drive_source.dart';
 export 'fields.dart';
 export 'focus_emphasis.dart';
-export 'image_cache_log.dart';
 export 'image_cache_usage.dart';
 export 'image_disk_cache.dart';
 export 'prefs_client.dart';

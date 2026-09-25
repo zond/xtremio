@@ -15,13 +15,16 @@ import 'shell/device_profile.dart';
 import 'src/rust/frb_generated.dart';
 
 Future<void> main() async {
-  // Ours rather than `WidgetsFlutterBinding`, and first of everything: a
-  // binding's `createImageCache` is the one place the framework lets the
-  // image cache be replaced, and the app replaces it with one that can say
-  // what a picture decoded to ([ObservingImageCache]). Whichever binding
-  // comes up first is the process's, so anything below that brings one up
-  // -- every plugin's own `ensureInitialized` does -- has to come after.
-  XtremioBinding.ensureInitialized();
+  // First of everything: whichever binding comes up first is the process's,
+  // and anything below that brings one up -- every plugin's own
+  // `ensureInitialized` does -- has to come after.
+  //
+  // It used to be a binding of this app's own, whose only purpose was to
+  // replace the image cache with one that logged what every picture decoded
+  // to. That answered what a poster costs resident on the television, which
+  // is what it was built for, and then drowned the log of anybody
+  // debugging anything else.
+  WidgetsFlutterBinding.ensureInitialized();
   // Before anything that could fail: an unhandled error is the one line a
   // report most needs, and until the core is up there is nowhere to put it
   // (`DiagnosticsLog` drops what it cannot write).

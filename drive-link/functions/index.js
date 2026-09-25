@@ -94,6 +94,26 @@ const HAND_BACK_LINK = 'stremio:///pair';
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 const app = express();
+
+/**
+ * Nothing this function answers may be cached, by anything, ever.
+ *
+ * Belt and braces, and the braces were missing: Hosting's own header rule
+ * once matched `**`, which is every response it proxies -- so `GET
+ * /session/{id}` was served from the edge for a minute. A television polled
+ * once and the cache answered the rest; a collect made 46 milliseconds after
+ * the handover was told the session was still waiting, and a pairing of
+ * seventeen files was lost to a cache hit.
+ *
+ * Every route here is either a one-shot credential exchange or a question
+ * whose answer changes by the second, so there is no response worth keeping
+ * and none safe to keep. Said here as well as in `firebase.json` because
+ * this one travels with the code.
+ */
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, max-age=0');
+  next();
+});
 app.use(express.json());
 
 /**
