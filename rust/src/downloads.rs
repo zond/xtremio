@@ -51,6 +51,7 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuar
 use std::time::{Duration, Instant, SystemTime};
 
 use chrono::{DateTime, Utc};
+use enginefs::MagnetAddError;
 use serde::{Deserialize, Deserializer, Serialize};
 use stream_server::{DownloadInfo, PinDownloadError};
 
@@ -1310,15 +1311,43 @@ fn add_with(
         ))
     })?;
 
+    // Timed, because a pin takes as long as a magnet does -- up to the
+    // metadata timeout -- and everything that waits on this key's lock
+    // meanwhile (a removal, the progress tick) waits that long with it.
+    let asked = Instant::now();
     let info = match pin(&info_hash, file_idx, &announce) {
-        Ok(info) => info,
+        Ok(info) => {
+            tracing::info!(
+                key,
+                took_ms = asked.elapsed().as_millis() as u64,
+                "download_pin_taken"
+            );
+            info
+        }
         Err(error) => {
             let failure = PinFailure::classify(&error);
-            tracing::warn!(
-                key,
-                message = failure.message(),
-                "could not pin the download"
-            );
+            let took_ms = asked.elapsed().as_millis() as u64;
+            // A cancelled pin is the server answering a removal of this
+            // very row while the magnet resolved: the user's doing, not a
+            // failure to warn about.
+            let cancelled = error
+                .downcast_ref::<PinDownloadError>()
+                .is_some_and(|error| {
+                    matches!(
+                        error,
+                        PinDownloadError::MagnetAdd(MagnetAddError::Cancelled { .. })
+                    )
+                });
+            if cancelled {
+                tracing::info!(key, took_ms, "the pin was cancelled under the download");
+            } else {
+                tracing::warn!(
+                    key,
+                    took_ms,
+                    message = failure.message(),
+                    "could not pin the download"
+                );
+            }
             // Released with the lock still held: see [`update_then`].
             update_then(
                 |registry| {
@@ -1774,8 +1803,20 @@ fn remove_with(
             forget_removed(registry, key, &info_hash, file_idx);
             return Ok(Ok(NOTHING_UNPINNED));
         }
+        // Timed for the same reason the pin is: an unpin of a hash whose
+        // pin is still in flight queues behind it, and this lock is held
+        // for as long as that takes.
+        let asked = Instant::now();
         match unpin(&info_hash, file_idx, delete_files) {
             Ok(outcome) => {
+                tracing::info!(
+                    key,
+                    file_idx,
+                    took_ms = asked.elapsed().as_millis() as u64,
+                    unpinned = outcome.unpinned,
+                    deleted_files = outcome.deleted_files,
+                    "download_unpinned"
+                );
                 forget_removed(registry, key, &info_hash, file_idx);
                 Ok(Ok(outcome))
             }
