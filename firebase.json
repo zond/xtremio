@@ -1,0 +1,13 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/session", "function": "api" },
+      { "source": "/session/**", "function": "api" },
+      { "source": "/oauth/callback", "function": "api" },
+      { "source": "/refresh", "function": "api" }
+    ]
+  },
+  "firestore": { "rules": "firestore.rules" }
+}

@@ -1,0 +1,96 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Choose what to play</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; display: grid; place-items: center; min-height: 100svh;
+         padding: 24px; box-sizing: border-box; }
+  main { max-width: 32rem; text-align: center; }
+  h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
+  p { line-height: 1.5; opacity: .8; }
+  button { margin-top: 1.5rem; padding: .9rem 1.6rem; border: 0;
+           border-radius: 999px; background: #1a73e8; color: white;
+           font-weight: 600; font-size: 1rem; }
+  .bad { color: #c5221f; }
+  .done { color: #188038; font-weight: 600; }
+</style>
+<main>
+  <h1 id="head">Choose what to play</h1>
+  <p id="what">Loading…</p>
+  <button id="go" hidden>Choose a file</button>
+</main>
+<script src="https://apis.google.com/js/api.js"></script>
+<script>
+  // Filled in at deploy: the browser key and the project number the Picker
+  // needs. Neither is a secret -- the key is restricted to this site's
+  // referrer, and the app id is the project number.
+  const API_KEY = '__API_KEY__';
+  const APP_ID = '__APP_ID__';
+
+  const session = new URLSearchParams(location.search).get('s');
+  const failed = new URLSearchParams(location.search).get('error');
+  const what = document.getElementById('what');
+  const head = document.getElementById('head');
+  const go = document.getElementById('go');
+
+  const say = (text, cls) => { what.className = cls || ''; what.textContent = text; };
+
+  async function token() {
+    const answer = await fetch(`/session/${session}/token`);
+    if (!answer.ok) throw new Error((await answer.json()).error);
+    return (await answer.json()).accessToken;
+  }
+
+  async function start() {
+    if (failed) return say(`Google said: ${failed}`, 'bad');
+    if (!session) return say('This link is missing its code.', 'bad');
+    let accessToken;
+    try {
+      accessToken = await token();
+    } catch (e) {
+      return say(`${e.message}. Scan the code on your television again.`, 'bad');
+    }
+    say('Signed in. Choose the file you want to play on your television.');
+    go.hidden = false;
+    go.onclick = () => gapi.load('picker', () => picker(accessToken));
+  }
+
+  function picker(accessToken) {
+    // Videos, and the viewer's own Drive. `setIncludeFolders` is on so the
+    // folder question can be answered by hand: pick a folder and see what
+    // `drive.file` then grants -- the documentation does not say, and it
+    // decides whether this is ever more than one file at a time.
+    const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true);
+    new google.picker.PickerBuilder()
+        .setAppId(APP_ID)
+        .setOAuthToken(accessToken)
+        .setDeveloperKey(API_KEY)
+        .addView(view)
+        .setCallback(chosen)
+        .build()
+        .setVisible(true);
+  }
+
+  async function chosen(data) {
+    if (data.action !== google.picker.Action.PICKED) return;
+    const doc = data.docs[0];
+    const answer = await fetch(`/session/${session}/file`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        fileId: doc.id,
+        name: doc.name,
+        mimeType: doc.mimeType,
+      }),
+    });
+    if (!answer.ok) return say('Your television did not take it.', 'bad');
+    head.textContent = 'Sent';
+    go.hidden = true;
+    say(`“${doc.name}” is on its way to your television.`, 'done');
+  }
+
+  start();
+</script>

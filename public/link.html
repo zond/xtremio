@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Send a file to your television</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; display: grid; place-items: center; min-height: 100svh;
+         padding: 24px; box-sizing: border-box; }
+  main { max-width: 32rem; text-align: center; }
+  h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
+  p { line-height: 1.5; opacity: .8; }
+  a.button { display: inline-block; margin-top: 1.5rem; padding: .9rem 1.6rem;
+             border-radius: 999px; background: #1a73e8; color: white;
+             text-decoration: none; font-weight: 600; }
+  .bad { color: #c5221f; }
+</style>
+<main>
+  <h1>Send a file to your television</h1>
+  <p id="what">Sign in with Google, then choose the file you want to
+     play. Only the file you choose is shared — this page cannot see
+     anything else in your Drive.</p>
+  <a class="button" id="go" href="#">Sign in with Google</a>
+</main>
+<script>
+  // The Web OAuth client. Public by nature: the secret that goes with it
+  // never leaves the function.
+  const CLIENT_ID = '__CLIENT_ID__';
+  const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+  const session = new URLSearchParams(location.search).get('s');
+  if (!session) {
+    document.getElementById('what').innerHTML =
+        '<span class="bad">This link is missing its code. ' +
+        'Scan the one on your television again.</span>';
+    document.getElementById('go').remove();
+  } else {
+    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    url.search = new URLSearchParams({
+      client_id: CLIENT_ID,
+      redirect_uri: location.origin + '/oauth/callback',
+      response_type: 'code',
+      scope: SCOPE,
+      // A refresh token, and asked for every time: without `prompt=consent`
+      // Google returns one only on the first authorisation, and a viewer
+      // who has paired before would get a session the television cannot
+      // keep alive past the first hour.
+      access_type: 'offline',
+      prompt: 'consent',
+      include_granted_scopes: 'true',
+      // The session id comes back untouched, and the function checks it
+      // against a session that is actually waiting.
+      state: session,
+    });
+    document.getElementById('go').href = url.toString();
+  }
+</script>
