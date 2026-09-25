@@ -139,6 +139,16 @@ cd functions && npm install && cd ..
 firebase deploy --only functions,hosting,firestore:rules
 ```
 
+The `npm install` is not optional and its absence does not say so: without
+`functions/node_modules` the CLI warns once, in passing, that it "couldn't
+find firebase-functions package" and then fails with `Error: An unexpected
+error has occurred` — and **hosting does not go out either**, so the pages
+stay on the last deployed version while the command looks like it ran.
+`node_modules/` is not in the repo, so a fresh clone needs this. Check a
+deploy by fetching something you changed (`curl -s
+https://xtremio-drive.web.app/pick | grep ...`) rather than by its exit
+code, which a pipe to `tail` will hand you as 0.
+
 Finally, a **TTL policy** on Firestore so abandoned sessions clean
 themselves up — field `expiresAt` on both `sessions` and `rate`:
 
