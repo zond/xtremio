@@ -48,6 +48,16 @@ dependencies:
   # `mpv_command_async`, which is reached through media_kit's own handle.
   ffi: ^2.2.0
   flutter_chrome_cast: ^1.4.8
+  # Where a Google Drive pairing's refresh token is kept. The one dependency
+  # here that is a different store on every platform: on Android a
+  # preferences file of AES-GCM ciphertext whose key is wrapped in the
+  # Keystore, on macOS the Keychain, on Windows an encrypted file keyed from
+  # the Credential Manager, and on Linux libsecret -- which means a keyring
+  # daemon, and means nothing at all on a machine with none.
+  # `lib/core/secret_store.dart` says what each one actually gets, and
+  # `DriveAccount` what happens where there is none. A Linux build needs
+  # `libsecret-1-dev` (docs/OPERATIONS.md).
+  flutter_secure_storage: ^11.2.0
 
 dev_dependencies:
   flutter_test:

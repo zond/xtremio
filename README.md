@@ -108,8 +108,8 @@ Android installs over an APK from `make apk-split`. Plain
 Flutter stable (CI uses 3.47.1) and a Rust toolchain no older than
 `rust-version` in `rust/Cargo.toml` (1.97.1): the Rust crate is compiled by
 the build itself, through cargokit. Linux desktop also needs `clang`, `cmake`,
-`ninja`, `pkg-config`, GTK 3 dev libraries, and `libmpv-dev` (media_kit links
-libmpv); Android has a document of its own, [ANDROID.md](ANDROID.md).
+`ninja`, `pkg-config`, GTK 3 dev libraries, `libmpv-dev` (media_kit) and
+`libsecret-1-dev`; Android has a document of its own, [ANDROID.md](ANDROID.md).
 Everything else a dev machine wants is in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## How it works

@@ -80,6 +80,18 @@ through `server::token_for` in `rust/src/env.rs`) is in the same class:
 never log it, never return it over FFI, never put it in a URL. It exists
 only inside the Rust crate.
 
+The Google Drive refresh token a pairing hands this device is the third
+thing in that class and the longest-lived of them: it does not expire on
+its own, and it reaches every file that account has ever picked through
+this OAuth client, not just the one the viewer picked this time. It lives
+in the platform's secure store and nowhere else — `SecretStore`
+(`lib/core/secret_store.dart`), reached only through `DriveAccount` — so it
+is never in `xtremio_prefs.json`, never in a log line, and never in the
+text of a caught exception that is logged (those lines carry the
+exception's *type* and nothing more, which is why). What does go in the
+preferences beside it is the list of linked files: file ids, names and
+mime types, which are no more secret than the library is.
+
 A URL in the diagnostics log is made safe in one place, `DiagnosticsLog`
 (`lib/core/diagnostics_log.dart`): `write` rewrites every `http(s)` URL in
 a line through `DiagnosticsLog.url`, which keeps a path only for a host on

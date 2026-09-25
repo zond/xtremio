@@ -122,10 +122,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # media_kit links libmpv; the rest is what `flutter build linux` wants.
+      # media_kit links libmpv and flutter_secure_storage links libsecret (the
+      # Drive pairing's token store); the rest is what `flutter build linux`
+      # wants. libsecret is a build dependency here and a *runtime* one on the
+      # machine that runs the bundle, where it also wants a keyring daemon --
+      # see docs/OPERATIONS.md, "Seeing video play".
       - run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libmpv-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libmpv-dev libsecret-1-dev
 
       - uses: dtolnay/rust-toolchain@stable
 

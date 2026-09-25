@@ -70,6 +70,12 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// one can be on the stack, so the first list is already laid out the way
 /// it was left — and written through on every change.
 ///
+/// And the [DriveAccountScope]: one [DriveAccount], which is this device's
+/// Google Drive pairing — the refresh token in the platform's secure store,
+/// the list of linked files in the preferences beside it. Loaded after the
+/// preferences and not beside them, because half of what it answers is in
+/// them: asked first it would report an unlinked device that is linked.
+///
 /// And the [CastScope]: one [CastClient] for the whole app, because the Cast
 /// SDK is a process-wide singleton behind it. Off Android and iOS the real
 /// one reports `isSupported` false and is never asked anything else, so it
@@ -116,6 +122,7 @@ class XtremioApp extends StatefulWidget {
     this.downloads,
     this.cast,
     this.prefs,
+    this.drive,
     this.addonHealth = const RustAddonHealthClient(),
     this.deepLinks,
     this.device = DeviceProfile.fallback,
@@ -137,6 +144,13 @@ class XtremioApp extends StatefulWidget {
   /// The app's own preferences, for tests that want a fake client behind
   /// them. Read once, when the app comes up, like [downloads].
   final AppPrefs? prefs;
+
+  /// This device's Drive pairing, for tests that want one over fakes. Read
+  /// once, when the app comes up, like [downloads]. The one built here
+  /// reaches the platform's secure store, which a widget test has no
+  /// implementation of — that reads as a device nobody has paired, which
+  /// is what a test that has not paired anything wants.
+  final DriveAccount? drive;
 
   /// How the installed addons have been answering, for the Addons screen.
   /// Null shows no verdicts at all, which is what a test that does not care
@@ -218,6 +232,10 @@ class _XtremioAppState extends State<XtremioApp> {
   late final AppPrefs _prefs;
   late final bool _ownsPrefs;
 
+  /// The one Drive pairing, and the same rule again.
+  late final DriveAccount _drive;
+  late final bool _ownsDrive;
+
   /// The one Cast sender, and the same rule again.
   late final CastClient _cast;
   late final bool _ownsCast;
@@ -265,6 +283,10 @@ class _XtremioAppState extends State<XtremioApp> {
     _cast = widget.cast ?? GoogleCastClient();
     _ownsPrefs = widget.prefs == null;
     _prefs = widget.prefs ?? AppPrefs(client: const RustPrefsClient());
+    _ownsDrive = widget.drive == null;
+    _drive =
+        widget.drive ??
+        DriveAccount(prefs: _prefs, secrets: const SecureStorageSecretStore());
     _sharing = IdleSharingPolicy(prefs: _prefs, server: widget.serverSettings);
     _trace = DiagnosticsTraceSync(prefs: _prefs, server: widget.serverSettings);
     _activity = SharingActivityMonitor(client: widget.sharingActivity);
@@ -276,6 +298,10 @@ class _XtremioAppState extends State<XtremioApp> {
       _prefs.load().whenComplete(() {
         _sharing.start();
         _trace.start();
+        // After the preferences and not beside them: the pairing's state
+        // is half the secure store and half this file, and a read of one
+        // half before the other is an answer about neither.
+        unawaited(_drive.load());
       }),
     );
     _lifecycle = AppLifecycleListener(
@@ -500,6 +526,7 @@ class _XtremioAppState extends State<XtremioApp> {
     // Stops the polling with it; nothing else holds the timer.
     _activity.dispose();
     _imageCacheLog.dispose();
+    if (_ownsDrive) _drive.dispose();
     if (_ownsPrefs) _prefs.dispose();
     _ctx.dispose();
     _lifecycle.dispose();
@@ -530,33 +557,39 @@ class _XtremioAppState extends State<XtremioApp> {
               client: _cast,
               child: PrefsScope(
                 prefs: _prefs,
-                child: SharingScope(
-                  policy: _sharing,
-                  monitor: _activity,
-                  child: PlaybackScope(
-                    createEngine: _createEngine,
-                    // Under the [PrefsScope] rather than above it, so that
-                    // the focus floor is rebuilt when the Bold switch is
-                    // flipped: the scope is an [InheritedNotifier] and this
-                    // builder reads it. Every other part of the theme is
-                    // settled before the app is built.
-                    child: Builder(
-                      builder: (context) => _showingFocus(
-                        isTv: isTv,
-                        child: MaterialApp(
-                          title: 'Xtremio',
-                          debugShowCheckedModeBanner: false,
-                          navigatorKey: _navigator,
-                          theme: XtremioApp.themeFor(
-                            isTv: isTv,
-                            emphasis: FocusHighlight.emphasisOf(context),
+                // Under the preferences, because it reads them: the list of
+                // linked files and the dead-token flag are preferences, and
+                // only the token itself is anywhere else.
+                child: DriveAccountScope(
+                  account: _drive,
+                  child: SharingScope(
+                    policy: _sharing,
+                    monitor: _activity,
+                    child: PlaybackScope(
+                      createEngine: _createEngine,
+                      // Under the [PrefsScope] rather than above it, so that
+                      // the focus floor is rebuilt when the Bold switch is
+                      // flipped: the scope is an [InheritedNotifier] and this
+                      // builder reads it. Every other part of the theme is
+                      // settled before the app is built.
+                      child: Builder(
+                        builder: (context) => _showingFocus(
+                          isTv: isTv,
+                          child: MaterialApp(
+                            title: 'Xtremio',
+                            debugShowCheckedModeBanner: false,
+                            navigatorKey: _navigator,
+                            theme: XtremioApp.themeFor(
+                              isTv: isTv,
+                              emphasis: FocusHighlight.emphasisOf(context),
+                            ),
+                            builder: isTv ? TvMediaQuery.builder : null,
+                            navigatorObservers: [
+                              _routes,
+                              if (kDebugMode) RouteLogObserver(),
+                            ],
+                            home: const RootShell(),
                           ),
-                          builder: isTv ? TvMediaQuery.builder : null,
-                          navigatorObservers: [
-                            _routes,
-                            if (kDebugMode) RouteLogObserver(),
-                          ],
-                          home: const RootShell(),
                         ),
                       ),
                     ),
