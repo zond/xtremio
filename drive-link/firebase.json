@@ -1,0 +1,41 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/session",
+        "function": "api"
+      },
+      {
+        "source": "/session/**",
+        "function": "api"
+      },
+      {
+        "source": "/oauth/callback",
+        "function": "api"
+      },
+      {
+        "source": "/refresh",
+        "function": "api"
+      }
+    ],
+    "cleanUrls": true
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "*.log"
+    ]
+  }
+}

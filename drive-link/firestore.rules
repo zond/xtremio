@@ -1,0 +1,10 @@
+rules_version = '2';
+// Nothing reaches Firestore from a browser or an app: every read and write
+// goes through the function, which runs as the admin SDK and bypasses these
+// rules. A session holds a refresh token for a few minutes, and a client
+// that could read one directly would be the whole design defeated.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} { allow read, write: if false; }
+  }
+}
