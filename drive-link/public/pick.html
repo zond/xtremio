@@ -95,27 +95,51 @@
       // be an instruction a desktop's viewer has no way to follow.
       return say(`${e.message}. Ask Xtremio for a fresh code.`, 'bad');
     }
-    say('Signed in. Choose what you want to play. You can choose more than '
-        + 'one file — only what you choose is shared.');
+    // What it says is what a phone can actually do. Promising several files
+    // to somebody holding a device that cannot select two is worse than
+    // saying nothing: they would hunt for a control that is not there.
+    say('Signed in. Choose what you want to play — only what you choose is '
+        + 'shared. On a phone that is one file at a time; on a computer, '
+        + 'hold Ctrl (or Cmd) to choose several at once.');
     go.hidden = false;
     go.onclick = () => gapi.load('picker', () => picker(accessToken));
   }
 
   function picker(accessToken) {
-    // Videos, and the viewer's own Drive. `setIncludeFolders` is on so the
-    // folder question can be answered by hand: pick a folder and see what
-    // `drive.file` then grants -- the documentation does not say. It is no
-    // longer what decides whether a pairing can carry more than one file;
-    // multiselect is, and it is below.
+    // Videos, and the viewer's own Drive. Folders are shown so they can be
+    // walked into, and are **not selectable**.
+    //
+    // They were selectable while one question was open -- does picking a
+    // folder grant what is inside it? -- and the answer, measured against
+    // the real API rather than read in a doc, was **no**: a token that had
+    // picked a folder could read the folder's own record and list nothing
+    // in it. So a selectable folder is a control that hands the viewer a
+    // grant worth nothing, and the question it existed to answer is shut.
+    //
+    // It is also the first suspect for the Picker refusing more than one
+    // file despite MULTISELECT_ENABLED below, which is the reason this is
+    // being taken out today rather than whenever.
     const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
-        .setIncludeFolders(true)
-        .setSelectFolderEnabled(true);
+        .setIncludeFolders(true);
+
+    // Multi-select is asked for and **will not be granted on a phone**.
+    //
+    // Not our bug and not a spelling mistake: the Picker gates selection on
+    // `event.ctrlKey || event.metaKey`, so a device with no Ctrl key can
+    // hold exactly one file. Reported by somebody else in April 2024,
+    // confirmed by Google, still open and still `Status: New`
+    // (issuetracker.google.com/issues/334994030). It is asked for anyway,
+    // because the day it is fixed this page should already work and
+    // everything behind it -- a pairing carrying a list, `linkFiles`,
+    // `linkingAll` -- already does.
+    //
+    // The documented way round it, `trigger_onepick` on the authorisation
+    // URL, was tried against this very client: Google accepted the parameter
+    // and then failed at the consent step with `invalid_request`.
     new google.picker.PickerBuilder()
         .setAppId(APP_ID)
         .setOAuthToken(accessToken)
         .setDeveloperKey(API_KEY)
-        // One scan, a whole season. Nothing about it is discoverable in the
-        // Picker itself, which is why the words on this page say it out loud.
         .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
         .addView(view)
         .setCallback(chosen)
