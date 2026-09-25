@@ -655,6 +655,115 @@ void main() {
     });
   });
 
+  /// What decides whether there is anything to merge at all.
+  ///
+  /// A card is drawn for a linked file that **matched**, so a file nobody
+  /// ever matched is a file that is nowhere: not on Movies, not on Series,
+  /// not on All. The pass used to belong to the Remote list, which meant a
+  /// viewer who linked a film and went to their library saw an empty page
+  /// until they happened to press a pill they had no reason to press. It
+  /// belongs to this screen now, and these are the three things that says.
+  group('the matching behind the merge', () {
+    /// A search that answers with Arrival for anything, and records what it
+    /// was asked.
+    (List<String>, CatalogueSearch) recordingSearch() {
+      final asked = <String>[];
+      return (
+        asked,
+        (type, query) async {
+          asked.add('$type/$query');
+          return [
+            {'id': 'tt2543164', 'name': 'Arrival', 'releaseInfo': '2016'},
+          ];
+        },
+      );
+    }
+
+    testWidgets('runs without Remote ever being opened, and the card it '
+        'earns is on the grid', (tester) async {
+      final (asked, search) = recordingSearch();
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [
+              (id: 'drive-file-1', name: 'Arrival.2016.mkv', match: null),
+            ],
+          ),
+          search: search,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(asked, [
+        'movie/Arrival',
+      ], reason: 'nothing here pressed Remote, and the pass still ran');
+      expect(cards(tester), ['Lanterns', 'The Whisper Man', 'Arrival']);
+    });
+
+    testWidgets('and for a file linked while the library is on screen', (
+      tester,
+    ) async {
+      // The account notifies, and this screen depends on the scope, so the
+      // pairing that happened somewhere else is what brings the pass round
+      // again. Nothing is rebuilt into existence by a pill being pressed.
+      final (asked, search) = recordingSearch();
+      final drive = await account();
+      await tester.pumpWidget(
+        harness(fakeCore(), drive: drive, search: search),
+      );
+      await tester.pumpAndSettle();
+      expect(asked, isEmpty);
+
+      await drive.link(
+        refreshToken: 'a-refresh-token',
+        files: [
+          LinkedDriveFile(
+            fileId: 'drive-file-1',
+            name: 'Arrival.2016.mkv',
+            mimeType: 'video/x-matroska',
+            linkedAt: DateTime.utc(2026, 9, 21),
+          ),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(asked, ['movie/Arrival']);
+      expect(cards(tester), ['Lanterns', 'The Whisper Man', 'Arrival']);
+    });
+
+    testWidgets('and opening Remote afterwards does not ask a second time', (
+      tester,
+    ) async {
+      // There is exactly one [DriveMatchRun] in the app and therefore
+      // exactly one memory of what has been asked about. A second run
+      // started by the Remote list would have an empty memory of its own,
+      // and this file would be searched for twice.
+      final asked = <String>[];
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+          // Nothing matches `ep6`, which is the case the store cannot
+          // guard: only the run's own memory stops it being asked again.
+          search: (type, query) async {
+            asked.add('$type/$query');
+            return const [];
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(asked, ['movie/ep6']);
+
+      await tapRemote(tester);
+      await tester.pumpAndSettle();
+
+      expect(asked, ['movie/ep6']);
+    });
+  });
+
   testWidgets('the Remote list is unchanged: every linked file, matched and '
       'unmatched', (tester) async {
     await tester.pumpWidget(

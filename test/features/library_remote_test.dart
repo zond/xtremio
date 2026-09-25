@@ -594,6 +594,11 @@ void main() {
     });
   });
 
+  /// The pass itself belongs to `LibraryScreen` and is driven from there
+  /// whether this pill is ever pressed -- `library_merge_test.dart` is what
+  /// holds that. What these say is the half this list owns: the rows are
+  /// drawn without waiting for a catalogue, and each one is redrawn when its
+  /// match is written down.
   group('the search behind the list', () {
     testWidgets('runs without the list waiting for it, and writes the match '
         'down where the row can read it', (tester) async {
@@ -655,9 +660,10 @@ void main() {
     testWidgets('and a file linked while the list is open is matched too', (
       tester,
     ) async {
-      // The pass is started from the build as well as on mount, because
-      // `didChangeDependencies` does not fire again for a file that arrives
-      // while the list is already on screen.
+      // The account notifies when the file is linked, which brings the
+      // screen's `didChangeDependencies` round again and the pass with it --
+      // so a file that arrives while this list is already open is matched
+      // and its row redrawn without anything being pressed.
       final asked = <String>[];
       final drive = await account(
         files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],

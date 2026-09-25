@@ -24,8 +24,15 @@
 ///    page to send anybody to, and a screen invented for the failure case
 ///    would be a screen that exists because something did not work.
 ///
-/// The matching itself is `drive_match.dart`; this starts a pass and draws
-/// what is stored, which is why nothing here awaits a network call.
+/// The matching itself is `drive_match.dart`, and **this does not start it**.
+/// A match is what puts a linked file on the library's own pills as well as
+/// here, so the pass belongs to the screen those pills are on
+/// (`LibraryScreen`) and runs whether or not anybody ever presses Remote --
+/// which is the whole difference between a viewer finding the film they
+/// linked and finding an empty library. One run means one memory of what has
+/// been asked about; a second one started here would be a second memory that
+/// knew nothing of the first. So this draws what the account holds, and the
+/// account notifying is what redraws it.
 library;
 
 import 'dart:async';
@@ -37,8 +44,6 @@ import '../../widgets/focusable_tile.dart';
 import '../../widgets/poster_tile.dart';
 import '../details/meta_details_screen.dart';
 import '../player/player_screen.dart';
-import '../similar/similar_resolver.dart';
-import 'drive_match.dart';
 
 /// The ordinary details screen for [match], reached the ordinary way.
 ///
@@ -65,31 +70,16 @@ class LinkedDriveFilesView extends StatefulWidget {
   const LinkedDriveFilesView({
     super.key,
     this.opener = const ServerDriveFileOpener(),
-    this.search = cinemetaSearch,
-    this.reloads = 0,
   });
 
   /// How a file is turned into something playable. A parameter for the
   /// reason `DrivePairingScreen.opener` is one: a widget test must not be
   /// pointed at the deployed server.
-  final DriveFileOpener opener;
-
-  /// How the catalogue is asked. Likewise: a test answers it with a list.
-  final CatalogueSearch search;
-
-  /// How many times **Reload** has been pressed and the listing came back
-  /// whole (`LibraryScreen`).
   ///
-  /// A count and not a callback, because what this owns is the matching
-  /// pass and the reload is somebody else's call: the button is on the
-  /// filter row with the pill that put this list on screen, the
-  /// reconciliation writes to [DriveAccount], and the account's notify
-  /// redraws the rows whose names changed all by itself. What the notify
-  /// cannot say is "ask Cinemeta again about the ones that matched
-  /// nothing" -- a reload where no name changed notifies nothing at all --
-  /// so the number changing is what says a reload happened, and
-  /// [DriveMatchRun.askAgain] is what it means.
-  final int reloads;
+  /// The only seam here, because playing is the only thing this view does
+  /// that leaves the device. The catalogue is asked by `LibraryScreen`,
+  /// whose `driveSearch` is the seam for that.
+  final DriveFileOpener opener;
 
   /// What is drawn where a poster would be for a file nothing matched, and
   /// what a test finds that row by. A **file** icon and not a film one: the
@@ -147,45 +137,11 @@ class LinkedDriveFilesView extends StatefulWidget {
 
 class _LinkedDriveFilesViewState extends State<LinkedDriveFilesView> {
   DriveAccount? _account;
-  DriveMatchRun? _matching;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final account = DriveAccountScope.maybeOf(context);
-    if (account == _account) return;
-    _account = account;
-    _matching = account == null
-        ? null
-        : DriveMatchRun(account: account, search: widget.search);
-    _startMatching();
-  }
-
-  @override
-  void didUpdateWidget(LinkedDriveFilesView old) {
-    super.didUpdateWidget(old);
-    // A reload has run and the listing was whole. Whatever it renamed has
-    // already lost its match and will be asked about again on its own; this
-    // is the other half, the files that matched nothing and kept their
-    // names, which this run would otherwise remember as hopeless.
-    if (widget.reloads != old.reloads) {
-      _matching?.askAgain();
-      _startMatching();
-    }
-  }
-
-  /// Asks about whatever has no match yet, without being waited for.
-  ///
-  /// `unawaited` and not `await`: this is called from
-  /// [didChangeDependencies] and from a rebuild, and a screen that waited
-  /// for Cinemeta before drawing would draw nothing until a catalogue
-  /// answered -- for a list whose rows are all perfectly drawable without
-  /// it. Each answer is written to the account, which notifies, which
-  /// redraws the row it was about. A pass already running is a no-op, so
-  /// calling this per build costs one method call.
-  void _startMatching() {
-    final matching = _matching;
-    if (matching != null) unawaited(matching.run());
+    _account = DriveAccountScope.maybeOf(context);
   }
 
   /// Opens [file] on the embedded server and pushes the player at it.
@@ -234,7 +190,6 @@ class _LinkedDriveFilesViewState extends State<LinkedDriveFilesView> {
     return ListenableBuilder(
       listenable: account,
       builder: (context, _) {
-        _startMatching();
         final files = account.files.entries;
         if (files.isEmpty) return const _NothingLinked();
         return Column(

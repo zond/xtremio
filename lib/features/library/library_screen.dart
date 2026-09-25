@@ -10,6 +10,7 @@ import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
 import '../details/meta_details_screen.dart';
 import '../downloads/downloads_screen.dart';
+import '../drive/drive_match.dart';
 import '../drive/linked_files.dart';
 import '../drive/remote_files.dart';
 import '../similar/similar_resolver.dart';
@@ -82,8 +83,11 @@ class LibraryScreen extends StatefulWidget {
   /// one: a widget test must not be pointed at the deployed server.
   final DriveFileOpener driveOpener;
 
-  /// How the catalogue is asked, for the same reason: a widget test answers
-  /// it with a list rather than reaching Cinemeta.
+  /// How the catalogue is asked when a linked Drive file is matched to a
+  /// title, for the same reason: a widget test answers it with a list rather
+  /// than reaching Cinemeta. This screen owns that pass -- see
+  /// [_LibraryScreenState._matching] -- so the seam is here and not on the
+  /// Remote list.
   final CatalogueSearch driveSearch;
 
   /// How Drive is asked what the linked files are called now, for **Reload**
@@ -190,10 +194,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// anything" is the sentence the reload finishes with.
   bool _reloading = false;
 
-  /// How many reloads have come back with a whole listing. Handed to
-  /// [LinkedDriveFilesView], which re-asks Cinemeta about what matched
-  /// nothing when it changes; see its `reloads`.
-  int _reloads = 0;
+  /// This device's Drive pairing, as it was last read off the scope.
+  DriveAccount? _drive;
+
+  /// **The one matching pass over the linked files, and the only one.**
+  ///
+  /// It lives here rather than in [LinkedDriveFilesView] because matching
+  /// is not about the Remote list: it is what decides whether a linked file
+  /// has a card under **Movies**, **Series** and **All** at all
+  /// ([_appended]), and those are this screen's. While the run belonged to
+  /// the Remote view, a file linked and never looked at under Remote had no
+  /// match and so appeared nowhere -- a viewer who linked a film and came
+  /// straight to their library saw an empty page, with nothing on it to say
+  /// why.
+  ///
+  /// **One run, so one notion of "already asked".** [DriveMatchRun] claims
+  /// each file in its own `_asked` set before it awaits, and that is the
+  /// whole of what stops a file being searched for twice; a second run
+  /// beside it would be a second set that knew nothing of the first, and
+  /// two passes walking the same files. So this is the only [DriveMatchRun]
+  /// the app builds -- the Remote list starts none and is handed none, it
+  /// draws what the account holds -- and **Reload** clears this one
+  /// ([DriveMatchRun.askAgain]) rather than signalling a view to clear its
+  /// own.
+  DriveMatchRun? _matching;
 
   @override
   void didChangeDependencies() {
@@ -210,6 +234,39 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _nextPageRequestedAt = -1;
       client.dispatch(CoreActions.loadLibrary(LibraryScreen.initialRequest));
     }
+    // The Drive account is depended on *here* and not only inside the build
+    // that merges its matches, and that is what makes this method the
+    // driver. [DriveAccountScope] is an [InheritedNotifier], so the
+    // dependency registered here outlives every rebuild: the account
+    // notifying -- a pairing screen linking a file, a Reload renaming one,
+    // a match being written down -- brings this method round again, which
+    // is exactly the list of occasions on which there might be something
+    // new to ask Cinemeta about. Nothing waits for a build to be the trigger
+    // and nothing runs per frame.
+    final drive = DriveAccountScope.maybeOf(context);
+    if (_drive != drive) {
+      _drive = drive;
+      _matching = drive == null
+          ? null
+          : DriveMatchRun(account: drive, search: widget.driveSearch);
+    }
+    _matchLinkedFiles();
+  }
+
+  /// Asks about every linked file that has no match yet, without being
+  /// waited for.
+  ///
+  /// `unawaited` and sequential, because neither half of what this feeds is
+  /// allowed to wait on a catalogue: the library grid draws the engine's own
+  /// cards long before Cinemeta has answered about anybody's Drive, and the
+  /// Remote list draws every row perfectly well without a match. Each answer
+  /// is written to the account, which notifies, which redraws the one card
+  /// or row it was about -- and brings [didChangeDependencies] round again,
+  /// where a pass with nothing left to ask about is a walk over the files
+  /// and no request at all.
+  void _matchLinkedFiles() {
+    final matching = _matching;
+    if (matching != null) unawaited(matching.run());
   }
 
   @override
@@ -286,7 +343,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (!mounted) return;
     // Only a whole listing counts: a refusal changed nothing, so there is
     // nothing new for the matching pass to be told about either.
-    if (outcome is DriveReloadDone) setState(() => _reloads++);
+    //
+    // Whatever the reload renamed has already lost its match and will be
+    // asked about on its own; [DriveMatchRun.askAgain] is the other half,
+    // the files that matched nothing and kept their names, which the run
+    // would otherwise remember as hopeless for the rest of the session.
+    // Said straight to the run, because the run is this screen's -- there
+    // is no count handed down to a view to mean this.
+    if (outcome is DriveReloadDone) {
+      _matching?.askAgain();
+      _matchLinkedFiles();
+    }
     _sayReload(outcome);
   }
 
@@ -464,11 +531,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 child: _remote
                     ? _tvGroup(
                         context,
-                        LinkedDriveFilesView(
-                          opener: widget.driveOpener,
-                          search: widget.driveSearch,
-                          reloads: _reloads,
-                        ),
+                        LinkedDriveFilesView(opener: widget.driveOpener),
                       )
                     : state == null || !state.isLoaded
                     ? const Center(child: CircularProgressIndicator())
