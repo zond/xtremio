@@ -115,6 +115,41 @@ Future<String> serverUpdateSettings({required String patchJson}) => RustLib
 Future<String> serverStorageReport() =>
     RustLib.instance.api.crateApiServerServerStorageReport();
 
+/// Opens a file in the paired Google Drive and answers, as JSON, a URL the
+/// player can fetch -- or the reason there is none:
+/// `{"ok":true,"url","name"?,"contentType","length"}`, else
+/// `{"ok":false,"reason":"pairAgain"|"noPairingService"|"unreachable"
+/// |"unavailable"}`.
+///
+/// **This is the only way a Drive file becomes playable, and the token
+/// goes no further than this call.** `refresh_token` is the viewer's
+/// long-lived grant, read out of the secure store by `DriveAccount` and
+/// handed straight down; the embedded server spends it for an hourly
+/// access token inside its own process. It is in no URL, no log line and
+/// no error, and the `url` that comes back names a random key -- not the
+/// account, and not even the file id -- so the string that reaches mpv and
+/// the diagnostics log says nothing about either.
+///
+/// `reason: "pairAgain"` is terminal: the grant is gone and only a new
+/// pairing brings it back, which is `DriveAccount.notePairAgain` and a
+/// fresh QR. It is a word rather than a sentence for exactly that reason
+/// -- nothing above this may have to match English to tell it from "the
+/// network is having a moment".
+///
+/// Blocks the FRB worker while the server renews a token and probes the
+/// file (one round trip each); never call it from the UI thread. It does
+/// not error for a server that is not running -- that is
+/// `reason: "unavailable"` -- so every failure is one of the four words.
+Future<String> serverDriveOpen({
+  required String fileId,
+  required String refreshToken,
+  String? name,
+}) => RustLib.instance.api.crateApiServerServerDriveOpen(
+  fileId: fileId,
+  refreshToken: refreshToken,
+  name: name,
+);
+
 /// What the server's cache currently occupies against the limit in force,
 /// as JSON (`CacheUsage`: `totalBytes`, `limitBytes`, `protectedBytes`,
 /// `protectedFiles`).

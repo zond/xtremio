@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/core.dart';
 import '../../shell/device_profile.dart';
 import '../../shell/external_link.dart';
+import '../player/player_screen.dart';
 
 /// Linking one file in somebody's Google Drive to this device, which is a
 /// pairing made on a second screen.
@@ -78,6 +79,7 @@ class DrivePairingScreen extends StatefulWidget {
   const DrivePairingScreen({
     super.key,
     this.service = const XtremioDrivePairingService(),
+    this.opener = const ServerDriveFileOpener(),
     this.pollEvery = defaultPollEvery,
     this.now = DateTime.now,
   });
@@ -85,6 +87,11 @@ class DrivePairingScreen extends StatefulWidget {
   /// Where the sessions come from; a widget test hands in a fake rather
   /// than reaching the deployed service.
   final DrivePairingService service;
+
+  /// What turns a linked file into a URL the player can open. Injected for
+  /// the same reason [service] is: a widget test plays a file without
+  /// reaching FFI, and it can say which id and which token went down.
+  final DriveFileOpener opener;
 
   /// How often the television asks whether the phone has finished.
   final Duration pollEvery;
@@ -152,6 +159,10 @@ class DrivePairingScreen extends StatefulWidget {
   static const String freshCodeLabel = 'New code';
   static const String openAgainLabel = 'Open the page again';
   static const String doneLabel = 'Done';
+  static const String playLabel = 'Play';
+  static const String linkedFilesHeading = 'Files linked to this device';
+  static const String linkAnotherLabel = 'Link another file';
+  static const String openingFileMessage = 'Opening that file…';
 
   /// How long this screen waits before it calls a session dead, counted
   /// from the moment the session opened.
@@ -183,6 +194,14 @@ enum _Stage {
   /// Asking the service for a session.
   opening,
 
+  /// This device is already linked and has files. **The temporary way in**:
+  /// until a Drive file has a row on the board of its own -- which wants
+  /// filenames matched against Cinemeta, and is not this change -- the list
+  /// a pairing built is the only place one can be played from, and this
+  /// screen is where that list lives. A viewer who came here to link
+  /// another file presses the button for it.
+  files,
+
   /// A session is drawn (or open in a browser) and being polled.
   waiting,
 
@@ -209,7 +228,18 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// What was linked, for the screen to name -- and nothing else about the
   /// pairing is kept, least of all the credential.
   String _linkedName = '';
+
+  /// Which file the pairing linked, so the Play button on [_Stage.linked]
+  /// aims at the row in the account's own list rather than at a copy of it.
+  /// The id and not the row: the account is the record, and a row held here
+  /// would be the second one.
+  String _linkedFileId = '';
   bool _thisRunOnly = false;
+
+  /// A file is being opened. It is one round trip to the pairing service
+  /// and one to Google, so it is worth saying out loud, and it is what
+  /// stops a second press starting a second open.
+  bool _playing = false;
 
   Timer? _poll;
   Timer? _window;
@@ -231,12 +261,21 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _account ??= DriveAccountScope.of(context);
+    final account = _account ??= DriveAccountScope.of(context);
+    if (_stage != _Stage.opening || _session != null || _opening) return;
+    // A device that is already linked and has files opens on the list
+    // rather than on a code: the commonest reason to come here after the
+    // first time is to play something, and asking the service for a session
+    // nobody wanted spends the one call it rate-limits. "Link another file"
+    // is the way on, and a pairing that has died goes straight to a code --
+    // the list is no use without a credential.
+    if (account.state == DriveLinkState.linked && account.files.isNotEmpty) {
+      _stage = _Stage.files;
+      return;
+    }
     // The first session is asked for once the scope is in reach, not in
     // `initState`, for exactly that reason.
-    if (_stage == _Stage.opening && _session == null && !_opening) {
-      unawaited(_open());
-    }
+    unawaited(_open());
   }
 
   @override
@@ -378,8 +417,74 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     setState(() {
       _stage = _Stage.linked;
       _linkedName = collected.name;
+      _linkedFileId = collected.fileId;
       _thisRunOnly = outcome == DriveLinkOutcome.thisRunOnly;
     });
+  }
+
+  /// One row per linked file, most recently linked first, each a way into
+  /// the film.
+  List<Widget> _fileRows() => [
+    for (final file in _account?.files.entries ?? const <LinkedDriveFile>[])
+      ListTile(
+        key: Key('drive-file-${file.fileId}'),
+        // The floor and nothing put on by hand: a [ListTile] on the
+        // scaffold's own surface is Material's ink, so [FocusTheme] marks
+        // it with the fill, and there is no poster art under it for a wash
+        // to disappear into (`AGENTS.md`, "Prefer the floor").
+        leading: const Icon(Icons.movie_outlined),
+        title: Text(file.name.isEmpty ? file.fileId : file.name),
+        subtitle: const Text(driveSourceLabel),
+        trailing: const Icon(Icons.play_arrow),
+        enabled: !_playing,
+        onTap: () => unawaited(_play(file)),
+      ),
+  ];
+
+  /// Opens [file] on the embedded server and pushes the player at it.
+  ///
+  /// The whole of what this knows about the credential is that it does not
+  /// have it: [openLinkedDriveFile] asks the account, which is the only
+  /// thing that holds one. A dead pairing is written down in there too, so
+  /// what is left here is a sentence and a code to scan -- the account's
+  /// state is already [DriveLinkState.pairAgain] by the time this draws,
+  /// and the list it was drawing is no longer any use.
+  Future<void> _play(LinkedDriveFile file) async {
+    final account = _account;
+    if (account == null || _playing) return;
+    setState(() {
+      _playing = true;
+      _refusal = '';
+    });
+    final opened = await openLinkedDriveFile(
+      account: account,
+      file: file,
+      opener: widget.opener,
+    );
+    if (!mounted) return;
+    switch (opened) {
+      case DriveFilePlayable():
+        setState(() => _playing = false);
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            settings: const RouteSettings(name: PlayerScreen.routeName),
+            builder: (_) => PlayerScreen(
+              stream: driveStreamJson(file: file, playable: opened),
+            ),
+          ),
+        );
+      case DriveFileRefused(:final reason):
+        setState(() {
+          _playing = false;
+          _refusal = driveFailureMessage(reason);
+          // The grant is gone, so the list is a list of films this device
+          // cannot read: a code is the only thing left to offer.
+          if (reason == DriveOpenFailure.pairAgain ||
+              reason == DriveOpenFailure.notLinked) {
+            _stage = _Stage.refused;
+          }
+        });
+    }
   }
 
   @override
@@ -433,7 +538,25 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
           ),
           _Line(DrivePairingScreen.windowMessage, theme: theme, quiet: true),
         ];
+      case _Stage.files:
+        return [
+          Text(
+            DrivePairingScreen.linkedFilesHeading,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineSmall,
+          ),
+          if (_refusal.isNotEmpty) _Line(_refusal, theme: theme, warning: true),
+          if (_playing)
+            _Line(DrivePairingScreen.openingFileMessage, theme: theme),
+          ..._fileRows(),
+          OutlinedButton.icon(
+            onPressed: () => unawaited(_open()),
+            icon: const Icon(Icons.add_link),
+            label: const Text(DrivePairingScreen.linkAnotherLabel),
+          ),
+        ];
       case _Stage.linked:
+        final justLinked = _account?.files.forFile(_linkedFileId);
         return [
           Icon(
             Icons.check_circle_outline,
@@ -453,7 +576,19 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
               theme: theme,
               warning: true,
             ),
-          FilledButton(
+          if (_refusal.isNotEmpty) _Line(_refusal, theme: theme, warning: true),
+          if (_playing)
+            _Line(DrivePairingScreen.openingFileMessage, theme: theme),
+          // Straight into the film from the screen that linked it: the
+          // pairing is the one moment the viewer is certainly holding a
+          // remote and certainly means to watch that file.
+          if (justLinked != null)
+            FilledButton.icon(
+              onPressed: _playing ? null : () => unawaited(_play(justLinked)),
+              icon: const Icon(Icons.play_arrow),
+              label: const Text(DrivePairingScreen.playLabel),
+            ),
+          TextButton(
             onPressed: () => Navigator.of(context).maybePop(),
             child: const Text(DrivePairingScreen.doneLabel),
           ),

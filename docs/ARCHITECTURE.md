@@ -192,12 +192,35 @@ what every model field means. The shape of the thing is in the
   bytes are cached under, which for anything but a torrent is this
   server's own `/proxy` route: the cache either side of the playhead and,
   for a torrent, the set committed for sharing and what it has moved since
-  it went live — the stats panel's cache and sharing rows)
+  it went live — the stats panel's cache and sharing rows), and
+  `server_drive_open(file_id, refresh_token, name)` (below)
   —
   wrapped by `ServerClient` in
   `lib/core/server_client.dart`. Nothing logs the token; the header value
   is marked sensitive. `media_kit`'s `Media.httpHeaders` could carry it to
   mpv should a media route ever need it; none does.
+- **A linked Google Drive file becomes a URL the same way**, and
+  `server_drive_open` is the one call that does it: the app hands down a
+  file id and the account's refresh token, the server opens the file as a
+  `DriveSource` and remembers it, and what comes back is
+  `http://127.0.0.1:<port>/drive/stream/<random key>` — an open media route
+  carrying no credential, which is what mpv can fetch. The grant is an
+  argument to a function call inside the process and is spent there for an
+  hourly access token; it is in no URL, no log line and no error, which is
+  the whole reason the create is not an HTTP request (stream-server's
+  `routes::drive`). The answer is `{ok, url, name?, contentType, length}`
+  or `{ok: false, reason}`, and `reason: "pairAgain"` is the terminal one:
+  the grant is gone, so `openLinkedDriveFile`
+  (`lib/core/drive_playback.dart`) calls `DriveAccount.notePairAgain` on
+  the way past and every screen reading the account redraws on a fresh QR.
+  A Drive file has no addon and no metadata, so what the player is given is
+  a hand-built `Stream` JSON (`driveStreamJson`) whose `name` is the file's
+  own name — `PlayerState.title` falls through to it with no meta item —
+  with `Google Drive` as the description and the same name in
+  `behaviorHints.filename`, which is the only thing the cast check can read
+  a container off a `/drive/stream/<key>` URL from. Until a Drive file has
+  a board row of its own, the list on the pairing screen
+  (`DrivePairingScreen`) is where one is played from.
 - **Whether the server shares between sessions is the app's decision, and
   it is one settings key.** The server keeps uploading after playback ends
   when its `seedingEnabled` setting is true (its own default); when it is

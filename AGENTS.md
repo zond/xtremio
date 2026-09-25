@@ -118,7 +118,8 @@ in one of two ways: stremio-core's `StreamingServer` model through
 `ServerHandle`'s library API — `rust/src/api/server.rs`
 (`server_torrent_stats`, `server_settings`, `server_update_settings`,
 `server_storage_report`, `server_cache_usage`, `server_clean_cache_now`,
-`server_background_traffic`, `server_stream_numbers`) and
+`server_background_traffic`, `server_stream_numbers`,
+`server_drive_open`) and
 `rust/src/api/downloads.rs` (`downloads_add`, `downloads_remove`,
 `downloads_list`, `downloads_open`, `downloads_events`). A new need goes in
 one of those, as a Rust function returning JSON, not as a `dart:io`

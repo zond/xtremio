@@ -110,7 +110,18 @@ fn url_of(handle: &ServerHandle) -> anyhow::Result<Url> {
 /// with whatever else holds 11470 -- and the fallback that handled it was a
 /// second bind attempt for a number nothing reads.
 fn spawn(config: &StartConfig) -> anyhow::Result<ServerHandle> {
-    stream_server::start(stream_server::ServerConfig {
+    stream_server::start(server_config(config))
+}
+
+/// Everything this app asks of the embedded server, as one value.
+///
+/// Separate from [`spawn`] so that a test can read what is asked for
+/// without binding a port: the fields here are decisions, and two of them
+/// -- the pin set and the Drive pairing endpoint -- are the kind that fail
+/// silently. A missing endpoint is every Drive file refusing to open with
+/// `noPairingService`, which no test that stubs the opener would ever see.
+fn server_config(config: &StartConfig) -> stream_server::ServerConfig {
+    stream_server::ServerConfig {
         http_addr: SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
         config_dir: Some(config.config_dir.clone()),
         cache_dir: Some(config.cache_dir.clone()),
@@ -123,9 +134,29 @@ fn spawn(config: &StartConfig) -> anyhow::Result<ServerHandle> {
         // set: the server then keeps every torrent's data for that boot.
         // See `crate::downloads::pins`.
         pins: crate::downloads::pins(),
+        // Where a Drive refresh token is turned into an access token. The
+        // server holds no client secret and must not guess an endpoint --
+        // a wrong one is a refresh token posted to somebody else's host --
+        // so it is configured here, once, from the one place this app
+        // writes that origin down.
+        drive_refresh_endpoint: Url::parse(DRIVE_REFRESH_ENDPOINT).ok(),
         ..stream_server::ServerConfig::default()
-    })
+    }
 }
+
+/// Where the pairing service renews an access token:
+/// `POST {"refreshToken":...}` -> `{"accessToken","expiresIn"}`, or a
+/// `401` with `pairAgain` for a grant that is gone.
+///
+/// **The same origin the pairing screen talks to**
+/// (`XtremioDrivePairingService.defaultOrigin` in
+/// `lib/core/drive_pairing.dart`, which is the service's own
+/// `PUBLIC_ORIGIN`). It is written here rather than handed in from Dart
+/// because a caller who could name it could point the server's renewals --
+/// and this device's refresh token with them -- at a host of their
+/// choosing, and the whole reason the token never crosses a URL is that
+/// nobody but this device and that service should ever see it.
+const DRIVE_REFRESH_ENDPOINT: &str = "https://xtremio-drive.web.app/refresh";
 
 /// Where the LAN media listener binds when a cast session turns it on: every
 /// interface (a receiver is on the LAN, not on loopback) on a port the OS
@@ -423,6 +454,154 @@ pub fn download_path(info_hash: &str, file_idx: usize) -> anyhow::Result<Option<
 /// The server's current settings (`GET /settings` → `values`).
 pub fn settings() -> anyhow::Result<ServerSettings> {
     with_handle(|handle| handle.settings())
+}
+
+/// Why a linked Drive file could not be made playable. **Three answers the
+/// app acts on differently**, which is why it is an enum and not a
+/// sentence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DriveOpenFailure {
+    /// The grant is gone: revoked, or expired, and no retry brings it
+    /// back. The viewer pairs again from their phone, and
+    /// `DriveAccount.notePairAgain` is what the app does with this.
+    /// **Terminal**, which is the whole reason it is told apart.
+    PairAgain,
+    /// This build has no pairing service configured, so there is nothing
+    /// to renew against. A fact about the build; a viewer can do nothing
+    /// about it.
+    NoPairingService,
+    /// Google or the pairing service could not be reached, or would not
+    /// serve the file. Worth trying again; the grant may be perfectly
+    /// good.
+    Unreachable,
+    /// The embedded server is not running, so nothing could be opened.
+    /// Not about the account either.
+    Unavailable,
+}
+
+/// What [`open_drive_file`] answers: a URL, or the reason there is none.
+///
+/// The `ok`/`reason` shape `downloads::OpenOutcome` already uses, and for
+/// the same reason -- the refusals are outcomes the app draws differently,
+/// not errors, and an error would cross the FFI as a sentence the caller
+/// would have to match English against.
+///
+/// **Nothing here can carry the refresh token.** The fields are a URL the
+/// server minted, the name the caller passed in and two facts about the
+/// file; every failure is one of the four words above.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriveOpenOutcome {
+    pub ok: bool,
+    /// Where the player fetches the film: this server's own
+    /// `/drive/stream/{key}`, carrying a random key and no credential.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub length: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<DriveOpenFailure>,
+}
+
+impl DriveOpenOutcome {
+    fn refused(reason: DriveOpenFailure) -> Self {
+        Self {
+            ok: false,
+            url: None,
+            name: None,
+            content_type: None,
+            length: None,
+            reason: Some(reason),
+        }
+    }
+}
+
+/// Open a file in the paired Google Drive and answer a URL the player can
+/// fetch (`ServerHandle::open_drive_file`, which is `POST /drive/create`'s
+/// own function).
+///
+/// **The token is an argument and never a request.** It crosses from Dart
+/// into this process, is handed to the server's library API, and is spent
+/// inside the server for an hourly access token; it is in no URL, no log
+/// line and no error. What comes back names a random key, so the string
+/// that reaches mpv -- and the diagnostics log, and a bug report -- says
+/// nothing about the account or even which file it is.
+///
+/// A server that is not running is [`DriveOpenFailure::Unavailable`]
+/// rather than an error, so that every way this can fail is one of four
+/// words the app switches on.
+pub fn open_drive_file(
+    file_id: &str,
+    refresh_token: &str,
+    name: Option<String>,
+) -> DriveOpenOutcome {
+    outcome_of(with_handle(|handle| {
+        handle.open_drive_file(file_id, refresh_token, name)
+    }))
+}
+
+/// [`open_drive_file`] against a given state, which is how a test says
+/// "no server is running" without taking the process's embedded one away
+/// from another test (the same reason [`update_settings_in`] exists).
+#[cfg(test)]
+fn open_drive_file_in(
+    app: &AppState,
+    file_id: &str,
+    refresh_token: &str,
+    name: Option<String>,
+) -> DriveOpenOutcome {
+    outcome_of(with_handle_in(app, |handle| {
+        handle.open_drive_file(file_id, refresh_token, name)
+    }))
+}
+
+/// What the server answered, as one of the four words and a URL.
+///
+/// The whole of the mapping, shared by the two entry points above so that
+/// neither can answer differently: an `Err` at this level is a server that
+/// is not running or a runtime that is gone, which is `unavailable` and
+/// **not** the error's own sentence -- a caller that had to read one would
+/// be matching English.
+fn outcome_of(
+    opened: anyhow::Result<Result<stream_server::DriveFileOpened, stream_server::DriveOpenError>>,
+) -> DriveOpenOutcome {
+    let opened = match opened {
+        Ok(opened) => opened,
+        Err(_) => return DriveOpenOutcome::refused(DriveOpenFailure::Unavailable),
+    };
+    match opened {
+        Ok(file) => DriveOpenOutcome {
+            ok: true,
+            url: Some(file.url),
+            name: file.name,
+            content_type: Some(file.content_type),
+            length: Some(file.length),
+            reason: None,
+        },
+        Err(error) if error.is_pair_again() => {
+            DriveOpenOutcome::refused(DriveOpenFailure::PairAgain)
+        }
+        Err(error) if error.refused() == Some("noPairingService") => {
+            DriveOpenOutcome::refused(DriveOpenFailure::NoPairingService)
+        }
+        Err(error) => {
+            // The *kind*, never the sentence: a refusal's text is written
+            // in the server and says nothing secret, but a habit of
+            // logging what an error said is how the one that does gets
+            // filed. See `AGENTS.md`, "Never log auth material".
+            tracing::warn!(
+                pair_again = false,
+                "a linked Drive file could not be opened"
+            );
+            let _ = error;
+            DriveOpenOutcome::refused(DriveOpenFailure::Unreachable)
+        }
+    }
 }
 
 /// Applies `patch` as `POST /settings` would (same keys, validation and
@@ -1089,5 +1268,103 @@ mod tests {
             &Url::parse("http://example.com/").unwrap(),
             &Url::parse("http://example.com:80/x").unwrap()
         ));
+    }
+
+    /// The pairing endpoint is a URL, it is the one the app's own pairing
+    /// screen talks to, and **the server is actually told about it**. A typo
+    /// or an omission here is every Drive file refusing to open, and nothing
+    /// above the FFI would see it: a test with a fake opener never reaches
+    /// the server's configuration at all.
+    #[test]
+    fn the_server_is_told_where_the_pairing_service_is() {
+        let url = Url::parse(DRIVE_REFRESH_ENDPOINT).expect("a literal URL");
+        assert_eq!(url.scheme(), "https");
+        assert_eq!(url.host_str(), Some("xtremio-drive.web.app"));
+        assert_eq!(url.path(), "/refresh");
+
+        let config = server_config(&StartConfig {
+            config_dir: PathBuf::from("/tmp/xtremio-test-config"),
+            cache_dir: PathBuf::from("/tmp/xtremio-test-cache"),
+        });
+        assert_eq!(config.drive_refresh_endpoint, Some(url));
+        // And Drive itself stays the server's own constant: an origin this
+        // side could name would be a credentialed relay with a cache behind
+        // it (`routes::drive::DriveEndpoints`).
+        assert_eq!(config.drive_api_base, None);
+    }
+
+    /// With no server running there is nothing to open, and that is an
+    /// *outcome* rather than an error -- so every way this call can fail is
+    /// one of the four words the app switches on, and none of them carries
+    /// the grant.
+    ///
+    /// Against a state of its own, with no server in it: the process's
+    /// embedded server belongs to whichever other test started it, and one
+    /// running would send this test's marker to the real pairing service.
+    #[test]
+    fn no_server_is_unavailable_and_says_nothing_about_the_grant() {
+        const TOKEN: &str = "not-a-token-only-a-marker-for-this-test";
+        let app = AppState::default();
+        let outcome = open_drive_file_in(&app, "a-file-id", TOKEN, Some("A Film.mkv".into()));
+        assert!(!outcome.ok);
+        assert_eq!(outcome.reason, Some(DriveOpenFailure::Unavailable));
+        assert!(outcome.url.is_none());
+        let answered = serde_json::to_string(&outcome).expect("the outcome serialises");
+        assert!(!answered.contains(TOKEN), "{answered}");
+        assert!(!answered.contains("a-file-id"), "{answered}");
+    }
+
+    /// **Every answer the server can give becomes the right word**, and
+    /// above all `pairAgain`: that one is terminal, the app's response to
+    /// it is a fresh QR, and it is the one thing nothing above the FFI may
+    /// have to read English to recognise.
+    ///
+    /// The server's own tests prove `DriveOpenError::is_pair_again` for a
+    /// grant that is gone (`server/tests/drive.rs`); this is the other
+    /// half, which is that the word survives the crossing.
+    #[test]
+    fn every_refusal_crosses_as_its_own_word() {
+        use stream_server::{DriveError, DriveOpenError};
+
+        for (error, expected) in [
+            (
+                DriveOpenError::Drive(DriveError::PairAgain),
+                DriveOpenFailure::PairAgain,
+            ),
+            (
+                DriveOpenError::NoPairingService,
+                DriveOpenFailure::NoPairingService,
+            ),
+            (
+                DriveOpenError::Drive(DriveError::Refused(503)),
+                DriveOpenFailure::Unreachable,
+            ),
+            (
+                DriveOpenError::Drive(DriveError::Unreachable("no route".into())),
+                DriveOpenFailure::Unreachable,
+            ),
+        ] {
+            let outcome = outcome_of(Ok(Err(error)));
+            assert!(!outcome.ok);
+            assert_eq!(outcome.reason, Some(expected));
+            assert!(outcome.url.is_none());
+        }
+
+        // And a file that opened is a URL with the three facts on it.
+        let outcome = outcome_of(Ok(Ok(stream_server::DriveFileOpened {
+            key: "a-key".into(),
+            url: "http://127.0.0.1:1/drive/stream/a-key".into(),
+            name: Some("A Film.mkv".into()),
+            content_type: "video/x-matroska".into(),
+            length: 4096,
+        })));
+        assert!(outcome.ok);
+        assert_eq!(
+            outcome.url.as_deref(),
+            Some("http://127.0.0.1:1/drive/stream/a-key")
+        );
+        assert_eq!(outcome.name.as_deref(), Some("A Film.mkv"));
+        assert_eq!(outcome.length, Some(4096));
+        assert_eq!(outcome.reason, None);
     }
 }
