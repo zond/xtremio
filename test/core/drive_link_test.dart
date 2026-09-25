@@ -9,12 +9,16 @@ LinkedDriveFile _file({
   String name = 'one.mkv',
   String mime = 'video/x-matroska',
   DateTime? at,
+  int? height,
+  int? durationMillis,
   LinkedDriveMatch? match,
 }) => LinkedDriveFile(
   fileId: id,
   name: name,
   mimeType: mime,
   linkedAt: at ?? _first,
+  height: height,
+  durationMillis: durationMillis,
   match: match,
 );
 
@@ -49,6 +53,53 @@ void main() {
       LinkedDriveFile.fromJson(_file(match: _episode).toJson()),
       _file(match: _episode),
     );
+  });
+
+  test('what Drive measured round-trips, and a file it has not measured '
+      'round-trips as a file nobody measured', () {
+    // Both halves, because the absent one is the ordinary case: Drive fills
+    // `videoMediaMetadata` in after it has processed an upload and leaves
+    // it out for anything it did not decode.
+    final measured = _file(height: 2160, durationMillis: 6960000);
+    expect(LinkedDriveFile.fromJson(measured.toJson()), measured);
+    expect(LinkedDriveFile.fromJson(measured.toJson())!.height, 2160);
+    expect(
+      LinkedDriveFile.fromJson(measured.toJson())!.durationMillis,
+      6960000,
+    );
+
+    final unmeasured = _file();
+    expect(unmeasured.height, isNull);
+    expect(LinkedDriveFile.fromJson(unmeasured.toJson()), unmeasured);
+  });
+
+  test('a measurement is written only when there is one, so a row from '
+      'before them reads back as a row nobody measured', () {
+    expect(_file().toJson().containsKey('height'), isFalse);
+    expect(_file().toJson().containsKey('durationMillis'), isFalse);
+    expect(_file(height: 1080).toJson()['height'], 1080);
+
+    // Exactly what a preferences file written by the build before this one
+    // holds: the four keys that were there, and neither of the new ones.
+    final stored = LinkedDriveFile.fromJson({
+      'id': 'drive-file-1',
+      'name': 'one.mkv',
+      'mime': 'video/x-matroska',
+      'linkedAt': _first.toIso8601String(),
+    })!;
+    expect(stored, _file());
+    expect(stored.height, isNull);
+    expect(stored.durationMillis, isNull);
+
+    // And a value of a type this build cannot use is the same as none:
+    // nothing downstream may be handed a height that is not a number.
+    final odd = LinkedDriveFile.fromJson({
+      'id': 'drive-file-1',
+      'height': '1080',
+      'durationMillis': 3.5,
+    })!;
+    expect(odd.height, isNull);
+    expect(odd.durationMillis, isNull);
   });
 
   test('the match is written only when there is one', () {

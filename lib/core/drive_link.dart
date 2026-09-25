@@ -134,6 +134,21 @@ final class LinkedDriveMatch {
   String toString() => 'LinkedDriveMatch(${videoId ?? cinemetaId}, $name)';
 }
 
+/// What Drive says about one file **now**: its name, and what Drive
+/// measured of the video when it has measured it.
+///
+/// A record and not a class, for the reason [DrivePairingFile] is one: it
+/// is three values out of somebody else's JSON, and naming the shape
+/// structurally keeps this library from depending on the one that fetches
+/// it (`drive_listing.dart`). The row this device keeps is
+/// [LinkedDriveFile].
+///
+/// [height] and [durationMillis] are null far more often than they are
+/// wrong: Drive fills `videoMediaMetadata` in after it has processed an
+/// upload, and it never fills it in for a container it did not understand.
+/// Absent is the ordinary case and not the error case.
+typedef DriveFileFacts = ({String name, int? height, int? durationMillis});
+
 /// One file a pairing linked.
 @immutable
 final class LinkedDriveFile {
@@ -142,6 +157,8 @@ final class LinkedDriveFile {
     required this.name,
     required this.mimeType,
     required this.linkedAt,
+    this.height,
+    this.durationMillis,
     this.match,
   });
 
@@ -162,6 +179,29 @@ final class LinkedDriveFile {
   /// from its clock rather than taken from a caller, so every row in the
   /// list is on the same clock.
   final DateTime linkedAt;
+
+  /// How tall the video is in pixels, as **Drive measured it** server-side,
+  /// or null.
+  ///
+  /// It is here because the one place a Drive file has to be put among
+  /// other sources -- the resolution section of a details page -- needs a
+  /// number, and the two other ways of getting one are worse. A filename
+  /// says `1080p` when somebody typed `1080p`, which is a claim by whoever
+  /// named the file and is often a lie. Reading the container needs the
+  /// `moov` atom, which an MP4 keeps at the *end* unless it was written
+  /// with faststart, so a first-bytes probe silently fails on exactly the
+  /// files a probe was for. Drive has already done the work and will hand
+  /// it over in the listing that is being fetched anyway.
+  ///
+  /// **Null is ordinary.** Drive fills this in after processing an upload
+  /// and leaves it empty for anything it did not decode, so a file with no
+  /// height behaves exactly as every file did before this was recorded --
+  /// nothing may require it.
+  final int? height;
+
+  /// How long the video runs, in milliseconds, as Drive measured it, or
+  /// null. Recorded on the same terms and with the same caveat as [height].
+  final int? durationMillis;
 
   /// Which catalogue title this file turned out to be, or null.
   ///
@@ -186,23 +226,66 @@ final class LinkedDriveFile {
   bool isFor(String cinemetaId, {String? videoId}) =>
       match?.isFor(cinemetaId, videoId: videoId) ?? false;
 
+  /// This row as [facts] describes it: the name Drive gives it **now**, and
+  /// whatever Drive has measured since.
+  ///
+  /// **A new name drops the match, and that is here rather than in a
+  /// caller**, so that there is no way to write a new name and keep a
+  /// stale match. A rename is the one thing a viewer can do about a file
+  /// that matched the wrong title or none at all, and the note above the
+  /// list tells them to do exactly that and press Reload -- so a new name
+  /// has to be searched for again, and a match made from the old one is a
+  /// claim about a name that no longer exists. The search itself is
+  /// `DriveMatchRun`, which asks about whatever has no match.
+  ///
+  /// That is not the rule [linking] follows, and the two are not in
+  /// disagreement. A file handed over by a *pairing* keeps its match:
+  /// nothing new has been said about it, the viewer picked it again in a
+  /// Picker, and re-matching there would spend a search to reach the same
+  /// answer. Here the viewer has asked, by pressing a button, for what
+  /// Drive says now to be taken seriously.
+  ///
+  /// An empty name is not a rename but a name this build could not read,
+  /// and a null height or duration is Drive not having measured this file
+  /// *yet* rather than a measurement withdrawn -- so both keep what is
+  /// stored. A measurement that arrives on a later reload is written down;
+  /// nothing here can unwrite one.
+  LinkedDriveFile reconciledWith(DriveFileFacts facts) {
+    final renaming = facts.name.isNotEmpty && facts.name != name;
+    return LinkedDriveFile(
+      fileId: fileId,
+      name: renaming ? facts.name : name,
+      mimeType: mimeType,
+      linkedAt: linkedAt,
+      height: facts.height ?? height,
+      durationMillis: facts.durationMillis ?? durationMillis,
+      match: renaming ? null : match,
+    );
+  }
+
   /// This row with [match] recorded, or cleared when it is null.
   LinkedDriveFile withMatch(LinkedDriveMatch? match) => LinkedDriveFile(
     fileId: fileId,
     name: name,
     mimeType: mimeType,
     linkedAt: linkedAt,
+    height: height,
+    durationMillis: durationMillis,
     match: match,
   );
 
   /// The row as it is written to the preferences file. The match is written
   /// only when there is one, so a file somebody reads does not claim one
-  /// that was never made.
+  /// that was never made -- and the two measurements the same way, since a
+  /// file Drive has not measured has no height rather than a height of
+  /// nothing.
   Map<String, Object> toJson() => {
     'id': fileId,
     'name': name,
     'mime': mimeType,
     'linkedAt': linkedAt.toUtc().toIso8601String(),
+    'height': ?height,
+    'durationMillis': ?durationMillis,
     'match': ?match?.toJson(),
   };
 
@@ -214,6 +297,10 @@ final class LinkedDriveFile {
   /// wrong one, and an unreadable stamp is the epoch, which sorts last
   /// and says plainly that nobody knows. Dropping the row instead would
   /// hide a file the token still reaches.
+  /// A row written before the measurements were recorded has neither key,
+  /// which reads as "Drive has not measured this" -- the same answer as a
+  /// file Drive genuinely has not measured, and one everything downstream
+  /// has to cope with anyway. So there is nothing to migrate.
   static LinkedDriveFile? fromJson(Object? json) {
     if (json is! Map) return null;
     final id = json['id'];
@@ -221,6 +308,8 @@ final class LinkedDriveFile {
     final name = json['name'];
     final mime = json['mime'];
     final linkedAt = json['linkedAt'];
+    final height = json['height'];
+    final durationMillis = json['durationMillis'];
     return LinkedDriveFile(
       fileId: id.trim(),
       name: name is String ? name : '',
@@ -228,6 +317,8 @@ final class LinkedDriveFile {
       linkedAt:
           (linkedAt is String ? DateTime.tryParse(linkedAt) : null)?.toUtc() ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      height: height is int ? height : null,
+      durationMillis: durationMillis is int ? durationMillis : null,
       match: LinkedDriveMatch.fromJson(json['match']),
     );
   }
@@ -239,10 +330,20 @@ final class LinkedDriveFile {
       other.name == name &&
       other.mimeType == mimeType &&
       other.linkedAt == linkedAt &&
+      other.height == height &&
+      other.durationMillis == durationMillis &&
       other.match == match;
 
   @override
-  int get hashCode => Object.hash(fileId, name, mimeType, linkedAt, match);
+  int get hashCode => Object.hash(
+    fileId,
+    name,
+    mimeType,
+    linkedAt,
+    height,
+    durationMillis,
+    match,
+  );
 
   @override
   String toString() => 'LinkedDriveFile($fileId, $name)';
@@ -291,7 +392,13 @@ final class LinkedDriveFiles {
   /// A renamed file therefore keeps the match its old name earned, which is
   /// the right way round: a rename is the viewer tidying up, not new
   /// evidence about which film it is, and re-matching on every rename would
-  /// spend a search to reach the same answer or a worse one.
+  /// spend a search to reach the same answer or a worse one. [reconciled]
+  /// is where a rename *is* new evidence, because there the viewer asked.
+  ///
+  /// What Drive measured is kept the same way and for the same reason: a
+  /// Picker hands over a name and a mime type and knows nothing about the
+  /// video, so a pairing has nothing better to say than what a listing
+  /// already said.
   LinkedDriveFiles linking(LinkedDriveFile file) {
     final known = forFile(file.fileId);
     final row = known == null
@@ -301,6 +408,8 @@ final class LinkedDriveFiles {
             name: file.name,
             mimeType: file.mimeType,
             linkedAt: known.linkedAt,
+            height: known.height ?? file.height,
+            durationMillis: known.durationMillis ?? file.durationMillis,
             match: known.match ?? file.match,
           );
     return LinkedDriveFiles([
@@ -325,6 +434,38 @@ final class LinkedDriveFiles {
       all = all.linking(file);
     }
     return all;
+  }
+
+  /// This list reconciled against [factsById] -- **a complete** listing of
+  /// what one credential reaches, Drive's id to what Drive says about that
+  /// file now.
+  ///
+  /// Three rules, and the third is the one that needs saying:
+  ///
+  ///  * a file Drive describes differently takes the new name (and loses
+  ///    its match with it) and whatever Drive has measured since:
+  ///    [LinkedDriveFile.reconciledWith] is the whole of that rule.
+  ///  * a file that is not in [factsById] at all is dropped: the file is
+  ///    gone, or the grant is, and a row that cannot play is worse than no
+  ///    row.
+  ///  * an id in [factsById] that is not already a row **is not added**.
+  ///    The listing reaches every file the account has ever picked through
+  ///    this OAuth client, including on another device and including ones
+  ///    cleared from this install's preferences; the list is what was
+  ///    linked *here*, not a mirror of somebody's Drive.
+  ///
+  /// The caller's half of the bargain is the completeness of [factsById]:
+  /// pass half a listing and this removes the other half. `DriveListing` is
+  /// why that cannot be reached by accident -- there is no value in it that
+  /// means "some of the files".
+  LinkedDriveFiles reconciled(Map<String, DriveFileFacts> factsById) {
+    final kept = <LinkedDriveFile>[];
+    for (final entry in entries) {
+      final facts = factsById[entry.fileId];
+      if (facts == null) continue;
+      kept.add(entry.reconciledWith(facts));
+    }
+    return LinkedDriveFiles(kept);
   }
 
   /// This list with [fileId]'s match recorded, or this list unchanged when

@@ -300,6 +300,25 @@ class DriveAccount extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Writes down the list a reload worked out, as one write.
+  ///
+  /// **The list it is given is the whole list**, so this is the one method
+  /// here that can take rows away without touching the credential. It is
+  /// narrow on purpose: it does not list, it does not decide what is gone,
+  /// and it does not know what Drive said -- `reloadLinkedDriveFiles`
+  /// works all of that out from a `DriveFilesListed`, which is a value that
+  /// exists only for a listing that ran to its last page. Calling this with
+  /// anything less is calling it with a list the viewer did not ask for.
+  ///
+  /// A list identical to the stored one writes nothing and notifies
+  /// nothing, the way [noteMatch] does: a reload that found no change is a
+  /// sentence to read and not a redraw.
+  Future<void> noteReconciled(LinkedDriveFiles files) async {
+    if (files == prefs.driveLinkedFiles) return;
+    await prefs.setDriveLinkedFiles(files);
+    notifyListeners();
+  }
+
   /// Puts [token] in the secure store, or keeps it for the run when the
   /// store will not take it.
   Future<DriveLinkOutcome> _store(String token) async {

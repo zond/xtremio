@@ -46,6 +46,7 @@ class LinkedDriveFilesView extends StatefulWidget {
     super.key,
     this.opener = const ServerDriveFileOpener(),
     this.search = cinemetaSearch,
+    this.reloads = 0,
   });
 
   /// How a file is turned into something playable. A parameter for the
@@ -55,6 +56,20 @@ class LinkedDriveFilesView extends StatefulWidget {
 
   /// How the catalogue is asked. Likewise: a test answers it with a list.
   final CatalogueSearch search;
+
+  /// How many times **Reload** has been pressed and the listing came back
+  /// whole (`LibraryScreen`).
+  ///
+  /// A count and not a callback, because what this owns is the matching
+  /// pass and the reload is somebody else's call: the button is on the
+  /// filter row with the pill that put this list on screen, the
+  /// reconciliation writes to [DriveAccount], and the account's notify
+  /// redraws the rows whose names changed all by itself. What the notify
+  /// cannot say is "ask Cinemeta again about the ones that matched
+  /// nothing" -- a reload where no name changed notifies nothing at all --
+  /// so the number changing is what says a reload happened, and
+  /// [DriveMatchRun.askAgain] is what it means.
+  final int reloads;
 
   /// What is drawn where a poster would be for a file nothing matched, and
   /// what a test finds that row by. A **file** icon and not a film one: the
@@ -78,16 +93,24 @@ class LinkedDriveFilesView extends StatefulWidget {
   /// `holiday video 2.avi` has no way to know that the file's *name* is what
   /// was searched for, and so no way to know that renaming it would fix it.
   ///
-  /// Linking again rather than a reload: renaming a file in Drive does not
-  /// reach this device at all -- the name is what Drive said when the file
-  /// was picked -- so linking it again is what brings the new name over, and
-  /// that in turn is what gets it searched for again
-  /// (`DriveMatchRun._asked`). A button that re-ran the search against the
-  /// old name would find the same nothing. If a reload arrives later it can
-  /// be added to this sentence; nothing here promises one now.
+  /// **It names the button, and the button is what makes it true.** The
+  /// stored name is what Drive said when the file was picked, but the API
+  /// is not a snapshot: `files.list` answers with each file's *current*
+  /// name, so a rename does reach this device -- the moment something asks.
+  /// Reload is what asks (`reloadLinkedDriveFiles`), a new name drops the
+  /// match the old one earned ([LinkedDriveFile.renamed]), and the search
+  /// runs again against the name the viewer just chose. This note used to
+  /// say "link it again", which worked only for a file that had matched
+  /// nothing: a re-linked file keeps its match, so a viewer renaming a file
+  /// that had matched the *wrong* title was being sent round a loop that
+  /// could not change anything.
+  ///
+  /// [LibraryScreen.reloadLabel] is the word on the button; a test holds
+  /// the two together, so this sentence cannot start naming a control that
+  /// is not there.
   static const String matchedByNameNote =
-      'Titles are matched from the file name. Rename a file in Drive and '
-      'link it again to try once more:';
+      'Titles are matched from the file name. Rename a file in Drive, then '
+      'press Reload to try once more:';
 
   /// Shown rather than described: somebody skimming copies the example and
   /// does not read the sentence. Both of these are walked by
@@ -116,6 +139,19 @@ class _LinkedDriveFilesViewState extends State<LinkedDriveFilesView> {
         ? null
         : DriveMatchRun(account: account, search: widget.search);
     _startMatching();
+  }
+
+  @override
+  void didUpdateWidget(LinkedDriveFilesView old) {
+    super.didUpdateWidget(old);
+    // A reload has run and the listing was whole. Whatever it renamed has
+    // already lost its match and will be asked about again on its own; this
+    // is the other half, the files that matched nothing and kept their
+    // names, which this run would otherwise remember as hopeless.
+    if (widget.reloads != old.reloads) {
+      _matching?.askAgain();
+      _startMatching();
+    }
   }
 
   /// Asks about whatever has no match yet, without being waited for.
