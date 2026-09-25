@@ -1,4 +1,30 @@
 import groovy.json.JsonSlurper
+import java.util.Properties
+
+/**
+ * The release signing key, or null on a machine that has not got it.
+ *
+ * `android/key.properties` and the keystore beside it are **not in the
+ * repository** and never can be (`android/.gitignore`), so every build has to
+ * cope with their absence: a fresh clone, a contributor, and CI before its
+ * secret is unpacked. Absent, the release build falls back to the debug key
+ * exactly as it did before there was a release key at all -- so `flutter build
+ * apk --release` keeps working for anybody, and only a build that *has* the
+ * key produces an APK that can update an installed one.
+ *
+ * What makes that safe rather than sloppy is that the two are told apart
+ * afterwards: a release signed with the debug key has a different certificate,
+ * so Android itself refuses to install it over a properly signed one. The
+ * failure is loud and at install time, not silent and in the store.
+ */
+val releaseSigning: Properties? by lazy {
+    val file = rootProject.file("key.properties")
+    if (!file.exists()) {
+        null
+    } else {
+        Properties().apply { file.inputStream().use { load(it) } }
+    }
+}
 
 plugins {
     id("com.android.application")
@@ -120,11 +146,31 @@ android {
         }
     }
 
+    signingConfigs {
+        // Declared only when the key is actually here: an empty signing config
+        // is worse than none, because Gradle would accept it and fail late
+        // with a message about a missing store file rather than about a
+        // missing key.
+        releaseSigning?.let { key ->
+            create("release") {
+                storeFile = rootProject.file(key.getProperty("storeFile"))
+                storePassword = key.getProperty("storePassword")
+                keyAlias = key.getProperty("keyAlias")
+                keyPassword = key.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // The release key when this machine has it, the debug key when it
+            // has not -- see [releaseSigning]. This is the whole of what used
+            // to be a TODO, and the reason it mattered: an app's identity *is*
+            // its signing certificate, so App Links, an Android OAuth client
+            // and every future update are all keyed on this and on nothing
+            // else.
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

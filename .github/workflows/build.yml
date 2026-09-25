@@ -100,20 +100,64 @@ jobs:
 
       - run: flutter pub get
 
+      # The release key, which is the app's identity: Android reads a signing
+      # certificate as *which app this is*, so a build signed with anything
+      # else cannot update an installed one. Written before the build,
+      # removed after it whatever happened -- `if: always()` so a failed
+      # build does not leave a key on the runner.
+      - name: Unpack the signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE" | base64 -d > android/upload-keystore.jks
+          umask 077
+          cat > android/key.properties <<'PROPS'
+          storeFile=upload-keystore.jks
+          PROPS
+          {
+            echo "storePassword=$PASSWORD"
+            echo "keyPassword=$PASSWORD"
+            echo "keyAlias=$ALIAS"
+          } >> android/key.properties
+
       - run: make ${{ matrix.target }}
 
-      # These are signed with the Flutter template's debug key -- see the
-      # release notes below. Say so in the name, because the name is all a
-      # person downloading it sees.
+      # Proved, not assumed: without the key Gradle falls back to the debug
+      # one and still produces an APK, so "it built" says nothing about what
+      # signed it. Compare the certificate against the secret's own keystore
+      # and fail if they differ -- an APK shipped under the wrong identity is
+      # one nobody can update from.
+      - name: Check the APK carries the release certificate
+        run: |
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          got=$("$apksigner" verify --print-certs \
+            build/app/outputs/flutter-apk/app-release.apk \
+            | sed -n 's/.*SHA-256 digest: //p' | head -1)
+          want=$(keytool -list -v -keystore android/upload-keystore.jks \
+            -alias "$(sed -n 's/^keyAlias=//p' android/key.properties)" \
+            -storepass "$(sed -n 's/^storePassword=//p' android/key.properties)" \
+            | sed -n 's/.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')
+          if [ -z "$want" ] || [ "$got" != "$want" ]; then
+            echo "signed by $got, expected $want"
+            exit 1
+          fi
+          echo "signed by the release key ($got)"
+
+      - name: Forget the signing key
+        if: always()
+        run: rm -f android/upload-keystore.jks android/key.properties
+
       - name: Name the APK after the build it is
         run: |
           mv build/app/outputs/flutter-apk/app-release.apk \
-             "xtremio-${{ matrix.abi }}-debug-key.apk"
+             "xtremio-${{ matrix.abi }}.apk"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: xtremio-${{ matrix.abi }}-debug-key
-          path: xtremio-${{ matrix.abi }}-debug-key.apk
+          name: xtremio-${{ matrix.abi }}
+          path: xtremio-${{ matrix.abi }}.apk
           if-no-files-found: error
 
   linux:
@@ -385,8 +429,8 @@ jobs:
 
           | File | For |
           |---|---|
-          | `xtremio-arm64-v8a-debug-key.apk` | Android phones and 64-bit TV boxes |
-          | `xtremio-armeabi-v7a-debug-key.apk` | Chromecast with Google TV and other 32-bit Android TV boxes |
+          | `xtremio-arm64-v8a.apk` | Android phones and 64-bit TV boxes |
+          | `xtremio-armeabi-v7a.apk` | Chromecast with Google TV and other 32-bit Android TV boxes |
           | `xtremio-linux-x64.tar.gz` | Linux desktop (needs `libmpv`) |
           | `xtremio-windows-x64.zip` | Windows desktop |
           | `xtremio-macos.zip` | macOS, Intel and Apple silicon (unsigned -- see below) |
@@ -410,20 +454,22 @@ jobs:
           xattr -dr com.apple.quarantine /Applications/xtremio.app
           ```
 
-          ## The APKs are test builds, signed with a throwaway key
+          ## The APKs are signed with this project's own key
 
-          Both APKs are signed with the Flutter template's **debug key**, which
-          is public and identical on every machine. They install and run, but
-          they are test builds and nothing about that signature identifies
-          them as ours.
+          Both are signed with the project's release keystore, and CI proves it
+          rather than assuming it: the build compares the APK's certificate
+          against the keystore's and fails if they differ. Without the key
+          Gradle quietly falls back to a debug one and still produces an APK,
+          so "it built" would otherwise say nothing about what signed it.
 
-          **This has a consequence worth knowing before you install.** Android
-          refuses to replace an app with one signed by a different key. When a
-          real keystore eventually replaces this one, upgrading in place will
-          fail with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, and everybody running
-          one of these builds will have to uninstall -- losing local library,
-          settings and downloads -- before the signed build will install. That
-          is a decision deferred, not one avoided.
+          **If you installed a build from before this change, you have to
+          uninstall once.** Those were signed with the Flutter template's debug
+          key, and Android reads a signing certificate as the app's identity --
+          so installing over them fails with
+          `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Uninstalling loses the local
+          library, settings and downloads. It is a one-off: every build from
+          here on updates the last one, whether you built it yourself or took
+          it from this page.
           NOTES
           # Draft, upload, publish -- three steps because `gh release create`
           # with the files on the end is not one. It creates the release

@@ -90,10 +90,16 @@ Every version tag builds Linux, Windows, macOS and both Android ABIs and
 attaches them to a
 [GitHub Release](https://github.com/zond/xtremio/releases) -- that is where a
 build comes from. Nothing is tagged yet, so until the first one that page is
-empty and building it yourself is the only way. Two things about those builds
-are worth knowing before installing, and the release notes say both: the APKs
-are signed with the Flutter template's debug key, and the macOS build is
-unsigned.
+empty and building it yourself is the only way. One thing about those builds
+is worth knowing before installing, and the release notes say it: the macOS
+build is unsigned.
+
+The Android builds are signed with the project's own release key. An APK
+built here and one downloaded from a release can therefore update each
+other, which an APK signed with the Flutter template's debug key could not --
+Android reads a signing certificate as the app's identity, so a change of key
+is a different app to it and an install over the old one is refused. Anyone
+who installed a build from before that change has to uninstall once.
 
 ```bash
 flutter pub get
