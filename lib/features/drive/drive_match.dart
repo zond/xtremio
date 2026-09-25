@@ -172,6 +172,23 @@ final class DriveMatchRun {
   /// be picked is a character a Drive file may have in its name.
   final Set<(String, String)> _asked = <(String, String)>{};
 
+  /// Forgets what this run has asked about, so the next [run] asks again
+  /// about every file that still has no match.
+  ///
+  /// **For a Reload and nothing else.** [_asked] exists to keep a rebuild
+  /// from asking about `ep6.avi` once a frame, and clearing it on any other
+  /// occasion would put that back. A press on Reload is different in kind:
+  /// the viewer has said out loud that what is known about these files is
+  /// out of date, and the answer for a file nothing matched is the one
+  /// thing a reload could otherwise miss -- a renamed file re-matches
+  /// because the rename dropped its match, while an unmatched file whose
+  /// name did not change would be remembered as hopeless for the life of
+  /// the run.
+  ///
+  /// A file that *did* match is unaffected either way: [run] steps over it
+  /// on the store, which is the guard that outlives this one.
+  void askAgain() => _asked.clear();
+
   /// Asks about every linked file that has no match and has not been asked.
   ///
   /// Safe to call on every build, and on a build made while a pass is still in

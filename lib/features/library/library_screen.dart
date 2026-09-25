@@ -67,6 +67,7 @@ class LibraryScreen extends StatefulWidget {
     super.key,
     this.driveOpener = const ServerDriveFileOpener(),
     this.driveSearch = cinemetaSearch,
+    this.driveLister = const XtremioDriveFileLister(),
   });
 
   /// How a linked Drive file is turned into something playable, for the
@@ -77,6 +78,11 @@ class LibraryScreen extends StatefulWidget {
   /// How the catalogue is asked, for the same reason: a widget test answers
   /// it with a list rather than reaching Cinemeta.
   final CatalogueSearch driveSearch;
+
+  /// How Drive is asked what the linked files are called now, for **Reload**
+  /// -- and for the same reason again: the real one goes to the pairing
+  /// service and to Google, and a widget test goes to neither.
+  final DriveFileLister driveLister;
 
   /// From this width on, types are a segmented button rather than chips.
   static const double wideBreakpoint = 720;
@@ -103,6 +109,14 @@ class LibraryScreen extends StatefulWidget {
   /// Not "Google Drive", and not "Linked": the same word as the button that
   /// links them, because a share on a NAS arrives under it too.
   static const String remoteLabel = 'Remote';
+
+  /// Label of the button beside it, drawn only while it is on.
+  ///
+  /// One word, and the same word the note above the list tells a viewer to
+  /// press (`LinkedDriveFilesView.matchedByNameNote`). Not "Refresh": what
+  /// it does is fetch the list again, and refresh is what a television does
+  /// sixty times a second.
+  static const String reloadLabel = 'Reload';
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -188,6 +202,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// answers "which linked files are this meta id and video id" as a lookup.
   bool _remote = false;
 
+  /// A reload is in flight, so a second press is dropped. Nothing is drawn
+  /// from it: a chip that turned into a spinner under a viewer's thumb is a
+  /// chip a remote loses its focus on, and the answer to "did that do
+  /// anything" is the sentence the reload finishes with.
+  bool _reloading = false;
+
+  /// How many reloads have come back with a whole listing. Handed to
+  /// [LinkedDriveFilesView], which re-asks Cinemeta about what matched
+  /// nothing when it changes; see its `reloads`.
+  int _reloads = 0;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -244,6 +269,48 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void _showRemote({required bool remote}) {
     if (_remote != remote) setState(() => _remote = remote);
   }
+
+  /// Asks Drive what the linked files are called now, and says what came of
+  /// it in one line.
+  ///
+  /// **Every outcome is a sentence and none of them is a state.** A reload
+  /// that reconciled nothing, one that could not reach Google, and one that
+  /// found the grant revoked are all a snack bar -- the same register as a
+  /// file that would not play ([driveFailureMessage]) -- because there is
+  /// nothing on this screen for a viewer to clear, retry or dismiss. The
+  /// one that says "nothing has changed" is not padding: a button that
+  /// answers with silence is a button pressed again.
+  ///
+  /// No scope above this is the same picture as a device nobody has paired.
+  /// It is a build of the app that cannot link anything, so the line it
+  /// gets is the one for no account.
+  Future<void> _reloadRemote() async {
+    if (_reloading) return;
+    final account = DriveAccountScope.maybeOf(context);
+    if (account == null) {
+      _sayReload(const DriveReloadRefused(DriveListingFailure.notLinked));
+      return;
+    }
+    _reloading = true;
+    final DriveReloaded outcome;
+    try {
+      outcome = await reloadLinkedDriveFiles(
+        account: account,
+        lister: widget.driveLister,
+      );
+    } finally {
+      _reloading = false;
+    }
+    if (!mounted) return;
+    // Only a whole listing counts: a refusal changed nothing, so there is
+    // nothing new for the matching pass to be told about either.
+    if (outcome is DriveReloadDone) setState(() => _reloads++);
+    _sayReload(outcome);
+  }
+
+  void _sayReload(DriveReloaded outcome) =>
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text(driveReloadMessage(outcome))));
 
   bool _onScroll(ScrollNotification notification, LibraryState state) {
     if (notification.metrics.extentAfter < 600 &&
@@ -349,6 +416,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   remote: _remote,
                   onSelect: _select,
                   onRemote: (on) => _showRemote(remote: on),
+                  onReload: () => unawaited(_reloadRemote()),
                   onDownloads: _openDownloads,
                 ),
               ),
@@ -364,6 +432,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         LinkedDriveFilesView(
                           opener: widget.driveOpener,
                           search: widget.driveSearch,
+                          reloads: _reloads,
                         ),
                       )
                     : state == null || !state.isLoaded
@@ -443,6 +512,7 @@ class _FilterRow extends StatelessWidget {
     required this.remote,
     required this.onSelect,
     required this.onRemote,
+    required this.onReload,
     required this.onDownloads,
   });
 
@@ -459,6 +529,12 @@ class _FilterRow extends StatelessWidget {
   /// current owes a viewer: a control that will not let go is a control they
   /// have to guess their way out of.
   final ValueChanged<bool> onRemote;
+
+  /// Asks Drive what the linked files are called now. Only reachable while
+  /// [remote] is on, because it is about the list that is on screen then
+  /// and about nothing else: a Reload sitting beside the engine's types
+  /// would be a button whose subject a viewer has to guess.
+  final VoidCallback onReload;
 
   final VoidCallback onDownloads;
 
@@ -517,6 +593,21 @@ class _FilterRow extends StatelessWidget {
               onSelected: onRemote,
             ),
           ),
+          // Next to the pill it belongs to, and only while that pill is on.
+          // It is an [ActionChip] and not a second [FilterChip] for the
+          // reason Downloaded is one: pressing it does something and then it
+          // is over, where a pill says what the body is showing. Wrapped
+          // like the rest of the row, because the floor fills a chip and
+          // cannot outline one.
+          if (remote)
+            FocusMarked(
+              borderRadius: FocusMarked.stadium,
+              child: ActionChip(
+                avatar: const Icon(Icons.refresh, size: 18),
+                label: const Text(LibraryScreen.reloadLabel),
+                onPressed: onReload,
+              ),
+            ),
           if (sorts.isNotEmpty)
             FilterMenu(label: 'Sort', options: sorts, onSelect: onSelect),
           // Wrapped for the same reason the filter chips are: the floor

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -13,6 +15,7 @@ import 'package:xtremio/widgets/poster_tile.dart';
 
 import '../support/fake_core_client.dart';
 import '../support/fake_downloads_client.dart';
+import '../support/fake_drive_file_lister.dart';
 import '../support/fake_drive_file_opener.dart';
 import '../support/fake_playback_engine.dart';
 import '../support/fake_prefs_client.dart';
@@ -88,6 +91,7 @@ void main() {
     DriveAccount? drive,
     DriveFileOpener? opener,
     CatalogueSearch? search,
+    DriveFileLister? lister,
     NavigatorObserver? observer,
   }) {
     final downloads = FakeDownloadsClient();
@@ -95,6 +99,9 @@ void main() {
     final screen = LibraryScreen(
       driveOpener: opener ?? FakeDriveFileOpener(),
       driveSearch: search ?? (type, query) async => const [],
+      // Nothing in this file reaches the pairing service or Google; a test
+      // that presses Reload says what Drive answered.
+      driveLister: lister ?? FakeDriveFileLister(),
     );
     final app = CoreScope(
       client: core,
@@ -707,6 +714,363 @@ void main() {
       expect(find.byIcon(LinkedDriveFilesView.unmatchedIcon), findsOneWidget);
       expect(find.byType(SnackBar), findsNothing);
       expect(find.textContaining('could not'), findsNothing);
+    });
+  });
+
+  group('Reload', () {
+    Future<void> tapReload(WidgetTester tester) async {
+      await tester.tap(
+        find.widgetWithText(ActionChip, LibraryScreen.reloadLabel),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Finder reloadChip() =>
+        find.widgetWithText(ActionChip, LibraryScreen.reloadLabel);
+
+    testWidgets('is drawn beside the Remote pill, and only while it is on', (
+      tester,
+    ) async {
+      useNarrowScreen(tester);
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        reloadChip(),
+        findsNothing,
+        reason: 'a Reload beside the engine\'s types has no subject',
+      );
+
+      await tapRemote(tester);
+      expect(reloadChip(), findsOneWidget);
+
+      await tapRemote(tester);
+      expect(reloadChip(), findsNothing);
+    });
+
+    testWidgets('the note above the list names it, and the two are on screen '
+        'together', (tester) async {
+      // The note tells a viewer to press this. Two constants held against
+      // each other, and then both found on the one screen: either half
+      // alone would let the sentence go on naming a control that is gone.
+      expect(
+        LinkedDriveFilesView.matchedByNameNote,
+        contains(LibraryScreen.reloadLabel),
+      );
+      useNarrowScreen(tester);
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+
+      expect(find.text(LinkedDriveFilesView.matchedByNameNote), findsOneWidget);
+      expect(reloadChip(), findsOneWidget);
+    });
+
+    testWidgets('a renamed file is redrawn under its new name, and matched '
+        'again from it', (tester) async {
+      // The whole promise of the note, end to end: rename in Drive, press
+      // Reload, and the row that said `ep6.avi` is the episode it is.
+      final asked = <String>[];
+      final drive = await account(
+        files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+      );
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: drive,
+          lister: FakeDriveFileLister(
+            answers: [
+              FakeDriveFileLister.listing({
+                'drive-file-1': 'Breaking.Bad.S01E01.mkv',
+              }),
+            ],
+          ),
+          search: (type, query) async {
+            asked.add('$type/$query');
+            return const [
+              {
+                'id': 'tt0903747',
+                'name': 'Breaking Bad',
+                'type': 'series',
+                'releaseInfo': '2008',
+              },
+            ];
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+      await tester.pumpAndSettle();
+      expect(asked, ['movie/ep6']);
+
+      await tapReload(tester);
+
+      expect(find.text('Breaking Bad'), findsOneWidget);
+      expect(find.text('ep6.avi'), findsNothing);
+      expect(asked, ['movie/ep6', 'series/Breaking Bad']);
+      expect(drive.files.entries.single.match?.videoId, 'tt0903747:1:1');
+    });
+
+    testWidgets('a file Drive no longer shares leaves the list, and the line '
+        'says how many', (tester) async {
+      final drive = await account(
+        files: [
+          (id: 'drive-file-1', name: 'ep6.avi', match: null),
+          (id: 'drive-file-2', name: 'Arrival.2016.mkv', match: arrival),
+        ],
+      );
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: drive,
+          lister: FakeDriveFileLister(
+            answers: [
+              FakeDriveFileLister.listing({'drive-file-2': 'Arrival.2016.mkv'}),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+
+      await tapReload(tester);
+
+      expect(find.text('ep6.avi'), findsNothing);
+      expect(find.text('Arrival'), findsOneWidget);
+      expect(
+        find.text(
+          driveReloadMessage(const DriveReloadDone(renamed: 0, removed: 1)),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a reload that found nothing to do says so out loud', (
+      tester,
+    ) async {
+      // A button that answers with silence is a button pressed again.
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+          lister: FakeDriveFileLister(
+            answers: [
+              FakeDriveFileLister.listing({'drive-file-1': 'ep6.avi'}),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+
+      await tapReload(tester);
+
+      expect(
+        find.text(
+          driveReloadMessage(const DriveReloadDone(renamed: 0, removed: 0)),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('ep6.avi'), findsOneWidget);
+    });
+
+    testWidgets('a listing that did not arrive is one line and no row moves', (
+      tester,
+    ) async {
+      final drive = await account(
+        files: [
+          (id: 'drive-file-1', name: 'ep6.avi', match: null),
+          (id: 'drive-file-2', name: 'Arrival.2016.mkv', match: arrival),
+        ],
+      );
+      final before = drive.files;
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: drive,
+          lister: FakeDriveFileLister(
+            answers: const [
+              DriveListingFailed(DriveListingFailure.unreachable),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+
+      await tapReload(tester);
+
+      expect(drive.files, before, reason: 'a failure is not a shorter list');
+      expect(find.text('ep6.avi'), findsOneWidget);
+      expect(find.text('Arrival'), findsOneWidget);
+      expect(
+        find.text(
+          driveReloadMessage(
+            const DriveReloadRefused(DriveListingFailure.unreachable),
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('it is asked with the account\'s own credential', (
+      tester,
+    ) async {
+      final lister = FakeDriveFileLister(
+        answers: [
+          FakeDriveFileLister.listing({'drive-file-1': 'ep6.avi'}),
+        ],
+      );
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+          lister: lister,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+
+      await tapReload(tester);
+
+      expect(lister.asked, ['a-refresh-token']);
+    });
+
+    testWidgets('and it asks the catalogue again about a file that matched '
+        'nothing, even with its name unchanged', (tester) async {
+      // The other half of "re-match what changed, or what never matched".
+      // A rename re-matches because the rename dropped the match; this one
+      // would otherwise be remembered as hopeless for the life of the run.
+      final asked = <String>[];
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+          lister: FakeDriveFileLister(
+            answers: [
+              FakeDriveFileLister.listing({'drive-file-1': 'ep6.avi'}),
+            ],
+          ),
+          search: (type, query) async {
+            asked.add('$type/$query');
+            return const [];
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+      await tester.pumpAndSettle();
+      expect(asked, ['movie/ep6']);
+
+      await tapReload(tester);
+
+      expect(asked, ['movie/ep6', 'movie/ep6']);
+    });
+
+    testWidgets('a refused listing does not send the matching round again', (
+      tester,
+    ) async {
+      // Nothing changed, so there is nothing new to ask about -- and a
+      // press that failed should not spend a search on every row.
+      final asked = <String>[];
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+          lister: FakeDriveFileLister(
+            answers: const [
+              DriveListingFailed(DriveListingFailure.unreachable),
+            ],
+          ),
+          search: (type, query) async {
+            asked.add('$type/$query');
+            return const [];
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+      await tester.pumpAndSettle();
+      expect(asked, ['movie/ep6']);
+
+      await tapReload(tester);
+
+      expect(asked, ['movie/ep6']);
+    });
+
+    testWidgets('a second press while the first is in flight is dropped', (
+      tester,
+    ) async {
+      // The service allows sixty refreshes an hour per credential, and a
+      // chip on a television gets pressed twice by anybody who is not sure
+      // it registered. The answer to that is the sentence at the end, not
+      // a second listing.
+      final lister = FakeDriveFileLister(
+        answers: [
+          FakeDriveFileLister.listing({'drive-file-1': 'ep6.avi'}),
+        ],
+      )..gate = Completer<void>();
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(
+            files: [(id: 'drive-file-1', name: 'ep6.avi', match: null)],
+          ),
+          lister: lister,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+
+      await tester.tap(reloadChip());
+      await tester.pump();
+      await tester.tap(reloadChip());
+      await tester.pump();
+      expect(lister.asked, hasLength(1));
+
+      lister.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(lister.asked, hasLength(1));
+      expect(find.byType(SnackBar), findsOneWidget);
+    });
+
+    testWidgets('with no Drive scope above it at all, it is one line and not '
+        'a crash', (tester) async {
+      await tester.pumpWidget(harness(fakeCore()));
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+
+      await tapReload(tester);
+
+      expect(
+        find.text(
+          driveReloadMessage(
+            const DriveReloadRefused(DriveListingFailure.notLinked),
+          ),
+        ),
+        findsOneWidget,
+      );
     });
   });
 

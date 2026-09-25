@@ -11,6 +11,7 @@ import 'package:xtremio/shell/root_shell.dart';
 import 'package:xtremio/widgets/remote_press.dart';
 
 import '../../support/fake_core_client.dart';
+import '../../support/fake_drive_file_lister.dart';
 import '../../support/fake_drive_file_opener.dart';
 import '../../support/fake_secret_store.dart';
 import '../../support/fixtures.dart';
@@ -255,6 +256,11 @@ void main() {
           home: LibraryScreen(
             driveOpener: FakeDriveFileOpener(),
             driveSearch: (type, query) async => const [],
+            driveLister: FakeDriveFileLister(
+              answers: [
+                FakeDriveFileLister.listing({'drive-file-1': 'ep6.avi'}),
+              ],
+            ),
           ),
           theme: XtremioApp.themeFor(isTv: true, emphasis: FocusEmphasis.bold),
         ),
@@ -278,6 +284,29 @@ void main() {
 
     await press(tester, LogicalKeyboardKey.select);
     expect(find.text('ep6.avi'), findsOneWidget);
+
+    // Selecting it also puts Reload on the row, right beside it, and the
+    // remote reaches that with one press: a button a viewer is told to
+    // press has to be a stop on the walk they are already making.
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedLabel(tester), LibraryScreen.reloadLabel);
+    expect(
+      focusMarks(),
+      isNotEmpty,
+      reason: 'a chip the remote can stand on with nothing drawn on it',
+    );
+    await press(tester, LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        driveReloadMessage(const DriveReloadDone(renamed: 0, removed: 0)),
+      ),
+      findsOneWidget,
+      reason: 'a press from a remote answers in a line, like every refusal',
+    );
+    // And back to the pill it belongs to, so it is not a one-way stop.
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
 
     // And down into the list it put there, onto a tile the remote can see
     // it is standing on.
