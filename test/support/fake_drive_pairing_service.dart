@@ -43,10 +43,10 @@ class FakeDrivePairingService implements DrivePairingService {
   /// Every `POST /session`, counted.
   int opens = 0;
 
-  /// What each `POST /session` asked for a hand-back, in order: what the
-  /// service is told about which shape is pairing, and the one thing a
-  /// television's pairing and a phone's differ by on the wire.
-  final List<bool> handBacks = [];
+  /// What shape each `POST /session` said it was, in order: the one thing
+  /// the service is told about the device that is pairing, and what the pick
+  /// page words its confirmation from.
+  final List<DrivePairingShape> shapes = [];
 
   /// Every `GET /session/{id}`, by the id it was made with.
   final List<String> collects = [];
@@ -57,9 +57,9 @@ class FakeDrivePairingService implements DrivePairingService {
   Completer<DrivePairingAnswer>? hold;
 
   @override
-  Future<DrivePairingOpening> open({bool handBack = false}) async {
+  Future<DrivePairingOpening> open({required DrivePairingShape shape}) async {
     opens++;
-    handBacks.add(handBack);
+    shapes.add(shape);
     if (openings.isEmpty) return DrivePairingOpened(session);
     return openings.removeAt(0);
   }

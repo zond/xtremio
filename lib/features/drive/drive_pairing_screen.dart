@@ -23,8 +23,10 @@ import '../player/player_screen.dart';
 /// typed into and the second device is the point. On a phone or a desktop
 /// there is no second device, and scanning your own screen is absurd, so the
 /// app opens the link itself and waits for the same answer. That is the split
-/// this app makes everywhere ([DeviceScope.isTv]), and the service is now
-/// told one thing about it -- see the hand-back below.
+/// this app makes everywhere ([DeviceScope.isTv]). Two shapes here, but
+/// *three* on the wire: what the page has to say at the end splits the phone
+/// from the desktop, which this screen treats alike -- see the hand-back
+/// below.
 ///
 /// **One pairing links everything the viewer picked.** The Picker takes
 /// several files at once, so a scan can link a whole season, and
@@ -44,8 +46,8 @@ import '../player/player_screen.dart';
 /// says "on its way" and nothing to press is the one part of the phone shape
 /// that was plainly wrong. So the pick page now navigates to
 /// [drivePairingHandBackLink] when it is finished -- but only for a session
-/// that asked ([_handBack]), and this app does not act on the link when it
-/// arrives.
+/// that asked ([DrivePairingShape.handsBack]), and this app does not act on
+/// the link when it arrives.
 ///
 /// That is what answers what was written here against `app_links`, rather
 /// than ignoring it. The objection was never the dependency, which is
@@ -67,9 +69,18 @@ import '../player/player_screen.dart';
 /// A television asks for no hand-back, and neither does a desktop: the
 /// scheme's registration there is installed by hand or not at all
 /// (`docs/DEEP_LINKS.md`), and a browser sent to a scheme nothing handles
-/// shows an error page where a confirmation should be. [_handBack] is
-/// therefore `hasTouch && !isTv` -- a phone or a tablet, where the
-/// registration ships with the app.
+/// shows an error page where a confirmation should be. So the hand-back is
+/// the phone and the tablet alone, where the registration ships with the
+/// app.
+///
+/// **The service is told which of three shapes asked, not whether to hand
+/// back** ([_shapeOf], [DrivePairingShape]). Those are not the same fact,
+/// and taking them as one is what made the pick page tell a desktop its
+/// files were on the way to "your television": the two shapes that want no
+/// hand-back want it for opposite reasons, and the page has something
+/// different to say to each. A television's viewer is already looking
+/// elsewhere; a desktop's is looking at the page, and is told the pairing
+/// landed in the app and the window can be closed.
 ///
 /// **Polling ends.** A session lasts about ten minutes and the screen says
 /// so; when it is up, the screen says *that* and offers a fresh code rather
@@ -333,15 +344,18 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// Whether a finished pairing should put this app back in front of the
   /// viewer, which is asked of the service when the session is opened.
   ///
-  /// A phone or a tablet: the shape where this app opened the browser itself
-  /// and where the viewer is left in it with nothing to do. Not a
-  /// television, whose viewer is looking at the other screen already, and
-  /// not a desktop -- `hasTouch` is false on both, and a desktop is also
-  /// where the `stremio://` registration is installed by hand or not at all
-  /// (`docs/DEEP_LINKS.md`), so a hand-back there could land on a browser
-  /// error page instead of this app. See the class comment.
-  static bool _handBack(DeviceProfile device) =>
-      device.hasTouch && !device.isTv;
+  /// Which of the three shapes this device is, in the service's terms.
+  ///
+  /// The television first, because `hasTouch` is true on some of them and
+  /// the remote is what decides that split everywhere else in this app.
+  /// After that, touch tells a phone or tablet from a desktop -- which is
+  /// the line the hand-back falls on, and the line the pick page's own
+  /// wording falls on. See [DrivePairingShape] and the class comment.
+  static DrivePairingShape _shapeOf(DeviceProfile device) => device.isTv
+      ? DrivePairingShape.television
+      : device.hasTouch
+      ? DrivePairingShape.phone
+      : DrivePairingShape.desktop;
 
   /// Asks for a session and starts the waiting, or says why it could not.
   Future<void> _open() async {
@@ -361,7 +375,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         _refusal = '';
       });
     }
-    final opening = await widget.service.open(handBack: _handBack(device));
+    final opening = await widget.service.open(shape: _shapeOf(device));
     _opening = false;
     if (!mounted) return;
     switch (opening) {

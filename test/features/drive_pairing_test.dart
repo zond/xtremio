@@ -77,9 +77,10 @@ void main() {
       final qr = tester.widget<PairingQrCode>(find.byType(PairingQrCode));
       expect(qr.link, service.session.link);
       expect(find.text(DrivePairingScreen.waitingMessage), findsOneWidget);
-      // And it asks for no hand-back: this viewer is looking at the screen
-      // the QR is on, and the phone in their hand is not what is playing.
-      expect(service.handBacks, [isFalse]);
+      // And it says it is a television: this viewer is looking at the screen
+      // the QR is on, so the pick page hands nobody back and words its
+      // confirmation for somebody who will read it on the other screen.
+      expect(service.shapes, [DrivePairingShape.television]);
     });
 
     testWidgets('a phone opens the page itself and draws no QR at all', (
@@ -104,13 +105,14 @@ void main() {
       expect(opener.opened.map((url) => url.toString()), [
         service.session.link,
       ]);
-      // And it asks to be handed back to, because it is the app that put
-      // this viewer in a browser: the pick page ends by navigating to
+      // And it says it is a phone, which is the one shape that is handed
+      // back to: the pick page ends by navigating to
       // `drivePairingHandBackLink`, which brings this app to the front.
-      expect(service.handBacks, [isTrue]);
+      expect(service.shapes, [DrivePairingShape.phone]);
+      expect(DrivePairingShape.phone.handsBack, isTrue);
     });
 
-    testWidgets('a desktop opens the page too, and asks for no hand-back', (
+    testWidgets('a desktop opens the page too, and says it is a desktop', (
       tester,
     ) async {
       // `hasTouch` is what tells a phone from a desktop among the shapes that
@@ -118,6 +120,11 @@ void main() {
       // registration is installed by hand or not at all
       // (`docs/DEEP_LINKS.md`) -- so a hand-back there could put a browser on
       // an error page where a confirmation should be.
+      //
+      // It is still not a television, and the service is told so rather than
+      // being left to infer it from the missing hand-back: the pick page tells
+      // a desktop its files are in the app and the window can be closed, and
+      // told a television's viewer to look at their television.
       final service = FakeDrivePairingService();
       final opener = FakeLinkOpener();
       await tester.pumpWidget(
@@ -140,7 +147,8 @@ void main() {
       await tester.pump();
 
       expect(opener.opened, hasLength(1));
-      expect(service.handBacks, [isFalse]);
+      expect(service.shapes, [DrivePairingShape.desktop]);
+      expect(DrivePairingShape.desktop.handsBack, isFalse);
     });
 
     testWidgets('and it opens an external browser, never an in-app web view', (

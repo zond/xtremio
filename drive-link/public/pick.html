@@ -41,17 +41,42 @@
    * Where to send this browser once the picking is done, or null.
    *
    * The service says which (`GET /session/<id>/token`), because the service
-   * is what was told which shape asked for the pairing: a phone, which this
-   * app sent here itself and which should be put back in front of the
-   * viewer, or a television, whose viewer is already looking at the other
-   * screen and should be sent nowhere at all.
+   * is what was told which shape asked for the pairing. Only a phone is sent
+   * anywhere: the app put this browser here itself *and* the `stremio://`
+   * registration ships with it there.
    */
   let backLink = null;
+
+  /**
+   * Which shape asked for this pairing: `tv`, `phone` or `desktop`.
+   *
+   * Three, and not the presence of [backLink], because the two shapes that
+   * are sent nowhere are sent nowhere for opposite reasons and want opposite
+   * things said to them. A television's viewer is not reading this page --
+   * they are looking at the television, and the page's job is to say the
+   * files went *there*. A desktop's viewer is reading this page, on the very
+   * machine the app is running on, and the page's job is to say the pairing
+   * landed and this window is finished with. While this was read off
+   * `backLink` they were one case, and a desktop was told its files were on
+   * the way to a television it has not got.
+   *
+   * Unknown is treated as a television, which is what the service sends for
+   * anything it does not recognise.
+   */
+  let shape = 'tv';
 
   const say = (text, cls) => { what.className = cls || ''; what.textContent = text; };
 
   /** What the pairing is for, in the words the viewer would use for it. */
-  const destination = () => backLink ? 'Xtremio' : 'your television';
+  const destination = () => shape === 'tv' ? 'your television' : 'Xtremio';
+
+  /**
+   * What is left for the viewer to do, when it is this page that has to say
+   * it. Only the desktop: the phone is about to be taken back to the app and
+   * the television's viewer is not reading this.
+   */
+  const afterword = () =>
+      shape === 'desktop' ? ' You can close this window.' : '';
 
   async function start() {
     if (failed) return say(`Google said: ${failed}`, 'bad');
@@ -63,8 +88,12 @@
       if (!answer.ok) throw new Error(ready.error);
       accessToken = ready.accessToken;
       backLink = ready.handBack || null;
+      shape = ready.shape || 'tv';
     } catch (e) {
-      return say(`${e.message}. Scan the code on your television again.`, 'bad');
+      // Shape-agnostic on purpose: this is the one failure that happens
+      // before the service has said which shape asked, so "scan again" would
+      // be an instruction a desktop's viewer has no way to follow.
+      return say(`${e.message}. Ask Xtremio for a fresh code.`, 'bad');
     }
     say('Signed in. Choose what you want to play. You can choose more than '
         + 'one file — only what you choose is shared.');
@@ -100,7 +129,7 @@
         ? `“${files[0].name}”`
         : `${files.length} files`;
     const verb = files.length === 1 ? 'is' : 'are';
-    return `${subject} ${verb} on the way to ${destination()}.`;
+    return `${subject} ${verb} on the way to ${destination()}.${afterword()}`;
   }
 
   async function chosen(data) {
@@ -119,9 +148,9 @@
       body: JSON.stringify({files}),
     });
     if (!answer.ok) {
-      return say(backLink
-          ? 'Xtremio did not take it. Try again from the app.'
-          : 'Your television did not take it.', 'bad');
+      return say(shape === 'tv'
+          ? 'Your television did not take it.'
+          : 'Xtremio did not take it. Try again from the app.', 'bad');
     }
     head.textContent = 'Sent';
     go.hidden = true;
@@ -136,7 +165,9 @@
    * the navigation is attempted, so that a browser which refuses to follow
    * a custom scheme without a tap leaves a page that says what happened and
    * offers the tap -- rather than a page the viewer has to guess at. A
-   * television's session has no `backLink` and nothing here fires.
+   * television's session has no `backLink`, and neither has a desktop's, so
+   * nothing here fires for either -- what those two are told instead is in
+   * `destination` and `afterword`.
    */
   function handBack() {
     if (!backLink) return;

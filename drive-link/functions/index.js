@@ -63,10 +63,12 @@ const MAX_FILES = 100;
 /**
  * Where the pick page sends a phone's browser once the picking is done.
  *
- * Only for a pairing that asked for it (`handBack` on `POST /session`),
- * which is the app saying "I opened this browser myself, hand the viewer
- * back when you are finished". A television's viewer looks up at the
- * screen and is sent nowhere.
+ * Only for a pairing a phone asked for (`shape` on `POST /session`), which
+ * is the app saying "I opened this browser myself, hand the viewer back when
+ * you are finished". A television's viewer looks up at the screen and is sent
+ * nowhere; a desktop's is looking at this page and has nowhere to be sent,
+ * because the scheme's registration there is installed by hand or not at all.
+ * See [SHAPES].
  *
  * It is host-less on purpose, and the app **does not act on it**: a
  * `stremio://` link with no host is exactly the shape the app already
@@ -167,15 +169,40 @@ async function withinRate(key, limit) {
 }
 
 /**
+ * The three shapes a pairing can be asked for by, and the only thing this
+ * service is told about the device that asked.
+ *
+ * It decides two things, and they are not the same thing: whether the pick
+ * page ends by sending the browser to [HAND_BACK_LINK] (`phone` alone), and
+ * what that page says it has done (a `tv`'s viewer is looking at the other
+ * screen; a `desktop`'s is looking at the page, and is told the pairing is
+ * in the app and the window can be closed). While this was one boolean the
+ * second question had no answer for a desktop, which was told its files were
+ * on the way to a television it has not got.
+ */
+const SHAPES = ['tv', 'phone', 'desktop'];
+
+/**
+ * Which shape `POST /session` says it is, read strictly.
+ *
+ * Anything unrecognised is a television, which is the safe end of the two
+ * decisions above: no hand-back is sent to a browser that may have nothing
+ * to handle it, and the page says the least about a screen it cannot see.
+ * An app built before the shape was sent said only whether it wanted a
+ * hand-back, which is a phone and no other shape, so those builds keep
+ * pairing and keep their confirmation.
+ */
+function shapeOf(body) {
+  const asked = (body || {}).shape;
+  if (SHAPES.includes(asked)) return asked;
+  return (body || {}).handBack === true ? 'phone' : 'tv';
+}
+
+/**
  * 1. The app asks for a session and gets something to draw.
  *
- * `handBack` is the app saying which shape it is, and it is the only thing
- * the two shapes differ by here: a phone opened the browser itself and
- * wants the viewer put back in front of it when the picking is done, a
- * television wants nothing of the kind. See [HAND_BACK_LINK]. It is read
- * strictly -- anything but `true` is a television, because a hand-back sent
- * to a browser on a device with nothing to handle it is an error page where
- * a confirmation should be.
+ * What it says about itself is its shape, and see [SHAPES] for what that is
+ * for and why it is three words rather than a flag.
  */
 app.post('/session', async (req, res) => {
   const from = req.ip || 'unknown';
@@ -186,7 +213,7 @@ app.post('/session', async (req, res) => {
   const expiresAt = new Date(Date.now() + SESSION_MINUTES * 60000);
   await db.collection('sessions').doc(id).set({
     status: 'pending',
-    handBack: (req.body || {}).handBack === true,
+    shape: shapeOf(req.body),
     createdAt: FieldValue.serverTimestamp(),
     expiresAt,
   });
@@ -245,12 +272,14 @@ app.get('/oauth/callback', async (req, res) => {
 });
 
 /**
- * What the Picker page needs to draw itself: a token, and where to send
- * the viewer afterwards.
+ * What the Picker page needs to draw itself: a token, where to send the
+ * viewer afterwards, and what to call where the files went.
  *
- * `handBack` is the link or null, rather than the flag: the page is told
- * where to go and knows nothing about which shape asked, and the URL it may
- * navigate to is this file's constant and never a client's.
+ * `handBack` is the link or null rather than a flag, so that the URL the
+ * page may navigate to is this file's constant and never a client's. `shape`
+ * is the word the page words its confirmation from, and it is separate
+ * because two of the three shapes are handed back nowhere and still have
+ * different things said to them.
  */
 app.get('/session/:id/token', async (req, res) => {
   const session = await db.collection('sessions').doc(req.params.id).get();
@@ -261,7 +290,8 @@ app.get('/session/:id/token', async (req, res) => {
   }
   res.json({
     accessToken: it.accessToken,
-    handBack: it.handBack === true ? HAND_BACK_LINK : null,
+    handBack: it.shape === 'phone' ? HAND_BACK_LINK : null,
+    shape: SHAPES.includes(it.shape) ? it.shape : 'tv',
   });
 });
 

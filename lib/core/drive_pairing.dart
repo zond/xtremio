@@ -242,18 +242,53 @@ final class DrivePairingUnreachable extends DrivePairingAnswer {
   const DrivePairingUnreachable();
 }
 
+/// Which shape of device asked for a pairing. The only thing about the app
+/// the service is told, and the only thing the pick page words itself
+/// differently for.
+///
+/// **Three, not two.** A phone and a desktop are the same at the start --
+/// both opened the browser themselves, on the screen the viewer is already
+/// looking at -- and differ only at the end. `stremio://` is registered on
+/// the phone, so the page can put the viewer back in front of the app; on a
+/// desktop that registration is installed by hand or not at all
+/// (`docs/DEEP_LINKS.md`), so a browser sent to the scheme would show an
+/// error page where a confirmation should be, and the page has to say the
+/// pairing is done and leave the window to be closed instead. A [television]
+/// is the third: its viewer is looking at the other screen already and is
+/// sent nowhere at all.
+///
+/// While this was one boolean -- did the session want a hand-back -- the
+/// page had no way to tell the two shapes that do not want one apart, and
+/// told a desktop its files were on the way to a television it has not got.
+enum DrivePairingShape {
+  television('tv'),
+  phone('phone'),
+  desktop('desktop');
+
+  const DrivePairingShape(this.wire);
+
+  /// What `POST /session` is sent, and what the service stores against the
+  /// session for the pick page to read back.
+  final String wire;
+
+  /// Whether the pick page ends by sending this browser to
+  /// [drivePairingHandBackLink]. The phone alone, and see the note above for
+  /// why the desktop is not included.
+  bool get handsBack => this == DrivePairingShape.phone;
+}
+
 /// The television's side of the pairing service. An interface because the
 /// screen that drives it is walked by a widget test with a remote, and a
 /// test must not reach the network.
 abstract interface class DrivePairingService {
   /// Asks for a session: `POST /session`.
   ///
-  /// [handBack] tells the service which shape asked, and is the only thing
-  /// the two shapes differ by on the wire: with it, the pick page ends by
-  /// sending the browser to [drivePairingHandBackLink] so the viewer is put
-  /// back in front of this app. Only a device this app opened the browser
-  /// on asks for it -- see `DrivePairingScreen`.
-  Future<DrivePairingOpening> open({bool handBack});
+  /// [shape] tells the service which kind of device asked, and is the only
+  /// thing the shapes differ by on the wire -- it decides how the pick page
+  /// words its confirmation, and whether that page ends by sending the
+  /// browser to [drivePairingHandBackLink]. See [DrivePairingShape] and
+  /// `DrivePairingScreen`.
+  Future<DrivePairingOpening> open({required DrivePairingShape shape});
 
   /// Asks what has happened to [sessionId]: `GET /session/{id}`.
   ///
@@ -282,14 +317,14 @@ class XtremioDrivePairingService implements DrivePairingService {
   final Duration timeout;
 
   @override
-  Future<DrivePairingOpening> open({bool handBack = false}) async {
+  Future<DrivePairingOpening> open({required DrivePairingShape shape}) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
       final answer = await _send(
         client,
         'POST',
         Uri.parse('$origin/session'),
-        body: {'handBack': handBack},
+        body: {'shape': shape.wire},
       ).timeout(timeout);
       if (answer.statusCode == HttpStatus.tooManyRequests) {
         await answer.drain<void>();

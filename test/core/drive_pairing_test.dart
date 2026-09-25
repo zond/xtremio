@@ -83,7 +83,7 @@ void main() {
         XtremioDrivePairingService(origin: 'http://127.0.0.1:${server.port}');
 
     test('opens a session and reads what there is to draw', () async {
-      final opening = await service().open();
+      final opening = await service().open(shape: DrivePairingShape.television);
       expect(seen, ['POST /session']);
       final session = (opening as DrivePairingOpened).session;
       expect(session.sessionId, 'abc-123');
@@ -95,16 +95,22 @@ void main() {
     });
 
     test('and says which shape asked, which is all the service is told about '
-        'the two of them', () async {
+        'the three of them', () async {
       // A phone was handed to a browser by this app and wants the viewer
-      // handed back; a television wants nothing of the kind, and a hand-back
-      // sent to a browser with nothing to handle it is an error page where a
-      // confirmation should be.
-      await service().open(handBack: true);
-      await service().open();
+      // handed back; a desktop was too but has nowhere to be handed back to,
+      // because the `stremio://` registration there is installed by hand or
+      // not at all; a television's viewer is looking at the other screen and
+      // is sent nowhere. Three cases and not two, because the page says
+      // something different for each -- the desktop and the television were
+      // one case while this was a boolean, and a desktop was told its files
+      // were on the way to a television.
+      for (final shape in DrivePairingShape.values) {
+        await service().open(shape: shape);
+      }
       expect(sent, [
-        {'handBack': true},
-        {'handBack': false},
+        {'shape': 'tv'},
+        {'shape': 'phone'},
+        {'shape': 'desktop'},
       ]);
     });
 
@@ -113,7 +119,9 @@ void main() {
       // one is not something to put on a television and wait beside.
       sessionBody = {'sessionId': 'abc-123'};
       expect(
-        (await service().open() as DrivePairingUnavailable).reason,
+        (await service().open(
+          shape: DrivePairingShape.television,
+        ) as DrivePairingUnavailable).reason,
         XtremioDrivePairingService.notUnderstood,
       );
     });
@@ -124,7 +132,9 @@ void main() {
       sessionStatus = HttpStatus.tooManyRequests;
       sessionBody = {'error': 'too many sessions'};
       expect(
-        (await service().open() as DrivePairingUnavailable).reason,
+        (await service().open(
+          shape: DrivePairingShape.television,
+        ) as DrivePairingUnavailable).reason,
         XtremioDrivePairingService.tooManyCodes,
       );
     });
@@ -136,7 +146,9 @@ void main() {
       final dead = service();
       await server.close(force: true);
       expect(
-        (await dead.open() as DrivePairingUnavailable).reason,
+        (await dead.open(
+          shape: DrivePairingShape.television,
+        ) as DrivePairingUnavailable).reason,
         XtremioDrivePairingService.notReached,
       );
     });
