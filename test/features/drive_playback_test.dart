@@ -65,34 +65,47 @@ Widget _harness({
   ),
 );
 
+/// Pumps until the one queued pairing has been polled for and stored, which
+/// is what puts the screen on its confirmation.
+Future<void> _untilLinked(WidgetTester tester) async {
+  await tester.pump();
+  // One poll brings the pairing back.
+  await tester.pump(DrivePairingScreen.defaultPollEvery);
+  await tester.pump();
+  await tester.pump();
+}
+
 void main() {
-  group('the list a pairing built', () {
-    testWidgets('a linked device opens on its files rather than on a '
-        'code', (tester) async {
+  group('what the cloud button opens on', () {
+    testWidgets('a code, on a device that already has files linked', (
+      tester,
+    ) async {
+      // The screen is for *adding* a file, and everything already linked has
+      // two homes of its own -- the library's Remote pill and each matched
+      // title's own details page. So there is no third copy of that list
+      // here, and no landing on one: a device that paired a season last week
+      // gets the same code as a device that has never paired. Spending the
+      // rate-limited `POST /session` is what the viewer came here to ask
+      // for.
+      final account = await _account(linked: true);
       final service = FakeDrivePairingService();
       await tester.pumpWidget(
         _harness(
-          account: await _account(linked: true),
+          account: account,
           opener: FakeDriveFileOpener(),
           service: service,
         ),
       );
       await tester.pump();
 
-      expect(find.text(DrivePairingScreen.linkedFilesHeading), findsOneWidget);
-      expect(find.text('Arrival (2016) 2160p.mkv'), findsOneWidget);
-      expect(find.byType(PairingQrCode), findsNothing);
-      // And the call the service rate-limits was not spent on a code
-      // nobody asked for.
-      expect(service.opens, 0);
-
-      // The way on is still there.
-      expect(find.text(DrivePairingScreen.linkAnotherLabel), findsOneWidget);
+      expect(find.byType(PairingQrCode), findsOneWidget);
+      expect(service.opens, 1);
+      // And nothing about what is already linked is drawn on the way in.
+      expect(find.text('Arrival (2016) 2160p.mkv'), findsNothing);
+      expect(find.byKey(const Key('drive-file-drive-file-1')), findsNothing);
     });
 
-    testWidgets('a device with nothing linked still opens on a code', (
-      tester,
-    ) async {
+    testWidgets('a code, on a device with nothing linked', (tester) async {
       final service = FakeDrivePairingService();
       await tester.pumpWidget(
         _harness(
@@ -104,43 +117,24 @@ void main() {
       await tester.pump();
 
       expect(find.byType(PairingQrCode), findsOneWidget);
-      expect(find.text(DrivePairingScreen.linkedFilesHeading), findsNothing);
       expect(service.opens, 1);
     });
+  });
 
-    testWidgets('pressing a file opens it with the account\'s own grant and '
-        'plays it', (tester) async {
-      final account = await _account(linked: true);
-      final opener = FakeDriveFileOpener();
-      await tester.pumpWidget(_harness(account: account, opener: opener));
-      await tester.pump();
-
-      await tester.tap(find.byKey(const Key('drive-file-drive-file-1')));
-      await tester.pump();
-      await tester.pumpAndSettle();
-
-      expect(opener.asked, hasLength(1));
-      expect(opener.asked.single.fileId, 'drive-file-1');
-      expect(opener.asked.single.refreshToken, fakeRefreshToken);
-      // The player is on top of the pairing screen, which is the whole
-      // point of the button.
-      expect(find.byType(PlayerScreen), findsOneWidget);
-      expect(find.text(DrivePairingScreen.linkedFilesHeading), findsNothing);
-    });
-
+  group('straight from the pairing', () {
     testWidgets('a dead pairing sends the viewer back to a code, with a '
         'sentence', (tester) async {
-      final account = await _account(linked: true);
+      final account = await _account();
       final opener = FakeDriveFileOpener(
         answers: const [DriveFileRefused(DriveOpenFailure.pairAgain)],
       );
-      final service = FakeDrivePairingService();
+      final service = FakeDrivePairingService(answers: [fakeCollected()]);
       await tester.pumpWidget(
         _harness(account: account, opener: opener, service: service),
       );
-      await tester.pump();
+      await _untilLinked(tester);
 
-      await tester.tap(find.byKey(const Key('drive-file-drive-file-1')));
+      await tester.tap(find.text(DrivePairingScreen.playLabel));
       await tester.pump();
       await tester.pump();
 
@@ -152,17 +146,25 @@ void main() {
         findsOneWidget,
       );
       expect(find.text(DrivePairingScreen.freshCodeLabel), findsOneWidget);
-      expect(find.text('Arrival (2016) 2160p.mkv'), findsNothing);
+      expect(find.text(DrivePairingScreen.playLabel), findsNothing);
     });
 
-    testWidgets('a failure that might pass says so and leaves the list '
+    testWidgets('a failure that might pass says so and leaves the rows '
         'alone', (tester) async {
-      final account = await _account(linked: true);
+      // A season, so the confirmation is a row each and the failure has
+      // something to leave standing.
+      final account = await _account();
       final opener = FakeDriveFileOpener(
         answers: const [DriveFileRefused(DriveOpenFailure.unreachable)],
       );
-      await tester.pumpWidget(_harness(account: account, opener: opener));
-      await tester.pump();
+      await tester.pumpWidget(
+        _harness(
+          account: account,
+          opener: opener,
+          service: FakeDrivePairingService(answers: [fakeCollectedFiles()]),
+        ),
+      );
+      await _untilLinked(tester);
 
       await tester.tap(find.byKey(const Key('drive-file-drive-file-1')));
       await tester.pump();
@@ -174,11 +176,9 @@ void main() {
       );
       // Still linked, and the file still there to try again.
       expect(account.state, DriveLinkState.linked);
-      expect(find.text('Arrival (2016) 2160p.mkv'), findsOneWidget);
+      expect(find.text('Gilmore Girls S01E01.mkv'), findsOneWidget);
     });
-  });
 
-  group('straight from the pairing', () {
     testWidgets('the screen that linked a file offers to play it', (
       tester,
     ) async {
@@ -188,11 +188,7 @@ void main() {
       await tester.pumpWidget(
         _harness(account: account, opener: opener, service: service),
       );
-      await tester.pump();
-      // One poll brings the pairing back.
-      await tester.pump(DrivePairingScreen.defaultPollEvery);
-      await tester.pump();
-      await tester.pump();
+      await _untilLinked(tester);
 
       expect(find.text(DrivePairingScreen.playLabel), findsOneWidget);
       await tester.tap(find.text(DrivePairingScreen.playLabel));
