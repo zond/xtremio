@@ -147,6 +147,48 @@ function pickedFiles(body) {
 }
 
 /**
+ * What Drive says about one file: its name, and what it measured of the
+ * video when it has measured it.
+ *
+ * **Measured at pairing time and not left for later.** The height is what
+ * puts a Drive source in the right resolution section, and it is the one
+ * thing about a linked file that cannot be read off its name. It used to
+ * arrive on the first Reload, which is true and useless: nobody presses
+ * Reload after linking, so every freshly linked file sat under "Unknown
+ * resolution" until they happened to.
+ *
+ * `videoMediaMetadata` is absent more often than it is wrong -- Drive fills
+ * it in once it has processed an upload, and never for a container it did
+ * not understand -- so absent is the ordinary answer and not a failure.
+ * `durationMillis` arrives as a **string**: it is an int64, and Google's
+ * JSON mapping serialises those as strings, so a reader that took numbers
+ * only would drop every duration and say nothing.
+ */
+async function describeFile(fileId, accessToken) {
+  const read = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
+      '?fields=id,name,mimeType,videoMediaMetadata(width,height,durationMillis)',
+      {headers: {Authorization: `Bearer ${accessToken}`}});
+  if (!read.ok) return {ok: false, status: read.status};
+  const file = await read.json();
+  const measured = file.videoMediaMetadata || {};
+  const height = Number(measured.height);
+  const duration = Number(measured.durationMillis);
+  return {
+    ok: true,
+    file: {
+      fileId: file.id || fileId,
+      name: typeof file.name === 'string' ? file.name : fileId,
+      mimeType: typeof file.mimeType === 'string' ? file.mimeType : '',
+      // Zero is nothing measured, not a zero-pixel video.
+      height: Number.isFinite(height) && height > 0 ? height : null,
+      durationMillis:
+        Number.isFinite(duration) && duration > 0 ? duration : null,
+    },
+  };
+}
+
+/**
  * Refuses more than `limit` calls an hour for one key.
  *
  * Not a general rate limiter: one Firestore document per key, incremented,
@@ -315,8 +357,27 @@ app.post(['/session/:id/files', '/session/:id/file'], async (req, res) => {
   if (session.data().status !== 'signed-in') {
     return res.status(409).json({error: 'sign in first'});
   }
-  await ref.update({status: 'ready', files});
-  res.json({ok: true, files: files.length});
+  // Measured here too, so that which path a pairing took is invisible
+  // afterwards: the Picker sends a name and nothing else, and a file linked
+  // from a browser would otherwise sit under "Unknown resolution" while the
+  // same file linked from the app did not.
+  //
+  // Best effort, unlike the native path. There the read is also the proof
+  // that the grant reached this client, so a failure is a pairing worth
+  // refusing; here the sign-in already proved it and the names are in hand,
+  // so a file Drive would not describe is linked with what the Picker said
+  // rather than not linked at all.
+  const accessToken = session.data().accessToken;
+  const described = [];
+  for (const file of files) {
+    const answer = accessToken
+        ? await describeFile(file.fileId, accessToken)
+        : {ok: false};
+    described.push(answer.ok ? answer.file : {...file, height: null,
+      durationMillis: null});
+  }
+  await ref.update({status: 'ready', files: described});
+  res.json({ok: true, files: described.length});
 });
 
 /**
@@ -450,26 +511,18 @@ app.post('/session/:id/android', async (req, res) => {
   const files = [];
   for (const fileId of fileIds) {
     if (typeof fileId !== 'string' || !fileId) continue;
-    const read = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
-        '?fields=id,name,mimeType',
-        {headers: {Authorization: `Bearer ${granted.access_token}`}});
-    if (!read.ok) {
+    const described = await describeFile(fileId, granted.access_token);
+    if (!described.ok) {
       // The one failure worth naming: the grant did not reach this client,
       // so the television would be handed ids it cannot open. Refuse the
       // whole pairing rather than write half of one.
       return res.status(502).json({
         error: 'the grant does not reach this client',
         fileId,
-        readStatus: read.status,
+        readStatus: described.status,
       });
     }
-    const file = await read.json();
-    files.push({
-      fileId: file.id || fileId,
-      name: typeof file.name === 'string' ? file.name : fileId,
-      mimeType: typeof file.mimeType === 'string' ? file.mimeType : '',
-    });
+    files.push(described.file);
   }
   if (files.length === 0) return res.status(400).json({error: 'no fileIds'});
 

@@ -329,6 +329,16 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// answer arrives [_picking] is over.
   bool _pickedHere = false;
 
+  /// A browser really was opened, so the block that talks about "the page
+  /// that opened" has a page to be about.
+  ///
+  /// It used to be drawn for every device that is not a television, which
+  /// was true while a phone always went out through a browser. A phone that
+  /// picks in place opens no page, and the block told the viewer to sign in
+  /// to one that was not there -- and offered a button to open it, which is
+  /// the one thing on that screen they should not press.
+  bool _openedBrowser = false;
+
   /// Guards against two `POST /session` calls overlapping -- a press on
   /// "New code" while the first is still out.
   bool _opening = false;
@@ -434,6 +444,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         // cannot. Once, here, rather than on every rebuild.
         if (!device.isTv && !await _pickHere(session)) {
           if (!mounted) return;
+          setState(() => _openedBrowser = true);
           await openInBrowser(context, session.link);
         }
     }
@@ -604,10 +615,15 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     // Not when the store refused to keep the credential ([thisRunOnly]):
     // that is news, it is about *later*, and it is the one thing this
     // screen has to say that the library cannot.
-    final quietly = _pickedHere && outcome != DriveLinkOutcome.thisRunOnly;
-    if (quietly) {
-      Navigator.of(context).maybePop();
-      return;
+    if (_pickedHere && outcome != DriveLinkOutcome.thisRunOnly) {
+      // Asked, not assumed. `maybePop` is allowed to refuse -- a route that
+      // is the first of its navigator, or anything that has taken the back
+      // button -- and a screen that trusted it silently stayed exactly where
+      // it was, on a spinner, after a pairing that had already finished.
+      // That is what this looked like on a real phone: the files were in the
+      // library and the screen was still saying "adding".
+      if (await Navigator.of(context).maybePop()) return;
+      if (!mounted) return;
     }
     setState(() {
       _stage = _Stage.linked;
@@ -714,13 +730,15 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
                 ? DrivePairingScreen.pickingHeading
                 : isTv
                 ? DrivePairingScreen.scanHeading
-                : DrivePairingScreen.browserHeading,
+                : _openedBrowser
+                ? DrivePairingScreen.browserHeading
+                : DrivePairingScreen.pickingHeading,
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall,
           ),
           if (isTv)
             PairingQrCode(link: session.link)
-          else
+          else if (_openedBrowser)
             ..._openedSession(session, theme),
           _Line(switch (_picking) {
             _Picking.choosing => DrivePairingScreen.pickingMessage,

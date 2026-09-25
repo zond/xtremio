@@ -75,9 +75,12 @@ class _NoNativePicker implements DriveNativePicker {
 
 /// A device that picks natively, answering what a test tells it to.
 class _FakeNativePicker implements DriveNativePicker {
-  _FakeNativePicker(this.answer);
+  _FakeNativePicker(this.answer, {this.gate});
 
   final DriveNativePickResult answer;
+
+  /// Held open, so a test can look at the screen *while* the picker is up.
+  final Completer<void>? gate;
   int picks = 0;
 
   @override
@@ -86,6 +89,7 @@ class _FakeNativePicker implements DriveNativePicker {
   @override
   Future<DriveNativePickResult> pick() async {
     picks++;
+    if (gate != null) await gate!.future;
     return answer;
   }
 }
@@ -269,6 +273,77 @@ void main() {
         reason: 'and took itself off the screen once it had',
       );
       expect(observer.popped, 1);
+    });
+
+    testWidgets('and when it cannot go back it says it is done instead of '
+        'sitting on a spinner', (tester) async {
+      // `maybePop` is allowed to refuse, and a screen that trusted it stayed
+      // exactly where it was after a pairing that had already finished --
+      // the files in the library, the screen still saying "adding". Here the
+      // screen is the first route of its navigator, which is one of the ways
+      // it refuses.
+      final account = await _account();
+      final service = FakeDrivePairingService(
+        answers: [
+          DrivePairingCollected(
+            refreshToken: fakeRefreshToken,
+            files: [
+              (
+                fileId: 'drive-file-1',
+                name: 'One.mkv',
+                mimeType: 'video/x-matroska',
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _harness(
+          isTv: false,
+          service: service,
+          account: account,
+          picker: _FakeNativePicker(_picked),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(account.files.entries, isNotEmpty, reason: 'it did pair');
+      expect(
+        find.text(DrivePairingScreen.pickingMessage),
+        findsNothing,
+        reason: 'and stopped saying it was still doing it',
+      );
+      expect(find.text(DrivePairingScreen.addingMessage), findsNothing);
+      expect(find.text(DrivePairingScreen.doneLabel), findsOneWidget);
+    });
+
+    testWidgets('and says nothing about a browser while picking here, '
+        'because no page was opened', (tester) async {
+      // The screen used to draw "sign in to Google in the page that opened"
+      // and a button to open it for every device that is not a television,
+      // which was true while a phone always went out through a browser. With
+      // the picker up, that sentence is about a page that does not exist and
+      // the button is the one thing on screen not to press. Seen on a real
+      // phone, under a heading that said the right thing.
+      final gate = Completer<void>();
+      final opener = FakeLinkOpener();
+      await tester.pumpWidget(
+        _harness(
+          isTv: false,
+          service: FakeDrivePairingService(),
+          account: await _account(),
+          opener: opener,
+          picker: _FakeNativePicker(_picked, gate: gate),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text(DrivePairingScreen.inBrowserMessage), findsNothing);
+      expect(find.text(DrivePairingScreen.openAgainLabel), findsNothing);
+      expect(opener.opened, isEmpty);
+      gate.complete();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('and a phone with no native picker opens the page, as every '
