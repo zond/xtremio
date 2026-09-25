@@ -17,8 +17,8 @@
 ///
 /// **Neither token is written down here.** The refresh token is carried in
 /// one field of one object, straight from the response into
-/// [DriveAccount.linkFile], and nothing in this file logs a body, a header
-/// or an answer; [DrivePairingCollected.toString] names the file and not
+/// [DriveAccount.linkFiles], and nothing in this file logs a body, a header
+/// or an answer; [DrivePairingCollected.toString] names the files and not
 /// the credential, because a `$answer` in a debug line is the commonest way
 /// a secret gets filed (`AGENTS.md`, "Never log auth material"). The access
 /// token the same answer carries is **not read at all**: it is good for an
@@ -33,12 +33,70 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+/// Where the pick page sends a phone's browser when the picking is done, so
+/// that a viewer this app handed to a browser is handed back to it.
+///
+/// **Nothing in this app acts on this link**, and that is the design rather
+/// than an omission. `deepLinkAddonManifestUrl` drops a `stremio://` link
+/// with no host -- those are the official clients' own in-app routes -- so
+/// this arrives, means nothing, and is dropped. The whole effect of it is
+/// the platform bringing this app to the front, which is what a hand-back
+/// is. That is what answers the two objections written down against
+/// `app_links` here (see `DrivePairingScreen`): the scheme keeps its one
+/// meaning, "open that addon's details", because this adds no second one;
+/// and a launch link the platform replays on a cold start days later is
+/// dropped then too, because it was never acted on in the first place.
+///
+/// The end that actually sends it is the service, whose `HAND_BACK_LINK`
+/// (`drive-link/functions/index.js`) is the copy that matters -- the URL is
+/// hard-coded there so that a page on that origin never navigates to a URL
+/// a client sent it. This constant is the app's side of the agreement and
+/// nothing but a test reads it.
+const String drivePairingHandBackLink = 'stremio:///pair';
+
+/// One file as the pairing service names it: what the viewer picked, before
+/// this device has written anything down about it.
+///
+/// A record and not a class, so that [DriveAccount.linkFiles] can name the
+/// same shape structurally and the account need not depend on the pairing
+/// service's types. It is three strings out of somebody else's JSON; the
+/// row this device keeps is [LinkedDriveFile], which is stamped from the
+/// account's own clock and is a class for that reason.
+///
+/// * `fileId` -- Drive's own id, the only field that has to be right, since
+///   it is what a byte range is asked for.
+/// * `name` -- what the file is called in their Drive, for the list they
+///   are shown.
+/// * `mimeType` -- what Drive says it is (`video/x-matroska`). Empty when
+///   the Picker sent none, which is no worse than a wrong one.
+typedef DrivePairingFile = ({String fileId, String name, String mimeType});
+
+/// One file out of a `ready` body, or null when it is not one this build can
+/// use.
+///
+/// A row with no id is nothing -- the id is what a request is made against
+/// -- and is dropped rather than failing the whole answer: one unreadable
+/// row out of twelve should not lose the eleven, and the session is deleted
+/// either way. Everything else has an answer for being missing, the same
+/// answers [LinkedDriveFile.fromJson] gives.
+DrivePairingFile? _pairedFile(Object? json) {
+  if (json is! Map) return null;
+  final fileId = json['fileId'];
+  if (fileId is! String || fileId.trim().isEmpty) return null;
+  final name = json['name'];
+  final mimeType = json['mimeType'];
+  return (
+    fileId: fileId.trim(),
+    name: name is String ? name : '',
+    mimeType: mimeType is String ? mimeType : '',
+  );
+}
+
 /// A session the service has opened: what to draw, and what to poll.
 @immutable
 final class DrivePairingSession {
   const DrivePairingSession({
     required this.sessionId,
-    required this.code,
     required this.link,
     required this.expiresAt,
   });
@@ -47,17 +105,6 @@ final class DrivePairingSession {
   /// called with. Not drawn: it is a UUID, and a UUID is not something a
   /// viewer reads off a television or types into a phone.
   final String sessionId;
-
-  /// Six characters out of an alphabet with no `I`, `O`, `0` or `1` in it,
-  /// minted by the service for a camera that will not read the QR.
-  ///
-  /// **No route on the service consumes it yet.** It is stored on the
-  /// session and returned here, and nothing reads it back -- so what the
-  /// screen can honestly do with it is show it, which is what it does. A
-  /// page that asked for it is the service's half of this fallback and is
-  /// not written; pointing a viewer at one would be a lie drawn a metre
-  /// high.
-  final String code;
 
   /// The URL the QR carries and the phone opens: `/link?s=<sessionId>`.
   final String link;
@@ -77,7 +124,6 @@ final class DrivePairingSession {
   static DrivePairingSession? fromJson(Object? json) {
     if (json is! Map) return null;
     final id = json['sessionId'];
-    final code = json['code'];
     final link = json['link'];
     final expiresAt = json['expiresAt'];
     if (id is! String || id.trim().isEmpty) return null;
@@ -86,14 +132,17 @@ final class DrivePairingSession {
     if (until == null) return null;
     return DrivePairingSession(
       sessionId: id.trim(),
-      code: code is String ? code.trim() : '',
       link: link.trim(),
       expiresAt: until.toUtc(),
     );
   }
 
+  /// Nothing about the session at all. The id is the whole of what a pairing
+  /// is collected with -- anybody holding it can make the one read that
+  /// hands over the credential -- so it is not written into a line either,
+  /// and there is nothing else here worth naming.
   @override
-  String toString() => 'DrivePairingSession($code)';
+  String toString() => 'DrivePairingSession()';
 }
 
 /// What `POST /session` came back with.
@@ -144,31 +193,29 @@ final class DrivePairingWaiting extends DrivePairingAnswer {
 final class DrivePairingCollected extends DrivePairingAnswer {
   const DrivePairingCollected({
     required this.refreshToken,
-    required this.fileId,
-    required this.name,
-    required this.mimeType,
+    required this.files,
   });
 
   /// The long-lived grant. **Never logged, never drawn, never put in a
   /// URL**: it does not expire on its own and it reaches every file the
   /// account has picked through this OAuth client. It goes from here into
-  /// [DriveAccount.linkFile] and nowhere else.
+  /// [DriveAccount.linkFiles] and nowhere else.
   final String refreshToken;
 
-  /// Drive's own id for the file the viewer picked -- the only field here
-  /// that has to be right, since it is what a byte range is asked for.
-  final String fileId;
+  /// Every file the viewer picked in the one Picker, in the order the Picker
+  /// handed them over, and **never empty** -- a `ready` session with no
+  /// readable file on it is [DrivePairingGone] instead, because there is
+  /// nothing to link and nothing left to poll for.
+  ///
+  /// One is still the common case and is not a special one: a service that
+  /// only ever named a single file answers as a list of one (see
+  /// [XtremioDrivePairingService._readAnswer]).
+  final List<DrivePairingFile> files;
 
-  /// What the file is called in their Drive, for the list they are shown.
-  final String name;
-
-  /// What Drive says it is (`video/x-matroska`). Empty when the Picker sent
-  /// none, which is no worse than a wrong one.
-  final String mimeType;
-
-  /// The file and never the token; see the library comment.
+  /// The files and never the token; see the library comment.
   @override
-  String toString() => 'DrivePairingCollected($fileId)';
+  String toString() =>
+      'DrivePairingCollected(${files.map((file) => file.fileId).join(', ')})';
 }
 
 /// `410`: the ten minutes are up, and the service has dropped the session.
@@ -200,7 +247,13 @@ final class DrivePairingUnreachable extends DrivePairingAnswer {
 /// test must not reach the network.
 abstract interface class DrivePairingService {
   /// Asks for a session: `POST /session`.
-  Future<DrivePairingOpening> open();
+  ///
+  /// [handBack] tells the service which shape asked, and is the only thing
+  /// the two shapes differ by on the wire: with it, the pick page ends by
+  /// sending the browser to [drivePairingHandBackLink] so the viewer is put
+  /// back in front of this app. Only a device this app opened the browser
+  /// on asks for it -- see `DrivePairingScreen`.
+  Future<DrivePairingOpening> open({bool handBack});
 
   /// Asks what has happened to [sessionId]: `GET /session/{id}`.
   ///
@@ -229,13 +282,14 @@ class XtremioDrivePairingService implements DrivePairingService {
   final Duration timeout;
 
   @override
-  Future<DrivePairingOpening> open() async {
+  Future<DrivePairingOpening> open({bool handBack = false}) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
       final answer = await _send(
         client,
         'POST',
         Uri.parse('$origin/session'),
+        body: {'handBack': handBack},
       ).timeout(timeout);
       if (answer.statusCode == HttpStatus.tooManyRequests) {
         await answer.drain<void>();
@@ -296,6 +350,14 @@ class XtremioDrivePairingService implements DrivePairingService {
   /// is [DrivePairingUnreachable] and so is polled again -- a service that
   /// grew a fourth waiting state is not a pairing this screen should give
   /// up on.
+  ///
+  /// **Two spellings of the files, and `files` wins.** A `ready` body names
+  /// them as a list, and names the first of them again as `file` for a build
+  /// that knows nothing of lists. This build reads the list when there is
+  /// one and falls back to the single `file` when there is not, which is
+  /// what a service from before several could be picked answers with -- and
+  /// that is the whole of what an older service needs, since one file is a
+  /// list of one and nothing here treats it as a special case.
   static DrivePairingAnswer _readAnswer(Map<String, dynamic>? json) {
     final status = json?['status'];
     if (status == 'pending') return const DrivePairingWaiting(signedIn: false);
@@ -304,25 +366,24 @@ class XtremioDrivePairingService implements DrivePairingService {
     }
     if (status != 'ready') return const DrivePairingUnreachable();
     final token = json?['refreshToken'];
-    final file = json?['file'];
-    final fileId = file is Map ? file['fileId'] : null;
     if (token is! String || token.isEmpty) {
       // A `ready` with no grant on it is the one shape nothing can be
       // rescued from: the session is deleted either way, so there is
       // nothing left to poll for.
       return const DrivePairingGone();
     }
-    if (fileId is! String || fileId.trim().isEmpty) {
-      return const DrivePairingGone();
-    }
-    final name = file is Map ? file['name'] : null;
-    final mimeType = file is Map ? file['mimeType'] : null;
-    return DrivePairingCollected(
-      refreshToken: token,
-      fileId: fileId.trim(),
-      name: name is String ? name : '',
-      mimeType: mimeType is String ? mimeType : '',
-    );
+    final listed = json?['files'];
+    final files = <DrivePairingFile>[
+      if (listed is List)
+        for (final one in listed) ?_pairedFile(one)
+      else
+        ?_pairedFile(json?['file']),
+    ];
+    // And a `ready` naming nothing this build can read is the same dead end
+    // as one with no grant: the session is gone, so there is nothing to ask
+    // again about.
+    if (files.isEmpty) return const DrivePairingGone();
+    return DrivePairingCollected(refreshToken: token, files: files);
   }
 
   /// What a viewer is told when the service will not open a session.
@@ -339,12 +400,19 @@ class XtremioDrivePairingService implements DrivePairingService {
   static Future<HttpClientResponse> _send(
     HttpClient client,
     String method,
-    Uri url,
-  ) async {
+    Uri url, {
+    Map<String, Object?>? body,
+  }) async {
     final request = await client.openUrl(method, url);
     // Nothing here follows a redirect: both routes answer JSON directly,
     // and the one redirect the service issues is the phone's.
     request.followRedirects = false;
+    if (body != null) {
+      final bytes = utf8.encode(jsonEncode(body));
+      request.headers.contentType = ContentType.json;
+      request.contentLength = bytes.length;
+      request.add(bytes);
+    }
     return request.close();
   }
 

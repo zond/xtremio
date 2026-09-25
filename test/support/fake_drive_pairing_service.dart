@@ -43,6 +43,11 @@ class FakeDrivePairingService implements DrivePairingService {
   /// Every `POST /session`, counted.
   int opens = 0;
 
+  /// What each `POST /session` asked for a hand-back, in order: what the
+  /// service is told about which shape is pairing, and the one thing a
+  /// television's pairing and a phone's differ by on the wire.
+  final List<bool> handBacks = [];
+
   /// Every `GET /session/{id}`, by the id it was made with.
   final List<String> collects = [];
 
@@ -52,8 +57,9 @@ class FakeDrivePairingService implements DrivePairingService {
   Completer<DrivePairingAnswer>? hold;
 
   @override
-  Future<DrivePairingOpening> open() async {
+  Future<DrivePairingOpening> open({bool handBack = false}) async {
     opens++;
+    handBacks.add(handBack);
     if (openings.isEmpty) return DrivePairingOpened(session);
     return openings.removeAt(0);
   }
@@ -74,23 +80,40 @@ class FakeDrivePairingService implements DrivePairingService {
 /// A session as the service describes one, ten minutes from [pairingNow].
 DrivePairingSession fakeSession({
   String id = 'session-1',
-  String code = 'K7M2QX',
   Duration lasts = const Duration(minutes: 10),
 }) => DrivePairingSession(
   sessionId: id,
-  code: code,
   link: 'https://xtremio-drive.web.app/link?s=$id',
   expiresAt: pairingNow.add(lasts),
 );
 
-/// A pairing as the service hands one over.
+/// A pairing as the service hands one over: one file, which is the common
+/// case. [fakeCollectedFiles] is the same pairing with a season on it.
 DrivePairingCollected fakeCollected({
   String name = 'Arrival (2016) 2160p.mkv',
   String fileId = 'drive-file-1',
   String mimeType = 'video/x-matroska',
 }) => DrivePairingCollected(
   refreshToken: fakeRefreshToken,
-  fileId: fileId,
-  name: name,
-  mimeType: mimeType,
+  files: [(fileId: fileId, name: name, mimeType: mimeType)],
+);
+
+/// A pairing carrying several files, in the order the Picker handed them
+/// over.
+DrivePairingCollected fakeCollectedFiles([
+  List<String> names = const [
+    'Gilmore Girls S01E01.mkv',
+    'Gilmore Girls S01E02.mkv',
+    'Gilmore Girls S01E03.mkv',
+  ],
+]) => DrivePairingCollected(
+  refreshToken: fakeRefreshToken,
+  files: [
+    for (var i = 0; i < names.length; i++)
+      (
+        fileId: 'drive-file-${i + 1}',
+        name: names[i],
+        mimeType: 'video/x-matroska',
+      ),
+  ],
 );

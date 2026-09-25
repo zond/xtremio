@@ -16,6 +16,7 @@ import '../support/fake_secret_store.dart';
 
 const DeviceProfile _tv = DeviceProfile(isTv: true, hasTouch: false);
 const DeviceProfile _phone = DeviceProfile(isTv: false, hasTouch: true);
+const DeviceProfile _desktop = DeviceProfile(isTv: false, hasTouch: false);
 
 /// A [DriveAccount] over fakes, with the preferences loaded first the way
 /// the app loads them.
@@ -63,8 +64,9 @@ Future<void> _tick(WidgetTester tester, {int times = 1}) async {
 
 void main() {
   group('the two shapes', () {
-    testWidgets('a television draws the QR for the link, and the code under '
-        'it', (tester) async {
+    testWidgets('a television draws the QR for the link, and nothing else', (
+      tester,
+    ) async {
       final service = FakeDrivePairingService();
       await tester.pumpWidget(
         _harness(isTv: true, service: service, account: await _account()),
@@ -74,14 +76,10 @@ void main() {
       expect(find.text(DrivePairingScreen.scanHeading), findsOneWidget);
       final qr = tester.widget<PairingQrCode>(find.byType(PairingQrCode));
       expect(qr.link, service.session.link);
-      // And the code beneath it, for a camera that will not focus. It is
-      // drawn as the service minted it, six characters and no spaces.
-      expect(find.byKey(pairingCodeKey), findsOneWidget);
-      expect(
-        tester.widget<Text>(find.byKey(pairingCodeKey)).data,
-        service.session.code,
-      );
       expect(find.text(DrivePairingScreen.waitingMessage), findsOneWidget);
+      // And it asks for no hand-back: this viewer is looking at the screen
+      // the QR is on, and the phone in their hand is not what is playing.
+      expect(service.handBacks, [isFalse]);
     });
 
     testWidgets('a phone opens the page itself and draws no QR at all', (
@@ -102,11 +100,47 @@ void main() {
       await tester.pump();
 
       expect(find.byType(PairingQrCode), findsNothing);
-      expect(find.byKey(pairingCodeKey), findsNothing);
       expect(find.text(DrivePairingScreen.browserHeading), findsOneWidget);
       expect(opener.opened.map((url) => url.toString()), [
         service.session.link,
       ]);
+      // And it asks to be handed back to, because it is the app that put
+      // this viewer in a browser: the pick page ends by navigating to
+      // `drivePairingHandBackLink`, which brings this app to the front.
+      expect(service.handBacks, [isTrue]);
+    });
+
+    testWidgets('a desktop opens the page too, and asks for no hand-back', (
+      tester,
+    ) async {
+      // `hasTouch` is what tells a phone from a desktop among the shapes that
+      // are not televisions, and the desktop is where the `stremio://`
+      // registration is installed by hand or not at all
+      // (`docs/DEEP_LINKS.md`) -- so a hand-back there could put a browser on
+      // an error page where a confirmation should be.
+      final service = FakeDrivePairingService();
+      final opener = FakeLinkOpener();
+      await tester.pumpWidget(
+        DeviceScope(
+          profile: _desktop,
+          child: ExternalLinkScope(
+            opener: opener,
+            child: DriveAccountScope(
+              account: await _account(),
+              child: MaterialApp(
+                home: DrivePairingScreen(
+                  service: service,
+                  now: () => pairingNow,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(opener.opened, hasLength(1));
+      expect(service.handBacks, [isFalse]);
     });
 
     testWidgets('and it opens an external browser, never an in-app web view', (
@@ -301,6 +335,58 @@ void main() {
       expect(secrets.stored[DriveAccount.refreshTokenKey], fakeRefreshToken);
       expect(find.textContaining('Arrival (2016) 2160p.mkv'), findsOneWidget);
       expect(find.text(DrivePairingScreen.thisRunOnlyMessage), findsNothing);
+      // One file names itself, and there is one press to play it.
+      expect(
+        find.text(
+          DrivePairingScreen.linkedHeadline(const ['Arrival (2016) 2160p.mkv']),
+        ),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(FilledButton, 'Play'), findsOneWidget);
+    });
+
+    testWidgets('linked: every file picked in one session arrives', (
+      tester,
+    ) async {
+      // One scan, a whole season. The Picker takes several files at once and
+      // a pairing carries all of them, in the order they were picked, under
+      // the one credential and in one write.
+      final secrets = FakeSecretStore();
+      final account = await _account(secrets: secrets);
+      final collected = fakeCollectedFiles();
+      final service = FakeDrivePairingService(answers: [collected]);
+      await tester.pumpWidget(
+        _harness(isTv: true, service: service, account: account),
+      );
+      await tester.pump();
+      await _tick(tester);
+
+      expect(account.state, DriveLinkState.linked);
+      expect(account.files.entries.map((file) => file.fileId), [
+        'drive-file-1',
+        'drive-file-2',
+        'drive-file-3',
+      ]);
+      expect(
+        account.files.entries.map((file) => file.name),
+        collected.files.map((file) => file.name),
+      );
+      // One pairing, one moment: they became reachable together.
+      expect(
+        account.files.entries.map((file) => file.linkedAt),
+        everyElement(pairingNow),
+      );
+      // And one credential for all of them, written once.
+      expect(secrets.stored[DriveAccount.refreshTokenKey], fakeRefreshToken);
+
+      // The screen counts them rather than stacking twelve filenames at a
+      // viewer in an armchair, and offers a row per file instead of a Play
+      // button that would have to guess which one.
+      expect(find.text('3 files are linked.'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Play'), findsNothing);
+      for (final file in collected.files) {
+        expect(find.byKey(Key('drive-file-${file.fileId}')), findsOneWidget);
+      }
     });
 
     testWidgets('expired: the window closed and nothing was linked', (
@@ -458,7 +544,7 @@ void main() {
       final service = FakeDrivePairingService(
         openings: [
           DrivePairingOpened(fakeSession()),
-          DrivePairingOpened(fakeSession(id: 'session-2', code: 'B4NPRT')),
+          DrivePairingOpened(fakeSession(id: 'session-2')),
         ],
       );
       final holding = Completer<DrivePairingAnswer>();
@@ -475,15 +561,15 @@ void main() {
       await tester.tap(find.text(DrivePairingScreen.freshCodeLabel));
       await tester.pump();
       await tester.pump();
-      expect(find.byType(PairingQrCode), findsOneWidget);
-
-      expect(find.text('B4NPRT'), findsOneWidget);
+      // The QR is the second session's, which is what the link in it says.
+      String drawn() =>
+          tester.widget<PairingQrCode>(find.byType(PairingQrCode)).link;
+      expect(drawn(), contains('session-2'));
 
       holding.complete(const DrivePairingGone());
       await tester.pump();
       await tester.pump();
-      expect(find.byType(PairingQrCode), findsOneWidget);
-      expect(find.text('B4NPRT'), findsOneWidget);
+      expect(drawn(), contains('session-2'));
       expect(find.text(DrivePairingScreen.lostMessage), findsNothing);
     });
 
@@ -578,6 +664,46 @@ void main() {
     // a secret usually gets filed.
     expect('${fakeCollected()}', isNot(contains(fakeRefreshToken)));
     expect('${service.session}', isNot(contains(fakeRefreshToken)));
+  });
+
+  group('what the screen says about what arrived', () {
+    // One file is still the common case, and a sentence that read oddly in
+    // the singular would be a worse regression than the missing capability.
+    test('names one file', () {
+      expect(
+        DrivePairingScreen.linkedHeadline(const ['Arrival.mkv']),
+        '"Arrival.mkv" is linked.',
+      );
+    });
+
+    test('counts several', () {
+      expect(
+        DrivePairingScreen.linkedHeadline(const ['a.mkv', 'b.mkv']),
+        '2 files are linked.',
+      );
+    });
+
+    test('and falls back when the Picker sent no name', () {
+      // A nameless file draws the wording a nameless single file has always
+      // had, rather than a pair of empty quotes.
+      expect(
+        DrivePairingScreen.linkedHeadline(const ['']),
+        'That file is '
+        'linked.',
+      );
+      expect(
+        DrivePairingScreen.linkedHeadline(const []),
+        'That file is '
+        'linked.',
+      );
+    });
+
+    test('and every waiting line says several may be picked', () {
+      // Multiselect is not discoverable in the Picker: a viewer who is not
+      // told picks one file and presses the button.
+      expect(DrivePairingScreen.signedInMessage, contains('more than one'));
+      expect(DrivePairingScreen.inBrowserMessage, contains('more than one'));
+    });
   });
 
   group('the session window', () {

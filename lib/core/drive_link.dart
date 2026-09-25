@@ -178,6 +178,23 @@ final class LinkedDriveFiles {
     ]);
   }
 
+  /// This list with every one of [files] at the front, in the order given.
+  ///
+  /// One pairing links as many files as the viewer picked in the one Picker,
+  /// so this is what a pairing writes and [linking] is the one-file case of
+  /// it. Folded from the back, so [files] keeps its own order at the front
+  /// of the result: the Picker hands over what was picked in the order it
+  /// was picked, and a season linked in order should read in order. Each row
+  /// goes in through [linking], so a file picked again keeps the moment it
+  /// first became reachable, and a file named twice in one pick lands once.
+  LinkedDriveFiles linkingAll(Iterable<LinkedDriveFile> files) {
+    var all = this;
+    for (final file in files.toList().reversed) {
+      all = all.linking(file);
+    }
+    return all;
+  }
+
   /// This list with [fileId]'s Cinemeta id set, or this list unchanged
   /// when no such file is linked or it already says that.
   LinkedDriveFiles withCinemetaId(String fileId, String? cinemetaId) {
