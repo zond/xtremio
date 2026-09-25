@@ -8,7 +8,7 @@ import '../../shell/device_profile.dart';
 import '../../shell/external_link.dart';
 import '../player/player_screen.dart';
 
-/// Linking one file in somebody's Google Drive to this device, which is a
+/// Linking files in somebody's Google Drive to this device, which is a
 /// pairing made on a second screen.
 ///
 /// The television cannot run the Google Picker -- it is web-only -- and
@@ -19,12 +19,18 @@ import '../player/player_screen.dart';
 /// the phone has finished, hand what comes back to [DriveAccount].
 ///
 /// **Two shapes, one flow.** On a television the session is drawn -- the QR
-/// for the link, and the six-character code under it for a camera that will
-/// not focus -- because nothing on that screen can be typed into and the
-/// second device is the point. On a phone or a desktop there is no second
-/// device, and scanning your own screen is absurd, so the app opens the link
-/// itself and waits for the same answer. That is the split this app makes
-/// everywhere ([DeviceScope.isTv]); the service knows nothing about it.
+/// for the link, and nothing else, because nothing on that screen can be
+/// typed into and the second device is the point. On a phone or a desktop
+/// there is no second device, and scanning your own screen is absurd, so the
+/// app opens the link itself and waits for the same answer. That is the split
+/// this app makes everywhere ([DeviceScope.isTv]), and the service is now
+/// told one thing about it -- see the hand-back below.
+///
+/// **One pairing links everything the viewer picked.** The Picker takes
+/// several files at once, so a scan can link a whole season, and
+/// [DrivePairingCollected.files] is a list for that reason. One file is not a
+/// special case of it anywhere but in what the screen *says*, which has to
+/// read properly for one as well as twenty ([linkedHeadline]).
 ///
 /// **The browser is the system's, never a web view.** Google refuses OAuth
 /// in an embedded user agent (`disallowed_useragent`), so
@@ -33,21 +39,37 @@ import '../player/player_screen.dart';
 /// [openInBrowser], which is [UrlLauncherLinkOpener] and hard-codes
 /// `LaunchMode.externalApplication`.
 ///
-/// **`app_links` is deliberately not used to bring the app back.** It is
-/// already a dependency and already handles deep links, and it was
-/// considered for exactly this: a redirect at the end of the pick that puts
-/// the app back in front. It is not worth it, for four reasons and not one.
-/// The app never stops polling while the browser is over it, so by the time
-/// the viewer comes back by themselves the screen already says "linked" --
-/// what a hand-back would save is one Back press. The redirect would have to
-/// come from the service, and the brief for this flow is that the service
-/// needs no change. A `stremio://` link already means exactly one thing in
-/// this app -- open that addon's details screen, install nothing
-/// (`AGENTS.md`, "Deep links open an addon") -- and a second meaning on a
-/// channel the platform hands to anybody is a second thing to get wrong.
-/// And `app_links` replays the launch link on a cold start, so a pairing
-/// hand-back kept by the platform would reopen this screen days later for a
-/// session that no longer exists.
+/// **The hand-back is a link nothing acts on.** A viewer on a phone was
+/// handed to a browser by this app, and leaving them there with a page that
+/// says "on its way" and nothing to press is the one part of the phone shape
+/// that was plainly wrong. So the pick page now navigates to
+/// [drivePairingHandBackLink] when it is finished -- but only for a session
+/// that asked ([_handBack]), and this app does not act on the link when it
+/// arrives.
+///
+/// That is what answers what was written here against `app_links`, rather
+/// than ignoring it. The objection was never the dependency, which is
+/// already in the app: it was that `stremio://` means exactly one thing
+/// (open that addon's details, install nothing -- `AGENTS.md`), that a
+/// second meaning on a channel the platform hands to anybody is a second
+/// thing to get wrong, and that `app_links` replays the launch link on a
+/// cold start, so a hand-back kept by the platform could reopen this screen
+/// days later for a session that no longer exists. A host-less
+/// `stremio:///pair` is already the shape `deepLinkAddonManifestUrl` drops,
+/// so **no second meaning is added and nothing new is dispatched**: the link
+/// arrives, is recognised as nothing, and is dropped -- on a cold start
+/// exactly as when the app is up. What brings the app forward is the
+/// platform switching tasks, which is the whole of what a hand-back is. The
+/// third objection, that this saves only one Back press, was true and is
+/// what the owner asked for anyway; polling is unchanged and still what
+/// collects the pairing.
+///
+/// A television asks for no hand-back, and neither does a desktop: the
+/// scheme's registration there is installed by hand or not at all
+/// (`docs/DEEP_LINKS.md`), and a browser sent to a scheme nothing handles
+/// shows an error page where a confirmation should be. [_handBack] is
+/// therefore `hasTouch && !isTv` -- a phone or a tablet, where the
+/// registration ships with the app.
 ///
 /// **Polling ends.** A session lasts about ten minutes and the screen says
 /// so; when it is up, the screen says *that* and offers a fresh code rather
@@ -69,9 +91,9 @@ import '../player/player_screen.dart';
 /// half a second early would lose a pairing they completed.
 ///
 /// **The token is never drawn, never logged, never in an error.** It goes
-/// from the response object into [DriveAccount.linkFile] in one statement
+/// from the response object into [DriveAccount.linkFiles] in one statement
 /// and is in no field of this state. What the screen draws about a finished
-/// pairing is the file's name. And [DriveLinkOutcome.thisRunOnly] -- the
+/// pairing is the files' names. And [DriveLinkOutcome.thisRunOnly] -- the
 /// secure store refusing the write -- is said out loud rather than dressed
 /// up as success: the pairing works now and will be gone after a restart,
 /// which is a thing a viewer would want to know before they settle in.
@@ -137,13 +159,21 @@ class DrivePairingScreen extends StatefulWidget {
   /// waiting is over. Constants because the tests name them, and a message
   /// a test quotes by hand is one that can be changed without the test
   /// noticing.
-  static const String title = 'Link a file';
+  static const String title = 'Link files';
   static const String scanHeading = 'Scan this with your phone';
   static const String browserHeading = 'Finish this in your browser';
-  static const String codeLabel = 'Code';
   static const String openingMessage = 'Asking for a code…';
   static const String waitingMessage = 'Waiting for your phone…';
-  static const String signedInMessage = 'Signed in. Now pick a file.';
+
+  /// Said out loud, because nothing in the Picker suggests it: a viewer who
+  /// does not know several can be chosen picks one and presses the button.
+  static const String signedInMessage =
+      'Signed in. Now pick what to play — '
+      'you can pick more than one file.';
+  static const String inBrowserMessage =
+      'Sign in to Google in the page that '
+      'opened and pick what you want to play — you can pick more than one '
+      'file. This screen is watching for it.';
   static const String windowMessage = 'This lasts about ten minutes.';
   static const String expiredMessage =
       'That code has expired before anybody '
@@ -161,8 +191,22 @@ class DrivePairingScreen extends StatefulWidget {
   static const String doneLabel = 'Done';
   static const String playLabel = 'Play';
   static const String linkedFilesHeading = 'Files linked to this device';
-  static const String linkAnotherLabel = 'Link another file';
+  static const String linkAnotherLabel = 'Link more files';
   static const String openingFileMessage = 'Opening that file…';
+
+  /// What the screen says about a pairing that has just arrived.
+  ///
+  /// One file names itself, because that is what the viewer would look for
+  /// and it is still the commonest pairing by far. Several are counted:
+  /// twelve filenames stacked on a television is a wall of text read from an
+  /// armchair, and the rows underneath name them anyway. A file the Picker
+  /// sent no name for falls back to the wording a nameless single file has
+  /// always had.
+  static String linkedHeadline(List<String> names) {
+    if (names.length > 1) return '${names.length} files are linked.';
+    final name = names.isEmpty ? '' : names.single;
+    return name.isEmpty ? 'That file is linked.' : '"$name" is linked.';
+  }
 
   /// How long this screen waits before it calls a session dead, counted
   /// from the moment the session opened.
@@ -225,15 +269,13 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// here, never echoed from a response body.
   String _refusal = '';
 
-  /// What was linked, for the screen to name -- and nothing else about the
-  /// pairing is kept, least of all the credential.
-  String _linkedName = '';
-
-  /// Which file the pairing linked, so the Play button on [_Stage.linked]
-  /// aims at the row in the account's own list rather than at a copy of it.
-  /// The id and not the row: the account is the record, and a row held here
-  /// would be the second one.
-  String _linkedFileId = '';
+  /// What the pairing linked, for the screen to name and to offer -- and
+  /// nothing else about the pairing is kept, least of all the credential.
+  ///
+  /// The ids and the names, not the rows: the account is the record of what
+  /// is linked, so [_Stage.linked] looks each id up there rather than
+  /// drawing a second copy that could disagree with it.
+  List<DrivePairingFile> _linked = const [];
   bool _thisRunOnly = false;
 
   /// A file is being opened. It is one round trip to the pairing service
@@ -288,12 +330,29 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     super.dispose();
   }
 
+  /// Whether a finished pairing should put this app back in front of the
+  /// viewer, which is asked of the service when the session is opened.
+  ///
+  /// A phone or a tablet: the shape where this app opened the browser itself
+  /// and where the viewer is left in it with nothing to do. Not a
+  /// television, whose viewer is looking at the other screen already, and
+  /// not a desktop -- `hasTouch` is false on both, and a desktop is also
+  /// where the `stremio://` registration is installed by hand or not at all
+  /// (`docs/DEEP_LINKS.md`), so a hand-back there could land on a browser
+  /// error page instead of this app. See the class comment.
+  static bool _handBack(DeviceProfile device) =>
+      device.hasTouch && !device.isTv;
+
   /// Asks for a session and starts the waiting, or says why it could not.
   Future<void> _open() async {
     if (_opening) return;
     _opening = true;
     _poll?.cancel();
     _window?.cancel();
+    // Read before the await and not after it: which shape this is decides
+    // what the service is asked for, and `context` is not something to reach
+    // into once a network call has been waited on.
+    final device = DeviceScope.of(context);
     if (mounted) {
       setState(() {
         _stage = _Stage.opening;
@@ -302,7 +361,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         _refusal = '';
       });
     }
-    final opening = await widget.service.open();
+    final opening = await widget.service.open(handBack: _handBack(device));
     _opening = false;
     if (!mounted) return;
     switch (opening) {
@@ -323,7 +382,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
         _armPoll();
         // A phone has no second screen to scan with, so the app is the one
         // that opens the page. Once, here, rather than on every rebuild.
-        if (!DeviceScope.isTv(context)) {
+        if (!device.isTv) {
           await openInBrowser(context, session.link);
         }
     }
@@ -405,19 +464,17 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     _window?.cancel();
     final account = _account;
     if (account == null) return;
-    // One statement, from the response into the account. The token is in no
-    // field of this state and in no line of the log.
-    final outcome = await account.linkFile(
+    // One statement, from the response into the account -- every file the
+    // pairing named, in one write. The token is in no field of this state
+    // and in no line of the log.
+    final outcome = await account.linkFiles(
       refreshToken: collected.refreshToken,
-      fileId: collected.fileId,
-      name: collected.name,
-      mimeType: collected.mimeType,
+      files: collected.files,
     );
     if (!mounted) return;
     setState(() {
       _stage = _Stage.linked;
-      _linkedName = collected.name;
-      _linkedFileId = collected.fileId;
+      _linked = collected.files;
       _thisRunOnly = outcome == DriveLinkOutcome.thisRunOnly;
     });
   }
@@ -426,20 +483,23 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
   /// the film.
   List<Widget> _fileRows() => [
     for (final file in _account?.files.entries ?? const <LinkedDriveFile>[])
-      ListTile(
-        key: Key('drive-file-${file.fileId}'),
-        // The floor and nothing put on by hand: a [ListTile] on the
-        // scaffold's own surface is Material's ink, so [FocusTheme] marks
-        // it with the fill, and there is no poster art under it for a wash
-        // to disappear into (`AGENTS.md`, "Prefer the floor").
-        leading: const Icon(Icons.movie_outlined),
-        title: Text(file.name.isEmpty ? file.fileId : file.name),
-        subtitle: const Text(driveSourceLabel),
-        trailing: const Icon(Icons.play_arrow),
-        enabled: !_playing,
-        onTap: () => unawaited(_play(file)),
-      ),
+      _fileRow(file),
   ];
+
+  /// One file, as a row that plays it.
+  Widget _fileRow(LinkedDriveFile file) => ListTile(
+    key: Key('drive-file-${file.fileId}'),
+    // The floor and nothing put on by hand: a [ListTile] on the
+    // scaffold's own surface is Material's ink, so [FocusTheme] marks
+    // it with the fill, and there is no poster art under it for a wash
+    // to disappear into (`AGENTS.md`, "Prefer the floor").
+    leading: const Icon(Icons.movie_outlined),
+    title: Text(file.name.isEmpty ? file.fileId : file.name),
+    subtitle: const Text(driveSourceLabel),
+    trailing: const Icon(Icons.play_arrow),
+    enabled: !_playing,
+    onTap: () => unawaited(_play(file)),
+  );
 
   /// Opens [file] on the embedded server and pushes the player at it.
   ///
@@ -527,7 +587,7 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
             style: theme.textTheme.headlineSmall,
           ),
           if (isTv)
-            ..._drawnSession(session, theme)
+            PairingQrCode(link: session.link)
           else
             ..._openedSession(session, theme),
           _Line(
@@ -556,7 +616,12 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
           ),
         ];
       case _Stage.linked:
-        final justLinked = _account?.files.forFile(_linkedFileId);
+        // Looked up in the account rather than drawn from what came back:
+        // the account is the record of what is linked, and a row it does not
+        // have is a row nothing here could play.
+        final justLinked = [
+          for (final file in _linked) ?_account?.files.forFile(file.fileId),
+        ];
         return [
           Icon(
             Icons.check_circle_outline,
@@ -564,9 +629,9 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
             color: theme.colorScheme.primary,
           ),
           Text(
-            _linkedName.isEmpty
-                ? 'That file is linked.'
-                : '"$_linkedName" is linked.',
+            DrivePairingScreen.linkedHeadline([
+              for (final file in _linked) file.name,
+            ]),
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall,
           ),
@@ -581,13 +646,19 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
             _Line(DrivePairingScreen.openingFileMessage, theme: theme),
           // Straight into the film from the screen that linked it: the
           // pairing is the one moment the viewer is certainly holding a
-          // remote and certainly means to watch that file.
-          if (justLinked != null)
+          // remote and certainly means to watch what they just picked. One
+          // file is one press; a season is a row each, because "Play" over
+          // twelve episodes would have to guess which one.
+          if (justLinked.length == 1)
             FilledButton.icon(
-              onPressed: _playing ? null : () => unawaited(_play(justLinked)),
+              onPressed: _playing
+                  ? null
+                  : () => unawaited(_play(justLinked.single)),
               icon: const Icon(Icons.play_arrow),
               label: const Text(DrivePairingScreen.playLabel),
-            ),
+            )
+          else
+            ...justLinked.map(_fileRow),
           TextButton(
             onPressed: () => Navigator.of(context).maybePop(),
             child: const Text(DrivePairingScreen.doneLabel),
@@ -612,39 +683,10 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     }
   }
 
-  /// A television's half: the QR, and the code under it.
-  List<Widget> _drawnSession(DrivePairingSession session, ThemeData theme) => [
-    PairingQrCode(link: session.link),
-    if (session.code.isNotEmpty)
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            DrivePairingScreen.codeLabel,
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          Text(
-            session.code,
-            key: pairingCodeKey,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              letterSpacing: 6,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-  ];
-
   /// A phone's or a desktop's half: the page is already open, and a way to
   /// open it again for a launch that did not take or a tab that was closed.
   List<Widget> _openedSession(DrivePairingSession session, ThemeData theme) => [
-    _Line(
-      'Sign in to Google in the page that opened and pick the file you want. '
-      'This screen is watching for it.',
-      theme: theme,
-    ),
+    _Line(DrivePairingScreen.inBrowserMessage, theme: theme),
     OutlinedButton.icon(
       onPressed: () => unawaited(openInBrowser(context, session.link)),
       icon: const Icon(Icons.open_in_new),
@@ -652,9 +694,6 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
     ),
   ];
 }
-
-/// The key on the code drawn beneath the QR.
-const Key pairingCodeKey = Key('drive-pairing-code');
 
 /// The QR for a pairing link, with the quiet zone a camera needs.
 ///

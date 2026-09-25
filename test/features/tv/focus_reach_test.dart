@@ -606,9 +606,9 @@ void main() {
       'the pairing screen, waiting for a '
           'phone',
       (tester) async {
-        // A television's shape of it: the QR, the code under it, and the Back
-        // it was pushed with. Nothing else on this screen can be pressed
-        // while it is waiting, which is the point of it.
+        // A television's shape of it: the QR, and the Back it was pushed
+        // with. Nothing else on this screen can be pressed while it is
+        // waiting, which is the point of it.
         useScreen(tester, tvSize);
         await tester.pumpWidget(
           DriveAccountScope(

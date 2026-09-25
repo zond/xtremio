@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Send a file to your television</title>
+<title>Send files to Xtremio</title>
 <style>
   :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
   body { margin: 0; display: grid; place-items: center; min-height: 100svh;
@@ -15,10 +15,12 @@
   .bad { color: #c5221f; }
 </style>
 <main>
-  <h1>Send a file to your television</h1>
-  <p id="what">Sign in with Google, then choose the file you want to
-     play. Only the file you choose is shared — this page cannot see
-     anything else in your Drive.</p>
+  <!-- Not "to your television": the same page is opened by a phone pairing
+       with itself, where the television is the phone in the viewer's hand. -->
+  <h1>Send files to Xtremio</h1>
+  <p id="what">Sign in with Google, then choose what you want to play. You
+     can choose more than one file. Only the files you choose are shared —
+     this page cannot see anything else in your Drive.</p>
   <a class="button" id="go" href="#">Sign in with Google</a>
 </main>
 <script>

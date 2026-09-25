@@ -17,7 +17,7 @@
 <p class="when">Last updated 25 September 2026</p>
 
 <p>xtremio is a media player. This page describes the one part of it that
-touches a Google Account: connecting a television to a file in your
+touches a Google Account: connecting a television to files in your
 Google&nbsp;Drive by scanning a code with your phone.</p>
 
 <h2>What it asks Google for</h2>
@@ -25,15 +25,17 @@ Google&nbsp;Drive by scanning a code with your phone.</p>
 app "see, edit, create and delete only the specific Google Drive files you
 use with this app". It cannot list your Drive, search it, or read anything
 you have not handed over. The file chooser you see is Google's own, runs
-on Google's servers, and tells this service nothing except which file you
-picked.</p>
+on Google's servers, and tells this service nothing except which files you
+picked — you may pick one or several, and it is told about those and no
+others.</p>
 
 <h2>What is stored, and for how long</h2>
 <ul>
   <li><strong>While you are pairing</strong> — a short-lived record holding
-    the access and refresh tokens Google issued, and the id, name and type
-    of the file you chose. It is <strong>deleted the moment your television
-    collects it</strong>, and in any case automatically after ten
+    the access and refresh tokens Google issued, the id, name and type of
+    each file you chose, and whether the device that started the pairing
+    asked to be reopened afterwards. It is <strong>deleted the moment your
+    television collects it</strong>, and in any case automatically after ten
     minutes.</li>
   <li><strong>After pairing</strong> — nothing. This service keeps no
     account, no history of what you played, and no copy of your
@@ -51,7 +53,7 @@ app on that device. Nothing else is kept.</p>
 <h2>Who else sees it</h2>
 <p>Nobody. There is no analytics, no advertising, no tracking, and no third
 party of any kind. The only servers involved are Google's and this one,
-which runs on Google Cloud. Your file's contents are read by your
+which runs on Google Cloud. Your files' contents are read by your
 television directly from Google Drive and never pass through this
 service.</p>
 

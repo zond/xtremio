@@ -1,5 +1,5 @@
 /**
- * Pairing a television with one Google Drive file, over a QR code.
+ * Pairing a television with files in a Google Drive, over a QR code.
  *
  * The television cannot run the Google Picker -- it is web-only -- and it
  * cannot hold the OAuth client secret, because it is an app anybody can
@@ -9,13 +9,13 @@
  *
  * The flow, and what is stored at each step:
  *
- *   1. TV    POST /session            -> a session doc, `pending`, 10 min
- *   2. TV    shows a QR for /link?s=<id>
+ *   1. app   POST /session            -> a session doc, `pending`, 10 min
+ *   2. TV    shows a QR for /link?s=<id>; a phone opens it itself
  *   3. phone signs in, redirected to  /oauth/callback?code&state=<id>
  *   4. here  exchanges the code, writes the refresh token on the session
- *   5. phone picks a file, POST /session/<id>/file, session becomes `ready`
- *   6. TV    GET /session/<id>        -> the tokens and the file, ONCE
- *   7. TV    POST /refresh            -> a fresh access token, later
+ *   5. phone picks files, POST /session/<id>/files, session becomes `ready`
+ *   6. app   GET /session/<id>        -> the tokens and the files, ONCE
+ *   7. app   POST /refresh            -> a fresh access token, later
  *
  * The session is deleted the moment the television collects it, so the
  * only thing this service stores long-term is nothing at all. A refresh
@@ -46,6 +46,46 @@ const db = getFirestore();
 /** How long a viewer has to scan the code and pick something. */
 const SESSION_MINUTES = 10;
 
+/**
+ * The most files one pairing may carry.
+ *
+ * The Picker's multiselect has no bound of its own, and a session document
+ * has Firestore's: one megabyte. A row is a file id, a name of at most 255
+ * characters and a mime type, so a hundred of them is about thirty
+ * kilobytes and nowhere near it. The number is not really about bytes
+ * though -- it is a whole show's worth of episodes, and a pick larger than
+ * that is somebody selecting everything rather than choosing something.
+ * Over the limit is refused and said out loud, never silently trimmed: a
+ * viewer who picked forty files and got thirty would have no way to know.
+ */
+const MAX_FILES = 100;
+
+/**
+ * Where the pick page sends a phone's browser once the picking is done.
+ *
+ * Only for a pairing that asked for it (`handBack` on `POST /session`),
+ * which is the app saying "I opened this browser myself, hand the viewer
+ * back when you are finished". A television's viewer looks up at the
+ * screen and is sent nowhere.
+ *
+ * It is host-less on purpose, and the app **does not act on it**: a
+ * `stremio://` link with no host is exactly the shape the app already
+ * drops (`lib/shell/deep_link.dart`, and `docs/DEEP_LINKS.md` -- those are
+ * the official clients' own in-app routes). So this adds no second meaning
+ * to a scheme whose one meaning is "open that addon's details", and a
+ * launch link the platform replays on a cold start days later is dropped
+ * then too, because it was never acted on in the first place. The whole
+ * effect of it is the platform bringing the app forward, which is what a
+ * hand-back is.
+ *
+ * Written down here rather than taken from the app: this is a URL a page
+ * on this origin navigates to, and a client-supplied one would be an open
+ * redirect with a signed-in viewer in front of it. The app's own copy of
+ * the constant is `drivePairingHandBackLink` in
+ * `lib/core/drive_pairing.dart`, which nothing but a test reads.
+ */
+const HAND_BACK_LINK = 'stremio:///pair';
+
 /** What the app asks for, and the only thing it can ask for without a
  * Google security assessment: the files the viewer hands it in the Picker,
  * and nothing else in their Drive. */
@@ -72,12 +112,36 @@ function origin() {
   return PUBLIC_ORIGIN;
 }
 
-/** A short code a viewer could type if the camera will not read the QR. */
-function humanCode() {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1
-  return Array.from(crypto.randomFillSync(new Uint8Array(6)))
-      .map((b) => alphabet[b % alphabet.length])
-      .join('');
+/**
+ * The files out of one `POST /session/<id>/files` body, cleaned up.
+ *
+ * Two shapes are read. `{files: [...]}` is what the pick page sends now,
+ * one entry per file the viewer chose. A bare `{fileId, name, mimeType}`
+ * is the one file the page used to send, and is still accepted because
+ * Hosting may hand a browser a cached copy of the old page for an hour
+ * after a deploy -- a pairing half way through a deploy should finish, not
+ * fail.
+ *
+ * A row with no file id is dropped rather than refused: the id is the only
+ * field a byte range is asked for, and the rest have answers for being
+ * missing (`LinkedDriveFile.fromJson` in the app says the same). Every row
+ * dropping is what the caller sees as an empty list.
+ */
+function pickedFiles(body) {
+  const sent = Array.isArray(body.files)
+      ? body.files
+      : (body.fileId ? [body] : []);
+  const files = [];
+  for (const one of sent) {
+    const fileId = typeof one?.fileId === 'string' ? one.fileId.trim() : '';
+    if (!fileId) continue;
+    files.push({
+      fileId,
+      name: typeof one.name === 'string' ? one.name : '',
+      mimeType: typeof one.mimeType === 'string' ? one.mimeType : '',
+    });
+  }
+  return files;
 }
 
 /**
@@ -102,7 +166,17 @@ async function withinRate(key, limit) {
   return count <= limit;
 }
 
-/** 1. The television asks for a session and gets something to draw. */
+/**
+ * 1. The app asks for a session and gets something to draw.
+ *
+ * `handBack` is the app saying which shape it is, and it is the only thing
+ * the two shapes differ by here: a phone opened the browser itself and
+ * wants the viewer put back in front of it when the picking is done, a
+ * television wants nothing of the kind. See [HAND_BACK_LINK]. It is read
+ * strictly -- anything but `true` is a television, because a hand-back sent
+ * to a browser on a device with nothing to handle it is an error page where
+ * a confirmation should be.
+ */
 app.post('/session', async (req, res) => {
   const from = req.ip || 'unknown';
   if (!await withinRate(`session-${from}`, 60)) {
@@ -112,14 +186,12 @@ app.post('/session', async (req, res) => {
   const expiresAt = new Date(Date.now() + SESSION_MINUTES * 60000);
   await db.collection('sessions').doc(id).set({
     status: 'pending',
-    code: humanCode(),
+    handBack: (req.body || {}).handBack === true,
     createdAt: FieldValue.serverTimestamp(),
     expiresAt,
   });
-  const session = await db.collection('sessions').doc(id).get();
   res.json({
     sessionId: id,
-    code: session.data().code,
     link: `${origin()}/link?s=${id}`,
     expiresAt: expiresAt.toISOString(),
   });
@@ -172,7 +244,14 @@ app.get('/oauth/callback', async (req, res) => {
   res.redirect(`/pick?s=${state}`);
 });
 
-/** What the Picker page needs to draw itself: a token, and nothing else. */
+/**
+ * What the Picker page needs to draw itself: a token, and where to send
+ * the viewer afterwards.
+ *
+ * `handBack` is the link or null, rather than the flag: the page is told
+ * where to go and knows nothing about which shape asked, and the URL it may
+ * navigate to is this file's constant and never a client's.
+ */
 app.get('/session/:id/token', async (req, res) => {
   const session = await db.collection('sessions').doc(req.params.id).get();
   if (!session.exists) return res.status(404).json({error: 'no session'});
@@ -180,21 +259,34 @@ app.get('/session/:id/token', async (req, res) => {
   if (it.status !== 'signed-in') {
     return res.status(409).json({error: `session is ${it.status}`});
   }
-  res.json({accessToken: it.accessToken});
+  res.json({
+    accessToken: it.accessToken,
+    handBack: it.handBack === true ? HAND_BACK_LINK : null,
+  });
 });
 
-/** 5. The phone says which file the viewer picked. */
-app.post('/session/:id/file', async (req, res) => {
-  const {fileId, name, mimeType} = req.body || {};
-  if (!fileId) return res.status(400).json({error: 'no fileId'});
+/**
+ * 5. The phone says which files the viewer picked.
+ *
+ * One scan links as many files as the viewer chose in the one Picker, which
+ * is what makes a season a single pairing rather than twelve. Both spellings
+ * of the route answer: `/files` is what the page asks for now, and `/file`
+ * is what a copy of the page cached before a deploy asks for.
+ */
+app.post(['/session/:id/files', '/session/:id/file'], async (req, res) => {
+  const files = pickedFiles(req.body || {});
+  if (files.length === 0) return res.status(400).json({error: 'no files'});
+  if (files.length > MAX_FILES) {
+    return res.status(400).json({error: `more than ${MAX_FILES} files`});
+  }
   const ref = db.collection('sessions').doc(req.params.id);
   const session = await ref.get();
   if (!session.exists) return res.status(404).json({error: 'no session'});
   if (session.data().status !== 'signed-in') {
     return res.status(409).json({error: 'sign in first'});
   }
-  await ref.update({status: 'ready', file: {fileId, name, mimeType}});
-  res.json({ok: true});
+  await ref.update({status: 'ready', files});
+  res.json({ok: true, files: files.length});
 });
 
 /**
@@ -203,6 +295,14 @@ app.post('/session/:id/file', async (req, res) => {
  * The session is deleted in the same breath: a refresh token that has been
  * handed over is not something to leave lying in a database, and a pickup
  * that could happen twice is a pickup somebody else could make.
+ *
+ * The files go over twice, and deliberately. `files` is the list, which is
+ * what a build that knows about several reads. `file` is the first of them,
+ * which is what a build from before this reads -- it knows nothing of
+ * `files`, and a body with only `files` on it would be a `ready` session it
+ * could make nothing of, on a session that no longer exists to ask again.
+ * One file arriving out of a pairing that picked twelve is a poor answer;
+ * losing the pairing is a worse one.
  */
 app.get('/session/:id', async (req, res) => {
   const ref = db.collection('sessions').doc(req.params.id);
@@ -215,12 +315,20 @@ app.get('/session/:id', async (req, res) => {
   }
   if (it.status !== 'ready') return res.json({status: it.status});
   await ref.delete();
+  // `file` is a session written before this deploy -- one that was `ready`
+  // while the function was being replaced, whose ten minutes are still
+  // running. Reading only `files` there would drop the file the viewer
+  // picked.
+  const files = Array.isArray(it.files)
+      ? it.files
+      : (it.file ? [it.file] : []);
   res.json({
     status: 'ready',
     refreshToken: it.refreshToken,
     accessToken: it.accessToken,
     accessExpiresAt: it.accessExpiresAt.toDate().toISOString(),
-    file: it.file,
+    files,
+    file: files[0],
   });
 });
 

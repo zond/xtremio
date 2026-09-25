@@ -198,7 +198,10 @@ void main() {
     await tester.pump();
 
     expect(find.byType(PairingQrCode), findsOneWidget);
-    expect(find.text(service.session.code), findsOneWidget);
+    expect(
+      tester.widget<PairingQrCode>(find.byType(PairingQrCode)).link,
+      service.session.link,
+    );
   });
 }
 

@@ -237,6 +237,15 @@ it, and the platform registrations are listed in `docs/DEEP_LINKS.md`. A
 widget test drives links through `FakeDeepLinks` (`test/support/`);
 nothing in the tests touches `app_links`.
 
+**One link is sent to this app on purpose and means nothing.** The Drive
+pick page ends a phone's pairing by navigating to `stremio:///pair`
+(`drivePairingHandBackLink`), so the platform brings this app back in front
+of a viewer it handed to a browser. It is host-less, so the rule above
+already drops it, and that is the whole design: the scheme keeps its one
+meaning, and a hand-back the platform replays on a cold start days later is
+dropped then too. Do not give it one — a hand-back that navigated would be a
+dead session reopened by a link from last week.
+
 ## Nothing re-times a subtitle but the viewer
 
 A declared frame rate says where an upload came from, not how it is

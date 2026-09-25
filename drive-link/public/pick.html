@@ -9,8 +9,9 @@
   main { max-width: 32rem; text-align: center; }
   h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
   p { line-height: 1.5; opacity: .8; }
-  button { margin-top: 1.5rem; padding: .9rem 1.6rem; border: 0;
-           border-radius: 999px; background: #1a73e8; color: white;
+  button, a.button { display: inline-block; margin-top: 1.5rem;
+           padding: .9rem 1.6rem; border: 0; border-radius: 999px;
+           background: #1a73e8; color: white; text-decoration: none;
            font-weight: 600; font-size: 1rem; }
   .bad { color: #c5221f; }
   .done { color: #188038; font-weight: 600; }
@@ -18,7 +19,8 @@
 <main>
   <h1 id="head">Choose what to play</h1>
   <p id="what">Loading…</p>
-  <button id="go" hidden>Choose a file</button>
+  <button id="go" hidden>Choose files</button>
+  <a class="button" id="back" hidden>Back to Xtremio</a>
 </main>
 <script src="https://apis.google.com/js/api.js"></script>
 <script>
@@ -33,25 +35,39 @@
   const what = document.getElementById('what');
   const head = document.getElementById('head');
   const go = document.getElementById('go');
+  const back = document.getElementById('back');
+
+  /**
+   * Where to send this browser once the picking is done, or null.
+   *
+   * The service says which (`GET /session/<id>/token`), because the service
+   * is what was told which shape asked for the pairing: a phone, which this
+   * app sent here itself and which should be put back in front of the
+   * viewer, or a television, whose viewer is already looking at the other
+   * screen and should be sent nowhere at all.
+   */
+  let backLink = null;
 
   const say = (text, cls) => { what.className = cls || ''; what.textContent = text; };
 
-  async function token() {
-    const answer = await fetch(`/session/${session}/token`);
-    if (!answer.ok) throw new Error((await answer.json()).error);
-    return (await answer.json()).accessToken;
-  }
+  /** What the pairing is for, in the words the viewer would use for it. */
+  const destination = () => backLink ? 'Xtremio' : 'your television';
 
   async function start() {
     if (failed) return say(`Google said: ${failed}`, 'bad');
     if (!session) return say('This link is missing its code.', 'bad');
     let accessToken;
     try {
-      accessToken = await token();
+      const answer = await fetch(`/session/${session}/token`);
+      const ready = await answer.json();
+      if (!answer.ok) throw new Error(ready.error);
+      accessToken = ready.accessToken;
+      backLink = ready.handBack || null;
     } catch (e) {
       return say(`${e.message}. Scan the code on your television again.`, 'bad');
     }
-    say('Signed in. Choose the file you want to play on your television.');
+    say('Signed in. Choose what you want to play. You can choose more than '
+        + 'one file — only what you choose is shared.');
     go.hidden = false;
     go.onclick = () => gapi.load('picker', () => picker(accessToken));
   }
@@ -59,8 +75,9 @@
   function picker(accessToken) {
     // Videos, and the viewer's own Drive. `setIncludeFolders` is on so the
     // folder question can be answered by hand: pick a folder and see what
-    // `drive.file` then grants -- the documentation does not say, and it
-    // decides whether this is ever more than one file at a time.
+    // `drive.file` then grants -- the documentation does not say. It is no
+    // longer what decides whether a pairing can carry more than one file;
+    // multiselect is, and it is below.
     const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
         .setIncludeFolders(true)
         .setSelectFolderEnabled(true);
@@ -68,28 +85,64 @@
         .setAppId(APP_ID)
         .setOAuthToken(accessToken)
         .setDeveloperKey(API_KEY)
+        // One scan, a whole season. Nothing about it is discoverable in the
+        // Picker itself, which is why the words on this page say it out loud.
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
         .addView(view)
         .setCallback(chosen)
         .build()
         .setVisible(true);
   }
 
+  /** What was sent: right for one file, and right for twenty. */
+  function sent(files) {
+    const subject = files.length === 1
+        ? `“${files[0].name}”`
+        : `${files.length} files`;
+    const verb = files.length === 1 ? 'is' : 'are';
+    return `${subject} ${verb} on the way to ${destination()}.`;
+  }
+
   async function chosen(data) {
     if (data.action !== google.picker.Action.PICKED) return;
-    const doc = data.docs[0];
-    const answer = await fetch(`/session/${session}/file`, {
+    // `docs` has always been an array; what is new is reading past the first
+    // of it.
+    const files = (data.docs || []).map((doc) => ({
+      fileId: doc.id,
+      name: doc.name,
+      mimeType: doc.mimeType,
+    }));
+    if (files.length === 0) return;
+    const answer = await fetch(`/session/${session}/files`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        fileId: doc.id,
-        name: doc.name,
-        mimeType: doc.mimeType,
-      }),
+      body: JSON.stringify({files}),
     });
-    if (!answer.ok) return say('Your television did not take it.', 'bad');
+    if (!answer.ok) {
+      return say(backLink
+          ? 'Xtremio did not take it. Try again from the app.'
+          : 'Your television did not take it.', 'bad');
+    }
     head.textContent = 'Sent';
     go.hidden = true;
-    say(`“${doc.name}” is on its way to your television.`, 'done');
+    say(sent(files), 'done');
+    handBack();
+  }
+
+  /**
+   * Puts the viewer back in front of the app, when the app asked for it.
+   *
+   * The confirmation above is drawn first and the button is shown before
+   * the navigation is attempted, so that a browser which refuses to follow
+   * a custom scheme without a tap leaves a page that says what happened and
+   * offers the tap -- rather than a page the viewer has to guess at. A
+   * television's session has no `backLink` and nothing here fires.
+   */
+  function handBack() {
+    if (!backLink) return;
+    back.href = backLink;
+    back.hidden = false;
+    location.href = backLink;
   }
 
   start();

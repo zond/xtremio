@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
+import 'package:xtremio/shell/deep_link.dart';
 
 import '../support/fake_drive_pairing_service.dart';
 
@@ -24,6 +25,9 @@ void main() {
     /// Every request the server saw, as `METHOD <request-target>`.
     late List<String> seen;
 
+    /// Every body it was sent, decoded.
+    late List<Object?> sent;
+
     /// What `POST /session` answers.
     late int sessionStatus;
     late Object? sessionBody;
@@ -38,10 +42,10 @@ void main() {
       overrides = HttpOverrides.current;
       HttpOverrides.global = null;
       seen = [];
+      sent = [];
       sessionStatus = HttpStatus.ok;
       sessionBody = {
         'sessionId': 'abc-123',
-        'code': 'K7M2QX',
         'link': 'https://xtremio-drive.web.app/link?s=abc-123',
         'expiresAt': '2026-09-25T20:10:00.000Z',
       };
@@ -51,6 +55,8 @@ void main() {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((request) async {
         seen.add('${request.method} ${request.uri}');
+        final asked = await utf8.decoder.bind(request).join();
+        if (asked.isNotEmpty) sent.add(jsonDecode(asked));
         final response = request.response;
         final Object? body;
         if (request.method == 'POST') {
@@ -81,15 +87,31 @@ void main() {
       expect(seen, ['POST /session']);
       final session = (opening as DrivePairingOpened).session;
       expect(session.sessionId, 'abc-123');
-      expect(session.code, 'K7M2QX');
       expect(session.link, 'https://xtremio-drive.web.app/link?s=abc-123');
       expect(session.expiresAt, DateTime.utc(2026, 9, 25, 20, 10));
+      // And nothing about the session goes into a line: the id is the whole
+      // of what a pairing is collected with.
+      expect('$session', 'DrivePairingSession()');
+    });
+
+    test('and says which shape asked, which is all the service is told about '
+        'the two of them', () async {
+      // A phone was handed to a browser by this app and wants the viewer
+      // handed back; a television wants nothing of the kind, and a hand-back
+      // sent to a browser with nothing to handle it is an error page where a
+      // confirmation should be.
+      await service().open(handBack: true);
+      await service().open();
+      expect(sent, [
+        {'handBack': true},
+        {'handBack': false},
+      ]);
     });
 
     test('a session it cannot draw is no session at all', () async {
       // The link is what the QR carries and the phone opens; a body without
       // one is not something to put on a television and wait beside.
-      sessionBody = {'sessionId': 'abc-123', 'code': 'K7M2QX'};
+      sessionBody = {'sessionId': 'abc-123'};
       expect(
         (await service().open() as DrivePairingUnavailable).reason,
         XtremioDrivePairingService.notUnderstood,
@@ -141,13 +163,69 @@ void main() {
       expect(seen, ['GET /session/abc-123', 'GET /session/abc-123']);
     });
 
-    test('a ready session hands over the grant and the file', () async {
+    test(
+      'a ready session hands over the grant and every file picked',
+      () async {
+        // One scan, a whole season: the Picker takes several files at once and
+        // `files` is what the service answers with.
+        collectBody = {
+          'status': 'ready',
+          'refreshToken': fakeRefreshToken,
+          // Read past, deliberately: an access token is good for an hour,
+          // this device has nowhere safe for a second credential, and
+          // DriveSource mints its own through POST /refresh.
+          'accessToken': 'fake-access-token-for-tests-only',
+          'accessExpiresAt': '2026-09-25T21:00:00.000Z',
+          'files': [
+            {
+              'fileId': 'drive-file-1',
+              'name': 'Gilmore Girls S01E01.mkv',
+              'mimeType': 'video/x-matroska',
+            },
+            {
+              'fileId': 'drive-file-2',
+              'name': 'Gilmore Girls S01E02.mkv',
+              'mimeType': 'video/x-matroska',
+            },
+          ],
+          // The first of them again, for a build that knows nothing of `files`.
+          // This build reads the list and ignores it.
+          'file': {
+            'fileId': 'drive-file-1',
+            'name': 'Gilmore Girls S01E01.mkv',
+          },
+        };
+        final answer = await service().collect('abc-123');
+        final collected = answer as DrivePairingCollected;
+        expect(collected.refreshToken, fakeRefreshToken);
+        expect(collected.files, [
+          (
+            fileId: 'drive-file-1',
+            name: 'Gilmore Girls S01E01.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+          (
+            fileId: 'drive-file-2',
+            name: 'Gilmore Girls S01E02.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ]);
+        // And it names the files and nothing else when something writes it
+        // into a line.
+        expect(
+          '$collected',
+          'DrivePairingCollected(drive-file-1, drive-file-2)',
+        );
+      },
+    );
+
+    test('and a session naming one file the old way still works', () async {
+      // What a service from before several could be picked answers with:
+      // `file` and no `files` at all. One file is a list of one, and nothing
+      // past this point treats it as a special case.
       collectBody = {
         'status': 'ready',
         'refreshToken': fakeRefreshToken,
-        // Read past, deliberately: an access token is good for an hour,
-        // this device has nowhere safe for a second credential, and
-        // DriveSource mints its own through POST /refresh.
         'accessToken': 'fake-access-token-for-tests-only',
         'accessExpiresAt': '2026-09-25T21:00:00.000Z',
         'file': {
@@ -156,15 +234,37 @@ void main() {
           'mimeType': 'video/x-matroska',
         },
       };
-      final answer = await service().collect('abc-123');
-      final collected = answer as DrivePairingCollected;
-      expect(collected.refreshToken, fakeRefreshToken);
-      expect(collected.fileId, 'drive-file-1');
-      expect(collected.name, 'Arrival (2016) 2160p.mkv');
-      expect(collected.mimeType, 'video/x-matroska');
-      // And it names the file and nothing else when something writes it
-      // into a line.
-      expect('$collected', 'DrivePairingCollected(drive-file-1)');
+      final collected =
+          await service().collect('abc-123') as DrivePairingCollected;
+      expect(collected.files, [
+        (
+          fileId: 'drive-file-1',
+          name: 'Arrival (2016) 2160p.mkv',
+          mimeType: 'video/x-matroska',
+        ),
+      ]);
+    });
+
+    test('a row with no id is dropped, not the eleven beside it', () async {
+      // The id is the only field a byte range is asked for; a name and a
+      // mime type have answers for being missing. Losing the whole pairing
+      // over one unreadable row would be losing a read that cannot be made
+      // again.
+      collectBody = {
+        'status': 'ready',
+        'refreshToken': fakeRefreshToken,
+        'files': [
+          {'name': 'no id at all'},
+          {'fileId': '  '},
+          {'fileId': ' drive-file-2 '},
+          'nonsense',
+        ],
+      };
+      final collected =
+          await service().collect('abc-123') as DrivePairingCollected;
+      expect(collected.files, [
+        (fileId: 'drive-file-2', name: '', mimeType: ''),
+      ]);
     });
 
     test('a ready session with nothing on it is not polled again', () async {
@@ -172,10 +272,22 @@ void main() {
       // left to wait for -- whichever half of the answer is missing.
       collectBody = {
         'status': 'ready',
-        'file': {'fileId': 'drive-file-1'},
+        'files': [
+          {'fileId': 'drive-file-1'},
+        ],
       };
       expect(await service().collect('abc-123'), isA<DrivePairingGone>());
       collectBody = {'status': 'ready', 'refreshToken': fakeRefreshToken};
+      expect(await service().collect('abc-123'), isA<DrivePairingGone>());
+      // And a list with nothing readable in it is the same dead end: there
+      // is no session left to ask again about.
+      collectBody = {
+        'status': 'ready',
+        'refreshToken': fakeRefreshToken,
+        'files': [
+          {'name': 'no id'},
+        ],
+      };
       expect(await service().collect('abc-123'), isA<DrivePairingGone>());
     });
 
@@ -238,15 +350,31 @@ void main() {
       );
     });
 
-    test('but a missing code is only a missing fallback', () {
-      // The QR is the way in; the six characters under it are the spare.
+    test('and nothing else: a service still minting a typeable code is read '
+        'past it', () {
+      // The code is gone from the service's answer and from the screen -- no
+      // route ever read it back, and a code a viewer cannot type anywhere is
+      // worse than no code. A deployment that still sends one is a session
+      // like any other.
       final session = DrivePairingSession.fromJson({
         'sessionId': 'abc',
+        'code': 'K7M2QX',
         'link': 'https://example.com/link?s=abc',
         'expiresAt': '2026-09-25T20:10:00.000Z',
       });
       expect(session, isNotNull);
-      expect(session!.code, isEmpty);
+      expect(session!.sessionId, 'abc');
+      expect('$session', isNot(contains('K7M2QX')));
     });
+  });
+
+  test('the hand-back link is one this app does nothing with', () {
+    // The whole answer to what was written against `app_links` here: a
+    // host-less `stremio://` link is already the shape the app drops, so the
+    // hand-back adds no second meaning to the scheme and a launch link the
+    // platform replays on a cold start days later is dropped then too. What
+    // brings the app forward is the platform switching tasks.
+    expect(deepLinkAddonManifestUrl(drivePairingHandBackLink), isNull);
+    expect(Uri.parse(drivePairingHandBackLink).host, isEmpty);
   });
 }

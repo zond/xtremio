@@ -183,46 +183,73 @@ class DriveAccount extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Stores [refreshToken] as this device's credential and, when the
-  /// pairing named one, writes [file] into the list.
+  /// Stores [refreshToken] as this device's credential and writes whatever
+  /// [files] the pairing named into the list.
   ///
   /// The token is written first and the list second, so nothing can leave
   /// a list of files behind with no credential to open them. The dead flag
   /// is cleared: a fresh token is exactly what [DriveLinkState.pairAgain]
   /// was waiting for.
   ///
-  /// [file] is null when a pairing hands back only a rotated token and
-  /// picks no new file.
+  /// [files] is empty when a pairing hands back only a rotated token and
+  /// picks nothing new. It is a list rather than one file because one
+  /// pairing links everything the viewer picked in the one Picker, and
+  /// because the whole of it has to be one write: a store write and a
+  /// preferences write per file would leave the list disagreeing with what
+  /// was picked if one of them failed half way down a season.
   Future<DriveLinkOutcome> link({
     required String refreshToken,
-    LinkedDriveFile? file,
+    Iterable<LinkedDriveFile> files = const [],
   }) async {
     final outcome = await _store(refreshToken);
     _refreshToken = refreshToken;
-    if (file != null) {
-      await prefs.setDriveLinkedFiles(prefs.driveLinkedFiles.linking(file));
+    if (files.isNotEmpty) {
+      await prefs.setDriveLinkedFiles(prefs.driveLinkedFiles.linkingAll(files));
     }
     await prefs.setDriveTokenDead(false);
     notifyListeners();
     return outcome;
   }
 
-  /// [link], with the file described the way the pairing service describes
+  /// [link], with one file described the way the pairing service describes
   /// it and the moment stamped from this account's clock.
   Future<DriveLinkOutcome> linkFile({
     required String refreshToken,
     required String fileId,
     required String name,
     required String mimeType,
-  }) => link(
+  }) => linkFiles(
     refreshToken: refreshToken,
-    file: LinkedDriveFile(
-      fileId: fileId,
-      name: name,
-      mimeType: mimeType,
-      linkedAt: now().toUtc(),
-    ),
+    files: [(fileId: fileId, name: name, mimeType: mimeType)],
   );
+
+  /// [link], with every file one pairing named, described the way the
+  /// pairing service describes them and stamped from this account's clock.
+  ///
+  /// One stamp for all of them: they became reachable in the same moment,
+  /// because they were handed over by the same pairing.
+  ///
+  /// The shape of [files] is spelled out rather than named so that this does
+  /// not depend on the pairing service's own types; it is
+  /// `DrivePairingCollected.files`, which is a record for that reason.
+  Future<DriveLinkOutcome> linkFiles({
+    required String refreshToken,
+    required Iterable<({String fileId, String mimeType, String name})> files,
+  }) {
+    final linkedAt = now().toUtc();
+    return link(
+      refreshToken: refreshToken,
+      files: [
+        for (final file in files)
+          LinkedDriveFile(
+            fileId: file.fileId,
+            name: file.name,
+            mimeType: file.mimeType,
+            linkedAt: linkedAt,
+          ),
+      ],
+    );
+  }
 
   /// Records that the service answered `pairAgain` for the stored token.
   ///

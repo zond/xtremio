@@ -31,6 +31,20 @@ The contract, in full:
   nothing, not even in the Diagnostics log. Those are the official clients'
   own in-app routes, not manifest URLs.
 
+One host-less link is sent to this app deliberately, and being dropped is the
+whole of what it does. When a **phone** pairs with a Google Drive, the app
+opens the pick page in the system browser itself, and the page ends by
+navigating to `stremio:///pair` (`drivePairingHandBackLink`,
+`lib/core/drive_pairing.dart`; `HAND_BACK_LINK` in
+`drive-link/functions/index.js`, which is the end that sends it). The
+platform brings the app forward, `MainActivity` being `singleTop`, and the
+link itself is dropped by the rule above. Nothing navigates, nothing is
+dispatched, and nothing changes on a cold start, where `app_links` replays
+the launch link — a hand-back that *did* act would be a dead pairing reopened
+days later by a link from last week. A television asks for no hand-back, and
+neither does a desktop, where the registration below is installed by hand or
+not at all.
+
 The pieces: `lib/shell/deep_link.dart` (the source, over
 [`app_links`](https://pub.dev/packages/app_links), and
 `deepLinkAddonManifestUrl`, which decides what a link means), the listener in

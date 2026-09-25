@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addon_details_screen.dart';
+import 'package:xtremio/features/drive/drive_pairing_screen.dart';
 
 import 'support/fake_core_client.dart';
 import 'support/fake_deep_links.dart';
@@ -122,6 +123,33 @@ void main() {
 
     expect(find.byType(AddonDetailsScreen), findsNothing);
     expect(detailsActions(core), isEmpty);
+  });
+
+  testWidgets('and so is the pairing hand-back, on a cold start as much as '
+      'a warm one', (tester) async {
+    // The pick page sends a phone's browser to `drivePairingHandBackLink`
+    // when the picking is done, so a viewer this app put in a browser is put
+    // back in front of this app. Nothing here acts on it: it is a host-less
+    // `stremio://` link, which is the shape already dropped above, so the
+    // scheme gains no second meaning and the whole effect of the link is the
+    // platform switching tasks.
+    //
+    // `initial` is the half that matters most. `app_links` replays the launch
+    // link on a cold start, and the objection written down against a
+    // hand-back was that a stale one could reopen a dead pairing days later.
+    // A link nothing acts on cannot.
+    final core = fakeCore();
+    final links = await pumpApp(
+      tester,
+      core,
+      initial: drivePairingHandBackLink,
+    );
+    links.send(drivePairingHandBackLink);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddonDetailsScreen), findsNothing);
+    expect(detailsActions(core), isEmpty);
+    expect(find.byType(DrivePairingScreen), findsNothing);
   });
 
   testWidgets('a second link replaces the details screen instead of '
