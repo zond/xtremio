@@ -14,6 +14,8 @@ import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
 import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
+import 'package:xtremio/features/drive/drive_pairing_screen.dart';
+import 'package:xtremio/features/drive/remote_files.dart';
 import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/player/playback_tracks.dart';
 import 'package:xtremio/features/player/track_menus.dart';
@@ -29,6 +31,8 @@ import 'package:xtremio/widgets/tv_text_field.dart';
 import '../../support/fake_core_client.dart';
 import '../../support/fake_diagnostics_client.dart';
 import '../../support/fake_downloads_client.dart';
+import '../../support/fake_drive_pairing_service.dart';
+import '../../support/fake_secret_store.dart';
 import '../../support/fake_server_cache.dart';
 import '../../support/fixtures.dart';
 import '../../support/player_harness.dart';
@@ -197,6 +201,19 @@ void main() {
 
   /// Preferences that persist nothing, set to bold.
   AppPrefs bold() => AppPrefs.inMemory()..setFocusEmphasis(FocusEmphasis.bold);
+
+  /// A Drive pairing over fakes, for the screens that need the scope: the
+  /// board, because its link button pushes the pairing screen, and the
+  /// pairing screen itself.
+  DriveAccount drive() {
+    final prefs = AppPrefs.inMemory();
+    final account = DriveAccount(prefs: prefs, secrets: FakeSecretStore());
+    addTearDown(() {
+      account.dispose();
+      prefs.dispose();
+    });
+    return account;
+  }
 
   /// Everything the core has to answer for the screens below to settle,
   /// with [overrides] laid over it for a walk that needs a state the
@@ -584,6 +601,32 @@ void main() {
       await tester.pumpAndSettle();
       await walkEveryStop(tester);
     }),
+    walk(
+      'drive_pairing_screen.dart',
+      'the pairing screen, waiting for a '
+          'phone',
+      (tester) async {
+        // A television's shape of it: the QR, the code under it, and the Back
+        // it was pushed with. Nothing else on this screen can be pressed
+        // while it is waiting, which is the point of it.
+        useScreen(tester, tvSize);
+        await tester.pumpWidget(
+          DriveAccountScope(
+            account: drive(),
+            child: onTv(
+              DrivePairingScreen(
+                service: FakeDrivePairingService(),
+                now: () => pairingNow,
+              ),
+              pushed: true,
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(find.byType(PairingQrCode), findsOneWidget);
+        await walkEveryStop(tester, stops: 8);
+      },
+    ),
     walk('search_screen.dart', 'Search', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
@@ -853,6 +896,34 @@ void main() {
       );
       await tester.pumpAndSettle();
       await openUninstallDialog(tester, '1 catalog could not be loaded');
+      await walkEveryStop(tester, stops: 12);
+    }),
+    walk('board_screen.dart', 'the list of services the link button opens', (
+      tester,
+    ) async {
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        DriveAccountScope(
+          account: drive(),
+          child: CoreScope(
+            client: fullCore(),
+            child: onTv(const BoardScreen()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Up out of the top row is how the remote gets into the app bar here
+      // -- see BoardScreen.appBarLevel.
+      await pressUntil(
+        tester,
+        LogicalKeyboardKey.arrowUp,
+        () => focusedTooltip() == RemoteFilesButton.label,
+        target: 'the link button',
+        limit: 4,
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.byType(AlertDialog), findsOneWidget);
       await walkEveryStop(tester, stops: 12);
     }),
     walk('discover_screen.dart', 'the catalog menu on Discover', (
@@ -1252,6 +1323,39 @@ void main() {
         return pushes;
       },
     ),
+    // The pairing screen makes no route of its own. Every press on it is
+    // either the Back it was pushed with or a button that asks the service
+    // for a fresh session and redraws in place -- a QR, a sentence, a tick.
+    // Mounted in the state with the most to press: the service refusing to
+    // open one, which draws the refusal and "New code" beside Back. Written
+    // down as what the driving found, not as what lets it be skipped.
+    claim('drive_pairing_screen.dart', 'a pairing nothing would open', (
+      tester,
+    ) async {
+      final pushes = Pushed();
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        DriveAccountScope(
+          account: drive(),
+          child: onTv(
+            DrivePairingScreen(
+              service: FakeDrivePairingService(
+                openings: const [
+                  DrivePairingUnavailable(
+                    XtremioDrivePairingService.tooManyCodes,
+                  ),
+                ],
+              ),
+              now: () => pairingNow,
+            ),
+            pushed: true,
+            pushes: pushes,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return pushes;
+    }),
   ];
 
   group('every screen marks what the remote lands on', () {
