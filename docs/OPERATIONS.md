@@ -30,9 +30,20 @@ flutter_rust_bridge_codegen generate && git diff --exit-code lib/src/rust rust/s
 ## Seeing video play
 
 ```bash
-sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev libmpv-dev
+sudo apt install clang cmake ninja-build pkg-config libgtk-3-dev libmpv-dev \
+  libsecret-1-dev
 flutter run -d linux
 ```
+
+`libmpv-dev` is what media_kit links against. `libsecret-1-dev` is for
+`flutter_secure_storage`, where the Drive pairing's refresh token is kept
+(`lib/core/secret_store.dart`): on Linux that is libsecret, which is the
+Secret Service API, which needs a keyring daemon — `gnome-keyring`, KWallet
+or another provider — *running* as well as installed. A machine with none
+has no secure store at all, and the app says so rather than pretending: the
+pairing works for the run and is gone after a restart
+(`DriveLinkOutcome.thisRunOnly`). Building without the dev package fails in
+cmake; running without a daemon fails at the first read, which is handled.
 
 Then either **Discover → a title → a stream**, or **Settings → Developer →
 "Play test torrent"** (Big Buck Bunny from a public torrent through the

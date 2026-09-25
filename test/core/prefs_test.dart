@@ -329,6 +329,45 @@ void main() {
     });
   });
 
+  group('the Drive pairing', () {
+    test('an unreadable list of linked files is nothing linked', () async {
+      final prefs = AppPrefs(
+        client: FakePrefsClient({
+          AppPrefs.driveLinkedFilesKey: 'drive-file-1',
+          AppPrefs.driveTokenDeadKey: 'yes',
+        }),
+      );
+      addTearDown(prefs.dispose);
+
+      await prefs.load();
+
+      expect(prefs.driveLinkedFiles, LinkedDriveFiles.empty);
+      expect(prefs.driveTokenDead, isFalse);
+    });
+
+    test(
+      'nothing linked and no dead token are written as absent keys',
+      () async {
+        final client = FakePrefsClient({
+          AppPrefs.driveLinkedFilesKey: [
+            {'id': 'drive-file-1'},
+          ],
+          AppPrefs.driveTokenDeadKey: true,
+        });
+        final prefs = AppPrefs(client: client);
+        addTearDown(prefs.dispose);
+        await prefs.load();
+
+        await prefs.setDriveLinkedFiles(LinkedDriveFiles.empty);
+        await prefs.setDriveTokenDead(false);
+
+        // A key that says the default in more bytes is a key removed, the
+        // way the subtitle memories do it.
+        expect(client.stored, isEmpty);
+      },
+    );
+  });
+
   testWidgets('maybeOf is null with no scope above', (tester) async {
     AppPrefs? found = AppPrefs.inMemory();
     await tester.pumpWidget(

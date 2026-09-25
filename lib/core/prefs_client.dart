@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../src/rust/api/prefs.dart' as rust;
 import 'buffer_ahead.dart';
+import 'drive_link.dart';
 import 'focus_emphasis.dart';
 import 'similar_memory.dart';
 import 'stream_order.dart';
@@ -224,6 +225,29 @@ class AppPrefs extends ChangeNotifier {
   /// that reshuffles every visit is one nobody can point at.
   static const String similarSuggestionsKey = 'similarSuggestions';
 
+  /// The `driveLinkedFiles` key: which Google Drive files a pairing has
+  /// linked to this device (see [LinkedDriveFiles]).
+  ///
+  /// Here, and not in the [SecretStore] beside the refresh token, because
+  /// it is not a secret: file ids and filenames are the same kind of thing
+  /// as the library, and a viewer looking at this file learns nothing they
+  /// could use. The token is the secret and it is the only thing kept
+  /// anywhere else. Keeping the list here is also what makes the Drive
+  /// screen cheap to build -- it is already in memory with the rest of the
+  /// preferences, and nothing has to open a keyring to draw a list.
+  static const String driveLinkedFilesKey = 'driveLinkedFiles';
+
+  /// The `driveTokenDead` key: the pairing service has answered
+  /// `pairAgain` for the stored refresh token, and only a fresh pairing
+  /// fixes it (see [DriveLinkState.pairAgain]).
+  ///
+  /// Stored rather than held for the run, so the screen that comes up
+  /// after a restart says "pair again" straight away instead of saying
+  /// "linked" until the first request fails. It is not a secret and it is
+  /// not about a file, so it is a flag here rather than a shape in the
+  /// list above.
+  static const String driveTokenDeadKey = 'driveTokenDead';
+
   bool _streamsSectioned = true;
 
   bool get streamsSectioned => _streamsSectioned;
@@ -291,6 +315,17 @@ class AppPrefs extends ChangeNotifier {
   SimilarMemory _similarSuggestions = SimilarMemory.empty;
 
   SimilarMemory get similarSuggestions => _similarSuggestions;
+
+  /// Which Drive files are linked -- see [driveLinkedFilesKey]. Read
+  /// straight out of memory, so a screen may build from it.
+  LinkedDriveFiles get driveLinkedFiles => _driveLinkedFiles;
+  LinkedDriveFiles _driveLinkedFiles = LinkedDriveFiles.empty;
+
+  /// Whether the stored refresh token has been rejected -- see
+  /// [driveTokenDeadKey]. False on a fresh install, and false again the
+  /// moment a new pairing stores a token.
+  bool get driveTokenDead => _driveTokenDead;
+  bool _driveTokenDead = false;
 
   /// Reads every stored preference. Called once at start-up, before any
   /// screen that reads one can be on the stack, so the first list is
@@ -403,6 +438,16 @@ class AppPrefs extends ChangeNotifier {
     final similar = SimilarMemory.fromJson(stored[similarSuggestionsKey]);
     if (similar != _similarSuggestions) {
       _similarSuggestions = similar;
+      changed = true;
+    }
+    final linked = LinkedDriveFiles.fromJson(stored[driveLinkedFilesKey]);
+    if (linked != _driveLinkedFiles) {
+      _driveLinkedFiles = linked;
+      changed = true;
+    }
+    final tokenDead = stored[driveTokenDeadKey];
+    if (tokenDead is bool && tokenDead != _driveTokenDead) {
+      _driveTokenDead = tokenDead;
       changed = true;
     }
     if (changed) notifyListeners();
@@ -525,6 +570,29 @@ class AppPrefs extends ChangeNotifier {
       similarSuggestionsKey,
       value.entries.isEmpty ? null : value.toJson(),
     );
+  }
+
+  /// Stores which files are linked, or removes the key once nothing is --
+  /// for the same reason [setSubtitleSync] does.
+  ///
+  /// Written by [DriveAccount] and not by a screen: the list and the token
+  /// are two halves of one fact, and letting a screen move one of them
+  /// without the other is how a list of files nothing can open gets
+  /// written.
+  Future<void> setDriveLinkedFiles(LinkedDriveFiles value) async {
+    if (_driveLinkedFiles == value) return;
+    _driveLinkedFiles = value;
+    notifyListeners();
+    await _write(driveLinkedFilesKey, value.isEmpty ? null : value.toJson());
+  }
+
+  /// Records that the refresh token has been rejected, or that a fresh one
+  /// has replaced it. [DriveAccount] again, for the same reason.
+  Future<void> setDriveTokenDead(bool value) async {
+    if (_driveTokenDead == value) return;
+    _driveTokenDead = value;
+    notifyListeners();
+    await _write(driveTokenDeadKey, value ? true : null);
   }
 
   Future<void> _write(String key, Object? value) async {
