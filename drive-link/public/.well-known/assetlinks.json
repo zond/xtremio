@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.zond.xtremio",
+      "sha256_cert_fingerprints": [
+        "3B:8E:C6:7F:C7:AC:4D:9F:12:E4:14:B0:B7:D5:A4:BE:12:EB:6F:4E:FD:0C:69:37:AB:F5:54:92:E1:8E:81:27"
+      ]
+    }
+  }
+]

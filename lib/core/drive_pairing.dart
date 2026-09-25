@@ -54,6 +54,46 @@ import 'package:flutter/foundation.dart';
 /// nothing but a test reads it.
 const String drivePairingHandBackLink = 'stremio:///pair';
 
+/// The pairing session a link carries, or null when [link] is not one of
+/// this app's pairing links.
+///
+/// **This is the second half of the QR, and the reason the phone can pick
+/// more than one file.** The code a television draws is
+/// `https://<origin>/link?s=<session>`, and it has always been a web page.
+/// On a phone that has this app it is now an **App Link** instead: Android
+/// verifies the app against `/.well-known/assetlinks.json` on that origin
+/// and hands the URL here rather than to a browser. Same QR, same television
+/// screen — a phone without the app still gets the page, which is why that
+/// page stays.
+///
+/// It is worth being exact about why this is not the objection recorded in
+/// `DrivePairingScreen`. That one was about `stremio://`, a scheme whose one
+/// meaning is "open that addon's details" and which the platform hands to
+/// anybody. This is an `https` URL on a **domain this project owns and
+/// serves**, claimed by a certificate fingerprint Google checks: nothing
+/// else can send it, and it means one thing.
+///
+/// Strict on every part, because a link is an input from outside: the scheme
+/// must be `https`, the host must be exactly the service's own (no
+/// subdomain, no lookalike), the path must be the link page's, and `s` must
+/// be there and non-empty. Anything else is not a pairing link and is
+/// dropped — the caller treats null as "some other link", never as an error.
+String? drivePairingSessionOfLink(
+  String link, {
+  String origin = XtremioDrivePairingService.defaultOrigin,
+}) {
+  final url = Uri.tryParse(link);
+  final home = Uri.tryParse(origin);
+  if (url == null || home == null) return null;
+  if (url.scheme != 'https' || url.host != home.host) return null;
+  // `cleanUrls` on the hosting side serves the page at both spellings, and a
+  // QR read by a camera can arrive as either.
+  if (url.path != '/link' && url.path != '/link.html') return null;
+  final session = url.queryParameters['s'];
+  if (session == null || session.isEmpty) return null;
+  return session;
+}
+
 /// One file as the pairing service names it: what the viewer picked, before
 /// this device has written anything down about it.
 ///
@@ -295,6 +335,48 @@ abstract interface class DrivePairingService {
   /// **Deletes the session** when it answers [DrivePairingCollected]. Call
   /// it once per session at a time and never again after that answer.
   Future<DrivePairingAnswer> collect(String sessionId);
+
+  /// Hands a **native** pick to a waiting session: `POST /session/{id}/android`.
+  ///
+  /// The phone's half of the App Link flow, and the one call the browser
+  /// never makes. A browser signs in and picks in two steps, so the service
+  /// learns them separately; a phone doing both natively has them in the
+  /// same instant, so this carries both and takes the session from waiting
+  /// to ready in one go.
+  ///
+  /// [serverAuthCode] is a **credential** and belongs in no log line and on
+  /// no screen. It is a one-time code issued for the *web* client, because
+  /// that is the client the television's token belongs to: a `drive.file`
+  /// grant is recorded against a user and a client, so a pick recorded
+  /// against this app's Android client would grant the television nothing.
+  ///
+  /// Only ids are sent. The service reads the names itself with the
+  /// credential it just minted, because a name is drawn on a television and
+  /// matched against a catalogue, and is not a thing a client should be able
+  /// to invent about somebody else's Drive.
+  Future<DrivePairingHandover> handOverNativePick({
+    required String sessionId,
+    required String serverAuthCode,
+    required List<String> fileIds,
+  });
+}
+
+/// What became of a [DrivePairingService.handOverNativePick].
+enum DrivePairingHandover {
+  /// The session has it, and the television will collect it on its next poll.
+  taken,
+
+  /// The session is not there, or is no longer waiting for this — a code
+  /// that timed out, or one already used. A fresh QR is the way on.
+  gone,
+
+  /// Google refused the code, or the grant it minted could not read the
+  /// files that were picked. The second is the interesting one and the
+  /// service says which, but to a viewer both mean "that did not work".
+  refused,
+
+  /// Nothing was reached. Worth retrying; nothing has been spent.
+  unreachable,
 }
 
 /// [DrivePairingService] over the deployed service.
@@ -342,6 +424,45 @@ class XtremioDrivePairingService implements DrivePairingService {
       // exception's own text is not it: a DNS failure and a refused
       // connection are the same problem from an armchair.
       return const DrivePairingUnavailable(notReached);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  @override
+  @override
+  Future<DrivePairingHandover> handOverNativePick({
+    required String sessionId,
+    required String serverAuthCode,
+    required List<String> fileIds,
+  }) async {
+    final client = HttpClient()..connectionTimeout = timeout;
+    try {
+      final answer = await _send(
+        client,
+        'POST',
+        Uri.parse('$origin/session/$sessionId/android'),
+        body: {'serverAuthCode': serverAuthCode, 'fileIds': fileIds},
+      ).timeout(timeout);
+      final status = answer.statusCode;
+      await answer.drain<void>();
+      return switch (status) {
+        HttpStatus.ok => DrivePairingHandover.taken,
+        // Not there, not waiting any more, or its ten minutes are up: all
+        // three mean this session cannot be given anything, and all three
+        // are answered by a fresh code rather than by trying again.
+        HttpStatus.notFound ||
+        HttpStatus.conflict ||
+        HttpStatus.gone => DrivePairingHandover.gone,
+        // `502` is Google refusing the code or the grant not reaching the
+        // files; `400` is this app sending something malformed, which is a
+        // bug rather than a retry.
+        HttpStatus.badGateway ||
+        HttpStatus.badRequest => DrivePairingHandover.refused,
+        _ => DrivePairingHandover.unreachable,
+      };
+    } on Object {
+      return DrivePairingHandover.unreachable;
     } finally {
       client.close(force: true);
     }

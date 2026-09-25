@@ -370,6 +370,119 @@ app.get('/session/:id', async (req, res) => {
  * being read at minute sixty-one need a token nobody could mint without
  * the client secret.
  */
+/**
+ * 5b. A phone running *this app* says who signed in and what they picked, in
+ * one call.
+ *
+ * The browser flow needs two ([oauth/callback] then `/session/:id/files`)
+ * because a redirect carries the sign-in and a later fetch carries the
+ * picking. A phone doing both natively has them at the same instant, so this
+ * takes a session straight from `pending` to `ready`.
+ *
+ * **Why this exists at all.** The Google Picker cannot select more than one
+ * file on a phone -- it gates selection on a Ctrl/Cmd key
+ * (issuetracker.google.com/issues/334994030, open since 2024) -- while the
+ * native Android picker can, measured at seven files in one go. So a phone
+ * with this app installed picks natively and posts here; a phone without one
+ * still gets the web page, which is why that page and `/session/:id/files`
+ * stay exactly as they are.
+ *
+ * **The code is a *server* auth code**, issued for this web client because
+ * the app asked for offline access naming it. That matters beyond the
+ * exchange: a `drive.file` grant belongs to a user *and a client*, and the
+ * television reads with this client's token -- so a pick recorded against
+ * the Android client would grant the television nothing. Naming the web
+ * client is what puts the grant where it can be used.
+ *
+ * **The picker returns ids and nothing else**, so the names are fetched here
+ * rather than trusted from the phone: the television draws them, matches
+ * them against Cinemeta and shows them to somebody, and a name is not a
+ * thing a client should be able to make up about somebody else's Drive.
+ */
+app.post('/session/:id/android', async (req, res) => {
+  const {serverAuthCode} = req.body || {};
+  const fileIds = (req.body || {}).fileIds;
+  if (!serverAuthCode || typeof serverAuthCode !== 'string') {
+    return res.status(400).json({error: 'no serverAuthCode'});
+  }
+  if (!Array.isArray(fileIds) || fileIds.length === 0) {
+    return res.status(400).json({error: 'no fileIds'});
+  }
+  if (fileIds.length > MAX_FILES) {
+    return res.status(400).json({error: `more than ${MAX_FILES} files`});
+  }
+  const ref = db.collection('sessions').doc(req.params.id);
+  const session = await ref.get();
+  if (!session.exists) return res.status(404).json({error: 'no session'});
+  if (session.data().status !== 'pending') {
+    return res.status(409).json({error: `session is ${session.data().status}`});
+  }
+  if (session.data().expiresAt.toDate() < new Date()) {
+    return res.status(410).json({error: 'expired'});
+  }
+
+  // No `redirect_uri`: a server auth code from an installed app was not
+  // issued against one, and sending a redirect the code never saw is what
+  // `redirect_uri_mismatch` means.
+  const token = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams({
+      code: serverAuthCode,
+      client_id: CLIENT_ID.value(),
+      client_secret: CLIENT_SECRET.value(),
+      grant_type: 'authorization_code',
+    }),
+  });
+  const granted = await token.json();
+  if (!token.ok) {
+    return res.status(502).json({error: `google refused the code`,
+      googleSaid: granted.error || null});
+  }
+  // A code minted without `forceCodeForRefreshToken` exchanges without one,
+  // and a television cannot keep a session alive on an access token that
+  // dies within the hour. Better a refusal here than a pairing that works
+  // for fifty minutes.
+  if (!granted.refresh_token) {
+    return res.status(502).json({error: 'no refresh token in the exchange'});
+  }
+
+  const files = [];
+  for (const fileId of fileIds) {
+    if (typeof fileId !== 'string' || !fileId) continue;
+    const read = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}` +
+        '?fields=id,name,mimeType',
+        {headers: {Authorization: `Bearer ${granted.access_token}`}});
+    if (!read.ok) {
+      // The one failure worth naming: the grant did not reach this client,
+      // so the television would be handed ids it cannot open. Refuse the
+      // whole pairing rather than write half of one.
+      return res.status(502).json({
+        error: 'the grant does not reach this client',
+        fileId,
+        readStatus: read.status,
+      });
+    }
+    const file = await read.json();
+    files.push({
+      fileId: file.id || fileId,
+      name: typeof file.name === 'string' ? file.name : fileId,
+      mimeType: typeof file.mimeType === 'string' ? file.mimeType : '',
+    });
+  }
+  if (files.length === 0) return res.status(400).json({error: 'no fileIds'});
+
+  await ref.update({
+    status: 'ready',
+    refreshToken: granted.refresh_token,
+    accessToken: granted.access_token,
+    accessExpiresAt: new Date(Date.now() + (granted.expires_in ?? 3600) * 1000),
+    files,
+  });
+  res.json({ok: true, files: files.length});
+});
+
 app.post('/refresh', async (req, res) => {
   const refreshToken = (req.body || {}).refreshToken;
   if (!refreshToken) return res.status(400).json({error: 'no refreshToken'});

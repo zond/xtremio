@@ -46,6 +46,13 @@ class MainActivity : FlutterActivity() {
      */
     private var displayRefreshRates: DisplayRefreshRates? = null
 
+    /**
+     * The native Drive picker's side of the conversation, alive for as long
+     * as the engine is. Held because its result arrives through
+     * [onActivityResult], which is the activity's and not a channel's.
+     */
+    private var drivePicker: DrivePicker? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before the Flutter engine starts Dart: RustLib.init() may
         // issue HTTPS requests right away.
@@ -118,6 +125,9 @@ class MainActivity : FlutterActivity() {
         // that would go nowhere.
         downloads = DownloadsChannel(this, flutterEngine.dartExecutor.binaryMessenger)
             .apply { pendingOpen = opensDownloads(intent) }
+        // The native Drive picker (lib/core/drive_native_pick.dart), which is
+        // the only picker on a phone that can choose more than one file.
+        drivePicker = DrivePicker(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -416,6 +426,9 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        // The picker answers its own request code and says so, which is what
+        // keeps two unrelated results from reading each other's data.
+        if (drivePicker?.onActivityResult(requestCode, data) == true) return
         if (requestCode != REQUEST_TEXT_ENTRY) return
         val pending = textEntry ?: return
         textEntry = null
@@ -444,6 +457,8 @@ class MainActivity : FlutterActivity() {
         downloads = null
         displayRefreshRates?.detach()
         displayRefreshRates = null
+        drivePicker?.detach()
+        drivePicker = null
         textEntry = null
         super.onDestroy()
     }

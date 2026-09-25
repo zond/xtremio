@@ -94,6 +94,44 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="stremio"/>
             </intent-filter>
+            <!-- The Drive pairing link a television draws as a QR, which on
+                 a phone that has this app opens the app instead of a
+                 browser. Same QR either way: a phone without the app still
+                 gets the web page, and that page is still the only thing a
+                 desktop or an unverified phone ever sees.
+
+                 android:autoVerify, unlike the filter above, because this
+                 host is *ours*: Android fetches
+                 https://xtremio-drive.web.app/.well-known/assetlinks.json
+                 and opens the app only if it names this package and this
+                 signing certificate. That is why it can be an https link at
+                 all — the stremio:// filter above cannot verify anything,
+                 because the host in those URLs is the addon author's.
+
+                 It matters for what this is *for*: the app picks Drive
+                 files with Android's native picker, which can select more
+                 than one, while the web Google Picker on a phone cannot
+                 (issuetracker.google.com/issues/334994030).
+
+                 Verification is per signing certificate, so a build signed
+                 with a different key will not claim these links — it will
+                 fall back to the browser, which is a degradation and not a
+                 breakage. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                  android:scheme="https"
+                  android:host="xtremio-drive.web.app"
+                  android:path="/link"
+                  />
+                <data
+                  android:scheme="https"
+                  android:host="xtremio-drive.web.app"
+                  android:path="/link.html"
+                  />
+            </intent-filter>
         </activity>
         <!-- The screen a remote types on (TextEntryActivity.kt), opened for
              the `editText` call on the xtremio/device channel and by nothing

@@ -77,6 +77,13 @@ dependencies {
     // naming it here adds nothing to the APK -- it only reaches our own
     // compile classpath.
     implementation("com.google.android.gms:play-services-cast:21.5.0")
+    // Google Identity Services, for the *native* Drive picker
+    // (DrivePicker.kt). The web Google Picker cannot select more than one
+    // file on a phone -- it gates selection on a Ctrl/Cmd key
+    // (issuetracker.google.com/issues/334994030) -- and this one can.
+    // `AuthorizationRequest.ResourceParameter`, which is what carries the
+    // picker trigger, exists from 21.6.0 onward, so that is the floor.
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
     // Plain JVM tests, for the Kotlin that has no Android in it.
     testImplementation("junit:junit:4.13.2")
 }

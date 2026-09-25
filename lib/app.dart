@@ -15,6 +15,7 @@ import 'features/player/playback_engine.dart';
 import 'features/player/player_screen.dart';
 import 'features/diagnostics/diagnostics_trace.dart';
 import 'features/sharing/idle_sharing.dart';
+import 'features/drive/drive_native_pair_screen.dart';
 import 'features/sharing/sharing_activity.dart';
 import 'shell/deep_link.dart';
 import 'shell/device_profile.dart';
@@ -342,10 +343,48 @@ class _XtremioAppState extends State<XtremioApp> {
     if (kDebugMode) debugPrint('deep links unavailable: $error');
   }
 
+  /// A link the platform handed over. Two shapes reach this app and they
+  /// are told apart by [drivePairingSessionOfLink] first, because it is the
+  /// stricter test: an `https` URL on **this project's own domain**, claimed
+  /// through `assetlinks.json` and a signing certificate Google checks.
+  /// Everything else falls through to the `stremio://` reading below.
+  void _onDeepLink(String link) {
+    final session = drivePairingSessionOfLink(link);
+    if (session != null) {
+      _openDrivePairing(session);
+      return;
+    }
+    _onAddonDeepLink(link);
+  }
+
+  /// The Drive pairing a television is waiting on, picked natively because
+  /// this phone has the app — see [DriveNativePairScreen]. Pushed rather
+  /// than replacing anything: the viewer came from their camera and will go
+  /// back to their television, so what was on screen before should still be
+  /// there afterwards.
+  void _openDrivePairing(String session, {bool retry = true}) {
+    final navigator = _navigator.currentState;
+    if (navigator == null) {
+      // A link the app was *launched* with arrives before the first build,
+      // which is the ordinary case here: the camera opened the app.
+      if (retry) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _openDrivePairing(session, retry: false),
+        );
+      }
+      return;
+    }
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => DriveNativePairScreen(sessionId: session),
+      ),
+    );
+  }
+
   /// A `stremio://` link: the manifest URL in it opens that addon's details
   /// screen. Nothing is installed — that stays a press on the Install button
   /// there, so a link cannot add an addon behind the user's back.
-  void _onDeepLink(String link) {
+  void _onAddonDeepLink(String link) {
     final transportUrl = deepLinkAddonManifestUrl(link);
     if (transportUrl == null) {
       // The URL itself is not logged: an addon's manifest URL can carry the

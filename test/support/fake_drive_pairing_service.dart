@@ -64,6 +64,27 @@ class FakeDrivePairingService implements DrivePairingService {
     return openings.removeAt(0);
   }
 
+  /// Every native hand-over, by session and how many ids came with it.
+  /// **Never the code**: a fake that recorded a credential would be the one
+  /// place in the suite where one is kept, and a test that asserts on a code
+  /// is a test that would have to hold one.
+  final List<({String sessionId, int files})> handovers = [];
+
+  /// What [handOverNativePick] answers, in order; the last stands.
+  List<DrivePairingHandover> handoverAnswers = [DrivePairingHandover.taken];
+
+  @override
+  Future<DrivePairingHandover> handOverNativePick({
+    required String sessionId,
+    required String serverAuthCode,
+    required List<String> fileIds,
+  }) async {
+    handovers.add((sessionId: sessionId, files: fileIds.length));
+    return handoverAnswers.length > 1
+        ? handoverAnswers.removeAt(0)
+        : handoverAnswers.first;
+  }
+
   @override
   Future<DrivePairingAnswer> collect(String sessionId) async {
     collects.add(sessionId);

@@ -14,6 +14,7 @@ import 'package:xtremio/features/diagnostics/diagnostics_screen.dart';
 import 'package:xtremio/features/diagnostics/server_storage_screen.dart';
 import 'package:xtremio/features/discover/discover_screen.dart';
 import 'package:xtremio/features/downloads/downloads_screen.dart';
+import 'package:xtremio/features/drive/drive_native_pair_screen.dart';
 import 'package:xtremio/features/drive/drive_pairing_screen.dart';
 import 'package:xtremio/features/drive/remote_files.dart';
 import 'package:xtremio/features/library/library_screen.dart';
@@ -627,6 +628,28 @@ void main() {
         await walkEveryStop(tester, stops: 8);
       },
     ),
+    walk('drive_native_pair_screen.dart', 'the phone\'s half of a pairing', (
+      tester,
+    ) async {
+      // The other end of the same QR: a phone that has this app is handed
+      // the link Android verified, and picks natively rather than in a
+      // browser -- the web Google Picker cannot take more than one file on
+      // a phone. Walked with the picker unavailable, which is the state
+      // that draws both stops (Try again, Done) rather than a spinner.
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        onTv(
+          DriveNativePairScreen(
+            sessionId: 'session-1',
+            picker: const _NoNativePicker(),
+            service: FakeDrivePairingService(),
+          ),
+          pushed: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await walkEveryStop(tester);
+    }),
     walk('search_screen.dart', 'Search', (tester) async {
       useScreen(tester, tvSize);
       await tester.pumpWidget(
@@ -1256,6 +1279,33 @@ void main() {
       await tester.pumpAndSettle();
       return pushes;
     }),
+    // The phone's half of a Drive pairing, which opens nothing of this
+    // app's: the picker it drives is a window the platform puts up, and the
+    // only routing here is Done popping back. Walked with the picker saying
+    // it is not available, because that is the state with both stops on
+    // screen at once -- Try again and Done.
+    claim('drive_native_pair_screen.dart', 'a Drive pairing on a phone', (
+      tester,
+    ) async {
+      final pushes = Pushed();
+      useScreen(tester, tvSize);
+      await tester.pumpWidget(
+        CoreScope(
+          client: fullCore(),
+          child: onTv(
+            DriveNativePairScreen(
+              sessionId: 'session-1',
+              picker: const _NoNativePicker(),
+              service: FakeDrivePairingService(),
+            ),
+            pushed: true,
+            pushes: pushes,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return pushes;
+    }),
     // The same shape: every action here reports through a snack bar.
     claim('diagnostics_screen.dart', 'Diagnostics', (tester) async {
       final pushes = Pushed();
@@ -1576,4 +1626,17 @@ class _StuckCache implements ServerCacheControl {
   Future<Map<String, dynamic>> updateSettings(
     Map<String, dynamic> patch,
   ) async => throw StateError('server not running');
+}
+
+/// A picker that says this device has none, which is the answer on every
+/// device this suite runs on and the state that draws both stops.
+class _NoNativePicker implements DriveNativePicker {
+  const _NoNativePicker();
+
+  @override
+  Future<bool> available() async => false;
+
+  @override
+  Future<DriveNativePickResult> pick() async =>
+      const DriveNativePickUnavailable();
 }

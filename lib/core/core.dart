@@ -13,6 +13,7 @@ export 'downloads_client.dart';
 export 'drive_account.dart';
 export 'drive_link.dart';
 export 'drive_listing.dart';
+export 'drive_native_pick.dart';
 export 'drive_pairing.dart';
 export 'drive_playback.dart';
 export 'drive_source.dart';
