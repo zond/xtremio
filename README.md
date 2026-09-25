@@ -92,14 +92,9 @@ attaches them to a
 build comes from. Nothing is tagged yet, so until the first one that page is
 empty and building it yourself is the only way. One thing about those builds
 is worth knowing before installing, and the release notes say it: the macOS
-build is unsigned.
-
-The Android builds are signed with the project's own release key. An APK
-built here and one downloaded from a release can therefore update each
-other, which an APK signed with the Flutter template's debug key could not --
-Android reads a signing certificate as the app's identity, so a change of key
-is a different app to it and an install over the old one is refused. Anyone
-who installed a build from before that change has to uninstall once.
+build is unsigned. The APKs carry this project's own release key, so anyone
+who installed one from before that key must uninstall first: to Android, a
+signing certificate *is* the app's identity.
 
 ```bash
 flutter pub get
