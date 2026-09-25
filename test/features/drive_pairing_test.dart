@@ -351,6 +351,64 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('backing out of the picker leaves a way back in, not a dead '
+        'end', (tester) async {
+      // No QR, no page, and a session that is still perfectly good. Before
+      // this the screen said it was "waiting for your phone" -- no phone was
+      // ever involved -- and offered nothing to press.
+      final picker = _FakeNativePicker(const DriveNativePickCancelled());
+      final service = FakeDrivePairingService();
+      await tester.pumpWidget(
+        _harness(
+          isTv: false,
+          service: service,
+          account: await _account(),
+          picker: picker,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(DrivePairingScreen.waitingMessage), findsNothing);
+      expect(
+        find.text(DrivePairingScreen.nothingChosenMessage),
+        findsOneWidget,
+      );
+      expect(find.text(DrivePairingScreen.chooseFilesLabel), findsOneWidget);
+
+      await tester.tap(find.text(DrivePairingScreen.chooseFilesLabel));
+      await tester.pumpAndSettle();
+      expect(picker.picks, 2, reason: 'the same session, picked again');
+      expect(service.opens, 1, reason: 'and no second code asked for');
+    });
+
+    testWidgets('and the ten minutes is said only where a code is waiting', (
+      tester,
+    ) async {
+      // It is about a code somebody still has to do something with. A device
+      // picking in place is not racing a clock it can see.
+      await tester.pumpWidget(
+        _harness(
+          isTv: false,
+          service: FakeDrivePairingService(),
+          account: await _account(),
+          picker: _FakeNativePicker(const DriveNativePickCancelled()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(DrivePairingScreen.windowMessage), findsNothing);
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(
+        _harness(
+          isTv: true,
+          service: FakeDrivePairingService(),
+          account: await _account(),
+        ),
+      );
+      await tester.pump();
+      expect(find.text(DrivePairingScreen.windowMessage), findsOneWidget);
+    });
+
     testWidgets('and a phone with no native picker opens the page, as every '
         'phone did before', (tester) async {
       final opener = FakeLinkOpener();

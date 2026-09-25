@@ -205,6 +205,14 @@ class DrivePairingScreen extends StatefulWidget {
       'opened and pick what you want to play — you can pick more than one '
       'file. This screen is watching for it.';
   static const String windowMessage = 'This lasts about ten minutes.';
+
+  /// What a device that picks in place says when the picker closed with
+  /// nothing chosen. Not "waiting for your phone": no phone is involved and
+  /// nothing is being waited for -- the viewer backed out, which is a thing
+  /// they are allowed to do, so this says what to press to go back in.
+  static const String nothingChosenMessage =
+      'Nothing chosen yet. Open Google Drive to pick what to play.';
+  static const String chooseFilesLabel = 'Choose files';
   static const String expiredMessage =
       'That code has expired before anybody '
       'finished with it.';
@@ -448,6 +456,17 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
           await openInBrowser(context, session.link);
         }
     }
+  }
+
+  /// Opens the picker again on a session that is still good.
+  ///
+  /// Not a fresh session: the one this screen holds is still open, still
+  /// polled and still inside its ten minutes, and asking for another would
+  /// spend a call the service rate-limits to buy nothing.
+  Future<void> _pickAgain() async {
+    final session = _session;
+    if (session == null || _picking != _Picking.no) return;
+    await _pickHere(session);
   }
 
   /// Picks on *this* device, and whether that happened.
@@ -747,6 +766,16 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
           // has done their part, the app is talking to Google about every
           // file they chose, and a line of text that does not move reads as
           // stuck. It is: a season of twelve is twelve files to ask about.
+          // Backing out of the picker used to leave this screen with no QR,
+          // no page, nothing to press and a line saying it was waiting for a
+          // phone that was never involved. The session is still open and
+          // still good, so the honest offer is the picker again.
+          if (!isTv && !_openedBrowser && _picking == _Picking.no)
+            FilledButton.icon(
+              onPressed: () => unawaited(_pickAgain()),
+              icon: const Icon(Icons.folder_open),
+              label: const Text(DrivePairingScreen.chooseFilesLabel),
+            ),
           if (_picking != _Picking.no) ...[
             const SizedBox(height: 8),
             const SizedBox.square(
@@ -761,9 +790,17 @@ class _DrivePairingScreenState extends State<DrivePairingScreen> {
             _Picking.no =>
               _signedIn
                   ? DrivePairingScreen.signedInMessage
+                  : !isTv && !_openedBrowser
+                  ? DrivePairingScreen.nothingChosenMessage
                   : DrivePairingScreen.waitingMessage,
           }, theme: theme),
-          _Line(DrivePairingScreen.windowMessage, theme: theme, quiet: true),
+          // Only where there is a code somebody still has to do something
+          // with: a QR on a television, or a page opened in a browser. A
+          // device picking in place is not racing a clock it can see, and
+          // the line reads as one more thing about a code that is not on
+          // screen.
+          if (isTv || _openedBrowser)
+            _Line(DrivePairingScreen.windowMessage, theme: theme, quiet: true),
         ];
       case _Stage.linked:
         // Looked up in the account rather than drawn from what came back:
