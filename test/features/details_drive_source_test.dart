@@ -144,11 +144,13 @@ void main() {
     String id = 'file-1',
     String name = driveFileName,
     LinkedDriveMatch? match,
+    int? height,
   }) => LinkedDriveFile(
     fileId: id,
     name: name,
     mimeType: 'video/x-matroska',
     linkedAt: DateTime.utc(2026, 9, 20),
+    height: height,
     match: match,
   );
 
@@ -666,6 +668,58 @@ void main() {
         reason:
             'the derivation is keyed on the files by value, so a match '
             'landing is a change it notices',
+      );
+    });
+  });
+
+  group('what Drive measured decides the section', () {
+    // A Drive row is the only row in the app that knows how tall its video
+    // actually is, because Drive measures an upload once it has processed
+    // it. `driveFileName` claims 1080p; these files are measured otherwise.
+    testWidgets('so a file measured at 720 sits under 720p, and not in the '
+        '1080p section its name asks for', (tester) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(
+        harness(
+          coreWith(oneAddon()),
+          drive: await pairedWith([file(match: movieMatch, height: 720)]),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The addon's own 1080p release is what holds that section open, so
+      // the section exists either way and its being the wrong home for the
+      // Drive file is the thing under test -- not whether it is drawn.
+      await toggleSection(tester, StreamResolution.fhd1080);
+      expect(
+        find.text(driveRelease),
+        findsNothing,
+        reason: 'the name said 1080p and the file is not 1080p',
+      );
+
+      await toggleSection(tester, StreamResolution.hd720);
+      expect(find.text(driveRelease), findsOneWidget);
+      // And the pill agrees with the section, because both read the one
+      // fact: a viewer can see what the sorting used.
+      expect(rowTexts(tester, driveRelease), contains('720p'));
+    });
+
+    testWidgets('and a file Drive never measured is read from its name, as '
+        'every other row is', (tester) async {
+      useWideViewport(tester);
+      await tester.pumpWidget(
+        harness(
+          coreWith(oneAddon()),
+          drive: await pairedWith([file(match: movieMatch)]),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await toggleSection(tester, StreamResolution.fhd1080);
+      expect(
+        find.text(driveRelease),
+        findsOneWidget,
+        reason: 'no measurement is the ordinary case, not a broken one',
       );
     });
   });

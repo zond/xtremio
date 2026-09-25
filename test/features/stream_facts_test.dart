@@ -1614,6 +1614,68 @@ void recordedAddonAnswers() {
       expect(withSwedish, ['torrentio']);
     });
   });
+
+  group('a measurement beats a name', () {
+    // Only a linked Google Drive file arrives with one: Drive measures an
+    // upload once it has processed it. Every other row in the app is read
+    // from a name, which is a claim rather than a measurement -- and a
+    // release called 1080p is frequently a 720p upscale somebody relabelled.
+    StreamInfo named(String name) => StreamInfo({'url': 'x', 'name': name});
+
+    test('so a file measured at 1080 is 1080p however loudly it is named '
+        '2160p', () {
+      final claimed = StreamFacts.of(named('A Film 2160p x265.mkv'));
+      expect(claimed.resolution, StreamResolution.uhd2160);
+
+      final measured = StreamFacts.of(
+        named('A Film 2160p x265.mkv'),
+        measuredHeight: 1080,
+      );
+      expect(measured.resolution, StreamResolution.fhd1080);
+      // And the pill says what the sectioning used, which is the whole
+      // reason the pills draw parsed values rather than the raw words.
+      expect(measured.resolutionLabel, '1080p');
+    });
+
+    test('and a measurement no rung reaches is unknown, not the name', () {
+      // 200 is below the bottom rung (240). The honest answer is "we
+      // measured it and it is none of these", not "well, the name said
+      // 720p" -- the name has already been shown to be wrong about this
+      // very file.
+      final measured = StreamFacts.of(
+        named('Holiday 720p.mp4'),
+        measuredHeight: 200,
+      );
+      expect(measured.resolution, isNull);
+    });
+
+    test('a height Drive never measured leaves the name to say', () {
+      // The ordinary case: `videoMediaMetadata` is absent far more often
+      // than it is wrong, so a row with no measurement must read exactly
+      // as every addon's row does.
+      expect(
+        StreamFacts.of(
+          named('A Film 720p.mkv'),
+          measuredHeight: null,
+        ).resolution,
+        StreamResolution.hd720,
+      );
+    });
+
+    test('a measurement exactly on a rung is that rung, and one just over '
+        'it does not climb', () {
+      // 1088 is a mod-16 1080p encode and must not read as 1440p; 1440
+      // itself must not read as 1080p.
+      expect(
+        StreamFacts.of(named('x'), measuredHeight: 1088).resolution,
+        StreamResolution.fhd1080,
+      );
+      expect(
+        StreamFacts.of(named('x'), measuredHeight: 1440).resolution,
+        StreamResolution.qhd1440,
+      );
+    });
+  });
 }
 
 /// [text] cut into words the way the parser cuts it: runs of letters and

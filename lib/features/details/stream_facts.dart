@@ -119,7 +119,25 @@ final class StreamFacts {
   /// Reads [stream]. [addonName] is the label the list should show, which
   /// the stream itself never carries — it comes from the profile, or from
   /// the host of the manifest URL it was asked at.
-  factory StreamFacts.of(StreamInfo stream, {String? addonName}) {
+  ///
+  /// [measuredHeight] is the video's height in pixels as something that
+  /// **opened the file** reports it, rather than as its name claims. Only a
+  /// linked Google Drive file has one (Drive measures an upload once it has
+  /// processed it), and when it is there it **decides** the resolution: a
+  /// measurement beats a name, because a name is a claim and a file called
+  /// `1080p` is frequently a 720p upscale. That includes deciding there is
+  /// no rung at all — a file measured shorter than the bottom rung (240)
+  /// belongs under "Unknown resolution" and not under whatever its name
+  /// boasts.
+  ///
+  /// It is already normalised where it is read (`drive_listing.dart` stores
+  /// a height Drive gave as zero or less as *no* height), so there is one
+  /// place that decides what "not measured" means and it is not this one.
+  factory StreamFacts.of(
+    StreamInfo stream, {
+    String? addonName,
+    int? measuredHeight,
+  }) {
     final hints = stream.behaviorHints;
     final releaseTag = hints['bingeGroup'] as String?;
     final filename = stream.filename;
@@ -132,7 +150,9 @@ final class StreamFacts {
     final all = ranked.join('\n');
     final spoken = _parseLanguages(description);
     return StreamFacts(
-      resolution: _firstResolution(ranked),
+      resolution: measuredHeight == null
+          ? _firstResolution(ranked)
+          : StreamResolution.forHeight(measuredHeight),
       sizeBytes: _videoSize(hints['videoSize']) ?? _parseSize(all),
       seeders: _parseSeeders(all),
       tags: _parseTags(all),

@@ -2712,13 +2712,24 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// `addonName` is [driveSourceLabel]: that slot is "where this row came
   /// from", which is the sectioned layout's provenance line and the grouped
   /// layout's heading, and `Google Drive` is the true answer to it.
+  ///
+  /// The one thing a Drive row knows that no addon's row does is how tall
+  /// the video actually is: Drive measures an upload once it has processed
+  /// it, and [LinkedDriveFile.height] is that measurement. Where it exists
+  /// it decides the section and the pill, over anything the name claims —
+  /// see [StreamFacts.of]. Where it does not, which is the ordinary case,
+  /// the name is read exactly as every other row's is.
   static _SourceRow _driveRow(LinkedDriveFile file) {
     final stream = driveSourceStream(file);
     return (
       group: null,
       drive: file,
       stream: stream,
-      facts: StreamFacts.of(stream, addonName: driveSourceLabel),
+      facts: StreamFacts.of(
+        stream,
+        addonName: driveSourceLabel,
+        measuredHeight: file.height,
+      ),
       alsoFrom: const <String>[],
     );
   }
