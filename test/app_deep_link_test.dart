@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/app.dart';
 import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/addons/addon_details_screen.dart';
+import 'package:xtremio/features/drive/drive_native_pair_screen.dart';
 import 'package:xtremio/features/drive/drive_pairing_screen.dart';
 
 import 'support/fake_core_client.dart';
@@ -150,6 +151,41 @@ void main() {
     expect(find.byType(AddonDetailsScreen), findsNothing);
     expect(detailsActions(core), isEmpty);
     expect(find.byType(DrivePairingScreen), findsNothing);
+  });
+
+  testWidgets('a pairing link handed over twice opens one pairing screen', (
+    tester,
+  ) async {
+    // `app_links` delivers the launch link both as the initial link and on
+    // the stream, and can replay it as the picker hands back. A second
+    // screen's pick found the first's still open and failed with "A pick is
+    // already on screen", over a first pick that had worked.
+    const pairing = '${XtremioDrivePairingService.defaultOrigin}/link?s=abc123';
+    // Pumped by the clock rather than settled: the pairing screen's
+    // spinner turns until a picker answers, and there is none here.
+    final links = FakeDeepLinks(initial: pairing);
+    final downloads = FakeDownloadsClient();
+    addTearDown(downloads.dispose);
+    await tester.pumpWidget(
+      XtremioApp(
+        core: fakeCore(),
+        deepLinks: links,
+        downloads: downloads,
+        sharingActivity: FakeSharingActivity(),
+      ),
+    );
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    links.send(pairing);
+    await tester.pump(const Duration(seconds: 1));
+    links.send(pairing);
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(
+      find.byType(DriveNativePairScreen, skipOffstage: false),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a second link replaces the details screen instead of '

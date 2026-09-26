@@ -331,6 +331,10 @@ class _XtremioAppState extends State<XtremioApp> {
     }
   }
 
+  /// The pairing sessions a screen has been opened for this run: see
+  /// [_openDrivePairing].
+  final Set<String> _drivePairingsOpened = {};
+
   void _onDeepLinkError(Object error) {
     if (kDebugMode) debugPrint('deep links unavailable: $error');
   }
@@ -354,7 +358,18 @@ class _XtremioAppState extends State<XtremioApp> {
   /// than replacing anything: the viewer came from their camera and will go
   /// back to their television, so what was on screen before should still be
   /// there afterwards.
+  ///
+  /// **Once per session, per run.** `app_links` hands the same link over
+  /// more than once -- the launch link comes both as [DeepLinkSource.initialLink]
+  /// and as the stream's first event, and a link can be replayed as the
+  /// picker's activity hands back to this one. An addon link landing twice
+  /// is a no-op; a pairing link landing twice pushed a second screen over
+  /// the first, whose pick found the first's still open and failed with
+  /// "A pick is already on screen" -- over a first pick that had worked. A
+  /// session is single-use on the service's side as well, so a link for one
+  /// already opened is never worth a second screen.
   void _openDrivePairing(String session, {bool retry = true}) {
+    if (_drivePairingsOpened.contains(session)) return;
     final navigator = _navigator.currentState;
     if (navigator == null) {
       // A link the app was *launched* with arrives before the first build,
@@ -366,6 +381,7 @@ class _XtremioAppState extends State<XtremioApp> {
       }
       return;
     }
+    _drivePairingsOpened.add(session);
     navigator.push(
       MaterialPageRoute<void>(
         builder: (_) => DriveNativePairScreen(sessionId: session),
