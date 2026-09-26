@@ -428,13 +428,15 @@ void main() {
   });
 
   group('the library', () {
-    testWidgets('gets the title, so offline progress is recorded', (
+    testWidgets('a title with no stored item gets one, so offline progress '
+        'is recorded -- added and removed, so it is not in the library', (
       tester,
     ) async {
       useWideViewport(tester);
-      final core = FakeCoreClient(
-        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
-      );
+      // What details draws for a title the bucket does not hold: a
+      // synthesized removed item with no progress.
+      final fixture = loadMetaDetailsFixture();
+      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
       final downloads = FakeDownloadsClient();
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(core, downloads));
@@ -443,10 +445,38 @@ void main() {
       await tester.tap(find.byTooltip(kDownloadTooltip));
       await tester.pumpAndSettle();
 
+      final last = core.dispatched.reversed.take(2).toList().reversed;
       expect(
-        core.dispatched.last.action,
-        CoreActions.addToLibrary(movieMeta()).action,
+        [for (final action in last) action.action],
+        [
+          CoreActions.addToLibrary(movieMeta()).action,
+          CoreActions.removeFromLibrary(
+            MetaDetailsState.fromJson(fixture).meta!.id,
+          ).action,
+        ],
       );
+    });
+
+    testWidgets('a title with progress is left alone: its item is a stored '
+        'one, and rewriting it would take it off Continue Watching', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final fixture = loadMetaDetailsFixture();
+      final item = fixture['libraryItem'] as Map<String, dynamic>;
+      (item['state'] as Map<String, dynamic>)['timeOffset'] = 60000;
+      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+      final before = core.dispatched.length;
+
+      await tester.tap(find.byTooltip(kDownloadTooltip));
+      await tester.pumpAndSettle();
+
+      expect(downloads.added, hasLength(1));
+      expect(core.dispatched, hasLength(before));
     });
 
     testWidgets('is left alone when the title is already in it', (

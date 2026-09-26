@@ -49,6 +49,46 @@ class DownloadsScreen extends StatefulWidget {
   /// rather than stacking a second one over it.
   static const String routeName = 'downloads';
 
+  /// Plays [view] off this device, with the addon requests the download was
+  /// taken with (see [_DownloadsScreenState._play]). Shared with the
+  /// library, whose card for a downloaded title with no details page to
+  /// open plays it the same way.
+  static Future<void> playFromDevice(
+    BuildContext context,
+    DownloadsClient client,
+    DownloadView view,
+  ) async {
+    final navigator = Navigator.of(context);
+    final playback = await offlinePlayback(client, view);
+    if (!context.mounted) return;
+    await navigator.push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: PlayerScreen.routeName),
+        builder: (_) => PlayerScreen(
+          stream: playback ?? view.stream.json,
+          streamRequest: _requestOf(view.streamRequest),
+          metaRequest: _requestOf(view.metaRequest),
+          subtitlesPath: ResourcePath(
+            resource: 'subtitles',
+            type: view.type,
+            id: view.videoId,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A stored addon request, or null when it was not stored (or was stored
+  /// by a build that shaped it differently).
+  static ResourceRequest? _requestOf(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    try {
+      return ResourceRequest.fromJson(json);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// The route every way in pushes, named so [routeName] means something.
   static Route<void> route({bool canPlay = true}) => MaterialPageRoute<void>(
     settings: const RouteSettings(name: routeName),
@@ -151,40 +191,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     if (client == null || _playing) return;
     _playing = true;
     try {
-      await _pushPlayer(client, view);
+      await DownloadsScreen.playFromDevice(context, client, view);
     } finally {
       _playing = false;
-    }
-  }
-
-  Future<void> _pushPlayer(DownloadsClient client, DownloadView view) async {
-    final playback = await offlinePlayback(client, view);
-    if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: PlayerScreen.routeName),
-        builder: (_) => PlayerScreen(
-          stream: playback ?? view.stream.json,
-          streamRequest: _requestOf(view.streamRequest),
-          metaRequest: _requestOf(view.metaRequest),
-          subtitlesPath: ResourcePath(
-            resource: 'subtitles',
-            type: view.type,
-            id: view.videoId,
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// A stored addon request, or null when it was not stored (or was stored
-  /// by a build that shaped it differently).
-  static ResourceRequest? _requestOf(Map<String, dynamic>? json) {
-    if (json == null) return null;
-    try {
-      return ResourceRequest.fromJson(json);
-    } catch (_) {
-      return null;
     }
   }
 

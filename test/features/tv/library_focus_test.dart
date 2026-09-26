@@ -431,7 +431,11 @@ void main() {
     }
     expect(focusedLabel(tester), LibraryScreen.remoteLabel);
     await press(tester, LogicalKeyboardKey.select);
-    expect(find.text('ep6.avi'), findsNothing, reason: 'on and off');
+    expect(
+      find.byTooltip(LibraryScreen.reloadLabel),
+      findsNothing,
+      reason: 'on and off: the reload button goes with the filter',
+    );
   });
 
   testWidgets('select on a tile opens its details', (tester) async {

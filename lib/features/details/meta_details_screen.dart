@@ -1152,13 +1152,37 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   DownloadView? _videoDownload(String videoId) =>
       _downloads?.forVideo(widget.id, videoId);
 
-  /// Pins [stream] as an offline download of the selected video, and puts
-  /// the title in the library so playing it offline still records progress.
+  /// Pins [stream] as an offline download of the selected video, and makes
+  /// sure the title has a library item on this device, so that playing it
+  /// offline still records progress.
   ///
-  /// The library add waits for the pin: a refused one (a full disk) should
-  /// not leave a title behind that the user never asked to keep. Whether it
-  /// was in the library is read before the call, since the state this was
-  /// built from is a moment old by the time the pin is taken.
+  /// **The title is not added to the library.** A downloaded title is drawn
+  /// in the library because it is downloaded (the library screen merges
+  /// every download in), not because the download put it there -- and an
+  /// add is a claim the viewer did not make, synced to their account.
+  ///
+  /// What the download does need is an *item*: offline, the player cannot
+  /// fetch the meta, so the only library item it can find is one already in
+  /// the bucket (`library_item_update` in stremio-core's player), and with
+  /// none it records no progress at all. It gets one the only way the core
+  /// offers without a fork change: `AddToLibrary` and straight away
+  /// `RemoveFromLibrary`, which leaves a removed item in the bucket, hidden
+  /// from the library and found by the player. Awaited in turn, because
+  /// each dispatch crosses to Rust on its own and two in flight can land in
+  /// either order.
+  ///
+  /// **Only for a title with no progress.** Details cannot tell a stored
+  /// item from the one it synthesizes for a title with none (both removed
+  /// and `temp`, both stamped now), but it does not need to: an item with
+  /// progress is necessarily a stored one -- only the bucket holds progress
+  /// -- and it is the one the add-and-remove would hurt, since clearing
+  /// `temp` takes it off Continue Watching. An item without progress is not
+  /// on Continue Watching, so rewriting it loses nothing.
+  ///
+  /// This waits for the pin: a refused one (a full disk) should not leave
+  /// an item behind for a title the user never kept. What the item was is
+  /// read before the call, since the state this was built from is a moment
+  /// old by the time the pin is taken.
   ///
   /// A finished download of the same video from another release is asked
   /// about first: the pin replaces it, and the Rust side deletes the file
@@ -1192,7 +1216,9 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final key = _streamKey(videoId, stream);
     if (!_pending.add(key)) return;
     setState(() {});
-    final wasInLibrary = state.isInLibrary;
+    final item = state.libraryItem;
+    final needsItem =
+        item == null || (!item.isInLibrary && item.timeOffset <= 0);
     final request = DownloadRequest(
       metaId: widget.id,
       videoId: videoId,
@@ -1229,8 +1255,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       _tell(downloadFailureMessage(failure));
       return;
     }
-    if (!wasInLibrary) {
-      _client?.dispatch(CoreActions.addToLibrary(meta.json));
+    final core = _client;
+    if (needsItem && core != null) {
+      await core.dispatch(CoreActions.addToLibrary(meta.json));
+      await core.dispatch(CoreActions.removeFromLibrary(meta.id));
+      if (!mounted) return;
     }
     _tell('Downloading ${request.name}');
   }

@@ -208,8 +208,12 @@ along, tappable to the Downloads screen, with a Cancel all on it -- for
 exactly as long as something is unfinished. A stream whose
 video is already kept from another release is offered as a replacement,
 and a *finished* one is named in a confirmation first, because taking the
-new pin deletes the old file. Downloading a
-title also adds it to the library, which is what makes the player record
+new pin deletes the old file. A downloaded title is in the Library
+because it is downloaded, and a linked Drive file because it is linked,
+whether or not either was ever added: the grid merges them in after the
+library's own titles, under their type, and nothing is written to the
+Stremio library or synced. Downloading a title with no progress leaves a
+removed library item on the device, which is what lets the player record
 progress with no network. **Addons**
 (from Settings) lists the installed and community addons and installs,
 updates, uninstalls or configures one by manifest URL, links out to

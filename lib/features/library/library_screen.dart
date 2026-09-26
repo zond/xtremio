@@ -175,7 +175,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   ///    type ([_appended]);
   ///  * the files nothing matched, under "All" and under "Other" only,
   ///    since a file with no title has no type to be a movie or a series
-  ///    by ([_unmatched]).
+  ///    by ([_unmatched]) -- the same as without the filter.
   ///
   /// It dispatches nothing, and the engine's controls never turn it off: a
   /// type or a sort pressed under Remote is the same filter over a different
@@ -560,7 +560,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// the [DriveAccountScope] dependency is registered where it is read: the
   /// account notifies when a match is written, and this list is what has to
   /// be recomputed when it does.
-  List<LinkedDriveMatch> _appended(BuildContext context, LibraryState? state) {
+  List<LinkedDriveMatch> _appended(
+    BuildContext context,
+    LibraryState? state,
+    List<DownloadView> kept,
+  ) {
     // An unloaded field has no selection to read, and a merge that guessed
     // at one would be the second opinion this whole arrangement avoids.
     if (state == null || !state.isLoaded) return const [];
@@ -579,7 +583,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
       // What is *drawn*, not what the engine sent: under Remote the grid is
       // already narrowed to titles that have a linked file, so a match whose
       // title was filtered out of it is one this list has to put back.
-      listed: {for (final item in _shown(state)) item.id},
+      listed: {
+        for (final item in _shown(state)) item.id,
+        // A matched title that is also downloaded already has a card.
+        for (final view in kept) view.metaId,
+      },
       type: state.selected!.type,
     );
   }
@@ -596,7 +604,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       builder: (context, _) {
         final json = _library!.value;
         final state = json == null ? null : LibraryState.fromJson(json);
-        final appended = _appended(context, state);
+        final kept = _kept(state);
+        final appended = _appended(context, state, kept);
         final isLoggedIn = _isLoggedIn;
         return TvLadder(
           child: Scaffold(
@@ -696,6 +705,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       // The engine still decides *which* message, because it
                       // is the engine's filter either one is about.
                       : _shown(state).isNotEmpty ||
+                            kept.isNotEmpty ||
                             appended.isNotEmpty ||
                             _unmatched(state).isNotEmpty
                       ? _tvGroup(
@@ -703,6 +713,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           _buildGrid(
                             state,
                             _shown(state),
+                            kept,
                             appended,
                             _unmatched(state),
                           ),
@@ -783,16 +794,62 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  /// The downloaded titles the grid has no card for, one card per title, of
+  /// the engine's selected type.
+  ///
+  /// **A title with a source on this device is in the library**, whether or
+  /// not anybody added it: the player's "keep whole file" pins a download
+  /// without adding the title, and removing a title -- here or on another
+  /// device -- leaves its download in place. Without this such a film is on
+  /// disk and reachable only from the Downloads screen. It is a merge of the
+  /// list, like [_appended] and for the same reasons: nothing is written to
+  /// the engine's library, so nothing syncs to an account.
+  ///
+  /// Not under Remote, which is the files in Drive. Only once the engine has
+  /// no page left to send: a downloaded title in the library but on a page
+  /// not loaded yet has a card coming, and one appended now would be drawn
+  /// twice when that page arrives -- the grid is scrolled to its end by the
+  /// time this matters anyway, since this is drawn after the last page.
+  List<DownloadView> _kept(LibraryState? state) {
+    if (state == null || !state.isLoaded || _remote) return const [];
+    if (state.hasNextPage) return const [];
+    final type = state.selected?.type;
+    final cards = {for (final item in _shown(state)) item.id};
+    return [
+      for (final view
+          in _downloads?.registry.items.values ?? const <DownloadView>[])
+        if (type == null || view.type == type)
+          if (cards.add(view.metaId)) view,
+    ];
+  }
+
+  /// A downloaded title with no card of its own, pressed: its details page
+  /// when the download kept the title's meta, which is what that page is
+  /// drawn from offline; played straight off the device when it did not,
+  /// since a page about a title nothing describes would be empty.
+  void _openKept(DownloadView view) {
+    if (view.meta != null) {
+      _open(_cardForDownload(view));
+      return;
+    }
+    final client = DownloadsScope.maybeOf(context);
+    if (client == null) return;
+    unawaited(DownloadsScreen.playFromDevice(context, client, view));
+  }
+
   /// The linked files nothing matched, which have no title to filter by and
   /// so have no card of their own anywhere else.
   ///
-  /// Only under Remote. They are drawn as themselves -- the raw name, no
-  /// poster -- because that is all that is known about them, and pressing
-  /// one plays it: there is no details page to send anybody to. Without
-  /// this a file whose name Cinemeta cannot read would be linked, would
-  /// have cost a grant, and would be reachable from nowhere in the app.
+  /// Drawn in the library like every other linked file, under Remote or
+  /// not -- a file with a source in Drive is in the library -- but not under
+  /// Downloaded, which is what is on this device. They are drawn as
+  /// themselves -- the raw name, no poster -- because that is all that is
+  /// known about them, and pressing one plays it: there is no details page
+  /// to send anybody to. Without this a file whose name Cinemeta cannot
+  /// read would be linked, would have cost a grant, and would be reachable
+  /// from nowhere in the app.
   List<LinkedDriveFile> _unmatched(LibraryState state) {
-    if (!_remote) return const [];
+    if (_downloadedOnly) return const [];
     // No title, so no type to be a movie or a series by: drawn under "All"
     // and under "Other", which is where a card of type `other` belongs.
     final type = state.selected?.type;
@@ -806,9 +863,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget _buildGrid(
     LibraryState state,
     List<LibraryItemView> items,
+    List<DownloadView> kept,
     List<LinkedDriveMatch> appended,
     List<LinkedDriveFile> unmatched,
   ) {
+    // The engine's items, then the merged cards in a fixed order: what is
+    // on this device, what is matched in Drive, and what nothing matched.
+    final afterItems = items.length;
+    final afterKept = afterItems + kept.length;
+    final afterAppended = afterKept + appended.length;
     return NotificationListener<ScrollNotification>(
       onNotification: (n) => _onScroll(n, state),
       child: GridView.builder(
@@ -819,10 +882,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
         ),
-        itemCount: items.length + appended.length + unmatched.length,
+        itemCount: afterAppended + unmatched.length,
         itemBuilder: (context, index) {
-          if (index >= items.length + appended.length) {
-            final file = unmatched[index - items.length - appended.length];
+          if (index >= afterAppended) {
+            final file = unmatched[index - afterAppended];
             return LibraryItemTile(
               item: _cardForFile(file),
               // Straight into the film: there is no details page for a file
@@ -832,8 +895,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
               memoryId: 'linked-file-${file.fileId}',
             );
           }
-          if (index >= items.length) {
-            final match = appended[index - items.length];
+          if (index >= afterKept) {
+            final match = appended[index - afterKept];
             return LibraryItemTile(
               item: _cardFor(match),
               // The Remote list's press, shared rather than written twice.
@@ -841,6 +904,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
               // And no long press: every action in that sheet is a `Ctx`
               // action about a library item, and this title is not one.
               memoryId: 'linked-${match.cinemetaId}',
+            );
+          }
+          if (index >= afterItems) {
+            final view = kept[index - afterItems];
+            return LibraryItemTile(
+              item: _cardForDownload(view),
+              onTap: () => _openKept(view),
+              // No long press, for the reason a matched file has none: the
+              // sheet's actions are about a library item, and this is not.
+              memoryId: 'kept-${view.metaId}',
             );
           }
           final item = items[index];
@@ -878,6 +951,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
     'type': 'other',
     'name': file.name.isEmpty ? file.fileId : file.name,
   });
+
+  /// A downloaded title as its card: the title's own meta when the download
+  /// kept it -- a series download names the episode, the card is the show
+  /// -- and the row's own name and poster when it did not.
+  static LibraryItemView _cardForDownload(DownloadView view) {
+    final meta = view.meta;
+    final poster = meta?['poster'] as String? ?? view.poster;
+    return LibraryItemView({
+      '_id': view.metaId,
+      'type': meta?['type'] as String? ?? view.type,
+      'name': meta?['name'] as String? ?? view.name,
+      'poster': ?poster,
+    });
+  }
 
   static LibraryItemView _cardFor(LinkedDriveMatch match) => LibraryItemView({
     '_id': match.cinemetaId,

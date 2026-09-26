@@ -299,8 +299,8 @@ void main() {
       expect(find.widgetWithText(LibraryItemTile, 'Arrival'), findsOneWidget);
     });
 
-    testWidgets('a file nothing matched adds no card: it has no title to be '
-        'one', (tester) async {
+    testWidgets('a file nothing matched is its own card, after the titles: a '
+        'file in Drive is in the library, title or not', (tester) async {
       await tester.pumpWidget(
         harness(
           fakeCore(),
@@ -311,8 +311,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(cards(tester), ['Lanterns', 'The Whisper Man']);
-      expect(find.text('ep6.avi'), findsNothing);
+      expect(cards(tester), ['Lanterns', 'The Whisper Man', 'ep6.avi']);
     });
   });
 
@@ -820,7 +819,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(cards(tester), ['Lanterns', 'The Whisper Man', 'Arrival']);
+    expect(cards(tester), [
+      'Lanterns',
+      'The Whisper Man',
+      'Arrival',
+      'ep6.avi',
+    ]);
 
     await tapRemote(tester);
 

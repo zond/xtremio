@@ -147,6 +147,27 @@ void main() {
       )
       .selected;
 
+  /// The recorded downloads fixture, narrowed to the rows [keys] names; the
+  /// rows in [noMeta] lose the title meta they were taken with, which is
+  /// what a download of something with no details page looks like.
+  DownloadsRegistry downloadsOnly(
+    Set<String> keys, {
+    Set<String> noMeta = const {},
+  }) {
+    final fixture = loadDownloadsFixture();
+    final items = fixture['items'] as Map<String, dynamic>;
+    return DownloadsRegistry.fromJson({
+      ...fixture,
+      'items': {
+        for (final MapEntry(:key, :value) in items.entries)
+          if (keys.contains(key))
+            key: noMeta.contains(key)
+                ? ({...value as Map<String, dynamic>}..remove('meta'))
+                : value,
+      },
+    });
+  }
+
   /// The reload button, drawn just before the Remote pill while it is on.
   Finder reloadButton() => find.byTooltip(LibraryScreen.reloadLabel);
 
@@ -536,8 +557,8 @@ void main() {
       await tester.pumpWidget(
         harness(
           fakeCore(library: libraryOf('series')),
-          // Titles on disk, none of them the library's one series.
-          downloaded: DownloadsRegistry.fromJson(loadDownloadsFixture()),
+          // One film on disk, and no series at all.
+          downloaded: downloadsOnly({'tt0063350:tt0063350'}),
         ),
       );
       await tester.pumpAndSettle();
@@ -546,6 +567,162 @@ void main() {
 
       expect(find.text('No downloaded series'), findsOneWidget);
       expect(find.textContaining('in your library'), findsNothing);
+    });
+  });
+
+  group('a title with a source is in the library, added or not', () {
+    // The fixture's three downloads -- a film and two episodes of one
+    // series -- and none of them is in the engine's library.
+    DownloadsRegistry allDownloads() =>
+        DownloadsRegistry.fromJson(loadDownloadsFixture());
+
+    testWidgets('a downloaded title is drawn after the engine\'s own, one '
+        'card per title', (tester) async {
+      useNarrowScreen(tester);
+      await tester.pumpWidget(harness(fakeCore(), downloaded: allDownloads()));
+      await tester.pumpAndSettle();
+      expect(find.text('Lanterns'), findsOneWidget);
+      expect(find.text('Night of the Living Dead'), findsOneWidget);
+      expect(
+        find.widgetWithText(LibraryItemTile, 'Breaking Bad'),
+        findsOneWidget,
+        reason: 'two episodes on disk are one card, the show',
+      );
+    });
+
+    testWidgets('under the type it is, and not under another', (tester) async {
+      useNarrowScreen(tester);
+      final core = fakeCore(library: libraryOf('movie'));
+      await tester.pumpWidget(harness(core, downloaded: allDownloads()));
+      await tester.pumpAndSettle();
+      expect(find.text('Night of the Living Dead'), findsOneWidget);
+      expect(find.text('Breaking Bad'), findsNothing);
+
+      core.setState(CoreField.library, libraryOf('series'));
+      await tester.pumpAndSettle();
+      expect(find.text('Night of the Living Dead'), findsNothing);
+      expect(find.text('Breaking Bad'), findsOneWidget);
+    });
+
+    testWidgets('under Downloaded, and not under Remote', (tester) async {
+      useNarrowScreen(tester);
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          drive: await account(files: linkedOne),
+          downloaded: allDownloads(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Downloaded'));
+      await tester.pumpAndSettle();
+      expect(find.text('Night of the Living Dead'), findsOneWidget);
+      expect(find.text('Lanterns'), findsNothing, reason: 'not on disk');
+      expect(find.text('A Film 2019.mkv'), findsNothing, reason: 'in Drive');
+
+      await tapRemote(tester);
+      expect(find.text('Night of the Living Dead'), findsNothing);
+      expect(find.text('A Film 2019.mkv'), findsOneWidget);
+    });
+
+    testWidgets('not while the engine has a page left to send: the title may '
+        'be on it, and would be drawn twice', (tester) async {
+      useNarrowScreen(tester);
+      final library = loadLibraryFixture();
+      final selectable = library['selectable'] as Map<String, dynamic>;
+      await tester.pumpWidget(
+        harness(
+          fakeCore(
+            library: {
+              ...library,
+              'selectable': {
+                ...selectable,
+                'next_page': {
+                  'request': {
+                    'type': null,
+                    'sort': LibrarySort.lastWatched,
+                    'page': 2,
+                  },
+                },
+              },
+            },
+          ),
+          downloaded: allDownloads(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Lanterns'), findsOneWidget);
+      expect(find.text('Night of the Living Dead'), findsNothing);
+    });
+
+    testWidgets('pressed, it opens its details like any library title', (
+      tester,
+    ) async {
+      useNarrowScreen(tester);
+      await tester.pumpWidget(harness(fakeCore(), downloaded: allDownloads()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.widgetWithText(LibraryItemTile, 'Night of the Living Dead'),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      final details = tester.widget<MetaDetailsScreen>(
+        find.byType(MetaDetailsScreen),
+      );
+      expect(details.type, 'movie');
+      expect(details.id, 'tt0063350');
+    });
+
+    testWidgets('and one with no title meta plays off the device, having no '
+        'page to open', (tester) async {
+      useNarrowScreen(tester);
+      await tester.pumpWidget(
+        harness(
+          fakeCore(),
+          downloaded: downloadsOnly(
+            {'tt0063350:tt0063350'},
+            noMeta: {'tt0063350:tt0063350'},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.widgetWithText(LibraryItemTile, 'Night of the Living Dead'),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byType(MetaDetailsScreen), findsNothing);
+      expect(find.byType(PlayerScreen), findsOneWidget);
+    });
+
+    testWidgets('a linked file nothing matched is drawn under All without the '
+        'Remote filter, and not under a type or Downloaded', (tester) async {
+      useNarrowScreen(tester);
+      final core = fakeCore();
+      await tester.pumpWidget(
+        harness(
+          core,
+          drive: await account(files: linkedOne),
+          downloaded: allDownloads(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('A Film 2019.mkv'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Downloaded'));
+      await tester.pumpAndSettle();
+      expect(find.text('A Film 2019.mkv'), findsNothing);
+      await tester.tap(find.widgetWithText(FilterChip, 'Downloaded'));
+      await tester.pumpAndSettle();
+
+      core.setState(CoreField.library, libraryOf('movie'));
+      await tester.pumpAndSettle();
+      expect(find.text('A Film 2019.mkv'), findsNothing);
     });
   });
 
@@ -727,7 +904,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(LibraryItemTile), findsNWidgets(2));
+      // The engine's two titles, and the linked file: a file in Drive is in
+      // the library with or without the filter.
+      expect(find.byType(LibraryItemTile), findsNWidgets(3));
+      expect(find.text('ep6.avi'), findsOneWidget);
 
       await tapRemote(tester);
       // Narrowed to what is linked: the engine's own two titles have no
@@ -737,8 +917,8 @@ void main() {
       expect(find.byType(LibraryItemTile), findsOneWidget);
 
       await tapRemote(tester);
-      expect(find.byType(LibraryItemTile), findsNWidgets(2));
-      expect(find.text('ep6.avi'), findsNothing);
+      expect(find.byType(LibraryItemTile), findsNWidgets(3));
+      expect(find.text('Lanterns'), findsOneWidget);
     });
 
     testWidgets('with no Drive scope above it at all there is no pill, which '
