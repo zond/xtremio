@@ -83,9 +83,12 @@ enum _DetailsRung {
 /// pins it through the [DownloadsClient] with everything the play path
 /// hands the player (the raw stream, both addon requests) plus a meta
 /// snapshot, so Details and the Downloads screen render with no network.
-/// The title goes into the library with it, because that is what makes the
-/// player track progress while offline (a temp library item is not enough:
-/// see `docs/phase3-design.md` on `library_item`). Playing that same
+/// The title is *not* put into the library: that would put it in the
+/// library of every device on the account, where it is neither downloaded
+/// nor linked. The library screen draws it because it is downloaded, and
+/// the player records progress offline because the Rust side answers the
+/// failed meta fetch from the snapshot (`downloads::kept_meta`), so it
+/// builds its own `temp` item as it does online. Playing that same
 /// release afterwards plays the file on the device rather than streaming
 /// it, connection or not (`offline_play.dart`).
 ///
@@ -1152,37 +1155,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   DownloadView? _videoDownload(String videoId) =>
       _downloads?.forVideo(widget.id, videoId);
 
-  /// Pins [stream] as an offline download of the selected video, and makes
-  /// sure the title has a library item on this device, so that playing it
-  /// offline still records progress.
+  /// Pins [stream] as an offline download of the selected video.
   ///
-  /// **The title is not added to the library.** A downloaded title is drawn
-  /// in the library because it is downloaded (the library screen merges
-  /// every download in), not because the download put it there -- and an
-  /// add is a claim the viewer did not make, synced to their account.
-  ///
-  /// What the download does need is an *item*: offline, the player cannot
-  /// fetch the meta, so the only library item it can find is one already in
-  /// the bucket (`library_item_update` in stremio-core's player), and with
-  /// none it records no progress at all. It gets one the only way the core
-  /// offers without a fork change: `AddToLibrary` and straight away
-  /// `RemoveFromLibrary`, which leaves a removed item in the bucket, hidden
-  /// from the library and found by the player. Awaited in turn, because
-  /// each dispatch crosses to Rust on its own and two in flight can land in
-  /// either order.
-  ///
-  /// **Only for a title with no progress.** Details cannot tell a stored
-  /// item from the one it synthesizes for a title with none (both removed
-  /// and `temp`, both stamped now), but it does not need to: an item with
-  /// progress is necessarily a stored one -- only the bucket holds progress
-  /// -- and it is the one the add-and-remove would hurt, since clearing
-  /// `temp` takes it off Continue Watching. An item without progress is not
-  /// on Continue Watching, so rewriting it loses nothing.
-  ///
-  /// This waits for the pin: a refused one (a full disk) should not leave
-  /// an item behind for a title the user never kept. What the item was is
-  /// read before the call, since the state this was built from is a moment
-  /// old by the time the pin is taken.
+  /// Nothing is dispatched to the core: see the class comment on why the
+  /// title stays out of the library, and how offline progress is recorded
+  /// without it.
   ///
   /// A finished download of the same video from another release is asked
   /// about first: the pin replaces it, and the Rust side deletes the file
@@ -1216,9 +1193,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     final key = _streamKey(videoId, stream);
     if (!_pending.add(key)) return;
     setState(() {});
-    final item = state.libraryItem;
-    final needsItem =
-        item == null || (!item.isInLibrary && item.timeOffset <= 0);
     final request = DownloadRequest(
       metaId: widget.id,
       videoId: videoId,
@@ -1254,12 +1228,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     if (failure != null) {
       _tell(downloadFailureMessage(failure));
       return;
-    }
-    final core = _client;
-    if (needsItem && core != null) {
-      await core.dispatch(CoreActions.addToLibrary(meta.json));
-      await core.dispatch(CoreActions.removeFromLibrary(meta.id));
-      if (!mounted) return;
     }
     _tell('Downloading ${request.name}');
   }

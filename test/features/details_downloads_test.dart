@@ -428,76 +428,33 @@ void main() {
   });
 
   group('the library', () {
-    testWidgets('a title with no stored item gets one, so offline progress '
-        'is recorded -- added and removed, so it is not in the library', (
-      tester,
-    ) async {
-      useWideViewport(tester);
-      // What details draws for a title the bucket does not hold: a
-      // synthesized removed item with no progress.
-      final fixture = loadMetaDetailsFixture();
-      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
-      final downloads = FakeDownloadsClient();
-      addTearDown(downloads.dispose);
-      await tester.pumpWidget(harness(core, downloads));
-      await tester.pumpAndSettle();
+    // The title is not put into the library by a download: that would put
+    // it in the library of every device on the account, where it is neither
+    // downloaded nor linked. Offline progress comes from the Rust side
+    // answering the player's failed meta fetch from the download's snapshot
+    // (`rust/tests/offline_meta.rs`), not from anything dispatched here.
+    for (final (label, fixture) in [
+      ('a title nobody added', loadMetaDetailsFixture),
+      ('a title already in the library', inLibraryFixture),
+    ]) {
+      testWidgets('downloading $label dispatches nothing to the core', (
+        tester,
+      ) async {
+        useWideViewport(tester);
+        final core = FakeCoreClient(state: {CoreField.metaDetails: fixture()});
+        final downloads = FakeDownloadsClient();
+        addTearDown(downloads.dispose);
+        await tester.pumpWidget(harness(core, downloads));
+        await tester.pumpAndSettle();
+        final before = core.dispatched.length;
 
-      await tester.tap(find.byTooltip(kDownloadTooltip));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip(kDownloadTooltip));
+        await tester.pumpAndSettle();
 
-      final last = core.dispatched.reversed.take(2).toList().reversed;
-      expect(
-        [for (final action in last) action.action],
-        [
-          CoreActions.addToLibrary(movieMeta()).action,
-          CoreActions.removeFromLibrary(
-            MetaDetailsState.fromJson(fixture).meta!.id,
-          ).action,
-        ],
-      );
-    });
-
-    testWidgets('a title with progress is left alone: its item is a stored '
-        'one, and rewriting it would take it off Continue Watching', (
-      tester,
-    ) async {
-      useWideViewport(tester);
-      final fixture = loadMetaDetailsFixture();
-      final item = fixture['libraryItem'] as Map<String, dynamic>;
-      (item['state'] as Map<String, dynamic>)['timeOffset'] = 60000;
-      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
-      final downloads = FakeDownloadsClient();
-      addTearDown(downloads.dispose);
-      await tester.pumpWidget(harness(core, downloads));
-      await tester.pumpAndSettle();
-      final before = core.dispatched.length;
-
-      await tester.tap(find.byTooltip(kDownloadTooltip));
-      await tester.pumpAndSettle();
-
-      expect(downloads.added, hasLength(1));
-      expect(core.dispatched, hasLength(before));
-    });
-
-    testWidgets('is left alone when the title is already in it', (
-      tester,
-    ) async {
-      useWideViewport(tester);
-      final core = FakeCoreClient(
-        state: {CoreField.metaDetails: inLibraryFixture()},
-      );
-      final downloads = FakeDownloadsClient();
-      addTearDown(downloads.dispose);
-      await tester.pumpWidget(harness(core, downloads));
-      await tester.pumpAndSettle();
-      final before = core.dispatched.length;
-
-      await tester.tap(find.byTooltip(kDownloadTooltip));
-      await tester.pumpAndSettle();
-
-      expect(downloads.added, hasLength(1));
-      expect(core.dispatched, hasLength(before));
-    });
+        expect(downloads.added, hasLength(1));
+        expect(core.dispatched, hasLength(before));
+      });
+    }
 
     testWidgets('keeps nothing when the pin was refused', (tester) async {
       useWideViewport(tester);

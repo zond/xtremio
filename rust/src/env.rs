@@ -401,6 +401,75 @@ async fn read_capped(
     Ok(body)
 }
 
+/// One request's body, capped, or why there is none: what
+/// [`XtremioEnv::fetch`] asks of the network before it decodes, split out so
+/// that a failure here can still be answered from a download
+/// (`downloads::kept_meta`).
+async fn fetch_bytes(request: reqwest::Request, host: Option<String>) -> Result<Vec<u8>, EnvError> {
+    let response = CLIENT.execute(request).await.map_err(|error| {
+        let error = error.without_url();
+        tracing::debug!(host = host.as_deref().unwrap_or("-"), %error, "fetch failed");
+        EnvError::Fetch(error.to_string())
+    })?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(EnvError::Fetch(format!("HTTP {}", status.as_u16())));
+    }
+    read_capped(response, MOST_JSON_BYTES)
+        .await
+        .map_err(|error| match error {
+            ReadError::TooBig(most_bytes) => {
+                EnvError::Fetch(format!("response larger than {most_bytes} bytes"))
+            }
+            ReadError::Transport(error) => EnvError::Fetch(error.without_url().to_string()),
+        })
+}
+
+/// The addon, type and id of a meta request's URL --
+/// `{base}/meta/{type}/{id}.json`, the shape stremio-core builds from a
+/// `ResourceRequest` -- with the base given back as the manifest URL the
+/// request was built from. None for any other URL.
+fn meta_request_of(url: &url::Url) -> Option<(url::Url, String, String)> {
+    let segments: Vec<&str> = url.path_segments()?.collect();
+    let [.., resource, kind, file] = segments.as_slice() else {
+        return None;
+    };
+    if *resource != "meta" {
+        return None;
+    }
+    let id = percent_decode(file.strip_suffix(".json")?)?;
+    let kind = percent_decode(kind)?;
+    // The query stays: stremio-core swaps the manifest's path for the
+    // resource's and leaves the rest of the addon's URL as it was.
+    let mut base = url.clone();
+    base.set_fragment(None);
+    base.path_segments_mut()
+        .ok()?
+        .pop()
+        .pop()
+        .pop()
+        .push("manifest.json");
+    Some((base, kind, id))
+}
+
+/// `%XX` escapes decoded, as UTF-8; None for a malformed one.
+fn percent_decode(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = std::str::from_utf8(bytes.get(i + 1..i + 3)?).ok()?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
 /// Uninhabited: `Env` is implemented on the type, never on a value.
 pub enum XtremioEnv {}
 
@@ -444,27 +513,30 @@ impl Env for XtremioEnv {
                 }
             }
         }
+        // A meta request the addon cannot answer is asked of the downloads
+        // registry instead: see `downloads::kept_meta`.
+        let meta_request = if request.method() == Method::GET {
+            meta_request_of(request.url())
+        } else {
+            None
+        };
         async move {
-            let response = CLIENT.execute(request).await.map_err(|error| {
-                let error = error.without_url();
-                tracing::debug!(host = host.as_deref().unwrap_or("-"), %error, "fetch failed");
-                EnvError::Fetch(error.to_string())
-            })?;
-            let status = response.status();
-            if !status.is_success() {
-                return Err(EnvError::Fetch(format!("HTTP {}", status.as_u16())));
-            }
-            let bytes =
-                read_capped(response, MOST_JSON_BYTES)
-                    .await
-                    .map_err(|error| match error {
-                        ReadError::TooBig(most_bytes) => {
-                            EnvError::Fetch(format!("response larger than {most_bytes} bytes"))
+            let bytes = match fetch_bytes(request, host).await {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    let kept = meta_request.and_then(|(base, kind, id)| {
+                        crate::downloads::kept_meta(&base, &kind, &id)
+                    });
+                    match kept {
+                        Some(kept) => {
+                            tracing::debug!("meta answered from a download");
+                            serde_json::to_vec(&kept)
+                                .map_err(|error| EnvError::Serde(error.to_string()))?
                         }
-                        ReadError::Transport(error) => {
-                            EnvError::Fetch(error.without_url().to_string())
-                        }
-                    })?;
+                        None => return Err(error),
+                    }
+                }
+            };
             let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
             serde_path_to_error::deserialize::<_, OUT>(&mut deserializer).map_err(|error| {
                 EnvError::Serde(crate::serde_fault::at_path(error.path(), error.inner()))
@@ -601,6 +673,42 @@ pub(crate) fn without_storage_dir<T>(f: impl FnOnce() -> T) -> T {
 #[cfg(test)]
 mod tests {
     use stremio_core::constants::{SCHEMA_VERSION, SCHEMA_VERSION_STORAGE_KEY};
+
+    /// The meta requests stremio-core builds come apart into the addon's
+    /// manifest URL, the type and the id -- escapes decoded, the addon's own
+    /// query kept -- and nothing else does.
+    #[test]
+    fn meta_request_of_reads_what_stremio_core_builds() {
+        let parse = |text: &str| url::Url::parse(text).unwrap();
+        assert_eq!(
+            meta_request_of(&parse(
+                "https://v3-cinemeta.strem.io/meta/movie/tt0063350.json"
+            )),
+            Some((
+                parse("https://v3-cinemeta.strem.io/manifest.json"),
+                "movie".to_owned(),
+                "tt0063350".to_owned()
+            ))
+        );
+        assert_eq!(
+            meta_request_of(&parse(
+                "https://addon.example/cfg/meta/series/kitsu%3A1.json?x=1"
+            )),
+            Some((
+                parse("https://addon.example/cfg/manifest.json?x=1"),
+                "series".to_owned(),
+                "kitsu:1".to_owned()
+            ))
+        );
+        for other in [
+            "https://v3-cinemeta.strem.io/stream/movie/tt1.json",
+            "https://v3-cinemeta.strem.io/meta/movie/tt1",
+            "https://v3-cinemeta.strem.io/manifest.json",
+            "https://v3-cinemeta.strem.io/meta/movie/tt%ZZ.json",
+        ] {
+            assert_eq!(meta_request_of(&parse(other)), None, "{other}");
+        }
+    }
 
     use super::*;
 

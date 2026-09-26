@@ -2451,6 +2451,51 @@ pub fn refresh() -> anyhow::Result<Vec<Progress>> {
 /// that timer before the app awaits `core_shutdown`, so a tick landing in
 /// the window undid the shutdown's whole point. See [`crate::state::state`]
 /// for which callers may build one -- the ones that *install* something.
+/// The meta a download kept of its title, as the addon answered it
+/// (`{"meta": ...}`), for a meta request that could not reach that addon.
+///
+/// **What makes an offline download remember where it got to.** The player
+/// records progress into a library item: one already on the device, or one
+/// it builds from the meta it fetches. Offline the fetch fails, so a title
+/// that was downloaded and never played had neither, and played without
+/// being recorded. With this answering the failed fetch, the player builds
+/// the item the way it does online -- a `temp` one, kept as it plays -- and
+/// the title never has to be put into the library for it (which would put
+/// it in the library of every device on the account, where it is neither
+/// downloaded nor linked).
+///
+/// Matched on the addon's own request, not on the id alone: the kept meta
+/// is Cinemeta's (or whichever addon it came from), and answering another
+/// addon's request with it would be that addon saying something it did
+/// not. `base` is the addon's manifest URL, as a `ResourceRequest` names it.
+/// Only a running core has a registry to ask.
+pub fn kept_meta(base: &url::Url, meta_type: &str, id: &str) -> Option<serde_json::Value> {
+    let app = crate::state::current()?;
+    kept_meta_in(&load_in(&app).ok()?, base, meta_type, id)
+}
+
+/// [`kept_meta`] over a registry the caller holds.
+fn kept_meta_in(
+    registry: &Registry,
+    base: &url::Url,
+    meta_type: &str,
+    id: &str,
+) -> Option<serde_json::Value> {
+    registry.items.values().find_map(|entry| {
+        if entry.meta_id != id || entry.is_leaving() {
+            return None;
+        }
+        let request = entry.meta_request.as_ref()?;
+        let entry_base = request.get("base")?.as_str()?;
+        let path = request.get("path")?;
+        let same_request = url::Url::parse(entry_base).ok().as_ref() == Some(base)
+            && path.get("type")?.as_str()? == meta_type
+            && path.get("id")?.as_str()? == id;
+        let meta = entry.meta.as_ref()?;
+        same_request.then(|| serde_json::json!({ "meta": meta }))
+    })
+}
+
 fn not_initialized_unless_running() -> anyhow::Result<Arc<AppState>> {
     crate::state::current()
         .ok_or_else(|| anyhow::anyhow!("the core is not initialized; is `core_init` done?"))
@@ -2929,6 +2974,52 @@ mod tests {
     #[test]
     fn key_is_meta_and_video() {
         assert_eq!(entry("tt1", "tt1:1:2").key(), "tt1:tt1:1:2");
+    }
+
+    /// A download's kept meta answers the request it was taken from, and
+    /// nothing else: not the same id asked of another addon, not another
+    /// type, and not a row that kept no meta.
+    #[test]
+    fn kept_meta_answers_only_the_request_it_came_from() {
+        let cinemeta = url::Url::parse("https://v3-cinemeta.strem.io/manifest.json").unwrap();
+        let other = url::Url::parse("https://other.example/manifest.json").unwrap();
+        let mut kept = entry("tt1", "tt1");
+        kept.meta = Some(serde_json::json!({"id": "tt1", "type": "movie", "name": "A Film"}));
+        kept.meta_request = Some(serde_json::json!({
+            "base": cinemeta.as_str(),
+            "path": {"resource": "meta", "type": "movie", "id": "tt1", "extra": []},
+        }));
+        let mut bare = entry("tt2", "tt2");
+        bare.meta_request = kept.meta_request.clone();
+        let mut registry = Registry::default();
+        registry.items.insert(kept.key(), kept);
+        registry.items.insert(bare.key(), bare);
+
+        assert_eq!(
+            kept_meta_in(&registry, &cinemeta, "movie", "tt1"),
+            Some(serde_json::json!({"meta": {"id": "tt1", "type": "movie", "name": "A Film"}})),
+            "the addon's own shape, `{{\"meta\": ...}}`"
+        );
+        assert_eq!(
+            kept_meta_in(&registry, &other, "movie", "tt1"),
+            None,
+            "another addon"
+        );
+        assert_eq!(
+            kept_meta_in(&registry, &cinemeta, "series", "tt1"),
+            None,
+            "another type"
+        );
+        assert_eq!(
+            kept_meta_in(&registry, &cinemeta, "movie", "tt2"),
+            None,
+            "no meta kept"
+        );
+        assert_eq!(
+            kept_meta_in(&registry, &cinemeta, "movie", "tt3"),
+            None,
+            "no download"
+        );
     }
 
     /// The record of where the downloads went is gone, and gone from what

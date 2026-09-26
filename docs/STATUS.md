@@ -212,9 +212,10 @@ new pin deletes the old file. A downloaded title is in the Library
 because it is downloaded, and a linked Drive file because it is linked,
 whether or not either was ever added: the grid merges them in after the
 library's own titles, under their type, and nothing is written to the
-Stremio library or synced. Downloading a title with no progress leaves a
-removed library item on the device, which is what lets the player record
-progress with no network. **Addons**
+Stremio library or synced. Offline, a meta request the addon cannot
+answer is answered from the meta the download kept, so the player records
+watch progress for a title that was downloaded and never added or played.
+**Addons**
 (from Settings) lists the installed and community addons and installs,
 updates, uninstalls or configures one by manifest URL, links out to
 [stremio-addons.net](https://stremio-addons.net) and pulls the account's
