@@ -386,16 +386,17 @@ void main() {
     await press(tester, LogicalKeyboardKey.select);
     expect(find.text('ep6.avi'), findsOneWidget);
 
-    // Selecting it also puts Reload on a row of its own directly under
-    // the pill, and the remote reaches that with one press down: a button
-    // a viewer is told to press has to be a stop on the walk they are
-    // already making.
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedLabel(tester), LibraryScreen.reloadLabel);
+    // Selecting it keeps the remote where it is, on the pill, which now
+    // carries the reload arrow: the control the note above the list tells
+    // a viewer to press again is the one they are already standing on, so
+    // a second select reloads and answers in a line, like every refusal.
+    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
     expect(
-      focusMarks(),
-      isNotEmpty,
-      reason: 'a chip the remote can stand on with nothing drawn on it',
+      find.descendant(
+        of: find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
+        matching: find.byIcon(LibraryScreen.reloadGlyph),
+      ),
+      findsOneWidget,
     );
     await press(tester, LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
@@ -406,8 +407,13 @@ void main() {
       findsOneWidget,
       reason: 'a press from a remote answers in a line, like every refusal',
     );
-    // And down from Reload into the list it put there, onto a tile the
-    // remote can see it is standing on.
+    expect(
+      find.text('ep6.avi'),
+      findsOneWidget,
+      reason: 'the second press did not turn the list off',
+    );
+    // And down from the pill straight into the list it put there, onto a
+    // tile the remote can see it is standing on.
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedTileName(tester), 'ep6.avi');
     expect(
@@ -415,12 +421,10 @@ void main() {
       isNotEmpty,
       reason: 'a linked file the remote can land on with nothing drawn on it',
     );
-    // Up comes back to Reload, and up again to the pill it belongs to, so
-    // the pill, its button and its list are not a one-way trip.
+    // Up comes back to the pill it belongs to, so the pill and its list
+    // are not a one-way trip.
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedTileName(tester), isNull);
-    expect(focusedLabel(tester), LibraryScreen.reloadLabel);
-    await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedLabel(tester), LibraryScreen.remoteLabel);
   });
 

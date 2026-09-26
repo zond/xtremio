@@ -115,12 +115,13 @@ class LinkedDriveFilesView extends StatefulWidget {
   /// that had matched the *wrong* title was being sent round a loop that
   /// could not change anything.
   ///
-  /// [LibraryScreen.reloadLabel] is the word on the button; a test holds
-  /// the two together, so this sentence cannot start naming a control that
-  /// is not there.
+  /// [LibraryScreen.remoteLabel] is the word on the pill, and "again" is
+  /// the whole instruction: a press on the pill while it is on is what
+  /// reloads. A test holds the two together, so this sentence cannot start
+  /// naming a control that is not there.
   static const String matchedByNameNote =
       'Titles are matched from the file name. Rename a file in Drive, then '
-      'press Reload to try once more:';
+      'press Remote again to try once more:';
 
   /// Shown rather than described: somebody skimming copies the example and
   /// does not read the sentence. Both of these are walked by

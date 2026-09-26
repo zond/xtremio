@@ -61,12 +61,12 @@ import '../similar/similar_resolver.dart';
 /// without one while its controls were a single row spanning the width
 /// under the bar: "the nearest node in that direction" and "the next region
 /// down" were the same answer, and geometry got it right on its own. They
-/// are three rows now -- the types with the sort, the app's own filters, Reload
+/// are two rows now -- the types with the sort, and the app's own filters
 /// -- each left-aligned and shorter than the width, and nothing under the
 /// bar's right-hand buttons is in their vertical band, so a press down out
 /// of the bar re-sorted every node on the page by distance and landed on
 /// the filters row (measured: `Downloaded`, past the types and the sort).
-/// So the bar's actions are rung 0 and the rows rungs 1 to 3, and up and
+/// So the bar's actions are rung 0 and the rows rungs 1 and 2, and up and
 /// down walk them in order; the grid below is not a rung, since it spans
 /// the width and geometry reaches it from the last row and comes back to
 /// it from the grid. The stop index a rung remembers can name at worst the
@@ -123,13 +123,21 @@ class LibraryScreen extends StatefulWidget {
   /// links them, because a share on a NAS arrives under it too.
   static const String remoteLabel = 'Remote';
 
-  /// Label of the button beside it, drawn only while it is on.
+  /// What a press on the Remote pill does while it is already on: fetch the
+  /// linked files again. The pill says so with [reloadGlyph] in place of
+  /// its cloud, and the note above the list tells a viewer to press it
+  /// again (`LinkedDriveFilesView.matchedByNameNote`, which a test holds
+  /// against [remoteLabel]).
   ///
-  /// One word, and the same word the note above the list tells a viewer to
-  /// press (`LinkedDriveFilesView.matchedByNameNote`). Not "Refresh": what
-  /// it does is fetch the list again, and refresh is what a television does
-  /// sixty times a second.
-  static const String reloadLabel = 'Reload';
+  /// There used to be a Reload button on a row of its own under the pill.
+  /// The pill's second press was the only thing left for it to do -- every
+  /// other control on these rows already turns Remote off, so a press on a
+  /// pill that is on had no job -- and a row that came and went with a
+  /// toggle moved the grid under a viewer's eyes and added a rung to the
+  /// television's walk. "Reload", not refresh: what it does is fetch the
+  /// list again, and refresh is what a television does sixty times a
+  /// second.
+  static const IconData reloadGlyph = Icons.refresh;
 
   /// What the app bar's way to the downloads screen is called. Not
   /// "Downloaded": that is the pill beside the types, and it says what to
@@ -945,16 +953,22 @@ class _FilterRow extends StatelessWidget {
 
   final ValueChanged<LibraryRequest> onSelect;
 
-  /// Turns the local option on and off. A press on it is the only way off it
-  /// besides pressing one of the engine's, which is what a pill that can be
-  /// current owes a viewer: a control that will not let go is a control they
-  /// have to guess their way out of.
+  /// Turns the local option on. The way off it is any other pill on these
+  /// rows -- one of the engine's types, a sort, Downloaded -- each of which
+  /// means "show me the engine's list" and turns Remote off on the way.
+  /// A second press on the pill itself is [onReload].
+  ///
+  /// The one screen with no other pill is an empty library with nothing
+  /// downloaded, and there Remote stays on: what it would go back to is
+  /// the engine's empty grid, and the list of the files the viewer just
+  /// linked is the better of the two to be left looking at.
   final ValueChanged<bool> onRemote;
 
-  /// Asks Drive what the linked files are called now. Only reachable while
-  /// [remote] is on, because it is about the list that is on screen then
-  /// and about nothing else: a Reload sitting beside the engine's types
-  /// would be a button whose subject a viewer has to guess.
+  /// Asks Drive what the linked files are called now: what a press on the
+  /// Remote pill does while it is on. Only reachable then, because it is
+  /// about the list that is on screen then and about nothing else: a
+  /// Reload sitting beside the engine's types would be a button whose
+  /// subject a viewer has to guess.
   final VoidCallback onReload;
 
   /// Whether the Downloaded pill is current.
@@ -1028,16 +1042,28 @@ class _FilterRow extends StatelessWidget {
           spacing: 12,
           runSpacing: 8,
           children: [
+            // One pill, two presses: the first turns it on, and while it
+            // is on a press reloads the list rather than turning it off,
+            // which the glyph says -- a cloud while off, the reload arrow
+            // while on, and no checkmark, since the checkmark would be
+            // painted over the one glyph that carries the meaning. The
+            // word stays "Remote" either way: with every type drawn as
+            // not-current, the lit pill is the only thing on the screen
+            // that says which list this is.
             if (hasRemote)
               FocusTraversalOrder(
                 order: const NumericFocusOrder(0),
                 child: FocusMarked(
                   borderRadius: FocusMarked.stadium,
                   child: FilterChip(
-                    avatar: const Icon(Icons.cloud_outlined, size: 18),
+                    avatar: Icon(
+                      remote ? LibraryScreen.reloadGlyph : Icons.cloud_outlined,
+                      size: 18,
+                    ),
+                    showCheckmark: false,
                     label: const Text(LibraryScreen.remoteLabel),
                     selected: remote,
-                    onSelected: onRemote,
+                    onSelected: (_) => remote ? onReload() : onRemote(true),
                   ),
                 ),
               ),
@@ -1062,19 +1088,6 @@ class _FilterRow extends StatelessWidget {
                 ),
               ),
           ],
-        ),
-      // Under the pill it belongs to, and only while that pill is on. It is
-      // an [ActionChip] and not a second [FilterChip] for the reason
-      // Downloaded is one: pressing it does something and then it is over,
-      // where a pill says what the body is showing.
-      if (remote)
-        FocusMarked(
-          borderRadius: FocusMarked.stadium,
-          child: ActionChip(
-            avatar: const Icon(Icons.refresh, size: 18),
-            label: const Text(LibraryScreen.reloadLabel),
-            onPressed: onReload,
-          ),
         ),
     ];
     return Padding(
