@@ -95,8 +95,7 @@ screen-by-screen inventory, and a feature with a design document links it.
 Every version tag builds Linux, Windows, macOS and both Android ABIs and
 attaches them to a
 [GitHub Release](https://github.com/zond/xtremio/releases) -- that is where a
-build comes from. Nothing is tagged yet, so until the first one that page is
-empty and building it yourself is the only way. One thing about those builds
+build comes from. One thing about those builds
 is worth knowing before installing, and the release notes say it: the macOS
 build is unsigned. The APKs carry this project's own release key, so anyone
 who installed one from before that key must uninstall first: to Android, a
