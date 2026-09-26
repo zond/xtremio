@@ -36,7 +36,7 @@ whole of what it does. When a **phone** pairs with a Google Drive, the app
 opens the pick page in the system browser itself, and the page ends by
 navigating to `stremio:///pair` (`drivePairingHandBackLink`,
 `lib/core/drive_pairing.dart`; `HAND_BACK_LINK` in
-`drive-link/functions/index.js`, which is the end that sends it). The
+`xtremio-xervice/functions/index.js`, which is the end that sends it). The
 platform brings the app forward, `MainActivity` being `singleTop`, and the
 link itself is dropped by the rule above. Nothing navigates, nothing is
 dispatched, and nothing changes on a cold start, where `app_links` replays

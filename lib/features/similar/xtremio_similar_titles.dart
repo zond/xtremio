@@ -2,7 +2,7 @@
 ///
 /// One `GET {base}/similar/{type}/{id}`, answered with
 /// `{"titles":[{"title","year","kind","why"}, …], "version": 1}`. The server
-/// (`drive-link/functions/similar.js`) holds the Gemini key, builds the
+/// (`xtremio-xervice/functions/similar.js`) holds the Gemini key, builds the
 /// question from the name and year Cinemeta has for the id, and keeps the
 /// first answer for a title for everybody -- so nothing is sent from here
 /// but a type and an id, and there is nothing secret in this file or in

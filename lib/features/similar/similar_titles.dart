@@ -2,7 +2,7 @@
 /// can go wrong with.
 ///
 /// The question is not asked here. It lives on the xtremio-drive server
-/// (`drive-link/functions/similar.js`), which holds the one Gemini key
+/// (`xtremio-xervice/functions/similar.js`), which holds the one Gemini key
 /// there is, asks the model once per title, and hands the same answer to
 /// every install after that. What is measured about the model and the
 /// wording lives in `tool/recommendations/`; none of it is this app's to

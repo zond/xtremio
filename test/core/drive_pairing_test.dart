@@ -10,7 +10,7 @@ import '../support/fake_drive_pairing_service.dart';
 /// The television's two calls against the pairing service, answered by a
 /// server on the loopback rather than by a stub of the parsing.
 ///
-/// Every shape here is one `drive-link/functions/index.js` really answers
+/// Every shape here is one `xtremio-xervice/functions/index.js` really answers
 /// with: the session, the two waiting statuses, the `ready` that deletes
 /// the session as it hands the tokens over, the `410` for a window that
 /// closed, the `404` for a session that has been collected, and the `429`

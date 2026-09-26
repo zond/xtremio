@@ -14,7 +14,7 @@ import '../player/player_screen.dart';
 /// The television cannot run the Google Picker -- it is web-only -- and
 /// cannot hold an OAuth client secret, because it is an app anybody can
 /// unpack. So a phone does the signing in and the picking, the service in
-/// `drive-link/` does the two things that need the secret, and this screen
+/// `xtremio-xervice/` does the two things that need the secret, and this screen
 /// is the television's whole part: ask for a session, draw it, poll until
 /// the phone has finished, hand what comes back to [DriveAccount].
 ///
@@ -154,7 +154,7 @@ class DrivePairingScreen extends StatefulWidget {
   /// (sixty an hour per address) and `POST /refresh` do -- so what bounds
   /// this is not a `429` but a Firestore read and a function invocation per
   /// poll, on a project with no budget cap
-  /// (`drive-link/README.md`, "What is deliberately not here"). Three
+  /// (`xtremio-xervice/README.md`, "What is deliberately not here"). Three
   /// seconds over the whole ten minutes is two hundred reads for one
   /// pairing, which is nothing, and it is bounded because the window is:
   /// the screen stops asking rather than sitting on a code all evening.

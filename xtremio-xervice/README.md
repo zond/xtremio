@@ -1,4 +1,4 @@
-# drive-link
+# xtremio-xervice
 
 Pairing a television with files in a Google Drive, over a QR code.
 

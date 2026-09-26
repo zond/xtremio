@@ -7,7 +7,7 @@ import 'package:xtremio/features/similar/similar_titles.dart';
 import 'package:xtremio/features/similar/xtremio_similar_titles.dart';
 
 /// Asking the xtremio-drive server what a title is like, over a server on
-/// the loopback that answers what `drive-link/functions/similar.js` does.
+/// the loopback that answers what `xtremio-xervice/functions/similar.js` does.
 ///
 /// What is checked is the contract between the two: the path the request
 /// goes to, the answer's shape, and every status the function can answer

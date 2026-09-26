@@ -41,7 +41,7 @@ import 'package:flutter/foundation.dart';
 /// which is exactly what it is.
 ///
 /// The question itself is asked by the server now
-/// (`drive-link/functions/similar.js`), which keys its own cache by its
+/// (`xtremio-xervice/functions/similar.js`), which keys its own cache by its
 /// `QUESTION_VERSION` and names that version in every answer. **Bump this
 /// when that bumps**, or a device that already holds an answer keeps the
 /// old one for the life of the install while every new install gets the

@@ -2,7 +2,7 @@
 
 The app shows a "More like this" row on a title, filled by a language
 model. The app does not ask the model itself: the xtremio-drive Firebase
-function (`drive-link/functions/similar.js`) holds the owner's Gemini key,
+function (`xtremio-xervice/functions/similar.js`) holds the owner's Gemini key,
 asks once per title, and keeps that answer for everybody. This is how we
 decide which model it asks, and with what question.
 
@@ -50,7 +50,7 @@ research: see **Pooling** below.
 
 **`recommend_bench.py` asks what the app asks**, and it is on the reader
 to keep it that way: the prompt and the system instruction are the ones
-in `drive-link/functions/similar.js`, word for word (they lived in
+in `xtremio-xervice/functions/similar.js`, word for word (they lived in
 `lib/features/similar/similar_titles.dart` until the ask moved to the
 server). Change the function, change the script, re-measure, and say here
 what moved. Measuring one question while
@@ -111,7 +111,7 @@ Nothing, any more. The keys used to ship with the app (`ship_keys.py`
 cut them to about 30 KB) so that a viewer who pasted their own API key
 could run a "Test this model" check from Settings against them. The app
 has no key, no model setting and no check now: the model is chosen here
-and named in `drive-link/functions/similar.js`, and these numbers are
+and named in `xtremio-xervice/functions/similar.js`, and these numbers are
 what that choice rests on. `ship_keys.py` still writes the asset path the
 app used; nothing reads it.
 
@@ -195,7 +195,7 @@ Three cautions, none of them about series:
   model on the same question** (+0.15 against +0.19). Either run-to-run
   noise, or `gemini-3.1-flash-lite` has moved behind a stable name. The
   second is the reason the model is named in one place
-  (`drive-link/functions/similar.js`) and every failure is classified
+  (`xtremio-xervice/functions/similar.js`) and every failure is classified
   rather than fatal.
 * **`The Call of Cthulhu` is below chance on tone** (0.36 against 0.41),
   and it was in every run all day. The model hears "Lovecraft" and misses

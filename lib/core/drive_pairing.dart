@@ -1,4 +1,4 @@
-/// Talking to the pairing service in `drive-link/`: opening a session and
+/// Talking to the pairing service in `xtremio-xervice/`: opening a session and
 /// collecting what a phone left on it.
 ///
 /// The service is the half of a Google Drive pairing that needs a client
@@ -48,7 +48,7 @@ import 'package:flutter/foundation.dart';
 /// dropped then too, because it was never acted on in the first place.
 ///
 /// The end that actually sends it is the service, whose `HAND_BACK_LINK`
-/// (`drive-link/functions/index.js`) is the copy that matters -- the URL is
+/// (`xtremio-xervice/functions/index.js`) is the copy that matters -- the URL is
 /// hard-coded there so that a page on that origin never navigates to a URL
 /// a client sent it. This constant is the app's side of the agreement and
 /// nothing but a test reads it.
@@ -387,7 +387,7 @@ class XtremioDrivePairingService implements DrivePairingService {
   });
 
   /// Where the service lives, as the service itself writes it down
-  /// (`drive-link/functions/index.js`, `PUBLIC_ORIGIN`). It has to be this
+  /// (`xtremio-xervice/functions/index.js`, `PUBLIC_ORIGIN`). It has to be this
   /// host and not the Cloud Run one behind the Hosting rewrite: the pages
   /// are served here, and this is the redirect URI the OAuth client knows.
   static const String defaultOrigin = 'https://xtremio-drive.web.app';

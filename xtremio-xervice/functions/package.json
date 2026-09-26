@@ -1,6 +1,6 @@
 {
-  "name": "xtremio-drive-link",
-  "description": "Pairing a television with one Google Drive file, over a QR code",
+  "name": "xtremio-xervice",
+  "description": "xtremio's service: Drive pairing and More like this",
   "main": "index.js",
   "engines": {
     "node": "22"

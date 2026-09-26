@@ -61,7 +61,7 @@ enum DriveListingFailure {
   unreachable,
 
   /// The pairing service is refusing to mint any more tokens for this
-  /// credential this hour (sixty, `drive-link/functions/index.js`). A limit
+  /// credential this hour (sixty, `xtremio-xervice/functions/index.js`). A limit
   /// that exists for cost rather than anything about this device.
   tooOften,
 
