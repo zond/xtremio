@@ -1020,6 +1020,8 @@ mod tests {
     /// serialize with this.
     #[test]
     fn fetch_decodes_json_from_the_embedded_server() {
+        // It starts a server, which writes the process's log filter.
+        let _serialised = crate::logging::serialise_with_the_filter();
         let tmp = tempfile::tempdir().expect("tempdir");
         let url = crate::server::start(crate::server::StartConfig {
             config_dir: tmp.path().join("server"),

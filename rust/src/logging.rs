@@ -75,13 +75,29 @@ static INIT: Once = Once::new();
 /// rather than merely left out.
 static FILTER: OnceLock<(String, reload::Handle<EnvFilter, Registry>)> = OnceLock::new();
 
-/// Serialises the tests that flip the process's one filter and then read
-/// it back. Two of them exist -- this module's and the one that goes
-/// through the server's settings -- and the filter they assert about is
-/// global, so run together they read each other's writes. This is the
-/// shape that made stream-server's own suite flake once already.
+/// Serialises every test that writes the process's one filter: the ones
+/// that flip it and read it back, and **every one that starts an embedded
+/// server**, because a start sets the filter from that server's settings
+/// file (`server::start_with`) -- off, for a fresh one. The filter is
+/// global and the lib's tests run in parallel, so a test that starts a
+/// server in another thread could turn the trace off between
+/// `a_start_applies_the_setting_the_last_session_left`'s restart and its
+/// check. It did in a full run on 2026-09-27, while only the tests that
+/// flipped the filter on purpose took this lock. This is the shape
+/// that made stream-server's own suite flake once already. Take it through
+/// [`serialise_with_the_filter`].
 #[cfg(test)]
-pub(crate) static VERBOSE_TEST_LOCK: Mutex<()> = Mutex::new(());
+static VERBOSE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+/// Holds [`VERBOSE_TEST_LOCK`] for the rest of the calling test. A test that
+/// failed while holding it poisoned nothing worth protecting -- the filter
+/// is set afresh by whoever runs next -- so a poisoned lock is taken as is.
+#[cfg(test)]
+pub(crate) fn serialise_with_the_filter() -> std::sync::MutexGuard<'static, ()> {
+    VERBOSE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 /// Turns the retention and proxy traces on or off in the running process.
 ///
@@ -347,9 +363,7 @@ mod tests {
     /// nothing else can turn the two traces on.
     #[test]
     fn the_verbose_switch_opens_and_shuts_the_two_traces() {
-        let _serialised = super::VERBOSE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let _serialised = super::serialise_with_the_filter();
         super::init();
         let retention = || tracing::enabled!(target: stream_server::RETENTION_TRACE_TARGET, tracing::Level::INFO);
         let proxy =

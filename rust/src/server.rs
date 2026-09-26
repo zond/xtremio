@@ -1106,9 +1106,7 @@ mod tests {
     /// to reach its file and stop there.
     #[test]
     fn the_diagnostics_setting_reaches_this_processes_filter() {
-        let _serialised = crate::logging::VERBOSE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _serialised = crate::logging::serialise_with_the_filter();
         crate::logging::init();
         let app = Arc::new(AppState::default());
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -1140,9 +1138,7 @@ mod tests {
     /// last week gets it on again without touching the switch.
     #[test]
     fn a_start_applies_the_setting_the_last_session_left() {
-        let _serialised = crate::logging::VERBOSE_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _serialised = crate::logging::serialise_with_the_filter();
         crate::logging::init();
         let tmp = tempfile::tempdir().expect("tempdir");
         let config = StartConfig {
@@ -1171,6 +1167,8 @@ mod tests {
 
     #[test]
     fn with_handle_readers_run_concurrently_with_token_for() {
+        // It starts a server, which writes the process's log filter.
+        let _serialised = crate::logging::serialise_with_the_filter();
         let app = Arc::new(AppState::default());
         let tmp = tempfile::tempdir().expect("tempdir");
         let url = start_in(
@@ -1235,6 +1233,8 @@ mod tests {
     /// it as a writer and every new reader queued behind the stop.
     #[test]
     fn a_stop_waiting_on_a_call_in_flight_holds_up_no_reader() {
+        // It starts a server, which writes the process's log filter.
+        let _serialised = crate::logging::serialise_with_the_filter();
         let app = Arc::new(AppState::default());
         let tmp = tempfile::tempdir().expect("tempdir");
         let url = start_in(&app, config(tmp.path())).expect("server start");
@@ -1297,6 +1297,8 @@ mod tests {
     /// isolate asks for the base URL throughout.
     #[test]
     fn a_boot_holds_up_no_reader() {
+        // It starts a server, which writes the process's log filter.
+        let _serialised = crate::logging::serialise_with_the_filter();
         let app = Arc::new(AppState::default());
         let tmp = tempfile::tempdir().expect("tempdir");
         let (held, entered, release) = held_spawn();
@@ -1322,6 +1324,8 @@ mod tests {
     /// started, rather than finding none yet and spawning a second one.
     #[test]
     fn a_start_during_a_boot_is_the_same_server() {
+        // It starts a server, which writes the process's log filter.
+        let _serialised = crate::logging::serialise_with_the_filter();
         let app = Arc::new(AppState::default());
         let tmp = tempfile::tempdir().expect("tempdir");
         let spawned = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -1366,6 +1370,8 @@ mod tests {
     /// than finding nothing yet and leaving the boot's server running.
     #[test]
     fn a_stop_during_a_boot_stops_what_it_starts() {
+        // It starts a server, which writes the process's log filter.
+        let _serialised = crate::logging::serialise_with_the_filter();
         let app = Arc::new(AppState::default());
         let tmp = tempfile::tempdir().expect("tempdir");
         let (held, entered, release) = held_spawn();
