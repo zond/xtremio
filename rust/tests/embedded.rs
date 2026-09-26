@@ -39,10 +39,11 @@ fn config(root: &std::path::Path) -> ServerConfig {
     }
 }
 
-/// `GET /heartbeat` without credentials: the status the server answers with.
-/// The control API requires the per-launch bearer token, so a plain request
-/// is refused (401); the media routes players fetch stay open.
-async fn heartbeat_status(base_url: &str) -> anyhow::Result<StatusCode> {
+/// `GET /settings` without credentials: the status the server answers with.
+/// The control routes -- exactly the ones stremio-core calls; the app's own
+/// questions go over FFI -- require the per-launch bearer token, so a plain
+/// request is refused (401); the media routes players fetch stay open.
+async fn control_status(base_url: &str) -> anyhow::Result<StatusCode> {
     let client = reqwest::Client::builder()
         // Loopback: an ambient `HTTP_PROXY` would send a request meant for
         // the server this test started off the machine, and reqwest does
@@ -51,7 +52,7 @@ async fn heartbeat_status(base_url: &str) -> anyhow::Result<StatusCode> {
         .connect_timeout(std::time::Duration::from_secs(5))
         .build()?;
     Ok(client
-        .get(format!("{base_url}heartbeat"))
+        .get(format!("{base_url}settings"))
         .send()
         .await?
         .status())
@@ -131,7 +132,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     );
 
     // Answering, and refusing a control request that carries no token.
-    assert_eq!(heartbeat_status(&url).await?, StatusCode::UNAUTHORIZED);
+    assert_eq!(control_status(&url).await?, StatusCode::UNAUTHORIZED);
 
     // The app's control plane is the library API, no token needed: settings
     // read and patched (the patch is validated and merged like POST
@@ -248,7 +249,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     assert_eq!(usage["protectedBytes"], 0, "{usage}");
     assert_eq!(usage["protectedFiles"], 0, "{usage}");
 
-    // The DHT's status, exactly the `dht` key of `GET /stats.json`: cheap
+    // The DHT's status (`ServerHandle::dht_status`, no route): cheap
     // and synchronous, so unlike the calls above this is not spawned onto a
     // blocking thread. The hermetic test sandbox rarely has a real DHT
     // bootstrap within a test's lifetime, so only the shape is asserted,
@@ -266,7 +267,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     assert!(cleaned["freed"].is_u64(), "{cleaned}");
     assert!(cleaned["deleted"].is_u64(), "{cleaned}");
     assert_eq!(server_base_url()?.as_deref(), Some(url.as_str()));
-    assert_eq!(heartbeat_status(&url).await?, StatusCode::UNAUTHORIZED);
+    assert_eq!(control_status(&url).await?, StatusCode::UNAUTHORIZED);
     // Nothing about the running server changed: the settings patched above
     // are still there, unlike a restart which would merely have reloaded
     // them from disk.
@@ -399,7 +400,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         .unwrap_err();
     assert!(error.to_string().contains("not running"), "{error}");
     assert!(
-        heartbeat_status(&url).await.is_err(),
+        control_status(&url).await.is_err(),
         "server still answering after stop"
     );
     // Unlike every other library call above, this one never errors: no
@@ -416,10 +417,7 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
         move || server_start(cfg)
     })
     .await??;
-    assert_eq!(
-        heartbeat_status(&restarted).await?,
-        StatusCode::UNAUTHORIZED
-    );
+    assert_eq!(control_status(&restarted).await?, StatusCode::UNAUTHORIZED);
     tokio::task::spawn_blocking(server_stop).await??;
     Ok(())
 }

@@ -222,7 +222,7 @@ touch the plugin; `rust/tests/lan_media.rs` drives the listener itself.
 
 **Not verified against a real Chromecast** — there is no receiver on this
 machine. What is verified: the LAN listener over real HTTP (it serves media
-routes, answers `/proxy` and `/heartbeat` with 404, counts every request that
+routes, answers `/proxy` and `/settings` with 404, counts every request that
 reaches it, and is gone after a stop and after a shutdown), the Android
 manifest merge, and every decision the app makes around a fake sender --
 including which address the server is asked for and what is said about a

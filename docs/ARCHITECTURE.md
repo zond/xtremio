@@ -171,9 +171,12 @@ what every model field means. The shape of the thing is in the
   `UserLoggedOut`.
 - **The server's control API requires a bearer token; only Rust has it.**
   `ServerConfig::default()` generates a token per launch, and every
-  non-media route (`/settings`, `/network-info`, `/device-info`,
-  `/casting`, `/create`, the `stats.json` routes, `/heartbeat`) answers
-  401 without `Authorization: Bearer <token>`; the media routes libmpv
+  non-media route -- which is exactly the handful stremio-core calls:
+  `/settings`, `/network-info`, `/device-info`, `/get-https`, `/casting`,
+  `/create`, `/{infoHash}/create`, `/{infoHash}/{fileIdx}/stats.json` --
+  answers 401 without `Authorization: Bearer <token>`; the app itself
+  never speaks HTTP to the server (everything else is a `ServerHandle`
+  call over FFI, and the server has no other control routes); the media routes libmpv
   fetches (`/{infoHash}/{fileIdx}`, archives, `/proxy`) and the
   `/local-addon` stubs stay open. stremio-core reaches the server only
   through `Env::fetch`, so `rust/src/env.rs` adds the header when the

@@ -241,14 +241,11 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
     );
     let socket = loopback(&addr)?;
 
-    // Media routes only. `/heartbeat` is a control route and is not mounted
+    // Media routes only. `/settings` is a control route and is not mounted
     // on this listener at all; `/proxy` is a media route deliberately left
     // off it, and answers a plain 404 rather than being reinterpreted as a
     // torrent path.
-    assert_eq!(
-        status_of(socket, "/heartbeat").await?,
-        StatusCode::NOT_FOUND
-    );
+    assert_eq!(status_of(socket, "/settings").await?, StatusCode::NOT_FOUND);
     assert_eq!(
         status_of(socket, "/proxy/d/http/example.com/a.mp4").await?,
         StatusCode::NOT_FOUND
@@ -312,7 +309,7 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
     assert!(!server_lan_media_running()?);
     assert!(!lan_media_allowed().await?, "the veto was left granted");
     assert!(
-        status_of(socket, "/heartbeat").await.is_err(),
+        status_of(socket, "/settings").await.is_err(),
         "the LAN socket still answers after the session ended"
     );
     assert_eq!(
@@ -338,7 +335,7 @@ async fn lan_media_toggles_and_is_off_around_the_session() -> anyhow::Result<()>
         "the LAN listener outlived the server"
     );
     assert!(
-        status_of(socket, "/heartbeat").await.is_err(),
+        status_of(socket, "/settings").await.is_err(),
         "the LAN socket still answers after shutdown"
     );
 

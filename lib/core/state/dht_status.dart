@@ -1,6 +1,6 @@
 /// What the mainline DHT looks like on this host right now, as the
-/// embedded server sees it (`ServerHandle::dht_status`/the `dht` key of
-/// `GET /stats.json`).
+/// embedded server sees it (`ServerHandle::dht_status`; no HTTP route,
+/// the app is the only thing that asks).
 ///
 /// The DHT is a peer *source*, not a requirement: a torrent with working
 /// trackers downloads fine without one. A network that drops the UDP the

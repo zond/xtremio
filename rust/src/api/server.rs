@@ -370,8 +370,8 @@ pub fn server_stream_numbers(url: String) -> anyhow::Result<Option<String>> {
 }
 
 /// The mainline DHT's status on this host, as JSON (`DhtStatus`: `enabled`,
-/// `nodes`, `nodesV6`, `everBootstrapped`) -- exactly the `dht` key of
-/// `GET /stats.json` (`ServerHandle::dht_status`).
+/// `nodes`, `nodesV6`, `everBootstrapped`) -- `ServerHandle::dht_status`,
+/// which has no HTTP route: the app is the only thing that asks.
 ///
 /// This is information, not a failure. The DHT is a peer *source*, not a
 /// requirement: a torrent with working trackers downloads fine without one,

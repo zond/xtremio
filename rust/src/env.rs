@@ -895,9 +895,13 @@ mod tests {
         assert!(!message.contains(&address.to_string()), "{message}");
     }
 
+    /// `/device-info`, the smallest of the routes stremio-core calls -- and
+    /// a core-protocol route is the only kind of control route there is
+    /// (the app's own questions go over FFI; the server's README "API").
     #[derive(Debug, Deserialize)]
-    struct Heartbeat {
-        success: bool,
+    #[serde(rename_all = "camelCase")]
+    struct DeviceInfo {
+        available_hardware_accelerations: Vec<String>,
     }
 
     /// The one lib test that starts the *process* state's embedded server,
@@ -917,36 +921,37 @@ mod tests {
 
         // The control API wants the per-launch bearer token; `fetch` adds it
         // for the embedded server's URL, so a token-protected route answers.
-        let request = Request::get(url.join("heartbeat").unwrap().as_str())
+        let request = Request::get(url.join("device-info").unwrap().as_str())
             .body(())
             .expect("request");
-        let heartbeat: Heartbeat = CONCURRENT
+        let info: DeviceInfo = CONCURRENT
             .block_on(XtremioEnv::fetch(request))
-            .expect("fetch heartbeat");
-        assert!(heartbeat.success);
+            .expect("fetch device-info");
+        assert!(info.available_hardware_accelerations.is_empty());
 
         // The text path shares the client and the token rule rather than
         // building a second one, and this route is what proves it: it
         // answers 401 without the bearer.
         let text = CONCURRENT
-            .block_on(fetch_text(&url.join("heartbeat").unwrap(), 4096))
-            .expect("fetch heartbeat as text");
-        assert!(text.contains("success"), "{text}");
+            .block_on(fetch_text(&url.join("device-info").unwrap(), 4096))
+            .expect("fetch device-info as text");
+        assert!(text.contains("availableHardwareAccelerations"), "{text}");
 
         // Wrong shape names the JSON path.
         #[derive(Debug, Deserialize)]
         #[allow(dead_code)]
+        #[serde(rename_all = "camelCase")]
         struct Wrong {
-            success: String,
+            available_hardware_accelerations: String,
         }
-        let request = Request::get(url.join("heartbeat").unwrap().as_str())
+        let request = Request::get(url.join("device-info").unwrap().as_str())
             .body(())
             .expect("request");
         let error = CONCURRENT
             .block_on(XtremioEnv::fetch::<(), Wrong>(request))
             .unwrap_err();
         assert!(
-            matches!(&error, EnvError::Serde(message) if message.contains("success")),
+            matches!(&error, EnvError::Serde(message) if message.contains("availableHardwareAccelerations")),
             "{error:?}"
         );
 
@@ -967,7 +972,7 @@ mod tests {
             .body(())
             .expect("request");
         let error = CONCURRENT
-            .block_on(XtremioEnv::fetch::<(), Heartbeat>(request))
+            .block_on(XtremioEnv::fetch::<(), DeviceInfo>(request))
             .unwrap_err();
         assert!(matches!(error, EnvError::Fetch(_)), "{error:?}");
 

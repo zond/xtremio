@@ -342,8 +342,9 @@ fn not_running() -> anyhow::Error {
 }
 
 /// A torrent's `stats.json` as the server's library API answers it: the
-/// per-file stats (`/{infoHash}/{fileIdx}/stats.json`) for `Some(file_idx)`,
-/// the torrent-level ones (`/{infoHash}/stats.json`) otherwise. `trackers`
+/// per-file stats (`ServerHandle::file_stats`, what the core's
+/// `/{infoHash}/{fileIdx}/stats.json` answers) for `Some(file_idx)`, the
+/// torrent-level ones (`ServerHandle::engine_stats`) otherwise. `trackers`
 /// are the stream's `announce` list, exactly what the stream URL's `tr=`
 /// carries; the server uses them only when this call is what creates the
 /// engine. A magnet still resolving reports `phase: resolvingMetadata`
@@ -569,8 +570,8 @@ impl DriveOpenOutcome {
 }
 
 /// Open a file in the paired Google Drive and answer a URL the player can
-/// fetch (`ServerHandle::open_drive_file`, which is `POST /drive/create`'s
-/// own function).
+/// fetch (`ServerHandle::open_drive_file`; there is no HTTP route for it,
+/// because the argument is the account's grant).
 ///
 /// **The token is an argument and never a request.** It crosses from Dart
 /// into this process, is handed to the server's library API, and is spent
@@ -799,8 +800,8 @@ pub fn stream_numbers(
     with_handle(|handle| handle.stream_numbers(url))
 }
 
-/// The mainline DHT's status on this host, exactly the `dht` key of
-/// `GET /stats.json` (`ServerHandle::dht_status`): whether a DHT is
+/// The mainline DHT's status on this host (`ServerHandle::dht_status`,
+/// no HTTP route): whether a DHT is
 /// running, how many nodes are in each routing table right now, and
 /// whether either has ever been non-empty this session (sticky: a table
 /// that empties out again -- peers aged out, the network changed -- still
