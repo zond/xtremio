@@ -578,12 +578,26 @@ app.post('/refresh', async (req, res) => {
   });
   const granted = await token.json();
   if (!token.ok) {
-    // `invalid_grant` is the viewer having revoked us, or the consent
-    // screen still being in Testing, where refresh tokens die after seven
-    // days. The app's answer to both is to pair again, so say which.
-    return res.status(token.ok ? 200 : 401).json({
+    // Two answers mean this token will never refresh here again, and the
+    // app's answer to both is to pair again, so say which:
+    //
+    //  * `invalid_grant` -- the viewer revoked us, or the consent screen is
+    //    still in Testing, where refresh tokens die after seven days;
+    //  * `unauthorized_client` -- the token was issued to another OAuth
+    //    client. Every token from before the move to this project is one:
+    //    without this, a television holding one was told Google could not
+    //    be reached, forever, since the app only ever gives a credential up
+    //    on `pairAgain`.
+    //
+    // Anything else -- `invalid_client` is *our* secret being wrong -- is
+    // not the viewer's to fix and must not cost them their pairing.
+    const pairAgain = ['invalid_grant', 'unauthorized_client']
+        .includes(granted.error);
+    // The error code only: the body can echo the request, token included.
+    console.warn(`refresh refused: ${granted.error || token.status}`);
+    return res.status(401).json({
       error: granted.error || 'refresh failed',
-      pairAgain: granted.error === 'invalid_grant',
+      pairAgain,
     });
   }
   res.json({
