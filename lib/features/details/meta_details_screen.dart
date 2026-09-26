@@ -1136,12 +1136,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// state is reloaded while the call runs, so the tile the user tapped is
   /// a different widget by the time it comes back.
   ///
-  /// **A torrent or a link has one.** A torrent is keyed by its info hash
-  /// and file index, a link by its URL; every other stream of a video
-  /// shares `$videoId|null|null` -- which is harmless only because
+  /// **A torrent, a link or a Drive file has one.** A torrent is keyed by
+  /// its info hash and file index, a link by its URL, a linked Drive file
+  /// by its `xtremio-drive:` URL; every other stream of a video shares
+  /// `$videoId|null|null` -- which is harmless only because
   /// [_StreamDownloads.starter] refuses anything else and so no such pin
-  /// is ever in flight. A linked Drive file is handed no [_StreamDownloads]
-  /// at all ([_downloadsFor]) rather than being let near this key.
+  /// is ever in flight.
   static String _streamKey(String videoId, StreamInfo stream) =>
       '$videoId|${stream.infoHash ?? stream.url}|${stream.fileIdx}';
 
@@ -1164,10 +1164,12 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// about first: the pin replaces it, and the Rust side deletes the file
   /// it replaced. Nothing undoes that, so it is not something a stray tap
   /// gets to do.
+  /// [group] is null for a linked Drive file: there is no addon request to
+  /// record the pin against, and the registry row says so by carrying none.
   Future<void> _download(
     MetaDetailsState state,
     MetaItem meta,
-    StreamGroup group,
+    StreamGroup? group,
     StreamInfo stream,
   ) async {
     final client = _downloadsClient;
@@ -1199,7 +1201,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       poster: meta.poster,
       stream: stream,
       meta: meta.json,
-      streamRequest: group.request.toJson(),
+      streamRequest: group?.request.toJson(),
       metaRequest: state.metaRequest?.toJson(),
     );
 
@@ -2781,10 +2783,13 @@ const String driveSourceStorageLabel = 'drive';
 /// account, not with a stream. Handing it a bound [_StreamDownloads] would
 /// let it read the video's download as one to *replace*, so it is handed
 /// none.
+/// The downloads binding for one source group: an addon's, recorded
+/// against its request, or -- for the group with no addon behind it, the
+/// linked Drive files -- one that pins with no request at all.
 _StreamDownloads? _downloadsFor(
   _StreamDownloads? downloads,
   StreamGroup? group,
-) => group == null ? null : downloads?.forGroup(group);
+) => group == null ? downloads?.forDrive() : downloads?.forGroup(group);
 
 /// An app bar control on a television, handing a press down to the ladder
 /// drawn below the bar.
@@ -3882,7 +3887,8 @@ final class _StreamDerivation {
 typedef _SourceGroup = ({
   /// The addon group, or null for the linked Drive files. Null is what says
   /// there is no addon request to record a pin against and no addon health
-  /// to be affected by; see [_downloadsFor].
+  /// to be affected by; a Drive file downloads all the same, with none
+  /// recorded ([_downloadsFor]).
   StreamGroup? group,
 
   /// The heading, as a viewer reads it: the addon's own name, or
@@ -3935,20 +3941,30 @@ final class _StreamDownloads {
     required this.onDownload,
     required this.onDelete,
     this.group,
+    this.drive = false,
   });
 
   /// The download of the video these tiles belong to, from any source.
   final DownloadView? Function() videoEntry;
   final bool Function(StreamInfo stream) isPending;
-  final void Function(StreamGroup group, StreamInfo stream) onDownload;
+
+  /// Starts a download; the [StreamGroup] is null for a linked Drive file,
+  /// which has no addon request to record.
+  final void Function(StreamGroup? group, StreamInfo stream) onDownload;
 
   /// Removes one, after asking what becomes of the file. Unlike a download
   /// this needs no group: an entry names the stream it was taken from.
   final void Function(DownloadView entry) onDelete;
 
   /// The addon group; null until [forGroup] binds one, which is when a tile
-  /// can offer to download at all.
+  /// can offer to download at all -- or until [forDrive] says there is none
+  /// to bind.
   final StreamGroup? group;
+
+  /// Whether this binding is the linked Drive files': a null [group] that
+  /// nevertheless pins, as opposed to the unbound reading a tile makes
+  /// before it knows which group it is in.
+  final bool drive;
 
   _StreamDownloads forGroup(StreamGroup group) => _StreamDownloads(
     videoEntry: videoEntry,
@@ -3956,6 +3972,14 @@ final class _StreamDownloads {
     onDownload: onDownload,
     onDelete: onDelete,
     group: group,
+  );
+
+  _StreamDownloads forDrive() => _StreamDownloads(
+    videoEntry: videoEntry,
+    isPending: isPending,
+    onDownload: onDownload,
+    onDelete: onDelete,
+    drive: true,
   );
 
   /// The download taken from [stream] itself, if there is one.
@@ -3974,15 +3998,16 @@ final class _StreamDownloads {
   }
 
   /// Starts the download of [stream]; null when the server has nothing to
-  /// pin (only a torrent stream is a file it keeps) or one is already on
-  /// its way.
+  /// pin (a stream that is not a file it keeps) or one is already on its
+  /// way.
   VoidCallback? starter(StreamInfo stream) {
     final group = this.group;
-    // A torrent, or a plain web link: both are files the server keeps (a
-    // torrent in its piece store, a link in its proxy cache -- see the
-    // server's `proxy_downloads`). YouTube and external streams open other
-    // apps and hold no bytes of ours.
-    if (group == null || !_downloadable(stream)) return null;
+    // A torrent, a plain web link or a linked Drive file: all three are
+    // files the server keeps (a torrent in its piece store, the other two
+    // in its proxy cache -- see the server's `proxy_downloads`). YouTube
+    // and external streams open other apps and hold no bytes of ours.
+    if (!_downloadable(stream)) return null;
+    if (group == null && !drive) return null;
     if (isPending(stream)) return null;
     return () => onDownload(group, stream);
   }
@@ -3991,7 +4016,8 @@ final class _StreamDownloads {
       stream.kind == StreamKind.torrent ||
       (stream.kind == StreamKind.url &&
           (stream.url?.startsWith('http://') == true ||
-              stream.url?.startsWith('https://') == true));
+              stream.url?.startsWith('https://') == true ||
+              stream.url?.startsWith('$driveSourceScheme:') == true));
 
   /// What a hold on the source [stream] is drawn on does about the copy on
   /// the device, for a remote that cannot press the button.
@@ -4143,8 +4169,8 @@ class _StreamGroupSliver extends StatelessWidget {
   final StreamInfo? lastUsed;
   final ValueChanged<_SourceRow> onPlay;
 
-  /// The downloads, when there is a client above this screen and this group
-  /// is an addon's ([_downloadsFor]).
+  /// The downloads, when there is a client above this screen
+  /// ([_downloadsFor]).
   final _StreamDownloads? downloads;
 
   @override
@@ -4471,8 +4497,8 @@ class _StreamTile extends StatelessWidget {
   /// What the download side of the tile shows: a button to start one, a
   /// ring while it arrives, a button that deletes it once it is on the
   /// device, and the error as a button that pins again. Nothing at all for
-  /// a stream the server cannot keep (anything but a torrent) or with no
-  /// client above.
+  /// a stream the server cannot keep (not a torrent, a link or a Drive
+  /// file) or with no client above.
   Widget? _downloadAffordance(BuildContext context) {
     final downloads = this.downloads;
     if (downloads == null) return null;

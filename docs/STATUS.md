@@ -168,11 +168,16 @@ long-press to remove, mark watched, rewind or mute notifications), and
 the details header has a bookmark to add or remove a title, wearing on a
 television the same focus ring everything else there wears rather than
 Material's tint. **Downloads**
-keeps a torrent stream on the device: the download button on a stream tile
+keeps a stream on the device -- a torrent in the server's piece store, a
+web link or a linked Google Drive file in its proxy cache: the download
+button on a stream tile
 pins the file through the embedded server and becomes a delete button once
 the file is whole, so the tile that took a download is the tile that undoes
 it -- asking first, as the list does, and saying that the bytes go with
-the entry. On a
+the entry. A Drive download is filled with the account's grant, which
+`DriveAccount` hands to the Rust side when it changes and nowhere else,
+and once whole it opens off the disk -- no request to Drive, so it plays
+with no network. On a
 television that button cannot be focused (directional traversal skips a
 node inside the focused one's rect, and it is inside the stream tile), so
 the tile's long press -- hold select, or the remote's menu key -- does

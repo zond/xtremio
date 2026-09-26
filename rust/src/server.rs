@@ -51,6 +51,11 @@ pub struct ServerState {
     /// boot must stop what that boot installs rather than find nothing and
     /// leave it running.
     lifecycle: Mutex<()>,
+    /// The Google Drive pairing's refresh token, while this device is
+    /// linked -- see [`set_drive_grant`] for where it comes from and what
+    /// it is for. In memory only: the secure store on the Dart side is
+    /// its home, and this process never writes it anywhere.
+    drive_grant: Mutex<Option<String>>,
 }
 
 impl ServerState {
@@ -78,7 +83,57 @@ impl ServerState {
     fn running(&self) -> Option<Arc<ServerHandle>> {
         self.read().clone()
     }
+
+    fn grant(&self) -> MutexGuard<'_, Option<String>> {
+        self.drive_grant
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
+
+/// Hands this process the Drive pairing's refresh token, or takes it back.
+///
+/// **Why Rust holds a copy at all.** A Drive download is a pin on the
+/// server that fetches the file with the account's grant
+/// (`ServerHandle::pin_proxy_download`), and two of the pins are not asked
+/// for by a screen: the launch re-pins every unfinished download
+/// (`downloads::reconcile_pins`), and a pin is retried after a refusal.
+/// Neither has a Dart frame above it to fetch the token from, so
+/// `DriveAccount` hands the grant down once -- on load, on a new pairing
+/// -- and takes it back on unlink or `pairAgain`. It is held in memory
+/// beside the server handle, exactly as long as the account is linked,
+/// and it is spent only inside the server's own process
+/// (`routes::drive`); it is in no log line and no registry file. Playing
+/// a Drive file still passes the token per call (`open_drive_file`) and
+/// does not read this.
+///
+/// Answers whether a grant *arrived* -- `None` to `Some`, or a different
+/// token -- which is when the unfinished Drive downloads are worth pinning
+/// again ([`crate::downloads::repin_drive_downloads`]).
+pub fn set_drive_grant(refresh_token: Option<String>) -> bool {
+    match crate::state::current() {
+        Some(app) => set_drive_grant_in(&app, refresh_token),
+        None => false,
+    }
+}
+
+pub(crate) fn set_drive_grant_in(app: &AppState, refresh_token: Option<String>) -> bool {
+    let refresh_token = refresh_token.filter(|token| !token.is_empty());
+    let mut grant = app.server.grant();
+    let arrived = refresh_token.is_some() && *grant != refresh_token;
+    let changed = *grant != refresh_token;
+    *grant = refresh_token;
+    drop(grant);
+    if changed {
+        tracing::info!(linked = arrived, "the Drive grant changed hands");
+    }
+    arrived
+}
+
+/// The sentence a Drive pin is refused with while no account is linked.
+/// Client-safe, and the whole of what the download's row then says.
+pub const DRIVE_NOT_LINKED: &str =
+    "No Google account is linked to this device, so its Drive files cannot be downloaded.";
 
 /// How to start the embedded server. Two directories, and nothing else to
 /// decide: the port is always ephemeral (see [`spawn`]).
@@ -461,6 +516,18 @@ pub fn proxy_download_key(pin: &ProxyPinKey) -> anyhow::Result<Option<String>> {
 /// Pins a link as an offline download (`ServerHandle::pin_proxy_download`):
 /// the row it answers has the key for `info_hash` and `0` for `file_idx`.
 pub fn pin_proxy_download(pin: ProxyPinKey, name: Option<String>) -> anyhow::Result<DownloadInfo> {
+    let app = crate::state::current().ok_or_else(not_running)?;
+    pin_proxy_download_in(&app, pin, name)
+}
+
+/// [`pin_proxy_download`] against a given state. A Drive pin takes the
+/// grant [`set_drive_grant`] left here and is refused -- before the server
+/// is asked anything -- while there is none ([`DRIVE_NOT_LINKED`]).
+pub(crate) fn pin_proxy_download_in(
+    app: &AppState,
+    pin: ProxyPinKey,
+    name: Option<String>,
+) -> anyhow::Result<DownloadInfo> {
     let request = match pin {
         ProxyPinKey::Url { target, headers } => ProxyDownloadRequest {
             url: Some(target),
@@ -469,17 +536,22 @@ pub fn pin_proxy_download(pin: ProxyPinKey, name: Option<String>) -> anyhow::Res
             refresh_token: None,
             name,
         },
-        ProxyPinKey::Drive { file_id } => ProxyDownloadRequest {
-            url: None,
-            headers: Default::default(),
-            drive_file_id: Some(file_id),
-            // A Drive download needs the pairing's refresh token, which this
-            // side does not pass yet; the server refuses without it.
-            refresh_token: None,
-            name,
-        },
+        ProxyPinKey::Drive { file_id } => {
+            let refresh_token = app
+                .server
+                .grant()
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!(DRIVE_NOT_LINKED))?;
+            ProxyDownloadRequest {
+                url: None,
+                headers: Default::default(),
+                drive_file_id: Some(file_id),
+                refresh_token: Some(refresh_token),
+                name,
+            }
+        }
     };
-    with_handle(|handle| handle.pin_proxy_download(request))
+    with_handle_in(app, |handle| handle.pin_proxy_download(request))
 }
 
 /// Drops a link download's pin by its key
@@ -977,6 +1049,40 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
+
+    /// A Drive pin with no grant in hand is refused with the one sentence,
+    /// before the server is asked -- there is no server here, and the
+    /// refusal is not "not running". Once a grant arrives the pin gets as
+    /// far as the server, which is the "not running" this state has.
+    #[test]
+    fn a_drive_pin_wants_the_grant_before_it_wants_the_server() {
+        let app = Arc::new(AppState::default());
+        let pin = ProxyPinKey::Drive {
+            file_id: "1AbCdEfGh".into(),
+        };
+        let refused = pin_proxy_download_in(&app, pin.clone(), None).unwrap_err();
+        assert_eq!(refused.to_string(), DRIVE_NOT_LINKED);
+
+        assert!(
+            !set_drive_grant_in(&app, Some(String::new())),
+            "empty is none"
+        );
+        assert!(set_drive_grant_in(&app, Some("refresh-tok".into())));
+        assert!(
+            !set_drive_grant_in(&app, Some("refresh-tok".into())),
+            "the same grant again is not an arrival"
+        );
+        let asked = pin_proxy_download_in(&app, pin.clone(), None).unwrap_err();
+        assert_ne!(asked.to_string(), DRIVE_NOT_LINKED);
+        assert!(asked.to_string().contains("not running"), "{asked}");
+
+        assert!(
+            !set_drive_grant_in(&app, None),
+            "taking it back is not an arrival"
+        );
+        let refused = pin_proxy_download_in(&app, pin, None).unwrap_err();
+        assert_eq!(refused.to_string(), DRIVE_NOT_LINKED);
+    }
 
     /// `with_handle` (stats, settings) and `token_for` (`Env::fetch`) both
     /// only need to observe the running handle, so they must run

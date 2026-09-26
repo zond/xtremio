@@ -560,9 +560,8 @@ void main() {
   });
 
   group('it is a source and not an addon', () {
-    testWidgets('it is offered no download, and the addon rows keep theirs', (
-      tester,
-    ) async {
+    testWidgets('it is offered a download like any link, and the pin is '
+        'recorded with no addon request', (tester) async {
       useWideViewport(tester);
       final downloads = FakeDownloadsClient();
       addTearDown(downloads.dispose);
@@ -576,15 +575,16 @@ void main() {
       await tester.pumpAndSettle();
       await toggleSection(tester, StreamResolution.fhd1080);
 
+      final onDriveRow = find.descendant(
+        of: find.widgetWithText(ListTile, driveRelease),
+        matching: find.byTooltip(kDownloadTooltip),
+      );
       expect(
-        find.descendant(
-          of: find.widgetWithText(ListTile, driveRelease),
-          matching: find.byTooltip(kDownloadTooltip),
-        ),
-        findsNothing,
+        onDriveRow,
+        findsOneWidget,
         reason:
-            'nothing to pin: not a torrent, and no addon request for a '
-            'pin to record',
+            'a linked Drive file is a file the server keeps, in its proxy '
+            'cache, exactly as a web link is',
       );
       expect(
         find.descendant(
@@ -593,6 +593,27 @@ void main() {
         ),
         findsOneWidget,
       );
+
+      await tester.tap(onDriveRow);
+      await tester.pumpAndSettle();
+
+      // What was asked for: the Drive source itself -- its
+      // `xtremio-drive:` URL, which the Rust side keys through the server
+      // as `ProxyPinKey::Drive` -- under this title, and with no addon
+      // request, because there is no addon. The grant is not in the
+      // request either: Rust holds it (`DriveAccount.grantSink`).
+      final request = downloads.added.single;
+      expect(request.metaId, movieId);
+      expect(request.videoId, movieId);
+      expect(request.stream.url, driveSourceUrl(file(match: movieMatch)));
+      expect(request.stream.infoHash, isNull);
+      expect(request.streamRequest, isNull);
+      expect(request.name, isNotEmpty);
+      expect(request.toJson().toString(), isNot(contains('a-refresh-token')));
+
+      // And the tile has moved on from offering it: the pin is on its way.
+      expect(onDriveRow, findsNothing);
+      expect(find.text('Downloading ${request.name}'), findsOneWidget);
     });
 
     testWidgets('the addons that answered with nothing are counted without '

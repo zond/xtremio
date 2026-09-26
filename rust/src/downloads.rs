@@ -1203,6 +1203,23 @@ pub fn is_proxy_key(info_hash: &str) -> bool {
 /// The proxy pin a stream names, or `None` for a torrent or anything that
 /// is not an `http(s)` link: the addon URL, and the request headers
 /// stremio-core puts in `h=` (`behaviorHints.proxyHeaders.request`).
+/// The scheme a linked Google Drive file is listed under among a title's
+/// sources (`driveSourceScheme` in `lib/core/drive_source.dart`): the
+/// stream's `url` is `xtremio-drive:<fileId>`, and nothing else about the
+/// file is in the stream -- the pairing that reads it is the account's,
+/// held by Dart and handed to [`crate::server::set_drive_grant`].
+pub const DRIVE_SOURCE_SCHEME: &str = "xtremio-drive";
+
+/// The Drive file id a stream names, when it is a linked Drive file.
+pub fn drive_file_id_of_stream(stream: &serde_json::Value) -> Option<&str> {
+    stream
+        .get("url")
+        .and_then(serde_json::Value::as_str)?
+        .strip_prefix(DRIVE_SOURCE_SCHEME)?
+        .strip_prefix(':')
+        .filter(|id| !id.is_empty())
+}
+
 pub fn proxy_pin_of_stream(stream: &serde_json::Value) -> Option<stream_server::ProxyPinKey> {
     if stream
         .get("infoHash")
@@ -1210,6 +1227,11 @@ pub fn proxy_pin_of_stream(stream: &serde_json::Value) -> Option<stream_server::
         .is_some_and(|hash| !hash.is_empty())
     {
         return None;
+    }
+    if let Some(file_id) = drive_file_id_of_stream(stream) {
+        return Some(stream_server::ProxyPinKey::Drive {
+            file_id: file_id.to_owned(),
+        });
     }
     let target = stream.get("url").and_then(serde_json::Value::as_str)?;
     if !(target.starts_with("http://") || target.starts_with("https://")) {
@@ -1279,7 +1301,7 @@ fn source_of(
         .filter(|hash| !hash.is_empty())
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "only torrent and web-link streams can be downloaded (no infoHash or url)"
+                "only torrent, web-link and Drive streams can be downloaded (no infoHash or url)"
             )
         })?
         .to_lowercase();
@@ -2753,6 +2775,62 @@ pub fn reconcile_pins() {
 /// removals a kill interrupted first, so a cancelled download is not
 /// re-pinned only to be dropped again; the pins of swapped-out files last,
 /// once the re-pin has put the swap's new pin in place.
+/// Pins one unfinished download again and writes a refusal down as its
+/// state; `false` when `app` was retired under the pin, which is the
+/// caller's signal to stop (see [`reconcile_pins_in`] for why a pin
+/// issued after a shutdown must not be written down).
+fn repin_unfinished_in(app: &Arc<AppState>, key: &str, entry: &Entry) -> bool {
+    match pin_entry(entry) {
+        Ok(_) => tracing::info!(key, "re-pinned an unfinished download"),
+        Err(error) => {
+            let failure = PinFailure::classify(&error);
+            tracing::warn!(key, message = failure.message(), "could not re-pin");
+            if !crate::state::is_current(app) {
+                return false;
+            }
+            let _ = update_in(app, |registry| {
+                if let Some(entry) = registry.items.get_mut(key) {
+                    entry.state = State::Error;
+                    entry.error = Some(failure.message().to_owned());
+                }
+                Ok(())
+            });
+        }
+    }
+    true
+}
+
+/// Pins every unfinished Google Drive download again: what the arrival of
+/// the account's grant ([`crate::server::set_drive_grant`]) makes possible.
+///
+/// The boot's [`reconcile_pins`] runs before Dart has read the pairing out
+/// of the secure store, so a Drive download that was mid-fill at the last
+/// exit is refused then -- "no account is linked" -- and written down as
+/// such. This is the other half: once the grant is in hand, those rows are
+/// pinned again and the server's filler resumes; the next tick reads the
+/// live row back over the refusal (`Entry::apply_live`). Torrent and link
+/// downloads are not touched, since nothing about them changed.
+pub fn repin_drive_downloads() {
+    let Some(app) = crate::state::current() else {
+        return;
+    };
+    let items = match load_in(&app) {
+        Ok(registry) => registry.items,
+        Err(error) => {
+            tracing::warn!(%error, "could not read the downloads registry to re-pin Drive downloads");
+            return;
+        }
+    };
+    for (key, entry) in items {
+        if !entry.unfinished() || drive_file_id_of_stream(&entry.stream).is_none() {
+            continue;
+        }
+        if !crate::state::is_current(&app) || !repin_unfinished_in(&app, &key, &entry) {
+            return;
+        }
+    }
+}
+
 pub fn reconcile_pins_in(app: &Arc<AppState>) {
     finish_pending_removals_in(app);
     let items = match load_in(app) {
@@ -2805,22 +2883,8 @@ pub fn reconcile_pins_in(app: &Arc<AppState>) {
         if !crate::state::is_current(app) {
             return;
         }
-        match pin_entry(&entry) {
-            Ok(_) => tracing::info!(key, "re-pinned an unfinished download"),
-            Err(error) => {
-                let failure = PinFailure::classify(&error);
-                tracing::warn!(key, message = failure.message(), "could not re-pin");
-                if !crate::state::is_current(app) {
-                    return;
-                }
-                let _ = update_in(app, |registry| {
-                    if let Some(entry) = registry.items.get_mut(&key) {
-                        entry.state = State::Error;
-                        entry.error = Some(failure.message().to_owned());
-                    }
-                    Ok(())
-                });
-            }
+        if !repin_unfinished_in(app, &key, &entry) {
+            return;
         }
     }
     if !crate::state::is_current(app) {
@@ -3027,6 +3091,49 @@ mod tests {
     /// A link is a source too: keyed by the server, one file, its `h=`
     /// headers carried; a stream that is neither a torrent nor a link is
     /// refused, and so is a link the server cannot key.
+    /// A linked Drive file is listed as an `xtremio-drive:<id>` stream, and
+    /// it downloads like a link: keyed by the server under
+    /// `ProxyPinKey::Drive`, one file, no trackers. The grant is not in
+    /// the stream -- the server side asks `crate::server` for it.
+    #[test]
+    fn a_drive_file_is_a_source_keyed_by_the_server() {
+        let key = "cd".repeat(32);
+        let stream = serde_json::json!({
+            "url": "xtremio-drive:1AbCdEfGh",
+            "name": "A Film.mkv",
+            "behaviorHints": {"filename": "A Film.mkv"},
+        });
+        assert_eq!(drive_file_id_of_stream(&stream), Some("1AbCdEfGh"));
+        let source = source_of(&stream, None, |pin| {
+            assert_eq!(
+                *pin,
+                stream_server::ProxyPinKey::Drive {
+                    file_id: "1AbCdEfGh".into()
+                }
+            );
+            Some(key.clone())
+        })
+        .unwrap();
+        assert_eq!(
+            (source.info_hash.as_str(), source.file_idx),
+            (key.as_str(), Some(0))
+        );
+        assert!(source.announce.is_empty());
+        // An empty id is not a Drive file, and neither is a torrent that
+        // happens to carry a url.
+        assert_eq!(
+            drive_file_id_of_stream(&serde_json::json!({"url": "xtremio-drive:"})),
+            None
+        );
+        assert_eq!(
+            proxy_pin_of_stream(&serde_json::json!({
+                "infoHash": "a".repeat(40),
+                "url": "xtremio-drive:1AbCdEfGh",
+            })),
+            None
+        );
+    }
+
     #[test]
     fn a_link_is_a_source_keyed_by_the_server() {
         let key = "ab".repeat(32);

@@ -239,6 +239,34 @@ pub fn server_drive_open(
     })
 }
 
+/// Hands the Rust side the Google Drive pairing's refresh token, or takes
+/// it back with `None` -- `DriveAccount` calls this on load, on a new
+/// pairing, on unlink and on `pairAgain`, so that what Rust holds is
+/// exactly "linked or not".
+///
+/// **Why Rust needs it at all**, since playing a Drive file passes the
+/// token per call: a Drive *download* is a pin the server fills with the
+/// grant, and the pins nobody presses a button for -- the launch's re-pin
+/// of every unfinished download, a retry after a refusal -- have no Dart
+/// frame to fetch the token from. It is held in memory beside the server
+/// handle (`crate::server::set_drive_grant`), for as long as the account
+/// is linked, and written nowhere.
+///
+/// A grant that *arrives* also pins the unfinished Drive downloads again
+/// (`downloads::repin_drive_downloads`), off this thread: the boot's
+/// re-pin ran before the secure store was read and refused them, and this
+/// is the moment they can go on. Blocks for nothing itself.
+pub fn server_drive_grant(refresh_token: Option<String>) -> anyhow::Result<()> {
+    guarded(|| {
+        if crate::server::set_drive_grant(refresh_token) {
+            std::thread::Builder::new()
+                .name("drive-repin".into())
+                .spawn(crate::downloads::repin_drive_downloads)?;
+        }
+        Ok(())
+    })
+}
+
 /// What the server's cache currently occupies against the limit in force,
 /// as JSON (`CacheUsage`: `totalBytes`, `limitBytes`, `protectedBytes`,
 /// `protectedFiles`).

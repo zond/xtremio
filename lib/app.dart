@@ -276,7 +276,11 @@ class _XtremioAppState extends State<XtremioApp> {
     _ownsDrive = widget.drive == null;
     _drive =
         widget.drive ??
-        DriveAccount(prefs: _prefs, secrets: const SecureStorageSecretStore());
+        DriveAccount(
+          prefs: _prefs,
+          secrets: const SecureStorageSecretStore(),
+          grantSink: rustDriveGrantSink,
+        );
     _sharing = IdleSharingPolicy(prefs: _prefs, server: widget.serverSettings);
     _trace = DiagnosticsTraceSync(prefs: _prefs, server: widget.serverSettings);
     _activity = SharingActivityMonitor(client: widget.sharingActivity);

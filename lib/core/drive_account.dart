@@ -36,6 +36,13 @@ enum DriveLinkState {
   pairAgain,
 }
 
+/// Where the grant is handed once it is known, so that the Rust side can
+/// spend it on the pins nobody presses a button for -- the launch's re-pin
+/// of an unfinished Drive download, a retry after a refusal. `null` takes
+/// it back. [rustDriveGrantSink] is the one the app wires; a test passes
+/// its own or none.
+typedef DriveGrantSink = Future<void> Function(String? refreshToken);
+
 /// What [DriveAccount.link] managed to do with the token it was given.
 enum DriveLinkOutcome {
   /// It is in the platform's secure store and will be there after a
@@ -85,13 +92,28 @@ enum DriveLinkOutcome {
 /// platform that puts the value it was handed into an error message cannot
 /// leak it through a log line either. The report's scrub is the second
 /// lock and knows [refreshTokenKey] by name (`redactSecrets`).
+///
+/// **The grant crosses to Rust exactly when it changes.** Playing a Drive
+/// file hands the token down per call (`openLinkedDriveFile`), but a Drive
+/// *download* is a pin the embedded server fills with the grant, and the
+/// pins nobody presses a button for -- the launch's re-pin of what was
+/// unfinished, a retry -- have no screen above them to fetch it from. So
+/// [grantSink] is told the token when it is loaded or a pairing is made,
+/// and told `null` on [unlink] and [notePairAgain]; Rust holds it in memory
+/// beside the server handle for as long as this says the device is linked
+/// (`crate::server::set_drive_grant`), and writes it nowhere.
 class DriveAccount extends ChangeNotifier {
   DriveAccount({
     required this.prefs,
     this.secrets,
     this.now = DateTime.now,
     this.pairingService = const XtremioDrivePairingService(),
+    this.grantSink,
   });
+
+  /// Where the grant goes when it changes; see the class comment. None in
+  /// a test that has no Rust under it.
+  final DriveGrantSink? grantSink;
 
   /// Where a pairing is finished. Held here rather than by the screen that
   /// starts one, which is the whole point -- see [DrivePairingJob].
@@ -211,6 +233,7 @@ class DriveAccount extends ChangeNotifier {
     }
     _refreshToken = token;
     notifyListeners();
+    await _handOver();
   }
 
   /// Stores [refreshToken] as this device's credential and writes whatever
@@ -238,6 +261,7 @@ class DriveAccount extends ChangeNotifier {
     }
     await prefs.setDriveTokenDead(false);
     notifyListeners();
+    await _handOver();
     return outcome;
   }
 
@@ -298,6 +322,7 @@ class DriveAccount extends ChangeNotifier {
     await _forget();
     await prefs.setDriveTokenDead(true);
     notifyListeners();
+    await _handOver();
   }
 
   /// Undoes the pairing: the credential is deleted, the list of files is
@@ -315,6 +340,24 @@ class DriveAccount extends ChangeNotifier {
     await prefs.setDriveLinkedFiles(LinkedDriveFiles.empty);
     await prefs.setDriveTokenDead(false);
     notifyListeners();
+    await _handOver();
+  }
+
+  /// Tells [grantSink] what [refreshToken] answers now. A sink that throws
+  /// is reported by type and nothing else -- the call it failed in was
+  /// handed the grant -- and the account's own state stands regardless:
+  /// what Rust holds is a copy, and the next change tells it again.
+  Future<void> _handOver() async {
+    final sink = grantSink;
+    if (sink == null) return;
+    try {
+      await sink(refreshToken);
+    } catch (error) {
+      DiagnosticsLog.warn(
+        'drive',
+        'the grant could not be handed to the core (${error.runtimeType})',
+      );
+    }
   }
 
   /// Writes down which catalogue title [fileId] turned out to be, so the

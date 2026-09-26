@@ -153,6 +153,13 @@ class ServerDriveFileOpener implements DriveFileOpener {
 /// Visible for tests, and shaped so that anything it does not recognise is
 /// [DriveOpenFailure.notUnderstood] rather than a throw: a build reading an
 /// answer from a newer core has a sentence to draw instead of a crash.
+/// The [DriveGrantSink] the app wires: the grant to the Rust side, for the
+/// Drive downloads it pins without a screen above it (`server_drive_grant`).
+/// The token goes into the FFI call and nowhere else; the call's own
+/// failure, if any, is [DriveAccount]'s to report by type.
+Future<void> rustDriveGrantSink(String? refreshToken) =>
+    rust.serverDriveGrant(refreshToken: refreshToken);
+
 DriveOpened parseDriveOpenAnswer(String answer) {
   final Object? json;
   try {
