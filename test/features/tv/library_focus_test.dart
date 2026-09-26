@@ -100,8 +100,10 @@ List<String> ctxActions(FakeCoreClient core) => [
 /// Mounts the library and walks the D-pad down through the app bar and the
 /// filter row into the grid, then left to its first tile.
 ///
-/// Three downs and not two: the bar has a control in it now (the link
-/// button), so it is a stop on the way in. The walk itself is what
+/// Three downs and not two: the bar has a control in it (the link button),
+/// and the filter controls are two rows above the grid -- the types with
+/// the sort, then the app's own filters -- each a stop on the way in. The
+/// walk itself is what
 /// `'the D-pad walks the bar, the filter row, then the grid'` asserts
 /// step by step; this only has to arrive.
 Future<FakeCoreClient> mountOnFirstTile(WidgetTester tester) async {
@@ -109,7 +111,7 @@ Future<FakeCoreClient> mountOnFirstTile(WidgetTester tester) async {
   final core = fakeCore();
   await tester.pumpWidget(harness(core));
   await tester.pumpAndSettle();
-  for (var i = 0; i < 4 && focusedTileName(tester) == null; i++) {
+  for (var i = 0; i < 6 && focusedTileName(tester) == null; i++) {
     await press(tester, LogicalKeyboardKey.arrowDown);
   }
   for (var i = 0; i < 2 && focusedTileName(tester) != 'Lanterns'; i++) {
@@ -147,47 +149,73 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTooltip(), RemoteFilesButton.label);
 
-    // Down again is the filter row. The bar's button is at the right, so
-    // "nearest below" is the rightmost control on the row; left walks back
-    // along it, which is how the whole row is reached from the bar.
+    // Down again is the first of the filter rows: the engine's types, one
+    // segmented button, entered at its first segment -- the rung's doing,
+    // since by distance alone the press would land two rows further down.
     await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedLabel(tester), 'Downloaded');
-    await press(tester, LogicalKeyboardKey.arrowLeft);
-    expect(focusedLabel(tester), 'Sort: Last watched');
-    expect(find.byType(DropdownMenu<int>), findsNothing);
-    await press(tester, LogicalKeyboardKey.arrowLeft);
-    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
-    await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusIn<SegmentedButton<int>>(), isTrue);
-    expect(focusedLabel(tester), 'Series');
-    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedLabel(tester), 'All');
+    await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedLabel(tester), 'Movies');
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusedLabel(tester), 'All');
 
-    // Down enters the grid; left and right walk it; up is the filter row
-    // again. The same assertions as before the local option was added -- it
-    // is a stop on the row, not a change to what the row does.
+    // The sort is the last stop of that row, beside the types where the
+    // width allows -- a wide screen spends one line on the engine's half.
+    // Each row below is its own stop on the way down: the app's own
+    // filters -- Remote, then Downloaded to its right -- so a press down
+    // never has to guess where a wrapped row broke.
+    for (
+      var i = 0;
+      i < 4 && focusedLabel(tester) != 'Sort: Last watched';
+      i++
+    ) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+    }
+    expect(focusedLabel(tester), 'Sort: Last watched');
+    expect(find.byType(DropdownMenu<int>), findsNothing);
     await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(
+      focusedLabel(tester),
+      LibraryScreen.remoteLabel,
+      reason: 'the filters row is entered at its first stop',
+    );
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedLabel(tester), 'Downloaded');
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
+
+    // Down enters the grid -- on whichever tile geometry puts under the
+    // chip -- and left and right walk it; up is the filters row again, the
+    // row directly above the grid, whichever of its chips geometry picks.
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedTileName(tester), isNotNull, reason: 'down enters the grid');
+    for (var i = 0; i < 3 && focusedTileName(tester) != 'Lanterns'; i++) {
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+    }
+    expect(focusedTileName(tester), 'Lanterns');
+    await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focusedTileName(tester), 'The Whisper Man');
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusedTileName(tester), 'Lanterns');
     await press(tester, LogicalKeyboardKey.arrowLeft);
     expect(focusedTileName(tester), 'Lanterns', reason: 'first column');
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusedTileName(tester), 'The Whisper Man');
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedTileName(tester), isNull);
-    expect(focusIn<SegmentedButton<int>>(), isTrue);
+    expect(
+      focusedLabel(tester),
+      anyOf(LibraryScreen.remoteLabel, 'Downloaded'),
+      reason: 'up out of the grid is the filters row, not a row past it',
+    );
   });
 
-  testWidgets('and up out of the filter row is the link button, with the '
-      'row in between never stepped over', (tester) async {
+  testWidgets('and up out of the filter rows is the link button, with the '
+      'rows in between never stepped over', (tester) async {
     // The press this is about is the one the board needed two rungs of a
-    // [TvLadder] for. Here the filter row spans the width directly under the
-    // bar, so it is genuinely the nearest thing in each direction and
-    // geometry answers both presses -- which is a claim about the drawing,
-    // and so has to be walked rather than reasoned about.
+    // [TvLadder] for. Here the first filter row spans the width directly
+    // under the bar, so it is genuinely the nearest thing in each direction
+    // and geometry answers both presses -- which is a claim about the
+    // drawing, and so has to be walked rather than reasoned about.
     useScreen(tester, tvSize);
     await tester.pumpWidget(harness(fakeCore()));
     await tester.pumpAndSettle();
@@ -200,7 +228,11 @@ void main() {
       isNull,
       reason: 'down out of the bar landed in the grid, past the whole row',
     );
-    expect(focusedLabel(tester), 'Downloaded');
+    expect(
+      focusIn<SegmentedButton<int>>(),
+      isTrue,
+      reason: 'the first row under the bar is the types',
+    );
     await press(tester, LogicalKeyboardKey.arrowUp);
     // Back into the bar, on whichever of its two buttons is nearest above
     // the chip that was left. Which one is geometry's answer and not this
@@ -227,8 +259,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    // Two downs: the bar, then the rightmost control on the row under it,
-    // which is this chip. It used to be one down and five rights.
+    // Three downs: the bar, the types and the sort, and then the filters
+    // row, which with nothing linked holds this chip alone.
+    await press(tester, LogicalKeyboardKey.arrowDown);
     await press(tester, LogicalKeyboardKey.arrowDown);
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedLabel(tester), 'Downloaded');
@@ -251,8 +284,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    await press(tester, LogicalKeyboardKey.arrowDown);
+    // The bar, the types and the sort, and then the filters row, whose
+    // first chip this is.
+    for (var i = 0; i < 3; i++) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+    }
     for (
       var i = 0;
       i < 8 && focusedLabel(tester) != LibraryScreen.remoteLabel;
@@ -269,12 +305,13 @@ void main() {
     final core = fakeCore();
     await tester.pumpWidget(harness(core));
     await tester.pumpAndSettle();
-    // Down twice for the bar and the row, then left along the row: the
-    // segments are at its left-hand end.
+    // Down twice for the bar and the types row, entered at its first
+    // segment; right along it to Movies.
     await press(tester, LogicalKeyboardKey.arrowDown);
     await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusIn<SegmentedButton<int>>(), isTrue);
     for (var i = 0; i < 6 && focusedLabel(tester) != 'Movies'; i++) {
-      await press(tester, LogicalKeyboardKey.arrowLeft);
+      await press(tester, LogicalKeyboardKey.arrowRight);
     }
     expect(focusedLabel(tester), 'Movies');
 
@@ -330,9 +367,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Down into the bar, down onto the row, then left along it to the pill.
+    // Down into the bar, down past the types and the sort onto the filters
+    // row, then left along it to the pill.
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedTooltip(), RemoteFilesButton.label);
+    await press(tester, LogicalKeyboardKey.arrowDown);
     await press(tester, LogicalKeyboardKey.arrowDown);
     for (
       var i = 0;
@@ -347,10 +386,11 @@ void main() {
     await press(tester, LogicalKeyboardKey.select);
     expect(find.text('ep6.avi'), findsOneWidget);
 
-    // Selecting it also puts Reload on the row, right beside it, and the
-    // remote reaches that with one press: a button a viewer is told to
-    // press has to be a stop on the walk they are already making.
-    await press(tester, LogicalKeyboardKey.arrowRight);
+    // Selecting it also puts Reload on a row of its own directly under
+    // the pill, and the remote reaches that with one press down: a button
+    // a viewer is told to press has to be a stop on the walk they are
+    // already making.
+    await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedLabel(tester), LibraryScreen.reloadLabel);
     expect(
       focusMarks(),
@@ -366,12 +406,8 @@ void main() {
       findsOneWidget,
       reason: 'a press from a remote answers in a line, like every refusal',
     );
-    // And back to the pill it belongs to, so it is not a one-way stop.
-    await press(tester, LogicalKeyboardKey.arrowLeft);
-    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
-
-    // And down into the list it put there, onto a tile the remote can see
-    // it is standing on.
+    // And down from Reload into the list it put there, onto a tile the
+    // remote can see it is standing on.
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedTileName(tester), 'ep6.avi');
     expect(
@@ -379,11 +415,13 @@ void main() {
       isNotEmpty,
       reason: 'a linked file the remote can land on with nothing drawn on it',
     );
-    // Up comes back to the row, so the pill and its list are not a one-way
-    // trip.
+    // Up comes back to Reload, and up again to the pill it belongs to, so
+    // the pill, its button and its list are not a one-way trip.
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedTileName(tester), isNull);
-    expect(focusedLabel(tester), isNotNull);
+    expect(focusedLabel(tester), LibraryScreen.reloadLabel);
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
   });
 
   testWidgets('select on a tile opens its details', (tester) async {
@@ -482,7 +520,11 @@ void main() {
     while (focusedTileName(tester) == null) {
       await press(tester, LogicalKeyboardKey.arrowDown);
     }
-    await press(tester, LogicalKeyboardKey.arrowRight);
+    // Which tile geometry lands on from the last filter row is its own
+    // business; the second tile is the one this test is about.
+    if (focusedTileName(tester) != 'The Whisper Man') {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+    }
     expect(focusedTileName(tester), 'The Whisper Man');
 
     await tester.tap(find.text('Board'));

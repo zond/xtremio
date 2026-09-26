@@ -9,9 +9,11 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../shell/device_profile.dart';
 import 'focusable_tile.dart';
+import 'tv_ladder.dart';
 
 /// One selectable entry of a filter: what to show, whether the engine flags
 /// it as the current one, and the request to dispatch to select it.
@@ -267,14 +269,37 @@ class _FilterMenuButtonState<R> extends State<_FilterMenuButton<R>> {
             ),
           ],
         ],
-        builder: (context, controller, _) => OutlinedButton.icon(
-          focusNode: _button,
-          onPressed: () =>
-              controller.isOpen ? controller.close() : controller.open(),
-          iconAlignment: IconAlignment.end,
-          icon: const Icon(Icons.arrow_drop_down),
-          label: Text(
-            selected == null ? widget.label : '${widget.label}: $selected',
+        // A [MenuAnchor] keeps arrow-key shortcuts installed around its
+        // button while the menu is shut, which move focus by geometry
+        // before any row this button sits in can answer the press. So an
+        // up or down made on the shut button is offered to the enclosing
+        // ladder row first ([TvLadderRow.moveFrom]); left and right, and
+        // every press while the menu is open, are left to the anchor.
+        builder: (context, controller, _) => Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          includeSemantics: false,
+          onKeyEvent: (node, event) {
+            if (event is! KeyDownEvent || controller.isOpen) {
+              return KeyEventResult.ignored;
+            }
+            final up = event.logicalKey == LogicalKeyboardKey.arrowUp;
+            if (!up && event.logicalKey != LogicalKeyboardKey.arrowDown) {
+              return KeyEventResult.ignored;
+            }
+            return TvLadderRow.moveFrom(context, up: up)
+                ? KeyEventResult.handled
+                : KeyEventResult.ignored;
+          },
+          child: OutlinedButton.icon(
+            focusNode: _button,
+            onPressed: () =>
+                controller.isOpen ? controller.close() : controller.open(),
+            iconAlignment: IconAlignment.end,
+            icon: const Icon(Icons.arrow_drop_down),
+            label: Text(
+              selected == null ? widget.label : '${widget.label}: $selected',
+            ),
           ),
         ),
       ),

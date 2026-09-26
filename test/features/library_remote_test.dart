@@ -10,6 +10,7 @@ import 'package:xtremio/features/library/library_screen.dart';
 import 'package:xtremio/features/player/playback_engine.dart';
 import 'package:xtremio/features/player/player_screen.dart';
 import 'package:xtremio/features/similar/similar_resolver.dart';
+import 'package:xtremio/widgets/filter_controls.dart';
 import 'package:xtremio/widgets/library_item_tile.dart';
 import 'package:xtremio/widgets/poster_tile.dart';
 
@@ -100,8 +101,9 @@ void main() {
     CatalogueSearch? search,
     DriveFileLister? lister,
     NavigatorObserver? observer,
+    DownloadsRegistry? downloaded,
   }) {
-    final downloads = FakeDownloadsClient();
+    final downloads = FakeDownloadsClient(registry: downloaded);
     addTearDown(downloads.dispose);
     final screen = LibraryScreen(
       driveOpener: opener ?? FakeDriveFileOpener(),
@@ -165,7 +167,71 @@ void main() {
   }
 
   group('the pill itself', () {
-    testWidgets('is drawn beside the engine\'s types, and is not one of them', (
+    testWidgets('the controls are three rows, in the order a viewer narrows: '
+        'the types with the sort beside them, the app\'s own filters, and '
+        'Reload under them while Remote is on', (tester) async {
+      Future<void> mount(Size size) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          harness(
+            fakeCore(),
+            drive: await account(files: linkedOne),
+            // Any download at all is what makes the Downloaded pill exist.
+            downloaded: DownloadsRegistry.fromJson(loadDownloadsFixture()),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      double top(Finder finder) => tester.getTopLeft(finder).dy;
+      final sortMenu = find.byWidgetPredicate((w) => w is FilterMenu);
+      final remoteChip = find.widgetWithText(
+        FilterChip,
+        LibraryScreen.remoteLabel,
+      );
+      final downloadedChip = find.widgetWithText(FilterChip, 'Downloaded');
+      final reload = find.widgetWithText(ActionChip, LibraryScreen.reloadLabel);
+
+      // Wide: the sort sits on the types' own row, and the filters under
+      // both.
+      await mount(const Size(1200, 900));
+      final types = top(find.byType(SegmentedButton<int>));
+      // Centred on the same line as the segments, whose control is a few
+      // pixels taller than the menu button.
+      expect(
+        top(sortMenu),
+        closeTo(types, 8),
+        reason: 'the sort shares the wide row',
+      );
+      expect(top(remoteChip), greaterThan(types));
+      expect(
+        top(remoteChip),
+        top(downloadedChip),
+        reason: 'Remote and Downloaded share a row',
+      );
+      expect(reload, findsNothing, reason: 'no Reload while Remote is off');
+      await tester.tap(remoteChip);
+      await tester.pumpAndSettle();
+      expect(reload, findsOneWidget);
+      expect(
+        top(reload),
+        greaterThan(top(remoteChip)),
+        reason: 'Reload is on a row of its own under the filters',
+      );
+
+      // Narrow: the same order, with the sort wrapped under the types
+      // where the width forces it -- never above them, and never below
+      // the filters.
+      await tester.pumpWidget(const SizedBox());
+      await mount(const Size(400, 900));
+      final firstChip = top(find.byType(ChoiceChip).first);
+      expect(top(sortMenu), greaterThanOrEqualTo(firstChip));
+      expect(top(remoteChip), greaterThan(top(sortMenu)));
+    });
+
+    testWidgets('is drawn under the engine\'s types, and is not one of them', (
       tester,
     ) async {
       useNarrowScreen(tester);
@@ -578,7 +644,7 @@ void main() {
       await tester.pumpAndSettle();
       await tapRemote(tester);
 
-      await tester.tap(find.text('Arrival'));
+      await tester.tap(find.widgetWithText(LibraryItemTile, 'Arrival'));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
 
@@ -611,7 +677,7 @@ void main() {
       await tester.pumpAndSettle();
       await tapRemote(tester);
 
-      await tester.tap(find.text('Breaking Bad'));
+      await tester.tap(find.widgetWithText(LibraryItemTile, 'Breaking Bad'));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
 
@@ -644,7 +710,7 @@ void main() {
       await tapRemote(tester);
       pushed.names.clear();
 
-      await tester.tap(find.text('ep6.avi'));
+      await tester.tap(find.widgetWithText(LibraryItemTile, 'ep6.avi'));
       await tester.pump();
 
       expect(opener.asked.single.fileId, 'drive-file-1');
@@ -672,7 +738,7 @@ void main() {
       await tester.pumpAndSettle();
       await tapRemote(tester);
 
-      await tester.tap(find.text('ep6.avi'));
+      await tester.tap(find.widgetWithText(LibraryItemTile, 'ep6.avi'));
       await tester.pumpAndSettle();
 
       expect(find.byType(PlayerScreen), findsNothing);

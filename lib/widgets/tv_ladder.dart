@@ -145,6 +145,26 @@ class TvLadderRow extends StatefulWidget {
     required this.child,
   });
 
+  /// Moves the remote out of the row enclosing [context], up or down, and
+  /// says whether a row took it -- for a control that has to ask on the
+  /// row's behalf.
+  ///
+  /// A row answers up and down in its own key handler, which runs after
+  /// every handler *deeper* in the tree has declined the press. A control
+  /// that installs its own arrow-key shortcuts around itself -- a
+  /// [MenuAnchor] does, and keeps them installed while it is shut -- turns
+  /// the press into a directional-focus move before the row sees it, and
+  /// the remote lands wherever geometry says rather than on the next rung
+  /// (measured: down from the library's sort menu skipped the filters row's
+  /// first chip). Such a control calls this from a key handler of its own,
+  /// placed inside the shortcuts, and returns handled when it answers true.
+  /// Off a television, or outside a ladder, it answers false and the press
+  /// falls through as it always did.
+  static bool moveFrom(BuildContext context, {required bool up}) {
+    final row = context.getInheritedWidgetOfExactType<_TvLadderRowScope>()?.row;
+    return row?._moveOut(up: up) ?? false;
+  }
+
   /// Where this row sits in the walk, low to high. The screens that use
   /// this leave gaps between them, so a row that only sometimes exists can
   /// be dropped in without renumbering the rest.
@@ -312,6 +332,14 @@ class TvLadderRowState extends State<TvLadderRow> {
     return true;
   }
 
+  /// What an up or down press made in this row does: remember where it was
+  /// made from -- the focus change on the way out arrives after this --
+  /// and hand the remote to the next row that will take it.
+  bool _moveOut({required bool up}) {
+    _onFocusChange(true);
+    return _ladder?.move(widget.level, up: up) ?? false;
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
@@ -328,11 +356,7 @@ class TvLadderRowState extends State<TvLadderRow> {
     if (!up && key != LogicalKeyboardKey.arrowDown) {
       return KeyEventResult.ignored;
     }
-    // Remember where the press was made from before leaving: the focus
-    // change on the way out arrives after this.
-    _onFocusChange(true);
-    final moved = _ladder?.move(widget.level, up: up) ?? false;
-    return moved ? KeyEventResult.handled : KeyEventResult.ignored;
+    return _moveOut(up: up) ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 
   @override
@@ -343,14 +367,25 @@ class TvLadderRowState extends State<TvLadderRow> {
       onFocusChange: _onFocusChange,
       onKeyEvent: _onKey,
       includeSemantics: false,
-      child: widget.advanceOnSelect
-          ? NotificationListener<RemotePressed>(
-              onNotification: _onActivated,
-              child: widget.child,
-            )
-          : widget.child,
+      child: _TvLadderRowScope(
+        row: this,
+        child: widget.advanceOnSelect
+            ? NotificationListener<RemotePressed>(
+                onNotification: _onActivated,
+                child: widget.child,
+              )
+            : widget.child,
+      ),
     );
   }
+}
+
+/// The row a control is in, for [TvLadderRow.moveFrom].
+class _TvLadderRowScope extends InheritedWidget {
+  const _TvLadderRowScope({required this.row, required super.child});
+  final TvLadderRowState row;
+  @override
+  bool updateShouldNotify(_TvLadderRowScope oldWidget) => row != oldWidget.row;
 }
 
 /// One rung of a collapsing [TvLadder]: a header line that is always on the

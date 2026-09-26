@@ -8,6 +8,7 @@ import '../../widgets/content_type_label.dart';
 import '../../widgets/filter_controls.dart';
 import '../../widgets/focusable_tile.dart';
 import '../../widgets/library_item_tile.dart';
+import '../../widgets/tv_ladder.dart';
 import '../details/meta_details_screen.dart';
 import '../downloads/downloads_controller.dart';
 import '../downloads/downloads_screen.dart';
@@ -56,22 +57,21 @@ import '../similar/similar_resolver.dart';
 /// long press does on a phone), and the sheet puts focus on its first
 /// action so the D-pad can walk it.
 ///
-/// **And no `TvLadder`, which is a decision and not an omission.** The board
-/// carried two rungs for this very button and they did not come with it,
-/// because the two screens differ in exactly the property a ladder is for.
-/// On the board the thing under the bar is a row of posters: nothing is in
-/// the button's own vertical band, so up from a poster takes a corner of the
-/// bar and down out of the bar re-sorts every node on the page by horizontal
-/// distance. Here the thing under the bar is the filter row, which spans the
-/// width, so "the nearest node in that direction" and "the next region down"
-/// are the same answer and geometry gets it right on its own --
-/// `library_focus_test.dart` walks every step of it.
-///
-/// It is also the wrong tool for this row, measured: a rung hands the remote
-/// back to a *stop index* it remembers, and this row's stops are chips
-/// wrapped in [FocusMarked], whose focus nodes re-attach as they rebuild. The
-/// index names a different control from one press to the next, which is the
-/// scheme-disagreeing-with-the-drawing failure wearing a ladder's clothes.
+/// **A [TvLadder] over the bar and the filter rows.** The screen went
+/// without one while its controls were a single row spanning the width
+/// under the bar: "the nearest node in that direction" and "the next region
+/// down" were the same answer, and geometry got it right on its own. They
+/// are three rows now -- the types with the sort, the app's own filters, Reload
+/// -- each left-aligned and shorter than the width, and nothing under the
+/// bar's right-hand buttons is in their vertical band, so a press down out
+/// of the bar re-sorted every node on the page by distance and landed on
+/// the filters row (measured: `Downloaded`, past the types and the sort).
+/// So the bar's actions are rung 0 and the rows rungs 1 to 3, and up and
+/// down walk them in order; the grid below is not a rung, since it spans
+/// the width and geometry reaches it from the last row and comes back to
+/// it from the grid. The stop index a rung remembers can name at worst the
+/// control beside the one the remote left. `library_focus_test.dart` walks
+/// every step of it.
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({
     super.key,
@@ -604,106 +604,121 @@ class _LibraryScreenState extends State<LibraryScreen> {
         final state = json == null ? null : LibraryState.fromJson(json);
         final appended = _appended(context, state);
         final isLoggedIn = _isLoggedIn;
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Library'),
-            actions: [
-              if (isLoggedIn)
-                _syncing
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+        return TvLadder(
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text('Library'),
+              actions: [
+                // One rung for the bar's buttons, so a press down out of it
+                // reaches the first filter row and not whichever control
+                // happens to be nearest (see the class comment).
+                TvLadderRow(
+                  level: 0,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isLoggedIn)
+                        _syncing
+                            ? const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : IconButton(
+                                tooltip: 'Sync now',
+                                icon: const Icon(Icons.sync),
+                                onPressed: _sync,
+                              ),
+                      // Where the Downloaded chip used to go, and only while there
+                      // is something to clean up. Housekeeping is a different
+                      // intention from browsing: the pill below says what to look
+                      // at, this says what to get rid of, and a control that did
+                      // both was the thing that made them hard to tell apart.
+                      if (_hasDownloads)
+                        IconButton(
+                          tooltip: LibraryScreen.downloadsLabel,
+                          // A "downloads" glyph, not a tick: the pill below wears
+                          // the tick and means "show me what is here", this opens
+                          // the place they are managed.
+                          icon: const Icon(Icons.download_for_offline_outlined),
+                          onPressed: _openDownloads,
                         ),
-                      )
-                    : IconButton(
-                        tooltip: 'Sync now',
-                        icon: const Icon(Icons.sync),
-                        onPressed: _sync,
-                      ),
-              // Where the Downloaded chip used to go, and only while there
-              // is something to clean up. Housekeeping is a different
-              // intention from browsing: the pill below says what to look
-              // at, this says what to get rid of, and a control that did
-              // both was the thing that made them hard to tell apart.
-              if (_hasDownloads)
-                IconButton(
-                  tooltip: LibraryScreen.downloadsLabel,
-                  // A "downloads" glyph, not a tick: the pill below wears
-                  // the tick and means "show me what is here", this opens
-                  // the place they are managed.
-                  icon: const Icon(Icons.download_for_offline_outlined),
-                  onPressed: _openDownloads,
+                      const RemoteFilesButton(),
+                    ],
+                  ),
                 ),
-              const RemoteFilesButton(),
-            ],
-          ),
-          body: Column(
-            children: [
-              _tvGroup(
-                context,
-                _FilterRow(
-                  // The engine's half of the row, empty until it has
-                  // loaded something: its options are meaningless
-                  // without its state, and a type filter over a library
-                  // that is still arriving would offer types nothing is
-                  // in.
-                  selectable:
-                      state != null && state.isLoaded && !state.isLibraryEmpty
-                      ? state.selectable
-                      : const LibrarySelectable.empty(),
-                  remote: _remote,
-                  downloaded: _downloadedOnly,
-                  // A control with nothing to act on is not drawn. Neither
-                  // of these is the engine's, so neither appears merely
-                  // because a library did.
-                  hasRemote: (_drive?.files.entries.isNotEmpty ?? false),
-                  hasDownloads: _hasDownloads,
-                  onSelect: _select,
-                  onRemote: (on) => _showRemote(remote: on),
-                  onDownloaded: (on) => _showDownloaded(downloaded: on),
-                  onReload: () => unawaited(_reloadRemote()),
+              ],
+            ),
+            body: Column(
+              children: [
+                _tvGroup(
+                  context,
+                  _FilterRow(
+                    // The engine's half of the row, empty until it has
+                    // loaded something: its options are meaningless
+                    // without its state, and a type filter over a library
+                    // that is still arriving would offer types nothing is
+                    // in.
+                    selectable:
+                        state != null && state.isLoaded && !state.isLibraryEmpty
+                        ? state.selectable
+                        : const LibrarySelectable.empty(),
+                    remote: _remote,
+                    downloaded: _downloadedOnly,
+                    // A control with nothing to act on is not drawn. Neither
+                    // of these is the engine's, so neither appears merely
+                    // because a library did.
+                    hasRemote: (_drive?.files.entries.isNotEmpty ?? false),
+                    hasDownloads: _hasDownloads,
+                    onSelect: _select,
+                    onRemote: (on) => _showRemote(remote: on),
+                    onDownloaded: (on) => _showDownloaded(downloaded: on),
+                    onReload: () => unawaited(_reloadRemote()),
+                  ),
                 ),
-              ),
-              if (!isLoggedIn &&
-                  !_remote &&
-                  state != null &&
-                  !state.isLibraryEmpty)
-                const _SignInHint(),
-              // What the naming note used to sit above, kept where it was
-              // useful: a viewer looking at their linked files is the one
-              // who needs to know that renaming is how a file gets matched.
-              if (_remote) const _NamingNote(),
-              Expanded(
-                child: state == null || !state.isLoaded
-                    ? const Center(child: CircularProgressIndicator())
-                    // Both "nothing here" messages are about an empty
-                    // *body*, and the body is no longer the engine's
-                    // catalog alone: a viewer who has just linked a film
-                    // into an otherwise empty library is the most likely
-                    // of anybody to be hunting for it, and a page saying
-                    // there is nothing with the thing they are looking for
-                    // one merge away is the worst answer on this screen.
-                    // The engine still decides *which* message, because it
-                    // is the engine's filter either one is about.
-                    : _shown(state).isNotEmpty ||
-                          appended.isNotEmpty ||
-                          _unmatched().isNotEmpty
-                    ? _tvGroup(
-                        context,
-                        _buildGrid(
-                          state,
-                          _shown(state),
-                          appended,
-                          _unmatched(),
-                        ),
-                      )
-                    : state.isFilteredEmpty
-                    ? _EmptyFilter(type: state.selected!.type!)
-                    : _EmptyLibrary(isLoggedIn: isLoggedIn),
-              ),
-            ],
+                if (!isLoggedIn &&
+                    !_remote &&
+                    state != null &&
+                    !state.isLibraryEmpty)
+                  const _SignInHint(),
+                // What the naming note used to sit above, kept where it was
+                // useful: a viewer looking at their linked files is the one
+                // who needs to know that renaming is how a file gets matched.
+                if (_remote) const _NamingNote(),
+                Expanded(
+                  child: state == null || !state.isLoaded
+                      ? const Center(child: CircularProgressIndicator())
+                      // Both "nothing here" messages are about an empty
+                      // *body*, and the body is no longer the engine's
+                      // catalog alone: a viewer who has just linked a film
+                      // into an otherwise empty library is the most likely
+                      // of anybody to be hunting for it, and a page saying
+                      // there is nothing with the thing they are looking for
+                      // one merge away is the worst answer on this screen.
+                      // The engine still decides *which* message, because it
+                      // is the engine's filter either one is about.
+                      : _shown(state).isNotEmpty ||
+                            appended.isNotEmpty ||
+                            _unmatched().isNotEmpty
+                      ? _tvGroup(
+                          context,
+                          _buildGrid(
+                            state,
+                            _shown(state),
+                            appended,
+                            _unmatched(),
+                          ),
+                        )
+                      : state.isFilteredEmpty
+                      ? _EmptyFilter(type: state.selected!.type!)
+                      : _EmptyLibrary(isLoggedIn: isLoggedIn),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -890,14 +905,25 @@ class _LibraryScreenState extends State<LibraryScreen> {
 /// engine's choices and a widget tree that said it was would be the first
 /// place the two got confused. See [LibraryScreen._remote].
 ///
-/// **The row is drawn whether the engine has anything to say or not.** It
-/// used to appear only once a non-empty library had loaded, which was fine
-/// while every control on it was the engine's -- and is exactly how a local
-/// option vanishes. Remote is true of this device whatever the core is
-/// doing, and a viewer whose library is empty is the *most* likely to be
+/// **The rows are drawn whether the engine has anything to say or not.**
+/// They used to appear only once a non-empty library had loaded, which was
+/// fine while every control on them was the engine's -- and is exactly how
+/// a local option vanishes. Remote is true of this device whatever the core
+/// is doing, and a viewer whose library is empty is the *most* likely to be
 /// looking for the file they just linked. So the engine's controls come and
 /// go with its state (an empty [LibrarySelectable] draws neither), and the
 /// app's own are always there.
+///
+/// **Three rows, in the order a viewer narrows things down.** The engine's
+/// controls first -- the types, and the sort beside them, wrapping under
+/// them only where the width forces it, so a wide screen spends one line on
+/// the engine's half and a phone two; the app's own filters, Remote and
+/// Downloaded, on the row below; and Reload on a row of its own at the
+/// bottom, only while Remote is on. One wrapped row held all of them, and
+/// which control a press would land on depended on how the wrap happened to
+/// break at that width -- on a television, where the remote walks the rows,
+/// that is a layout that has to be learned per screen size. A row that has
+/// nothing to draw is left out rather than left empty.
 class _FilterRow extends StatelessWidget {
   const _FilterRow({
     required this.selectable,
@@ -972,66 +998,99 @@ class _FilterRow extends StatelessWidget {
           request: sort.request,
         ),
     ];
+    final rows = <Widget>[
+      if (types.isNotEmpty || sorts.isNotEmpty)
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (types.isNotEmpty)
+              isWide
+                  ? FilterSegments(options: types, onSelect: onSelect)
+                  : FilterChips(options: types, onSelect: onSelect),
+            if (sorts.isNotEmpty)
+              FilterMenu(label: 'Sort', options: sorts, onSelect: onSelect),
+          ],
+        ),
+      // The app's own filters, together and under the engine's controls: a
+      // choice of what to look at, made after the type and the order. Chips
+      // in both layouts: at wide widths the engine's types become one
+      // segmented button, and a local option added as a segment of it would
+      // be inside the control whose selection is the engine's. Wrapped,
+      // because the floor fills a chip and cannot outline one.
+      // Its two stops declare their order, so the rung hands the remote
+      // to Remote first whatever order the chips' nodes happen to register
+      // in (`TvLadderRow` sorts stops by a declared order when they all
+      // have one).
+      if (hasRemote || hasDownloads)
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            if (hasRemote)
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(0),
+                child: FocusMarked(
+                  borderRadius: FocusMarked.stadium,
+                  child: FilterChip(
+                    avatar: const Icon(Icons.cloud_outlined, size: 18),
+                    label: const Text(LibraryScreen.remoteLabel),
+                    selected: remote,
+                    onSelected: onRemote,
+                  ),
+                ),
+              ),
+            // A pill, like Remote, and for the same reason: it says what
+            // the body is showing. It used to be an [ActionChip] that
+            // navigated to the downloads screen, which made one control
+            // mean two things -- "show me these" and "let me delete these"
+            // -- and left Remote and Downloaded looking alike while
+            // behaving differently. The way to that screen is now an icon
+            // in the app bar, where housekeeping belongs.
+            if (hasDownloads)
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(1),
+                child: FocusMarked(
+                  borderRadius: FocusMarked.stadium,
+                  child: FilterChip(
+                    avatar: const Icon(Icons.download_done_outlined, size: 18),
+                    label: const Text(downloadedLabel),
+                    selected: downloaded,
+                    onSelected: onDownloaded,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      // Under the pill it belongs to, and only while that pill is on. It is
+      // an [ActionChip] and not a second [FilterChip] for the reason
+      // Downloaded is one: pressing it does something and then it is over,
+      // where a pill says what the body is showing.
+      if (remote)
+        FocusMarked(
+          borderRadius: FocusMarked.stadium,
+          child: ActionChip(
+            avatar: const Icon(Icons.refresh, size: 18),
+            label: const Text(LibraryScreen.reloadLabel),
+            onPressed: onReload,
+          ),
+        ),
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (types.isNotEmpty)
-            isWide
-                ? FilterSegments(options: types, onSelect: onSelect)
-                : FilterChips(options: types, onSelect: onSelect),
-          // Beside the types and before the sort, because it is a choice of
-          // what to look at and the sort is a choice about the list. A chip
-          // in both layouts: at wide widths the engine's types become one
-          // segmented button, and a local option added as a segment of it
-          // would be inside the control whose selection is the engine's.
-          if (hasRemote)
-            FocusMarked(
-              borderRadius: FocusMarked.stadium,
-              child: FilterChip(
-                avatar: const Icon(Icons.cloud_outlined, size: 18),
-                label: const Text(LibraryScreen.remoteLabel),
-                selected: remote,
-                onSelected: onRemote,
-              ),
-            ),
-          // Next to the pill it belongs to, and only while that pill is on.
-          // It is an [ActionChip] and not a second [FilterChip] for the
-          // reason Downloaded is one: pressing it does something and then it
-          // is over, where a pill says what the body is showing. Wrapped
-          // like the rest of the row, because the floor fills a chip and
-          // cannot outline one.
-          if (remote)
-            FocusMarked(
-              borderRadius: FocusMarked.stadium,
-              child: ActionChip(
-                avatar: const Icon(Icons.refresh, size: 18),
-                label: const Text(LibraryScreen.reloadLabel),
-                onPressed: onReload,
-              ),
-            ),
-          if (sorts.isNotEmpty)
-            FilterMenu(label: 'Sort', options: sorts, onSelect: onSelect),
-          // A pill, like Remote, and for the same reason: it says what the
-          // body is showing. It used to be an [ActionChip] that navigated to
-          // the downloads screen, which made one control mean two things --
-          // "show me these" and "let me delete these" -- and left Remote and
-          // Downloaded looking alike while behaving differently. The way to
-          // that screen is now an icon in the app bar, where housekeeping
-          // belongs. Wrapped for the same reason the rest are: the floor
-          // fills a chip and cannot outline one.
-          if (hasDownloads)
-            FocusMarked(
-              borderRadius: FocusMarked.stadium,
-              child: FilterChip(
-                avatar: const Icon(Icons.download_done_outlined, size: 18),
-                label: const Text(downloadedLabel),
-                selected: downloaded,
-                onSelected: onDownloaded,
-              ),
+          // Each row is a rung of the screen's ladder, in this order, so a
+          // press down out of the bar walks them one at a time on a
+          // television (see [LibraryScreen]'s class comment); off one, a
+          // [TvLadderRow] is its child and nothing else. Levels count from
+          // 1 and skip nothing: a row that is not drawn is not registered.
+          for (final (index, row) in rows.indexed)
+            Padding(
+              padding: EdgeInsets.only(top: index == 0 ? 0 : 8),
+              child: TvLadderRow(level: index + 1, child: row),
             ),
         ],
       ),
