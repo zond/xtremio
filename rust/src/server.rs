@@ -159,7 +159,7 @@ fn url_of(handle: &ServerHandle) -> anyhow::Result<Url> {
 /// ephemeral port when that was taken, because stremio-core's default
 /// profile points `streaming_server_url` at `http://127.0.0.1:11470`. It
 /// does not have to: `start_with` reads the bound address back and
-/// `core::retarget_loopback_server` rewrites *any* loopback URL in the
+/// `core::pin_to_embedded` rewrites *any* server URL in the
 /// profile to it, whatever the port. So the preferred port only ever bought
 /// a collision -- with a desktop Stremio, with another instance of this app,
 /// with whatever else holds 11470 -- and the fallback that handled it was a

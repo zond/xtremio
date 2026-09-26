@@ -160,14 +160,17 @@ what every model field means. The shape of the thing is in the
   device that cannot fit the file is told so, with the numbers the server
   refused on, and left buffering as far ahead as it can instead.
 - **The server is in-process**: `stream_server::start` runs on its own
-  thread and runtime; the core's `streaming_server_url` is retargeted to it
-  when the persisted profile points at loopback (a remote server URL set by
-  the user is left alone). Both ports are ephemeral -- the HTTP listener and
-  the BitTorrent one -- because the retarget reads the bound address back, so
+  thread and runtime; the core's `streaming_server_url` is pointed at it
+  at every launch, whatever the persisted profile held
+  (`core::pin_to_embedded`). It is the only server the app streams from:
+  everything the app asks of a server goes to it over FFI, so there is no
+  "remote server" choice (there was one, and it split the player between
+  two servers). Both ports are ephemeral -- the HTTP listener and
+  the BitTorrent one -- because the pin reads the bound address back, so
   nothing downstream needs a number and asking for 11470 could only collide
   with a desktop Stremio. Login and logout reset the profile's
   settings to stremio-core's defaults (`http://127.0.0.1:11470/`), so the
-  event pump re-applies the retarget on `UserAuthenticated` /
+  event pump re-applies the pin on `UserAuthenticated` /
   `UserLoggedOut`.
 - **The server's control API requires a bearer token; only Rust has it.**
   `ServerConfig::default()` generates a token per launch, and every
@@ -522,9 +525,8 @@ what every model field means. The shape of the thing is in the
   by the percentage, `#RRGGBBAA` colours, a transparent background means
   no box); `XtremioApp` creates each `MediaKitEngine` with
   `hardwareDecoding` as the video controller's hardware acceleration, so
-  it applies to the next video that opens. `streamingServerUrl` is the
-  "Embedded server" (the URL init reported) / "Remote server" (a validated
-  http(s) URL) choice. `quitOnClose` and `hideSpoilers` are stored but not
+  it applies to the next video that opens. `streamingServerUrl` is not
+  offered: it is always the embedded server's (see above). `quitOnClose` and `hideSpoilers` are stored but not
   yet honoured (no tray to hide to; the details screen shows thumbnails
   and summaries regardless); the remaining fields pass through untouched.
 - **Account.** Settings → Account dispatches `Authenticate` (`Login` or
@@ -565,14 +567,7 @@ what every model field means. The shape of the thing is in the
   `ctx` pull that can land later. Left alone: a loopback URL (already the
   server, whatever port it bound -- which is what a kept download's own
   URL is), and everything
-  when this build runs no embedded server -- which is not what configuring
-  a streaming server elsewhere does. That rewrites
-  `profile.settings.streamingServerUrl` only: the embedded server keeps
-  running and keeps being named by `CoreInitInfo`, so a remote host's
-  stream is proxied through it on such a build like any other, and the
-  bytes still cross the network once. The torrent such a server is
-  actually for is the opposite case -- it has an info hash, so it goes
-  straight there with `buffer=` and never near the proxy. `force-seekable`
+  when this build runs no embedded server. `force-seekable`
   excludes
   `/proxy` for the same reason it always excluded a remote host: the
   promise that a seek will wait rather than be refused is about the

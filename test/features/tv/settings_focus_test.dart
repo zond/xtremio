@@ -110,47 +110,6 @@ void main() {
     expect(find.byType(AddonsScreen), findsOneWidget);
   });
 
-  testWidgets('the D-pad walks the streaming-server choices and off them', (
-    tester,
-  ) async {
-    useScreen(tester, tvSize);
-    final core = fakeCore(embeddedUrl: Uri.parse('http://127.0.0.1:11470'));
-    await tester.pumpWidget(harness(core));
-    await tester.pumpAndSettle();
-
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    await downTo(tester, 'Embedded server');
-    expect(core.dispatched, isEmpty, reason: 'walking onto one picks nothing');
-
-    // Flutter's RadioGroup takes all four arrow keys to move the
-    // *selection*, and wraps around at the ends: on a television that shut
-    // the remote inside the pair for good, rewriting the setting on every
-    // press. Down walks the choices and then leaves them.
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedLabel(tester), 'Remote server');
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusedLabel(tester), isNot('Embedded server'));
-    expect(focusedLabel(tester), isNot('Remote server'));
-
-    // And up walks back in, and out of the top.
-    await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusedLabel(tester), 'Remote server');
-    await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusedLabel(tester), 'Embedded server');
-    await press(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusedLabel(tester), isNot('Embedded server'));
-    expect(focusedLabel(tester), isNot('Remote server'));
-    expect(core.dispatched, isEmpty, reason: 'nothing was chosen yet');
-
-    // Select is what picks one: the remote choice opens its URL field.
-    await downTo(tester, 'Remote server');
-    await press(tester, LogicalKeyboardKey.select);
-    expect(
-      find.byKey(StreamingServerSection.remoteUrlFieldKey),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('the remote reaches Buffer ahead and picks a choice', (
     tester,
   ) async {
@@ -251,36 +210,6 @@ void main() {
     expect(chosen, isNot(countdown));
     expect(picked, PlayerSettingsSection.upNextLabel(chosen));
     expect(focusIn<DropdownButton<int>>(), isTrue, reason: 'focus returns');
-  });
-
-  testWidgets('the remote reaches the line saying why a URL was refused', (
-    tester,
-  ) async {
-    // A read-only block that is only ever on screen when something has
-    // gone wrong, which is the worst kind to be unreachable: it appears
-    // under the Save that was just pressed, and on a television a block
-    // that takes no focus is one the page cannot be scrolled to.
-    useScreen(tester, tvSize);
-    final core = fakeCore(embeddedUrl: Uri.parse('http://127.0.0.1:11470'));
-    await tester.pumpWidget(harness(core));
-    await tester.pumpAndSettle();
-
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    await downTo(tester, 'Remote server');
-    await press(tester, LogicalKeyboardKey.select);
-    // An empty box is not a URL, which is what the line under it says.
-    // The Save is beside the box rather than under it, so this is a right
-    // press and not another down.
-    await press(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusIn<TvTextField>(), isTrue);
-    await press(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusedLabel(tester), 'Save');
-    await press(tester, LogicalKeyboardKey.select);
-    expect(find.text(StreamingServerSection.invalidUrlMessage), findsOneWidget);
-
-    await downTo(tester, StreamingServerSection.invalidUrlMessage);
-    expect(focusIn<Readout>(), isTrue);
-    expect(focusMarks(), {FocusMark.ring});
   });
 
   testWidgets('and the account row, which is words rather than a control', (

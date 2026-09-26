@@ -434,7 +434,7 @@ fn newest(kinds: &BTreeMap<ResourceKind, Record>) -> Option<DateTime<Utc>> {
 /// Two rules, because the bound-authority check never catches the local
 /// addon. It keeps the transport URL it was born with,
 /// `http://127.0.0.1:11470/local-addon/manifest.json`, and nothing
-/// retargets it -- `crate::core::retarget_loopback_server` rewrites the
+/// retargets it -- `crate::core::pin_to_embedded` rewrites the
 /// streaming server URL in the settings and not the addon -- while the
 /// embedded server is always on a port the OS picked (`server::spawn`
 /// binds port 0; it has not asked for 11470 since the fallback that

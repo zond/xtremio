@@ -286,18 +286,29 @@ pub(crate) fn is_loopback(url: &Url) -> bool {
     }
 }
 
-/// If the profile points at a loopback server (stremio-core's default), point
-/// it at the embedded server instead. A user-configured remote server URL is
-/// left alone.
-pub fn retarget_loopback_server(profile: &mut Profile, embedded: &Url) {
-    retarget_loopback_settings(&mut profile.settings, embedded);
+/// Points the profile's streaming server at the embedded server, whatever it
+/// held: stremio-core's default (`http://127.0.0.1:11470/`), a port an
+/// earlier launch was given, or a remote server's URL.
+///
+/// **The embedded server is the only one this app streams from.** There
+/// used to be a "Remote server" choice, and a remote URL was left alone
+/// here. It was never a working mode: everything the app itself asks of a
+/// server -- the stats overlay, the player's duration and stall notes,
+/// stream numbers, storage, Drive, sharing, downloads -- goes to the
+/// embedded one over FFI, so with a remote URL half of the player watched
+/// an idle server while the other half streamed elsewhere; and the only
+/// thing a remote URL could name was Stremio's own server, since this
+/// server runs nowhere but in the app. The choice is gone, and a profile
+/// that still holds a remote URL is brought back here at the next launch.
+pub fn pin_to_embedded(profile: &mut Profile, embedded: &Url) {
+    pin_settings_to_embedded(&mut profile.settings, embedded);
 }
 
-/// [`retarget_loopback_server`] on the settings alone; `true` when changed.
-fn retarget_loopback_settings(settings: &mut Settings, embedded: &Url) -> bool {
+/// [`pin_to_embedded`] on the settings alone; `true` when changed.
+fn pin_settings_to_embedded(settings: &mut Settings, embedded: &Url) -> bool {
     let current = &settings.streaming_server_url;
-    if is_loopback(current) && current != embedded {
-        tracing::info!(from = %current, to = %embedded, "retargeting streaming server URL at the embedded server");
+    if current != embedded {
+        tracing::info!(from = %current, to = %embedded, "pointing the streaming server URL at the embedded server");
         settings.streaming_server_url = embedded.clone();
         true
     } else {
@@ -305,12 +316,12 @@ fn retarget_loopback_settings(settings: &mut Settings, embedded: &Url) -> bool {
     }
 }
 
-/// Re-applies the init-time retarget after stremio-core reset the settings
+/// Re-applies [`pin_to_embedded`] after stremio-core reset the settings
 /// (login and logout both replace them with `Settings::default()`, whose
 /// server URL is loopback:11470). Dispatches `UpdateSettings` with the
-/// retargeted copy when the current URL is loopback but not the embedded
-/// server; a remote URL, or no embedded server, leaves everything alone.
-pub(crate) fn reapply_loopback_retarget(app: &AppState) {
+/// pinned copy when the URL is anything but the embedded server's; with no
+/// embedded server it leaves everything alone.
+pub(crate) fn reapply_embedded_pin(app: &AppState) {
     let Some(embedded) = server::base_url_in(app) else {
         return;
     };
@@ -323,7 +334,7 @@ pub(crate) fn reapply_loopback_retarget(app: &AppState) {
         Err(_) => return,
     };
     // The model read guard is released; `dispatch` takes the write lock.
-    if retarget_loopback_settings(&mut settings, &embedded) {
+    if pin_settings_to_embedded(&mut settings, &embedded) {
         runtime.dispatch(RuntimeAction {
             field: Some(XtremioModelField::Ctx),
             action: Action::Ctx(ActionCtx::UpdateSettings(settings)),
@@ -420,7 +431,7 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
 
     let mut profile = profile.unwrap_or_default();
     if let Some(embedded) = &server_base_url {
-        retarget_loopback_server(&mut profile, embedded);
+        pin_to_embedded(&mut profile, embedded);
     }
     // The record is about addons this profile has. Once one has been gone
     // long enough that reinstalling it would not be "the same addon" any
@@ -481,7 +492,7 @@ pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
                 Event::UserAuthenticated { .. } | Event::UserLoggedOut { .. },
             ) = &event
             {
-                reapply_loopback_retarget(app);
+                reapply_embedded_pin(app);
             }
             if let RuntimeEvent::NewState(fields, ..) = &event {
                 observe_addon_answers(app, fields);
@@ -661,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn loopback_urls_are_retargeted_but_remote_ones_kept() {
+    fn every_server_url_is_pointed_at_the_embedded_server() {
         let embedded = Url::parse("http://127.0.0.1:43123/").unwrap();
         for loopback in [
             "http://127.0.0.1:11470/",
@@ -670,17 +681,18 @@ mod tests {
         ] {
             let mut profile = Profile::default();
             profile.settings.streaming_server_url = Url::parse(loopback).unwrap();
-            retarget_loopback_server(&mut profile, &embedded);
+            pin_to_embedded(&mut profile, &embedded);
             assert_eq!(
                 profile.settings.streaming_server_url, embedded,
                 "{loopback}"
             );
         }
+        // A remote server's URL, left by the choice this app no longer
+        // offers, is brought back too.
         let mut profile = Profile::default();
-        let remote = Url::parse("http://192.168.1.20:11470/").unwrap();
-        profile.settings.streaming_server_url = remote.clone();
-        retarget_loopback_server(&mut profile, &embedded);
-        assert_eq!(profile.settings.streaming_server_url, remote);
+        profile.settings.streaming_server_url = Url::parse("http://192.168.1.20:11470/").unwrap();
+        pin_to_embedded(&mut profile, &embedded);
+        assert_eq!(profile.settings.streaming_server_url, embedded);
     }
 
     /// Against a state of this test's own, not the process's: buffering is a

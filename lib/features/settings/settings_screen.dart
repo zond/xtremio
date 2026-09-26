@@ -128,18 +128,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => confirmed.forEach(_unconfirmed.remove));
   }
 
-  /// Whether a pull's [landed] value for [key] is the [sent] one, as the
-  /// engine keeps it. The server URL comes back as stremio-core's `Url`,
-  /// with a slash on one typed without a path: compared as strings, the
-  /// URL sent was never let go, so the screen showed it over whatever the
-  /// engine held from then on and every later change sent it back.
-  static bool _shows(String key, Object? landed, Object? sent) {
-    if (landed == sent) return true;
-    return key == ProfileSettings.streamingServerUrlKey &&
-        landed is String &&
-        sent is String &&
-        StreamingServerSection.sameUrl(landed, sent);
-  }
+  /// Whether a pull's [landed] value for [key] is the [sent] one.
+  static bool _shows(String key, Object? landed, Object? sent) =>
+      landed == sent;
 
   /// The streaming-server field pulled (or failed to): piggyback the DHT
   /// read on that same trigger rather than giving it a poll of its own.
@@ -266,13 +257,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const _SectionHeader(RecommendationsSection.title),
           RecommendationsSection(prefs: _prefs),
           const _SectionHeader('Streaming server'),
-          _withSettings(
-            (settings, write) => StreamingServerSection(
-              settings: settings,
-              embeddedUrl: initInfo?.serverBaseUrl,
-              onSetting: write,
-            ),
-          ),
+          // No choice of server: the embedded one is the only one this app
+          // streams from, and the status line below says where it is
+          // (`core::pin_to_embedded` on the Rust side).
           // The app's own preference again, so it is outside `_withSettings`
           // like "Buffer ahead": what it feeds is the embedded server's
           // `seedingEnabled`, not a `profile.settings` field, and the

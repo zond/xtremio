@@ -229,7 +229,9 @@ fn core_lifecycle() -> anyhow::Result<()> {
     assert_eq!(server_base_url()?, None);
     core_shutdown()?; // no-op
 
-    // A persisted remote server URL must survive init untouched.
+    // A persisted remote server URL -- left by the "Remote server" choice
+    // this app no longer offers -- is pointed back at the embedded server:
+    // it is the only server the app streams from (`core::pin_to_embedded`).
     let tmp2 = tempfile::tempdir()?;
     let mut profile = Profile::default();
     profile.settings.streaming_server_url = url::Url::parse("http://192.168.1.20:11470/")?;
@@ -243,11 +245,11 @@ fn core_lifecycle() -> anyhow::Result<()> {
         stremio_core::constants::SCHEMA_VERSION.to_string(),
     )?;
     let result = core_init(config(tmp2.path()))?;
-    assert!(result.server_base_url.is_some());
+    let embedded = result.server_base_url.clone().expect("an embedded server");
     let ctx = state("ctx");
     assert_eq!(
-        ctx["profile"]["settings"]["streamingServerUrl"],
-        "http://192.168.1.20:11470/"
+        ctx["profile"]["settings"]["streamingServerUrl"].as_str(),
+        Some(embedded.as_str())
     );
     core_shutdown()?;
 

@@ -157,8 +157,9 @@ void main() {
       ),
     );
 
-    // The embedded server's URL on its radio tile; the status carries it too.
-    expect(find.text('http://127.0.0.1:11470/'), findsOneWidget);
+    // The status line is where the embedded server's URL is shown: there
+    // is no choice of server to show it on any more.
+    expect(find.text('http://127.0.0.1:11470/'), findsNothing);
     expect(find.text('Connecting… · http://127.0.0.1:11470/'), findsOneWidget);
     expect(find.text('v25'), findsOneWidget);
 
