@@ -18,29 +18,35 @@ engine for addons, catalogs, library and playback state, built here from a
 
 ## What it does
 
-All of this is built and runs today. [docs/STATUS.md](docs/STATUS.md) is the
-screen-by-screen inventory; a feature with a design document links it.
+What Stremio's own apps do -- catalogs and search across every installed
+addon, a library, an account, playback state -- this app does through the
+same engine, [`stremio-core`](https://github.com/Stremio/stremio-core), and
+it draws them its own way (a board with a line naming the addons that could
+*not* answer, so a dead addon is never mistaken for a title nobody has; a
+title's sources as one row per release, in a section per resolution, ranked
+by peers per megabyte). The list below is what it does that they do not.
+All of it is built and runs today; [docs/STATUS.md](docs/STATUS.md) is the
+screen-by-screen inventory, and a feature with a design document links it.
 
-- **Catalogs and search across every addon installed, and a library.** A
-  board of continue-watching and a row per catalog that answered, discover
-  over the engine's own filters, a search that asks every addon supporting it
-  -- and on the board, in search and under a title's sources, a line naming
-  the addons that could *not* answer, so a dead addon is never mistaken for a
-  title nobody has.
 - **Torrent streaming with no external binary.** `stream-server` runs
   in-process on loopback: nothing to ship beside the app, launch, or keep
-  alive on mobile. In the default layout a title's sources are one row per
-  release rather than one per addon offering it, in a section per resolution,
-  ranked by peers per megabyte unless another order is picked; a torrent
-  starts behind a card that says what it is doing -- checking, finding peers,
-  buffering -- instead of a spinner.
-- **Offline downloads.** A download is a file pinned in the embedded server:
-  it is kept, piece by piece, in the one torrent-data root the streaming cache
-  uses, and never exists as a whole file. A finished download plays through
-  the same in-process server off the pieces already on the device -- no peer,
-  no tracker, no network -- and only once the server answers that it holds the
-  file whole. On Android a foreground service keeps one going after the app
-  is left.
+  alive on mobile. A torrent starts behind a card that says what it is doing
+  -- checking, finding peers, buffering -- instead of a spinner, and every
+  stream the app plays -- a torrent, an addon's direct link, a debrid link,
+  a Drive file -- is cached and read ahead of the player by the server,
+  inside one bounded cache.
+- **Offline downloads of any source.** A download is a pin in the embedded
+  server -- a torrent file kept piece by piece, or an addon link or a Google
+  Drive file kept in the same cache -- and never exists as a whole file. A
+  finished download plays through the same in-process server off what is
+  already on the device -- no peer, no origin, no network -- and only once
+  the server answers that it holds the file whole. On Android a foreground
+  service keeps one going after the app is left.
+- **Google Drive as a source.** A phone pairs the app with a Drive account
+  through a QR code and picks files; they appear under the titles they
+  match, play through the server (which renews the token itself), download
+  like any other source and play offline once downloaded. The grant lives in
+  the platform's secure store and is never in a URL or a log.
 - **A player rather than a video widget.** Buffered seek bar, keyboard and
   remote shortcuts, audio tracks, embedded and addon subtitles, a stats OSD
   reporting hwdec, the swarm, what this device holds of the stream either
@@ -175,9 +181,6 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 
 What is genuinely not built:
 
-- **Cloud storage sources** (e.g. Google Drive) -- most naturally via a Stremio
-  addon that resolves cloud files to playable URLs; the provider's OAuth or
-  API-key setup is the fiddly part.
 - **Media3 remuxing for casting**, to let a receiver play a stream it cannot
   decode as it stands. It would run on the sending device with its platform
   hardware codec (Android MediaCodec first) -- never ffmpeg, never software
@@ -195,18 +198,14 @@ What is genuinely not built:
 | [docs/CASTING.md](docs/CASTING.md) | The cast button: what it hands a receiver untouched, and every rule it refuses on. |
 | [docs/ADDONS.md](docs/ADDONS.md) | How each installed addon has been answering, and the verdict the Installed tab reads off that record. |
 | [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md) | What a `stremio://` link may and may not do, and how the scheme is registered on each platform. |
-| [AGENTS.md](AGENTS.md) | What a change has to satisfy here; see [Contributing](#contributing). |
+| [AGENTS.md](AGENTS.md) | How changes are made here: verification, tests and fixtures, what is never logged, and the rules the code depends on. |
 
 ## Contributing
 
 [AGENTS.md](AGENTS.md) is what a change has to satisfy here: single-concept
-commits, the verification that gates them, and the rules a real television
-taught us. Read it before opening a pull request. CI runs the same checks on every push
-to `main` and every pull request: formatting, analysis, the Flutter and Rust
-suites, `cargo clippy -D warnings`, a `cargo check` of the core for 32-bit
-Android, and a check that the `flutter_rust_bridge` bindings regenerate to
-what is committed ([AGENTS.md](AGENTS.md#verification-with-real-exit-codes)
-has the commands).
+commits, the verification that gates them (CI runs the same checks on every
+push and pull request), and the rules a real television taught us. Read it
+before opening a pull request.
 
 ## License
 

@@ -83,14 +83,21 @@ only inside the Rust crate.
 The Google Drive refresh token a pairing hands this device is the third
 thing in that class and the longest-lived of them: it does not expire on
 its own, and it reaches every file that account has ever picked through
-this OAuth client, not just the one the viewer picked this time. It lives
-in the platform's secure store and nowhere else — `SecretStore`
+this OAuth client, not just the one the viewer picked this time. Its home
+is the platform's secure store — `SecretStore`
 (`lib/core/secret_store.dart`), reached only through `DriveAccount` — so it
 is never in `xtremio_prefs.json`, never in a log line, and never in the
 text of a caught exception that is logged (those lines carry the
-exception's *type* and nothing more, which is why). What does go in the
-preferences beside it is the list of linked files: file ids, names and
-mime types, which are no more secret than the library is.
+exception's *type* and nothing more, which is why). The one copy outside
+it is in the Rust side's memory while the device is linked:
+`DriveAccount.grantSink` hands it to `server_drive_grant` on load and on a
+new pairing and hands `null` on unlink and `pairAgain`, because a Drive
+*download* is a pin the server fills with the grant and the pins nobody
+presses a button for (the launch's re-pin, a retry) have no screen to fetch
+it from (`crate::server::set_drive_grant`). Rust writes it nowhere; playing
+a Drive file still passes it per call. What does go in the preferences
+beside it is the list of linked files: file ids, names and mime types,
+which are no more secret than the library is.
 
 A URL in the diagnostics log is made safe in one place, `DiagnosticsLog`
 (`lib/core/diagnostics_log.dart`): `write` rewrites every `http(s)` URL in
@@ -110,27 +117,19 @@ report skips the scrub; once it is off the scrub catches what it wrote.
 
 ## The app never speaks HTTP to the embedded server
 
-Only libmpv fetches from it (the open media routes). Everything else the
-server can answer — settings, a torrent's `stats.json`, creating an
-engine — is a control route that wants the token, and the app reaches it
-in one of two ways: stremio-core's `StreamingServer` model through
-`Env::fetch` (which adds the header), or an FFI function over
-`ServerHandle`'s library API — `rust/src/api/server.rs`
-(`server_torrent_stats`, `server_settings`, `server_update_settings`,
-`server_storage_report`, `server_cache_usage`, `server_clean_cache_now`,
-`server_background_traffic`, `server_stream_numbers`,
-`server_drive_open`) and
-`rust/src/api/downloads.rs` (`downloads_add`, `downloads_remove`,
-`downloads_list`, `downloads_open`, `downloads_events`). A new need goes in
-one of those, as a Rust function returning JSON, not as a `dart:io`
-`HttpClient` call.
+Only libmpv fetches from it (the open media routes), and only
+stremio-core's `StreamingServer` model calls its handful of control routes,
+through `Env::fetch`, which adds the per-launch bearer token that only the
+Rust side holds. The server has no other HTTP: every question the app has
+of it -- settings, a torrent's stats, storage, downloads, Drive, the LAN
+listener -- is an FFI function over `ServerHandle`'s library API, in
+`rust/src/api/server.rs` and `rust/src/api/downloads.rs`, returning JSON.
+A new need goes there, as a Rust function, not as a `dart:io` `HttpClient`
+call, and never as a new route on the server (its `AGENTS.md`, "Routes").
 
-There used to be one FFI call in that shape that was *not* about the
-server: `volume_free_bytes`, a bare `statvfs` for the volume the player's
-own cache file was on. The player keeps no cache file, so nothing asked and
-it is gone. Every storage question the app has is a question about the
-server's cache again, and `server_storage_report` is the one that answers
-it.
+Every storage question the app has is a question about the server's
+cache, and `server_storage_report` answers it; the player keeps no cache
+file of its own.
 
 ## The downloads registry
 
@@ -190,11 +189,20 @@ and the bytes. Keep it that way:
 - **A kept download is not a file, so nothing opens one.** Torrent data is
   stored one file per piece; no whole file is ever produced, and the
   `path` the server reports is a *name* for the file, not something to
-  `open`. `downloads_open` answers the embedded server's media route for
-  the entry's own torrent and file (`{base}/{infoHash}/{fileIdx}`), served
-  off the pieces already here -- no peer, no tracker, no network. A build
-  that goes back to consulting `entry.path` refuses every download on the
-  device.
+  `open`. `downloads_open` answers a URL on the embedded server: the media
+  route for a torrent's own file (`{base}/{infoHash}/{fileIdx}`), or the
+  `playUrl` the server reports for a link or a Drive download
+  (`/downloads/{key}/stream`), served off what is already here -- no peer,
+  no origin, no network. A build that goes back to consulting `entry.path`
+  refuses every download on the device.
+- **A row's source is its stream, and the server keys it.** A torrent row
+  is `(infoHash, fileIdx)`; a link or Drive row is the server's 64-hex
+  cache key as `infoHash` and `0` as `fileIdx` (`is_proxy_key`), asked of
+  the server before the row is written so it lands under its final
+  coordinates (`proxy_download_key`). A linked Drive file is the
+  `xtremio-drive:<fileId>` stream the details screen lists it as; the
+  grant it is filled with is the Rust side's (see *Never log auth
+  material*), never the row's.
 - **The row is not evidence; ask the server.** A `complete` row is the
   last reading, and the pieces sit under a root that can be moved or
   reclaimed without any row being rewritten -- so `downloads_open` hands
@@ -266,18 +274,15 @@ and so cannot check it, and nothing here can drive a real player. What
 holds that one up is the measurement written down beside the property.
 See `docs/ARCHITECTURE.md`, *Subtitles*.
 
-- **A multiplier is measured, never judged.** The toggle that offered
-  25/23.976 and its reciprocal is gone, and so are
-  `SubtitleSpeedDirection`, `subtitleSpeedDirection` and the
-  frame-rate-family reduction that pointed it. It was both too blunt and
-  too narrow for the case it existed for: the owner's Swedish Gilmore
-  Girls file needs 1.0440 where the PAL constant is 1.0427, PAL-ish plus
-  0.12 %, three seconds across an episode that no toggle reaches and no
-  offset cancels. **A rate is only ever derived from evidence about
-  these two files -- a scored alignment, or two marks far enough apart
-  to have a lever arm -- and never from a declared frame rate.** Do not
-  re-derive a multiplier from a rate an addon or a container claims;
-  that is the premise this whole section exists to refuse.
+- **A multiplier is measured, never judged.** A PAL/NTSC toggle was too
+  blunt and too narrow for the case it existed for: the owner's Swedish
+  Gilmore Girls file needs 1.0440 where the PAL constant is 1.0427, three
+  seconds across an episode that no toggle reaches and no offset cancels.
+  **A rate is only ever derived from evidence about these two files -- a
+  scored alignment, or two marks far enough apart to have a lever arm --
+  and never from a declared frame rate.** Do not re-derive a multiplier
+  from a rate an addon or a container claims; that is the premise this
+  whole section exists to refuse.
 - **There are two mechanisms and both are the viewer's.** The match
   measures this file against another they say is in sync
   (`subtitles_match`, below); the marks measure it against the picture
@@ -672,10 +677,8 @@ See `docs/ARCHITECTURE.md`, *Subtitles*.
   get the same order and the auto-pick's one case that reads it is
   untouched. Inside a
   rank the addon that answered first still wins, because that is the
-  file a language row applies. Ordering by the rate is the thing not to put
-  back: it had to be taught that a claim beats no claim, and then that a
-  mis-scaled `fpsMilli` beats neither, and the premise under all of it
-  was still wrong.
+  file a language row applies. Ordering by a declared rate is the thing
+  not to put back: the premise under it was wrong however it was patched.
 - **A release match is whole tokens, and a false one is worse than
   none.** `subtitleMatchesRelease` compares the addon's `releaseGroup`
   and `movieReleaseName` against the name the player knows the video by
