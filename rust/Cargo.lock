@@ -4003,7 +4003,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "stremio-core"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=ef43c64636d68311c059893fb2a40cfbe920bd63#ef43c64636d68311c059893fb2a40cfbe920bd63"
+source = "git+https://github.com/zond/stremio-core?rev=f2cc08bf9dbf1124acf6342abaa957917a7a4306#f2cc08bf9dbf1124acf6342abaa957917a7a4306"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4049,7 +4049,7 @@ dependencies = [
 [[package]]
 name = "stremio-derive"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=ef43c64636d68311c059893fb2a40cfbe920bd63#ef43c64636d68311c059893fb2a40cfbe920bd63"
+source = "git+https://github.com/zond/stremio-core?rev=f2cc08bf9dbf1124acf6342abaa957917a7a4306#f2cc08bf9dbf1124acf6342abaa957917a7a4306"
 dependencies = [
  "case",
  "proc-macro-crate",
@@ -4079,7 +4079,7 @@ dependencies = [
 [[package]]
 name = "stremio-watched-bitfield"
 version = "0.1.0"
-source = "git+https://github.com/zond/stremio-core?rev=ef43c64636d68311c059893fb2a40cfbe920bd63#ef43c64636d68311c059893fb2a40cfbe920bd63"
+source = "git+https://github.com/zond/stremio-core?rev=f2cc08bf9dbf1124acf6342abaa957917a7a4306#f2cc08bf9dbf1124acf6342abaa957917a7a4306"
 dependencies = [
  "base64 0.13.1",
  "flate2",
@@ -4255,7 +4255,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
