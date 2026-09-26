@@ -1161,10 +1161,11 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// title stays out of the library, and how offline progress is recorded
   /// without it.
   ///
-  /// A finished download of the same video from another release is asked
-  /// about first: the pin replaces it, and the Rust side deletes the file
-  /// it replaced. Nothing undoes that, so it is not something a stray tap
-  /// gets to do.
+  /// A download of the same video from another release, finished or not,
+  /// is asked about first: the pin replaces it, and the Rust side deletes
+  /// what it had. Nothing undoes that, so it is not something a stray tap
+  /// gets to do -- and the button itself is an ordinary download button,
+  /// so this question is the only place the replacement is said.
   /// [group] is null for a linked Drive file: there is no addon request to
   /// record the pin against, and the registry row says so by carrying none.
   Future<void> _download(
@@ -1181,9 +1182,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
     // guard against a second press while it stands, and a cancelled one
     // leaves the tile exactly as it was.
     final replaced = downloads.forVideo(widget.id, videoId);
-    if (replaced != null &&
-        replaced.isComplete &&
-        !replaced.stream.isSameSource(stream)) {
+    if (replaced != null && !replaced.stream.isSameSource(stream)) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (_) => _ReplaceDialog(replaced: replaced),
@@ -3783,9 +3782,14 @@ class _ReplaceDialog extends StatelessWidget {
   Widget build(BuildContext context) => AlertDialog(
     title: Text('Replace ${replaced.name}?'),
     content: Text(
-      'It is already downloaded from another source. Downloading this '
-      'stream deletes those ${replaced.sizeLabel} and starts again from '
-      'nothing.',
+      replaced.isComplete
+          ? 'It is already downloaded from another source. Downloading this '
+                'stream deletes those ${replaced.sizeLabel} and starts again '
+                'from nothing.'
+          : 'It is already being downloaded from another source '
+                '(${replaced.downloadedLabel} so far). Downloading this stream '
+                'stops that download, deletes what it has, and starts again '
+                'from nothing.',
     ),
     actions: [
       TextButton(
@@ -4509,16 +4513,13 @@ class _StreamTile extends StatelessWidget {
     final start = downloads.starter(stream);
     if (entry == null) {
       if (start == null) return null;
-      // The same video kept from another release: this button does not add
-      // a download, it swaps one for another and the old file goes. Say
-      // that here, where the press happens -- the summary in the header is
-      // scrolled away by the time a stream tile is reached on a phone.
-      final replaced = downloads.replacedBy(stream);
+      // The same button whether or not the video is kept from another
+      // release: pressing it where one is kept asks first, and the question
+      // says what goes (`_download`). A swap icon here said it in a way
+      // nobody could read off a television, where tooltips do not show.
       return IconButton(
-        tooltip: replaced == null ? kDownloadTooltip : kDownloadReplaceTooltip,
-        icon: Icon(
-          replaced == null ? Icons.download_outlined : Icons.swap_horiz,
-        ),
+        tooltip: kDownloadTooltip,
+        icon: const Icon(Icons.download_outlined),
         onPressed: start,
       );
     }

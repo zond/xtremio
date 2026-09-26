@@ -1291,8 +1291,8 @@ void main() {
         alphaUrl,
         reason: 'the pin records the request the stream came from',
       );
-      // The row that took it now says it is queued, and the others offer
-      // to replace it rather than to add a second download of the title.
+      // The row that took it now says it is queued, and the others offer an
+      // ordinary download, which asks before replacing it.
       expect(
         onRow(
           tester,
@@ -1301,11 +1301,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byTooltip(kDownloadTooltip), findsNothing);
-      expect(
-        onRow(tester, 'Beta 1080p', kDownloadReplaceTooltip),
-        findsOneWidget,
-      );
+      expect(onRow(tester, 'Beta 1080p', kDownloadTooltip), findsOneWidget);
     });
 
     testWidgets('a finished download is a delete button on its own row', (
@@ -1343,12 +1339,9 @@ void main() {
         findsOneWidget,
       );
       expect(find.byTooltip(kDownloadDeleteTooltip), findsWidgets);
+      expect(onRow(tester, 'Beta 1080p', kDownloadTooltip), findsOneWidget);
       expect(
-        onRow(tester, 'Beta 1080p', kDownloadReplaceTooltip),
-        findsOneWidget,
-      );
-      expect(
-        onRow(tester, 'Beta mystery release', kDownloadReplaceTooltip),
+        onRow(tester, 'Beta mystery release', kDownloadTooltip),
         findsOneWidget,
       );
     });

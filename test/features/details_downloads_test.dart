@@ -1061,23 +1061,26 @@ void main() {
       ]),
     );
 
-    testWidgets('leaves this tile offering one, marked as a replacement', (
-      tester,
-    ) async {
+    testWidgets('leaves this tile an ordinary download button: the question '
+        'on pressing it is what says what goes', (tester) async {
       useWideViewport(tester);
       final core = FakeCoreClient(
         state: {CoreField.metaDetails: loadMetaDetailsFixture()},
       );
-      // Pressing download here replaces that pin, so the tile must neither
-      // read as done nor as an ordinary first download.
       final downloads = keptElsewhere('complete');
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(core, downloads));
       await tester.pumpAndSettle();
 
       expect(onStreamTile(kDownloadDeleteTooltip), findsNothing);
-      expect(onStreamTile(kDownloadTooltip), findsNothing);
-      expect(onStreamTile(kDownloadReplaceTooltip), findsOneWidget);
+      expect(onStreamTile(kDownloadTooltip), findsOneWidget);
+      expect(
+        find.descendant(
+          of: onStreamTile(kDownloadTooltip),
+          matching: find.byIcon(Icons.download_outlined),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('asks before deleting the finished copy, and cancels', (
@@ -1092,7 +1095,7 @@ void main() {
       await tester.pumpWidget(harness(core, downloads));
       await tester.pumpAndSettle();
 
-      await tester.tap(onStreamTile(kDownloadReplaceTooltip));
+      await tester.tap(onStreamTile(kDownloadTooltip));
       await tester.pumpAndSettle();
 
       expect(find.text('Replace Night of the Living Dead?'), findsOneWidget);
@@ -1102,7 +1105,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(downloads.added, isEmpty, reason: 'nothing was deleted');
-      expect(onStreamTile(kDownloadReplaceTooltip), findsOneWidget);
+      expect(onStreamTile(kDownloadTooltip), findsOneWidget);
     });
 
     testWidgets('pins once the replacement is confirmed', (tester) async {
@@ -1115,7 +1118,7 @@ void main() {
       await tester.pumpWidget(harness(core, downloads));
       await tester.pumpAndSettle();
 
-      await tester.tap(onStreamTile(kDownloadReplaceTooltip));
+      await tester.tap(onStreamTile(kDownloadTooltip));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Replace it'));
       await tester.pumpAndSettle();
@@ -1124,20 +1127,43 @@ void main() {
       expect(find.text('Downloading Night of the Living Dead'), findsOneWidget);
     });
 
-    testWidgets('an unfinished one is replaced without a question', (
+    testWidgets('an unfinished one is asked about too, by what it has so far', (
       tester,
     ) async {
       useWideViewport(tester);
       final core = FakeCoreClient(
         state: {CoreField.metaDetails: loadMetaDetailsFixture()},
       );
-      // There is no whole file to lose, so asking would be noise.
       final downloads = keptElsewhere('downloading');
       addTearDown(downloads.dispose);
       await tester.pumpWidget(harness(core, downloads));
       await tester.pumpAndSettle();
 
-      await tester.tap(onStreamTile(kDownloadReplaceTooltip));
+      await tester.tap(onStreamTile(kDownloadTooltip));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.textContaining('being downloaded'), findsOneWidget);
+      expect(downloads.added, isEmpty, reason: 'nothing before the answer');
+
+      await tester.tap(find.text('Replace it'));
+      await tester.pumpAndSettle();
+      expect(downloads.added, hasLength(1));
+    });
+
+    testWidgets('and a video with no other copy is downloaded without one', (
+      tester,
+    ) async {
+      useWideViewport(tester);
+      final core = FakeCoreClient(
+        state: {CoreField.metaDetails: loadMetaDetailsFixture()},
+      );
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      await tester.tap(onStreamTile(kDownloadTooltip));
       await tester.pumpAndSettle();
 
       expect(find.byType(AlertDialog), findsNothing);

@@ -30,12 +30,6 @@ const String kDownloadRetryTooltip = 'Download stopped — try again';
 /// separate thing to have happened: nothing is being tried.
 const String kDownloadGoneTooltip = 'No longer on this device — download again';
 
-/// ... on a stream whose video is already kept from *another* release.
-/// Pinning this one drops that pin, and the server deletes its file, so the
-/// button must not read like a first download.
-const String kDownloadReplaceTooltip =
-    'Download instead — replaces the copy already kept';
-
 /// The chip a stream tile carries once its release is the one kept on this
 /// device, so the kept source can be told from the others at a glance.
 const String kDownloadedChipLabel = 'Downloaded';

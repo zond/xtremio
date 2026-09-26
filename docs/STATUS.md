@@ -206,9 +206,9 @@ after the user leaves the app: a `dataSync` foreground service holds the
 process up with an ongoing notification -- how many titles, how far
 along, tappable to the Downloads screen, with a Cancel all on it -- for
 exactly as long as something is unfinished. A stream whose
-video is already kept from another release is offered as a replacement,
-and a *finished* one is named in a confirmation first, because taking the
-new pin deletes the old file. A downloaded title is in the Library
+video is already kept from another release offers the same download
+button, and pressing it asks first, finished or not, because taking the
+new pin deletes what the old one had. A downloaded title is in the Library
 because it is downloaded, and a linked Drive file because it is linked,
 whether or not either was ever added: the grid merges them in after the
 library's own titles, under their type, and nothing is written to the
