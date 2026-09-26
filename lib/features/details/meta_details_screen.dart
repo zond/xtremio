@@ -466,31 +466,22 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   late final SimilarAskBuilder _askSimilar = SimilarScope.of(context);
 
   /// Whether the question has gone out for this title, which is also the
-  /// answer to *is the feature on*: with no key configured nothing is
-  /// asked and no rung is drawn ([_maybeAskSimilar]).
+  /// answer to *is there a rung*: a title that is not a film or a series
+  /// is never asked about and draws none ([_maybeAskSimilar]).
   bool _similarAsked = false;
 
   /// What came back: the titles a catalogue confirmed, in the model's
   /// order. Null while the ask is out -- which is where the header says it
-  /// is looking -- and empty when the model had nothing or the guard
-  /// dropped all of it, which takes the rung away again.
+  /// is looking -- and empty when the server had nothing, could not be
+  /// asked, or the guard dropped all of it, which takes the rung away
+  /// again.
   List<SimilarTitle>? _similar;
-
-  /// Whether a re-ask is out ([_askSimilarAgain]).
-  ///
-  /// One ask at a time, and this is the guard rather than a disabled
-  /// control: the television's card keeps its tap for as long as the
-  /// remote may be standing on it, so four presses in a row have to cost
-  /// one call here.
-  bool _reasking = false;
 
   /// Whether there is a "More like this" rung on the panel at all.
   ///
-  /// Three states and not two: never asked (no key) and asked-and-empty
-  /// both draw nothing, and the wait between them is a header that says
-  /// it is looking. A feature that is off says nothing about itself --
-  /// there is no "configure a key" line here, because a viewer who has
-  /// not set one up is not being sold anything.
+  /// Three states and not two: never asked (not a film or a series) and
+  /// asked-and-empty both draw nothing, and the wait between them is a
+  /// header that says it is looking.
   bool get _hasSimilar =>
       _similarAsked && (_similar == null || _similar!.isNotEmpty);
 
@@ -767,71 +758,32 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   }
 
   /// Asks what this title is like, once, as soon as the title itself is
-  /// known -- its name and year are the question.
+  /// known -- which is when the rest of the ladder is drawn, so the rung's
+  /// header arrives with it rather than after.
   ///
-  /// **With no key configured nothing is asked.** The feature answers
-  /// every failure with an empty list, a missing key included, so asking
-  /// anyway would work; it is the *rung* that cannot wait for that answer.
-  /// A header that appeared and then went away again on every title a
-  /// viewer who has configured nothing opens is worse than no row, so the
-  /// one thing the screen reads for itself is whether there is a key.
+  /// **Every film and series is asked about.** There is no setting to
+  /// wait for: the server holds the key and answers everybody. So the
+  /// rung appears saying it is looking on every such title, and on one the
+  /// server has nothing for -- no answer, a failure, or a list the guard
+  /// emptied -- it goes away again when that empty answer lands
+  /// ([_hasSimilar]). Any other type is not asked about at all, because
+  /// the server answers only these two and the header would be a promise
+  /// the screen already knows it cannot keep.
   void _maybeAskSimilar(MetaDetailsState state) {
     final meta = state.meta;
     final prefs = _prefs;
     if (!mounted || _similarAsked || meta == null || prefs == null) return;
-    if (prefs.similarApiKey == null) return;
+    if (widget.type != 'movie' && widget.type != 'series') return;
     _similarAsked = true;
-    unawaited(_similarFor(meta, prefs));
+    unawaited(_similarFor(prefs));
   }
 
-  Future<void> _similarFor(MetaItem meta, AppPrefs prefs) async {
-    final titles = await _askSimilar(prefs)(
-      type: widget.type,
-      id: widget.id,
-      name: meta.name,
-      year: yearIn(meta.releaseInfo),
-    );
-    // Late by design -- three seconds is the good case. Everything about
-    // what this must not disturb on the way in is in [_tvSimilarRung].
+  Future<void> _similarFor(AppPrefs prefs) async {
+    final titles = await _askSimilar(prefs)(type: widget.type, id: widget.id);
+    // Late by design -- a remembered answer is quick, and the first ask of
+    // a title anywhere waits on the model behind the server. Everything
+    // about what this must not disturb on the way in is in [_tvSimilarRung].
     if (mounted) setState(() => _similar = titles);
-  }
-
-  /// The viewer has said this row is wrong: ask the model again about the
-  /// title on screen, past everything remembered about it.
-  ///
-  /// **A press may not leave them with less than they had.** Every failure
-  /// down there is an empty list by design ([MoreLikeThis]), so a provider
-  /// that is gone and a model with nothing to say arrive looking the same,
-  /// and neither is grounds for blanking a row somebody was looking at
-  /// when they pressed -- on a television, one they may be standing in.
-  /// So the rule is one rule for both: the row is replaced only when
-  /// something came back to replace it with, and otherwise the
-  /// suggestions stand, unchanged on the panel and unchanged in the
-  /// preferences file, and the viewer is told once. A press that changed
-  /// nothing and said nothing is a dead button.
-  Future<void> _askSimilarAgain() async {
-    final meta = ownState?.meta;
-    final prefs = _prefs;
-    if (_reasking || meta == null || prefs == null) return;
-    setState(() => _reasking = true);
-    final List<SimilarTitle> titles;
-    try {
-      titles = await _askSimilar(prefs)(
-        type: widget.type,
-        id: widget.id,
-        name: meta.name,
-        year: yearIn(meta.releaseInfo),
-        afresh: true,
-      );
-    } finally {
-      if (mounted) setState(() => _reasking = false);
-    }
-    if (!mounted) return;
-    if (titles.isEmpty) {
-      _tell(kNothingNewSimilar);
-      return;
-    }
-    setState(() => _similar = titles);
   }
 
   /// The episode the screen shows as selected: the tap in flight, else the
@@ -1575,12 +1527,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       // there is no ladder: the television has one.
       if (!isTv && _hasSimilar)
         SliverToBoxAdapter(
-          child: SimilarSection(
-            titles: _similar,
-            onOpen: _openSimilar,
-            onAskAgain: () => unawaited(_askSimilarAgain()),
-            asking: _reasking,
-          ),
+          child: SimilarSection(titles: _similar, onOpen: _openSimilar),
         ),
       const SliverPadding(padding: EdgeInsets.only(bottom: 16)),
     ];
@@ -2254,7 +2201,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// What a model says this title is like, as a rung below the sources.
   ///
   /// **Everything here is about a row that arrives late.** The answer
-  /// takes three seconds when it comes at all, by which time the viewer
+  /// takes seconds when it comes at all, by which time the viewer
   /// has read the screen and moved the remote, and this screen has been
   /// broken twice already by something appearing under a viewer who was
   /// using it (see [_takeTheRemoteToTheLastUsed] and
@@ -2262,8 +2209,8 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// them is optional:
   ///
   ///  * **The header is there from the first frame.** Whether there is a
-  ///    rung at all is decided by whether a key is configured, which is
-  ///    known before the title is drawn -- so the line appears with the
+  ///    rung at all is decided by whether the title is a film or a
+  ///    series, which is known before the title is drawn -- so the line appears with the
   ///    rest of the ladder and says it is looking, and the answer landing
   ///    changes the words on it and nothing else. A rung that appeared
   ///    when the answer did would push everything below it down the panel
@@ -2279,11 +2226,6 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// And when the answer is nothing -- a model with nothing to say, or a
   /// row the guard emptied -- the rung goes away rather than standing
   /// there as a header over an empty strip.
-  ///
-  /// The way to ask again is the last card *of the row* rather than
-  /// anything on this header, which is both where the D-pad already goes
-  /// and the one place it cannot be what the rung focuses first; see the
-  /// card ([SimilarTitlesRow.onAskAgain]).
   Widget _tvSimilarRung({required bool open}) {
     final titles = _similar;
     return TvLadderRung(
@@ -2305,12 +2247,7 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
       children: [
         TvLadderRow(
           level: _ladderSimilar,
-          child: SimilarTitlesRow(
-            titles: titles,
-            onOpen: _openSimilar,
-            onAskAgain: () => unawaited(_askSimilarAgain()),
-            asking: _reasking,
-          ),
+          child: SimilarTitlesRow(titles: titles, onOpen: _openSimilar),
         ),
       ],
     );

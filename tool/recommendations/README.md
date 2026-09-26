@@ -1,8 +1,10 @@
 # Which model should recommend films
 
-The app can show a "More like this" row on a title, filled by a language
-model. This is how we decide which model, and how the app decides whether
-the one a viewer configured is any good.
+The app shows a "More like this" row on a title, filled by a language
+model. The app does not ask the model itself: the xtremio-drive Firebase
+function (`drive-link/functions/similar.js`) holds the owner's Gemini key,
+asks once per title, and keeps that answer for everybody. This is how we
+decide which model it asks, and with what question.
 
 Nothing here runs in CI or in the app build. It reaches the internet, it
 costs money at some providers, and it is run by hand when the question
@@ -47,10 +49,11 @@ research: see **Pooling** below.
 ## The tests
 
 **`recommend_bench.py` asks what the app asks**, and it is on the reader
-to keep it that way: the prompt is `askForSimilar` in
-`lib/features/similar/similar_titles.dart`, word for word, and the system
-instruction is `similarSystemInstruction`. Change the Dart, change the
-script, re-measure, and say here what moved. Measuring one question while
+to keep it that way: the prompt and the system instruction are the ones
+in `drive-link/functions/similar.js`, word for word (they lived in
+`lib/features/similar/similar_titles.dart` until the ask moved to the
+server). Change the function, change the script, re-measure, and say here
+what moved. Measuring one question while
 shipping another is how a table of numbers quietly stops describing the
 app, which is what happened between the first measurements and the day
 the app learned to ask about series.
@@ -104,16 +107,13 @@ every such entry, so the research-only subset can always be recovered.
 
 ## What the app does with this
 
-The keys ship with the app -- title, year, grade and tone is about 30 KB --
-so a viewer who pastes an API key can be told whether the model behind it
-is any good. Both tests are one call per target, so the check is seconds:
-
-* the **sort** gives a clean, comparable number that no coverage effect can
-  inflate, since every film in the question is already in the key;
-* one **recommendation** call catches the failure the sort structurally
-  cannot see -- invented films. A model can sort sensibly and still
-  fabricate one title in six when asked to generate, which is what would
-  actually appear on screen.
+Nothing, any more. The keys used to ship with the app (`ship_keys.py`
+cut them to about 30 KB) so that a viewer who pasted their own API key
+could run a "Test this model" check from Settings against them. The app
+has no key, no model setting and no check now: the model is chosen here
+and named in `drive-link/functions/similar.js`, and these numbers are
+what that choice rests on. `ship_keys.py` still writes the asset path the
+app used; nothing reads it.
 
 ## What was measured, 2026-09-22
 
@@ -146,7 +146,7 @@ Read with care:
   *feel* alike rather than films that are related scores 0.85 against 0.73
   on tone, and invents fewer films while it is at it.
 
-On this evidence the app's default is `gemini-3.1-flash-lite`: within
+On this evidence the model asked is `gemini-3.1-flash-lite`: within
 0.06 of the best judgement available at any speed, the best coverage of
 any model tested, the most self-consistent, and under three seconds.
 
@@ -194,8 +194,9 @@ Three cautions, none of them about series:
 * **The film-only column is below this README's own row for the same
   model on the same question** (+0.15 against +0.19). Either run-to-run
   noise, or `gemini-3.1-flash-lite` has moved behind a stable name. The
-  second is the reason the app treats the model as a preference and every
-  failure as classified rather than fatal.
+  second is the reason the model is named in one place
+  (`drive-link/functions/similar.js`) and every failure is classified
+  rather than fatal.
 * **`The Call of Cthulhu` is below chance on tone** (0.36 against 0.41),
   and it was in every run all day. The model hears "Lovecraft" and misses
   "silent, 47 minutes, 1920s pastiche". The obscure targets are where this

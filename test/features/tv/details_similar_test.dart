@@ -21,11 +21,11 @@ import '../../support/fixtures.dart';
 import '../../support/tv.dart';
 
 /// The "More like this" rung: when there is one at all, and what an answer
-/// that arrives three seconds after the viewer does is allowed to disturb.
+/// that arrives seconds after the viewer does is allowed to disturb.
 ///
 /// Everything behind the row is `features/similar/` and tested there; this
 /// file is about the row's arrival, which is the dangerous part. Nothing
-/// here reaches a model or a catalogue: the ask is a [Completer] the test
+/// here reaches the server or a catalogue: the ask is a [Completer] the test
 /// completes when it wants the answer to land.
 const movieId = 'tt0063350';
 
@@ -112,50 +112,29 @@ void main() {
   late List<String> asked;
   late Completer<List<SimilarTitle>> answer;
 
-  /// The preferences the screen is mounted over, so a test can paste a key
-  /// into them while the title is open.
-  late AppPrefs prefs;
-
   /// An asker that records the question and answers when the test says so.
   SimilarAsk waiting(AppPrefs prefs) =>
-      ({
-        required String type,
-        required String id,
-        required String name,
-        int? year,
-        bool afresh = false,
-      }) {
-        final subject = year == null
-            ? '$type $id $name'
-            : '$type $id $name ($year)';
-        asked.add(afresh ? '$subject afresh' : subject);
+      ({required String type, required String id}) {
+        asked.add('$type $id');
         return answer.future;
       };
 
   /// One that fails the test if anything asks it anything at all.
   SimilarAsk never(AppPrefs prefs) =>
-      ({
-        required String type,
-        required String id,
-        required String name,
-        int? year,
-        bool afresh = false,
-      }) {
-        fail('the model was asked about $name with no key configured');
+      ({required String type, required String id}) {
+        fail('the server was asked about $type $id');
       };
 
   Future<void> mount(
     WidgetTester tester, {
-    String? apiKey = 'not-a-real-key',
+    String type = 'movie',
     SimilarAskBuilder? askFor,
     Map<String, dynamic>? fixture,
   }) async {
     asked = [];
     answer = Completer<List<SimilarTitle>>();
     useScreen(tester, tvSize);
-    prefs = AppPrefs(
-      client: FakePrefsClient({AppPrefs.similarApiKeyKey: ?apiKey}),
-    );
+    final prefs = AppPrefs(client: FakePrefsClient());
     addTearDown(prefs.dispose);
     await prefs.load();
     await tester.pumpWidget(
@@ -172,8 +151,8 @@ void main() {
               torrentStats: FakeTorrentStatsClient(),
               child: SimilarScope(
                 askFor: askFor ?? waiting,
-                child: const MaterialApp(
-                  home: MetaDetailsScreen(type: 'movie', id: movieId),
+                child: MaterialApp(
+                  home: MetaDetailsScreen(type: type, id: movieId),
                 ),
               ),
             ),
@@ -187,12 +166,8 @@ void main() {
   /// Lands the answer on the screen. The completion is a microtask and
   /// [WidgetTester.pumpAndSettle] does not run one before its first frame,
   /// so the tree is pumped once for it and settled after.
-  ///
-  /// A fresh completer is left behind it, so a re-ask has one of its own.
   Future<void> land(WidgetTester tester, List<SimilarTitle> titles) async {
-    final landing = answer;
-    answer = Completer<List<SimilarTitle>>();
-    landing.complete(titles);
+    answer.complete(titles);
     await tester.pump();
     await tester.pumpAndSettle();
   }
@@ -211,33 +186,24 @@ void main() {
     return walk;
   }
 
-  /// Select on the card the remote is standing on. Not settled: while the
-  /// ask is out the card holds a spinner, and a spinner never stops.
-  Future<void> pressSelect(WidgetTester tester) async {
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await tester.pump();
-  }
-
   group('whether there is a rung at all', () {
-    testWidgets('with no key configured there is none, and nothing is '
-        'asked: the feature is off and says nothing about itself', (
-      tester,
-    ) async {
-      await mount(tester, apiKey: null, askFor: never);
+    testWidgets('a title that is not a film or a series has none, and '
+        'nothing is asked: the server answers only those two', (tester) async {
+      await mount(tester, type: 'channel', askFor: never);
 
       expect(rungs(tester), [kSourcesLabel]);
       expect(find.text(kMoreLikeThisLabel), findsNothing);
       expect(find.byType(SimilarTitlesRow), findsNothing);
     });
 
-    testWidgets('with a key the header is on the panel before the answer '
-        'is, and says it is looking', (tester) async {
+    testWidgets('a film has one with nothing set up: the header is on the '
+        'panel before the answer is, and says it is looking', (tester) async {
       await mount(tester);
 
       expect(rungs(tester), [kSourcesLabel, kMoreLikeThisLabel]);
       expect(summaryOf(tester, kMoreLikeThisLabel), kLookingForSimilar);
-      // The title and its year are the question, asked once.
-      expect(asked, ['movie $movieId Night of the Living Dead (1968)']);
+      // The type and the id are the question, asked once.
+      expect(asked, ['movie $movieId']);
     });
 
     testWidgets('and fills when the answer arrives', (tester) async {
@@ -259,18 +225,6 @@ void main() {
 
       expect(rungs(tester), [kSourcesLabel]);
       expect(find.text(kMoreLikeThisLabel), findsNothing);
-    });
-
-    testWidgets('and a key pasted in while the title is open turns it on: '
-        'the settings screen is a press away from here', (tester) async {
-      await mount(tester, apiKey: null);
-      expect(find.text(kMoreLikeThisLabel), findsNothing);
-
-      await prefs.setSimilarApiKey('not-a-real-key');
-      await tester.pumpAndSettle();
-
-      expect(rungs(tester), [kSourcesLabel, kMoreLikeThisLabel]);
-      expect(asked, hasLength(1));
     });
 
     testWidgets('and the screen never opens it by itself, even when it is '
@@ -399,94 +353,16 @@ void main() {
     });
   });
 
-  /// The way to ask again, which on a television is a card at the end of
-  /// the strip rather than anything on the rung's header: the remote is
-  /// already in the row, and walking off the end of it is the gesture.
-  group('asking again', () {
-    testWidgets('is the last card of the row, reached by walking off the '
-        'end of it, and is not what the rung focuses first', (tester) async {
-      await mount(tester);
-      await land(tester, [stalker, existenz]);
+  testWidgets('the row ends at its last poster: there is nothing to ask '
+      'again past it', (tester) async {
+    // The server's answer is everybody's, so there is no re-ask to put at
+    // the end of the strip, and a press past the last poster stays on it.
+    await mount(tester);
+    await land(tester, [stalker, existenz]);
 
-      final walk = await walkTheRow(tester);
+    final walk = await walkTheRow(tester);
 
-      expect(walk, ['Stalker', 'eXistenZ', kAskAgainLabel]);
-      // The strip still swallows a press past its end, so the card is the
-      // last stop rather than a way out of the row.
-      await press(tester, LogicalKeyboardKey.arrowRight);
-      expect(focusedLabel(tester), kAskAgainLabel);
-      // And left comes straight back to the posters.
-      await press(tester, LogicalKeyboardKey.arrowLeft);
-      expect(focusedLabel(tester), 'eXistenZ');
-    });
-
-    testWidgets('with no key configured there is no rung, and so no card', (
-      tester,
-    ) async {
-      await mount(tester, apiKey: null, askFor: never);
-
-      expect(find.text(kAskAgainLabel), findsNothing);
-    });
-
-    testWidgets('select on it asks again although an answer is remembered, '
-        'and the new answer replaces the old one', (tester) async {
-      await mount(tester);
-      await land(tester, [stalker, existenz]);
-      await walkTheRow(tester);
-      expect(asked, hasLength(1));
-
-      await pressSelect(tester);
-
-      expect(
-        asked.last,
-        'movie $movieId Night of the Living Dead (1968) afresh',
-      );
-      expect(
-        find.text('Stalker'),
-        findsOneWidget,
-        reason: 'the old row stands while the new ask is out',
-      );
-
-      await land(tester, [suggestion('tt0113277', 'Heat', 1995)]);
-
-      expect(find.text('Heat'), findsOneWidget);
-      expect(find.text('Stalker'), findsNothing);
-      expect(summaryOf(tester, kMoreLikeThisLabel), '1 title');
-    });
-
-    testWidgets('a re-ask that comes back with nothing keeps the row, the '
-        'rung and the remote, and says so', (tester) async {
-      await mount(tester);
-      await land(tester, [stalker, existenz]);
-      await walkTheRow(tester);
-
-      await pressSelect(tester);
-      await land(tester, const []);
-
-      expect(rungs(tester), [kSourcesLabel, kMoreLikeThisLabel]);
-      expect(find.text('Stalker'), findsOneWidget);
-      expect(find.text('eXistenZ'), findsOneWidget);
-      expect(find.text(kNothingNewSimilar), findsOneWidget);
-      expect(
-        focusedLabel(tester),
-        kAskAgainLabel,
-        reason: 'a press that changed nothing moved nothing either',
-      );
-    });
-
-    testWidgets('and four presses while the ask is out cost one call', (
-      tester,
-    ) async {
-      await mount(tester);
-      await land(tester, [stalker, existenz]);
-      await walkTheRow(tester);
-
-      for (var i = 0; i < 4; i++) {
-        await pressSelect(tester);
-      }
-
-      expect(asked, hasLength(2), reason: 'the first ask and one re-ask');
-    });
+    expect(walk, ['Stalker', 'eXistenZ', 'eXistenZ']);
   });
 
   testWidgets('the poster is the size the drawing settled on', (tester) async {

@@ -17,10 +17,10 @@ import 'focusable_tile.dart';
 /// between go past. Where such a block is the last thing on the screen, or
 /// is taller than the space left under the control above it, some of it
 /// can never be read at all -- which is how this was found, on a
-/// Chromecast, on the longest read-only block in the app: the result of
-/// "Test this model" in Settings, a readout of judgement, agreement,
-/// invented films and speed that is exactly what somebody sits down to
-/// read.
+/// Chromecast, on what was then the longest read-only block in the app:
+/// the result of a model check in Settings (since removed), a readout of
+/// judgement, agreement, invented films and speed that was exactly what
+/// somebody sits down to read.
 ///
 /// So a block of words becomes a stop. Not a control: select does nothing
 /// here, and there is nothing for it to do.

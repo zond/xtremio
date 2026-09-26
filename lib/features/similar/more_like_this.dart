@@ -2,10 +2,10 @@
 ///
 /// A row on a title asks this one question -- *what is like this?* -- and
 /// everything that can go wrong with the answer is answered here with an
-/// empty list. No key configured, a model that is gone, a provider that
-/// took too long, a catalogue that did not answer: all of them are a title
-/// with no row under it, which is the same thing a film nothing resembles
-/// looks like. **Nothing in this file throws.**
+/// empty list. A server that is busy or unreachable, a title it does not
+/// know, a catalogue that did not answer: all of them are a title with no
+/// row under it, which is the same thing a film nothing resembles looks
+/// like. **Nothing in this file throws.**
 ///
 /// The order is deliberate and it is the whole design:
 ///
@@ -13,20 +13,20 @@
 ///    the answer, for the life of the install (`SimilarMemory`) -- the
 ///    same model asked twice agrees with itself about half the time, and a
 ///    row that reshuffles on every visit is one nobody can point at. Only
-///    an answer to the question this build asks counts as one
+///    an answer to the question this build knows counts as one
 ///    (`similarQuestionVersion`); an older one is asked again.
-/// 2. **The model, only with a key and only once per title.** With no key
-///    configured nothing is asked of any provider at all -- not a probe,
-///    not a default key, nothing: there is no key in this repository and
-///    there is not going to be one.
+/// 2. **The server, once per title per install.** It asks the model once
+///    per title for everybody and keeps that answer, so this is the second
+///    of two caches and usually a read. Only `movie` and `series` are
+///    asked about -- the server takes nothing else, and a type it would
+///    refuse is not worth a request to be told so.
 /// 3. **The guard**, which is not optional and is documented where it
 ///    lives (`similar_resolver.dart`).
 ///
-/// And one way past all of it: `afresh`, which is the viewer saying the
-/// row is wrong. It steps over both caches and writes the new answer over
-/// the old one -- but only when there is a new answer to write, because
-/// every failure here is an empty list and a row the viewer was looking at
-/// is not a thing a failure may take away. See [MoreLikeThis.forItem].
+/// There is no way past any of it. A viewer who dislikes a row has no
+/// "ask again": the server's answer is everybody's, and a re-ask anybody
+/// could send would re-bill a title without end and replace the answer
+/// for every other install.
 ///
 /// What the row itself does with the result -- how many it shows, what a
 /// reason looks like on a television -- is not here. This hands back
@@ -34,40 +34,23 @@
 library;
 
 import '../../core/core.dart';
-import 'gemini_similar_titles.dart';
 import 'similar_resolver.dart';
 import 'similar_titles.dart';
-
-/// How a provider is built once the key and the model are known.
-///
-/// A factory rather than a provider, because both of its arguments are
-/// *preferences*: the viewer can paste a new key or name another model
-/// between one title and the next, and a provider built at start-up would
-/// be holding the old ones.
-typedef SimilarProviderFactory = SimilarTitlesProvider Function({
-  required String apiKey,
-  required String model,
-});
-
-/// What the app uses: Google's API, the model named in preferences.
-SimilarTitlesProvider _googleProvider({
-  required String apiKey,
-  required String model,
-}) => GeminiSimilarTitles(apiKey: apiKey, model: model);
+import 'xtremio_similar_titles.dart';
 
 final class MoreLikeThis {
   MoreLikeThis({
     required this.prefs,
-    this.providerFor = _googleProvider,
+    SimilarTitlesProvider? provider,
     this.search = cinemetaSearch,
-  });
+  }) : provider = provider ?? XtremioSimilarTitles();
 
-  /// Where the key, the model and the remembered answers live.
+  /// Where the remembered answers live.
   final AppPrefs prefs;
 
-  /// How the provider is built, once there is a key to build it with. A
-  /// test hands one that answers without a network; nothing else does.
-  final SimilarProviderFactory providerFor;
+  /// Where a title nobody on this device has asked about is asked. A test
+  /// hands one that answers without a network; nothing else does.
+  final SimilarTitlesProvider provider;
 
   /// How a suggestion is checked against a catalogue -- injected for the
   /// same reason and in the same shape as `PlaybackScope.archiveSniff`.
@@ -81,96 +64,48 @@ final class MoreLikeThis {
   /// Within one run, though, going back to a title should not ask again.
   final Map<String, List<SimilarTitle>> _resolved = {};
 
-  /// Titles like [name] ([year]), the item [id] of [type] on screen.
+  /// The types the server answers for: Stremio's own `movie` and `series`.
+  static const Set<String> _askable = {'movie', 'series'};
+
+  /// Titles like the item [id] of [type] on screen.
   ///
-  /// Empty is an ordinary answer, and every failure is one.
-  ///
-  /// [afresh] is the viewer having pressed "ask again": the model is asked
-  /// about this title whatever is written down about it, and the answer
-  /// replaces what was. Two things about it are the whole of the feature:
-  ///
-  ///  * **Both caches are stepped over**, and they are two -- the answer
-  ///    remembered under this title and the resolution of it this run. A
-  ///    remembered *empty* answer is a value here and normally stops the
-  ///    asking, which makes it exactly the row somebody presses this for.
-  ///  * **The row is replaced only when something came back to replace it
-  ///    with.** Everything that can go wrong is an empty list by design
-  ///    (see the top of this file), so a provider that is gone and a model
-  ///    with nothing to say arrive looking the same -- and neither is
-  ///    grounds for blanking a row that was fine, which is the one thing
-  ///    the press must not cost. An empty re-ask therefore writes nothing
-  ///    and caches nothing: what was remembered stands, and the next press
-  ///    asks again.
+  /// Empty is an ordinary answer, and every failure is one. A [type] other
+  /// than `movie` or `series` is empty without asking anybody, and nothing
+  /// is remembered about it.
   Future<List<SimilarTitle>> forItem({
     required String type,
     required String id,
-    required String name,
-    int? year,
-    bool afresh = false,
   }) async {
+    if (!_askable.contains(type)) return const [];
     final key = '$type/$id';
-    if (!afresh) {
-      if (_resolved[key] case final already?) return already;
-    }
-    final suggestions = await _suggestionsFor(
-      type: type,
-      id: id,
-      name: name,
-      year: year,
-      afresh: afresh,
-    );
+    if (_resolved[key] case final already?) return already;
+    final suggestions = await _suggestionsFor(type: type, id: id);
     final resolved = await resolveSuggestions(
       suggestions,
       subjectId: id,
       search: search,
     );
-    if (afresh) {
-      // The guard can empty a model's answer on its own -- ten invented
-      // titles resolve to nothing -- so the test is on what would reach
-      // the screen and not on what the model said. That keeps the row, the
-      // per-run resolution and the preferences file saying one thing.
-      if (resolved.isEmpty) return const [];
-      await _remember(type: type, id: id, suggestions: suggestions);
-    }
     return _resolved[key] = resolved;
   }
 
   /// What the model said about this title: off the preferences file when
-  /// it has been asked before, off the provider when it has not, and an
-  /// empty list when there is no key or the ask failed.
+  /// this device has asked before, off the server when it has not, and an
+  /// empty list when the ask failed.
   Future<List<SuggestedTitle>> _suggestionsFor({
     required String type,
     required String id,
-    required String name,
-    int? year,
-    required bool afresh,
   }) async {
-    if (!afresh) {
-      final remembered = prefs.similarSuggestions.forItem(type: type, id: id);
-      if (remembered != null) return remembered;
-    }
-    final apiKey = prefs.similarApiKey;
-    // No key, no provider. Not "ask and fail" -- ask *nothing*.
-    if (apiKey == null) return const [];
-    final model = prefs.similarModel;
-    final provider = providerFor(apiKey: apiKey, model: model);
+    final remembered = prefs.similarSuggestions.forItem(type: type, id: id);
+    if (remembered != null) return remembered;
     final List<SuggestedTitle> answered;
     try {
-      answered = await provider.suggest(
-        year == null ? name : '$name ($year)',
-        // Stremio's own `movie`/`series`, which is what the screen has,
-        // turned into the question's vocabulary. Anything else -- a type
-        // this app does not put a details screen under -- is asked about
-        // as a film, which is the question that was measured.
-        about: SuggestedKind.parse(type) ?? SuggestedKind.film,
-      );
+      answered = await provider.suggest(type: type, id: id);
     } on SimilarTitlesFailure catch (failure) {
-      // Which failure it was, so that a fallback to another model -- or a
-      // viewer being told to pick one -- has grounds a week later. The
-      // model's name is in the line; the key never is.
+      // Which failure it was, so that a row that never appears has an
+      // explanation a week later.
       DiagnosticsLog.info(
         'similar',
-        'no suggestions for $type $id from $model: '
+        'no suggestions for $type $id: '
             '${failure.trouble.describe}${failure.detail == null ? '' : ' (${failure.detail})'}',
       );
       return const [];
@@ -179,30 +114,19 @@ final class MoreLikeThis {
       // does not appear.
       DiagnosticsLog.info(
         'similar',
-        'no suggestions for $type $id from $model: ${error.runtimeType}',
+        'no suggestions for $type $id: ${error.runtimeType}',
       );
       return const [];
     }
     // Written down even when it is empty: an answer with nothing in it is
-    // an answer, and asking again would cost a call to be told it twice.
-    // A re-ask writes nothing here -- it writes after the guard has run,
-    // and only if anything survived it ([forItem]).
-    if (!afresh) await _remember(type: type, id: id, suggestions: answered);
+    // an answer, and the server would only say it again.
+    await prefs.setSimilarSuggestions(
+      prefs.similarSuggestions.remembering(
+        type: type,
+        id: id,
+        suggestions: answered,
+      ),
+    );
     return answered;
   }
-
-  /// [suggestions] written down under this title, stamped with the question
-  /// that produced them and moved to the front of the recency order
-  /// ([SimilarMemory.remembering]), replacing whatever was there.
-  Future<void> _remember({
-    required String type,
-    required String id,
-    required List<SuggestedTitle> suggestions,
-  }) => prefs.setSimilarSuggestions(
-    prefs.similarSuggestions.remembering(
-      type: type,
-      id: id,
-      suggestions: suggestions,
-    ),
-  );
 }

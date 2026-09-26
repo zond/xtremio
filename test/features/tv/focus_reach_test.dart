@@ -681,9 +681,9 @@ void main() {
       // owner reported from a Chromecast: not a stop with nothing drawn on
       // it, but words with no stop at all. The page scrolls by moving
       // focus, so a block the D-pad jumps over is a block the page never
-      // scrolls to -- and the report under "Test this model" is both the
-      // longest thing on this screen and the last, which is the worst
-      // possible thing to be unreachable.
+      // scrolls to -- and the report of the model check Settings used to
+      // have was both the longest thing on this screen and the last, which
+      // is the worst possible thing to be unreachable.
       //
       // Named by nothing: the walk collects the [Readout]s the screen
       // builds as it goes and the ones it lands on, and the two sets have
@@ -727,10 +727,6 @@ void main() {
       for (final words in [
         AccountSection.libraryNote,
         'Subtitle preview',
-        'More like this',
-        'is kept on this device and sent only to Google',
-        'Being listed is not being usable',
-        'Until a key is pasted there is no list to choose from',
         'Status',
         'Peer discovery',
         'stremio-core storage schema',

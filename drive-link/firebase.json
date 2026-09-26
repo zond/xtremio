@@ -27,6 +27,10 @@
       {
         "source": "/probe/**",
         "function": "api"
+      },
+      {
+        "source": "/similar/**",
+        "function": "similar"
       }
     ],
     "cleanUrls": true,

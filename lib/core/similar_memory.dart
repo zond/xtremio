@@ -1,14 +1,15 @@
 /// What a model answered when it was asked what a title is like, and where
 /// that answer is kept.
 ///
-/// "More like this" costs a call to somebody's API, and the same model
+/// "More like this" is asked of the xtremio-drive server, which asks a model
+/// once per title and keeps that answer for everybody -- the same model
 /// asked the same question twice agrees with itself about half the time
-/// (`tool/recommendations/README.md`, the `consistent` column). Two things
-/// follow. A row that changed every time a title was opened would be a row
-/// nobody could point at, so **the first answer is the answer**: it is
-/// written down under the title it was asked about and read back for the
-/// life of the install. And because it is written down, what is stored is
-/// the *model's* answer -- titles and years -- rather than the catalogue
+/// (`tool/recommendations/README.md`, the `consistent` column), and a row
+/// that changed every time a title was opened would be a row nobody could
+/// point at. **The first answer is the answer**, and this is the device's
+/// copy of it: written down under the title it was asked about and read
+/// back for the life of the install, so a title reaches the server once
+/// per install. What is stored is the *model's* answer -- titles and years -- rather than the catalogue
 /// items it resolved to: the resolution is a lookup against whatever the
 /// catalogues hold now, it is cheap, and it is the half that is allowed to
 /// change when a poster does.
@@ -29,22 +30,6 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-/// The model asked when the viewer has not named another
-/// (`AppPrefs.similarModel`).
-///
-/// `gemini-3.1-flash-lite` on the evidence in `tool/recommendations`, not
-/// on taste: of everything that answers inside the five seconds a row can
-/// wait, it had the best coverage of the researched keys (0.91), the most
-/// self-consistent repeat runs, few invented titles, and judgement within
-/// 0.06 of the best model available at any speed -- which takes 153
-/// seconds and is therefore no use here.
-///
-/// It lives beside the preference rather than beside the provider because
-/// it is the *default of a setting*, and because the model names rot:
-/// prefer a `-latest` alias where a provider offers one, since an alias
-/// rots more slowly than a version does.
-const String defaultSimilarModel = 'gemini-3.1-flash-lite';
-
 /// Which version of the question produced a stored answer.
 ///
 /// The first answer is the answer for the life of the install, which is
@@ -55,10 +40,12 @@ const String defaultSimilarModel = 'gemini-3.1-flash-lite';
 /// all, and an unstamped row reads back as 0 -- *not this version* --
 /// which is exactly what it is.
 ///
-/// **Change [askForSimilar] and change this.** It lives here rather than
-/// beside the question for the reason [defaultSimilarModel] does: this is
-/// the half of it the preferences file has to know about, and nothing in
-/// `core/` may reach into `features/`.
+/// The question itself is asked by the server now
+/// (`drive-link/functions/similar.js`), which keys its own cache by its
+/// `QUESTION_VERSION` and names that version in every answer. **Bump this
+/// when that bumps**, or a device that already holds an answer keeps the
+/// old one for the life of the install while every new install gets the
+/// new one.
 const int similarQuestionVersion = 1;
 
 /// Which catalogue a suggestion is to be looked for in.
@@ -142,8 +129,8 @@ final class SuggestedTitle {
 
   /// One stored row, or null when it is not one this build can use: no
   /// title, no year, a value of the wrong type. A row that cannot be read
-  /// is dropped, never a failed load -- the worst it costs is one model
-  /// call the next time the title is opened.
+  /// is dropped, never a failed load -- the worst it costs is one request
+  /// to the server the next time the title is opened.
   static SuggestedTitle? fromJson(Object? json) {
     if (json is! Map) return null;
     final title = json['title'];

@@ -3,69 +3,55 @@ import 'package:xtremio/core/core.dart';
 
 import '../support/fake_prefs_client.dart';
 
-/// Where "More like this" keeps its three preferences: the viewer's API
-/// key, which model is asked, and what has already been answered.
+/// Where "More like this" keeps what the server has already answered, and
+/// what became of the two preferences it used to keep beside it.
 ///
-/// The key is the one preference in this file that is auth material. It is
-/// never defaulted and never invented -- a fresh install has none, and a
-/// box cleared back to empty has none again, because a stored `""` is the
-/// same decision spelled in a way every reader of the file has to think
-/// about.
+/// An older build asked Gemini itself, with a key the viewer pasted and a
+/// model they could name. Neither means anything now, and the key is auth
+/// material: a file that still holds one after an upgrade is a credential
+/// lying on the device that nothing reads.
 void main() {
   group('the preferences', () {
-    test('a fresh install has no key and the measured default model', () async {
-      final prefs = AppPrefs(client: FakePrefsClient());
+    test('a fresh install remembers nothing and writes nothing', () async {
+      final storage = FakePrefsClient();
+      final prefs = AppPrefs(client: storage);
       await prefs.load();
 
-      expect(prefs.similarApiKey, isNull);
-      expect(prefs.similarModel, defaultSimilarModel);
       expect(prefs.similarSuggestions, SimilarMemory.empty);
+      expect(storage.writes, isEmpty);
     });
 
-    test('a key is read back, and cleared by emptying the box', () async {
-      final storage = FakePrefsClient();
+    test('a key and a model an older build stored are removed on load, and '
+        'nothing else is', () async {
+      final storage = FakePrefsClient({
+        'similarApiKey': 'not-a-real-key',
+        'similarModel': 'gemini-9.9-flash-latest',
+        AppPrefs.bufferAheadKey: BufferAhead.wholeFile.stored,
+      });
       final prefs = AppPrefs(client: storage);
       await prefs.load();
 
-      await prefs.setSimilarApiKey('  not-a-real-key  ');
-      expect(prefs.similarApiKey, 'not-a-real-key');
-      expect(storage.stored[AppPrefs.similarApiKeyKey], 'not-a-real-key');
-
-      await prefs.setSimilarApiKey('');
-      expect(prefs.similarApiKey, isNull);
+      expect(storage.stored.containsKey('similarApiKey'), isFalse);
+      expect(storage.stored.containsKey('similarModel'), isFalse);
       expect(
-        storage.stored.containsKey(AppPrefs.similarApiKeyKey),
-        isFalse,
-        reason: 'no key is a missing key, not an empty one',
+        storage.stored[AppPrefs.bufferAheadKey],
+        BufferAhead.wholeFile.stored,
+        reason: 'the purge touches the retired keys and only them',
       );
+      expect(prefs.bufferAhead, BufferAhead.wholeFile);
+
+      // Once: the next start finds nothing to remove and writes nothing.
+      final restarted = AppPrefs(client: storage);
+      storage.writes.clear();
+      await restarted.load();
+      expect(storage.writes, isEmpty);
     });
 
-    test('a stored blank is not a key', () async {
-      final prefs = AppPrefs(
-        client: FakePrefsClient({AppPrefs.similarApiKeyKey: '   '}),
-      );
-      await prefs.load();
-
-      expect(prefs.similarApiKey, isNull);
-    });
-
-    test('a model can be named, and emptied back to the default', () async {
-      final storage = FakePrefsClient();
-      final prefs = AppPrefs(client: storage);
-      await prefs.load();
-
-      // What a viewer does when their model answers "no longer available
-      // to new users", which two of them began doing in one afternoon.
-      await prefs.setSimilarModel('gemini-9.9-flash-latest');
-      expect(prefs.similarModel, 'gemini-9.9-flash-latest');
-      expect(
-        storage.stored[AppPrefs.similarModelKey],
-        'gemini-9.9-flash-latest',
-      );
-
-      await prefs.setSimilarModel(null);
-      expect(prefs.similarModel, defaultSimilarModel);
-      expect(storage.stored.containsKey(AppPrefs.similarModelKey), isFalse);
+    test('either one alone is removed too', () async {
+      final storage = FakePrefsClient({'similarModel': 'gemini-x'});
+      await AppPrefs(client: storage).load();
+      expect(storage.stored, isEmpty);
+      expect(storage.writes, ['similarModel']);
     });
 
     test(

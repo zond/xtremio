@@ -9,49 +9,47 @@ import '../../support/fake_prefs_client.dart';
 
 /// Everything behind the row, with nothing on the network.
 ///
-/// The two things this file is here to hold are the ones that cost money
-/// or leak something: **with no key configured no provider is built at
-/// all**, and **a title is asked about once** -- the answer is written
-/// down and read back, because the same model asked twice agrees with
-/// itself about half the time.
+/// The thing this file is here to hold is that **a title is asked about
+/// once per install** -- the answer is written down and read back, because
+/// the server's answer is everybody's and asking it again would only be
+/// told the same -- and that a failure is never written down as an answer.
 void main() {
   late FakePrefsClient storage;
   late AppPrefs prefs;
-  late List<String> built;
   late List<String> asked;
 
   /// What a provider answers, or throws.
-  late Object Function(String subject) answering;
+  late Object Function(String type, String id) answering;
 
-  Future<void> start({String? apiKey, String? model}) async {
-    storage = FakePrefsClient({
-      AppPrefs.similarApiKeyKey: ?apiKey,
-      AppPrefs.similarModelKey: ?model,
-    });
+  Future<void> start([Map<String, dynamic>? stored]) async {
+    storage = FakePrefsClient(stored);
     prefs = AppPrefs(client: storage);
     await prefs.load();
-    built = [];
     asked = [];
   }
 
   MoreLikeThis feature({CatalogueSearch? search}) => MoreLikeThis(
     prefs: prefs,
-    providerFor: ({required String apiKey, required String model}) {
-      built.add('$model with $apiKey');
-      return _FakeProvider(asked, answering);
-    },
+    provider: _FakeProvider(asked, answering),
     search: search ?? _catalogue,
   );
 
   setUp(() async {
-    answering = (_) => const [
+    answering = (_, _) => const [
       SuggestedTitle(title: 'Avalon', year: 2001, why: 'grey'),
     ];
-    await start(apiKey: 'not-a-real-key');
+    await start();
   });
 
-  test('with no key configured nothing is asked of anybody', () async {
-    await start();
+  test('the type and the id are what the server is asked about', () async {
+    await feature().forItem(type: 'movie', id: 'tt1');
+    await feature().forItem(type: 'series', id: 'tt0903747');
+
+    expect(asked, ['movie/tt1', 'series/tt0903747']);
+  });
+
+  test('a type the server does not answer for is not asked about, and '
+      'nothing is remembered about it', () async {
     var searched = 0;
     Future<List<Map<String, dynamic>>> searching(
       String type,
@@ -61,74 +59,21 @@ void main() {
       return const [];
     }
 
-    final row = await feature(search: searching).forItem(
-      type: 'movie',
-      id: 'tt0293429',
-      name: 'Wave Twisters',
-      year: 2001,
-    );
+    final row = await feature(search: searching)
+        .forItem(type: 'channel', id: 'tt1');
 
     expect(row, isEmpty);
-    expect(
-      built,
-      isEmpty,
-      reason: 'no key means no provider, not a failed call',
-    );
     expect(asked, isEmpty);
     expect(searched, 0);
-  });
-
-  test('the title and its year are what the model is asked about', () async {
-    await feature().forItem(
-      type: 'movie',
-      id: 'tt1',
-      name: 'Wave Twisters',
-      year: 2001,
-    );
-
-    expect(asked, ['Wave Twisters (2001) as film']);
-    expect(built, ['$defaultSimilarModel with not-a-real-key']);
-  });
-
-  test('a series is asked about as a series', () async {
-    // The screen's own `type` is what decides which question is asked, so
-    // a show page does not get a row of ten films.
-    await feature().forItem(
-      type: 'series',
-      id: 'tt0903747',
-      name: 'Breaking Bad',
-      year: 2008,
-    );
-
-    expect(asked, ['Breaking Bad (2008) as series']);
-  });
-
-  test('the model named in preferences is the one asked', () async {
-    await start(apiKey: 'not-a-real-key', model: 'gemini-9.9-flash-latest');
-
-    await feature().forItem(type: 'movie', id: 'tt1', name: 'Avalon');
-
-    expect(built, ['gemini-9.9-flash-latest with not-a-real-key']);
-    // No year known is no year claimed.
-    expect(asked, ['Avalon as film']);
+    expect(storage.stored[AppPrefs.similarSuggestionsKey], isNull);
   });
 
   test('a title is asked about once, ever', () async {
-    final first = await feature().forItem(
-      type: 'movie',
-      id: 'tt1',
-      name: 'Wave Twisters',
-      year: 2001,
-    );
+    final first = await feature().forItem(type: 'movie', id: 'tt1');
     expect(first.single.item.id, 'tt0219653');
 
     // A fresh feature off the same preferences file: what a restart is.
-    final again = await feature().forItem(
-      type: 'movie',
-      id: 'tt1',
-      name: 'Wave Twisters',
-      year: 2001,
-    );
+    final again = await feature().forItem(type: 'movie', id: 'tt1');
 
     expect(again.single.item.id, 'tt0219653');
     expect(asked, hasLength(1), reason: 'the first answer is the answer');
@@ -136,13 +81,11 @@ void main() {
   });
 
   test('an answer to an older question is asked again', () async {
-    // What an install that has already opened this series holds: ten
-    // titles written down by the film-only question, with no stamp on
-    // them at all. Without the stamp that viewer keeps a row of films
-    // under a television series for the life of the install, and this
-    // change would be one only a fresh install ever saw.
-    storage = FakePrefsClient({
-      AppPrefs.similarApiKeyKey: 'not-a-real-key',
+    // What an install that opened this series under the film-only question
+    // holds: titles written down with no stamp on them at all. Without the
+    // stamp that viewer keeps a row of films under a television series for
+    // the life of the install.
+    await start({
       AppPrefs.similarSuggestionsKey: [
         {
           'type': 'series',
@@ -153,71 +96,53 @@ void main() {
         },
       ],
     });
-    prefs = AppPrefs(client: storage);
-    await prefs.load();
-    built = [];
-    asked = [];
 
-    await feature().forItem(
-      type: 'series',
-      id: 'tt0903747',
-      name: 'Breaking Bad',
-    );
+    await feature().forItem(type: 'series', id: 'tt0903747');
 
-    expect(asked, ['Breaking Bad as series']);
+    expect(asked, ['series/tt0903747']);
     // And the new answer replaces the stale row rather than joining it,
     // so it is asked once and not once a visit.
-    await feature().forItem(
-      type: 'series',
-      id: 'tt0903747',
-      name: 'Breaking Bad',
-    );
+    await feature().forItem(type: 'series', id: 'tt0903747');
     expect(asked, hasLength(1));
+    expect(prefs.similarSuggestions.entries, hasLength(1));
+    expect(
+      prefs.similarSuggestions.entries.single.askedAs,
+      similarQuestionVersion,
+    );
   });
 
   test('an answer with nothing in it is still an answer', () async {
-    answering = (_) => const <SuggestedTitle>[];
+    answering = (_, _) => const <SuggestedTitle>[];
 
-    expect(
-      await feature().forItem(type: 'movie', id: 'tt1', name: 'A'),
-      isEmpty,
-    );
-    expect(
-      await feature().forItem(type: 'movie', id: 'tt1', name: 'A'),
-      isEmpty,
-    );
+    expect(await feature().forItem(type: 'movie', id: 'tt1'), isEmpty);
+    expect(await feature().forItem(type: 'movie', id: 'tt1'), isEmpty);
 
     expect(asked, hasLength(1), reason: 'asking again would be told the same');
   });
 
   test('a failure is an empty row, and a log line saying which', () async {
     final lines = captureDiagnostics();
-    answering = (_) => const SimilarTitlesFailure(SimilarTrouble.gone, '404');
+    answering = (_, _) =>
+        const SimilarTitlesFailure(SimilarTrouble.busy, '503');
 
-    final row = await feature().forItem(type: 'movie', id: 'tt1', name: 'A');
+    final row = await feature().forItem(type: 'movie', id: 'tt1');
 
     expect(row, isEmpty);
-    expect(lines.single, contains(SimilarTrouble.gone.describe));
-    expect(lines.single, contains(defaultSimilarModel));
-    // The key is the one thing that must never reach a log: this
-    // repository is public and the ring is copied into bug reports.
-    expect(lines.single, isNot(contains('not-a-real-key')));
-    // Nothing was written down, so another visit may find the model back.
+    expect(lines.single, contains(SimilarTrouble.busy.describe));
+    expect(lines.single, contains('movie tt1'));
+    // Nothing was written down, so another visit asks again -- a busy
+    // server is one that will have the answer by then.
     expect(storage.stored[AppPrefs.similarSuggestionsKey], isNull);
-    expect(
-      await feature().forItem(type: 'movie', id: 'tt1', name: 'A'),
-      isEmpty,
-    );
+    expect(await feature().forItem(type: 'movie', id: 'tt1'), isEmpty);
     expect(asked, hasLength(2));
   });
 
   test('a provider that throws something else is still an empty row', () async {
-    answering = (_) => StateError('a bug in a provider');
+    captureDiagnostics();
+    answering = (_, _) => StateError('a bug in a provider');
 
-    expect(
-      await feature().forItem(type: 'movie', id: 'tt1', name: 'A'),
-      isEmpty,
-    );
+    expect(await feature().forItem(type: 'movie', id: 'tt1'), isEmpty);
+    expect(storage.stored[AppPrefs.similarSuggestionsKey], isNull);
   });
 
   test('a title already resolved this run is not searched again', () async {
@@ -231,185 +156,15 @@ void main() {
     }
 
     final feature1 = feature(search: searching);
-    await feature1.forItem(type: 'movie', id: 'tt1', name: 'A');
+    await feature1.forItem(type: 'movie', id: 'tt1');
     final searches = searched;
-    await feature1.forItem(type: 'movie', id: 'tt1', name: 'A');
+    await feature1.forItem(type: 'movie', id: 'tt1');
 
     expect(searched, searches);
   });
-
-  /// The one way past "the first answer is the answer": the viewer saying
-  /// the row is wrong. What is asserted here is the pair of rules that
-  /// makes that safe -- everything remembered is stepped over, and nothing
-  /// is written down unless something came back to write.
-  group('asking again', () {
-    const stalker = SuggestedTitle(title: 'Stalker', year: 1979, why: 'grey');
-
-    /// A remembered answer for [id], and the row it resolved to.
-    Future<void> rememberOne(String id) async {
-      await feature().forItem(type: 'movie', id: id, name: 'A');
-    }
-
-    test('goes past a remembered answer, and the new one replaces it at '
-        'the front of the recency order', () async {
-      await rememberOne('tt1');
-      await rememberOne('tt2');
-      expect(asked, hasLength(2));
-
-      answering = (_) => const [stalker];
-      final again = await feature().forItem(
-        type: 'movie',
-        id: 'tt1',
-        name: 'A',
-        afresh: true,
-      );
-
-      expect(again.single.item.id, 'tt0079944');
-      expect(
-        asked,
-        hasLength(3),
-        reason: 'the remembered row was stepped over',
-      );
-      final memory = prefs.similarSuggestions;
-      expect(memory.forItem(type: 'movie', id: 'tt1'), const [stalker]);
-      expect(memory.entries.first.id, 'tt1', reason: 'most recently asked');
-      expect(memory.entries.first.askedAs, similarQuestionVersion);
-      expect(memory.entries, hasLength(2), reason: 'replaced, not added to');
-
-      // And an ordinary visit after it reads the new row back rather than
-      // asking a fourth time: a re-ask is one call, not a mode.
-      final plain = await feature().forItem(
-        type: 'movie',
-        id: 'tt1',
-        name: 'A',
-      );
-      expect(plain.single.item.id, 'tt0079944');
-      expect(asked, hasLength(3));
-    });
-
-    test('goes past a remembered answer of nothing, which normally stops '
-        'the asking altogether', () async {
-      answering = (_) => const <SuggestedTitle>[];
-      expect(
-        await feature().forItem(type: 'movie', id: 'tt1', name: 'A'),
-        isEmpty,
-      );
-
-      answering = (_) => const [stalker];
-      final again = await feature().forItem(
-        type: 'movie',
-        id: 'tt1',
-        name: 'A',
-        afresh: true,
-      );
-
-      expect(again.single.item.id, 'tt0079944');
-      expect(prefs.similarSuggestions.forItem(type: 'movie', id: 'tt1'), const [
-        stalker,
-      ]);
-    });
-
-    test(
-      'and past the resolution this run, since that is a cache too',
-      () async {
-        var searched = 0;
-        Future<List<Map<String, dynamic>>> searching(
-          String type,
-          String query,
-        ) async {
-          searched++;
-          return _catalogue(type, query);
-        }
-
-        final one = feature(search: searching);
-        await one.forItem(type: 'movie', id: 'tt1', name: 'A');
-        final searches = searched;
-
-        answering = (_) => const [stalker];
-        final again = await one.forItem(
-          type: 'movie',
-          id: 'tt1',
-          name: 'A',
-          afresh: true,
-        );
-
-        expect(searched, greaterThan(searches));
-        expect(again.single.item.id, 'tt0079944');
-      },
-    );
-
-    test(
-      'a re-ask that fails leaves what is remembered exactly as it was',
-      () async {
-        captureDiagnostics();
-        await rememberOne('tt1');
-        final kept = prefs.similarSuggestions;
-        answering = (_) =>
-            const SimilarTitlesFailure(SimilarTrouble.gone, '404');
-
-        final again = await feature().forItem(
-          type: 'movie',
-          id: 'tt1',
-          name: 'A',
-          afresh: true,
-        );
-
-        expect(again, isEmpty, reason: 'nothing came back');
-        expect(prefs.similarSuggestions, kept);
-      },
-    );
-
-    test('and so does one the model answers with nothing: a press may not '
-        'leave the viewer with less than they had', () async {
-      // The deliberate choice, and the reason it is this one. A failure
-      // and an empty answer are the same list down here, so the screen
-      // could not tell them apart even if it wanted to -- and the viewer
-      // pressed because the row was wrong, not to be rid of it. Storing
-      // the empty would take the row away on the next visit, for an
-      // answer the same model disagrees with itself about half the time.
-      await rememberOne('tt1');
-      final kept = prefs.similarSuggestions;
-      answering = (_) => const <SuggestedTitle>[];
-
-      expect(
-        await feature().forItem(
-          type: 'movie',
-          id: 'tt1',
-          name: 'A',
-          afresh: true,
-        ),
-        isEmpty,
-      );
-
-      expect(prefs.similarSuggestions, kept);
-    });
-
-    test('and so does one whose titles no catalogue confirms', () async {
-      // The guard is what empties this one, not the provider: ten invented
-      // films are a full answer that resolves to nothing. The test is on
-      // what would reach the screen, which is why.
-      await rememberOne('tt1');
-      final kept = prefs.similarSuggestions;
-      answering = (_) => const [
-        SuggestedTitle(title: 'The Otherside', year: 2022, why: 'invented'),
-      ];
-
-      expect(
-        await feature().forItem(
-          type: 'movie',
-          id: 'tt1',
-          name: 'A',
-          afresh: true,
-        ),
-        isEmpty,
-      );
-
-      expect(prefs.similarSuggestions, kept);
-    });
-  });
 }
 
-/// A catalogue holding the two films the fake model names, and nothing
+/// A catalogue holding the two films the fake server names, and nothing
 /// else -- so a suggestion of any other title is one the guard drops,
 /// which is what an invented title does.
 Future<List<Map<String, dynamic>>> _catalogue(String type, String query) async {
@@ -434,20 +189,19 @@ Future<List<Map<String, dynamic>>> _catalogue(String type, String query) async {
 final class _FakeProvider implements SimilarTitlesProvider {
   _FakeProvider(this.asked, this.answering);
 
-  /// What was asked about, and as what: `Avalon (2001) as film`. The kind
-  /// is in the string because it is half the question.
+  /// What was asked about: `movie/tt1`.
   final List<String> asked;
 
   /// A list to answer with, or an object to throw.
-  final Object Function(String subject) answering;
+  final Object Function(String type, String id) answering;
 
   @override
-  Future<List<SuggestedTitle>> suggest(
-    String subject, {
-    required SuggestedKind about,
+  Future<List<SuggestedTitle>> suggest({
+    required String type,
+    required String id,
   }) async {
-    asked.add('$subject as ${about.stored}');
-    final answer = answering(subject);
+    asked.add('$type/$id');
+    final answer = answering(type, id);
     if (answer is List<SuggestedTitle>) return answer;
     throw answer;
   }

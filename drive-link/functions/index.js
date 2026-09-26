@@ -596,3 +596,17 @@ exports.api = onRequest(
     {secrets: [CLIENT_ID, CLIENT_SECRET], region: 'europe-west1'},
     app,
 );
+
+/**
+ * "More like this", as its own function with its own secret (see
+ * `similar.js`): a Gemini outage or a missing key cannot touch pairing, and
+ * deploying pairing does not wait on a key this one needs.
+ */
+const {mountSimilar} = require('./similar');
+const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
+const similarApp = express();
+mountSimilar(similarApp, GEMINI_API_KEY);
+exports.similar = onRequest(
+    {secrets: [GEMINI_API_KEY], region: 'europe-west1', timeoutSeconds: 60},
+    similarApp,
+);
