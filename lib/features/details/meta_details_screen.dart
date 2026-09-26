@@ -1136,16 +1136,14 @@ class _MetaDetailsScreenState extends State<MetaDetailsScreen>
   /// state is reloaded while the call runs, so the tile the user tapped is
   /// a different widget by the time it comes back.
   ///
-  /// **Only a torrent has one.** The info hash and the file index are the
-  /// whole of the key, so every stream of a video that is not a torrent
+  /// **A torrent or a link has one.** A torrent is keyed by its info hash
+  /// and file index, a link by its URL; every other stream of a video
   /// shares `$videoId|null|null` -- which is harmless only because
-  /// [_StreamDownloads.starter] refuses anything that is not a torrent and
-  /// so no such pin is ever in flight. A linked Drive file is not a torrent
-  /// and has no addon request for a pin to record either, so it is handed
-  /// no [_StreamDownloads] at all ([_downloadsFor]) rather than being let
-  /// near this key.
+  /// [_StreamDownloads.starter] refuses anything else and so no such pin
+  /// is ever in flight. A linked Drive file is handed no [_StreamDownloads]
+  /// at all ([_downloadsFor]) rather than being let near this key.
   static String _streamKey(String videoId, StreamInfo stream) =>
-      '$videoId|${stream.infoHash}|${stream.fileIdx}';
+      '$videoId|${stream.infoHash ?? stream.url}|${stream.fileIdx}';
 
   /// The download of one video, whatever source it was taken from. The
   /// registry is keyed by meta and video, so there is at most one, and a
@@ -2776,12 +2774,13 @@ const String driveSourceStorageLabel = 'drive';
 /// The download affordances for one row, or none at all for a row no addon
 /// answered with.
 ///
-/// A linked Drive file is already on the viewer's own Drive, is not a
-/// torrent the server could keep (so [_StreamDownloads.starter] would
-/// refuse it anyway), and has no addon request for a pin to record. Handing
-/// it a bound [_StreamDownloads] would still let it read the video's
-/// download as one to *replace* and let [_streamKey] key it on a null info
-/// hash, so it is handed none.
+/// A linked Drive file is already on the viewer's own Drive and has no
+/// addon request for a pin to record; the server can keep one (its proxy
+/// cache pins Drive files by id) but this screen does not offer it yet --
+/// the pin needs the pairing's refresh token, which lives with the Drive
+/// account, not with a stream. Handing it a bound [_StreamDownloads] would
+/// let it read the video's download as one to *replace*, so it is handed
+/// none.
 _StreamDownloads? _downloadsFor(
   _StreamDownloads? downloads,
   StreamGroup? group,
@@ -3979,10 +3978,20 @@ final class _StreamDownloads {
   /// its way.
   VoidCallback? starter(StreamInfo stream) {
     final group = this.group;
-    if (group == null || stream.kind != StreamKind.torrent) return null;
+    // A torrent, or a plain web link: both are files the server keeps (a
+    // torrent in its piece store, a link in its proxy cache -- see the
+    // server's `proxy_downloads`). YouTube and external streams open other
+    // apps and hold no bytes of ours.
+    if (group == null || !_downloadable(stream)) return null;
     if (isPending(stream)) return null;
     return () => onDownload(group, stream);
   }
+
+  static bool _downloadable(StreamInfo stream) =>
+      stream.kind == StreamKind.torrent ||
+      (stream.kind == StreamKind.url &&
+          (stream.url?.startsWith('http://') == true ||
+              stream.url?.startsWith('https://') == true));
 
   /// What a hold on the source [stream] is drawn on does about the copy on
   /// the device, for a remote that cannot press the button.
@@ -4371,7 +4380,12 @@ class _StreamTile extends StatelessWidget {
     // repeat the title just as readily as the old chips did, and a row
     // reading "1080p / 1080p / 2 GB" is what it looks like when nobody
     // checks.
+    // The kept release says so where the row is read, not only in the
+    // trailing button: a picker with five releases and one bin icon was a
+    // puzzle ("which one is the download?").
+    final kept = downloads?.entryOf(stream)?.isComplete == true;
     final chips = [
+      if (kept) kDownloadedChipLabel,
       for (final chip in facts?.pills ?? hints.chips)
         if (chip.toLowerCase() != title.toLowerCase()) chip,
     ];

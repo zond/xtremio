@@ -295,6 +295,43 @@ void main() {
       expect(request.streamRequest!['base'], contains('torrentio'));
     });
 
+    testWidgets('a web link is offered too: the server keeps it in its '
+        'proxy cache', (tester) async {
+      useWideViewport(tester);
+      // The fixture's stream list, plus one plain link among the external
+      // streams. A link is a file the server can keep; an external stream
+      // opens another app and holds no bytes of ours.
+      final fixture = loadMetaDetailsFixture();
+      final streams = fixture['streams'] as List<dynamic>;
+      final first = streams.first as Map<String, dynamic>;
+      final content = first['content'] as Map<String, dynamic>;
+      (content['content'] as List<dynamic>).add({
+        'url': 'https://cdn.example/night.mp4',
+        'name': 'Direct',
+        'title': 'Direct 720p',
+      });
+      final core = FakeCoreClient(state: {CoreField.metaDetails: fixture});
+      final downloads = FakeDownloadsClient();
+      addTearDown(downloads.dispose);
+      await tester.pumpWidget(harness(core, downloads));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Direct 720p'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ListTile, 'Direct 720p'),
+          matching: find.byTooltip(kDownloadTooltip),
+        ),
+        findsOneWidget,
+        reason: 'the link offers a download',
+      );
+      expect(
+        find.byTooltip(kDownloadTooltip),
+        findsNWidgets(2),
+        reason: 'the torrent and the link; the five external streams do not',
+      );
+    });
+
     testWidgets('only a torrent is offered: the server keeps nothing else', (
       tester,
     ) async {
@@ -537,6 +574,27 @@ void main() {
       await tester.pumpAndSettle();
       return downloads;
     }
+
+    testWidgets('says on its tile that it is the kept release', (tester) async {
+      // One bin icon among five releases did not say which one was kept:
+      // the tile carries the word.
+      await pumpWith(tester, 'complete', done: 1000000);
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ListTile, '1080p'),
+          matching: find.text(kDownloadedChipLabel),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ListTile),
+          matching: find.text(kDownloadedChipLabel),
+        ),
+        findsOneWidget,
+        reason: 'and no other release wears it',
+      );
+    });
 
     testWidgets('offers to delete it instead of offering to download it', (
       tester,

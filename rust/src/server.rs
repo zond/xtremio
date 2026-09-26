@@ -18,8 +18,8 @@ use std::time::Duration;
 use anyhow::Context;
 use enginefs::backend::DhtStatus;
 use stream_server::{
-    CacheUsage, DownloadInfo, EngineStats, EvictionReport, ServerHandle, ServerSettings,
-    UnpinOutcome,
+    CacheUsage, DownloadInfo, EngineStats, EvictionReport, ProxyDownloadRequest, ProxyPinKey,
+    ServerHandle, ServerSettings, UnpinOutcome,
 };
 use url::Url;
 
@@ -134,6 +134,8 @@ fn server_config(config: &StartConfig) -> stream_server::ServerConfig {
         // set: the server then keeps every torrent's data for that boot.
         // See `crate::downloads::pins`.
         pins: crate::downloads::pins(),
+        // And the link downloads, under the same rule (`downloads::proxy_pins`).
+        proxy_pins: crate::downloads::proxy_pins(),
         // Where a Drive refresh token is turned into an access token. The
         // server holds no client secret and must not guess an endpoint --
         // a wrong one is a refresh token posted to somebody else's host --
@@ -437,7 +439,52 @@ pub fn unpin_download(
     file_idx: usize,
     delete_files: bool,
 ) -> anyhow::Result<UnpinOutcome> {
+    // A row's coordinates say which pin it holds: a proxy download's key
+    // is 64 hex characters, an info hash 40 (`downloads::is_proxy_key`).
+    // Dispatched here so every unpin site in the registry -- a removal, a
+    // replacement's release, a boot's reconcile, a row marked gone -- asks
+    // one function and cannot get the two mixed up.
+    if crate::downloads::is_proxy_key(info_hash) {
+        return unpin_proxy_download(info_hash, delete_files);
+    }
     with_handle(|handle| handle.unpin_download(info_hash, file_idx, delete_files))
+}
+
+/// The key a link download has or would have, derived by the server with
+/// no network (`ServerHandle::proxy_download_key`); `Ok(None)` for what it
+/// cannot key.
+pub fn proxy_download_key(pin: &ProxyPinKey) -> anyhow::Result<Option<String>> {
+    with_handle(|handle| Ok(handle.proxy_download_key(pin)))
+}
+
+/// Pins a link as an offline download (`ServerHandle::pin_proxy_download`):
+/// the row it answers has the key for `info_hash` and `0` for `file_idx`.
+pub fn pin_proxy_download(pin: ProxyPinKey, name: Option<String>) -> anyhow::Result<DownloadInfo> {
+    let request = match pin {
+        ProxyPinKey::Url { target, headers } => ProxyDownloadRequest {
+            url: Some(target),
+            headers,
+            drive_file_id: None,
+            refresh_token: None,
+            name,
+        },
+        ProxyPinKey::Drive { file_id } => ProxyDownloadRequest {
+            url: None,
+            headers: Default::default(),
+            drive_file_id: Some(file_id),
+            // A Drive download needs the pairing's refresh token, which this
+            // side does not pass yet; the server refuses without it.
+            refresh_token: None,
+            name,
+        },
+    };
+    with_handle(|handle| handle.pin_proxy_download(request))
+}
+
+/// Drops a link download's pin by its key
+/// (`ServerHandle::unpin_proxy_download`).
+pub fn unpin_proxy_download(key: &str, delete_files: bool) -> anyhow::Result<UnpinOutcome> {
+    with_handle(|handle| handle.unpin_proxy_download(key, delete_files))
 }
 
 /// Every pinned download the server knows about, with live progress.

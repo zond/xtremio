@@ -728,13 +728,18 @@ pub fn pins_in(registry: &Registry) -> Option<stream_server::PinSet> {
         if !entry.wants_pin() {
             continue;
         }
-        pins.entry(entry.info_hash.to_lowercase())
-            .or_default()
-            .push(entry.file_idx);
-        if let Some(old) = &entry.replaces {
-            pins.entry(old.info_hash.to_lowercase())
+        // A proxy download is the other record's ([`proxy_pins_in`]).
+        if !is_proxy_key(&entry.info_hash) {
+            pins.entry(entry.info_hash.to_lowercase())
                 .or_default()
-                .push(old.file_idx);
+                .push(entry.file_idx);
+        }
+        if let Some(old) = &entry.replaces {
+            if !is_proxy_key(&old.info_hash) {
+                pins.entry(old.info_hash.to_lowercase())
+                    .or_default()
+                    .push(old.file_idx);
+            }
         }
     }
     for (key, raw) in &registry.unreadable {
@@ -747,7 +752,9 @@ pub fn pins_in(registry: &Registry) -> Option<stream_server::PinSet> {
             return None;
         };
         for (info_hash, file_idx) in named {
-            pins.entry(info_hash).or_default().push(file_idx);
+            if !is_proxy_key(&info_hash) {
+                pins.entry(info_hash).or_default().push(file_idx);
+            }
         }
     }
     for indices in pins.values_mut() {
@@ -783,6 +790,63 @@ fn unreadable_pins(raw: &serde_json::Value) -> Option<Vec<(String, usize)>> {
 /// see [`read_registry`] -- or names something this build cannot place.
 /// Called once, by [`crate::server::start`], before the server opens its
 /// session.
+/// The proxy downloads to keep, for `ServerConfig::proxy_pins`: what every
+/// row that is a link download and wants its pin names, rebuilt from the
+/// stream the row stores. `None` under the same rule as [`pins_in`]: an
+/// unreadable row that might be a link download this build cannot tell
+/// makes the whole set unknown, and the server then sweeps nothing.
+pub fn proxy_pins_in(registry: &Registry) -> Option<Vec<stream_server::ProxyPinKey>> {
+    let mut pins = Vec::new();
+    for entry in registry.items.values() {
+        if !entry.wants_pin() || !is_proxy_key(&entry.info_hash) {
+            continue;
+        }
+        match proxy_pin_of_stream(&entry.stream) {
+            Some(pin) => pins.push(pin),
+            None => {
+                tracing::warn!(
+                    key = entry.key(),
+                    "a link download's row stores no link; its pin cannot be named"
+                );
+                return None;
+            }
+        }
+    }
+    for (key, raw) in &registry.unreadable {
+        let hash = raw
+            .get("infoHash")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        if !is_proxy_key(hash) {
+            continue;
+        }
+        match raw.get("stream").and_then(proxy_pin_of_stream) {
+            Some(pin) => pins.push(pin),
+            None => {
+                tracing::warn!(
+                    key,
+                    "an unreadable link download names no link; the proxy pin set cannot be known"
+                );
+                return None;
+            }
+        }
+    }
+    pins.sort();
+    pins.dedup();
+    Some(pins)
+}
+
+/// [`proxy_pins_in`] over the registry on disk, for the boot. See [`pins`].
+pub fn proxy_pins() -> Option<Vec<stream_server::ProxyPinKey>> {
+    match load() {
+        Ok(registry) => proxy_pins_in(&registry),
+        Err(error) => {
+            tracing::warn!(%error, "the downloads registry would not read; proxy pins unknown");
+            None
+        }
+    }
+}
+
 pub fn pins() -> Option<stream_server::PinSet> {
     let pins = match load() {
         Ok(registry) => pins_in(&registry),
@@ -1102,6 +1166,11 @@ pub struct AddRequest {
 /// which is the one thing the caller must not get wrong.
 #[derive(Clone, Debug, PartialEq)]
 struct TorrentSource {
+    /// The row's coordinates. A torrent's info hash -- or, for a stream
+    /// that is not a torrent, the proxy download's key the server derives
+    /// for it (64 hex characters, which no info hash is; see
+    /// [`is_proxy_key`]), in which case [`Self::proxy`] says what it is a
+    /// download of.
     info_hash: String,
     /// The index the stream names, or `None` when it names none — a missing
     /// `fileIdx` and the explicit `-1` sentinel alike. `None` is not file 0:
@@ -1113,6 +1182,52 @@ struct TorrentSource {
     /// The stream's `fileMustInclude`, which the play URL passes as `f=` and
     /// which wins over the largest-file rule.
     filters: Vec<String>,
+    /// What a non-torrent stream downloads: the addon URL with its `h=`
+    /// headers, as the server pins it (`stream_server::ProxyPinKey`).
+    /// `None` for a torrent.
+    proxy: Option<stream_server::ProxyPinKey>,
+    /// What to call the download in the server's listing; the request's
+    /// name, set by [`add_with`] before the pin.
+    name: Option<String>,
+}
+
+/// Whether a row's `info_hash` is a proxy download's key rather than a
+/// torrent's info hash: the server's cache key is 64 hex characters, an
+/// info hash 40. What every server call site branches on
+/// (`crate::server::unpin_download` dispatches by it), so a row carries no
+/// second field to fall out of step with the first.
+pub fn is_proxy_key(info_hash: &str) -> bool {
+    info_hash.len() == 64 && info_hash.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The proxy pin a stream names, or `None` for a torrent or anything that
+/// is not an `http(s)` link: the addon URL, and the request headers
+/// stremio-core puts in `h=` (`behaviorHints.proxyHeaders.request`).
+pub fn proxy_pin_of_stream(stream: &serde_json::Value) -> Option<stream_server::ProxyPinKey> {
+    if stream
+        .get("infoHash")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|hash| !hash.is_empty())
+    {
+        return None;
+    }
+    let target = stream.get("url").and_then(serde_json::Value::as_str)?;
+    if !(target.starts_with("http://") || target.starts_with("https://")) {
+        return None;
+    }
+    let headers: BTreeMap<String, String> = stream
+        .pointer("/behaviorHints/proxyHeaders/request")
+        .and_then(serde_json::Value::as_object)
+        .map(|map| {
+            map.iter()
+                .filter_map(|(name, value)| Some((name.clone(), value.as_str()?.to_owned())))
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(stream_server::ProxyPinKey::Url {
+        target: target.to_owned(),
+        headers,
+    })
 }
 
 fn string_list(stream: &serde_json::Value, keys: &[&str]) -> Vec<String> {
@@ -1130,11 +1245,43 @@ fn torrent_source(
     stream: &serde_json::Value,
     file_idx_override: Option<i64>,
 ) -> anyhow::Result<TorrentSource> {
+    source_of(stream, file_idx_override, |pin| {
+        crate::server::proxy_download_key(pin).unwrap_or(None)
+    })
+}
+
+/// [`torrent_source`] with the server's key derivation handed in, which is
+/// how a test resolves a link without a server running.
+fn source_of(
+    stream: &serde_json::Value,
+    file_idx_override: Option<i64>,
+    key_for: impl FnOnce(&stream_server::ProxyPinKey) -> Option<String>,
+) -> anyhow::Result<TorrentSource> {
+    if let Some(pin) = proxy_pin_of_stream(stream) {
+        // A link: one file, keyed by the server exactly as it will pin it,
+        // so the row is written under its final coordinates as a torrent's
+        // is under its info hash.
+        let key = key_for(&pin).ok_or_else(|| {
+            anyhow::anyhow!("this link cannot be downloaded: the server cannot key it")
+        })?;
+        return Ok(TorrentSource {
+            info_hash: key,
+            file_idx: Some(0),
+            announce: Vec::new(),
+            filters: Vec::new(),
+            proxy: Some(pin),
+            name: None,
+        });
+    }
     let info_hash = stream
         .get("infoHash")
         .and_then(serde_json::Value::as_str)
         .filter(|hash| !hash.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("only torrent streams can be downloaded (no infoHash)"))?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "only torrent and web-link streams can be downloaded (no infoHash or url)"
+            )
+        })?
         .to_lowercase();
     // A negative index is the caller saying "you pick", the same thing the
     // media route's `-1` says, so it never becomes a real index here.
@@ -1152,7 +1299,31 @@ fn torrent_source(
         file_idx,
         announce,
         filters,
+        proxy: None,
+        name: None,
     })
+}
+
+/// Takes the pin `source` asks for: the server's torrent pin, or its proxy
+/// download. What [`add`] hands [`add_with`].
+fn pin_source(source: &TorrentSource, file_idx: usize) -> anyhow::Result<DownloadInfo> {
+    match &source.proxy {
+        Some(pin) => crate::server::pin_proxy_download(pin.clone(), source.name.clone()),
+        None => crate::server::pin_download(&source.info_hash, file_idx, &source.announce),
+    }
+}
+
+/// Re-takes the pin a persisted row holds -- at boot, for an unfinished
+/// download -- from what the row kept: a torrent from its coordinates and
+/// trackers, a link from the stream the row stores.
+fn pin_entry(entry: &Entry) -> anyhow::Result<DownloadInfo> {
+    if is_proxy_key(&entry.info_hash) {
+        let pin = proxy_pin_of_stream(&entry.stream)
+            .ok_or_else(|| anyhow::anyhow!("the download's stream names no link to pin"))?;
+        crate::server::pin_proxy_download(pin, Some(entry.name.clone()))
+    } else {
+        crate::server::pin_download(&entry.info_hash, entry.file_idx, &entry.announce)
+    }
 }
 
 /// Whether a file name is one the server counts as media
@@ -1252,7 +1423,7 @@ fn resolve_media_file(source: &TorrentSource) -> Result<usize, PinFailure> {
 /// meta/video keeps its `createdAt` and `lastPlayedAt` and takes everything
 /// else from this call, so re-downloading after a failure is one call.
 pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
-    let outcome = add_with(request, crate::server::pin_download, release_replaced)?;
+    let outcome = add_with(request, pin_source, release_replaced)?;
     if outcome.ok {
         ensure_ticker();
     }
@@ -1266,10 +1437,11 @@ pub fn add(request: AddRequest) -> anyhow::Result<AddOutcome> {
 /// releases once it answers.
 fn add_with(
     request: AddRequest,
-    pin: impl FnOnce(&str, usize, &[String]) -> anyhow::Result<DownloadInfo>,
+    pin: impl FnOnce(&TorrentSource, usize) -> anyhow::Result<DownloadInfo>,
     mut release: impl FnMut(&str, &Replaced),
 ) -> anyhow::Result<AddOutcome> {
-    let source = torrent_source(&request.stream, request.file_idx)?;
+    let mut source = torrent_source(&request.stream, request.file_idx)?;
+    source.name = Some(request.name.clone());
     let TorrentSource {
         info_hash,
         announce,
@@ -1315,7 +1487,7 @@ fn add_with(
     // metadata timeout -- and everything that waits on this key's lock
     // meanwhile (a removal, the progress tick) waits that long with it.
     let asked = Instant::now();
-    let info = match pin(&info_hash, file_idx, &announce) {
+    let info = match pin(&source, file_idx) {
         Ok(info) => {
             tracing::info!(
                 key,
@@ -1379,6 +1551,9 @@ fn add_with(
     // again only for the case where it did not (metadata just landed).
     let path = match info.path.clone() {
         Some(path) => Some(path),
+        // A proxy download has no file: it is played from the server's
+        // media route (`DownloadInfo::play_url`), never opened by path.
+        None if source.proxy.is_some() => None,
         None => crate::server::download_path(&info_hash, file_idx).unwrap_or_default(),
     };
 
@@ -2175,6 +2350,17 @@ fn stream_url(entry: &Entry, live: Option<&[DownloadInfo]>) -> Result<String, Op
         // is the honest answer and the one that says "ask again in a moment".
         Held::Unknown => return Err(OpenFailure::Unavailable),
     }
+    // A proxy download plays from the route the server names for it; a
+    // torrent from its media route, which this side has always built.
+    if let Some(play) = live
+        .iter()
+        .find(|info| {
+            info.file_idx == entry.file_idx && info.info_hash.eq_ignore_ascii_case(&entry.info_hash)
+        })
+        .and_then(|info| info.play_url.clone())
+    {
+        return Ok(play);
+    }
     let base = crate::server::base_url().ok_or(OpenFailure::Unavailable)?;
     base.join(&format!("{}/{}", entry.info_hash, entry.file_idx))
         .map(String::from)
@@ -2619,7 +2805,7 @@ pub fn reconcile_pins_in(app: &Arc<AppState>) {
         if !crate::state::is_current(app) {
             return;
         }
-        match crate::server::pin_download(&entry.info_hash, entry.file_idx, &entry.announce) {
+        match pin_entry(&entry) {
             Ok(_) => tracing::info!(key, "re-pinned an unfinished download"),
             Err(error) => {
                 let failure = PinFailure::classify(&error);
@@ -2838,10 +3024,57 @@ mod tests {
         }
     }
 
+    /// A link is a source too: keyed by the server, one file, its `h=`
+    /// headers carried; a stream that is neither a torrent nor a link is
+    /// refused, and so is a link the server cannot key.
+    #[test]
+    fn a_link_is_a_source_keyed_by_the_server() {
+        let key = "ab".repeat(32);
+        let source = source_of(
+            &serde_json::json!({
+                "url": "http://example/x.mkv",
+                "behaviorHints": {"proxyHeaders": {"request": {"Authorization": "Bearer t", "X-N": 1}}},
+            }),
+            None,
+            |pin| {
+                assert_eq!(
+                    *pin,
+                    stream_server::ProxyPinKey::Url {
+                        target: "http://example/x.mkv".into(),
+                        headers: [("Authorization".to_string(), "Bearer t".to_string())].into(),
+                    },
+                    "the URL and the string-valued request headers"
+                );
+                Some(key.clone())
+            },
+        )
+        .unwrap();
+        assert!(is_proxy_key(&source.info_hash));
+        assert_eq!(
+            (source.info_hash.as_str(), source.file_idx),
+            (key.as_str(), Some(0))
+        );
+        assert!(source.proxy.is_some());
+        let unkeyable = source_of(
+            &serde_json::json!({"url": "http://example/x.mkv"}),
+            None,
+            |_| None,
+        )
+        .unwrap_err();
+        assert!(unkeyable.to_string().contains("cannot key"), "{unkeyable}");
+        let neither = source_of(
+            &serde_json::json!({"ytId": "abc"}),
+            None,
+            |_| unreachable!(),
+        )
+        .unwrap_err();
+        assert!(neither.to_string().contains("infoHash or url"), "{neither}");
+        assert!(!is_proxy_key("abc"), "an info hash is not a proxy key");
+    }
+
     #[test]
     fn a_stream_without_an_info_hash_is_not_downloadable() {
-        let error =
-            torrent_source(&serde_json::json!({"url": "http://example/x.mkv"}), None).unwrap_err();
+        let error = torrent_source(&serde_json::json!({"ytId": "x"}), None).unwrap_err();
         assert!(error.to_string().contains("infoHash"), "{error}");
 
         let source = torrent_source(
@@ -3456,7 +3689,7 @@ mod tests {
             let mut released = Vec::new();
             let outcome = add_with(
                 request("tt1", "tt1"),
-                |_, _, _| {
+                |_, _| {
                     update(|registry| {
                         meanwhile(registry);
                         Ok(())

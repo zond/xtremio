@@ -36,6 +36,10 @@ const String kDownloadGoneTooltip = 'No longer on this device — download again
 const String kDownloadReplaceTooltip =
     'Download instead — replaces the copy already kept';
 
+/// The chip a stream tile carries once its release is the one kept on this
+/// device, so the kept source can be told from the others at a glance.
+const String kDownloadedChipLabel = 'Downloaded';
+
 /// What a download of [video] is called in a list: the title for a movie,
 /// `Breaking Bad: S1E1 · Pilot` for an episode. It is stored with the entry,
 /// so a Downloads screen has it without the meta.

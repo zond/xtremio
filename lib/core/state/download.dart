@@ -88,6 +88,16 @@ final class DownloadView {
   /// was pinned as the file it would have played.
   int get fileIdx => (json['fileIdx'] as num?)?.toInt() ?? 0;
 
+  /// Whether the row is a torrent's file. A link download's coordinates are
+  /// the server's cache key (64 hex characters), a torrent's its info hash
+  /// (40): the same rule the Rust side dispatches on (`is_proxy_key`).
+  bool get isTorrent => infoHash.length != 64;
+
+  /// Where a finished link download plays from, as the server reports it
+  /// in its listing; `null` for a torrent, whose media route the app
+  /// builds itself.
+  String? get playUrl => json['playUrl'] as String?;
+
   /// The stream's trackers, as the pin was taken with.
   List<String> get announce => [
     for (final tracker in (json['announce'] as List<dynamic>? ?? const []))

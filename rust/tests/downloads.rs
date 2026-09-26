@@ -323,15 +323,40 @@ fn offline_downloads_lifecycle() -> anyhow::Result<()> {
         "no file until there is something in it"
     );
 
-    // A stream that is not a torrent is the one thing that raises.
+    // A stream that is neither a torrent nor a link is the one thing that
+    // raises. A link is a download too -- this one names a host that does
+    // not exist, so its pin is refused, which is a failure the row reports
+    // and not an exception.
     let error = downloads_add(
         serde_json::json!({
-            "metaId": "tt1", "videoId": "tt1", "stream": {"url": "https://example.invalid/x.mkv"}
+            "metaId": "tt1", "videoId": "tt1", "stream": {"ytId": "abc"}
         })
         .to_string(),
     )
     .unwrap_err();
     assert!(error.to_string().contains("infoHash"), "{error}");
+    let refused: serde_json::Value = serde_json::from_str(
+        &downloads_add(
+            serde_json::json!({
+                "metaId": "tt1", "videoId": "tt1", "stream": {"url": "https://example.invalid/x.mkv"}
+            })
+            .to_string(),
+        )
+        .expect("a link is downloadable; an unreachable one is refused, not thrown"),
+    )
+    .unwrap();
+    assert_eq!(refused["ok"], false, "{refused}");
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("could not be reached")),
+        "{refused}"
+    );
+    assert_eq!(
+        list()["items"],
+        serde_json::json!({}),
+        "a refused link left no row"
+    );
     let error = downloads_add("{".to_owned()).unwrap_err();
     assert!(
         error.to_string().contains("invalid download request"),

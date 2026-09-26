@@ -630,7 +630,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
               if (_hasDownloads)
                 IconButton(
                   tooltip: LibraryScreen.downloadsLabel,
-                  icon: const Icon(Icons.download_done_outlined),
+                  // A "downloads" glyph, not a tick: the pill below wears
+                  // the tick and means "show me what is here", this opens
+                  // the place they are managed.
+                  icon: const Icon(Icons.download_for_offline_outlined),
                   onPressed: _openDownloads,
                 ),
               const RemoteFilesButton(),
