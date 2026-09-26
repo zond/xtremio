@@ -1,7 +1,7 @@
 /// Where "More like this" suggestions come from, and what asking for them
 /// can go wrong with.
 ///
-/// The question is not asked here. It lives on the xtremio-drive server
+/// The question is not asked here. It lives on the xtremio-xervice server
 /// (`xtremio-xervice/functions/similar.js`), which holds the one Gemini key
 /// there is, asks the model once per title, and hands the same answer to
 /// every install after that. What is measured about the model and the

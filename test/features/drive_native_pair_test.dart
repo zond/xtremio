@@ -46,7 +46,7 @@ void main() {
     test('is recognised, and carries the session the phone must hand to', () {
       expect(
         drivePairingSessionOfLink(
-          'https://xtremio-drive.web.app/link?s=abc-123',
+          'https://xtremio-xervice.web.app/link?s=abc-123',
         ),
         'abc-123',
       );
@@ -54,7 +54,7 @@ void main() {
       // either.
       expect(
         drivePairingSessionOfLink(
-          'https://xtremio-drive.web.app/link.html?s=abc-123',
+          'https://xtremio-xervice.web.app/link.html?s=abc-123',
         ),
         'abc-123',
       );
@@ -66,13 +66,13 @@ void main() {
       // that matters: App Links verification is per host, and this parser is
       // what decides what the app *acts* on.
       for (final link in [
-        'https://xtremio-drive.web.app.evil.example/link?s=abc-123',
+        'https://xtremio-xervice.web.app.evil.example/link?s=abc-123',
         'https://evil.example/link?s=abc-123',
-        'http://xtremio-drive.web.app/link?s=abc-123',
-        'https://xtremio-drive.web.app/link',
-        'https://xtremio-drive.web.app/link?s=',
-        'https://xtremio-drive.web.app/pick?s=abc-123',
-        'https://xtremio-drive.web.app/',
+        'http://xtremio-xervice.web.app/link?s=abc-123',
+        'https://xtremio-xervice.web.app/link',
+        'https://xtremio-xervice.web.app/link?s=',
+        'https://xtremio-xervice.web.app/pick?s=abc-123',
+        'https://xtremio-xervice.web.app/',
         'stremio://community.example/manifest.json',
         'stremio:///pair',
         'not a url at all',
@@ -90,7 +90,7 @@ void main() {
       // pairing one first, and a `stremio://` manifest URL must still reach
       // the addon path untouched.
       expect(
-        deepLinkAddonManifestUrl('https://xtremio-drive.web.app/link?s=a'),
+        deepLinkAddonManifestUrl('https://xtremio-xervice.web.app/link?s=a'),
         isNull,
       );
       expect(

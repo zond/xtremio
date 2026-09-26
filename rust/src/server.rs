@@ -213,7 +213,7 @@ fn server_config(config: &StartConfig) -> stream_server::ServerConfig {
 /// and this device's refresh token with them -- at a host of their
 /// choosing, and the whole reason the token never crosses a URL is that
 /// nobody but this device and that service should ever see it.
-const DRIVE_REFRESH_ENDPOINT: &str = "https://xtremio-drive.web.app/refresh";
+const DRIVE_REFRESH_ENDPOINT: &str = "https://xtremio-xervice.web.app/refresh";
 
 /// Where the LAN media listener binds when a cast session turns it on: every
 /// interface (a receiver is on the LAN, not on loopback) on a port the OS
@@ -1433,7 +1433,7 @@ mod tests {
     fn the_server_is_told_where_the_pairing_service_is() {
         let url = Url::parse(DRIVE_REFRESH_ENDPOINT).expect("a literal URL");
         assert_eq!(url.scheme(), "https");
-        assert_eq!(url.host_str(), Some("xtremio-drive.web.app"));
+        assert_eq!(url.host_str(), Some("xtremio-xervice.web.app"));
         assert_eq!(url.path(), "/refresh");
 
         let config = server_config(&StartConfig {

@@ -1,7 +1,7 @@
 # Which model should recommend films
 
 The app shows a "More like this" row on a title, filled by a language
-model. The app does not ask the model itself: the xtremio-drive Firebase
+model. The app does not ask the model itself: the xtremio-xervice Firebase
 function (`xtremio-xervice/functions/similar.js`) holds the owner's Gemini key,
 asks once per title, and keeps that answer for everybody. This is how we
 decide which model it asks, and with what question.

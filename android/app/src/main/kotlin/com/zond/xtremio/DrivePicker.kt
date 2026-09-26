@@ -211,6 +211,6 @@ class DrivePicker(
          * identifier and carries no secret.
          */
         const val WEB_CLIENT_ID =
-            "55893685423-gv2bba8akveimtbepg2ot7iohm3g64pp.apps.googleusercontent.com"
+            "931205572142-d7bo9sfqr2o9aurefpk1vnbj47pheta4.apps.googleusercontent.com"
     }
 }

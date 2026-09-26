@@ -1,7 +1,7 @@
 /// What a model answered when it was asked what a title is like, and where
 /// that answer is kept.
 ///
-/// "More like this" is asked of the xtremio-drive server, which asks a model
+/// "More like this" is asked of the xtremio-xervice server, which asks a model
 /// once per title and keeps that answer for everybody -- the same model
 /// asked the same question twice agrees with itself about half the time
 /// (`tool/recommendations/README.md`, the `consistent` column), and a row

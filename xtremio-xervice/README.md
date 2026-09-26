@@ -106,13 +106,13 @@ The console work, once:
    second is easy to miss; the Picker will not load without it.
 2. **OAuth client**, type *Web application*. Redirect URIs:
    ```
-   https://xtremio-drive.web.app/oauth/callback
-   https://xtremio-drive.firebaseapp.com/oauth/callback
+   https://xtremio-xervice.web.app/oauth/callback
+   https://xtremio-xervice.firebaseapp.com/oauth/callback
    http://localhost:5000/oauth/callback
    ```
    JavaScript origins: the same three, without the path.
 3. **Browser API key**, restricted by HTTP referrer to
-   `https://xtremio-drive.web.app/*`. This is the Picker's
+   `https://xtremio-xervice.web.app/*`. This is the Picker's
    `developerKey`.
 4. **OAuth consent screen**: External, and **published to Production**.
    In Testing, Google expires refresh tokens after seven days, which
@@ -123,7 +123,7 @@ The console work, once:
 Then the secrets and the two values the pages need:
 
 ```sh
-firebase use xtremio-drive
+firebase use xtremio-xervice
 firebase functions:secrets:set OAUTH_CLIENT_ID        # the web client id
 firebase functions:secrets:set OAUTH_CLIENT_SECRET    # its secret
 
@@ -146,7 +146,7 @@ error has occurred` — and **hosting does not go out either**, so the pages
 stay on the last deployed version while the command looks like it ran.
 `node_modules/` is not in the repo, so a fresh clone needs this. Check a
 deploy by fetching something you changed (`curl -s
-https://xtremio-drive.web.app/pick | grep ...`) rather than by its exit
+https://xtremio-xervice.web.app/pick | grep ...`) rather than by its exit
 code, which a pipe to `tail` will hand you as 0.
 
 Finally, a **TTL policy** on Firestore so abandoned sessions clean
@@ -154,9 +154,9 @@ themselves up — field `expiresAt` on both `sessions` and `rate`:
 
 ```sh
 gcloud firestore fields ttls update expiresAt \
-  --collection-group=sessions --enable-ttl --project=xtremio-drive
+  --collection-group=sessions --enable-ttl --project=xtremio-xervice
 gcloud firestore fields ttls update expiresAt \
-  --collection-group=rate --enable-ttl --project=xtremio-drive
+  --collection-group=rate --enable-ttl --project=xtremio-xervice
 ```
 
 ## Proving it works, without the app
@@ -164,7 +164,7 @@ gcloud firestore fields ttls update expiresAt \
 The whole point of the proof is the last step. No television needed:
 
 ```sh
-HOST=https://xtremio-drive.web.app
+HOST=https://xtremio-xervice.web.app
 
 # 1. Stand in for the television. (A phone pairing sends
 #    -H 'Content-Type: application/json' -d '{"handBack":true}' instead.)

@@ -102,7 +102,7 @@
 
                  android:autoVerify, unlike the filter above, because this
                  host is *ours*: Android fetches
-                 https://xtremio-drive.web.app/.well-known/assetlinks.json
+                 https://xtremio-xervice.web.app/.well-known/assetlinks.json
                  and opens the app only if it names this package and this
                  signing certificate. That is why it can be an https link at
                  all — the stremio:// filter above cannot verify anything,
@@ -123,12 +123,12 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
                   android:scheme="https"
-                  android:host="xtremio-drive.web.app"
+                  android:host="xtremio-xervice.web.app"
                   android:path="/link"
                   />
                 <data
                   android:scheme="https"
-                  android:host="xtremio-drive.web.app"
+                  android:host="xtremio-xervice.web.app"
                   android:path="/link.html"
                   />
             </intent-filter>

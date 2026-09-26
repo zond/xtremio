@@ -128,7 +128,7 @@ app.use(express.json());
  * console is configured with, and the exchange below has to present the
  * same one it authorised with or Google refuses the code.
  */
-const PUBLIC_ORIGIN = 'https://xtremio-drive.web.app';
+const PUBLIC_ORIGIN = 'https://xtremio-xervice.web.app';
 
 function origin() {
   return PUBLIC_ORIGIN;

@@ -46,7 +46,7 @@ void main() {
       sessionStatus = HttpStatus.ok;
       sessionBody = {
         'sessionId': 'abc-123',
-        'link': 'https://xtremio-drive.web.app/link?s=abc-123',
+        'link': 'https://xtremio-xervice.web.app/link?s=abc-123',
         'expiresAt': '2026-09-25T20:10:00.000Z',
       };
       collectStatus = HttpStatus.ok;
@@ -87,7 +87,7 @@ void main() {
       expect(seen, ['POST /session']);
       final session = (opening as DrivePairingOpened).session;
       expect(session.sessionId, 'abc-123');
-      expect(session.link, 'https://xtremio-drive.web.app/link?s=abc-123');
+      expect(session.link, 'https://xtremio-xervice.web.app/link?s=abc-123');
       expect(session.expiresAt, DateTime.utc(2026, 9, 25, 20, 10));
       // And nothing about the session goes into a line: the id is the whole
       // of what a pairing is collected with.

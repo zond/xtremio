@@ -6,7 +6,7 @@ import 'package:xtremio/core/core.dart';
 import 'package:xtremio/features/similar/similar_titles.dart';
 import 'package:xtremio/features/similar/xtremio_similar_titles.dart';
 
-/// Asking the xtremio-drive server what a title is like, over a server on
+/// Asking the xtremio-xervice server what a title is like, over a server on
 /// the loopback that answers what `xtremio-xervice/functions/similar.js` does.
 ///
 /// What is checked is the contract between the two: the path the request
@@ -235,7 +235,7 @@ void main() {
       expect(XtremioSimilarTitles().budget, similarBudget);
       expect(
         XtremioSimilarTitles().base,
-        Uri.parse('https://xtremio-drive.web.app'),
+        Uri.parse('https://xtremio-xervice.web.app'),
       );
     });
   });

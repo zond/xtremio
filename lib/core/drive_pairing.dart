@@ -390,7 +390,7 @@ class XtremioDrivePairingService implements DrivePairingService {
   /// (`xtremio-xervice/functions/index.js`, `PUBLIC_ORIGIN`). It has to be this
   /// host and not the Cloud Run one behind the Hosting rewrite: the pages
   /// are served here, and this is the redirect URI the OAuth client knows.
-  static const String defaultOrigin = 'https://xtremio-drive.web.app';
+  static const String defaultOrigin = 'https://xtremio-xervice.web.app';
 
   final String origin;
 

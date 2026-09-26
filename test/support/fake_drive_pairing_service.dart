@@ -109,7 +109,7 @@ DrivePairingSession fakeSession({
   Duration lasts = const Duration(minutes: 10),
 }) => DrivePairingSession(
   sessionId: id,
-  link: 'https://xtremio-drive.web.app/link?s=$id',
+  link: 'https://xtremio-xervice.web.app/link?s=$id',
   expiresAt: pairingNow.add(lasts),
 );
 

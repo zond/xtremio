@@ -1,4 +1,4 @@
-/// [SimilarTitlesProvider] over the xtremio-drive server's `/similar`.
+/// [SimilarTitlesProvider] over the xtremio-xervice server's `/similar`.
 ///
 /// One `GET {base}/similar/{type}/{id}`, answered with
 /// `{"titles":[{"title","year","kind","why"}, …], "version": 1}`. The server
@@ -20,9 +20,9 @@ import 'dart:io';
 import '../../core/core.dart';
 import 'similar_titles.dart';
 
-/// Where the xtremio-drive server lives: the Firebase Hosting site that
+/// Where the xtremio-xervice server lives: the Firebase Hosting site that
 /// also serves Drive pairing, which rewrites `/similar/**` to the function.
-const String xtremioDriveBase = 'https://xtremio-drive.web.app';
+const String xtremioDriveBase = 'https://xtremio-xervice.web.app';
 
 final class XtremioSimilarTitles implements SimilarTitlesProvider {
   XtremioSimilarTitles({Uri? base, this.budget = similarBudget})

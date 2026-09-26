@@ -194,7 +194,7 @@ class AppPrefs extends ChangeNotifier {
   /// `similarApiKey`, the Gemini key a viewer once pasted so the app could
   /// ask a model itself, and `similarModel`, which model it asked.
   ///
-  /// "More like this" is asked of the xtremio-drive server now, which holds
+  /// "More like this" is asked of the xtremio-xervice server now, which holds
   /// the only key there is, so neither means anything to this build. They
   /// are not merely ignored: the first is a credential, and a credential
   /// nothing reads is one that should not be lying in a file on the device
