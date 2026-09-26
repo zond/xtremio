@@ -147,34 +147,43 @@ void main() {
       )
       .selected;
 
-  /// A second press on the Remote pill: what reloads. Asserts the pill is
-  /// on first, so a test that meant to reload and turned the pill on
-  /// instead fails here and not somewhere downstream.
-  Future<void> tapReload(WidgetTester tester) async {
-    expect(remoteIsOn(tester), isTrue, reason: 'reload is the second press');
-    await tapRemote(tester);
-  }
+  /// The reload button, drawn just before the Remote pill while it is on.
+  Finder reloadButton() => find.byTooltip(LibraryScreen.reloadLabel);
 
-  /// The way off Remote: any of the engine's pills. "All" is drawn as
-  /// not-current while Remote is on, so a press on it fires in either
-  /// layout (a chip when narrow, a segment when wide) and dispatches the
-  /// engine's own request, which the fake core records and does nothing
-  /// with -- so what is drawn afterwards is the flags the engine held.
-  Future<void> leaveRemote(WidgetTester tester) async {
-    final chip = find.widgetWithText(ChoiceChip, LibraryScreen.allTypesLabel);
-    await tester.tap(
-      chip.evaluate().isNotEmpty
-          ? chip
-          : find.text(LibraryScreen.allTypesLabel),
-    );
+  Future<void> tapReload(WidgetTester tester) async {
+    await tester.tap(reloadButton());
     await tester.pumpAndSettle();
   }
 
-  /// The reload arrow drawn on the Remote pill while it is on.
-  Finder reloadGlyph() => find.descendant(
-    of: find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
-    matching: find.byIcon(LibraryScreen.reloadGlyph),
-  );
+  /// The engine answering with [type] selected (null for every type): its
+  /// catalog narrowed to that type and its own flags moved, as a real
+  /// `Load` would leave them. The fake core does nothing with a dispatch,
+  /// so a test that means "the engine is now on Movies" says it here.
+  Map<String, dynamic> libraryOf(String? type) {
+    final fixture = loadLibraryFixture();
+    final selectable = fixture['selectable'] as Map<String, dynamic>;
+    return {
+      ...fixture,
+      'catalog': [
+        for (final item in fixture['catalog'] as List<dynamic>)
+          if (type == null || (item as Map<String, dynamic>)['type'] == type)
+            item,
+      ],
+      'selected': {
+        'request': {'type': type, 'sort': LibrarySort.lastWatched, 'page': 1},
+      },
+      'selectable': {
+        ...selectable,
+        'types': [
+          for (final option in selectable['types'] as List<dynamic>)
+            {
+              ...option as Map<String, dynamic>,
+              'selected': option['type'] == type,
+            },
+        ],
+      },
+    };
+  }
 
   Set<String> selectedTypes(WidgetTester tester) => {
     for (final chip in tester.widgetList<ChoiceChip>(find.byType(ChoiceChip)))
@@ -233,14 +242,27 @@ void main() {
         top(downloadedChip),
         reason: 'Remote and Downloaded share a row',
       );
-      // Turning Remote on adds no row: the reload moved onto the pill.
+      // Turning Remote on adds no row: the reload button appears just
+      // before the pill, on the pill's own row.
       final rowsOff = find.byType(TvLadderRow).evaluate().length;
+      expect(reloadButton(), findsNothing, reason: 'no reload while off');
       await tester.tap(remoteChip);
       await tester.pumpAndSettle();
       expect(
         find.byType(TvLadderRow).evaluate().length,
         rowsOff,
         reason: 'no row comes and goes with the pill',
+      );
+      expect(reloadButton(), findsOneWidget);
+      expect(
+        tester.getCenter(reloadButton()).dy,
+        closeTo(tester.getCenter(remoteChip).dy, 2),
+        reason: 'the reload button is on the pill\'s row',
+      );
+      expect(
+        tester.getCenter(reloadButton()).dx,
+        lessThan(tester.getTopLeft(remoteChip).dx),
+        reason: 'just before the pill',
       );
 
       // Narrow: the same order, with the sort wrapped under the types
@@ -353,33 +375,35 @@ void main() {
       );
     });
 
-    testWidgets('and leaves the engine\'s own selection where it was', (
-      tester,
-    ) async {
+    testWidgets('leaves the engine\'s selection drawn, and a second press '
+        'turns it off', (tester) async {
       useNarrowScreen(tester);
+      final core = fakeCore();
       await tester.pumpWidget(
-        harness(fakeCore(), drive: await account(files: linkedOne)),
+        harness(core, drive: await account(files: linkedOne)),
       );
       await tester.pumpAndSettle();
       expect(selectedTypes(tester), {LibraryScreen.allTypesLabel});
+      final before = core.dispatched.length;
 
       await tapRemote(tester);
-
-      // Drawn as not-current, because the body is not the engine's list --
-      // but nothing was sent to make that so.
-      expect(selectedTypes(tester), isEmpty);
-
-      // And turning it off -- by the engine's own pill, since a second
-      // press on Remote reloads -- shows the engine's flags again: the
-      // engine held them the whole time, and the fake does nothing with
-      // the request the press dispatched.
-      await leaveRemote(tester);
-      expect(remoteIsOn(tester), isFalse, reason: "the engine's pill is off");
+      expect(remoteIsOn(tester), isTrue);
+      // A filter over the engine's list, so the engine's choice is still
+      // the one drawn -- and nothing was sent to make it so.
       expect(selectedTypes(tester), {LibraryScreen.allTypesLabel});
+
+      await tapRemote(tester);
+      expect(
+        remoteIsOn(tester),
+        isFalse,
+        reason: 'on and off, like Downloaded',
+      );
+      expect(selectedTypes(tester), {LibraryScreen.allTypesLabel});
+      expect(core.dispatched, hasLength(before));
     });
 
-    testWidgets('a type dispatched while Remote is on turns Remote off and is '
-        'dispatched verbatim', (tester) async {
+    testWidgets('a type pressed while Remote is on is dispatched verbatim and '
+        'leaves Remote on', (tester) async {
       useNarrowScreen(tester);
       final core = fakeCore();
       final fixture = loadLibraryFixture();
@@ -392,12 +416,17 @@ void main() {
       await tester.tap(find.widgetWithText(ChoiceChip, 'Movies'));
       await tester.pumpAndSettle();
 
-      expect(remoteIsOn(tester), isFalse);
+      expect(
+        remoteIsOn(tester),
+        isTrue,
+        reason:
+            'a type narrows, it does '
+            'not replace',
+      );
       expect(
         loads(core).last.action['args']['args']['request'],
         (fixture['selectable']!
             as Map<String, dynamic>)['types']![1]['request'],
-        reason: 'an engine control means "show me the engine\'s list"',
       );
     });
 
@@ -418,30 +447,105 @@ void main() {
 
       // The engine reloads with a different type selected, as it would after
       // a sync.
-      final fixture = loadLibraryFixture();
-      final selectable = {
-        ...fixture['selectable'] as Map<String, dynamic>,
-        'types': [
-          for (final (index, type)
-              in ((fixture['selectable'] as Map<String, dynamic>)['types']
-                      as List<dynamic>)
-                  .indexed)
-            {...type as Map<String, dynamic>, 'selected': index == 1},
-        ],
-      };
-      core.setState(CoreField.library, {...fixture, 'selectable': selectable});
+      core.setState(CoreField.library, libraryOf('movie'));
       await tester.pumpAndSettle();
 
       expect(remoteIsOn(tester), isTrue, reason: 'the flag is the screen\'s');
-      expect(
-        find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
-        findsOneWidget,
-      );
-      // The engine's new selection is held, not lost, and is what is drawn
-      // the moment Remote is turned off (the fake ignores the request the
-      // press on "All" dispatched, so the flags it shows are the held ones).
-      await leaveRemote(tester);
       expect(selectedTypes(tester), {'Movies'});
+    });
+  });
+
+  group('Remote and the engine\'s types together', () {
+    // One of each kind: a matched film, a matched episode, and a file
+    // nothing matched. None of them has a card in the engine's library, so
+    // what is drawn for each type is the merge's answer and nothing else.
+    final mixed = [
+      (id: 'drive-file-1', name: 'Arrival.2016.mkv', match: arrival),
+      (id: 'drive-file-2', name: 'Breaking.Bad.S01E01.mkv', match: episode),
+      (id: 'drive-file-3', name: 'holiday video 2.avi', match: null),
+    ];
+
+    Future<FakeCoreClient> mountRemote(
+      WidgetTester tester,
+      String? type,
+    ) async {
+      useNarrowScreen(tester);
+      final core = fakeCore(library: libraryOf(type));
+      await tester.pumpWidget(
+        harness(core, drive: await account(files: mixed)),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+      return core;
+    }
+
+    testWidgets('under All every linked file is drawn, matched or not', (
+      tester,
+    ) async {
+      await mountRemote(tester, null);
+      expect(find.text('Arrival'), findsOneWidget);
+      expect(find.text('Breaking Bad'), findsOneWidget);
+      expect(find.text('holiday video 2.avi'), findsOneWidget);
+      expect(find.text('Lanterns'), findsNothing, reason: 'nothing linked');
+    });
+
+    testWidgets('under Movies only the linked films: no series, and no file '
+        'with no title to be a film by', (tester) async {
+      await mountRemote(tester, 'movie');
+      expect(remoteIsOn(tester), isTrue);
+      expect(selectedTypes(tester), {'Movies'});
+      expect(find.text('Arrival'), findsOneWidget);
+      expect(find.text('Breaking Bad'), findsNothing);
+      expect(find.text('holiday video 2.avi'), findsNothing);
+    });
+
+    testWidgets('under Series only the linked series', (tester) async {
+      await mountRemote(tester, 'series');
+      expect(find.text('Breaking Bad'), findsOneWidget);
+      expect(find.text('Arrival'), findsNothing);
+      expect(find.text('holiday video 2.avi'), findsNothing);
+    });
+
+    testWidgets('a type with nothing linked says so, not that the library is '
+        'empty', (tester) async {
+      useNarrowScreen(tester);
+      await tester.pumpWidget(
+        harness(
+          fakeCore(library: libraryOf('series')),
+          drive: await account(
+            files: [
+              (id: 'drive-file-1', name: 'Arrival.2016.mkv', match: arrival),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapRemote(tester);
+
+      expect(find.text('No linked series'), findsOneWidget);
+      expect(find.text('Your library is empty'), findsNothing);
+      expect(find.textContaining('in your library'), findsNothing);
+    });
+
+    testWidgets('and Downloaded says the same kind of thing in its own words', (
+      tester,
+    ) async {
+      // The same fall-through: a local filter over a type it left empty used
+      // to reach the engine's messages, which are about the library.
+      useNarrowScreen(tester);
+      await tester.pumpWidget(
+        harness(
+          fakeCore(library: libraryOf('series')),
+          // Titles on disk, none of them the library's one series.
+          downloaded: DownloadsRegistry.fromJson(loadDownloadsFixture()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilterChip, 'Downloaded'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No downloaded series'), findsOneWidget);
+      expect(find.textContaining('in your library'), findsNothing);
     });
   });
 
@@ -607,7 +711,7 @@ void main() {
       await tapRemote(tester);
       expect(find.textContaining('Sign in to sync'), findsNothing);
 
-      await leaveRemote(tester);
+      await tapRemote(tester);
       expect(find.textContaining('Sign in to sync'), findsOneWidget);
     });
 
@@ -632,7 +736,7 @@ void main() {
       expect(find.text('ep6.avi'), findsOneWidget);
       expect(find.byType(LibraryItemTile), findsOneWidget);
 
-      await leaveRemote(tester);
+      await tapRemote(tester);
       expect(find.byType(LibraryItemTile), findsNWidgets(2));
       expect(find.text('ep6.avi'), findsNothing);
     });
@@ -913,9 +1017,8 @@ void main() {
   });
 
   group('Reload', () {
-    testWidgets('is the Remote pill\'s second press: the glyph turns to the '
-        'reload arrow while it is on, and pressing it then reloads rather '
-        'than turning it off', (tester) async {
+    testWidgets('is drawn just before the Remote pill, and only while it is '
+        'on', (tester) async {
       useNarrowScreen(tester);
       final lister = FakeDriveFileLister(
         answers: [
@@ -933,27 +1036,22 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(
-        reloadGlyph(),
+        reloadButton(),
         findsNothing,
         reason: 'a reload beside the engine\'s types has no subject',
       );
-      expect(lister.asked, isEmpty);
 
       await tapRemote(tester);
-      expect(remoteIsOn(tester), isTrue);
-      expect(reloadGlyph(), findsOneWidget);
-      expect(lister.asked, isEmpty, reason: 'the first press only shows');
+      expect(reloadButton(), findsOneWidget);
+      expect(lister.asked, isEmpty, reason: 'turning Remote on only shows');
+
+      await tapReload(tester);
+      expect(lister.asked, hasLength(1));
+      expect(remoteIsOn(tester), isTrue, reason: 'a reload is not a toggle');
 
       await tapRemote(tester);
-      expect(remoteIsOn(tester), isTrue, reason: 'the pill does not let go');
-      expect(reloadGlyph(), findsOneWidget);
-      expect(lister.asked, hasLength(1), reason: 'the second press reloads');
-
-      // Off is any other pill, and the glyph goes back with it.
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Movies'));
-      await tester.pumpAndSettle();
       expect(remoteIsOn(tester), isFalse);
-      expect(reloadGlyph(), findsNothing);
+      expect(reloadButton(), findsNothing);
     });
 
     testWidgets('the note above the list names it, and the two are on screen '
@@ -963,7 +1061,7 @@ void main() {
       // alone would let the sentence go on naming a control that is gone.
       expect(
         LinkedDriveFilesView.matchedByNameNote,
-        contains('press ${LibraryScreen.remoteLabel} again'),
+        contains('reload button beside ${LibraryScreen.remoteLabel}'),
       );
       useNarrowScreen(tester);
       await tester.pumpWidget(
@@ -978,7 +1076,7 @@ void main() {
       await tapRemote(tester);
 
       expect(find.text(LinkedDriveFilesView.matchedByNameNote), findsOneWidget);
-      expect(reloadGlyph(), findsOneWidget);
+      expect(reloadButton(), findsOneWidget);
     });
 
     testWidgets('a renamed file is redrawn under its new name, and matched '
@@ -1245,13 +1343,9 @@ void main() {
       await tester.pumpAndSettle();
       await tapRemote(tester);
 
-      final remoteChip = find.widgetWithText(
-        FilterChip,
-        LibraryScreen.remoteLabel,
-      );
-      await tester.tap(remoteChip);
+      await tester.tap(reloadButton());
       await tester.pump();
-      await tester.tap(remoteChip);
+      await tester.tap(reloadButton());
       await tester.pump();
       expect(lister.asked, hasLength(1));
 
@@ -1270,7 +1364,7 @@ void main() {
         find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
         findsNothing,
       );
-      expect(reloadGlyph(), findsNothing);
+      expect(reloadButton(), findsNothing);
     });
 
     testWidgets('and a linked device whose grant is gone says so in one line, '

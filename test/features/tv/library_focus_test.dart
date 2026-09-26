@@ -386,18 +386,13 @@ void main() {
     await press(tester, LogicalKeyboardKey.select);
     expect(find.text('ep6.avi'), findsOneWidget);
 
-    // Selecting it keeps the remote where it is, on the pill, which now
-    // carries the reload arrow: the control the note above the list tells
-    // a viewer to press again is the one they are already standing on, so
-    // a second select reloads and answers in a line, like every refusal.
+    // Selecting it keeps the remote where it is, on the pill, and puts the
+    // reload button just before it on the same row: one press left, since
+    // a button the note above the list tells a viewer to press has to be a
+    // stop on the walk they are already making.
     expect(focusedLabel(tester), LibraryScreen.remoteLabel);
-    expect(
-      find.descendant(
-        of: find.widgetWithText(FilterChip, LibraryScreen.remoteLabel),
-        matching: find.byIcon(LibraryScreen.reloadGlyph),
-      ),
-      findsOneWidget,
-    );
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(focusedTooltip(), LibraryScreen.reloadLabel);
     await press(tester, LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(
@@ -410,10 +405,12 @@ void main() {
     expect(
       find.text('ep6.avi'),
       findsOneWidget,
-      reason: 'the second press did not turn the list off',
+      reason: 'a reload did not turn the list off',
     );
-    // And down from the pill straight into the list it put there, onto a
-    // tile the remote can see it is standing on.
+    // Right comes back to the pill, and down from it into the list it put
+    // there, onto a tile the remote can see it is standing on.
+    await press(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedLabel(tester), LibraryScreen.remoteLabel);
     await press(tester, LogicalKeyboardKey.arrowDown);
     expect(focusedTileName(tester), 'ep6.avi');
     expect(
@@ -421,11 +418,20 @@ void main() {
       isNotEmpty,
       reason: 'a linked file the remote can land on with nothing drawn on it',
     );
-    // Up comes back to the pill it belongs to, so the pill and its list
-    // are not a one-way trip.
+    // Up comes back to the filters row, so the pill and its list are not a
+    // one-way trip; and select on the pill turns it off again.
     await press(tester, LogicalKeyboardKey.arrowUp);
     expect(focusedTileName(tester), isNull);
+    for (
+      var i = 0;
+      i < 3 && focusedLabel(tester) != LibraryScreen.remoteLabel;
+      i++
+    ) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+    }
     expect(focusedLabel(tester), LibraryScreen.remoteLabel);
+    await press(tester, LogicalKeyboardKey.select);
+    expect(find.text('ep6.avi'), findsNothing, reason: 'on and off');
   });
 
   testWidgets('select on a tile opens its details', (tester) async {

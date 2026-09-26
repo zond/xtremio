@@ -123,21 +123,16 @@ class LibraryScreen extends StatefulWidget {
   /// links them, because a share on a NAS arrives under it too.
   static const String remoteLabel = 'Remote';
 
-  /// What a press on the Remote pill does while it is already on: fetch the
-  /// linked files again. The pill says so with [reloadGlyph] in place of
-  /// its cloud, and the note above the list tells a viewer to press it
-  /// again (`LinkedDriveFilesView.matchedByNameNote`, which a test holds
-  /// against [remoteLabel]).
-  ///
-  /// There used to be a Reload button on a row of its own under the pill.
-  /// The pill's second press was the only thing left for it to do -- every
-  /// other control on these rows already turns Remote off, so a press on a
-  /// pill that is on had no job -- and a row that came and went with a
-  /// toggle moved the grid under a viewer's eyes and added a rung to the
-  /// television's walk. "Reload", not refresh: what it does is fetch the
-  /// list again, and refresh is what a television does sixty times a
-  /// second.
-  static const IconData reloadGlyph = Icons.refresh;
+  /// Tooltip of the reload button drawn just before the Remote pill while
+  /// it is on: fetch the linked files again. An icon and not a chip, so
+  /// the pill beside it keeps its one job -- on and off, the way
+  /// Downloaded works -- and the button costs no row of its own. Two
+  /// earlier shapes were worse: a Reload chip on a row under the filters
+  /// moved the grid every time Remote was toggled, and making the pill's
+  /// second press the reload took away the only way to turn it off.
+  /// "Reload", not refresh: what it does is fetch the list again, and
+  /// refresh is what a television does sixty times a second.
+  static const String reloadLabel = 'Reload';
 
   /// What the app bar's way to the downloads screen is called. Not
   /// "Downloaded": that is the pill beside the types, and it says what to
@@ -161,47 +156,38 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// `Error` whose source is that event).
   bool _syncing = false;
 
-  /// The **Remote** option is the one showing, so the body is the linked
-  /// Drive files rather than the engine's grid.
+  /// The **Remote** filter is on: the body is narrowed to what has a linked
+  /// Drive file, under whatever type and sort the engine has selected.
   ///
-  /// **This is how a local option lives beside engine-driven ones.** The type
-  /// pills are not the app's: they come from `selectable.types`, each one
-  /// carries the request that selects it, and pressing one dispatches that
-  /// request verbatim and then re-renders from the `selected` flags the
+  /// **A filter over the engine's list, the way Downloaded is one.** The
+  /// type pills are not the app's: they come from `selectable.types`, each
+  /// one carries the request that selects it, and pressing one dispatches
+  /// that request verbatim and then re-renders from the `selected` flags the
   /// engine sends back. The engine has never heard of Google Drive and is
   /// never going to, so Remote cannot be one of them -- a synthetic entry
   /// with a sentinel request would need a branch at the dispatch and a
-  /// second, local notion of which entry is current, and two notions of
-  /// "which one is selected" is two pills drawn as current the first time
-  /// they disagree.
+  /// second, local notion of which entry is current. So it is a
+  /// [FilterChip] on the row under the types, and it narrows what the
+  /// engine answered:
   ///
-  /// So Remote is not a type and does not pretend to be one. It is a
-  /// [FilterChip] beside the types rather than one of them -- a different
-  /// widget because it is a different kind of thing -- and the whole of what
-  /// it does is decide **which body this screen draws**. It dispatches
-  /// nothing, and it undispatches nothing:
+  ///  * the engine's cards that have a linked file ([_shown]);
+  ///  * the matched titles the engine has no card for, of the selected
+  ///    type ([_appended]);
+  ///  * the files nothing matched, under "All" and under "Other" only,
+  ///    since a file with no title has no type to be a movie or a series
+  ///    by ([_unmatched]).
   ///
-  ///  * The engine's selection is untouched while Remote is on. It is drawn
-  ///    as not-current, because it is not what the body is showing, but
-  ///    nothing was sent to change it and nothing has to be sent to get it
-  ///    back -- turning Remote off redraws the engine's own `selected` flags,
-  ///    which the engine still holds.
-  ///  * Any engine control turns Remote off and does exactly what it did
-  ///    before. A press on a type or a sort is a press that means "show me
-  ///    the engine's list", so there is nothing inert on the row and nothing
-  ///    to fight over.
-  ///  * A core reload cannot take the option away, because the option is not
-  ///    in the field. `selectable` arriving again republishes the engine's
-  ///    pills; this flag is the screen's, and the two cannot clobber each
-  ///    other in either direction.
+  /// It dispatches nothing, and the engine's controls never turn it off: a
+  /// type or a sort pressed under Remote is the same filter over a different
+  /// list. It used to be the other way round -- Remote replaced the body
+  /// and every engine control turned it off -- which made the one local
+  /// filter that could not be combined with a type the one that looked like
+  /// it could.
   ///
-  /// The row that holds it is drawn whether or not the engine has anything
-  /// to say, which is the other half of not vanishing: see [_FilterRow].
-  ///
-  /// **What this is not: the merge is not this.** A matched linked file also
-  /// appears under the ordinary type options -- see [_appended] -- and that
-  /// is a different mechanism on purpose. This flag *replaces* the body; the
-  /// merge *adds to* it, without touching this row at all.
+  /// A core reload cannot take it away, because it is not in the field:
+  /// `selectable` arriving again republishes the engine's pills, and this
+  /// flag is the screen's. The row that holds it is drawn whether or not
+  /// the engine has anything to say: see [_FilterRow].
   bool _remote = false;
 
   /// Whether the body is filtered down to what is on this device's disk.
@@ -384,19 +370,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return source is Map<String, dynamic> ? source['event'] as String? : null;
   }
 
-  /// Selects one of the engine's own options: its request, verbatim, and the
-  /// local option off, because an engine option means "the engine's list".
+  /// Selects one of the engine's own options: its request, verbatim. The
+  /// local filters stay as they are, since each one narrows whatever list
+  /// the engine answers with.
   void _select(LibraryRequest request) {
     _nextPageRequestedAt = -1;
-    if (_remote) setState(() => _remote = false);
     _client?.dispatch(CoreActions.loadLibrary(request));
   }
 
   void _showRemote({required bool remote}) {
     if (_remote == remote) return;
-    // The two local filters are alternatives, not layers: Remote replaces
-    // the body outright, so "downloaded, among the remote files" would be a
-    // filter over a list it does not apply to.
+    // The two local filters are alternatives, not layers: one says the
+    // files are on this device and the other that they are in Drive, and a
+    // title narrowed by both would be a third thing neither pill names.
     setState(() {
       _remote = remote;
       if (remote) _downloadedOnly = false;
@@ -557,9 +543,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// sent. A linked file has never been watched, so interleaving it into a
   /// `lastwatched` sort would be inventing the one thing it does not have.
   ///
-  /// Nothing is subtracted for **Remote**, and nothing needs to be: that
-  /// option replaces the body rather than filtering it, so this list simply
-  /// is not the thing drawn while it is on.
+  /// Under **Remote** the rule is the same, over the narrowed grid: a
+  /// matched title whose card [_shown] kept is not added twice, and one the
+  /// engine has no card for is added under its own type.
   ///
   /// **What a merged card does not get** is everything the engine derives
   /// from its own library: no continue-watching row, no notifications, no
@@ -711,16 +697,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       // is the engine's filter either one is about.
                       : _shown(state).isNotEmpty ||
                             appended.isNotEmpty ||
-                            _unmatched().isNotEmpty
+                            _unmatched(state).isNotEmpty
                       ? _tvGroup(
                           context,
                           _buildGrid(
                             state,
                             _shown(state),
                             appended,
-                            _unmatched(),
+                            _unmatched(state),
                           ),
                         )
+                      // A local filter that narrowed the grid to nothing
+                      // says so in its own words: the library is not empty,
+                      // and there may well be movies in it.
+                      : _remote || _downloadedOnly
+                      ? _EmptyLocal(type: state.selected?.type, remote: _remote)
                       : state.isFilteredEmpty
                       ? _EmptyFilter(type: state.selected!.type!)
                       : _EmptyLibrary(isLoggedIn: isLoggedIn),
@@ -800,8 +791,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// one plays it: there is no details page to send anybody to. Without
   /// this a file whose name Cinemeta cannot read would be linked, would
   /// have cost a grant, and would be reachable from nowhere in the app.
-  List<LinkedDriveFile> _unmatched() {
+  List<LinkedDriveFile> _unmatched(LibraryState state) {
     if (!_remote) return const [];
+    // No title, so no type to be a movie or a series by: drawn under "All"
+    // and under "Other", which is where a card of type `other` belongs.
+    final type = state.selected?.type;
+    if (type != null && type != 'other') return const [];
     return [
       for (final file in _drive?.files.entries ?? const <LinkedDriveFile>[])
         if (file.match == null) file,
@@ -903,15 +898,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
 /// attached to the chosen entry, and nothing about which one is current is
 /// decided here.
 ///
-/// **Two of these controls are not the engine's, and they are not the same
-/// as each other.** "Downloaded" is a way to another screen: nothing in the
-/// engine knows about downloads, and what is kept on the device is a place
-/// of its own, so it is an [ActionChip] and pressing it navigates. "Remote"
-/// selects: it changes what this screen's body is, which is what a type pill
-/// does, so it is drawn as a pill that can be current -- but a [FilterChip]
-/// rather than the [ChoiceChip]s beside it, because it is not one of the
-/// engine's choices and a widget tree that said it was would be the first
-/// place the two got confused. See [LibraryScreen._remote].
+/// **Two of these controls are not the engine's.** Remote and Downloaded
+/// are [FilterChip]s rather than the [ChoiceChip]s the types are, because
+/// they are not the engine's choices and a widget tree that said they were
+/// would be the first place the two got confused. Each narrows whatever the
+/// engine's selection answers with, and each turns off with a second press.
+/// See [LibraryScreen._remote].
 ///
 /// **The rows are drawn whether the engine has anything to say or not.**
 /// They used to appear only once a non-empty library had loaded, which was
@@ -922,12 +914,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
 /// go with its state (an empty [LibrarySelectable] draws neither), and the
 /// app's own are always there.
 ///
-/// **Three rows, in the order a viewer narrows things down.** The engine's
+/// **Two rows, in the order a viewer narrows things down.** The engine's
 /// controls first -- the types, and the sort beside them, wrapping under
 /// them only where the width forces it, so a wide screen spends one line on
-/// the engine's half and a phone two; the app's own filters, Remote and
-/// Downloaded, on the row below; and Reload on a row of its own at the
-/// bottom, only while Remote is on. One wrapped row held all of them, and
+/// the engine's half and a phone two; then the app's own filters, Remote
+/// and Downloaded, with the reload button just before Remote while Remote
+/// is on. One wrapped row held all of them, and
 /// which control a press would land on depended on how the wrap happened to
 /// break at that width -- on a television, where the remote walks the rows,
 /// that is a layout that has to be learned per screen size. A row that has
@@ -953,22 +945,13 @@ class _FilterRow extends StatelessWidget {
 
   final ValueChanged<LibraryRequest> onSelect;
 
-  /// Turns the local option on. The way off it is any other pill on these
-  /// rows -- one of the engine's types, a sort, Downloaded -- each of which
-  /// means "show me the engine's list" and turns Remote off on the way.
-  /// A second press on the pill itself is [onReload].
-  ///
-  /// The one screen with no other pill is an empty library with nothing
-  /// downloaded, and there Remote stays on: what it would go back to is
-  /// the engine's empty grid, and the list of the files the viewer just
-  /// linked is the better of the two to be left looking at.
+  /// Turns the Remote filter on and off, the way Downloaded's pill does.
   final ValueChanged<bool> onRemote;
 
-  /// Asks Drive what the linked files are called now: what a press on the
-  /// Remote pill does while it is on. Only reachable then, because it is
-  /// about the list that is on screen then and about nothing else: a
-  /// Reload sitting beside the engine's types would be a button whose
-  /// subject a viewer has to guess.
+  /// Asks Drive what the linked files are called now. Only drawn while
+  /// [remote] is on, just before the pill, because it is about the linked
+  /// files and about nothing else: a reload beside the engine's types would
+  /// be a button whose subject a viewer has to guess.
   final VoidCallback onReload;
 
   /// Whether the Downloaded pill is current.
@@ -995,12 +978,7 @@ class _FilterRow extends StatelessWidget {
             null => LibraryScreen.allTypesLabel,
             final type => contentTypeLabel(type),
           },
-          // Drawn as not-current while the local option is: the body is not
-          // showing the engine's list, and two pills lit at once is the one
-          // thing this arrangement has to avoid. Nothing was dispatched to
-          // make this so, so the engine's own selection is still whatever it
-          // was.
-          selected: type.selected && !remote,
+          selected: type.selected,
           request: type.request,
         ),
     ];
@@ -1041,29 +1019,40 @@ class _FilterRow extends StatelessWidget {
         Wrap(
           spacing: 12,
           runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            // One pill, two presses: the first turns it on, and while it
-            // is on a press reloads the list rather than turning it off,
-            // which the glyph says -- a cloud while off, the reload arrow
-            // while on, and no checkmark, since the checkmark would be
-            // painted over the one glyph that carries the meaning. The
-            // word stays "Remote" either way: with every type drawn as
-            // not-current, the lit pill is the only thing on the screen
-            // that says which list this is.
+            // Just before the pill it belongs to, and only while that pill
+            // is on: an icon rather than a chip, so it takes no row and the
+            // pill keeps its one job. Its order puts it first on the rung,
+            // where it is drawn.
+            //
+            // Keyed, all three: the button is inserted *in front of* the
+            // pill the moment the pill is selected, and unkeyed siblings of
+            // one type are matched by position -- the pill's element went to
+            // the button, the pill was built afresh, and the focus a remote
+            // had just used to select it went with the old one, to "All".
+            if (hasRemote && remote)
+              FocusTraversalOrder(
+                key: const ValueKey('reload'),
+                order: const NumericFocusOrder(0),
+                child: IconButton(
+                  tooltip: LibraryScreen.reloadLabel,
+                  icon: const Icon(Icons.refresh),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onReload,
+                ),
+              ),
             if (hasRemote)
               FocusTraversalOrder(
-                order: const NumericFocusOrder(0),
+                key: const ValueKey('remote'),
+                order: const NumericFocusOrder(1),
                 child: FocusMarked(
                   borderRadius: FocusMarked.stadium,
                   child: FilterChip(
-                    avatar: Icon(
-                      remote ? LibraryScreen.reloadGlyph : Icons.cloud_outlined,
-                      size: 18,
-                    ),
-                    showCheckmark: false,
+                    avatar: const Icon(Icons.cloud_outlined, size: 18),
                     label: const Text(LibraryScreen.remoteLabel),
                     selected: remote,
-                    onSelected: (_) => remote ? onReload() : onRemote(true),
+                    onSelected: onRemote,
                   ),
                 ),
               ),
@@ -1076,7 +1065,8 @@ class _FilterRow extends StatelessWidget {
             // in the app bar, where housekeeping belongs.
             if (hasDownloads)
               FocusTraversalOrder(
-                order: const NumericFocusOrder(1),
+                key: const ValueKey('downloaded'),
+                order: const NumericFocusOrder(2),
                 child: FocusMarked(
                   borderRadius: FocusMarked.stadium,
                   child: FilterChip(
@@ -1259,6 +1249,62 @@ class _EmptyFilter extends StatelessWidget {
   }
 }
 
+/// A local filter -- Remote or Downloaded -- that left nothing under the
+/// engine's current type. Not [_EmptyFilter]'s "No movies in your library":
+/// the library may be full of them, just none linked or none on this device.
+class _EmptyLocal extends StatelessWidget {
+  const _EmptyLocal({required this.type, required this.remote});
+
+  /// The engine's selected type, null for every type.
+  final String? type;
+  final bool remote;
+
+  static String message({required String? type, required bool remote}) {
+    if (type == null) {
+      return remote ? 'No linked files' : 'No downloaded titles';
+    }
+    final label = contentTypeLabel(type);
+    final word = label == label.toUpperCase() ? label : label.toLowerCase();
+    return remote ? 'No linked $word' : 'No downloaded $word';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.filter_list_off_outlined,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message(type: type, remote: remote),
+              style: theme.textTheme.titleMedium,
+            ),
+            if (type != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Pick "${LibraryScreen.allTypesLabel}" above to see every '
+                '${remote ? 'linked file' : 'download'}.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptyLibrary extends StatelessWidget {
   const _EmptyLibrary({required this.isLoggedIn});
 
@@ -1303,7 +1349,7 @@ class _EmptyLibrary extends StatelessWidget {
 ///
 /// Worth its place because the answer is not guessable: nothing about a row
 /// suggests that the *name in Drive* is what was looked up, or that renaming
-/// it and pressing Reload is how to try again. The examples are shown rather
+/// it and pressing reload is how to try again. The examples are shown rather
 /// than described -- somebody skimming copies one and does not read the
 /// sentence -- and `drive_match_test.dart` walks both, so a parser change
 /// that stopped either parsing fails there rather than leaving this telling
