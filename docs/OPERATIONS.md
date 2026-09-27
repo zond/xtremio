@@ -153,7 +153,8 @@ clipboard, and every URL is cut to what `DiagnosticsLog.safeUrl` keeps (the
 origin, a `/proxy/…` URL's target host, a path only on this device or the
 LAN listener). This is the second lock; the first is that nothing in that
 class is logged in the first place. With Verbose logging **on** the report
-is copied as logged, full stream links included, and the switch says so.
+is copied as logged and redacts nothing -- full stream links and the
+credentials in them included -- and the switch says so in those words.
 
 **Settings → Developer → Verbose logging** adds the server's retention
 trace, mpv's demuxer, stream and cache lines, and whole stream URLs.
@@ -234,11 +235,12 @@ it and the `hwdec` row are read.
 
 ## Building for iOS
 
-The CI's iOS job compiles an unsigned release build (`make ios`) and fails,
-on purpose: getting past it takes a change to each of two upstream
-dependencies, and this project carries no forks for a platform it does not
-ship. With both of these it compiles -- the build workflow on `c578980`
-passed its iOS job (run 35310774992) -- and nothing else was needed:
+iOS is not built in CI and not shipped. `make ios` compiles an unsigned
+release build, and fails: getting past it takes a change to each of two
+upstream dependencies, and this project carries no forks for a platform it
+does not ship. With both of these it compiles -- the build workflow on
+`c578980` passed the iOS job it had then (run 35310774992) -- and nothing
+else was needed:
 
 1. **The Cast plugin's iOS floor.** `flutter_chrome_cast` 1.4.8 declares
    iOS 15 in its `Package.swift` and podspec, but the GoogleCast SDK it

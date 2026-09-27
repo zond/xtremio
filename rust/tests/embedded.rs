@@ -9,8 +9,9 @@ use std::sync::{Arc, Mutex};
 use reqwest::StatusCode;
 use xtremio_core::api::server::{
     server_background_traffic, server_base_url, server_cache_usage, server_clean_cache_now,
-    server_close_proxy_streams, server_dht_status, server_settings, server_start, server_stop,
-    server_storage_report, server_torrent_stats, server_update_settings, ServerConfig,
+    server_close_proxy_streams, server_dht_status, server_set_background, server_settings,
+    server_start, server_stop, server_storage_report, server_torrent_stats, server_update_settings,
+    ServerConfig,
 };
 
 /// A well-known public-domain torrent (Night of the Living Dead), never
@@ -133,6 +134,15 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
 
     // Answering, and refusing a control request that carries no token.
     assert_eq!(control_status(&url).await?, StatusCode::UNAUTHORIZED);
+
+    // The lean footprint: a server starts full, is told lean and back, and
+    // says so. Still answering while lean.
+    assert_eq!(xtremio_core::server::is_background(), Some(false));
+    assert!(server_set_background(true)?, "a running server was told");
+    assert_eq!(xtremio_core::server::is_background(), Some(true));
+    assert_eq!(control_status(&url).await?, StatusCode::UNAUTHORIZED);
+    assert!(server_set_background(false)?);
+    assert_eq!(xtremio_core::server::is_background(), Some(false));
 
     // The app's control plane is the library API, no token needed: settings
     // read and patched (the patch is validated and merged like POST
@@ -409,6 +419,9 @@ async fn embedded_server_lifecycle() -> anyhow::Result<()> {
     let dht = json(&server_dht_status()?);
     assert_eq!(dht["enabled"], false, "{dht}");
     assert_eq!(dht["everBootstrapped"], false, "{dht}");
+    // Nothing to make lean, and that is an answer, not an error.
+    assert!(!server_set_background(true)?);
+    assert_eq!(xtremio_core::server::is_background(), None);
 
     // Stop when not running is a no-op, and a restart works.
     tokio::task::spawn_blocking(server_stop).await??;

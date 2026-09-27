@@ -280,6 +280,11 @@ function shapeOf(body) {
  * for and why it is three words rather than a flag.
  */
 app.post('/session', answered(async (req, res) => {
+  // Not a per-caller limit, whatever the key suggests. Behind Hosting and
+  // Cloud Run, with no `trust proxy` set, `req.ip` is the address of the
+  // proxy in front of this function, not of the device that asked -- so
+  // every viewer lands in the same few buckets, and this is in effect one
+  // shared ceiling of sixty new sessions an hour for the whole service.
   const from = req.ip || 'unknown';
   if (!await withinRate(`session-${from}`, 60)) {
     return res.status(429).json({error: 'too many sessions'});

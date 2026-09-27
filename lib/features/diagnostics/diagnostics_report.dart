@@ -142,7 +142,7 @@ String redactSecrets(
 /// lines, oldest first. Everything in it has been through [redactSecrets],
 /// unless [redact] is false -- by default, while Verbose logging is on
 /// ([DiagnosticsLog.unredacted]), when the report is for chasing a problem
-/// and the switch has said that it holds full stream links.
+/// and the switch has said that it holds credentials.
 String formatDiagnostics({
   required DiagnosticsSnapshot snapshot,
   required String platform,

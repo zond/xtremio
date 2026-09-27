@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:xtremio/src/rust/api/server.dart' as rust;
 import 'package:xtremio/src/rust/frb_generated.dart';
 
 /// Candidate locations of the host-built Rust library, relative to the
@@ -40,4 +41,31 @@ Future<void> initRustForTests() async {
   final lib = findHostRustLibrary();
   await RustLib.init(externalLibrary: ExternalLibrary.open(lib.absolute.path));
   _initialized = true;
+}
+
+/// Starts the embedded server on its own, without a core: what the server's
+/// FFI tests need. The app never does this -- `core_init` starts the server
+/// -- so `server_start`/`server_stop`/`server_base_url` are test and
+/// diagnostic calls only, and reached from here rather than from
+/// `ServerClient`.
+Future<Uri> startServerForTests({
+  required Directory configDir,
+  required Directory cacheDir,
+}) async => Uri.parse(
+  await rust.serverStart(
+    config: rust.ServerConfig(
+      configDir: configDir.path,
+      cacheDir: cacheDir.path,
+    ),
+  ),
+);
+
+/// Stops the embedded server and waits for its thread. No-op when it is not
+/// running.
+Future<void> stopServerForTests() => rust.serverStop();
+
+/// The running embedded server's base URL, or null when none is running.
+Uri? serverBaseUrlForTests() {
+  final url = rust.serverBaseUrl();
+  return url == null ? null : Uri.parse(url);
 }

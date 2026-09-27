@@ -37,16 +37,24 @@ impl From<ServerConfig> for crate::server::StartConfig {
 /// Starts the embedded server (idempotent) and returns its base URL --
 /// `http://127.0.0.1:<port the OS picked>/`, which is the only place that
 /// port is ever known.
+///
+/// **Test and diagnostic only.** The app never calls it: `core_init` starts
+/// the server it needs. The FFI tests (`rust/tests/embedded.rs`,
+/// `test/core/server_test.dart` through `test/support/rust_lib.dart`) start
+/// one without a core through here.
 pub fn server_start(config: ServerConfig) -> anyhow::Result<String> {
     guarded(|| crate::server::start(config.into()).map(|url| url.to_string()))
 }
 
 /// Stops the embedded server and joins its thread. Ok if it is not running.
+/// Test and diagnostic only, like [`server_start`]: the app's server stops
+/// with `core_shutdown`.
 pub fn server_stop() -> anyhow::Result<()> {
     guarded(crate::server::stop)
 }
 
 /// Base URL of the running embedded server, or null when it is stopped.
+/// Test and diagnostic only, like [`server_start`].
 #[frb(sync)]
 pub fn server_base_url() -> anyhow::Result<Option<String>> {
     guarded_ok(|| crate::server::base_url().map(|url| url.to_string()))
@@ -477,6 +485,16 @@ pub fn server_close_proxy_streams(token: String) -> anyhow::Result<i64> {
 /// the bind fails; in either case nothing is listening afterwards.
 pub fn server_set_lan_media(enabled: bool) -> anyhow::Result<Option<String>> {
     guarded(|| Ok(crate::server::set_lan_media(enabled)?.map(|addr| addr.to_string())))
+}
+
+/// Puts the embedded server into its lean background footprint (`true`) or
+/// back to full (`false`); answers whether a server was running to be told.
+/// Cheap and synchronous. The app calls it from its lifecycle, through
+/// `ServerFootprint` (`lib/shell/server_footprint.dart`), which decides when
+/// lean is allowed.
+#[frb(sync)]
+pub fn server_set_background(background: bool) -> anyhow::Result<bool> {
+    guarded_ok(|| crate::server::set_background(background))
 }
 
 /// Whether the LAN media listener is running. False when the server is not

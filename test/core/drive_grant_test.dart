@@ -34,11 +34,11 @@ void main() {
     await drive.load();
     expect(handed, isEmpty, reason: 'nothing stored, nothing to say');
 
-    await drive.linkFile(
+    await drive.linkFiles(
       refreshToken: 'refresh-tok-1',
-      fileId: 'file-1',
-      name: 'A Film.mkv',
-      mimeType: 'video/x-matroska',
+      files: [
+        (fileId: 'file-1', name: 'A Film.mkv', mimeType: 'video/x-matroska'),
+      ],
     );
     expect(handed, ['refresh-tok-1']);
 

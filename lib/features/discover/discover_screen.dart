@@ -65,7 +65,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       _client = client;
       _discover = CoreFieldNotifier(client, CoreField.discover)
         ..addListener(onFieldChanged);
-      _ctx = CoreFieldNotifier(client, CoreField.ctx)..addListener(_onCtx);
+      _ctx = CoreFieldNotifier(client, CoreField.ctx);
       _load(widget.request);
     }
     trackRoute();
@@ -77,12 +77,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _discover?.dispose();
     _ctx?.dispose();
     super.dispose();
-  }
-
-  /// An addon installed or uninstalled while this screen is up renames the
-  /// headings in the catalog menu, and nothing else here.
-  void _onCtx() {
-    if (mounted) setState(() {});
   }
 
   @override
@@ -154,12 +148,19 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             if (selectable != null && !selectable.isEmpty)
               _tvGroup(
                 isTv,
-                _FilterBar(
-                  selectable: selectable,
-                  profile: _ctx?.value == null
-                      ? null
-                      : ProfileState.fromCtx(_ctx!.value!),
-                  onSelect: _select,
+                // An addon installed or uninstalled while this screen is up
+                // renames the headings in the catalog menu, and nothing
+                // else here: only the bar listens to `ctx`, not the grid.
+                ListenableBuilder(
+                  listenable: _ctx!,
+                  builder: (context, _) {
+                    final ctx = _ctx!.value;
+                    return _FilterBar(
+                      selectable: selectable,
+                      profile: ctx == null ? null : ProfileState.fromCtx(ctx),
+                      onSelect: _select,
+                    );
+                  },
                 ),
               ),
             Expanded(

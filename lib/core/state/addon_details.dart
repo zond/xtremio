@@ -57,10 +57,6 @@ final class AddonDetailsState {
 
   bool get isLoaded => transportUrl != null;
 
-  bool get isInstalled => localAddon != null;
-
-  bool get isLoadingManifest => remoteAddon?.content.isLoading ?? isLoaded;
-
   /// The fetched descriptor, when the manifest loaded.
   AddonDescriptor? get remoteDescriptor => remoteAddon?.content.contentOrNull;
 

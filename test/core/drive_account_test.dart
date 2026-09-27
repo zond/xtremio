@@ -36,11 +36,15 @@ void main() {
         secrets: secrets,
       );
 
-      final outcome = await account.linkFile(
+      final outcome = await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'Arrival (2016) 2160p.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'Arrival (2016) 2160p.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
 
       expect(outcome, DriveLinkOutcome.stored);
@@ -60,11 +64,15 @@ void main() {
         secrets: secrets,
       );
 
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'Arrival (2016) 2160p.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'Arrival (2016) 2160p.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
 
       expect(prefsClient.stored[AppPrefs.driveLinkedFilesKey], [
@@ -85,11 +93,15 @@ void main() {
       final prefsClient = FakePrefsClient();
       final secrets = FakeSecretStore();
       final first = await _account(prefsClient: prefsClient, secrets: secrets);
-      await first.linkFile(
+      await first.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'Arrival (2016) 2160p.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'Arrival (2016) 2160p.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
 
       // A fresh app start over the same preferences file and the same
@@ -113,17 +125,25 @@ void main() {
         secrets: secrets,
       );
 
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'one.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'one.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _rotated,
-        fileId: 'drive-file-2',
-        name: 'two.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-2',
+            name: 'two.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
 
       expect(account.refreshToken, _rotated);
@@ -144,11 +164,15 @@ void main() {
         prefsClient: prefsClient,
         secrets: FakeSecretStore(),
       );
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'Arrival (2016) 2160p.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'Arrival (2016) 2160p.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
 
       await account.noteMatch(
@@ -200,11 +224,15 @@ void main() {
         prefsClient: prefsClient,
         secrets: secrets,
       );
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'one.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'one.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
 
       await account.notePairAgain();
@@ -251,11 +279,15 @@ void main() {
         prefsClient: prefsClient,
         secrets: secrets,
       );
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'one.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'one.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
       await account.notePairAgain();
 
@@ -274,19 +306,27 @@ void main() {
         prefsClient: prefsClient,
         secrets: FakeSecretStore(),
       );
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'one.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'one.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
       await account.notePairAgain();
 
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _rotated,
-        fileId: 'drive-file-1',
-        name: 'one.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'one.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
 
       expect(account.state, DriveLinkState.linked);
@@ -307,11 +347,15 @@ void main() {
         var notified = 0;
         account.addListener(() => notified++);
 
-        await account.linkFile(
+        await account.linkFiles(
           refreshToken: _token,
-          fileId: 'drive-file-1',
-          name: 'one.mkv',
-          mimeType: 'video/x-matroska',
+          files: [
+            (
+              fileId: 'drive-file-1',
+              name: 'one.mkv',
+              mimeType: 'video/x-matroska',
+            ),
+          ],
         );
 
         expect(notified, greaterThan(0));
@@ -327,11 +371,15 @@ void main() {
         prefsClient: prefsClient,
         secrets: secrets,
       );
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'one.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'one.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
 
       await account.unlink();
@@ -360,11 +408,15 @@ void main() {
         prefsClient: prefsClient,
         secrets: secrets,
       );
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'one.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'one.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
       await account.notePairAgain();
 
@@ -398,11 +450,15 @@ void main() {
           secrets: secrets,
         );
 
-        final outcome = await account.linkFile(
+        final outcome = await account.linkFiles(
           refreshToken: _token,
-          fileId: 'drive-file-1',
-          name: 'one.mkv',
-          mimeType: 'video/x-matroska',
+          files: [
+            (
+              fileId: 'drive-file-1',
+              name: 'one.mkv',
+              mimeType: 'video/x-matroska',
+            ),
+          ],
         );
 
         expect(outcome, DriveLinkOutcome.thisRunOnly);
@@ -453,11 +509,15 @@ void main() {
         prefsClient: prefsClient,
         secrets: FakeSecretStore.failing(),
       );
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: _token,
-        fileId: 'drive-file-1',
-        name: 'one.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-1',
+            name: 'one.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
       await account.notePairAgain();
       await account.unlink();

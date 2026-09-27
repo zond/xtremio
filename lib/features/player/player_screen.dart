@@ -1175,9 +1175,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ]);
   }
 
-  PlayerState? get _state {
-    final json = _player?.value;
-    return json == null ? null : PlayerState.fromJson(json);
+  PlayerState? get _state => _stateOf(_player?.value);
+
+  /// The last `player` value parsed, and what it parsed to.
+  Map<String, dynamic>? _parsedJson;
+  PlayerState? _parsed;
+
+  /// [json] as a [PlayerState], parsed once per value of the field rather
+  /// than once per read: a build reads [_state] several times, and the
+  /// subtitle sheets several more. The field notifier replaces its map on
+  /// every change and never edits one in place, so identity is the key.
+  PlayerState? _stateOf(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    if (!identical(json, _parsedJson)) {
+      _parsed = PlayerState.fromJson(json);
+      _parsedJson = json;
+    }
+    return _parsed;
   }
 
   /// The profile, for the installed addons' names; null until the `ctx`
@@ -3517,7 +3531,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       (context) => ValueListenableBuilder<Map<String, dynamic>?>(
         valueListenable: _player!,
         builder: (context, json, _) {
-          final state = json == null ? null : PlayerState.fromJson(json);
+          final state = _stateOf(json);
           return SubtitleReferenceMenu(
             groups: _subtitleGroups(state),
             playingId: playing.url.toString(),
@@ -3975,7 +3989,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       (context) => ValueListenableBuilder<Map<String, dynamic>?>(
         valueListenable: _player!,
         builder: (context, json, _) {
-          final state = json == null ? null : PlayerState.fromJson(json);
+          final state = _stateOf(json);
           final groups = _subtitleGroups(state);
           return ValueListenableBuilder<PlaybackTracks>(
             valueListenable: _tracks,

@@ -70,9 +70,6 @@ final class SelectableExtra {
             SelectableExtraOption.fromJson(option as Map<String, dynamic>),
         ],
       );
-
-  SelectableExtraOption? get selectedOption =>
-      options.where((option) => option.selected).firstOrNull;
 }
 
 /// One value of a [SelectableExtra].

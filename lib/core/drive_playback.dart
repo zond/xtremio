@@ -74,12 +74,7 @@ sealed class DriveOpened {
 
 /// The file is open and these are its bytes.
 final class DriveFilePlayable extends DriveOpened {
-  const DriveFilePlayable({
-    required this.url,
-    this.name,
-    this.contentType,
-    this.length,
-  });
+  const DriveFilePlayable({required this.url, this.name});
 
   /// Where the player fetches the film: the embedded server's
   /// `/drive/stream/{key}`. **Carries no credential**, which is why it is
@@ -88,12 +83,6 @@ final class DriveFilePlayable extends DriveOpened {
 
   /// What Drive calls the file, as the server echoed it back.
   final String? name;
-
-  /// What Drive labelled the bytes (`video/x-matroska`).
-  final String? contentType;
-
-  /// How long the file is, in bytes.
-  final int? length;
 }
 
 /// It could not be opened, and this is which of the reasons.
@@ -182,15 +171,9 @@ DriveOpened parseDriveOpenAnswer(String answer) {
       return const DriveFileRefused(DriveOpenFailure.notUnderstood);
     }
     final name = json['name'];
-    final contentType = json['contentType'];
-    final length = json['length'];
     return DriveFilePlayable(
       url: parsed,
       name: name is String && name.isNotEmpty ? name : null,
-      contentType: contentType is String && contentType.isNotEmpty
-          ? contentType
-          : null,
-      length: length is int ? length : null,
     );
   }
   return DriveFileRefused(switch (json['reason']) {

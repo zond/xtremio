@@ -19,11 +19,11 @@ void main() {
       final tmp = await Directory.systemTemp.createTemp('xtremio-server-test-');
       const server = ServerClient();
       addTearDown(() async {
-        await server.stop();
+        await stopServerForTests();
         await tmp.delete(recursive: true);
       });
 
-      expect(server.baseUrl, isNull);
+      expect(serverBaseUrlForTests(), isNull);
       await expectLater(server.settings(), throwsA(anything));
       await expectLater(server.backgroundTraffic(), throwsA(anything));
       await expectLater(
@@ -31,14 +31,14 @@ void main() {
         throwsA(anything),
       );
 
-      final url = await server.start(
+      final url = await startServerForTests(
         configDir: Directory('${tmp.path}/server'),
         cacheDir: Directory('${tmp.path}/cache/server'),
       );
       expect(url.scheme, 'http');
       expect(url.host, '127.0.0.1');
       expect(url.port, isNot(0));
-      expect(server.baseUrl, url);
+      expect(serverBaseUrlForTests(), url);
 
       // The control API, without HTTP: settings read and patched (the
       // patch is validated and merged like POST /settings would) ...
@@ -99,8 +99,8 @@ void main() {
       // it never saw -- where the truth is that it has not looked.
       expect(await server.streamNumbers(url.resolve('$_infoHash/0')), isNull);
 
-      await server.stop();
-      expect(server.baseUrl, isNull);
+      await stopServerForTests();
+      expect(serverBaseUrlForTests(), isNull);
       await expectLater(server.settings(), throwsA(anything));
       await expectLater(
         server.streamNumbers(url.resolve('$_infoHash/0')),
@@ -120,7 +120,7 @@ void main() {
       final tmp = await Directory.systemTemp.createTemp('xtremio-proxy-test-');
       const server = ServerClient();
       addTearDown(() async {
-        await server.stop();
+        await stopServerForTests();
         await tmp.delete(recursive: true);
       });
 
@@ -142,7 +142,7 @@ void main() {
         await request.response.close();
       });
 
-      final url = await server.start(
+      final url = await startServerForTests(
         configDir: Directory('${tmp.path}/server'),
         cacheDir: Directory('${tmp.path}/cache/server'),
       );

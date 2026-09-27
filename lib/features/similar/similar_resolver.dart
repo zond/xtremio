@@ -151,33 +151,30 @@ Future<List<SimilarTitle>> resolveSuggestions(
   required String subjectId,
   CatalogueSearch search = cinemetaSearch,
 }) async {
-  final resolved = <SimilarTitle>[];
-  final seen = <String>{subjectId};
   // One query is one answer for the length of this call: a model that
   // names the same title twice, or two titles that search the same, costs
-  // one search.
-  final asked = <String, List<Map<String, dynamic>>>{};
+  // one search -- the future is what is kept, so a second asker waits on
+  // the first one's search rather than starting its own.
+  final asked = <String, Future<List<Map<String, dynamic>>>>{};
 
-  Future<List<Map<String, dynamic>>> ask(String type, String query) async {
-    final key = '$type/$query';
-    if (asked[key] case final answer?) return answer;
-    List<Map<String, dynamic>> answer;
-    try {
-      answer = await search(type, query);
-    } on Object {
-      // A search that failed, timed out, or answered something that is not
-      // JSON: this one suggestion is lost and the rest of the row is not.
-      answer = const [];
-    }
-    return asked[key] = answer;
-  }
+  Future<List<Map<String, dynamic>>> ask(String type, String query) =>
+      asked.putIfAbsent('$type/$query', () async {
+        try {
+          return await search(type, query);
+        } on Object {
+          // A search that failed, timed out, or answered something that is
+          // not JSON: this one suggestion is lost and the rest of the row
+          // is not.
+          return const [];
+        }
+      });
 
-  for (final suggestion in suggestions) {
-    // The kind the model stated, or both in a fixed order when it stated
-    // none. Both is the honest default: the schema asks for a title, a
-    // year and a reason, so most answers say nothing about kind, and the
-    // year is what keeps a series from resolving to the film that was
-    // made of it.
+  // The kind the model stated, or both in a fixed order when it stated
+  // none. Both is the honest default: the schema asks for a title, a year
+  // and a reason, so most answers say nothing about kind, and the year is
+  // what keeps a series from resolving to the film that was made of it.
+  // The second kind is asked only when the first found nothing.
+  Future<MetaItemPreview?> resolve(SuggestedTitle suggestion) async {
     final types = switch (suggestion.kind) {
       final kind? => [kind.catalogType],
       null => const ['movie', 'series'],
@@ -188,12 +185,20 @@ Future<List<SimilarTitle>> resolveSuggestions(
         suggestion,
         type,
       );
-      if (match == null) continue;
-      final item = MetaItemPreview(match);
-      if (!seen.add(item.id)) break;
-      resolved.add(SimilarTitle(item: item, why: suggestion.why));
-      break;
+      if (match != null) return MetaItemPreview(match);
     }
+    return null;
+  }
+
+  // Every suggestion at once -- a row of ten is ten round trips to the
+  // catalogue, and one after another they were the whole wait -- and then
+  // read back in the order they were suggested.
+  final items = await Future.wait(suggestions.map(resolve));
+  final resolved = <SimilarTitle>[];
+  final seen = <String>{subjectId};
+  for (final (index, item) in items.indexed) {
+    if (item == null || !seen.add(item.id)) continue;
+    resolved.add(SimilarTitle(item: item, why: suggestions[index].why));
   }
   return resolved;
 }

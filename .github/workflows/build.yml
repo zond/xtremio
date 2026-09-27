@@ -3,7 +3,7 @@
 #
 # Deliberately not `ci.yml`. That one runs on every push and is the feedback
 # anybody actually reads; this one cross-compiles Rust with `lto = true` and
-# `codegen-units = 1` six times over, and hanging that off every push would
+# `codegen-units = 1` five times over, and hanging that off every push would
 # make the fast checks useless without making these any more informative.
 #
 # Nothing here is allowed to fail softly. Windows and macOS are built nowhere
@@ -123,6 +123,14 @@ jobs:
           } >> android/key.properties
 
       - run: make ${{ matrix.target }}
+
+      # The Kotlin with no Android in it (FrameRateMode,
+      # DownloadsProgressBar) has JVM unit tests, run nowhere else. Once,
+      # not per ABI: nothing in them depends on one.
+      - name: Kotlin unit tests
+        if: matrix.abi == 'arm64-v8a'
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest
 
       # Proved, not assumed: without the key Gradle falls back to the debug
       # one and still produces an APK, so "it built" says nothing about what
@@ -344,72 +352,13 @@ jobs:
           path: xtremio-macos.zip
           if-no-files-found: error
 
-  ios:
-    name: iOS (compile only)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
-          cache-directories: build/ios/Build/Intermediates.noindex/Pods.build/Release-iphoneos/xtremio_core.build
-          cache-on-failure: true
-
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - run: flutter pub get
-
-      # No artifact: there is no signing identity, so nothing this produces
-      # can be installed. The answer it gives is whether it compiles at all.
-      #
-      # `--verbose` permanently, because without it this job cannot answer
-      # that. Flutter meets any failed device build with its "requires a
-      # selected Development Team with a Provisioning Profile" advice --
-      # `--no-codesign` leaves DEVELOPMENT_TEAM unset, so that text appears
-      # whatever went wrong -- and swallows the xcodebuild output that says
-      # what did. A job whose whole output is a misdiagnosis is worse than no
-      # job. The logs are long; the answer is in them.
-      - run: make ios FLAGS=--verbose
-
-      # ...and the misdiagnosis is still printed last, where a person opening
-      # a red job reads it first. Say so in the log rather than in a comment
-      # in this file, which is not what they have open.
-      - name: What that failure actually means
-        if: failure()
-        run: |
-          echo 'Ignore the "Development Team / Provisioning Profile" advice'
-          echo 'above: --no-codesign makes Flutter print it for every failed'
-          echo 'device build. Search the log for "BuildTool failed" and for'
-          echo '"error[" to find the real one.'
-          echo
-          echo 'Known blocker as of 2026-09-05, upstream and unfixed here:'
-          echo '  librqbit-dualstack-sockets 0.7.0, src/bind_device.rs:54'
-          echo '  error[E0599]: no method named `bind_device` found for'
-          echo '  reference `&Socket`'
-          echo 'It gates the socket2 call on `not(any(macos, windows))`, but'
-          echo 'socket2 only offers bind_device on Linux, Android and Fuchsia;'
-          echo 'the Apple platforms get bind_device_by_index_v4/v6, which the'
-          echo 'crate already uses -- for macOS alone. Fixing it means'
-          echo 'widening that branch to iOS upstream.'
-
   release:
     name: GitHub Release
     if: github.ref_type == 'tag'
-    # Not `ios`. That job produces no artifact -- the notes below say iOS is
-    # deliberately not shipped -- and it is red on an upstream crate nobody
-    # here can fix, so gating on it means a tag builds four good downloads
-    # and publishes none of them, which is the whole point of this file
-    # undone. Dropping it from `needs` leaves the job exactly as red and
-    # exactly as visible; it just stops it holding the door.
+    # Every job above, since every one of them produces a download. There is
+    # no iOS job: iOS is not built or shipped (the notes below say why), and
+    # `make ios` with "Building for iOS" in docs/OPERATIONS.md is what is
+    # left for anyone who wants to try.
     needs: [android, linux, windows, macos]
     runs-on: ubuntu-latest
     permissions:
@@ -437,7 +386,7 @@ jobs:
 
           There is no iOS build, and none is shipped: it does not compile
           without a change to each of two upstream dependencies that this
-          project does not carry (the CI job fails on purpose), there is no
+          project does not carry, so CI does not try; there is no
           signing identity here, and App Store terms are incompatible with the
           GPL-3 the compiled binary carries. "Building for iOS" in
           `docs/OPERATIONS.md` says what it would take.

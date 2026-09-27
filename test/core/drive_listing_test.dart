@@ -170,7 +170,7 @@ void main() {
       ]);
       final before = account.files;
 
-      final outcome = await reloadLinkedDriveFiles(
+      await reloadLinkedDriveFiles(
         account: account,
         lister: FakeDriveFileLister(
           answers: [
@@ -179,7 +179,6 @@ void main() {
         ),
       );
 
-      expect((outcome as DriveReloadDone).changedNothing, isTrue);
       expect(account.files, before);
       expect(account.files.forFile('drive-file-1')!.match, _arrival);
     });
@@ -192,7 +191,7 @@ void main() {
         // is what was linked *here*.
         final account = await _account([_file('drive-file-1', 'ep6.avi')]);
 
-        final outcome = await reloadLinkedDriveFiles(
+        await reloadLinkedDriveFiles(
           account: account,
           lister: FakeDriveFileLister(
             answers: [
@@ -204,7 +203,6 @@ void main() {
           ),
         );
 
-        expect((outcome as DriveReloadDone).changedNothing, isTrue);
         expect(_stored(account), {'drive-file-1': 'ep6.avi'});
       },
     );

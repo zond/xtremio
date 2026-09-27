@@ -83,9 +83,6 @@ final class LibraryItemView {
   /// In the library proper (`NotRemovedFilter`).
   bool get isInLibrary => !removed;
 
-  /// `_mtime`, when parseable.
-  DateTime? get modifiedAt => _date(json['_mtime']);
-
   /// `state.lastWatched`, when set and parseable.
   DateTime? get lastWatched => _date(_state['lastWatched']);
 
@@ -118,11 +115,6 @@ final class LibraryItemView {
     if (timeOffset <= 0 || duration <= 0) return null;
     return (timeOffset / duration).clamp(0.0, 1.0);
   }
-
-  /// `LibraryItem::is_in_continue_watching`: not `other`, in the library or
-  /// temporary, with progress.
-  bool get isInContinueWatching =>
-      type != 'other' && (!removed || temp) && timeOffset > 0;
 
   /// Unseen new episodes for this item (only `continue_watching_preview`
   /// carries the count; 0 elsewhere).
@@ -239,9 +231,6 @@ final class LibrarySelectable {
 
   LibraryTypeOption? get selectedType =>
       types.where((type) => type.selected).firstOrNull;
-
-  LibrarySortOption? get selectedSort =>
-      sorts.where((sort) => sort.selected).firstOrNull;
 }
 
 /// View over the `library` field.

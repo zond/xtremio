@@ -30,10 +30,12 @@ and the doc is fixed.
 
 ## Verification, with real exit codes
 
-Run these before every commit and read the exit codes, not the tail of the
-output. Never pipe a test command into `tail`/`head`/`grep` before an
-`&&`-gated commit (the pipe's exit code is the filter's); redirect to a log
-and `echo EXIT=$?`.
+**`make check` runs every gate below, in order, and stops at the first
+that fails** -- run it before every commit and read its exit code, not the
+tail of its output. The commands it runs, for running one on its own:
+never pipe a test command into `tail`/`head`/`grep` before an `&&`-gated
+commit (the pipe's exit code is the filter's); redirect to a log and
+`echo EXIT=$?`.
 
 ```bash
 dart format --set-exit-if-changed lib test; echo EXIT=$?
@@ -53,7 +55,9 @@ flutter_rust_bridge_codegen generate && git diff --exit-code lib/src/rust rust/s
 CI (`.github/workflows/ci.yml`) runs four jobs: the Rust checks above, a
 `cargo check --target armv7-linux-androideabi`, the Flutter checks, and
 the codegen drift check.
-`build.yml` builds every platform weekly and on tags.
+`build.yml` builds every platform weekly and on tags, and its Android job
+runs the Kotlin unit tests. iOS is built in neither
+([Building for iOS](docs/OPERATIONS.md#building-for-ios)).
 
 New behaviour needs a test that fails without it. Prove at least one by
 stashing the `lib/` (or `rust/src`) change and running the new test
@@ -61,6 +65,17 @@ stashing the `lib/` (or `rust/src`) change and running the new test
 
 ## Tests and fixtures
 
+- **No fixed sleeps.** A test waits for the thing it is about -- a
+  `Completer` it holds, a fake clock (`fakeAsync`, `tester.pump(duration)`),
+  `pumpEventQueue`, a poll with a deadline -- never a `sleep` or a
+  `Future.delayed` long enough on this machine. A timing bound written on a
+  fast machine is a flake on a slow runner.
+- **Every assertion must be able to fail.** One that holds whatever the code
+  does (a widget that is never built, a list that is always empty) is not a
+  test. Prove a new one by breaking the hunk it covers and watching it fail.
+- **Copy pinned verbatim is pinned on purpose.** A test that quotes a whole
+  sentence of on-screen copy holds that wording; changing the copy means
+  changing the test in the same commit, not loosening it to a fragment.
 - Widget tests run against `FakeCoreClient`, `FakePlaybackEngine` and the
   other fakes in `test/support/`; nothing in `test/features` touches FFI or
   libmpv. `test/core/core_client_test.dart` and `rust/tests/core.rs` are the
@@ -101,7 +116,12 @@ bug report or the text of a logged exception (log the exception's *type*):
   rewrites every `http(s)` URL through `DiagnosticsLog.url` before the line
   is stored -- nothing below FFI redacts, and `rust/src/logging.rs` re-emits
   every line to logcat. `redactSecrets` is the second lock on the copied
-  report. Verbose logging is the one deliberate exception, and says so.
+  report. **Verbose logging is the one deliberate exception: it redacts
+  nothing, so while it is on the log includes credentials** (addon and
+  debrid keys, anything else a line carries). Do not add redaction to it --
+  a redacted line is where the problem being chased hides -- and do not
+  soften its tile: `DiagnosticsTraceSync.description` says "credentials" in
+  that word, and `test/features/core_settings_test.dart` holds it.
   A fetch error is stripped of its URL (`without_url`, `rust/src/env.rs`)
   before it becomes a message.
 
@@ -113,7 +133,8 @@ Tests: `test/features/diagnostics_test.dart`, `test/core/drive_*_test.dart`,
 libmpv fetches the open media routes, and stremio-core's `StreamingServer`
 model calls its handful of control routes through `Env::fetch`, which adds
 the bearer token. Everything the app itself asks of the server -- settings,
-stats, storage, downloads, Drive, the LAN listener -- is an FFI function
+stats, storage, downloads, Drive, the LAN listener, the lean background
+footprint -- is an FFI function
 over `ServerHandle` in `rust/src/api/server.rs` or
 `rust/src/api/downloads.rs`, returning JSON. A new need is a new Rust
 function there: never a `dart:io` `HttpClient` call, and never a new route
@@ -124,6 +145,12 @@ the player reading the start of a stream that failed
 keeps no disk cache of its own (`cache-on-disk=no`); every storage question
 is `server_storage_report`. See
 [The embedded server](docs/ARCHITECTURE.md#the-embedded-server).
+
+The server's lean background footprint (`server_set_background`) is set
+only by `ServerFootprint` (`lib/shell/server_footprint.dart`): lean when the
+app is hidden or paused, full when it resumes, and full regardless while a
+download is on its way, a cast is up or the LAN listener runs. Tests:
+`test/shell/server_footprint_test.dart`, `rust/tests/embedded.rs`.
 
 ## The downloads registry
 

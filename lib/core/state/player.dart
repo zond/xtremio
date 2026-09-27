@@ -21,9 +21,6 @@ final class StreamUrls {
   /// the stream cannot be played by a media player (magnet, external, ...).
   Uri? get streamingUrl => _uri(json['streaming_url']);
 
-  Uri? get downloadUrl => _uri(json['download_url']);
-  Uri? get magnetUrl => _uri(json['magnet_url']);
-
   static Uri? _uri(Object? value) =>
       value is String ? Uri.tryParse(value) : null;
 }

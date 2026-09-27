@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import '../src/rust/api/server.dart' as rust;
 import 'diagnostics_log.dart';
@@ -235,29 +234,6 @@ class ServerClient
         PlaybackHints {
   const ServerClient();
 
-  /// Starts the server (idempotent) and returns its base URL.
-  ///
-  /// The port is the OS's choice and the returned URL is the only place it
-  /// is known; nothing downstream assumes a number. It used to ask for
-  /// 11470 -- stremio-core's default -- and fall back when that was taken,
-  /// which only ever bought a collision with a desktop Stremio or a second
-  /// instance of this app.
-  Future<Uri> start({
-    required Directory configDir,
-    required Directory cacheDir,
-  }) async {
-    final url = await rust.serverStart(
-      config: rust.ServerConfig(
-        configDir: configDir.path,
-        cacheDir: cacheDir.path,
-      ),
-    );
-    return Uri.parse(url);
-  }
-
-  /// Stops the server and waits for its thread. No-op when not running.
-  Future<void> stop() => rust.serverStop();
-
   @override
   Future<void> noteDuration({
     required String infoHash,
@@ -278,12 +254,6 @@ class ServerClient
   @override
   Future<void> notePlayerStalled({required String infoHash}) =>
       rust.serverNotePlayerStalled(infoHash: infoHash);
-
-  /// Base URL of the running server, or null when stopped.
-  Uri? get baseUrl {
-    final url = rust.serverBaseUrl();
-    return url == null ? null : Uri.parse(url);
-  }
 
   /// The server's settings (`GET /settings` → `values`: `cacheRoot`,
   /// `cacheSize`, `btMaxConnections`, ...). Throws when the server is not

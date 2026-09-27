@@ -265,18 +265,6 @@ class DriveAccount extends ChangeNotifier {
     return outcome;
   }
 
-  /// [link], with one file described the way the pairing service describes
-  /// it and the moment stamped from this account's clock.
-  Future<DriveLinkOutcome> linkFile({
-    required String refreshToken,
-    required String fileId,
-    required String name,
-    required String mimeType,
-  }) => linkFiles(
-    refreshToken: refreshToken,
-    files: [(fileId: fileId, name: name, mimeType: mimeType)],
-  );
-
   /// [link], with every file one pairing named, described the way the
   /// pairing service describes them and stamped from this account's clock.
   ///

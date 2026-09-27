@@ -583,6 +583,9 @@ void main() {
       await pumpSettings(tester, prefs: AppPrefs.inMemory());
       expect(tester.widget<SwitchListTile>(theSwitch()).value, isFalse);
       expect(find.text(DiagnosticsTraceSync.description), findsOneWidget);
+      // Nothing is redacted while it is on, and the tile says what that
+      // means in the word a viewer would look for.
+      expect(DiagnosticsTraceSync.description, contains('credentials'));
       // With the Diagnostics tile whose contents it changes, not with the
       // server settings.
       final developer = tester.getTopLeft(find.text('Developer'));

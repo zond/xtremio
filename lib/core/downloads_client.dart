@@ -141,16 +141,10 @@ final class DownloadFailure {
   /// The sentence to show.
   String get message => json['message'] as String? ?? '';
 
-  /// [DownloadFailureKind.insufficientSpace]: the bytes still to fetch, what
-  /// the volume has, and the margin the server insists on keeping free.
+  /// [DownloadFailureKind.insufficientSpace]: the bytes still to fetch and
+  /// what the volume has.
   int? get requiredBytes => _int('required');
   int? get availableBytes => _int('available');
-  int? get marginBytes => _int('margin');
-
-  /// [DownloadFailureKind.fileNotFound]: what was asked for, and how many
-  /// files the torrent has.
-  int? get fileIdx => _int('fileIdx');
-  int? get fileCount => _int('fileCount');
 
   int? _int(String key) => (json[key] as num?)?.toInt();
 

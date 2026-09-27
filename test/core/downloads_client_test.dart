@@ -172,7 +172,6 @@ void main() {
         expect(error.message, 'not enough free space for this download');
         expect(error.requiredBytes, 4000000000);
         expect(error.availableBytes, 1000000000);
-        expect(error.marginBytes, 524288000);
         expect(formatBytes(error.requiredBytes!), '4.0 GB');
       },
     );
@@ -189,8 +188,6 @@ void main() {
         'message': 'the torrent has no file 99',
       });
       expect(missing.kind, DownloadFailureKind.fileNotFound);
-      expect(missing.fileIdx, 99);
-      expect(missing.fileCount, 2);
       expect(
         const DownloadFailure({'kind': 'diskOnFire'}).kind,
         DownloadFailureKind.unknown,

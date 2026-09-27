@@ -32,11 +32,11 @@ Future<DriveAccount> _account({
     now: () => _at,
   );
   if (linked) {
-    await account.linkFile(
+    await account.linkFiles(
       refreshToken: _token,
-      fileId: _file.fileId,
-      name: _file.name,
-      mimeType: _file.mimeType,
+      files: [
+        (fileId: _file.fileId, name: _file.name, mimeType: _file.mimeType),
+      ],
     );
   }
   return account;
@@ -165,11 +165,11 @@ void main() {
       // the account "linked" with nothing in it, and sending that to the
       // server is a refresh the viewer would be told to pair again over.
       final account = await _account(linked: false);
-      await account.linkFile(
+      await account.linkFiles(
         refreshToken: '',
-        fileId: _file.fileId,
-        name: _file.name,
-        mimeType: _file.mimeType,
+        files: [
+          (fileId: _file.fileId, name: _file.name, mimeType: _file.mimeType),
+        ],
       );
       final opener = FakeDriveFileOpener();
 
@@ -185,21 +185,17 @@ void main() {
   });
 
   group('the server answer', () {
-    test('a success is a URL and the three facts about the file', () {
+    test('a success is a URL and the name of the file', () {
       final opened = parseDriveOpenAnswer(
         jsonEncode({
           'ok': true,
           'url': 'http://127.0.0.1:1234/drive/stream/k',
           'name': 'A Film.mkv',
-          'contentType': 'video/mp4',
-          'length': 4096,
         }),
       );
       final playable = opened as DriveFilePlayable;
       expect(playable.url.toString(), 'http://127.0.0.1:1234/drive/stream/k');
       expect(playable.name, 'A Film.mkv');
-      expect(playable.contentType, 'video/mp4');
-      expect(playable.length, 4096);
     });
 
     test('each refusal keeps its own kind, so nothing matches English', () {

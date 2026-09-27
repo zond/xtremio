@@ -87,7 +87,7 @@ void main() {
 
       await client.shutdown();
       expect(client.isInitialized, isFalse);
-      expect(const ServerClient().baseUrl, isNull);
+      expect(serverBaseUrlForTests(), isNull);
     },
   );
 

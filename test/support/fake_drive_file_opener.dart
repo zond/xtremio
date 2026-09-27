@@ -55,11 +55,7 @@ class DriveOpenRequest {
 DriveFilePlayable fakeDrivePlayable({
   String key = '7f1c2e64-0a31-4f9b-9c2d-5b8e0a9d3c11',
   String? name,
-  String contentType = 'video/x-matroska',
-  int length = 4096,
 }) => DriveFilePlayable(
   url: Uri.parse('http://127.0.0.1:41871/drive/stream/$key'),
   name: name,
-  contentType: contentType,
-  length: length,
 );

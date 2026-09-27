@@ -22,6 +22,7 @@ import 'shell/device_profile.dart';
 import 'shell/focus_theme.dart';
 import 'shell/root_shell.dart';
 import 'shell/route_log_observer.dart';
+import 'shell/server_footprint.dart';
 import 'shell/tv_density.dart';
 import 'widgets/focusable_tile.dart';
 
@@ -81,8 +82,13 @@ typedef PlaybackEngineBuilder = PlaybackEngine Function({
 /// SDK is a process-wide singleton behind it. Off Android and iOS the real
 /// one reports `isSupported` false and is never asked anything else, so it
 /// is built everywhere and costs nothing where it cannot work. The LAN media
-/// listener half of the scope is left to its default, the embedded server's
-/// own.
+/// listener half of the scope is the embedded server's own, seen through
+/// the [ServerFootprint], which has to hear it start and stop.
+///
+/// That [ServerFootprint] is what puts the embedded server into its lean
+/// background footprint when the app is hidden or paused, and back when it
+/// resumes -- except while a download is on its way, a cast is up or the
+/// LAN listener serves one. It tells the server through [serverBackground].
 ///
 /// On Android it also runs the downloads foreground service
 /// ([DownloadsForegroundService]): while anything is unfinished the process
@@ -123,6 +129,7 @@ class XtremioApp extends StatefulWidget {
     this.device = DeviceProfile.fallback,
     this.serverSettings = const ServerClient(),
     this.sharingActivity = const RustSharingActivityClient(),
+    this.serverBackground = const RustServerBackgroundControl(),
   });
 
   final CoreClient core;
@@ -167,6 +174,10 @@ class XtremioApp extends StatefulWidget {
   /// nothing is playing, for the status light ([SharingLight]): the
   /// server's own reading over FFI unless a test hands over a fake.
   final SharingActivityClient sharingActivity;
+
+  /// Where the server's footprint is set ([ServerFootprint]): the embedded
+  /// server over FFI unless a test hands over a recorder.
+  final ServerBackgroundControl serverBackground;
 
   /// Builds the [PlaybackEngine] for one player. Tests inject a recorder
   /// here to see what the app asked for without touching libmpv.
@@ -245,6 +256,10 @@ class _XtremioAppState extends State<XtremioApp> {
   /// thing asking it. The shell turns it on and off with what is on screen.
   late final SharingActivityMonitor _activity;
 
+  /// The one footprint decision, built here and disposed here, on the
+  /// downloads client and the cast sender above.
+  late final ServerFootprint _footprint;
+
   /// The `ctx` field, for the settings a new player is created with.
   /// Created in [initState] so its first pull is in flight from start-up;
   /// created lazily it would come into being — empty — inside the first
@@ -282,6 +297,12 @@ class _XtremioAppState extends State<XtremioApp> {
     _sharing = IdleSharingPolicy(prefs: _prefs, server: widget.serverSettings);
     _trace = DiagnosticsTraceSync(prefs: _prefs, server: widget.serverSettings);
     _activity = SharingActivityMonitor(client: widget.sharingActivity);
+    _footprint = ServerFootprint(
+      server: widget.serverBackground,
+      downloads: _downloads,
+      cast: _cast,
+    );
+    unawaited(_footprint.start());
     // After the load, not beside it: a stored choice arriving a moment
     // later would otherwise be preceded by a push of the default it was
     // made to override, and the server would hear both.
@@ -480,12 +501,17 @@ class _XtremioAppState extends State<XtremioApp> {
   /// `inactive`, where a settings dialog would cost the board its posters
   /// every time it opened. The ceiling that bounds the same cache in the
   /// foreground is `XtremioBootstrap.imageCacheCeilingBytes`.
+  ///
+  /// The server's part is its lean footprint ([ServerFootprint]), which
+  /// decides for itself whether anything still needs the full one.
   void _onHidden() {
     _away = true;
     PaintingBinding.instance.imageCache.clear();
+    _footprint.appHidden();
   }
 
   Future<void> _onResume() async {
+    _footprint.appResumed();
     if (!_away) return;
     _away = false;
     if (await _isLoggedIn()) await _pullAccount();
@@ -557,6 +583,8 @@ class _XtremioAppState extends State<XtremioApp> {
   void dispose() {
     _events?.cancel();
     _links?.cancel();
+    // Before the downloads client and the cast sender it listens to.
+    _footprint.dispose();
     // Takes the foreground service down before the client it reports on:
     // without this side there is nobody to move the notification on.
     unawaited(_downloadsService.dispose());
@@ -599,6 +627,7 @@ class _XtremioAppState extends State<XtremioApp> {
             client: _downloads,
             child: CastScope(
               client: _cast,
+              lanMedia: _footprint,
               child: PrefsScope(
                 prefs: _prefs,
                 // Under the preferences, because it reads them: the list of

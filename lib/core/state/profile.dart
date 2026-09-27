@@ -37,9 +37,6 @@ final class ProfileState {
   ProfileSettings get settings =>
       ProfileSettings(json['settings'] as Map<String, dynamic>? ?? const {});
 
-  bool isAddonInstalled(String transportUrl) =>
-      addons.any((addon) => addon.transportUrl == transportUrl);
-
   AddonDescriptor? installedAddon(String transportUrl) =>
       addons.where((addon) => addon.transportUrl == transportUrl).firstOrNull;
 }
@@ -54,19 +51,6 @@ final class UserInfo {
   String get id => json['_id'] as String;
   String get email => json['email'] as String? ?? '';
   String? get avatar => json['avatar'] as String?;
-  String? get fbId => json['fbId'] as String?;
-  DateTime? get lastModified => _date(json['lastModified']);
-  DateTime? get dateRegistered => _date(json['dateRegistered']);
-
-  /// When the premium subscription ends; null without one.
-  DateTime? get premiumExpire => _date(json['premium_expire']);
-
-  GdprConsent get gdprConsent => GdprConsent.fromJson(
-    json['gdpr_consent'] as Map<String, dynamic>? ?? const {},
-  );
-
-  static DateTime? _date(Object? json) =>
-      json is String ? DateTime.tryParse(json)?.toUtc() : null;
 }
 
 /// `GDPRConsent`: what a `Register` request carries and what the user

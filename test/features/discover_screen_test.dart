@@ -103,7 +103,6 @@ void main() {
       expect(genre.options, hasLength(20));
       expect(genre.options.first.value, isNull);
       expect(genre.options.first.selected, isTrue);
-      expect(genre.selectedOption?.value, isNull);
       expect(genre.options[1].value, 'Action');
       expect(genre.options[1].request.path.extra, const [
         ExtraValue('genre', 'Action'),
@@ -650,6 +649,36 @@ void main() {
           .onPressed,
       isNotNull,
       reason: 'and the catalogs under it still are',
+    );
+  });
+
+  testWidgets('an addon list that arrives later renames the headings', (
+    tester,
+  ) async {
+    // Only the bar listens to `ctx`: the profile landing after the catalog
+    // (an install, a sign-in) still reaches the menu's headings.
+    useNarrowScreen(tester);
+    final core = FakeCoreClient(
+      state: {CoreField.discover: loadDiscoverFixture()},
+    );
+    await tester.pumpWidget(harness(core));
+    await tester.pumpAndSettle();
+
+    core.setState(CoreField.ctx, loadFixture('ctx_logged_in.json'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .ancestor(
+            of: find.text('Catalog'),
+            matching: find.byType(DropdownMenu<int>),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.widgetWithText(MenuItemButton, 'Public Domain Movies').hitTestable(),
+      findsOneWidget,
     );
   });
 

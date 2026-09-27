@@ -311,11 +311,15 @@ void main() {
     Future<DriveAccount> account({List<String> names = const []}) async {
       final drive = await driveAccount(prefsClient: FakePrefsClient());
       for (final (index, name) in names.indexed) {
-        await drive.linkFile(
+        await drive.linkFiles(
           refreshToken: 'token',
-          fileId: 'drive-file-$index',
-          name: name,
-          mimeType: 'video/x-matroska',
+          files: [
+            (
+              fileId: 'drive-file-$index',
+              name: name,
+              mimeType: 'video/x-matroska',
+            ),
+          ],
         );
       }
       return drive;
@@ -394,11 +398,15 @@ void main() {
 
       // The one thing a viewer can do about it: rename it in Drive and link
       // it again. The note above the list says so, so it has to work here.
-      await drive.linkFile(
+      await drive.linkFiles(
         refreshToken: 'token',
-        fileId: 'drive-file-0',
-        name: 'The.Matrix.1999.mkv',
-        mimeType: 'video/x-matroska',
+        files: [
+          (
+            fileId: 'drive-file-0',
+            name: 'The.Matrix.1999.mkv',
+            mimeType: 'video/x-matroska',
+          ),
+        ],
       );
       await run.run();
       expect(fake.asked, hasLength(2));
@@ -428,11 +436,15 @@ void main() {
         await run.run();
         expect(asked, ['movie/The Matrix'], reason: 'claimed before the await');
 
-        await drive.linkFile(
+        await drive.linkFiles(
           refreshToken: 'token',
-          fileId: 'drive-file-9',
-          name: 'Arrival.2016.mkv',
-          mimeType: 'video/x-matroska',
+          files: [
+            (
+              fileId: 'drive-file-9',
+              name: 'Arrival.2016.mkv',
+              mimeType: 'video/x-matroska',
+            ),
+          ],
         );
         final third = run.run();
         held.complete();

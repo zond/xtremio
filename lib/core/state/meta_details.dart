@@ -154,8 +154,6 @@ final class MetaDetailsState {
   /// The meta request to hand to `Load Player` (for library/next-video).
   ResourceRequest? get metaRequest => readyMeta?.request;
 
-  bool get isLoadingMeta => meta == null && metaItems.any((m) => m.isLoading);
-
   /// The error when every meta addon failed.
   LoadableError<MetaItem>? get metaError {
     if (meta != null || metaItems.isEmpty) return null;

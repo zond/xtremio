@@ -16,6 +16,7 @@
 #   make ios            release iOS build, unsigned -- does it compile at all
 #   make run            flutter run, stamped the same way
 #   make version        show what would be stamped
+#   make check          every local gate, the ones CI runs (see AGENTS.md)
 #
 # Any of them takes the usual extra flags through FLAGS=, e.g.
 #   make apk FLAGS="--target-platform android-arm64,android-x64"
@@ -30,7 +31,7 @@ DEFINES := --dart-define=XTREMIO_VERSION=$(VERSION) \
 FLAGS ?=
 DEVICE ?=
 
-.PHONY: apk apk-tv apk-split apk-debug linux macos ios run version
+.PHONY: apk apk-tv apk-split apk-debug linux macos ios run version check
 
 # Version codes follow `apk-split`, which is what goes to Drive: Flutter's
 # per-ABI build adds 1000 for armeabi-v7a and 2000 for arm64-v8a to the build
@@ -73,3 +74,26 @@ run:
 version:
 	@echo "XTREMIO_VERSION=$(VERSION)"
 	@echo "XTREMIO_GIT_COMMIT=$(COMMIT)"
+
+# Every gate a commit has to pass, in the order that makes each one mean
+# something: Rust first, because `cargo build` is what leaves the debug
+# library the FFI-backed Dart tests load. Each line is its own shell, so make
+# stops at the first that fails and exits with its code.
+#
+# The codegen check regenerates the bindings and fails if that changed
+# anything against the tree as it stood -- so it passes on a tree whose
+# regenerated bindings are not committed yet, and fails on one whose
+# bindings are stale.
+FRB_PATHS := lib/src/rust rust/src/frb_generated.rs
+check:
+	cd rust && cargo fmt --all --check && cargo clippy --all-targets -- -D warnings && cargo test && cargo build
+	dart format --output=none --set-exit-if-changed lib test
+	flutter analyze
+	flutter test
+	@before="$$(git diff -- $(FRB_PATHS); git status --porcelain -- $(FRB_PATHS))"; \
+	flutter_rust_bridge_codegen generate && \
+	after="$$(git diff -- $(FRB_PATHS); git status --porcelain -- $(FRB_PATHS))" && \
+	if [ "$$before" != "$$after" ]; then \
+		echo 'flutter_rust_bridge codegen drifted: regenerate and commit the bindings'; exit 1; \
+	fi
+	cd android && ./gradlew :app:testDebugUnitTest

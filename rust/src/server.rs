@@ -978,6 +978,29 @@ fn allow_lan_media(handle: &ServerHandle, allowed: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Puts the running server into its lean background footprint, or back out
+/// of it (`ServerHandle::set_background`): every torrent keeps running, on
+/// a few peers instead of the configured limit. `false` when no server is
+/// running, which is not an error -- a server started later starts full, and
+/// the app says otherwise on its next lifecycle change.
+///
+/// Which lifecycle changes, and what keeps the server full regardless (an
+/// unfinished download, a cast, the LAN listener), is the app's decision:
+/// `lib/shell/server_footprint.dart`.
+pub fn set_background(background: bool) -> bool {
+    with_handle(|handle| {
+        handle.set_background(background);
+        Ok(())
+    })
+    .is_ok()
+}
+
+/// Whether the running server is lean; `None` when no server is running.
+/// For tests: the app only ever says, it never asks.
+pub fn is_background() -> Option<bool> {
+    with_handle(|handle| Ok(handle.is_background())).ok()
+}
+
 /// Whether the LAN media listener is running right now. False when no server
 /// is running either -- "nothing of ours is on the LAN" is the same answer.
 pub fn lan_media_running() -> bool {

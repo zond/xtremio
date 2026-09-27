@@ -365,13 +365,13 @@ impl XtremioModel {
     /// `MetaDetails` plus a `watchedVideoIds` array. The engine's `watched`
     /// bitfield is `skip_serializing`, so the watched episode ids are
     /// resolved here (via `WatchedBitField::get_video`) for the UI.
+    ///
+    /// Serialized straight to text through [`MetaDetailsJson`], never through
+    /// a `serde_json::Value`: a series' meta runs to megabytes, and this runs
+    /// under the model's read lock on every `MetaDetails` change.
     fn meta_details_json(&self) -> serde_json::Result<String> {
-        let mut value = serde_json::to_value(&self.meta_details)?;
-        if let (Some(object), Some(watched)) =
-            (value.as_object_mut(), self.meta_details.watched.as_ref())
-        {
-            let watched_ids: Vec<&str> = self
-                .meta_details
+        let watched_video_ids = self.meta_details.watched.as_ref().map(|watched| {
+            self.meta_details
                 .meta_items
                 .iter()
                 .find_map(|loadable| match &loadable.content {
@@ -385,11 +385,25 @@ impl XtremioModel {
                         .filter(|id| watched.get_video(id))
                         .collect()
                 })
-                .unwrap_or_default();
-            object.insert("watchedVideoIds".to_owned(), serde_json::json!(watched_ids));
-        }
-        serde_json::to_string(&value)
+                .unwrap_or_default()
+        });
+        serde_json::to_string(&MetaDetailsJson {
+            meta_details: &self.meta_details,
+            watched_video_ids,
+        })
     }
+}
+
+/// What [`XtremioModel::meta_details_json`] writes: the model's own fields
+/// with `watchedVideoIds` beside them, present only when the engine has a
+/// watched bitfield to answer from.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MetaDetailsJson<'a> {
+    #[serde(flatten)]
+    meta_details: &'a MetaDetails,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    watched_video_ids: Option<Vec<&'a str>>,
 }
 
 /// Parses a `snake_case` field name (`"board"`, `"meta_details"`, ...).
@@ -464,6 +478,54 @@ mod tests {
             request: catalog_request(base, r#type, id),
             content: None,
         }]
+    }
+
+    /// `watchedVideoIds` sits beside the model's own fields, names exactly
+    /// the videos the engine's bitfield marks, and is absent while there is
+    /// no bitfield to answer from; the bitfield itself never goes out.
+    #[test]
+    fn meta_details_names_the_watched_videos_beside_the_model() {
+        use stremio_core::types::resource::MetaItem;
+        use stremio_core::types::watched_bitfield::WatchedBitField;
+
+        let fixture: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/meta_details_series.json"
+            ))
+            .expect("the series fixture"),
+        )
+        .expect("valid JSON");
+        let meta: MetaItem =
+            serde_json::from_value(fixture["metaItems"][0]["content"]["content"].clone())
+                .expect("the recorded meta parses back");
+        let ids: Vec<String> = meta.videos.iter().map(|video| video.id.clone()).collect();
+        assert!(ids.len() >= 3, "a series with episodes");
+
+        let mut model = default_model();
+        model.meta_details.meta_items = vec![ResourceLoadable {
+            request: ResourceRequest::new(
+                url::Url::parse("https://v3-cinemeta.strem.io/manifest.json").unwrap(),
+                ResourcePath::without_extra("meta", "series", &meta.preview.id),
+            ),
+            content: Some(Loadable::Ready(meta)),
+        }];
+        let json = |model: &XtremioModel| -> serde_json::Value {
+            serde_json::from_str(&model.meta_details_json().expect("serializes")).expect("JSON")
+        };
+
+        let unwatched = json(&model);
+        assert!(unwatched.get("watchedVideoIds").is_none(), "{unwatched}");
+        assert_eq!(unwatched["metaItems"][0]["content"]["type"], "Ready");
+
+        let mut watched =
+            WatchedBitField::construct_from_array(vec![false; ids.len()], ids.clone());
+        watched.set_video(&ids[1], true);
+        model.meta_details.watched = Some(watched);
+        let state = json(&model);
+        assert_eq!(state["watchedVideoIds"], serde_json::json!([ids[1]]));
+        assert_eq!(state["metaItems"][0]["content"]["type"], "Ready");
+        assert!(state.get("watched").is_none(), "{state}");
     }
 
     /// The items of every `Ready` page of the recorded board fixture: what

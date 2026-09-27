@@ -40,9 +40,9 @@ The FFI surface, by file under `rust/src/api/`:
 
 | File | Functions |
 |---|---|
-| `hello.rs` | `init_app` (FRB's start-up hook), `bridge_version`, `core_schema_version` |
+| `hello.rs` | `init_app` (FRB's start-up hook); `bridge_version`, `core_schema_version` (test and diagnostic only) |
 | `core.rs` | `core_init`, `core_dispatch`, `core_get_state`, `core_events`, `core_shutdown`, `core_is_initialized` |
-| `server.rs` | `server_start`/`stop`/`base_url`; `server_settings`, `server_update_settings`; `server_torrent_stats`; `server_note_duration`, `server_note_player_opened`, `server_note_player_stalled`; `server_storage_report`, `server_cache_usage`, `server_clean_cache_now`; `server_background_traffic`; `server_stream_numbers`; `server_dht_status`; `server_drive_open`, `server_drive_grant`; `server_close_proxy_streams`; `server_set_lan_media`, `server_lan_media_running`, `server_lan_media_requests_served`, `server_lan_media_base_url` |
+| `server.rs` | `server_start`/`stop`/`base_url` (test and diagnostic only: `core_init` starts the app's server); `server_set_background`; `server_settings`, `server_update_settings`; `server_torrent_stats`; `server_note_duration`, `server_note_player_opened`, `server_note_player_stalled`; `server_storage_report`, `server_cache_usage`, `server_clean_cache_now`; `server_background_traffic`; `server_stream_numbers`; `server_dht_status`; `server_drive_open`, `server_drive_grant`; `server_close_proxy_streams`; `server_set_lan_media`, `server_lan_media_running`, `server_lan_media_requests_served`, `server_lan_media_base_url` |
 | `downloads.rs` | `downloads_add`, `downloads_remove`, `downloads_list`, `downloads_open`, `downloads_events`, `downloads_start_fresh` |
 | `prefs.rs` | `prefs_get_all`, `prefs_set` |
 | `subtitles.rs` | `subtitles_match` |
@@ -244,6 +244,20 @@ Everything the app asks is a `ServerHandle` call over FFI (the table in
 [The bridge](#the-bridge)), wrapped by `ServerClient`
 (`lib/core/server_client.dart`). The app's one write to the server's
 settings is `server_update_settings` -- what `POST /settings` runs.
+
+**In the background it goes lean, unless something needs its peers.**
+stream-server's `ServerHandle::set_background` (`server_set_background`)
+keeps every torrent running on a few peers instead of the configured limit
+and prunes the peer tables -- the share of a backgrounded server's memory
+measured to be both the largest and still growing, on a television whose
+low-memory killer takes the fattest background process first.
+`ServerFootprint` (`lib/shell/server_footprint.dart`) sends it lean when the
+app is hidden or paused and full when it resumes, and keeps it full while a
+download is on its way (unfinished and not in error, the foreground
+service's own test), a cast session is up, or the LAN media listener runs --
+it stands in front of that listener as the tree's `LanMediaControl`, which
+is how it hears the listener stop. Any of those ending while the app is away
+sends the server lean then.
 
 **Idle sharing is one settings key.** The server keeps uploading after
 playback when its `seedingEnabled` is true; false chokes the whole session

@@ -18,8 +18,8 @@ import 'diagnostics_report.dart';
 /// been through [redactSecrets]: the server's bearer token, auth keys and
 /// passwords never leave the process, and every URL is cut down to its
 /// origin unless its path is this app's own. With it on, the report is
-/// the log as written, full stream links included, which is what the
-/// switch says it adds.
+/// the log as written, credentials included, which is what the switch
+/// says it adds.
 class DiagnosticsScreen extends StatefulWidget {
   const DiagnosticsScreen({
     super.key,

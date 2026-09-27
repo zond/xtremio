@@ -16,11 +16,15 @@ import '../support/tv.dart';
 Future<DriveAccount> _account({bool linked = false}) async {
   final account = await driveAccount(now: () => pairingNow);
   if (linked) {
-    await account.linkFile(
+    await account.linkFiles(
       refreshToken: fakeRefreshToken,
-      fileId: 'drive-file-1',
-      name: 'Arrival (2016) 2160p.mkv',
-      mimeType: 'video/x-matroska',
+      files: [
+        (
+          fileId: 'drive-file-1',
+          name: 'Arrival (2016) 2160p.mkv',
+          mimeType: 'video/x-matroska',
+        ),
+      ],
     );
   }
   return account;

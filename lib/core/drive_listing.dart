@@ -402,8 +402,6 @@ final class DriveReloadDone extends DriveReloaded {
   /// binned, or no longer shared with this app.
   final int removed;
 
-  bool get changedNothing => renamed == 0 && removed == 0;
-
   @override
   String toString() => 'DriveReloadDone(renamed: $renamed, removed: $removed)';
 }

@@ -57,7 +57,6 @@ void main() {
       expect(meta.poster, startsWith('https://'));
       expect(meta.videos, isEmpty);
       expect(state.metaRequest?.base, kCinemetaManifestUrl);
-      expect(state.isLoadingMeta, isFalse);
       expect(state.metaError, isNull);
       expect(state.selectedVideo, isNull);
     });
@@ -96,7 +95,6 @@ void main() {
       });
       expect(empty.meta, isNull);
       expect(empty.metaError, isNull);
-      expect(empty.isLoadingMeta, isFalse);
       expect(empty.playableStreams, isEmpty);
     });
   });
@@ -355,9 +353,6 @@ void main() {
       expect(state.progress?.timeOffset, 0);
       expect(state.progress?.isResumable, isFalse);
       expect(state.nextVideo, isNull);
-      final urls = state.stream!.contentOrNull!;
-      expect(urls.magnetUrl?.scheme, 'magnet');
-      expect(urls.downloadUrl?.queryParameters['download'], '1');
     });
 
     test('surfaces a conversion error and unplayable kinds', () {
@@ -931,8 +926,6 @@ void main() {
       expect(cinemeta.configureUrl, isNull);
       expect(cinemeta.manifest.addonCatalogs, isNotEmpty);
       expect(cinemeta.manifest.resourceNames, contains('catalog'));
-      expect(profile.isAddonInstalled(kCinemetaManifestUrl), isTrue);
-      expect(profile.isAddonInstalled('https://x/manifest.json'), isFalse);
       expect(
         profile.installedAddon(kCinemetaManifestUrl)?.manifest.name,
         'Cinemeta',
@@ -991,13 +984,6 @@ void main() {
         expect(user.id, 'fake_user_id');
         expect(user.email, 'user@example.com');
         expect(user.avatar, isNull);
-        expect(user.fbId, isNull);
-        expect(user.premiumExpire, isNull);
-        expect(user.dateRegistered, DateTime.utc(2025, 6, 1, 8));
-        expect(user.lastModified, DateTime.utc(2026, 1, 15, 10, 30));
-        expect(user.gdprConsent.tos, isTrue);
-        expect(user.gdprConsent.marketing, isFalse);
-        expect(user.gdprConsent.from, 'xtremio');
         // Same addons as the anonymous profile: only `auth` differs.
         expect(
           profile.addons.length,
@@ -1135,7 +1121,6 @@ void main() {
           LibrarySort.watched,
           LibrarySort.notWatched,
         ]);
-        expect(state.selectable.selectedSort?.sort, LibrarySort.lastWatched);
         expect(
           state.selectable.sorts[1].request,
           const LibraryRequest(sort: LibrarySort.name),
@@ -1158,11 +1143,9 @@ void main() {
       expect(series.progress, isNull);
       expect(series.isWatched, isFalse);
       expect(series.timesWatched, 0);
-      expect(series.isInContinueWatching, isFalse);
       expect(series.notificationsDisabled, isFalse);
       expect(series.notifications, 0, reason: 'only the preview carries it');
       expect(series.lastWatched, isNotNull, reason: 'added = watched now');
-      expect(series.modifiedAt, isNotNull);
       expect(series.posterShape, 'poster');
       expect(state.items.last.name, 'The Whisper Man');
       expect(state.items.last.type, 'movie');
@@ -1188,7 +1171,6 @@ void main() {
       });
       expect(empty.isLoaded, isFalse);
       expect(empty.isEmpty, isTrue);
-      expect(empty.selectable.selectedSort, isNull);
       expect(LibraryState.fromJson({}).isLoaded, isFalse);
     });
 
@@ -1259,7 +1241,7 @@ void main() {
   });
 
   group('LibraryItemView', () {
-    test('derives continue-watching membership and the watched flag', () {
+    test('derives isInLibrary and the watched flag', () {
       final played = LibraryItemView({
         '_id': 'tt1',
         'type': 'movie',
@@ -1268,7 +1250,6 @@ void main() {
         'state': {'timeOffset': 5000, 'duration': 10000, 'timesWatched': 1},
       });
       expect(played.isInLibrary, isFalse);
-      expect(played.isInContinueWatching, isTrue, reason: 'temp with offset');
       expect(played.isWatched, isTrue);
       expect(played.progress, 0.5);
       final other = LibraryItemView({
@@ -1278,7 +1259,6 @@ void main() {
         'temp': false,
         'state': {'timeOffset': 5000, 'duration': 10000},
       });
-      expect(other.isInContinueWatching, isFalse);
       expect(other.isInLibrary, isTrue);
       final muted = LibraryItemView({
         '_id': 'x',
@@ -1287,7 +1267,6 @@ void main() {
       });
       expect(muted.notificationsDisabled, isTrue);
       expect(muted.lastWatched, isNull);
-      expect(muted.modifiedAt, isNull);
     });
   });
 
@@ -1349,10 +1328,8 @@ void main() {
         final state = AddonDetailsState.fromJson(json);
         expect(state.isLoaded, isTrue);
         expect(state.transportUrl, kCinemetaManifestUrl);
-        expect(state.isInstalled, isTrue);
         expect(state.localAddon?.manifest.name, 'Cinemeta');
         expect(state.remoteAddon?.transportUrl, kCinemetaManifestUrl);
-        expect(state.isLoadingManifest, isFalse);
         expect(state.manifestError, isNull);
         final fetched = state.remoteDescriptor!;
         expect(fetched.manifest.id, 'com.linvo.cinemeta');
@@ -1424,8 +1401,6 @@ void main() {
           },
         },
       });
-      expect(failed.isInstalled, isFalse);
-      expect(failed.isLoadingManifest, isFalse);
       expect(failed.manifestError?.message, 'Failed to fetch');
       expect(failed.remoteDescriptor, isNull);
       expect(failed.descriptor, isNull);
@@ -1439,7 +1414,6 @@ void main() {
           'content': {'type': 'Loading'},
         },
       });
-      expect(loading.isLoadingManifest, isTrue);
       expect(loading.manifestError, isNull);
 
       final unloaded = AddonDetailsState.fromJson({
@@ -1448,7 +1422,6 @@ void main() {
         'remoteAddon': null,
       });
       expect(unloaded.isLoaded, isFalse);
-      expect(unloaded.isLoadingManifest, isFalse);
       expect(unloaded.descriptor, isNull);
     });
   });
@@ -1496,12 +1469,6 @@ void main() {
         state.addons.any((a) => a.manifest.behaviorHints.configurationRequired),
         isTrue,
         reason: 'the fixture carries a configuration-required template',
-      );
-      // Installed is not part of the model: the profile decides.
-      final profile = ProfileState.fromCtx(loadCtxLoggedOutFixture());
-      expect(
-        state.addons.where((a) => profile.isAddonInstalled(a.transportUrl)),
-        isEmpty,
       );
     });
 

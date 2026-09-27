@@ -4,6 +4,7 @@ import '../../core/core.dart';
 import '../../shell/tv_density.dart';
 import '../../widgets/content_type_label.dart';
 import '../../widgets/shared_field_screen.dart';
+import 'addon_url_text.dart';
 import 'addon_widgets.dart';
 
 /// One addon by manifest URL (`addon_details`): the fetched manifest next
@@ -291,7 +292,7 @@ class _Details extends StatelessWidget {
         const SizedBox(height: 16),
         Text('Manifest URL', style: theme.textTheme.labelLarge),
         const SizedBox(height: 6),
-        SelectableText(
+        AddonUrlText(
           state.transportUrl ?? descriptor.transportUrl,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
@@ -389,7 +390,7 @@ class _ManifestError extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            SelectableText(
+            AddonUrlText(
               transportUrl,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(

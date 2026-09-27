@@ -288,6 +288,41 @@ void main() {
       expect(table.asked, ['movie/Avalon']);
     });
 
+    test('every suggestion is asked at once, and the row keeps the '
+        'suggested order', () async {
+      final asked = <String>[];
+      final answers = <String, Completer<List<Map<String, dynamic>>>>{};
+      Future<List<Map<String, dynamic>>> search(String type, String query) {
+        asked.add('$type/$query');
+        return (answers['$type/$query'] = Completer()).future;
+      }
+
+      final row = resolveSuggestions(
+        [said('Avalon', 2001), said('Stalker', 1979), said('Heat', 1995)],
+        subjectId: 'tt0000',
+        search: search,
+      );
+      await pumpEventQueue();
+      expect(asked, [
+        'movie/Avalon',
+        'movie/Stalker',
+        'movie/Heat',
+      ], reason: 'none waits for the one before it');
+
+      // Answered last to first; the film catalogue has no Stalker, so the
+      // series one is asked then, and only then.
+      answers['movie/Heat']!.complete([meta('tt3', 'Heat', '1995')]);
+      answers['movie/Stalker']!.complete(const []);
+      await pumpEventQueue();
+      expect(asked.last, 'series/Stalker');
+      answers['series/Stalker']!.complete([
+        meta('tt2', 'Stalker', '1979', type: 'series'),
+      ]);
+      answers['movie/Avalon']!.complete([meta('tt1', 'Avalon', '2001')]);
+
+      expect((await row).map((r) => r.item.id), ['tt1', 'tt2', 'tt3']);
+    });
+
     test('the imdb id is the id, and the query names the type', () async {
       // Cinemeta answers both and they agree; an addon that keys its own
       // way does not, and the imdb id is the one the rest of the app is

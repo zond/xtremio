@@ -654,7 +654,7 @@ impl Env for XtremioEnv {
 /// not in a module's own test mod -- and they queue behind each other
 /// instead of pulling the directory out from under one another. Whatever
 /// can be said about a pure function is said about one instead
-/// (`registry_path_in`, `only_downloaded_moved`), and everything else now
+/// (`registry_path_in`, `Progress::only_downloaded_moved_from`), and everything else now
 /// runs against its own `AppState`.
 #[cfg(test)]
 static STORAGE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

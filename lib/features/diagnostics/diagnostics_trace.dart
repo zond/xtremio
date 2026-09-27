@@ -31,12 +31,16 @@ class DiagnosticsTraceSync {
 
   static const String title = 'Verbose logging';
 
-  /// What turning it on buys, on the tile, in one line: the two logs it
-  /// opens up. (A longer version said why and when; on a settings tile
-  /// about verbosity that read as a joke.)
+  /// What turning it on buys, on the tile: the two logs it opens up, and
+  /// plainly what it costs. Nothing in the report is redacted while it is
+  /// on -- not a URL, not a token, not a password -- because a redacted
+  /// line is the one a problem hides in; so the tile says the report then
+  /// holds credentials, in that word. (A longer version said why and when;
+  /// on a settings tile about verbosity that read as a joke.)
   static const String description =
-      'Adds cache, image and player detail and full stream links (which can '
-      'hold account keys) to the report.';
+      'Adds cache, image and player detail to the report and redacts '
+      'nothing: while on, the log includes credentials (account keys, '
+      'passwords, tokens).';
 
   /// The viewer's choice, and what tells this when it changes.
   final AppPrefs prefs;
