@@ -60,12 +60,12 @@ screen-by-screen inventory, and a feature with a design document links it.
   declared frame rate decides one. What was fixed is stored against the
   series and the subtitle's release group (a shift against the video release
   too), so the next episode starts right
-  ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
+  ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#subtitles)).
 - **Android TV and Google TV as their own layout**, not a phone app on a big
   screen: D-pad traversal with a focus memory per tab, a focus ring built to
   read over unknown poster art, remote keys in the player, ten-foot density
   and overscan. Run on a physical Chromecast with Google TV
-  ([ANDROID.md](ANDROID.md)).
+  ([docs/ANDROID.md](docs/ANDROID.md)).
 - **Casting to a Chromecast** from an Android phone, where the receiver can
   decode what the embedded server is already serving. The bytes go over the
   LAN untouched, from a second listener on the server that exists only while
@@ -84,6 +84,10 @@ screen-by-screen inventory, and a feature with a design document links it.
   or the title played last fetching what it keeps). Pressed while it shows an
   upload, it offers *Not now* (until the next start) or *Stop sharing*; while
   it shows bytes coming in, a *Cancel* for each offline download on its way.
+- **More like this.** A row of suggestions on every title, asked of a model
+  once per title for everybody by this project's own service -- no key in
+  the app -- and shown only when a catalogue confirms the title and year
+  ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#recommendations)).
 - **Addons installed from the web.** An addon site's Install button hands the
   OS a `stremio://` link; where Xtremio can register that scheme it opens
   that addon's details screen, and nothing is installed until the button
@@ -101,22 +105,10 @@ build is unsigned. The APKs carry this project's own release key, so anyone
 who installed one from before that key must uninstall first: to Android, a
 signing certificate *is* the app's identity.
 
-```bash
-flutter pub get
-make run DEVICE=linux   # flutter run -d linux, stamped with version and commit
-make linux              # a release build; also apk, apk-tv, apk-split, macos, ios (compile check)
-```
-
-The Makefile adds two `--dart-define`s so the Diagnostics screen can say which
-build it is, and its APK targets also set the ABI and a version code that
-Android installs over an APK from `make apk-split`. Plain
-`flutter run -d <device>` works too and reports `app: unknown`. A build needs
-Flutter stable (CI uses 3.47.1) and a Rust toolchain no older than
-`rust-version` in `rust/Cargo.toml` (1.97.1): the Rust crate is compiled by
-the build itself, through cargokit. Linux desktop also needs `clang`, `cmake`,
-`ninja`, `pkg-config`, GTK 3 dev libraries, `libmpv-dev` (media_kit) and
-`libsecret-1-dev`; Android has a document of its own, [ANDROID.md](ANDROID.md).
-Everything else a dev machine wants is in [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Building it yourself needs Flutter stable and a Rust toolchain; `make run
+DEVICE=linux` runs it, and the setup, the `make` targets and what a build
+stamps are in [docs/OPERATIONS.md](docs/OPERATIONS.md#building-and-running)
+(Android: [docs/ANDROID.md](docs/ANDROID.md)).
 
 ## How it works
 
@@ -149,10 +141,7 @@ stremio-core's requests to it carry a per-launch bearer token that only the
 Rust side holds. The only HTTP it serves beyond loopback is the media listener
 a cast session turns on and off. Because a capable on-device player handles
 codecs and subtitles, the server never transcodes -- it just gets bytes onto an
-HTTP connection. Settings can point stremio-core at a remote streaming server
-by URL, and torrents then play straight off that one; the embedded server
-still starts and still fronts an addon's direct links. The embedded one is
-the default.
+HTTP connection.
 
 How that bridge is built, what crosses it and what every field of the state
 means is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -171,8 +160,8 @@ sockets, a local HTTP server, disk cache, and libmpv. That decides everything.
 | **Linux (desktop)** | ✅ First-class | The easiest target; video is software-rendered until media_kit's Linux renderer lands ([docs/OPERATIONS.md](docs/OPERATIONS.md#linux-video-is-software-rendered-for-now)). |
 | **Windows (desktop)** | ✅ Built weekly in CI (`build.yml`) | Flutter desktop, media_kit and native Rust, as on Linux; registering `stremio://` needs an installer and there is none ([docs/DEEP_LINKS.md](docs/DEEP_LINKS.md)). |
 | **macOS (desktop)** | ✅ Built weekly in CI (`build.yml`) | Native Rust + media_kit; unsigned, and needs a Mac to build yourself -- there is none in the project. |
-| **Android** | ✅ Supported | Rust cross-compiles to the NDK and is embedded as a native lib; the primary mobile target ([ANDROID.md](ANDROID.md)). |
-| **Android TV / Google TV** | ✅ Supported | The same app, not a separate build; install the APK for the ABI the box reports -- a Chromecast with Google TV is 32-bit, `make apk-tv` ([ANDROID.md](ANDROID.md)). |
+| **Android** | ✅ Supported | Rust cross-compiles to the NDK and is embedded as a native lib; the primary mobile target ([docs/ANDROID.md](docs/ANDROID.md)). |
+| **Android TV / Google TV** | ✅ Supported | The same app, not a separate build; install the APK for the ABI the box reports -- a Chromecast with Google TV is 32-bit, `make apk-tv` ([docs/ANDROID.md](docs/ANDROID.md#running-on-a-physical-device)). |
 | **iOS** | ❌ Does not build as checked in | Two upstream dependencies do not build for iOS as released; with the two changes in [docs/OPERATIONS.md](docs/OPERATIONS.md#building-for-ios) it compiles. Past that, there is no signing identity here, the App Store is out on GPL-3 (see [License](#license)), and iOS throttles background work. |
 | **Web** | ❌ Not possible | A browser cannot do BitTorrent -- no raw sockets, no local server, no libmpv. A thin client onto a separate server is a different architecture, not this app. |
 
@@ -191,13 +180,16 @@ What is genuinely not built:
 | Document | What is in it |
 |---|---|
 | [docs/STATUS.md](docs/STATUS.md) | What is built today, screen by screen. |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the Rust core is wired in: the bridge, what crosses it as JSON, every model field, the pinned forks, and what the app reads from the settings. Its design notes are [docs/phase3-design.md](docs/phase3-design.md). |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | What to run before a commit, how to see video play, what the server's storage costs, getting a log off a device, and what an iOS build needs. |
-| [ANDROID.md](ANDROID.md) | Building, running and verifying on Android and Android TV: prerequisites, the APK, the manifest decisions, the emulators, a real box. |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How it works: the bridge and what crosses it, the wire conventions, the embedded server, the player, subtitles, downloads, Google Drive, the library, recommendations, and the pinned forks. |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Setting up, building and running, re-recording fixtures, server storage, diagnostics, the stats OSD, and what an iOS build needs. |
+| [docs/ANDROID.md](docs/ANDROID.md) | Android and Android TV: prerequisites, the APK, manifest and channels, display frame rate, downloads in the background, emulators, a real box. |
 | [docs/CASTING.md](docs/CASTING.md) | The cast button: what it hands a receiver untouched, and every rule it refuses on. |
 | [docs/ADDONS.md](docs/ADDONS.md) | How each installed addon has been answering, and the verdict the Installed tab reads off that record. |
 | [docs/DEEP_LINKS.md](docs/DEEP_LINKS.md) | What a `stremio://` link may and may not do, and how the scheme is registered on each platform. |
-| [AGENTS.md](AGENTS.md) | How changes are made here: verification, tests and fixtures, what is never logged, and the rules the code depends on. |
+| [docs/WISHLIST.md](docs/WISHLIST.md) | What is deliberately not built yet, and why. |
+| [AGENTS.md](AGENTS.md) | The rules a change has to keep: commits, the verification gates, tests and fixtures, and the invariants the code depends on. |
+| [xtremio-xervice/README.md](xtremio-xervice/README.md) | The Firebase service behind Drive pairing, Drive play tracking and recommendations. |
+| [tool/recommendations/README.md](tool/recommendations/README.md) | How the recommendation model and question were chosen, and the benchmarks. |
 
 ## Contributing
 

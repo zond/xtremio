@@ -65,7 +65,8 @@ running, `./build/linux/x64/debug/bundle/xtremio
 "stremio://v3-cinemeta.strem.io/manifest.json"` exits immediately without
 starting a second copy, and the running instance pushes the addon-details
 route (a second, different link replaces it). Android was not run against a
-device here; the `adb` line for it is in [ANDROID.md](../ANDROID.md).
+device here; the `adb` line for it is in
+[ANDROID.md](ANDROID.md#manifest-and-platform-channels).
 
 No App Links / Universal Links verification is possible for any of these: the
 host in a `stremio://` URL is the *addon's* domain, which could be anyone's,

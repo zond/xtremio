@@ -4,7 +4,7 @@
 /// a `.rar` of a release, a torrent whose one big file is a disc image.
 /// Until now that was the end of it -- "this source is a RAR archive,
 /// which can't be played". The streaming server reads such a container as
-/// *ranges of itself* now (`docs/translated-sources.md` in the
+/// *ranges of itself* now (`docs/design/translated-sources.md` in the
 /// stream-server tree): it indexes the container with a handful of small
 /// reads, works out which bytes of it are the film's bytes, and serves
 /// those. Nothing is extracted and nothing is written, so a member is

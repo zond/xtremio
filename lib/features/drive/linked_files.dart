@@ -16,10 +16,10 @@
 ///    episode where the name gave one. Exactly what a search result does,
 ///    by the same route with the same arguments: two ways into one title is
 ///    two things to keep agreeing, and there is no flag here for the details
-///    screen to read. It will not list the Drive file yet. That is the
-///    follow-up's job and not something to paper over from here -- playing
-///    the file directly instead would be the wrong destination made
-///    permanent by being convenient.
+///    screen to read. The details screen lists the linked file among the
+///    title's sources (`drive_source.dart`), and playing it from there is
+///    what records the viewer's progress against the title, which is why a
+///    press here does not play the file directly.
 ///  * **Unmatched** -- the player, on the file itself. There is no title
 ///    page to send anybody to, and a screen invented for the failure case
 ///    would be a screen that exists because something did not work.

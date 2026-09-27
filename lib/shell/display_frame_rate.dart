@@ -45,7 +45,7 @@ abstract interface class DisplayFrameRate {
 
 /// [DisplayFrameRate] over the `xtremio/device` channel, which
 /// `MainActivity` answers (`Surface.setFrameRate` on Android 12 and up,
-/// the window's `preferredDisplayModeId` below it; see ANDROID.md), and
+/// the window's `preferredDisplayModeId` below it; see docs/ANDROID.md), and
 /// the `xtremio/display` event channel, which it pushes the live rate on.
 ///
 /// Only a television is ever asked, and that gate is the caller's --

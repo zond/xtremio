@@ -52,7 +52,7 @@ jobs:
   # builds it (rust_builder/cargokit/build_tool/lib/src/android_environment.dart),
   # from the NDK the runner image ships. armv7 has no pregenerated aws-lc-sys
   # bindings, so bindgen runs, which wants libclang on the host and the NDK
-  # sysroot for its headers (ANDROID.md, "Prerequisites"), and the cc builder
+  # sysroot for its headers (docs/ANDROID.md, "Prerequisites"), and the cc builder
   # rather than CMake, as rust/cargokit.yaml forces for the app build.
   rust-armv7-android:
     name: Rust (check, armv7-linux-androideabi)

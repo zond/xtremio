@@ -1,6 +1,9 @@
 # xtremio-xervice
 
-Pairing a television with files in a Google Drive, over a QR code.
+Pairing a television with files in a Google Drive, over a QR code -- and,
+beside it, the manifest that Drive plays are tracked under and the "More
+like this" answers ([below](#more-like-this)). Served at
+`https://xtremio-xervice.web.app`.
 
 The television cannot run the Google Picker — it is web-only — and cannot
 hold an OAuth client secret, because it is an app anybody can unpack. So
@@ -27,7 +30,7 @@ A television draws the QR for step 2 and a phone opens that link itself,
 which is the only place the two shapes differ — and the one thing the
 service is told about it. See *Two shapes* below.
 
-Nothing is stored long-term. A refresh token lives here for the minutes
+Nothing of a pairing is stored long-term. A refresh token lives here for the minutes
 between a phone signing in and a television collecting it.
 
 ## What a session carries
@@ -106,6 +109,19 @@ empty answer is what it gets, and the app finds the next episode's Drive
 file itself. It is not meant to be installed, and installing it adds
 nothing.
 
+## More like this
+
+`GET /similar/{type}/{id}` (a Cinemeta id, `movie` or `series`) answers
+`{"titles": [{title, year, kind, why}, …]}`: what a model suggests watching
+after that title. It is its own function (`functions/similar.js`) with its
+own secret, `GEMINI_API_KEY`, so a Gemini outage cannot touch pairing. The
+question is built here from Cinemeta's name and year for the id, so nobody
+can put their own text through the key, and the first answer for a title is
+stored in Firestore under the title and `QUESTION_VERSION` and served to
+everyone after -- one model call per title, ever, until the question
+changes. There is no "ask again". How the model and the wording were chosen
+is `tool/recommendations/README.md`.
+
 ## Why there is no App Check
 
 App Check attests that a request came from a build Google Play
@@ -144,6 +160,7 @@ Then the secrets and the two values the pages need:
 firebase use xtremio-xervice
 firebase functions:secrets:set OAUTH_CLIENT_ID        # the web client id
 firebase functions:secrets:set OAUTH_CLIENT_SECRET    # its secret
+firebase functions:secrets:set GEMINI_API_KEY         # for /similar
 
 # The pages carry two public values; neither is a secret.
 sed -i "s/__CLIENT_ID__/<the web client id>/" public/link.html
@@ -205,9 +222,9 @@ ls -l /tmp/chunk.bin        # expect 1024 bytes, and a 206 above
 
 A `206 Partial Content` and exactly 1024 bytes is the answer: this flow
 can serve byte ranges out of a viewer's Drive, which is all the streaming
-server needs (`docs/translated-sources.md` specifies `DriveSource` as "a
-`ProxySource` with a header supplier that refreshes" — the header
-supplier is `POST /refresh`).
+server needs (stream-server's `docs/design/translated-sources.md`
+specifies `DriveSource` as "a `ProxySource` with a header supplier that
+refreshes" — the header supplier is `POST /refresh`).
 
 ## The question this proof no longer turns on
 

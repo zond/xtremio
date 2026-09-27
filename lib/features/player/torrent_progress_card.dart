@@ -233,8 +233,8 @@ class TorrentProgressCard extends StatelessWidget {
 /// thing on this card measuring bytes that are still moving -- and the only
 /// one that has to be careful about it.
 ///
-/// Three rules, all of them the server's own (`stream-server`'s README,
-/// "The in-flight piece"), and none of them what a plain
+/// Three rules, all of them the server's own (`stream-server`'s
+/// `docs/stats.md`, "The in-flight piece"), and none of them what a plain
 /// `LinearProgressIndicator(value: piece.progress)` would do:
 ///
 /// * **Full is not finished.** `downloadedBytes` counts chunks the moment

@@ -1,1465 +1,880 @@
-# How the Rust core is wired in
+# How the app is built
 
-Where the Dart side and the Rust core meet: the bridge, what crosses it, and
-what every model field means. The shape of the thing is in the
-[README](../README.md#how-it-works); this is the wiring.
+Where the Dart side and the Rust core meet, what crosses between them, and
+how each part of the app works on top of that. The shape of the thing is in
+the [README](../README.md#how-it-works); the rules a change has to keep are
+in [AGENTS.md](../AGENTS.md); running and checking it is in
+[OPERATIONS.md](OPERATIONS.md).
 
-- **Bridge:** [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge)
-  2.13.0 with the cargokit backend. Codegen, Dart package and Rust crate must
-  be the exact same version (FRB refuses to start otherwise). The crate lives
-  in `rust/` (package `xtremio_core`, cdylib + staticlib, plus rlib for its
-  own tests); `rust_builder/` is the generated FFI-plugin glue that builds it
-  for each platform; `lib/src/rust/` and `rust/src/frb_generated.rs` are
-  generated and committed. After changing anything under `rust/src/api`, run
-  `flutter_rust_bridge_codegen generate` and commit the result (CI fails on
-  drift).
-- **State crosses as JSON.** `core_dispatch` takes a stremio-core `Action`
-  as JSON, `core_get_state(field)` returns one model field as JSON, and
-  `core_events` streams `RuntimeEvent`s (`NewState` lists the fields that
-  changed). Every stremio-core type already derives serde, so this costs no
-  per-type mirroring and survives engine upgrades; Dart keeps small view
-  classes (`lib/core/state/`) over the maps. Where the raw model lacks what
-  the UI needs, `get_state_json` (`rust/src/model.rs`) adds a sibling key
-  rather than reshaping the field: `meta_details` gains `watchedVideoIds`,
-  `board`/`search` gain `catalogLabels` (catalog and addon names resolved
-  from the profile's manifests, aligned with `catalogs`).
-  Those two fields do not follow the library (`GridCatalogs` in `model.rs`),
-  since nothing they carry reads it: stremio-core marks them changed on every
-  library change because stremio-web merges library flags into the board it
-  serializes, and here that was the whole board re-serialized and re-decoded
-  on the UI isolate per pause and per progress push. The one field that *is*
-  reshaped is those two: a board or search item crosses as what a poster tile
-  draws -- `id`, `type`, `name`, `poster`, `posterShape`, `releaseInfo`
-  (`GridItem`) -- and not the whole `MetaItemPreview`, whose `links` alone
-  were three fifths of a 1.4 MB board re-serialized every time a row landed.
-  `core_get_state` takes an owned snapshot under the model's read lock and
-  serializes after letting it go (`FieldSnapshot`), so a board pull no longer
-  parks every dispatch behind it. The model
-  (`XtremioModel`) has `ctx`, `continue_watching_preview`, `board`,
-  `search`, `discover`, `meta_details`, `streaming_server`, `player`,
-  `library`, `installed_addons`, `remote_addons` and `addon_details`;
-  `lib/core/fields.dart` mirrors the list. `ctx` serializes as
-  `{profile, notifications, events}` only — the library, streams and
-  server-URL buckets it also holds are `#[serde(skip)]` — so the Library
-  screen reads its own `library` field (`LibraryWithFilters<NotRemovedFilter>`,
-  snake_case keys such as `next_page`). Typed FRB structs can be added
-  for hot paths later if profiling asks for it.
-- **What the crate keeps between calls is one value** (`rust/src/state.rs`):
-  `AppState`, grouped by concern (`core` — the Runtime, its event sink and
-  the events buffered before one arrives; `server` — the running handle;
-  `downloads` — the registry file's lock, the progress sink and the ticker
-  flag), behind the one process static there is. `core_init` creates it, or
-  adopts the one the event-stream subscribe made just before it, and
-  `core_shutdown` takes the whole value out of the process, so a second
-  boot starts clean instead of inheriting the first one's sinks. Every lock
-  is a field inside it, never one around it: a caller clones the `Arc` and
-  takes only what it needs, so nothing coarse is held across the server's
-  blocking calls. What stays a `static` says why it has to
-  (`env.rs`'s `STORAGE_DIR`, because `Env` is a trait on a *type* with no
-  `self` to hang a directory on; the tokio runtimes and the HTTP client,
-  which are process-wide by nature; `logging.rs`'s `INIT`, which guards
-  `tracing`'s own global).
-- **The engine runs on our `Env`** (`rust/src/env.rs`): reqwest + rustls for
-  HTTP, trusting Mozilla's compiled-in roots rather than the device store
-  (`http_client_builder` says why: on Android the platform verifier has Java
-  download and parse CRLs on every handshake), one JSON file per bucket
-  under the app-support directory with
-  temp-then-fsync-then-rename writes, and two lib-owned tokio runtimes
-  (concurrent + a single-worker sequential one for ordered persistence).
-  Every HTTP body is read under a cap (`MOST_JSON_BYTES`, 32 MiB, ten times
-  the largest real answer measured; 4 MiB for a subtitle file) chunk by
-  chunk, so a compressed answer that inflates past it is abandoned rather
-  than buffered, and no error out of `fetch` or `fetch_text` carries the URL
-  (`without_url`), since an addon's can hold a debrid key. A bucket that
-  will not parse at boot is moved aside as `<key>.json.corrupt-<seconds>`
-  and read as empty; one the disk will not read refuses the boot
-  (`core_init` fails and the Dart boot screen shows why) instead of
-  starting an anonymous profile the first persist would write over the
-  real one. A stremio-core schema migration that fails refuses the boot the
-  same way (a read or write the disk refused, or buckets a newer build
-  wrote), unless all it hit was a bucket that will not parse, which is
-  then moved aside like any other. `core_shutdown` waits (up to 5 s) for
-  the storage writes the engine has queued, and a bucket write never lands
-  over a newer one of the same file, whatever order the two were queued in.
-- **The app's own preferences are a file beside those buckets**
-  (`rust/src/prefs.rs`, `<storage_dir>/xtremio_prefs.json`): a flat JSON
-  object of client-side choices -- how a list is laid out, which view a
-  screen comes up in -- written with the same atomic write. A file that
-  will not parse is moved aside (`xtremio_prefs.json.corrupt-<seconds>`)
-  and reads as empty; one the disk will not read is an error to
-  `prefs_get_all` and refuses `prefs_set`, since a read-modify-write of one
-  key over a file that could not be read is the whole file gone. They are
-  deliberately *not* stremio-core `Settings` fields (that struct is the
-  engine's and is synced to the account; a field there means forking the
-  core) and deliberately not a Dart preferences package (the directory is
-  already ours). The FFI is `prefs_get_all()` and `prefs_set(key,
-  value_json)` (`rust/src/api/prefs.rs`) -- two calls, so a new choice
-  costs a key and no regenerated bindings -- wrapped by `PrefsClient` in
-  `lib/core/prefs_client.dart` and read once at start-up into `AppPrefs`,
-  which `XtremioApp` hands down as a `PrefsScope`. The file is forgiving
-  and additive like the downloads registry: a write is a read-modify-write
-  of one key, a key from a newer build survives it, and a file that cannot
-  be parsed reads as "nothing set" rather than as a failure. Today it holds
-  ten keys: `streamsSectioned` (the Details screen's sources list,
-  sectioned by resolution -- the default -- rather than grouped by addon;
-  an install from before the rename is read from the older `streamsFlat`
-  name it was stored under, never written back), `openStreamSections`
-  (which resolution sections are expanded, empty meaning every one
-  collapsed on purpose rather than "unset"), `openStreamAddons` (the same
-  for the grouped layout's addon groups, by transport URL, and a key of
-  its own because an addon may be called what a resolution is called and
-  because the two layouts ask different questions), `streamsOrder` (what
-  order the streams inside one of those sections are in), `bufferAhead`
-  (how far ahead playback buffers, below), `focusEmphasis` (Settings ->
-  Interface -> "Bold focus", a switch offered on a television only:
-  `standard` is the two-stroke ring with its zoom and shadow, `bold`
-  thickens the ring and dims everything the remote is not on, for a bright
-  room a display cannot fight; an unreadable or absent value is `standard`.
-  It reaches the app twice over: `FocusHighlight` reads it for what the app
-  draws itself, and `FocusTheme.apply` derives it into the `ThemeData` the
-  app runs under, so every Material control is marked without opting in --
-  see AGENTS.md, *Eleven rules a real device taught us*),
-  `shareWhileIdle` (whether the server goes on uploading while nothing
-  plays; on unless the viewer turned it off), `verboseDiagnostics`
-  (Settings -> "Verbose logging": the server's retention trace, mpv's
-  demuxer, stream and cache lines and whole stream URLs in the log),
-  `subtitleSync` (the subtitle timings the viewer has fixed by hand, most
-  recent first, bounded by recency -- see Subtitles) and `subtitlePicks`
-  (which subtitle each show was last watched with, and how often each
-  language has been picked). Nothing
-  secret goes in it.
-- **How far ahead playback buffers is the viewer's choice.** The streaming
-  server reads ahead of the play head by a window sized for a healthy
-  connection and a patient player; a spotty link, or a receiver with a
-  shallower buffer than mpv's, wants more, and a fast link on mobile data
-  wants less. The server takes that as `?buffer=normal|large|maximum` on
-  the stream URL: seconds of the film held and read ahead, at the film's
-  own bitrate -- 90 s for `normal`, four minutes for `large`, and a day
-  for `maximum`, which no film reaches, so the cache budget alone bounds
-  it. The seconds are convertible only once the server knows the film's
-  length, which the app tells it (`_reportDuration` in the player screen
-  -> `PlayheadReporter.noteDuration` -> `server_note_duration`); until it
-  has, every profile reads ahead by the same 4 MiB fallback, so the
-  startup window is the same under all three and nothing starts more
-  slowly. The app adds
-  it in `withBufferAhead` (`lib/core/buffer_ahead.dart`) to the URL
-  stremio-core resolved, and only for a torrent served over http(s) -- an
-  addon's own host knows nothing about it, and a kept download's URL is
-  this server's own media route with every piece already here. It
-  is additive on the wire: a server that predates the parameter ignores it.
-  Settings -> Player -> "Buffer ahead" is the standing choice
-  (`AppPrefs.bufferAhead`); the player's own settings sheet overrides it
-  for the playback on screen and reverts with the next one. Changing it
-  mid-playback re-opens the stream at the position it is at -- one `open`
-  on the same engine, no `Load Player` and no restart -- because the window
-  only reaches libmpv through the URL it is already fetching. The top of
-  the scale is not a window at all: **"Download the whole file"** pins the
-  stream as an offline download while it plays, which is the existing
-  mechanism (it appears in Downloads and is deleted there, and the server's
-  free-space check guards it exactly as it guards a pin from Details). A
-  device that cannot fit the file is told so, with the numbers the server
-  refused on, and left buffering as far ahead as it can instead.
-- **The server is in-process**: `stream_server::start` runs on its own
-  thread and runtime; the core's `streaming_server_url` is pointed at it
-  at every launch, whatever the persisted profile held
-  (`core::pin_to_embedded`). It is the only server the app streams from:
-  everything the app asks of a server goes to it over FFI, so there is no
-  "remote server" choice (there was one, and it split the player between
-  two servers). Both ports are ephemeral -- the HTTP listener and
-  the BitTorrent one -- because the pin reads the bound address back, so
-  nothing downstream needs a number and asking for 11470 could only collide
-  with a desktop Stremio. Login and logout reset the profile's
-  settings to stremio-core's defaults (`http://127.0.0.1:11470/`), so the
-  event pump re-applies the pin on `UserAuthenticated` /
-  `UserLoggedOut`.
-- **The server's control API requires a bearer token; only Rust has it.**
-  `ServerConfig::default()` generates a token per launch, and every
-  non-media route -- which is exactly the handful stremio-core calls:
-  `/settings`, `/network-info`, `/device-info`, `/get-https`, `/casting`,
-  `/create`, `/{infoHash}/create`, `/{infoHash}/{fileIdx}/stats.json` --
-  answers 401 without `Authorization: Bearer <token>`; the app itself
-  never speaks HTTP to the server (everything else is a `ServerHandle`
-  call over FFI, and the server has no other control routes); the media routes libmpv
-  fetches (`/{infoHash}/{fileIdx}`, archives, `/proxy`) and the
-  `/local-addon` stubs stay open. stremio-core reaches the server only
-  through `Env::fetch`, so `rust/src/env.rs` adds the header when the
-  request's scheme, host and effective port are the embedded server's
-  (`server::token_for`; any other host, loopback included, gets nothing).
-  The Dart side never sees the token and never speaks HTTP to the server:
-  the app's own control calls are FFI functions over `ServerHandle`'s
-  library API in `rust/src/api/server.rs` — `server_torrent_stats(info_hash,
-  file_idx, trackers)` (the per-file or torrent-level `stats.json` as
-  JSON), `server_settings()` and `server_update_settings(patch_json)`
-  (`GET`/`POST /settings`), plus `server_storage_report()`,
-  `server_cache_usage()` and `server_clean_cache_now()` (see "What the
-  server's storage costs"), `server_background_traffic()` (below) and
-  `server_stream_numbers(url)` (what the server holds of one playing
-  stream, asked with the URL the *engine* was handed — the address the
-  bytes are cached under, which for anything but a torrent is this
-  server's own `/proxy` route: the cache either side of the playhead and,
-  for a torrent, the set committed for sharing and what it has moved since
-  it went live — the stats panel's cache and sharing rows), and
-  `server_drive_open(file_id, refresh_token, name)` (below)
-  —
-  wrapped by `ServerClient` in
-  `lib/core/server_client.dart`. Nothing logs the token; the header value
-  is marked sensitive. `media_kit`'s `Media.httpHeaders` could carry it to
-  mpv should a media route ever need it; none does.
-- **A linked Google Drive file becomes a URL the same way**, and
-  `server_drive_open` is the one call that does it: the app hands down a
-  file id and the account's refresh token, the server opens the file as a
-  `DriveSource` and remembers it, and what comes back is
-  `http://127.0.0.1:<port>/drive/stream/<random key>` — an open media route
-  carrying no credential, which is what mpv can fetch. The grant is an
-  argument to a function call inside the process and is spent there for an
-  hourly access token; it is in no URL, no log line and no error, which is
-  the whole reason the create is not an HTTP request (stream-server's
-  `routes::drive`). The answer is `{ok, url, name?, contentType, length}`
-  or `{ok: false, reason}`, and `reason: "pairAgain"` is the terminal one:
-  the grant is gone, so `openLinkedDriveFile`
-  (`lib/core/drive_playback.dart`) calls `DriveAccount.notePairAgain` on
-  the way past and every screen reading the account redraws on a fresh QR.
-  A Drive file has no addon and no metadata, so what the player is given is
-  a hand-built `Stream` JSON (`driveStreamJson`) whose `name` is the file's
-  own name — `PlayerState.title` falls through to it with no meta item —
-  with `Google Drive` as the description and the same name in
-  `behaviorHints.filename`, which is the only thing the cast check can read
-  a container off a `/drive/stream/<key>` URL from. Until a Drive file has
-  a board row of its own, the list on the pairing screen
-  (`DrivePairingScreen`) is where one is played from.
-- **A Drive play of a known title is tracked like any other**, because it
-  is loaded with a stream request: stremio-core's player writes the resume
-  position, the watched mark and Continue Watching from `TimeChanged`
-  only when the selection has one, and finds the next episode by its id.
-  The request is `driveStreamRequest` (`lib/core/drive_playback.dart`),
-  and it names this app's own service --
-  `https://xtremio-xervice.web.app/manifest.json`, a truthful manifest
-  offering no streams -- rather than any installed addon, which would be
-  crediting an addon with a file it never offered. Every `stream/...`
-  under it is one static `{"streams":[]}` (a Hosting rewrite, cached a
-  day), so the core's next-episode fetch costs a CDN hit and finds
-  nothing; `_playNext` in the player finds a linked Drive file of the next
-  episode itself, after a finished download and before the core's own
-  next stream. Addon health skips that address like the loopback stubs
-  (`is_own_stub`). Details passes it for the video on screen, the pairing
-  screen for a file already matched (with a Cinemeta meta request), and a
-  Drive download stores it -- a row an older build stored without one gets
-  it at play time (`DownloadsScreen.streamRequestOf`). An unmatched file
-  plays with none: it has no title to keep progress on.
-- **Whether the server shares between sessions is the app's decision, and
-  it is one settings key.** The server keeps uploading after playback ends
-  when its `seedingEnabled` setting is true (its own default); when it is
-  false it uploads only while a player is reading from it. **It is one
-  choke on the whole session, not a rule about torrents**: the setting and
-  the liveness cell are read together on every reconciler pass
-  (`EngineFS::apply_upload_switch`, `enginefs/src/lib.rs`), and the answer
-  is a single `set_upload_enabled` on the backend — so nothing is paused,
-  no peer is dropped, and what any torrent *downloads* is untouched. A
-  title kept offline is not exempt and does not need to be: it goes on
-  downloading whatever the switch says, and while the switch is on it is
-  shared on the same terms as everything else. **What it buys is minutes,
-  not sessions**: an unpinned engine nothing is streaming is removed 300 s
-  after it went idle whatever the setting says
-  (`INACTIVE_TORRENT_REMOVE_TIMEOUT`, same file), so the setting's real
-  effect is whether those five minutes are spent uploading. The setting's
-  subtitle says that and says nothing else.
-  The app decides
-  the value and writes it through `ServerClient.updateSettings`
-  (`server_update_settings`, the same function `POST /settings` runs), which
-  is the only way it changes anything about the server.
-  `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`) is what
-  decides, and the viewer's `shareWhileIdle` preference is the whole of the
-  decision — **on by default on every device**. Nothing asks what the
-  connection costs: the term that did (a `ConnectivityManager` watcher
-  behind an event channel, refusing to seed on a metered link) could only be
-  answered on Android, and answered "unmetered" unconditionally on the
-  desktops, so a tethered laptop seeded over mobile data under a tile
-  promising it never would. What replaced that guess is showing the truth —
-  see the status light below. The policy pushes only changes, serialises its
-  writes, and pushes the first as soon as the preferences have loaded; a
-  "Not now" (`pauseUntilRestart`) holds its answer at false for the rest of
-  the run without writing anything down. A pause is a state of a switch that
-  is on, and that is held from both ends: either press of the switch lifts
-  one, and `pauseUntilRestart` refuses one while the switch is off. So the
-  settings tile's "Paused until you next start Xtremio." is never drawn
-  under a switch that is off, where the resumption it promises would never
-  come. The policy notifies when that pause goes on or off, which is how the
-  tile sees a "Not now" granted by a popup drawn over it.
-- **The status light says what is happening, and it is the only thing that
-  says it.** `SharingLight` (`lib/features/sharing/sharing_light.dart`)
-  means "Xtremio is using your connection while you are not watching" —
-  serving other people, a download filling in, both. It is drawn in the
-  shell's top right corner while the server's reading says bytes moved,
-  and never because a setting is on. The reading is
-  `ServerClient.backgroundTraffic` (`server_background_traffic`,
-  `ServerHandle::background_traffic`), read by `SharingActivityMonitor`
-  through `RustSharingActivityClient` every five seconds while the shell's
-  own route is the current one: per direction, whether librqbit's own peer
-  counters grew over the last five-second window with no player reading
-  over it or since, judged on the Rust side over one sample so the two
-  halves cannot disagree — a peek over the engines that exist, so it creates
-  nothing and touches no idle clock (the per-torrent stats calls create the
-  engine they are asked about and must never stand in for it). The monitor
-  repeats the halves unchanged: `uploading`, `downloading`, `active` as
-  either, and `BackgroundTraffic.none` before the first reading and after a
-  failed one, since a failed reading is darkness and not the last answer.
-  One slot, three glyphs — an up arrow while bytes go out, a down arrow
-  while they come in, `swap_vert` while both — never two lights; the glyph
-  and the popup's title are `SharingLight.glyphFor` and `labelFor`. The
-  shell's on-top rule is no longer what keeps the light off during a film
-  (the server folds "nothing playing" in itself); it is what stops the
-  polling while nobody could see the light. Semi-transparent, a 1.6 s pulse,
-  inside the overscan inset and a toolbar's height below the top; the
-  placement is measured on all five shell screens at TV and phone widths by
-  `test/features/sharing_light_placement_test.dart`. On a television the
-  remote reaches it from the top of the rail with a press of up, and the
-  node is skipped by traversal so it cannot swallow a press meant for a
-  poster. **Pressing it offers a stop for the arrow that is lit, and only
-  rows that do something.** While bytes go out, the sharing rows: "Not
-  now" (`pauseUntilRestart`) and "Stop sharing" (the setting) — but the
-  light is lit by bytes the server measured and the choke takes a pass or
-  two to land, so it can honestly be lit with the switch already off; the
-  popup then says there is nothing left to switch off and offers neither
-  row, and under a pause it says so and offers only the switch, since the
-  policy takes no second pause. The pause is read from `pausedForRun`,
-  not from the light, which cannot tell. While bytes come in, the offline
-  downloads: the light lists them before opening the popup and draws one
-  "Cancel <name>" row per download still on its way, each dropping that
-  download and its part-file through `DownloadsClient.remove` — what the
-  downloads notification's "Cancel all" does, and the only stop there is,
-  the server having no pause for a pinned file. With no offline download in
-  flight the bytes are a watched title finishing its own file, which the
-  sharing setting governs (above), so the popup says no download is in
-  flight and draws the sharing rows. While both, both groups under a
-  heading each. The way out is "Close" in every state. Widget tests count
-  the pressable rows in each state; a "Cancel" is checked to remove with
-  `deleteFiles: true`, and a refused removal is said in a snackbar rather
-  than swallowed.
-- **Offline downloads are a pin plus a registry.** The server keeps the
-  chosen file of a torrent wanted and un-evictable
-  (`ServerHandle::pin_download`, `pinned`/`complete` per file in
-  `stats.json`) -- a *retention* property, not a location: the bytes are
-  pieces in the one torrent-data root either way; `rust/src/downloads.rs`
-  keeps everything it has no idea about in `<storage_dir>/downloads.json` —
-  keyed `"{metaId}:{videoId}"`, holding the raw stream JSON `Load Player`
-  takes back, a `MetaItem` snapshot so Details renders offline, and
-  `createdAt`/`completedAt`/`lastPlayedAt`. The FFI is
-  `rust/src/api/downloads.rs`: `downloads_add(request_json)`,
-  `downloads_remove(key, delete_files)`, `downloads_list()`,
-  `downloads_open(key)` and a `downloads_events()` stream that
-  ticks about once a second, only while something is unfinished, and pushes
-  just the rows that moved -- and of each row only what moves
-  (`{"version":1,"progress":[{"key","downloaded","size","state","path",
-  "error","completedAt"}]}`, not the whole entry with its meta snapshot and
-  stream JSON, which is what a `downloads_list` is for). The file follows
-  the same rule: a tick that moved nothing but a byte count does not
-  rewrite it, since that number is a cache of the server's own and the next
-  write that matters carries it; a state, a path, an error or a finished
-  file goes to disk at once. Progress is merged from the server's
-  `downloads()`, never stored twice.
-  Downloading a second stream for a title replaces the entry and releases
-  the pin it replaces (with its bytes, unless another entry names the same
-  file), so no torrent is left downloading behind the registry's back. That
-  sharing cuts the other way too: the server's pins are a set with no
-  reference count, so removing one of two entries that name the same file
-  drops only the registry row and answers `unpinned: false`, leaving the
-  pin — and the bytes — to the one still playing it. A stream that names no
-  `fileIdx` (or the `-1` sentinel the player's URL carries) is resolved the
-  way the media route resolves `/{infoHash}/-1` — the `fileMustInclude`
-  match, else the largest media file — so what is kept offline is the file
-  that streamed, not file 0. A refused pin comes back as
-  `{"ok":false,"error":{"kind":…}}` — `insufficientSpace` carries the byte
-  counts, the rest the server's client-safe message, which names no local
-  path — because a full disk is something to show, not an exception.
-  Reading the registry is forgiving on purpose, and never at the cost of
-  what is on disk: a file from a newer build keeps its `version` and its
-  unknown keys, and an entry this build cannot parse is kept verbatim and
-  written back untouched (it is left out of the list payload, not out of
-  the file) and still named in the pin set the launch hands the server, by
-  its `infoHash`/`fileIdx` -- or, when those cannot be read either, the
-  launch names no set at all and the server keeps everything. A file that
-  is not the shape this build writes (not JSON, no `items` object) is an
-  error, never an empty registry: empty is the pin set that sweeps every
-  download. It is left where it is, the server is told nothing and keeps
-  everything, the list says `registryUnreadable`, and only the user's
-  `downloads_start_fresh` moves it aside as
-  `downloads.json.corrupt-<seconds>`.
-  At boot every entry that is not complete is pinned again, on a blocking
-  thread, since a pin waits on magnet metadata and nothing on screen waits
-  on it. The row leads the server on the way in and follows it out: `add`
-  writes the row (naming, under `replaces`, the file it stops naming)
-  before `pin_download`, `remove` marks the row `pendingRemoval` before
-  `unpin_download` and drops it after, and the boot finishes whatever a
-  kill left half done -- so no pin exists that no row names, and no row
-  outlives its pin to be re-pinned. The file is parsed once and then
-  answered from memory while its mtime and length are what the last read or
-  write left; a tick is a `stat`, not a parse of every meta snapshot. The UI
-  reaches all of that through one `DownloadsClient`
-  (`lib/core/downloads_client.dart`), which `XtremioApp` builds and
-  disposes and a `DownloadsScope` hands down the tree -- one client,
-  because the progress sink is one -- with `DownloadView`
-  (`lib/core/state/download.dart`) reading the registry it answers with.
-- **There is one place torrent data can be, and it is not a downloads
-  folder.** Everything a torrent puts on this device is under the server's
-  `cacheRoot`: the piece store the streaming cache and the kept downloads
-  share (`<cacheRoot>/rqbit-downloads/.pieces/<infoHash>/<bucket>/<piece>`,
-  one file per whole piece), the session's own records beside it, and what
-  `/proxy` cached. Nothing else on the device is the server's to reclaim,
-  and each part of it has one owner that does. A pin decides
-  that bytes are *kept*, never where they go, so a `downloadsDir` distinct
-  from the cache had nothing left to hold and is gone -- an unknown key the
-  server ignores on write and does not answer with. So is the app's whole
-  destination model: the `Destination` enum, the `destinationSettled` /
-  `destinationChoice` pair in `downloads.json`, `downloads_set_dir`,
-  `downloads_apply_default_dir` and the start-up that settled the question.
-  A file a previous build left with those keys keeps its entries and loses
-  them at the next write; nothing adopts the folder it names, because that
-  folder holds neither the piece store nor the session's records, and
-  making it the root would orphan both.
+**Contents:**
+[The bridge](#the-bridge) ·
+[What crosses the bridge](#what-crosses-the-bridge) ·
+[Wire conventions](#wire-conventions) ·
+[The Rust side](#the-rust-side) ·
+[The app's own preferences](#the-apps-own-preferences) ·
+[Engine settings and the account](#engine-settings-and-the-account) ·
+[The embedded server](#the-embedded-server) ·
+[The player](#the-player) ·
+[Subtitles](#subtitles) ·
+[Downloads and offline play](#downloads-and-offline-play) ·
+[Google Drive](#google-drive) ·
+[The library](#the-library) ·
+[Addons](#addons) ·
+[Recommendations](#recommendations) ·
+[Casting](#casting) ·
+[Pinned forks](#pinned-forks)
 
-  The root is named twice. Its **default** is the directory the app hands
-  `server_start` (`XtremioBootstrap.dataDirectory`, `lib/main.dart`): the
-  app cache directory everywhere but Android, and on Android the
-  app-specific external files directory
-  (`/storage/emulated/0/Android/data/com.zond.xtremio/files`), because
-  `getCacheDir()` is the system's to reclaim whenever it wants room and
-  with one root there is nowhere else for a kept download to be. Its
-  **setting** is `cacheRoot`, written like any other settings key through
-  `server_update_settings` from Settings → Server storage
-  (`lib/features/diagnostics/server_storage_screen.dart`, which offers
-  `getExternalStorageDirectories()` on Android so an SD card is reachable
-  without a permission, and a typed path elsewhere). It is the server's
-  one validated setting -- absolute, created if missing, writable, stored
-  resolved -- so a root it cannot use fails the whole update and nothing in
-  Dart checks a path itself. A persisted `cacheRoot` outranks the app's
-  default for ever after, and a change takes effect at the **next start**:
-  the running librqbit session was opened on the old root and cannot be
-  moved, and what is already there is not moved either. **On Android a
-  download keeps going while the app is away**: `DownloadsForegroundService`
-  (`lib/features/downloads/downloads_service.dart`) puts a `dataSync`
-  foreground service up over the `xtremio/downloads` channel as soon as one
-  entry is unfinished and takes it down when none is (ANDROID.md,
-  "Downloads while the app is away", for what Android still reserves the
-  right to do to it). The registry and the server's own pin set survive the
-  process dying either way, and the boot reconciliation picks the
-  unfinished ones up again.
+## The bridge
 
-  **An install that has run before does not get that default, and one
-  Android case is corrected.** stream-server fills its own default in only
-  when `cacheRoot` is *empty*, and every earlier build persisted one at
-  first start -- on Android the app cache directory, with the kept
-  downloads then in a `downloadsDir` of their own. With one root those
-  downloads would land in `getCacheDir()` on exactly the devices that had
-  been safe from it, so `XtremioBootstrap.moveOffPurgeableRoot`
-  (`lib/main.dart`) writes `cacheRoot` once at boot when the persisted root
-  is inside the app cache directory and there is a directory the system
-  does not reclaim to move it to. It compares the paths *resolved*, because
-  the server stores a canonical root and `/data/user/0/<pkg>` is a symlink
-  to `/data/data/<pkg>`. Everywhere else -- a desktop, an Android device
-  with no external storage, and any root somebody chose on the storage
-  screen -- it reads the setting and writes nothing.
-- **A finished download is played off this device, and there is no file to
-  open.** Torrent data is one file per piece, so no whole file is ever
-  produced and the `path` the server reports is a *name* for the file
-  rather than something to open. `downloads_open(key)` answers the
-  embedded server's own media route for the entry's torrent and file
-  (`{base}/{infoHash}/{fileIdx}`), which is served off the pieces already
-  here -- no peer, no tracker, no network -- and stamps the entry's
-  `lastPlayedAt` as it does. **Two things have to be true for that, and the
-  row is only one of them**: the entry says `complete`, *and* the server
-  answers that it is holding that file whole right now. The rows are a
-  record, and the pieces are under a root that can be moved (Settings →
-  Server storage) or reclaimed (an Android cache directory) without any row
-  being rewritten, so a row alone is not evidence. It refuses with
-  `unknown` (no such entry), `incomplete` (the bytes are not all here),
-  `unavailable` (the server that reads the pieces is not running) or
-  `notHeld` (it is running and does not hold these pieces: no pin, a
-  dormant one, or a torrent still being checked). `notHeld` is a refusal
-  and not a 404 waiting to happen: on loopback the media route *creates*
-  the torrent it is asked for, so a URL handed out for a hash the session
-  does not have starts a magnet add from a bare info hash with no trackers
-  and blocks to its metadata timeout -- a kept download starting a
-  download, behind a screen that says the film is on the device.
+[flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge)
+2.13.0 with the cargokit backend. The codegen, the Dart package and the Rust
+crate must be the exact same version (FRB refuses to start otherwise). The
+crate is `rust/` (package `xtremio_core`: cdylib + staticlib, plus rlib for
+its own tests); `rust_builder/` is the generated FFI-plugin glue that builds
+it per platform; `lib/src/rust/` and `rust/src/frb_generated.rs` are
+generated and committed. After changing anything under `rust/src/api`, run
+`flutter_rust_bridge_codegen generate` and commit the result (CI fails on
+drift).
 
-  The row is corrected at the next boot rather than left saying `complete`
-  for ever: `reconcile_pins` marks a finished entry the server does not
-  hold as `gone` -- no bytes, no completion date, a reason on the row and
-  "Not on this device" in the list -- and deliberately does **not** re-pin
-  it, because that would fetch a whole film again over whatever connection
-  the device is on, asked for by nobody. Pressing Download on the title
-  pins it again, which is what a `gone` row's own button does. Details and the
-  Downloads screen hand the player that URL as a plain `url` stream
-  (`lib/features/downloads/offline_play.dart`) together with the
-  *original* `streamRequest` and `metaRequest`, which is what keeps
-  continue-watching moving: stremio-core's `TimeChanged` writes progress
-  only with a stream request and a library item, and offline the library
-  item comes out of the `ctx` bucket the download put the title into.
-  It is a `url` stream and not the torrent it came from even though the
-  URL names the same server, because a torrent stream sends the player
-  through the engine's start-up and the overlay keys on `infoHash`: a
-  download with every byte here would sit behind a "connecting to peers"
-  panel it has no need of. The kept copy wins over the addon's stream
-  even with a connection -- but only for the release that was
-  downloaded; picking another stream is a request for that source. A
-  download with nowhere to play from streams the addon's own stream
-  instead, rather than opening a player on a URL with nothing behind it.
-  Binge-advancing asks the same question about the next episode before it
-  hands over, so a downloaded season plays through off the device -- and
-  offline that is the only way it advances at all, since the next
-  episode's streams never load and the engine finds nothing to move on
-  to.
-  *Known consequence:* the synthesized `url` stream is what
-  stremio-core records as that video's last stream, and it is persisted.
-  `MetaDetails` resolves the last stream against the addon's current
-  responses by `Stream::is_source_match` (which compares the source, so a
-  `Url` never matches the `Torrent` the addon offers) and then by
-  `Stream::is_binge_match`. The binge match is why `offlineStream` keeps
-  `behaviorHints.bingeGroup` -- but an addon that sets none leaves neither
-  match to make, so after one play off the device that title's "Continue
-  with last source" tile is gone until it is played from an addon stream
-  again, and `StreamsItem::adjusted_state` starts the next play of it with
-  no remembered subtitle or audio track (playback speed survives). The
-  download itself is unaffected: its badge, its row, and playing it from
-  the release's own stream tile all still work.
-- **Settings are the engine's.** `ctx.profile.settings` is stremio-core's
-  `Settings` struct (camelCase; `docs/phase3-design.md` §4 lists it) and
-  the only way to change one is `Ctx::UpdateSettings` with the *entire*
-  object — it has no serde defaults, so a map missing a key fails at
-  dispatch with "invalid action JSON" and never reaches the engine.
-  `ProfileSettings.withValue(key, value)` (`lib/core/state/profile.dart`)
-  copies the map with one key changed, and every control in Settings and
-  in the player's settings sheet writes exactly that; nothing writes while
-  the `ctx` field is still unknown, and the map last sent is what the
-  controls show and the next write builds on until the following `ctx`
-  pull, so two quick changes do not revert each other. Settings are device-local (the API's
-  `saveUser` carries only the user record). What the app reads: the player
-  takes `seekTimeDuration` (arrows, the seek buttons, double-tap) and
-  `seekShortTimeDuration` (Shift + arrows — the *short* seek, as
-  stremio-core names it), `bingeWatching` and
-  `nextVideoNotificationDuration` (the up-next countdown after an episode
-  ends; 0 plays the next one at once, and with binge watching off nothing
-  moves on by itself), `pauseOnMinimize` (through `AppLifecycleListener`),
-  `escExitFullscreen`, and `subtitlesSize` / `subtitlesTextColor` /
-  `subtitlesBackgroundColor` (`SubtitleStyle.fromSettings`: 32 px scaled
-  by the percentage, `#RRGGBBAA` colours, a transparent background means
-  no box); `XtremioApp` creates each `MediaKitEngine` with
-  `hardwareDecoding` as the video controller's hardware acceleration, so
-  it applies to the next video that opens. `streamingServerUrl` is not
-  offered: it is always the embedded server's (see above). `quitOnClose` and `hideSpoilers` are stored but not
-  yet honoured (no tray to hide to; the details screen shows thumbnails
-  and summaries regardless); the remaining fields pass through untouched.
-- **Account.** Settings → Account dispatches `Authenticate` (`Login` or
-  `Register` with the GDPR consent the API requires, `from: xtremio`),
-  `Logout`, and the housekeeping stremio-web does on window focus
-  (`PullAddonsFromAPI` at every start-up, plus `PullUserFromAPI`,
-  `SyncLibraryWithAPI` and `PullNotifications` for a signed-in profile, on
-  start-up, resume and `UserAuthenticated`). The engine does not serialize
-  its "authenticating" status, so the pending spinner is local state
-  cleared by `UserAuthenticated` or the `Error` whose `source` is it.
-  Signing in *replaces* the anonymous library and resets the settings;
-  the UI says so. **Privacy:** `AuthRequest` serializes the password, so
-  `UserAuthenticated{auth_request}` and its `Error{source}` carry it, and
-  `ctx.profile.auth.key` is the session key — nothing in the app logs
-  `RuntimeCoreEvent.args` or dumps `ctx`, and `ctx_logged_in.json` is a
-  hand-authored fixture with a fake account, never a recorded session.
-- **Playback goes through the engine's `Player` model.** The UI dispatches
-  `Load Player` with the raw stream JSON (plus the stream/meta requests);
-  stremio-core converts the source and publishes `player.stream` as
-  `{StreamUrls, converted stream}` — its `streaming_url` is the direct URL
-  for `url` streams and `<server>/{infoHash}/{fileIdx}?tr=…` for torrents
-  (the server auto-creates the engine from the info hash on first GET). The
-  player opens whatever that URL is in `media_kit`/libmpv and reports
-  `TimeChanged`/`PausedChanged`/`Ended` back so the library follows along.
-  `StreamUrls` is snake_case on the wire, unlike the rest of the model.
-  `PlaybackEngine` (`lib/features/player/`) is the thin interface over
-  media_kit; widget tests swap in a fake through `PlaybackScope`.
-- **Every stream reaches the player as a URL on our own server.** A torrent
-  already is one; a stream on anybody else's host -- a debrid link, an
-  addon's own HTTP URL -- is wrapped in the embedded server's `/proxy`
-  route before it is handed to mpv (`lib/core/stream_proxy.dart`). The
-  shape is the one stremio-core builds and the server parses: the target's
-  origin percent-encoded into a `d=` path segment, its own path and query
-  after it, so a signed link keeps its signature and the file name stays
-  where ffmpeg's probing and a log reader can see it. The address comes
-  from `CoreInitInfo`, which is settled before the first `open`, rather
-  than from `profile.settings.streamingServerUrl`, which arrives with a
-  `ctx` pull that can land later. Left alone: a loopback URL (already the
-  server, whatever port it bound -- which is what a kept download's own
-  URL is), and everything
-  when this build runs no embedded server. `force-seekable`
-  excludes
-  `/proxy` for the same reason it always excluded a remote host: the
-  promise that a seek will wait rather than be refused is about the
-  *server's own* torrent reader, and the route fronts a host we know
-  nothing about.
-- **There is one cache on the device and it is the server's.** The player
-  is started with `cache-on-disk=no`, once per player, for every stream,
-  and nothing ever writes that property again. media_kit's own default is
-  `yes`, and what that buys is a file mpv unlinks the moment it creates
-  it: no name in the directory, so no `du`, no `dumpsys diskstats` and
-  nothing the server counts can find it, and the blocks come back
-  only when the fd closes. On the owner's Chromecast one 90-second title
-  held 928 MB that way while three separate instruments reported the app
-  was using 46 MB. The server's cache is everything that is not -- named
-  files, a configured limit (`min(cacheSize, occupied + available -
-  floor)`, the floor being `enginefs::free_space_floor` -- a thirty-second
-  of the volume, clamped to 128-512 MiB, and 512 MiB when the volume's
-  size is unreadable -- below which `ensure_download_disk_ready` has
-  already given up on the disk), and
-  owners that give back what nobody is playing and nobody kept -- and now
-  that every stream goes through it, it is the only local copy there is.
-  There is no shared budget to keep any more, because there is nothing to
-  share it with.
-- **What the player still holds is memory, and it is deliberately small.**
-  `MediaKitEngine.memoryCacheBytes` is 32 MiB, written out rather than
-  inherited from media_kit's `bufferSize`. media_kit sets that on both
-  `demuxer-max-bytes` and `demuxer-max-back-bytes`, and the app then sets
-  the back side apart (`MediaKitEngine.backCacheBytes`, 16 MiB, through
-  `mpvOverrides`) -- so the ceiling is 48 MiB: about two minutes ahead of
-  a 2.3 Mbps film and 16 MiB behind the play head, which is one ten-second
-  press back at anything up to about 13 Mbps; a seek that misses the
-  window is a range request answered from the server's cache. Measured,
-  mpv fills the forward side and then reads at what playback
-  consumes (2 MB/s down to 18 KB/s within a second of the cache filling),
-  so a player with no disk is not a player downloading without bound. It
-  was reconsidered when the disk cache went and left where it is: the
-  television has 2 GB of RAM for the whole system and the app measured
-  245 MB PSS with a player up, the embedded server and its torrent engine
-  share that process, and the cushion this design wants is the server's
-  rather than a bigger heap here.
-- **What the proxy keeps.** `/proxy` caches by byte range
-  (`server/src/proxy_cache.rs` in the stream-server tree): the part of a
-  range it holds is answered off the disk, the origin is asked only for the
-  rest, and a miss streams to the player as it fills. What it holds is kept
-  around the play head by the same retention that keeps a torrent's
-  pieces, so `server_stream_numbers` answers a window for a proxied stream
-  as it does for a torrent, and a backward seek past the memory cache is
-  local inside that window. Only a read outside it goes back to the
-  origin. That is the cushion this design wants, on the server's side of
-  the hop rather than in the player's heap.
-- **A stream that turns out to be an archive is played, not refused.** Some
-  sources serve a whole container rather than the film inside it: a debrid
-  link to a `.rar` of a release, a torrent whose one big file is a `.zip`
-  or a disc image. mpv answers those with "Failed to recognize file
-  format", so the player reads the start of a stream that failed before it
-  loaded and names the container by its signature
-  (`lib/features/player/archive_sniff.dart`; RAR, ZIP, 7-Zip, and ISO 9660
-  by `CD001` at byte 32769). It then hands the container to the server,
-  which reads it as **ranges of itself** -- nothing extracted, nothing
-  written, a member served as cheaply as a plain file
-  (`docs/translated-sources.md` in the stream-server tree).
-  `lib/features/player/archive_route.dart` is that half. A stream on
-  anybody else's host is `POST /{rar|zip|7zip|iso}/create` with
-  `{"urls": [<the URL the engine was handed>]}` -- the `/proxy` one,
-  credentials and all, because a container the server cannot fetch is one
-  it cannot index -- and then `GET /{fmt}/stream/{key}`, whose redirect
-  names the member; a file of a torrent is
-  `GET /{fmt}/stream/torrent:<info hash>/<the file's name in the torrent>`
-  with no create call at all, the name being `streamName` from the
-  server's own `stats.json`. The key is one path segment, so its `/` is
-  escaped. What plays is the member URL (`_translatedUrl`), which stands
-  in front of the core's own URL at every later `open` -- a buffer change,
-  a reconnect -- while `_opened` stays what the core published; `buffer=`
-  is not written on it, since the archive routes read no such query and
-  the read-ahead is the one the translator's source opens underneath.
-  **And the member is what is cast**, not the container: `_castSource` and
-  `_castFilename` hand a receiver `_translatedUrl` and judge
-  `CastCompatibility` by the member's own name, so a `.rar` holding an MP4
-  casts where the `.rar` used to be refused on its extension -- see
-  [docs/CASTING.md](CASTING.md), which also says why the URL the receiver
-  gets is one the LAN listener serves.
-  **A container that cannot be played is still said honestly**: the server
-  answers `415` (`compressed`, `encrypted`, `solid`, `noRandomAccess`,
-  `unsupported`), `422` (`malformed`) or `501` (`noRanges`, the origin will
-  not serve byte ranges; `noReader`, this build has no reader for the
-  format), each with a kind and a sentence, and `archiveRefusal` shows the
-  app's own wording for the four that are just "the film is packed" and the
-  server's sentence where it names something concrete -- which volume is
-  missing, which UDF structure. `noReader` is the one sentence never shown:
-  it names a cargo feature, which is for whoever built the app, so the
-  viewer gets the app's own wording and the server's goes to the log. A
-  `501` from a server older than those kinds carries `{"error": ...}` and
-  no kind (`ArchiveRefused.unavailable`), and is said in the app's words
-  too, since one of the two it might be is that one. Addon-declared
-  archives (`rarUrls`/`zipUrls` -> `StreamKind.archive`) are untouched by
-  all of this: stremio-core builds the `/create` URL for those and the
-  player opens it like any other stream.
-- **A player that is left ends its own reads first.** Each player screen
-  mints a token (`player-1`, `player-2`, ...), writes it into the `/proxy`
-  URLs it hands the engine as `p=`, and on the way out calls
-  `server_close_proxy_streams` with it (`ProxyStreamControl`, over FFI like
-  every other control call): the server ends every stream carrying that
-  token, the read fails at once, and the teardown below is not left waiting
-  on `network-timeout` -- five minutes, and deliberately so, since a thin
-  swarm is not a dead connection. The token is a name and not a credential:
-  the route is on the loopback control API behind the bearer token, never
-  on the LAN media listener, and the token is stripped before the origin is
-  asked for anything. **It ends the read and the token** -- breaking the
-  read alone would only be a stutter, since ffmpeg runs with `reconnect=1`
-  and re-fetches through the URL it already has, so the server retires the
-  token too and answers `410 Gone` to anything that comes back with it.
-  The order the server documents is quit-then-close, since a cancelled
-  demuxer never reaches its reconnect, and that is the order the teardown
-  below runs in; the token's refusal covers the case where mpv had not
-  reached the quit yet. It ends a read and nothing else besides -- a
-  demuxer wedged on the Flutter texture or the audio device is not polling
-  that stream, which is why the bound below still exists. The call sits
-  between the quit and the release with its throw caught, because it
-  reaches FFI and an exception crossing it would take the release with it.
-  A torrent is never proxied, so its teardown has nothing to close.
-- **A player is stopped before its screen leaves, not after.** Every way
-  out of the player funnels through `PlayerScreen._leave`, and it goes in
-  one order: send `quit`, close the proxied streams, `await` the teardown
-  with the video still in the tree and the audio device still open, then
-  pop. The `quit` goes first because it is the kill and because it is what
-  makes the `stop()` inside media_kit's `Player.dispose` come back
-  promptly; the wait comes before the pop because media_kit releases the
-  video texture and the audio device from *inside* that teardown, after
-  the stop, so waiting with the screen up is what keeps the sinks
-  attached and consuming until mpv has no more use for them. It used to be
-  the reverse -- leave at once, release the engine two frames later
-  through a future nobody held, and send the `quit` only if a ten-second
-  deadline expired -- which withheld the one fast fix until the slow path
-  had failed. Measured against real libmpv: the quit returns in
-  microseconds, a teardown behind one comes back in 92-230 ms even against
-  a socket wedged for good, and mpv's core thread goes on answering
-  commands throughout, because `quit` starts the shutdown rather than
-  ending the core.
-- **The screen lets go of the player before it waits for it.** Waiting with
-  the picture up leaves the screen built and subscribed while its engine is
-  being released, which is a state it was never in before: a `completed`
-  during the wait re-opened the stream, the app going to the background
-  paused a released player, a cast session ending elsewhere seeked and
-  played one, the open-retry and the torrent poll ran on, and media_kit's
-  own `stop` -- `notify: true` by default -- pushed `position:
-  Duration.zero` with the duration still the film's, which reached the core
-  as a `TimeChanged` of zero and reset continue-watching for every film
-  that was not finished. `PlayerScreen._detach` is the one act that ends
-  all of it: the engine subscriptions, the cast subscriptions, the `player`
-  and `ctx` listeners and every timer go there, before the first `await` in
-  `_leave`. It is not a guard per handler, because the next handler would
-  have to remember one; a screen with nothing subscribed cannot be reached
-  by anything, including what has not been written yet. `State.dispose`
-  still calls it (idempotently) for the screens that go without a leave --
-  the hand-over's `pushReplacement`, a route dismantled from above -- but
-  it is no longer where this belongs, since it now runs after the wait
-  rather than instead of it. What is left after the detach is input, which
-  stands down the same way the remote does: a key press is swallowed
-  (`_onKeyEvent`), a hover is refused (`_onPointerMoved`, since the
-  `MouseRegion` sits above the `IgnorePointer` that covers everything
-  else), and the fade timer refuses to re-arm -- otherwise the focus change
-  `_leave` makes on its way out arms a timer nothing cancels, and it
-  outlives the screen.
-- **A suspended continuation is not a subscription, and `mounted` no longer
-  answers for one.** The detach above ends everything that could *arrive*
-  during the wait; it cannot reach an `await` that was already in flight
-  when the press landed, and that one resumes into the middle of the wait.
-  It resumes into a screen that is *more* alive than the one its guard was
-  written against: the player used to pop at the press and release its
-  engine two frames later, so `mounted` was false by the time anything late
-  came back, and now it is true for exactly the stretch it used to be false
-  for. Every `mounted` guard on a continuation therefore passes precisely
-  when it used to fail. Two of them cost the viewer something, both
-  measured: a cast start whose `connect` answered during the wait paused
-  the engine, opened the LAN listener and handed the receiver the film at
-  0:37:00 -- Back was pressed and the film started on the television -- and
-  a hand-over whose registry answer came back during the wait
-  `pushReplacement`ed a second player, a second engine and a fresh open over
-  the screen still waiting for its own teardown. So `PlayerScreen` has one
-  question with one name, `_stillOurs` (`mounted && !_leaving`), and every
-  continuation in the class that can reach the engine, the core, the cast
-  client or the navigator asks it; `mounted` says only that there is a
-  widget to call `setState` on. A continuation that had already *started*
-  something -- `_startCast`, once the session exists -- unwinds it rather
-  than merely returning, because a session and a socket are what must not
-  outlive the screen. `test/features/player/player_leaving_awaits_test.dart`
-  is the list, one row per such await.
-- **`quit` is the kill, and there is nothing stronger to escalate to.**
-  `PlaybackEngine.quit` sends it asynchronously on media_kit's own handle,
-  never `mpv_terminate_destroy`: destroying a handle whose event loop is
-  still attached deadlocks or crashes, which is why media_kit schedules its
-  own five seconds after the teardown. Sending it *first* is what makes
-  mpv's dispatch queue work in our favour -- the `stop` media_kit issues is
-  on that same queue, so a core thread that reaches the queue at all
-  reaches the quit ahead of it. A core thread already stuck elsewhere
-  swallows both, and nothing in the process can reach it; what bounds that
-  case is that a player keeping no disk cache costs memory, a socket and
-  the server engine that socket keeps live, rather than a gigabyte of a
-  4 GB television. `mpv_command_async`'s refusal is thrown rather than
-  discarded, so a report never says a player was killed when the command
-  was never enqueued.
-- **`PlayerScreen.teardownBound` bounds the viewer's wait, and is the only
-  instrument for a failure still unexplained.** Nothing is escalated to
-  when it expires -- the quit went out at the press -- so the screen simply
-  stops waiting after two seconds, the teardown carries on in the
-  background, and a line says a player which should have stopped in a
-  fraction of a second has not (with a second line when a late one lands,
-  since "slow" and "never stopped" want different things looked at next).
-  It is kept because on the owner's Chromecast a player once kept
-  downloading at 32 Mbps for at least ninety seconds after its screen was
-  left and only a force-stop ended it, and every mechanism since measured
-  resolves in a fraction of a second: something happened there that is
-  still not accounted for.
-- **A scan is a different question from a seek, and mpv is asked
-  differently.** mpv's seek is exact -- it lands on the keyframe before
-  the target and decodes forward, invisibly, to the moment asked for --
-  and media_kit makes that certain by starting libmpv with `hr-seek=yes`.
-  On a 32-bit Amlogic box decoding through `mediacodec-copy` that decode
-  is the beat every press of a seek key costs, which is how the owner
-  came to notice that "when the cache goes to 0s, the seeking becomes
-  smooth": with nothing to seek within, mpv fell back to a keyframe seek.
-  So every press that says *further on* -- the seek keys, a remote's
-  transport keys, the buttons either side of play, a double tap, and the
-  seek bar's left and right while it holds focus -- goes to
-  `PlaybackEngine.scanBy`, which is `seek <n> relative+keyframes`.
-  Relative is the point rather than a detail: a keyframe seek to an
-  absolute target lands on the keyframe *before* it, so a forward step
-  shorter than the gap between keyframes goes backwards, and x264's
-  default keyint is 10.4 s at 23.976 fps against a 10 s step. A press
-  that names a moment instead -- a tap or a drag on the bar -- is seeked
-  to exactly, and so is Shift + arrow, the *short* step, which at three
-  seconds is shorter than a keyframe gap. A held key accelerates rather
-  than the step growing (`SeekHold`): ten presses at the viewer's own
-  `seekTimeDuration`, fifteen at twice it, five times it thereafter, and
-  a fresh press always starts again at one.
-- **The player UI is ours, driven by the engine and the core.**
-  `PlayerScreen` switches media_kit's built-in controls off
-  (`controls: NoVideoControls`) and draws its own dark-M3 overlay: a top
-  bar (back, title, next episode, subtitles, audio, stats, settings) and a
-  bottom bar (seek bar with buffered range and drag scrubbing, play/pause,
-  ± the seek step, elapsed/remaining time, volume on wide layouts,
-  fullscreen). The controls fade after 3 s while playing and return on
-  tap, mouse or key; they stay while paused or buffering. On a television
-  they fade whether or not a control holds the remote, taking focus back to
-  the video with them so nothing is left focused on something invisible;
-  the D-pad stays inside them once it is there, and Back comes down a
-  ladder, most transient first -- the up-next card, then an OSD that is up
-  and free to go, then the player. A bar that cannot fade is not a rung:
-  paused, buffering, with a menu open or at the end of a film (where
-  playback has stopped and the up-next card was the rung), Back leaves,
-  because appearing to do nothing would be worse. Subtitles ride above the
-  bar: at rest they sit 4.5 % of the picture's height off the bottom, and
-  while the controls are up they are lifted clear of what the bar actually
-  covers, measured off the laid-out bar rather than assumed. media_kit's
-  `SubtitleView` reads its padding out of the configuration once and never
-  again, so the lift is *pushed* into it
-  (`VideoState.setSubtitleViewPadding`, one call per change) rather than
-  configured -- configuring it moves nothing after the first frame. Keyboard:
-  Space/K play-pause, ←/→ or J/L ± the seek step (10 s by default, and
-  further with each repeat of a held key),
-  Shift+←/→ ± the short seek step (3 s, and exact), ↑/↓ volume, M mute, F
-  fullscreen, Esc leaves fullscreen first when `escExitFullscreen` is on
-  and the player otherwise, S subtitles, Shift+S subtitle timing, A
-  audio, N next episode, Shift+I stats. Everything is a stream or method on
-  `PlaybackEngine` (`tracks`, `buffer`, `volume`, `setAudioTrack`,
-  `setSubtitleTrack`, `setExternalSubtitle`, ...) or a core action, so the
-  screen is tested against `FakePlaybackEngine` and `FakeCoreClient`
-  alone; fullscreen goes through an injectable `FullscreenController`
-  (media_kit_video's native window / immersive helpers by default).
-- **Subtitles.** After the media opens the screen dispatches
-  `VideoParamsChanged` with the best filename it knows (the stream's
-  `behaviorHints.filename`, else the URL's last segment when it looks
-  like one, else none — never a stand-in like the stream's label) — that
-  is what makes the core ask the subtitle addons. The menu lists the
-  tracks embedded in the file (from libmpv's track list, minus the
-  synthetic `auto`/`no` entries) first and in a section of their own --
-  they need no download and always match the release -- and below them
-  every file from `player.subtitles`, the stream's own `subtitles` and
-  the converted stream's, **one row per language**. That list is
-  deduplicated on what a file *is*, not on the URL string
-  (`SubtitleInfo.identityKeys`): the normalized URL -- scheme and host
-  lower-cased, a default port, a fragment and trailing slashes dropped,
-  the query's parameters in a fixed order but *nothing* removed from
-  them, because OpenSubtitles v3's only parameter is `senc`, which picks
-  the encoding of the bytes it returns -- and the addon's own `id`,
-  scoped by language, so two addons mirroring one upload collapse while
-  two that both number their answers from 1 do not. What is left is
-  ordered by **the release it was cut for**. A subtitle timed for 25 fps
-  played against a 23.976 fps film *can* drift about four seconds a
-  minute, and
-  OpenSubtitles says which rate an upload was cut for (`fpsMilli`, on
-  about nine entries in ten) -- but the claim is about the release the
-  upload was made for, not about its timing. Ten English files for one
-  film declaring six different rates all end within 1 % of the same
-  runtime, while five Gilmore Girls files at 25 fps really do run 4.27 %
-  short against the five at 23.976, and nothing in the metadata
-  separates those two populations. So **nothing is corrected
-  automatically** -- a multiplier applied unasked would fix one
-  population and silently break the other -- and nothing is *ordered* by
-  the rate either. What the addon says about which release an upload was
-  cut for says more, because two files made for one release keep its
-  time. `subtitlesByRelease` puts a language's files whose `releaseGroup`
-  or `movieReleaseName` names the video actually playing first, then the
-  ones from a release group the viewer has already adjusted for this
-  series (the correction goes back on when the file is applied, so it
-  arrives fixed, and the rank asks the memory exactly what applying it
-  will ask), then everything else in the order the addons answered.
-  The language rows themselves are sorted on the name the menu prints,
-  alphabetically, and `subtitlesByRelease` pins nothing above that: Off
-  is the menu's own row above every language, and the language that is
-  playing is not lifted, since the list is ordered before anything is
-  selected and a row that jumps to the top once it is picked is no longer
-  where the alphabet left it. The menu itself then lifts at most two
-  rows, under a heading of their own -- the languages picked most often
-  (`SubtitlePickMemory.pinned`), which is a fact about the viewer rather
-  than about these files, and whose reason for being first cannot change
-  under a finger because a count changes only on a pick and every pick
-  closes the sheet. An addon answering late still moves the rows of an
-  open menu, as it did before there were pins. They are
-  lifted rather than copied, only ever languages this episode offers, and
-  not drawn at all when they would be every language there is. Inside a rank the addon that answered first still wins --
-  which matters, because the head of a language is the file its row
-  applies and the file the auto-pick plays. The row order reaches the
-  auto-pick in exactly one case: a session preference that is enabled and
-  names no language matches every file and so takes the head of the whole
-  list, which is now the alphabetically first language rather than the
-  first one answered. Nothing is dropped or hidden. The video is named by the same
-  `castFilename` a remembered shift is keyed on (the file the server says
-  it opened, else the addon's claim); both sides are cut into lower-case
-  runs of letters and digits, since release names are written with dots,
-  underscores, spaces and any case, and the claim has to appear as a
-  contiguous run of *whole tokens*. A false match is worse than no match
-  -- it would put a file at the head of its language with nobody looking
-  -- so part of a word is not a match (`DFN` never claims a DFNX rip),
-  tokens scattered through the name are not (`BluRay` and `x264` from
-  opposite ends describe a kind of encode, not this one), and a lone bare
-  number or two-letter tag is not, because a year and a resolution are
-  what a bad parse leaves in those fields. A release *name* has to reach
-  past the front of the filename as well: a run that starts at the first
-  token and stops short of the last is the show, the episode and its
-  title, which every upload of that episode carries. Of the twelve files
-  in the real OpenSubtitles answer for one Gilmore Girls episode whose
-  claim appeared in the playing filename, eleven claimed only that (one
-  claimed `Gilmore Girls` and matched every filename tried), and each was
-  marked "same release" and sent to the head of its language ahead of the
-  one file that named the rip -- which on that episode meant a 25 fps
-  file first on a 23.976 fps picture. A release *group* is never the
-  show's title and still counts wherever in the name it sits. Both sides
-  lose a trailing container extension before any of this, since agreeing
-  where a name ends is what "to the end" needs and an addon writing
-  `.mkv` where the server opened the `.mp4` is naming the same release. A
-  claim matching every file of a language costs nothing, since a rank
-  keeps the addons' order inside it; the shape that hurts is a generic
-  claim on *one* file of a language, which is what the rule above is
-  for. A row carries the addon that offered the file and, where it earned
-  one, two words saying it was cut for this release -- a fact about the
-  upload, never a rate and never a verdict about its timing. **The
-  video's declared frame rate now decides nothing at all**, and nothing
-  in the player reads it: it pointed one button, and that button is
-  gone. What replaced it measures the drift rather than naming the
-  family it probably came from -- the owner's own Swedish Gilmore Girls
-  file wants 1.0440 where the PAL constant is 1.0427, three seconds
-  across an episode that the constant does not reach. libmpv's
-  `container-fps` survives only in the stats OSD's own poll, which is
-  where it was always a number to look at rather than to act on. Every
-  path that changes what is on screen -- another file, an embedded
-  track, subtitles off, the next video, and the auto-pick putting the
-  tracks back after the engine refused one -- goes through the one
-  `PlayerScreen._resetSubtitleTiming`, which puts both properties back to
-  untouched, because they belong to the player rather than to the file
-  and one left behind ruins a subtitle that was correct. The drift itself
-  is the viewer's to judge. **Adjust timing** opens a small panel; it is
-  the last entry of the subtitle menu (the toolbar's subtitle button, or
-  S), and it is
-  there only while a subtitle is actually showing, since there is nothing
-  to move otherwise. Shift+S opens and closes it directly, and on a
-  television the remote lands on its first stepper, walks the rows with
-  the direction keys and closes it with Back. It holds one control and
-  one reading. The **shift** is a stepper in 0.1 s steps on libmpv's
-  `sub-delay` (positive delays the lines, which is mpv's own sign),
-  counted in whole presses (`SubtitleTiming` in
-  `lib/features/player/subtitle_timing.dart`) so that ten forward and ten
-  back land exactly where they started. It repeats while it is held, by
-  pointer or by the remote's centre key, and **the hold accelerates
-  through three strides** -- ten steps of a tenth, fifteen of a whole
-  second, then five-second strides
-  (`SubtitleTimingOverlay.shiftStrideAt`). The offsets it has to reach
-  are three orders of magnitude apart: a tenth is the smallest
-  difference visible against speech, a mis-cut release is out by
-  seconds, and an uncorrected PAL file is a hundred and fifteen seconds
-  out by the end of an episode -- eleven hundred presses at a tenth
-  each. Three strides put it about six seconds of holding away. Only the hold
-  accelerates: the count belongs to the button and a release ends it, so
-  every tap is a tenth however large the correction before it was. The
-  **speed** is shown and cannot be pressed. A multiplier is measured
-  now, never judged -- the panel says what is in force because a
-  subtitle that is right at this moment and wrong in ten minutes looks
-  exactly like one that is right, and the number is the only thing that
-  says which. Above them the
-  panel offers the two measurements, which find the drift instead of
-  asking the viewer to press until it is gone: **This is right**, which
-  marks the line on screen where it belongs (below), and **Match to
-  another subtitle**, whose own measurement is this: two subtitle
-  files for one video are two clocks, so their disagreement is a line:
-  the viewer picks a file they have seen keep time, and Rust fetches
-  both, turns each into a bitmap of **when it has text on screen** and
-  searches for the ratio and shift that make the two bitmaps overlap
-  most (`rust/src/subtitles.rs`, over FFI as `subtitles_match`, because
-  two HTTP fetches and a search over two bitmaps do not belong on the UI
-  thread of a Chromecast). **Both timestamps of every cue, and no text
-  at all.** Comparing cue *starts* was the measurement this replaced,
-  and it refused the owner's own Swedish Gilmore Girls file against an
-  English one: the Swedish file has 690 cues where the English has 1024,
-  because the translator merges lines and gives each merged line its own
-  beat, so only 54 % of its starts land within a third of a second of an
-  English start -- 89 % within a second, 97 % within a second and a
-  half. A bitmap does not mind: a merged line overlaps both the lines it
-  covers, and a line one file does not have costs its own bins rather
-  than a whole match. **One damaged cue does not decide how long a file
-  is.** Everything downstream reads the last moment a file has text on
-  screen -- it is the length of the bitmap and the timeline both files'
-  densities, and so the chance term below, are measured over -- so a
-  stamp that parses and is wrong costs the whole measurement rather than
-  its own cue, in both directions: an appended `01:00:00,000` on a
-  twenty-minute file triples the timeline and decays the score into the
-  raw Dice coefficient of two talkative files, and one mistyped hour
-  digit on a cue's end (`02:10:18,160 --> 52:10:24,240`, from a real
-  file) lights fifty hours of invented timeline and refuses a pairing
-  that is perfect. So `cue_spans` drops a cue reaching further past the
-  body of the file than a tenth of it or ten minutes, and stops at six
-  hours for a file with no body to read at all -- four billion seconds
-  of timeline is a 34 GB allocation, which aborts rather than unwinding
-  and so never reaches the FFI guard. A healthy file loses nothing.
-  **What two cues share is on screen once**: the bitmap takes the union
-  of the cues over a bin, not their sum, because an SDH speaker label
-  beside its line and a sign captioned over dialogue are one lit
-  interval -- summing them counted a moment as many times as the file
-  wrote it and read a density of 0.81 where the file's is 0.66. **What
-  is scored is the overlap above chance,
-  never the overlap.** Subtitles are on screen something like two thirds
-  of an episode, so two files with nothing to do with each other already
-  overlap heavily, and the number reported is
-  `(dice - chance) / (1 - chance)` from `dice = 2|A∩B| / (|A|+|B|)` and
-  `chance = 2·da·db / (da+db)`. `CONVINCING` sits at 0.45 and is
-  **measured**: 39,000 pairings of 717 files the OpenSubtitles addon
-  offered for forty titles in thirty-seven languages, split into the
-  pairings whose transform is right -- judged by where it puts the lines,
-  not by the score -- and the deliberate mismatches. The first have a
-  fifth percentile of 0.54 and a median of 0.81; the best of the 30,918
-  mismatches reaches 0.376, and a different episode of the same season
-  0.222. **The two overlap**, so 0.45 is not a midpoint but a line drawn
-  above the mismatches: it clears the best of them by 0.074 and costs one
-  pairing in fifty that really does align -- pairs whose files keep text
-  on screen for very different shares of the episode, which Dice's
-  ceiling holds down however well the lines land. The measurement,
-  including what each neighbouring threshold would have cost, is
-  `rust/tests/subtitle_threshold.rs` and its fixture; re-run it with
-  `cargo test --release --test subtitle_threshold -- --ignored`. **The search goes coarse to
-  fine.** The rate window is 0.90 to 1.10 and stays there, because PAL
-  against film is 4.27 % away and finding it unaided is the whole point;
-  that is far too wide to sweep against every offset at a tenth of a
-  second, so the first pass bins at a second -- where an episode is a
-  few tens of machine words -- and two passes after it look only near
-  its winner, at 100 ms and then 20 ms. A bin is lit when text covers at
-  least *half* of it rather than any of it: lighting from any overlap
-  makes a file of two-second lines nearly all lit at a second per bin,
-  and two files that are both nearly all lit have no headroom above
-  chance left to tell them apart, which measured out as the right ratio
-  scoring 0.14 where a wrong one scored 0.34. How finely the ratio is
-  stepped comes from how long the file is, not from a constant: a ratio
-  out by `d` throws a cue `d * t` seconds, so the step nearest the right
-  answer has to keep the whole file inside a bin. **Refusing is the
-  point**, and a refusal says what was found -- the score and the
-  transform, not a fraction of cues. "Only 303 of 690 cues matched, so
-  nothing was changed" is what sent the owner looking for a different
-  reference when the reference was fine, and a count of cues was never
-  comparable between a file that merges lines and one that does not. A file
-  with fewer than fifty cues is not evidence either way, whichever side
-  of the pairing it is on, and the pairing is not measured at all; that answer carries no score and names how many
-  cues each file turned out to have, because a file that could not be
-  read as a subtitle is a different problem from two files that disagree
-  with each
-  other. The reference is always the viewer's to pick, since the answer
-  is only as good as that file's own sync and nothing in the metadata
-  knows which file that is; with no other file on offer the option is not
-  drawn at all, and the sheet that asks is one row per language with the
-  rest of a language behind a row of their own, because reaching a
-  *second* language is what opening it is usually for. **The other way of
-  measuring is the marks**, which is what a language that answers with
-  one file -- or with several sharing the same bad timing -- has instead,
-  since a match needs a second file to be right about. "This is right" on
-  the panel records where the line on screen belongs: the cue's own time
-  in the file, which is libmpv's `sub-start` and is its raw time there
-  (measured against a running player, not read out of the manual, and
-  written down at `MediaKitEngine.subtitleCueStart`), paired with the
-  video position that cue is *drawn* at -- the transform in force
-  applied, which is the picture the viewer has just approved, and not
-  the instant the button was pressed, which is a reaction time. So one
-  mark on its own changes nothing, deliberately: the viewer shifted the
-  line into place themselves and the mark writes down where they put it.
-  Two of them at least two minutes apart give the line through both, so
-  the rate comes with it -- which is what the second mark is for, made
-  out at the far end after the strides have put the picture right there
-  too; a mark within half a minute of an existing one
-  corrects that one rather than joining it, and the pair used is always
-  the two furthest apart (`SubtitleCalibration` in
-  `lib/features/player/subtitle_calibration.dart`). Which of the two
-  happened is on the panel, because the picture cannot say: an offset and
-  a rate both land the line in front of the viewer, and only one of them
-  still holds ten minutes later. The marks belong to the file that was
-  playing and go with it, since a point on one file's timeline pairing
-  with the next file's would be a lever arm across two of them; only what
-  they derive is kept. Reset goes back to untouched, 1.0 and 0.0, and
-  throws the marks away with them, because with nothing else writing
-  either property that is what "undo what I did" means -- and what those
-  two numbers hold is the line through the marks, so keeping the points
-  would let the next press pair with a judgement just discarded and put
-  the whole answer back. What the viewer fixes is **remembered, keyed on what caused
-  it** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`, under the
-  one `subtitleSync` preference), so the same correction is not made
-  again on the next episode, and `_resetSubtitleTiming` puts it back
-  whenever that file goes on screen. The two keys are deliberately
-  different because the causes are. A *speed* is remembered against the
-  series and the group that cut the release the file was made for
-  (`releaseGroup`, lower-cased), since what a file was timed against is a
-  property of where it came from and video releases of one show share a
-  frame rate, so a speed carries from one episode to the next. It is
-  `releaseGroup` and not the addon's own bucket (`g`), which is what this
-  used to key on: `g` is a per-answer cluster index, re-assigned every
-  answer, so one Swedish upload batch reads `g=6, 5, 4, 1` across four
-  Gilmore Girls episodes and Breaking Bad's BluRay family reads `2, 2,
-  1`, and a bucket can even hold files from another episode. Keyed on it,
-  a measured multiplier usually missed next episode and now and then
-  landed on a family nobody had measured. `releaseGroup` is on about four
-  entries in ten and is the same word every episode -- spelled with
-  whatever capitals the uploader used, which is why the key is
-  lower-cased -- and rows an older build wrote under `g` lapse rather
-  than migrate, since the group's name is not in them. A *shift* is remembered against the
-  video release as well, because an offset is the video's pre-roll less
-  whatever the subtitle's source assumed and changing either side
-  changes the answer; the release is the whole filename the player knows
-  (the file the server says it opened, else the addon's claim), not a
-  release group parsed out of it, because a parse is a guess and two
-  encodes by one group can still start in different places. Any part of
-  a key nobody can name -- an addon that names no release group, a
-  torrent nothing has named the file of -- means that adjustment is simply not
-  remembered: a narrower key is forgotten more often, and that is the
-  price of never being wrong. Both values stored are real numbers, a
-  multiplier and an offset in seconds, because both are measured: no
-  menu of values contains 1.0440. The preferences file is forgiving by
-  design, so the one place a stored multiplier becomes `sub-speed` is
-  where it is checked against mpv's `<0.1-10.0>`
-  (`PlayerScreen._rememberedSpeed`) -- media_kit throws the property
-  write's return code away, and a value outside that range is refused in
-  silence while the previous file's multiplier keeps running. Rows the
-  build before this one wrote name a toggle direction and a count of
-  presses, and are dropped rather than reinterpreted. Reset *forgets* rather than storing a
-  correction of none, since nothing remembered is what nothing applied
-  looks like next time; the store is bounded by recency, so a viewer who
-  fixes twenty shows does not pay for the twenty-first; and only a press
-  on the panel is written down, because every other call on the timing
-  is the machine putting a file back the way it found it. The write is
-  made when the adjusting is over -- the panel closing, something
-  changing what is on screen, the player going away -- rather than on
-  each press, since the shift repeats eight times a second under a held
-  key and a preferences file is not a keystroke log. The last of those
-  waits until after the screen has dropped its preferences listener,
-  because a write notifies synchronously and a notification answered
-  from inside `dispose` is a `setState` on an element Flutter has
-  already marked defunct. From the first
-  press the session preference's auto-pick stops
-  looking for a file of its own for this media -- a viewer judging the
-  subtitle in front of them has answered the question that guess exists
-  to ask, and a guess that keeps swapping the file under them is the
-  wrong answer to it. Picking a subtitle from the menu ends it for the
-  same reason. Both values are re-applied after the stream is re-opened,
-  since they belong to the playback rather than
-  to the file the demuxer just re-read -- and the addon file goes back
-  first, because a re-open is a fresh `loadfile` and nothing `sub-add`
-  put in survives one. The panel is deliberately not part of the OSD: the
-  bar fades on its three-second timer while the panel stays, because
-  adjusting means pressing and then watching the picture for several
-  seconds, and it takes a rung of its own on the Back ladder -- above the
-  bar, and on every device rather than only on a television. Every button
-  on it, Reset and the close cross included, wears the same two-pixel
-  focus ring, since this is the one surface meant to be operated after
-  the bar has gone. It scrolls inside whatever height the screen leaves
-  it, because a 360 dp-tall phone held sideways leaves under 300 and a
-  refusal's three lines do not fit in that -- overflowing there pushed
-  Reset off the bottom of the screen, which is the way back from the
-  state the viewer had just landed in. The speed row has no buttons and draws the space two
-  would have taken, so its number stays in the column the shift row put
-  its own in.
+The FFI surface, by file under `rust/src/api/`:
 
-  What was *picked* is remembered too, and separately
-  (`SubtitlePickMemory`, `lib/core/subtitle_picks.dart`, the
-  `subtitlePicks` preference): one row per show holding the language as
-  the label the menu prints, the release group of the file that was
-  picked where the addon named one, or that subtitles were turned off on
-  purpose, plus a count per language with no show attached. The engine's
-  own `subtitle_preference` is session state -- `Unload` clears it and the
-  player dispatches `Unload` on dispose -- so on a fresh start the row is
-  the only thing that knows what this programme is watched in, and the
-  auto-pick falls back to it. Among the files of the remembered language
-  one from the remembered group is preferred, and where there is none the
-  head of the language is taken as always: the group is a preference
-  among files, never a condition on the language, since a show can change
-  release family between seasons and six OpenSubtitles entries in ten
-  name no group. A language the episode does not answer with means
-  nothing is applied at all, and a show never watched is left alone --
-  putting the viewer's commonest language onto an unknown programme would
-  put subtitles on one that needs none. Only a pick made by hand writes
-  to the store, and a preference synthesized from it is never dispatched
-  back to the core. The counts decay on picks rather than on days: they
-  halve when their total passes a ceiling and the zeroes drop out, which
-  follows a taste that really changes without a language going stale
-  while the app is closed. Then
-  `groupSubtitlesByLanguage` (`lib/features/player/subtitle_groups.dart`)
-  makes one row per language, since OpenSubtitles answers a single movie
-  with 69 files, nineteen of them Spanish. Codes group on what they mean
-  (`en` and `eng` are one row); a code `languageName` does not know is
-  its own row, labelled with the code itself. Nothing that reaches it is
-  hidden: a language with more than one file carries a row beneath it ("14 other
-  English files") that opens them all, each named by the addon that
-  offered it plus whatever the file itself is worth calling: the addon's
-  `label` if it sent one, else its release group (`DFN`, or `DFN BluRay`
-  with the format), else its `subtitleFileName` cleaned up into words,
-  else its `movieReleaseName`, and only then `Option N`. A derived name
-  only earns its place by differing from its neighbours, and an addon
-  repeats itself -- all three Czech files OpenSubtitles answers for The
-  Godfather are named `1.srt` -- so any name two files of one language
-  both derive gets its position back on the end (`1 (2)`). Those come from
-  the addon's own properties the pinned stremio-core keeps
-  (`SubtitleInfo` in `lib/core/state/player.dart`); OpenSubtitles v3
-  sends no label, so before that pin fifteen English uploads were fifteen
-  numbers. Every one of them is addon text on its way to the screen and
-  goes through `wellFormedText` (`lib/core/well_formed_text.dart`), which
-  drops the half characters Flutter's text layout refuses to draw, and
-  every one is cut to the same 60 characters -- an addon's
-  `movieReleaseName` runs to a hundred and twenty, and a menu row is
-  something to choose between, not a paragraph (the rows cap at two lines
-  on top of that, since a `ListTile` grows to fit whatever it is given). That
-  row is a *sibling* of the language row rather than a button inside it,
-  so a remote reaches it by moving down (directional traversal skips a node
-  inside the focused one's rect). Whichever file is playing is what its
-  language row shows as selected and what it re-applies, so a pick two
-  rows deep survives the list being rebuilt when a slow addon answers.
-  The menu is reachable before the media loads, so a pick can predate the
-  rate; nothing is taken away when it lands, and the panel picks up the
-  direction as soon as the engine has answered. The list itself waits for
-  nothing: a torrent whose server has not yet named the file it opened is
-  a video nothing can be said to have been cut for, and the addons' order
-  stands until it is.
-  Which track is active comes from mpv's
-  own `sid`/`aid` (observed through `NativePlayer.observeProperty`), so a
-  default or forced track mpv picked by itself shows as selected too —
-  media_kit's `stream.track` only follows its own setters. Picking one
-  dispatches `SubtitlePreferenceChanged`, which the core keeps for the
-  Player session; the next episode's player applies it automatically to
-  the first matching track once the media is loaded (mpv refuses
-  `sub-add` while it is still between files) -- the automatic pick comes
-  out of the same ordered list the menu shows
-  (`PlayerScreen._offeredSubtitles`, the one place either consumer gets
-  it from), since it is the one path that applies a file without anybody
-  looking at it, and it applies it exactly as it stands. A backend with no
-  rate to report -- a cast device, an offline file, a container that
-  declares nothing -- simply stays silent, and an unknown rate decides
-  nothing. Text subtitles are rendered by Flutter
-  (media_kit's default `libass: false` sets mpv `sub-visibility=no` and
-  feeds the text lines to a `SubtitleView`), so size, colour and the
-  background box are a `TextStyle` in `SubtitleViewConfiguration`, not
-  mpv `sub-*` properties — identical on Linux and Android with no fonts
-  to ship. **Limitation:** bitmap subtitles (PGS, VobSub) are listed but
-  not drawn on this path; that needs `libass: true` and font shipping.
-  The style is the profile's subtitle settings (see *Settings are the
-  engine's*); the player's settings sheet edits the same keys.
-- **Torrent start-up overlay.** From `open` until the engine first reports
-  the media loaded (a duration, or playing), a torrent shows a card instead
-  of a spinner. Once `open` has been issued, the screen polls the embedded
-  server's stats every 500 ms over FFI (`server_torrent_stats`, the same
-  function its `stats.json` routes run; `TorrentStatsRequest.forStream`
-  takes the stream's `infoHash`, `fileIdx` and `announce` list — the three
-  things the core builds the stream URL from, `announce` being its `tr=` —
-  and a poll falls back to the torrent-level stats when the server has no
-  answer for the file) and maps the server's `phase` to a label:
-  `resolvingMetadata` → "Fetching torrent metadata…", `checking` →
-  "Checking existing data…" with `checkedBytes/checkTotalBytes`,
-  `buffering` → "Finding peers…" with the `peerDiscovery` counts while no
-  peer is live, else the window the reader is waiting for -- which is
-  piece-aligned and follows the reader, so after a seek it describes the
-  bytes actually being fetched. **A window one piece wide is said in
-  pieces, not in percent**: librqbit credits verified pieces and nothing
-  in between, so with 8-16 MiB pieces and a window inside one of them the
-  percentage could only ever read 0 or 100, and it read 0 for tens of
-  seconds while the download ran perfectly. What moves instead is the
-  server's `inFlightPiece` -- the byte progress of the very piece the
-  reader is sitting on -- which reads "Waiting for piece 137, 6.3 of
-  16.0 MiB…" over a bar at `downloadedBytes/totalBytes`, with an estimate
-  from `downloadSpeed` for that piece's own remainder. The bar owes three
-  rules to what the number actually means (`stream-server`'s README, "The
-  in-flight piece"), and each has a test: **full is not finished** -- a
-  chunk counts when it is written, the hash is only checked once the last
-  one is in, so the bar holds at 97% while `verified` is false and lets
-  `verified` fill it; **it never runs backwards** -- a decrease is a piece
-  that failed its check and was discarded, so the bar stays where it got
-  to rather than animating down, while a *different* piece (the reader
-  moved) starts where that piece is, at once and with no transition; and
-  **null is not zero** -- no reader open, no metadata, no chunk map, or a
-  server from before the field -- and then it is the wording it always
-  had ("Waiting for the first piece (16 MiB)…", "next piece"
-  mid-playback) over the indeterminate sweep, never a bar sitting at 0. A
-  window that genuinely spans several pieces keeps "Buffering start…" and
-  its percentage, and a server that sends no `pieceLength` keeps it too. `ready` → "Starting
-  playback…", `error` → "The torrent failed to start" with the server's
-  `error` string as the detail; no answer yet → "Connecting to server…".
-  The bar is determinate whenever there is a percentage; `downloadSpeed`
-  and, once anything is connected, the swarm line (`connected 4 ·
-  seeds 137 · swarm 539`) show when non-zero. While it is still finding
-  peers there is nothing connected to count, so that line is the
-  `peerDiscovery` counts plus, when a tracker answered, `137 seeds in the
-  swarm`. Polling pauses when the media loads (see
-  the stall card below) and ends on a failed playback and on dispose;
-  direct HTTP streams get nothing extra. The `TorrentStatsClient` comes from
-  `PlaybackScope`, so tests feed phases through a fake. The stream's
-  `fileMustInclude` (`f=`) filters are not part of the library call: a
-  stream without a `fileIdx` polls the torrent-level stats.
-- **An engine error is not a failed playback.** media_kit turns mpv's
-  error-level log lines from a handful of subsystems into `errors`
-  events, so one says something went wrong and not that the playback
-  did: a dead subtitle link, a decoder complaining, a read that was
-  retried. So "Playback failed: …" is shown only while the file the last
-  `open` asked for has not shown up (a duration, or a position past
-  zero); after that an error is a line in the diagnostics log, and what
-  gives up on a loaded playback is an end of file that is not the end
-  (`falseEndRecoveries` re-opens) or a position that stands still. mpv's
-  own words for a subtitle it could not fetch (`Can not open external
-  file <url>.`) are recognised: the file is passed over by the auto-pick
-  for the rest of the media, the selection it replaced goes back — `sub-add`
-  never took it off, and it answers a failure only in the log — and the
-  viewer is told which subtitle would not load, over the picture for six
-  seconds.
-- **Mid-playback stall card.** When playback that has started runs out of
-  data (`buffering` from the engine), a torrent gets the same card rather
-  than the spinner and sentence it used to: the polling that paused at
-  media-load resumes for as long as the stall lasts, at 2 s instead of
-  500 ms, with the first poll fired at once (the torrent's engine exists
-  by then, so there is no ordering to respect). The phases read in the
-  present tense — `checking` keeps its percentage, `buffering` means the
-  head window is still filling and its percentage — or, one piece wide,
-  the same in-flight piece the start-up card draws — is what playback is
-  waiting for, `ready`/unknown is "Buffering from the torrent…" with an
-  *indeterminate* bar (past the head of the file the server measures no
-  target, so a full bar would be a lie), `error` is "The torrent stopped"
-  with the server's reason. The detail line always says `downloadSpeed`
-  and the swarm, zeros included — during a stall `0 B/s · connected 0`
-  is the diagnosis, and whether the swarm holds a *seed* at all is the
-  difference between a slow swarm and one that cannot finish the file.
-  The swarm line is one formatter (`TorrentProgressCard.formatSwarm`,
-  rendered by the start-up card, the stall card and the progress card
-  alike) saying three numbers: our live connections, the tracker-scraped
-  `swarmSeeders`, and `swarmSeeders + swarmLeechers` for the whole swarm.
-  Only the first is ours to count; a scrape that never answered leaves
-  the other two *missing*, never printed as a 0 or a dash, because a
-  swarm we could not ask about is not an empty one — so a torrent with no
-  trackers says just `connected 4`, and seeders without leechers stops at
-  `seeds`. Connections that hold the whole file (`connectedSeeders`) and
-  addresses merely discovered are not on this line; the stats overlay
-  still shows both. Playback
-  resuming drops the card, the timer and the last answer; an answer that
-  arrives after the stall ended is discarded.
-- **Next episode.** `player.nextVideo`/`nextStream` come from the core.
-  On `Ended`, with `bingeWatching` on, an up-next card counts down
-  `nextVideoNotificationDuration` (35 s by default); playing it dispatches
-  `NextVideo` and either replaces the player route with one for the
-  engine's `nextStream` (same addon, matching binge group) — the old
-  screen then skips its `Unload` so the session's subtitle preference
-  survives — or pops with a `PlayerScreenResult` so the details screen
-  loads that episode's streams when the engine found no stream.
-- **Addons are three model fields and one external link.** The Addons
-  screen (Settings → Addons, or "Browse addons" on an empty board) reads
-  `installed_addons` (`InstalledAddonsWithFilters`, snake_case) and
-  `remote_addons` (`CatalogWithFilters<Descriptor>`, Discover's shape over
-  an `addon_catalog` resource); whether a community entry is installed is
-  not in the model and is computed from `ctx.profile.addons` by manifest
-  URL. "Add addon" and every tile open `AddonDetailsScreen`, which loads
-  `addon_details` for one manifest URL and offers Install (the fetched
-  descriptor), Update (`UpgradeAddon` when versions differ), Uninstall
-  (never for a protected addon) and Configure — the manifest URL with
-  `manifest.json` → `configure`, opened in the system browser through
-  `url_launcher` behind `ExternalLinkScope` so tests assert the URL. A
-  `configurationRequired` manifest cannot be installed (`Other` code 6),
-  so Configure is its primary action; `profile.addonsLocked` disables
-  every mutation behind a banner, and failed mutations (`Error` events
-  sourced from `AddonInstalled`/`AddonUninstalled`/`AddonUpgraded`) show
-  as a SnackBar.
-- **Pinned upstreams** (`rust/Cargo.toml`): `stremio-core` at a fixed rev
-  of the `zond/stremio-core` fork (`1819c56f`: release 0.63.0 plus the
-  commits the dependency table below lists, the one the app needs being
-  the commit that keeps an addon's own subtitle properties -- `fpsMilli`,
-  `subtitleFileName`, `releaseGroup` and the rest -- in a flattened
-  `other` map instead of letting serde drop them, upstream PR
-  Stremio/stremio-core#1045, and two build fixes described in the table
-  below; drop the fork once the PR lands and the two are upstream) with the
-  `derive` + `env-future-send`
-  features, `zond/stream-server` at a fixed rev (`de03ad08` as this is
-  written; the pin itself lives in `rust/Cargo.toml`, twice, for `server`
-  and its `enginefs`, and the `Pin stream-server at ...` commits move it
-  there and not here, so read the current one from the file. What the pin
-  buys: generated
-  bearer token, library API on `ServerHandle`, ephemeral torrent port,
-  `/local-addon` stubs, `connectedSeeders` and the tracker-scraped swarm
-  counts, the buffer profiles behind `?buffer=`, cache usage and
-  on-demand cleaning, a DHT bootstrap list trimmed to the two hosts that
-  actually answer and resolved over DNS-over-HTTPS when the system
-  resolver will not, with the IPv6 literals dropped on a device that has
-  no route to them -- and named in the log as route-dropped rather than
-  counted as a name DNS failed on, the piece-aligned start-up window that
-  follows the reader plus the `pieceLength` it is measured in,
-  `inFlightPiece`, the byte progress of the one piece the reader is
-  sitting on,
-  `ServerHandle::dht_status` for the diagnostics screen, a cache cap that
-  is the smaller of `cacheSize` and what `statvfs` says the volume can
-  give above a free-space floor sized to the volume
-  (`enginefs::free_space_floor`: a thirty-second of it, clamped to
-  128-512 MiB, and 512 MiB when the size is unreadable -- so a television
-  with a 4 GB partition keeps 128 MiB and can play, and one with no
-  `cacheSize` set is capped by its own disk rather than by `u64::MAX`) --
-  and an ENOSPC that stops a torrent being classified as a full disk and
-  answered with an eviction pass and a restart instead of a dead playback
-  -- with that pass allowed to evict a file larger than the whole cap when
-  the device rather than `cacheSize` is what set it, counting what the
-  30-day rule freed as room made, reporting a cap of 0 as a cap rather than
-  as no cap at all, and saying a disk with nothing left to evict is stuck
-  once instead of every fifteen seconds for the life of the process, a LAN
-  media listener that ranks its interfaces rather than naming whichever
-  non-loopback one `getifaddrs` happened to list first -- a phone's
-  cellular address as readily as its Wi-Fi one, and a container or VM
-  bridge as readily as either, since what the ranking demotes is every
-  interface a receiver on a home network cannot be behind, and an
-  interface whose netmask the kernel never reported is not subnet-matched
-  at all -- that says in the log which address it gave a receiver and when
-  a request arrives, and that counts what it has been asked for, so a
-  receiver which never fetched can be told from one which reached this
-  device -- which is all the count knows about it -- the count belonging to
-  the session that asks about it:
-  start and stop both reset it, so a second receiver picked mid-cast does
-  not inherit the first one's), and -- the last sixteen pins -- a retention
-  that keeps what the reads say is being watched rather than what a range
-  header looked like (a detector over the reads decides which reader is
-  the viewer, and a pass per owner answers its own file against its own
-  listing), buffer profiles sized in seconds of the film at its bitrate
-  (90 s, four minutes, a day) once `note_duration` has told the server the
-  length, with the film named the way the player URL spells it, `-1`
-  included, one allowance shared across the files being read, a reclaim
-  the backend refuses -- a hash check running, a piece it will not forget
-  -- noticed by the pass rather than counted as room made, and the
-  free-space floor sized to the volume above. To
-  bump: change the rev, `cargo update -p <crate>`, run
-  `cargo test`, and re-record any fixture whose shape moved. A stremio-core
-  bump has to keep the fork's `flate2` relaxation in
-  `stremio-watched-bitfield` (see the table below), or the graph stops
-  resolving.
+| File | Functions |
+|---|---|
+| `core.rs` | `core_init`, `core_dispatch`, `core_get_state`, `core_events`, `core_shutdown`, `core_is_initialized`, `core_schema_version` |
+| `server.rs` | `server_start`/`stop`/`base_url`; `server_settings`, `server_update_settings`; `server_torrent_stats`; `server_note_duration`, `server_note_player_opened`, `server_note_player_stalled`; `server_storage_report`, `server_cache_usage`, `server_clean_cache_now`; `server_background_traffic`; `server_stream_numbers`; `server_dht_status`; `server_drive_open`, `server_drive_grant`; `server_close_proxy_streams`; `server_set_lan_media`, `server_lan_media_running`, `server_lan_media_requests_served`, `server_lan_media_base_url` |
+| `downloads.rs` | `downloads_add`, `downloads_remove`, `downloads_list`, `downloads_open`, `downloads_events`, `downloads_start_fresh` |
+| `prefs.rs` | `prefs_get_all`, `prefs_set` |
+| `subtitles.rs` | `subtitles_match` |
+| `addon_health.rs` | `addon_health_report`, `addon_health_forget` |
+| `diagnostics.rs` | `diagnostics_snapshot`, `diagnostics_log` |
+
+Dart wraps them in clients (`CoreClient`, `ServerClient`, `DownloadsClient`,
+`PrefsClient`, ...) handed down the tree by scopes, which is what lets
+widget tests swap in the fakes in `test/support/`.
+
+## What crosses the bridge
+
+**State crosses as JSON.** `core_dispatch` takes a stremio-core `Action` as
+JSON, `core_get_state(field)` returns one model field as JSON, and
+`core_events` streams `RuntimeEvent`s (`NewState` lists the fields that
+changed). Every stremio-core type already derives serde, so this costs no
+per-type mirroring and survives engine upgrades; Dart keeps small view
+classes (`lib/core/state/`) over the maps.
+
+The model (`XtremioModel`, `rust/src/model.rs`) has `ctx`,
+`continue_watching_preview`, `board`, `search`, `discover`, `meta_details`,
+`streaming_server`, `player`, `library`, `installed_addons`,
+`remote_addons` and `addon_details`; `lib/core/fields.dart` mirrors the
+list.
+
+- `ctx` serializes as `{profile, notifications, events}` only -- its
+  library, streams and server-URL buckets are `#[serde(skip)]` -- so the
+  Library screen reads its own `library` field
+  (`LibraryWithFilters<NotRemovedFilter>`).
+- Where the raw model lacks what the UI needs, `get_state_json` adds a
+  sibling key rather than reshaping the field: `meta_details` gains
+  `watchedVideoIds`, `board`/`search` gain `catalogLabels` (catalog and
+  addon names resolved from the profile's manifests, aligned with
+  `catalogs`).
+- `board` and `search` are the one reshape. They are `GridCatalogs`, which
+  do not follow the library (stremio-core marks them changed on every
+  library change only because stremio-web merges library flags into the
+  board), and an item crosses as what a poster tile draws -- `id`, `type`,
+  `name`, `poster`, `posterShape`, `releaseInfo` (`GridItem`) -- not the
+  whole `MetaItemPreview`, whose `links` were most of a 1.4 MB board.
+- `core_get_state` takes an owned snapshot under the model's read lock and
+  serializes after releasing it (`FieldSnapshot`), so a board pull does not
+  park every dispatch behind it.
+
+## Wire conventions
+
+What the engine's serde shapes mean for a caller. The pinned source is the
+authority; these are the ones that have bitten.
+
+- **The envelope** is `{"field": <snake-case model field | null>, "action":
+  {...}}`, and `Action` is `#[serde(tag = "action", content = "args")]`
+  with every sub-enum nested the same way. `CoreActions`
+  (`lib/core/actions.dart`) builds them; screens never hand-write one.
+- **Routing.** `field: null` runs `Ctx` *and every field*, so a null
+  `Unload` clears everything: unload per field. A `Ctx` action sent with any
+  other field is silently ignored, so every `Ctx` action goes with
+  `field: "ctx"`. `NewState` is emitted before the effect-produced events of
+  the same update, so when `UserAuthenticated` arrives a `ctx` pull already
+  has the new profile.
+- **Casing is mixed.** Most of the model is camelCase, but `Event` args,
+  `LibraryWithFilters.selectable.next_page` (Discover's is `nextPage`),
+  `StreamUrls`, `DescriptorLoadable.transport_url` (while
+  `AddonDetails.selected.transportUrl`), `LibraryItem._id/_ctime/_mtime`
+  and `state.video_id` are not. Every view class is tested against recorded
+  JSON for this reason.
+- **Selectables carry their requests.** Discover, the library and the addon
+  lists publish each filter option with the exact request that selects it,
+  and the UI dispatches that verbatim.
+- **Library pages are cumulative**: page N is the first N×100 items, so the
+  grid replaces its list rather than appending.
+- **`UpdateSettings` takes the whole `Settings` object**, which has no serde
+  defaults; a map missing a key fails at dispatch as "invalid action JSON".
+- **Errors** are `{"type": "API"|"Env"|"Other", "code", "message"}`, and an
+  `Error` event names its `source` event. The `Other` codes the UI handles:
+  3 (addon already installed), 5 (protected addon), 6 (configuration
+  required), 7 (addons locked).
+- **The engine does not serialize its status** (`CtxStatus`), so "signing
+  in" and "syncing" are local UI state cleared by the event that ends them.
+
+## The Rust side
+
+**What the crate keeps between calls is one value** (`rust/src/state.rs`):
+`AppState`, grouped by concern (`core`, `server`, `downloads`, `prefs`,
+`addon_health`, `addon_observer`), behind the one process static there is.
+`core_init` creates it (or adopts the one the event-stream subscribe made
+just before), and `core_shutdown` takes the whole value out, so a second
+boot starts clean. Every lock is a field inside it, never one around it, so
+nothing coarse is held across the server's blocking calls. What stays a
+`static` says why (`env.rs`'s `STORAGE_DIR`, the tokio runtimes and HTTP
+client, `logging.rs`'s `INIT`).
+
+**The engine runs on our `Env`** (`rust/src/env.rs`):
+
+- reqwest + rustls, trusting Mozilla's compiled-in roots rather than the
+  device store (`http_client_builder` says why: on Android the platform
+  verifier parses CRLs in Java on every handshake);
+- every body read under a cap, chunk by chunk (`MOST_JSON_BYTES`, 32 MiB;
+  4 MiB for a subtitle), so an answer that inflates past it is abandoned;
+- no error out of `fetch` or `fetch_text` carries the URL (`without_url`);
+- one JSON file per storage bucket under the app-support directory, written
+  temp-then-fsync-then-rename on a single-worker runtime, and a bucket
+  write never lands over a newer one of the same file;
+- a bucket that will not parse at boot is moved aside as
+  `<key>.json.corrupt-<seconds>` and read as empty; one the disk will not
+  read refuses the boot (the Dart boot screen says why) rather than start
+  an anonymous profile the first persist would write over the real one. A
+  failed stremio-core schema migration refuses the boot the same way;
+- `core_shutdown` waits up to 5 s for queued storage writes.
+
+## The app's own preferences
+
+`rust/src/prefs.rs` keeps `<storage_dir>/xtremio_prefs.json`: a flat JSON
+object of this device's choices, written with the same atomic write.
+Deliberately not stremio-core `Settings` (the engine's, synced to the
+account) and not a Dart preferences package. The FFI is `prefs_get_all()`
+and `prefs_set(key, value_json)`, so a new choice costs a key and no
+regenerated bindings; `PrefsClient` (`lib/core/prefs_client.dart`) reads it
+once at start-up into `AppPrefs`, handed down as `PrefsScope`.
+
+The file is forgiving and additive: a write is a read-modify-write of one
+key, a key from a newer build survives it, and a file that will not parse
+is moved aside (`xtremio_prefs.json.corrupt-<seconds>`) and reads as
+nothing set. A file the disk will not read is an error to `prefs_get_all`
+and refuses `prefs_set`, since writing one key over an unread file loses
+the rest. Nothing secret goes in it.
+
+| Key | What it holds |
+|---|---|
+| `streamsSectioned` | Details sources sectioned by resolution (default) rather than grouped by addon; the older `streamsFlat` is read as a fallback and never written |
+| `streamsOrder` | Order inside a section: peers per megabyte (default), largest, most peers |
+| `openStreamSections`, `openStreamAddons` | Which resolution sections / addon groups are open; empty means all closed on purpose |
+| `bufferAhead` | How far ahead playback buffers (see [The player](#the-player)) |
+| `focusEmphasis` | Settings → Interface → "Bold focus", television only |
+| `shareWhileIdle` | Whether the server uploads while nothing plays; on unless turned off |
+| `verboseDiagnostics` | Settings → Developer → "Verbose logging" |
+| `subtitleSync`, `subtitlePicks` | What the viewer fixed about subtitle timing, and what they picked (see [Subtitles](#subtitles)) |
+| `similarSuggestions` | "More like this" answers already fetched |
+| `driveLinkedFiles`, `driveTokenDead`, `drivePendingSession` | Linked Drive files, a grant Google has refused, a pairing not yet collected |
+| `addonHealth` | Written by the Rust side (see [docs/ADDONS.md](ADDONS.md)) |
+
+`similarApiKey` and `similarModel`, from builds that asked a model
+directly, are deleted on load.
+
+## Engine settings and the account
+
+**Settings are the engine's.** `ctx.profile.settings` is stremio-core's
+`Settings` and the only way to change one is `UpdateSettings` with the
+whole object. `ProfileSettings.withValue(key, value)`
+(`lib/core/state/profile.dart`) copies the map with one key changed; every
+control writes exactly that, nothing writes while `ctx` is unknown, and the
+map last sent is what the next write builds on until the following pull,
+so two quick changes do not revert each other. Settings are device-local
+(the API's `saveUser` carries only the user record).
+
+What the app reads: `seekTimeDuration` and `seekShortTimeDuration` (Shift +
+arrow, the *short* seek), `bingeWatching`, `nextVideoNotificationDuration`
+(the up-next countdown; 0 plays the next at once), `pauseOnMinimize`,
+`escExitFullscreen`, `subtitlesSize` / `subtitlesTextColor` /
+`subtitlesBackgroundColor` (`SubtitleStyle.fromSettings`: 32 px scaled by
+the percentage, `#RRGGBBAA`, a transparent background meaning no box), and
+`hardwareDecoding` (applied to the next player that opens).
+`streamingServerUrl` is not offered: it is always the embedded server's.
+`quitOnClose` and `hideSpoilers` are stored but not honoured; the rest pass
+through untouched.
+
+**Account.** Settings → Account dispatches `Authenticate` (`Login`, or
+`Register` with the GDPR consent the API requires, `from: xtremio`) and
+`Logout`, plus the housekeeping stremio-web does on window focus:
+`PullAddonsFromAPI` at every start-up, and `PullUserFromAPI`,
+`SyncLibraryWithAPI` and `PullNotifications` for a signed-in profile on
+start-up, resume and `UserAuthenticated`. Signing in *replaces* the
+anonymous library and resets the settings, and the UI says so. A failed
+addon-collection fetch at login sets `addonsLocked`, which disables every
+addon mutation until a pull succeeds.
+
+## The embedded server
+
+**In-process.** `stream_server::start` runs on its own thread and runtime.
+Both its ports are ephemeral -- HTTP and BitTorrent -- so nothing collides
+with a desktop Stremio. The core's `streaming_server_url` is pointed at the
+address read back at every launch (`core::pin_to_embedded`), and again on
+`UserAuthenticated` / `UserLoggedOut`, since login and logout reset the
+settings to `http://127.0.0.1:11470/`. It is the only server the app
+streams from: there is no remote-server choice, because everything the app
+asks of a server goes to the embedded one over FFI.
+
+**The control API takes a per-launch bearer token that only Rust holds.**
+`ServerConfig::default()` generates it; every non-media route -- exactly the
+handful stremio-core calls (`/settings`, `/network-info`, `/device-info`,
+`/get-https`, `/casting`, `/create`, `/{infoHash}/create`,
+`/{infoHash}/{fileIdx}/stats.json`) -- answers 401 without it. stremio-core
+reaches the server only through `Env::fetch`, which adds the header when
+the request's scheme, host and effective port are the embedded server's
+(`server::token_for`). The media routes libmpv fetches
+(`/{infoHash}/{fileIdx}`, the archive routes, `/proxy`, `/drive/stream`,
+`/downloads/{key}/stream`) and the `/local-addon` stubs stay open.
+
+Everything the app asks is a `ServerHandle` call over FFI (the table in
+[The bridge](#the-bridge)), wrapped by `ServerClient`
+(`lib/core/server_client.dart`). The app's one write to the server's
+settings is `server_update_settings` -- what `POST /settings` runs.
+
+**Idle sharing is one settings key.** The server keeps uploading after
+playback when its `seedingEnabled` is true; false chokes the whole session
+while no player reads (one `set_upload_enabled` on the backend: nothing is
+paused, no peer dropped, downloads untouched). Since an unpinned engine
+nothing streams is removed five minutes after going idle whatever the
+setting says, what the switch really decides is whether those minutes
+upload. `IdleSharingPolicy` (`lib/features/sharing/idle_sharing.dart`)
+decides the value from the viewer's `shareWhileIdle` alone -- on by
+default everywhere; nothing asks what the connection costs -- pushes only
+changes, serialized, and holds it false for the run after "Not now"
+(`pauseUntilRestart`, which only a switch that is on can take).
+
+**The status light says what is happening, never what is configured.**
+`SharingLight` (`lib/features/sharing/sharing_light.dart`) is drawn in the
+shell's top right while the server says bytes moved to or from peers with
+no player reading (`server_background_traffic`, a peek that creates no
+engine, polled every five seconds by `SharingActivityMonitor` only while the
+shell's own route is current). One slot, three glyphs: up while
+uploading, down while downloading, `swap_vert` for both. Pressed, it offers
+a stop for what is lit, and only rows that do something: the sharing rows
+("Not now", "Stop sharing", or a sentence when the switch is already off or
+paused), and one "Cancel <name>" per offline download on its way
+(`DownloadsClient.remove` with its files, the only stop a pin has). The
+placement is pinned on every shell screen by
+`test/features/sharing_light_placement_test.dart`.
+
+## The player
+
+**Playback goes through the engine's `Player` model.** The UI dispatches
+`Load Player` with the raw stream JSON plus the stream and meta requests;
+stremio-core publishes `player.stream` as `{StreamUrls, converted stream}`,
+whose `streaming_url` is the direct URL for a `url` stream and
+`<server>/{infoHash}/{fileIdx}?tr=…` for a torrent (the server creates the
+engine on first GET). The player opens that in media_kit/libmpv and reports
+`TimeChanged` / `PausedChanged` / `Ended` back so the library follows.
+`PlaybackEngine` (`lib/features/player/playback_engine.dart`) is the thin
+interface over media_kit; widget tests swap in `FakePlaybackEngine` through
+`PlaybackScope`.
+
+### Streams, the proxy and the cache
+
+**Every stream reaches mpv as a URL on our own server.** A torrent already
+is one; anything on another host -- a debrid link, an addon's HTTP URL -- is
+wrapped in the server's `/proxy` route (`lib/core/stream_proxy.dart`): the
+target's origin percent-encoded into a `d=` segment, its own path and query
+after it, so a signed link keeps its signature and the file name stays
+visible. The base comes from `CoreInitInfo`, settled before the first
+`open`. A loopback URL (already the server, including a kept download's) is
+left alone. `force-seekable` is set only for the server's own torrent
+routes, never for `/proxy`.
+
+**How far ahead to buffer is the viewer's choice**, sent as
+`?buffer=normal|large|maximum` on a torrent URL (`withBufferAhead`,
+`lib/core/buffer_ahead.dart`): 90 s, four minutes, or a day of the film at
+its own bitrate. Seconds need the film's length, which the player reports
+(`server_note_duration`); until then every profile reads ahead the same
+small fallback, so start-up is equally fast. Settings → Player → "Buffer
+ahead" is the standing choice; the player's own sheet overrides it for the
+playback on screen, re-opening the stream at its position. **"Download the
+whole file"** pins the stream as an offline download while it plays; a
+device that cannot fit it is told the numbers and keeps buffering.
+
+**There is one cache on the device and it is the server's.** The player is
+started with `cache-on-disk=no` and never writes it again: media_kit's
+default creates a file mpv unlinks at once, invisible to every instrument
+and to the server's budget. The server's cache has named files, a limit
+(`min(cacheSize, occupied + available - floor)`, the floor being
+`enginefs::free_space_floor`), and owners that give back what nobody plays
+or kept. `/proxy` caches by byte range under the same retention as a
+torrent's pieces, so a backward seek inside the window is local.
+
+**What the player holds is memory, deliberately small.**
+`MediaKitEngine.memoryCacheBytes` (32 MiB ahead) and `backCacheBytes`
+(8 MiB behind, one ten-second press back up to about 6.7 Mbps); the
+reasoning is on the constants. A seek outside is a range request answered
+from the server's cache. A television has 2 GB of RAM for everything, and
+the cushion belongs in the server's bounded cache.
+
+**A player that is left ends its own reads.** Each player screen mints a
+token (`player-1`, ...), writes it into its `/proxy` URLs as `p=`, and on
+the way out calls `server_close_proxy_streams` (`ProxyStreamControl`): the
+server ends those reads and answers `410 Gone` to the token afterwards, so
+ffmpeg's reconnect cannot revive them. The token is a name, not a
+credential: the route is on the loopback control API only, and the token is
+stripped before the origin is asked.
+
+### Archives and disc images
+
+Some sources serve a container rather than the film: a debrid `.rar`, a
+torrent whose one file is a `.zip` or an ISO. When a stream fails before it
+loads, the player reads its start and names the container by signature
+(`lib/features/player/archive_sniff.dart`: RAR, ZIP, 7-Zip, ISO 9660), then
+hands it to the server, which serves the member as ranges of the container
+-- nothing extracted, nothing written (`docs/design/translated-sources.md`
+in stream-server). `lib/features/player/archive_route.dart` is that half: for a
+stream on another host, `POST /{rar|zip|7zip|iso}/create` with the `/proxy`
+URL the engine was handed, then `GET /{fmt}/stream/{key}`, whose redirect
+names the member; for a torrent file, `GET
+/{fmt}/stream/torrent:<info hash>/<file name>` with no create. The member URL
+(`_translatedUrl`) stands in front of the core's URL at every later `open`,
+while `_opened` stays what the core published; it is also what a cast sends
+(see [CASTING.md](CASTING.md)).
+
+A container that cannot be played is said honestly: the server answers
+`415` (`compressed`, `encrypted`, `solid`, `noRandomAccess`,
+`unsupported`), `422` (`malformed`) or `501` (`noRanges`, `noReader`), and
+`archiveRefusal` shows the app's wording or the server's sentence where it
+names something concrete. `noReader` names a cargo feature and so is never
+shown. Addon-declared archives (`rarUrls`/`zipUrls`) are untouched by this:
+stremio-core builds their `/create` URL itself.
+
+### Leaving the player
+
+Every way out goes through `PlayerScreen._leave`, in one order: `_detach`,
+send `quit`, close the proxied streams, await the teardown with the video
+still in the tree, then pop.
+
+- **`_detach` first** ends every subscription, listener and timer before the
+  first `await`. Waiting with the screen up is a state the handlers were not
+  written for: media_kit's own `stop` pushes a position of zero, which
+  reached the core as a `TimeChanged` and reset continue-watching. Input
+  stands down too (keys swallowed, hovers refused, the fade timer not
+  re-armed).
+- **`_stillOurs`** (`mounted && !_leaving`) is what every continuation that
+  can reach the engine, the core, the cast client or the navigator asks --
+  `mounted` is true during the wait, so it no longer answers that question.
+  A continuation that already started something unwinds it.
+  `test/features/player/player_leaving_awaits_test.dart` lists them.
+- **`quit` is the kill**, sent asynchronously on media_kit's handle
+  (`PlaybackEngine.quit`), never `mpv_terminate_destroy`. Sent first, it is
+  ahead of media_kit's `stop` on mpv's queue; measured, a teardown behind it
+  returns in 92-230 ms even against a wedged socket. A refused command is
+  thrown, not discarded.
+- **`PlayerScreen.teardownBound`** (2 s) bounds the viewer's wait, not the
+  teardown: past it the screen pops, the teardown continues, and a line is
+  logged (another if a late one lands). It exists because one player on the
+  owner's Chromecast once kept downloading after its screen was left, and
+  nothing since has explained it.
+
+### Seeking
+
+mpv's seek is exact (`hr-seek=yes`), which on a 32-bit box decoding through
+`mediacodec-copy` is a visible stall per press. So every press that says
+*further on* -- seek keys, a remote's transport keys, the buttons beside
+play, a double tap, the focused seek bar's left and right -- is
+`PlaybackEngine.scanBy`, `seek <n> relative+keyframes`. Relative matters: a
+keyframe seek to an absolute target lands on the keyframe *before* it, so
+a step shorter than the keyframe gap would go backwards. A tap or drag on
+the bar, and Shift + arrow (the short step), are exact. A held key
+accelerates (`SeekHold`): ten presses at `seekTimeDuration`, fifteen at
+twice it, then five times it; a fresh press starts again at one.
+
+### Controls and keys
+
+`PlayerScreen` switches media_kit's controls off and draws its own: a top
+bar (back, title, next episode, subtitles, audio, stats, settings) and a
+bottom bar (seek bar with the buffered range and drag scrubbing,
+play/pause, ± the seek step, time, volume on wide layouts, fullscreen). The
+controls fade after 3 s while playing and stay while paused or buffering.
+On a television they fade whatever holds focus, taking focus back to the
+video; Back comes down a ladder (up-next card, then an OSD that can fade,
+then the player). Subtitles sit 4.5 % of the picture above the bottom and
+are lifted clear of the bar while it is up, measured off the laid-out bar
+and pushed with `VideoState.setSubtitleViewPadding`.
+
+Keyboard: Space/K play-pause, ←/→ or J/L the seek step, Shift+←/→ the short
+step, ↑/↓ volume, M mute, F fullscreen, Esc (leaves fullscreen first when
+`escExitFullscreen` is on), S subtitles, Shift+S subtitle timing, A audio, N
+next episode, Shift+I stats. The remote's keys are in
+[ANDROID.md](ANDROID.md#driving-it-with-the-remote).
+
+### Torrent start-up and stalls
+
+From `open` until the media loads, a torrent shows a card instead of a
+spinner: the screen polls `server_torrent_stats` every 500 ms
+(`TorrentStatsRequest.forStream`: `infoHash`, `fileIdx` and the `announce`
+list, falling back to torrent-level stats) and maps the server's `phase` to
+words -- fetching metadata, checking existing data (with a percentage),
+finding peers (with the discovery counts), buffering the window the reader
+waits for, starting playback, or the server's error. **A window inside one
+piece is said in pieces**, from `inFlightPiece`: "Waiting for piece 137, 6.3
+of 16.0 MiB…", with three rules each tested -- full is not finished (the bar
+holds until `verified`), it never runs backwards (a failed hash is
+discarded silently), and null is not zero (the older wording over an
+indeterminate bar). A failed open while the torrent is still resolving,
+checking or buffering is retried behind the card.
+
+When a started playback runs dry, a torrent gets the same card
+(`torrent_stall_overlay.dart`), polled every 2 s, in the present tense, and
+always with the speed and the swarm, zeros included. The swarm line
+(`TorrentProgressCard.formatSwarm`) is our live connections, then the
+tracker-scraped seeds and swarm size; a scrape that never answered leaves
+those out rather than printing 0.
+
+**An engine error is not a failed playback.** media_kit turns mpv's error
+log lines into `errors` events, so "Playback failed" is shown only until the
+file has loaded (a duration or a position past zero); after that an error is
+a log line, and what gives up is a false end of file (re-opened) or a
+position that stands still. An addon subtitle mpv could not fetch is passed
+over by the auto-pick, the previous selection is restored, and the viewer is
+told for six seconds.
+
+**Next episode.** `player.nextVideo`/`nextStream` come from the core. On
+`Ended` with `bingeWatching` on, an up-next card counts down
+`nextVideoNotificationDuration` (35 s by default); playing it dispatches
+`NextVideo` and either replaces the route with a player for `nextStream`
+(skipping its own `Unload`, so the session's subtitle preference survives)
+or pops with a `PlayerScreenResult` so Details loads that episode's streams.
+A finished download of the next episode, then a linked Drive file of it, is
+preferred to the core's own next stream.
+
+## Subtitles
+
+The rules are in [AGENTS.md](../AGENTS.md#nothing-re-times-a-subtitle-but-the-viewer);
+this is how the feature works and why.
+
+**Why nothing is automatic.** A subtitle cut for 25 fps played against a
+23.976 fps film drifts about four seconds a minute, and OpenSubtitles says
+which rate an upload was cut for (`fpsMilli`, on about nine entries in ten).
+But the claim is about the release, not the timing: ten English files for
+one film declaring six different rates all end within 1 % of the same
+runtime, while five Gilmore Girls files at 25 fps really do run 4.27 %
+short. Nothing in the metadata separates the two populations, so anything
+applied unasked fixes one and silently breaks the other. The declared rate
+decides nothing; libmpv's `container-fps` is read only for the display (see
+[ANDROID.md](ANDROID.md#telling-the-television-what-rate-the-film-is)).
+
+### The menu
+
+After the media opens the screen dispatches `VideoParamsChanged` with the
+best filename it knows (the stream's `behaviorHints.filename`, else a URL
+segment that looks like one), which is what makes the core ask the subtitle
+addons. The menu lists the tracks in the file first, then every addon file
+from `player.subtitles`, the stream's `subtitles` and the converted
+stream's, **one row per language** (`groupSubtitlesByLanguage`,
+`lib/features/player/subtitle_groups.dart`), sorted on the language's
+printed name, with "N other <language> files" as a sibling row beneath (a
+sibling, so a remote reaches it moving down). Files are deduplicated on what
+they are (`SubtitleInfo.identityKeys`: the normalized URL with no query
+parameter removed, and the addon's `id` scoped by language). A file is named
+by the addon plus the best thing it offers -- its `label`, release group,
+cleaned `subtitleFileName`, `movieReleaseName`, then `Option N` -- with a
+position suffix where two names collide, run through `wellFormedText` and cut
+to 60 characters.
+
+**Inside a language the order is the release.** `subtitlesByRelease` puts
+first the files whose `releaseGroup` or `movieReleaseName` names the video
+playing, then files from a group the viewer already adjusted for this series
+(the correction goes back on when applied, and the rank asks
+`SubtitleSyncMemory` exactly what applying will ask), then the addons'
+order. `subtitleMatchesRelease` compares both sides as lower-case runs of
+letters and digits, extension stripped, and the claim must be a contiguous
+run of whole tokens: `DFN` never claims a DFNX rip, tokens scattered across
+the name do not count, a lone number or two-letter tag does not count, and a
+release *name* must reach past the front of the filename -- against a real
+OpenSubtitles answer, eleven of twelve "matches" claimed only the show,
+episode and title that every upload carries. A match earns two words on the
+row (`SubtitleMenu.releaseNote`); a rate is never shown.
+
+**At most two languages are lifted** under a heading of their own: the ones
+this viewer picks most (`SubtitlePickMemory.pinned`, a language counted
+`pinThreshold` times and offered by this episode). They are lifted, not
+copied; a winner the file itself carries takes its slot with no row, and a
+slot that lifts nothing is not handed to the next language
+(`test/features/player/subtitle_pins_test.dart`). A pinned row cannot move
+under a finger, since counts change only on a pick and a pick closes the
+sheet.
+
+**Which track is active** comes from mpv's own `sid`/`aid`, so a default
+track mpv chose shows as selected. A pick dispatches
+`SubtitlePreferenceChanged`, which the core keeps for the session; the next
+episode's player applies it to the first matching file once loaded, out of
+the same ordered list (`PlayerScreen._offeredSubtitles`). Text subtitles are
+drawn by Flutter (media_kit's `libass: false`), so size, colour and box are a
+`TextStyle`; bitmap subtitles (PGS, VobSub) are listed but not drawn.
+
+### Adjusting timing
+
+**Adjust timing** is the last entry of the subtitle menu while a subtitle
+is showing (Shift+S opens it directly). The panel is not part of the OSD:
+the bar fades while it stays, it has its own focus scope and Back rung on
+every device, every control wears the focus ring, and it scrolls in the
+height it gets (a 360 dp phone held sideways leaves it under 300).
+
+- **Shift** is a stepper on `sub-delay` in 0.1 s presses, counted in whole
+  presses so ten forward and ten back land at zero. A hold accelerates
+  through ten steps of a tenth, fifteen of a second, then five-second
+  strides (`SubtitleTimingOverlay.shiftStrideAt`), because the offsets span
+  three orders of magnitude -- an uncorrected PAL file is 115 s out by the
+  end of an episode.
+- **Speed** is shown and cannot be pressed: it is only ever measured, and
+  the number is the one thing on screen that tells a subtitle right now
+  from one right for the next ten minutes.
+- **Reset** returns to 1.0 and 0.0 and discards the marks.
+
+Every path that changes what is on screen -- another file, an embedded
+track, subtitles off, the next video, the auto-pick restoring the tracks
+after a refusal -- goes through `PlayerScreen._resetSubtitleTiming`, which
+replaces the whole `SubtitleTiming` with what is remembered for the file
+going on screen, or untouched. Both values are re-applied after a re-open,
+the addon file first (a re-open is a fresh `loadfile`, and nothing
+`sub-add` put in survives one). A pick from the menu or a press on the panel
+stops the session preference's auto-pick for that media
+(`_subtitlesChosenByHand`).
+
+### Matching against another subtitle
+
+"Match to another subtitle" solves for the ratio and offset mapping the
+playing file onto one the viewer says keeps time (`rust/src/subtitles.rs`,
+`subtitles_match`; `SubtitleMatchClient` in
+`lib/features/player/subtitle_match.dart`). Rust fetches both and turns
+each into a bitmap of **when it has text on screen**, from both timestamps
+of every cue. Comparing cue starts was what this replaced: a translator
+merges lines, and the owner's Swedish Gilmore Girls file has 690 cues
+against the English 1024, only 54 % of its starts within a third of a
+second. A bitmap does not mind merged lines.
+
+- **One damaged cue does not decide the length.** `cue_spans` drops a cue
+  reaching further past the body of the file than a tenth of it or ten
+  minutes, with a six-hour stop for a file with no body (a stretched
+  timeline dilutes chance, and a huge one is an allocation that aborts).
+- **Overlapping cues are one lit interval** (`Bitmap::of` takes the union),
+  and a bin is lit when text covers at least half of it.
+- **The score is overlap above chance**: `(dice - chance) / (1 - chance)`,
+  chance from the two files' densities, since subtitles cover about two
+  thirds of an episode and unrelated files already overlap heavily.
+- **`CONVINCING` is 0.45, measured.** Over 39,000 pairings of 717 real
+  files (forty titles, thirty-seven languages), pairings whose transform is
+  right have a fifth percentile of 0.54 and a median of 0.81; the best of
+  30,918 mismatches reaches 0.376. The populations overlap, so the line is
+  drawn above the mismatches and refuses about one real pairing in fifty
+  (files with very different on-screen shares, where Dice's ceiling holds
+  the score down -- a scoring problem, not a threshold one).
+  `rust/tests/subtitle_threshold.rs` records the corpus and the cost of each
+  neighbouring threshold, and its guard tests pin the constant.
+- **The search** covers rates 0.90 to 1.10 (PAL is 4.27 % away), coarse to
+  fine: a second per bin over the whole window, then 100 ms and 20 ms near
+  the winner, with the ratio step derived from the file's length.
+- **A refusal says what was found**, the score and the transform. Fewer than
+  fifty cues on either side (`FEWEST_CUES`) is a different answer, naming
+  both counts and carrying no score.
+- **The reference is always the viewer's pick**, from a sheet shaped like
+  the menu, and the option is not drawn with nothing to pick. A subtitle URL
+  is never quoted back (`fetch_text` strips it). An answer that lands after
+  the subtitle changed is dropped.
+
+### Marks
+
+For a language with one file, or several sharing the same bad timing, a
+match has nothing to measure against. **This is right** records where the
+line on screen belongs: the cue's own time in the file (libmpv's
+`sub-start`, which is the raw time -- measured against libmpv 0.41.0 with a
+real transform applied, and written down at
+`MediaKitEngine.subtitleCueStart`) paired with the video position the cue is
+drawn at under the transform in force, never the instant of the press,
+which is a reaction time. One mark changes nothing: the viewer already put
+the line there. Two at least two minutes apart give the line through both,
+so the rate; a mark within half a minute of another replaces it, and the
+pair used is the two furthest apart (`SubtitleCalibration`,
+`lib/features/player/subtitle_calibration.dart`). The panel says which of
+offset or rate was learnt. Marks belong to the file that was playing and go
+with it; only what they derive is kept.
+
+### What is remembered
+
+**Timing** (`SubtitleSyncMemory`, `lib/core/subtitle_sync.dart`, the
+`subtitleSync` preference) stores a multiplier and an offset in seconds.
+A *speed* is keyed on the series and the lower-cased `releaseGroup`, since
+what a file was timed against belongs to where it came from and releases of
+one show share a frame rate. Never the addon's `g`: measured over 506 real
+answers it is a per-answer cluster index (one Swedish batch reads `g=6, 5,
+4, 1` across four episodes), and rows keyed on it are dropped. A *shift* is
+keyed on the video release too (the whole filename from `castFilename`),
+because an offset depends on both sides' pre-roll. A key part nobody can
+name means nothing is remembered; Reset forgets; the store is bounded by
+recency. Only a press on the panel writes (`_adjustTiming`), and the write
+waits (`_pendingSync`) until the adjusting ends, since a held key repeats
+eight times a second and overlapping `prefsSet` calls land in no order.
+`PlayerScreen._rememberedSpeed` checks a stored multiplier against mpv's
+`0.1-10.0`, because media_kit discards the property write's return code.
+
+**Picks** (`SubtitlePickMemory`, `lib/core/subtitle_picks.dart`, the
+`subtitlePicks` preference) keep one row per show -- the language as the
+menu prints it, the release group of the file picked where there was one,
+or Off -- and a count per language for the pins. The engine's own
+`subtitle_preference` is session state cleared by `Unload`, so on a fresh
+start the row is what the auto-pick falls back to: a file of the remembered
+group preferred, else the head of the language, and nothing at all for a
+language the episode does not offer or a show never watched. Only a pick by
+hand writes, and a preference synthesized from the row is never dispatched.
+Counts halve when their total passes a ceiling, so they follow a changing
+taste without going stale while the app is closed.
+
+## Downloads and offline play
+
+**A download is a pin plus a registry.** The server keeps the chosen file
+wanted and un-evictable (`ServerHandle::pin_download`) -- a retention
+property, not a location. `rust/src/downloads.rs` keeps what the server
+does not know in `<storage_dir>/downloads.json`, keyed
+`"{metaId}:{videoId}"`: the raw stream JSON `Load Player` takes back, a
+`MetaItem` snapshot so Details renders offline, the stream and meta
+requests, and `createdAt`/`completedAt`/`lastPlayedAt`. The UI reaches it
+through one `DownloadsClient` (`lib/core/downloads_client.dart`) and
+`DownloadView` (`lib/core/state/download.dart`).
+
+- **Progress** is merged from the server's `downloads()`, never stored twice.
+  `downloads_events` ticks about once a second while something is
+  unfinished and pushes only the rows that moved, and of each only
+  `{key, downloaded, size, state, path, error, completedAt}`.
+- **A second stream for a title** replaces the entry and releases the pin it
+  replaces, unless another entry names the same file (the server's pins are
+  a set with no reference count, so that removal answers `unpinned:
+  false`).
+- **A stream with no `fileIdx`** (or `-1`) is resolved the way the media
+  route resolves `/{infoHash}/-1`, so what is kept is the file that
+  streamed.
+- **A refused pin** comes back as `{"ok":false,"error":{"kind":…}}`;
+  `insufficientSpace` carries the byte counts, since a full disk is
+  something to show.
+- **Links and Drive files** are downloads too: the row's key is the
+  server's 64-hex cache key (`proxy_download_key`), and a Drive download is
+  filled with the grant the Rust side holds.
+- **Reading is forgiving, never at the cost of what is on disk.** Unknown
+  keys and unparseable entries are kept and still named in the pin set the
+  launch hands the server; a file that is not this build's shape at all is
+  `registryUnreadable`, the server is told nothing and keeps everything, and
+  only the user's `downloads_start_fresh` moves it aside.
+- **At boot** every unfinished entry is pinned again on a blocking thread,
+  and `reconcile_pins` marks a finished row the server does not hold as
+  `gone` ("Not on this device"), without re-pinning it.
+
+**A finished download plays off this device, and there is no file.**
+Torrent data is one file per piece, so the `path` the server reports is a
+name. `downloads_open(key)` answers the server's own media route
+(`{base}/{infoHash}/{fileIdx}`), or the `playUrl` it reports for a link or
+Drive download (`/downloads/{key}/stream`), and stamps `lastPlayedAt` -- but
+only when the row says `complete` *and* the server says it holds the file
+whole now. Otherwise it refuses: `unknown`, `incomplete`, `unavailable` (no
+server) or `notHeld`. Details and the Downloads screen hand the player that
+URL as a plain `url` stream (`lib/features/downloads/offline_play.dart`),
+with the *original* stream and meta requests, which is what keeps
+continue-watching moving offline. The kept copy wins over the addon's
+stream only for the release that was downloaded, and binge-advance asks the
+same of the next episode, so a downloaded season plays through offline.
+
+*Known consequence:* the synthesized `url` stream becomes that video's
+persisted last stream. stremio-core resolves it against the addon's answers
+by source (a `Url` never matches a `Torrent`) and then by binge group, which
+is why `offlineStream` keeps `behaviorHints.bingeGroup`; for an addon that
+sets none, "Continue with last source" disappears after an offline play
+until the title is played from an addon again, and the next play starts
+with no remembered subtitle or audio track.
+
+**Android keeps a download going while the app is away** with a `dataSync`
+foreground service (`DownloadsForegroundService`,
+`lib/features/downloads/downloads_service.dart`); see
+[ANDROID.md](ANDROID.md#downloads-while-the-app-is-away).
+
+### Where torrent data lives
+
+Everything a torrent puts on the device is under the server's `cacheRoot`:
+the piece store the streaming cache and kept downloads share
+(`<cacheRoot>/rqbit-downloads/.pieces/<infoHash>/<bucket>/<piece>`), the
+session's records, and the proxy cache. There is no downloads folder and
+nothing to move a download to.
+
+- **Its default** is the directory the app hands `server_start`
+  (`XtremioBootstrap.dataDirectory`, `lib/main.dart`): the app cache
+  directory everywhere but Android, and on Android the app-specific external
+  files directory, since `getCacheDir()` is the system's to reclaim.
+- **Its setting** is `cacheRoot`, written through `server_update_settings`
+  from Settings → Server storage
+  (`lib/features/diagnostics/server_storage_screen.dart`). The server
+  validates it (absolute, created, writable, stored resolved), a persisted
+  value outranks the default for ever, and a change takes effect at the next
+  start; nothing already there is moved.
+- **An upgraded Android install** whose persisted root is inside the app
+  cache directory is moved once at boot (`moveOffPurgeableRoot`), comparing
+  resolved paths, because the server fills its own default only when the key
+  is empty. Everywhere else it writes nothing.
+
+Storage costs and cleaning are in
+[OPERATIONS.md](OPERATIONS.md#where-torrent-data-lives-and-what-it-costs).
+
+## Google Drive
+
+Drive is a source of files the viewer owns: they are linked once and then
+appear as sources, in the library, as downloads and in the player.
+
+**Pairing** needs a client secret a sideloaded app cannot hold, so the
+[xtremio-xervice](../xtremio-xervice/README.md) Firebase service at
+`https://xtremio-xervice.web.app` does the two things that need it:
+exchanging an authorization code and refreshing an access token.
+`DrivePairingScreen` (`lib/features/drive/drive_pairing_screen.dart`) asks
+for a session (`lib/core/drive_pairing.dart`):
+
+- a **television** draws the link as a QR for a phone to open;
+- a **phone or desktop** opens it itself; a phone asks for a hand-back, so
+  the pick page ends by navigating to `stremio:///pair`, which brings the app
+  forward and is otherwise dropped (see [DEEP_LINKS.md](DEEP_LINKS.md));
+- a **phone with this app installed** that opens a television's link gets it
+  as a verified app link and picks with Android's own picker
+  (`drive_native_pair_screen.dart`, `lib/core/drive_native_pick.dart`),
+  because the web Picker cannot select more than one file on a device with
+  no keyboard.
+
+Collecting a session is destructive -- the service deletes it as it answers
+-- so a collected answer is never retried. The collecting is the account's
+job rather than the screen's (`lib/core/drive_pairing_job.dart`), and the
+session id is written down (`drivePendingSession`) so a pairing that
+reached the service is collected when the library next opens, even after
+the app was killed.
+
+**The account** (`DriveAccount`, `lib/core/drive_account.dart`) is one
+refresh token and a list. The token is kept in `SecretStore`; on Linux that
+needs a running keyring, and without one a pairing lasts the run
+(`DriveLinkOutcome.thisRunOnly`). The linked files -- ids, names, mime types
+-- are the `driveLinkedFiles` preference (`lib/core/drive_link.dart`). The
+list is what to show, not a set of grants: `drive.file` grants accumulate
+per user and client, so one token reaches every file ever picked, and there
+is no unlinking one file. When the service answers `pairAgain`, that is
+stored (`driveTokenDead`) and every screen asks for a fresh pairing.
+**Reload** asks Drive what the files are called now
+(`lib/core/drive_listing.dart`), and only a complete listing writes -- a
+partial one deletes nothing.
+
+**Matching** a file to a title uses its name alone
+(`lib/features/drive/drive_match.dart`): a loose title plus a strict check,
+since a real poster for the wrong film is worse than none. A matched file
+is listed as a source on that title's details screen as an
+`xtremio-drive:<fileId>` row (`lib/core/drive_source.dart`) that nothing
+ever fetches; an unmatched one is played from the library's Remote list.
+
+**Playback.** `server_drive_open(file_id, refresh_token, name)` opens the
+file as a `DriveSource` in the server and answers `{ok, url, name?,
+contentType, length}` or `{ok: false, reason}`; the URL is
+`http://127.0.0.1:<port>/drive/stream/<random key>`, an open media route
+carrying no credential. The grant is an in-process argument, which is why
+this is not an HTTP request. `openLinkedDriveFile`
+(`lib/core/drive_playback.dart`) turns `pairAgain` into
+`DriveAccount.notePairAgain`, and the player gets a hand-built stream
+(`driveStreamJson`) named after the file, with the name in
+`behaviorHints.filename` for the cast check.
+
+**Tracking.** A Drive play of a known title is loaded with a stream request,
+because stremio-core writes the resume position, the watched mark and
+Continue Watching only when the selection has one. `driveStreamRequest`
+names this app's own service, `https://xtremio-xervice.web.app/manifest.json`
+-- a truthful manifest offering no streams, every `stream/...` a static
+`{"streams":[]}` cached a day -- rather than crediting an installed addon.
+Addon health skips it (`is_own_stub`). The player finds a linked Drive file
+of the next episode itself. A Drive download stores the request, and an
+older row without one gets it at play time
+(`DownloadsScreen.streamRequestOf`). An unmatched file plays with none.
+
+## The library
+
+The Library screen (`lib/features/library/library_screen.dart`) is the
+engine's `library` field -- type pills and sorts from `selectable`, each
+dispatched verbatim, cumulative pages, per-item remove, mark watched,
+rewind and notifications -- plus two things the engine knows nothing about,
+merged into the list and never written to the engine's library or synced:
+
+- **Downloaded titles** appear whether or not they were added, one card per
+  title the grid has no card for, of the selected type, once the engine has
+  no page left to send (`_kept`).
+- **Matched linked Drive files** appear the same way (`_appended`); files
+  that matched nothing appear under All and Other.
+
+**Downloaded** and **Remote** are filter chips on a row under the types, and
+they filter whatever the engine answered: they combine with the type pills
+and the sort, dispatch nothing, and are not turned off by the engine's
+controls. Remote shows everything linked, matched or not, with a Reload
+button beside it. The app bar holds the way to the Downloads screen and
+`RemoteFilesButton`, where files are linked from. One matching pass runs
+per screen (`DriveMatchRun`). Tests: `test/features/library_merge_test.dart`,
+`library_remote_test.dart`, `library_screen_test.dart`.
+
+## Addons
+
+The Addons screen (Settings → Addons, or "Browse addons" on an empty board)
+reads `installed_addons` (`InstalledAddonsWithFilters`) and `remote_addons`
+(`CatalogWithFilters<Descriptor>` over an `addon_catalog` resource); whether
+a community entry is installed is computed from `ctx.profile.addons` by
+manifest URL. "Add addon" and every tile open `AddonDetailsScreen`, which
+loads `addon_details` for one manifest URL and offers Install, Update
+(`UpgradeAddon` when versions differ), Uninstall (never for a protected
+addon) and Configure (the manifest URL with `manifest.json` → `configure`,
+opened through `url_launcher` behind `ExternalLinkScope`). A
+`configurationRequired` manifest cannot be installed, so Configure is its
+primary action; `profile.addonsLocked` disables every mutation behind a
+banner. How each addon has been answering, and the verdict drawn from it,
+is [docs/ADDONS.md](ADDONS.md); installing from a web page is
+[docs/DEEP_LINKS.md](DEEP_LINKS.md).
+
+## Recommendations
+
+"More like this" is a row of posters on a title (`similar_row.dart`),
+filled from the xtremio-xervice function at `GET
+https://xtremio-xervice.web.app/similar/{type}/{id}`
+(`lib/features/similar/xtremio_similar_titles.dart`). The function holds the
+owner's Gemini key, builds the question from Cinemeta's name and year for
+the id, and keeps the first answer for a title for everybody; the app holds
+no key and sends nothing but a type and an id. Only `movie` and `series` are
+asked. `more_like_this.dart` is the order: the answer this install already
+has (`SimilarMemory`, the `similarSuggestions` preference, kept for the
+life of the install per question version), else the server, then the guard.
+**The guard is where correctness lives** (`similar_resolver.dart`): a model
+invents titles, and a catalogue search for an invented one succeeds with a
+different film, so a suggestion is kept only when a catalogue answers with
+the same title and a year within one. Nothing in this path throws; every
+failure is an empty row. Which model is asked, and how that was measured, is
+[tool/recommendations/README.md](../tool/recommendations/README.md).
+
+## Casting
+
+The cast button, what it hands a receiver untouched, the LAN media listener
+and every rule it refuses on are in [CASTING.md](CASTING.md).
 
 ## Pinned forks
 
 `rust/Cargo.toml` pins every git dependency to a rev, with the reason beside
-it:
+it; read the current revs there.
 
 | Dependency | Pinned to | Why |
 |---|---|---|
-| `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | A rev, for reproducibility, that has what the app uses: the server keeps no record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry; it chokes the session's uploading while nothing plays if *Share while idle* is off; and it has the LAN media listener a cast turns on. Default features are on, which is RAR support — see [the README](../README.md#license). |
-| `librqbit` | [`zond/rqbit`](https://github.com/zond/rqbit) | Only a dev-dependency here, for the real `.torrent` fixtures in `rust/tests/downloads.rs`. It is always the rev stream-server's `enginefs` uses; any other puts two librqbits in the graph. The fork is stream-server's: it follows upstream and adds what a bounded streaming cache needs from the engine. |
-| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream 0.63.0 plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) instead of letting serde drop them — upstream PR Stremio/stremio-core#1045 — one that pins its `localsearch` dependency by rev rather than by branch, and one that relaxes `stremio-watched-bitfield`'s `flate2 = "1.0.*"` to `"1"`: stream-server's tree needs flate2 ≥ 1.1 and Cargo will not pick two 1.x versions, so without it the graph does not resolve. That last one replaced a vendored copy of the crate wired in with `[patch]`. |
+| `stream-server` (package `server`, and its `enginefs`) | [`zond/stream-server`](https://github.com/zond/stream-server) | The server this app embeds. It keeps no record of what is pinned and is told at start (`ServerConfig::pins`) from this app's downloads registry. Default features are on, which is RAR support -- see [the README](../README.md#license). |
+| `librqbit` | [`zond/rqbit`](https://github.com/zond/rqbit) | A dev-dependency only, for the real `.torrent` fixtures in `rust/tests/downloads.rs`. Always the rev stream-server's `enginefs` uses, or two librqbits end up in the graph: bump the two together. |
+| `stremio-core` | [`zond/stremio-core`](https://github.com/zond/stremio-core) | Upstream plus one commit that keeps a subtitle's addon-specific fields (`fpsMilli`, `subtitleFileName`, `releaseGroup`, …) in a flattened `other` map instead of letting serde drop them (upstream PR Stremio/stremio-core#1045), one that pins its `localsearch` dependency by rev, and one that relaxes `stremio-watched-bitfield`'s `flate2 = "1.0.*"` to `"1"` -- stream-server's tree needs flate2 ≥ 1.1 and Cargo will not pick two 1.x versions, so without it the graph does not resolve. Built with the `derive` + `env-future-send` features. |
 
-Beside those, `flutter_rust_bridge` is exactly 2.13.0 in `pubspec.yaml`,
-`rust/Cargo.toml` and the codegen.
+To bump one: change the rev, `cargo update -p <crate>`, run `cargo test`,
+and re-record any fixture whose shape moved. A stremio-core bump has to
+keep the fork's `flate2` relaxation. Beside those, `flutter_rust_bridge` is
+exactly 2.13.0 in `pubspec.yaml`, `rust/Cargo.toml` and the codegen.

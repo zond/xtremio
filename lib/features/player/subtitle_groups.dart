@@ -42,7 +42,7 @@ final class SubtitleOption {
   /// the release name, else its position.
   ///
   /// OpenSubtitles v3 sends no label, so before the pinned fork kept the
-  /// addon's own properties (see docs/ARCHITECTURE.md, "Pinned upstreams")
+  /// addon's own properties (see docs/ARCHITECTURE.md, "Pinned forks")
   /// every one of fifteen English uploads was `Option N` and the addon's
   /// name. The derived names are what tell them apart now; `Option $index`
   /// is still the floor, for an addon that says nothing but a URL.

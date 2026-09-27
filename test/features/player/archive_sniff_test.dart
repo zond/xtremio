@@ -273,10 +273,10 @@ void main() {
   group('the player sends the container to the server', () {
     // The server reads an archive or a disc image as ranges of itself, so
     // the film inside one is played rather than given up on
-    // (`docs/translated-sources.md`, step 7). What the screen has to get
-    // right is *what it names* -- the URL the engine was handed, or the
-    // torrent and the file inside it -- and what it does with each of the
-    // three answers.
+    // (stream-server's `docs/design/translated-sources.md`, step 7). What
+    // the screen has to get right is *what it names* -- the URL the engine
+    // was handed, or the torrent and the file inside it -- and what it does
+    // with each of the three answers.
     PlayerHarness failingLink(String error) => PlayerHarness(
       player: {
         'selected': {'stream': DevStreams.bigBuckBunnyHttp},

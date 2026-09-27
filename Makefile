@@ -45,8 +45,8 @@ apk:
 # A Chromecast with Google TV has a 64-bit chip and a 32-bit userspace
 # (`ro.product.cpu.abilist` is `armeabi-v7a,armeabi` on Android 14), so it
 # refuses the arm64 APK above with INSTALL_FAILED_NO_MATCHING_ABIS. Needs
-# libclang, which armv7 uses to generate the aws-lc-sys bindings -- ANDROID.md,
-# "Prerequisites".
+# libclang, which armv7 uses to generate the aws-lc-sys bindings --
+# docs/ANDROID.md, "Prerequisites".
 apk-tv:
 	flutter build apk --release --target-platform android-arm --build-number=1001 $(DEFINES) $(FLAGS)
 

@@ -9,8 +9,8 @@ import 'drive_pairing_screen.dart';
 /// **The button does not say Google Drive**, and the dialog is not a
 /// shortcut past it. Drive is the only entry today and the dialog is
 /// therefore one row -- which looks like a dialog that could be skipped
-/// until you read what is coming: `docs/translated-sources.md` in the
-/// streaming server names `SmbSource` and `NfsSource` as the same seam as
+/// until you read what is coming: `docs/design/translated-sources.md` in
+/// the streaming server names `SmbSource` and `NfsSource` as the same seam as
 /// `DriveSource`, "a `ProxySource` with a header supplier that refreshes",
 /// and being the same seam is the point of having one. A share on the
 /// landing and a folder on a NAS arrive as rows here. A button wired

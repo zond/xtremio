@@ -550,12 +550,13 @@ class MediaKitEngine implements PlaybackEngine {
   /// laid on a 2.5:1 cadence -- two refreshes for one frame, three for the
   /// next -- and that mpv's own answer to a mismatched rate is to lock the
   /// video to the display and resample the audio by the difference. Asking
-  /// the panel for the film's own rate (`DisplayFrameRate`, ANDROID.md)
-  /// removed the cadence and did not remove the drops: at a confirmed
-  /// 23.976 Hz the OSD still read **2779 vo / 0 decoder**, roughly one
-  /// frame in five decoded on time and thrown away at presentation. That
-  /// looked like a timing fault, so display sync was set against it, on
-  /// the standard that it had to start and had to beat 2779.
+  /// the panel for the film's own rate (`DisplayFrameRate`,
+  /// docs/ANDROID.md) removed the cadence and did not remove the drops: at
+  /// a confirmed 23.976 Hz the OSD still read **2779 vo / 0 decoder**,
+  /// roughly one frame in five decoded on time and thrown away at
+  /// presentation. That looked like a timing fault, so display sync was
+  /// set against it, on the standard that it had to start and had to beat
+  /// 2779.
   ///
   /// It did neither, and the diagnosis was wrong. `display-sync-active`
   /// read `no` in every capture -- the override is enough for mpv to have

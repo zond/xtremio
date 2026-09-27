@@ -8,7 +8,7 @@ import 'package:xtremio/features/player/archive_sniff.dart';
 /// Sending a container to the streaming server instead of giving up on it.
 ///
 /// The server reads an archive or a disc image as ranges of itself
-/// (`docs/translated-sources.md` in the stream-server tree), so a film
+/// (`docs/design/translated-sources.md` in the stream-server tree), so a film
 /// inside one plays as cheaply as a plain file -- and one that is *packed*
 /// rather than wrapped is refused with a sentence. Both halves are the
 /// route's contract, and this is a fake of it: every shape the real routes

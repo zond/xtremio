@@ -1,260 +1,196 @@
 # What is built today
 
-Screen by screen, what the app does and why it does it that way. What the
-app *is* is in the [README](../README.md).
+Screen by screen, what the app does. What the app *is* is in the
+[README](../README.md); how each part works is in
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
-**Status:** phase 3 (account, library, addons, settings) is complete
-on top of phase 2 (browse → details → play); what the README calls next is
-not started. The app boots `stremio-core` and the
-embedded `stream-server` at start-up, and the HTTP the app speaks to that
-server is only ever its open media routes: libmpv fetching media, and the
-player reading the start of a stream that failed and handing the
-container it turned out to be to the archive routes
-(`archive_sniff.dart`, `archive_route.dart`). The server's control API
-takes a per-launch bearer token that only the Rust side holds
-(stremio-core's requests get it in `Env::fetch`; the app's own control
-calls are FFI). **Board** shows a continue-watching
-row and one row per catalog that answered, with one line at the end for
-the catalogs that could not be loaded (expanding to the addon, what it
-said, and Check addon / Uninstall); **Discover** browses any catalog
-through the engine's type/catalog/genre filters; **Search** asks every
-addon that supports it, groups the hits per addon, and accounts for the
-addons that could not be searched the same way, so a dead addon is never
-mistaken for a title nobody has.
-**Details** shows facts and genres, a season picker and episode list with
-watched state for series (picking an episode loads its streams), and the
-streams every installed addon returns with quality hints parsed into
-chips. The sources list has two layouts and a toggle in its header, worded
-to say which layout is on screen and what tapping switches to, to pick
-one: **sectioned** -- every addon's answers put together and cut into
-**one collapsible section per resolution**, highest first, with the
-streams nothing could be read from last in a section that says it does
-not know rather than guessing a rung -- is the default. The other is
-grouped: a collapsible section per addon, in profile order, each addon's
-own ranking intact, which is what the engine hands over and what the
-sources list looked like before the sectioned layout existed. Every
-resolution section starts *collapsed*, on every title, until the viewer
-opens one, so the
-first thing shown is a compact list of what is available rather than a
-guess at what they want; a *closed* header still says how many streams it
-holds and the best swarm among them -- an empty-looking 2160p and a
-healthy one are different answers. Which sections are open is a global
-preference too, not a per-title one: a section opened on one title stays
-open on the next and survives a restart, and a resolution the current
-title does not offer is simply not shown open, never swapped for some
-other section the viewer did not ask for. Inside a section the
-order is **peers per megabyte** -- ascending size over peers -- because
-every stream in the list is the same film: duration is constant, so size
-is bitrate, bitrate is the demand and peers are the supply, which makes
-the smallest size per peer the best first guess at a stream that arrives
-faster than it is watched. Chips in the header offer largest first or
-most peers instead. A stream missing either number cannot be ranked by
-the ratio and sits after every ranked one in the addons' own order --
-never as a zero and never as a best guess -- while a swarm known to be
-empty is ranked, and ranked last of the ranked. Each row names the addon
-it came from and is badged with what could actually be read off the
-stream, size and peers included -- nothing is badged that is not known.
-The addon groups collapse and are remembered the same way, under
-`openStreamAddons` -- a key of its own, since an addon may be called what
-a resolution is called and what a viewer left open among resolutions says
-nothing about which addons they want open. Nothing remembered means every
-group shut, which is what a fresh install shows; a remembered addon this
-title has no sources from opens nothing and is never swapped for another
-group. The layout, the order and which sections and groups are open are
-all global and persisted (`streamsSectioned`, `streamsOrder`,
-`openStreamSections` and `openStreamAddons` in the preferences file), so
-they follow the user to the next title and survive a restart -- an
-install from before the layout was renamed keeps
-its choice too, read from the older `streamsFlat` key it was stored
-under. **One release is one
-row**: two addons offering the same torrent (or one addon offering it
-twice) collapse on what they *are* -- info hash plus file index, or the
-direct URL, the identity a download pin already uses -- never on what
-they look like, so two different releases with the same resolution and
-size both stay. The sectioned list collapses after sorting and across
-the whole list, so the best-ranked instance is the one kept and a source
-two addons described differently cannot appear in two sections; it says
-"Also from ..." when
-another addon had it too (silently when one addon simply repeated
-itself); the grouped list keeps a copy in each addon's group, marked the
-same way, since the groups are what that layout is for. The row that
-survives carries the **union of every listing's `announce` list**,
-deduplicated and in first-seen order, and that merged stream is what
-playback, a download and the stats poll are handed -- so the server adds
-the torrent with every tracker any addon knew about. An addon that answered
-with an error is named from the profile
-rather than by its host and offers to be checked or uninstalled on the
-spot; details routes are video-aware, so coming back from the player
-lands on the right episode. **On a television** the top of that screen is
-a different shape: the title's own artwork fills the panel -- *under* the
-overscan band, since the artwork is the one thing here meant to be
-cropped -- and over it sit the logo, one line of year, runtime, genres and
-rating, and two lines of description, with no poster, because at three
-metres the poster was a third of the layout of a picture already on
-screen. What darkens the artwork is a gradient scrim over it: never
-opacity on the text (dimmed text over a busy frame is unreadable in a way
-a dimmed picture behind solid text is not) and never a blur, which the
-Chromecast's Mali GPU cannot afford full-screen. No backdrop falls back to
-the poster, one that will not load falls back the same way, and neither
-leaves the brand ground. metahub names an image's size in its URL, so what
-is asked for is the `medium` one rather than Cinemeta's small poster
-stretched across the panel, and the decode is bounded to the panel's own
-pixels. The logo's box is the same height whether the logo arrives, never
-arrives or answers 404 a few seconds later: an image given only a height
-holds that height from its first frame, and the name that stands in for
-one that failed has to hold it too, or the header and every row under it
-jump up under a focus ring somebody is using. A series' episodes are a
-**row of cards** there rather than the vertical list, under the season
-pills that were already a row: a remote
-walks a row with two keys and a list with a hundred. A card carries what
-its list row carried -- the still with the episode number on it, the
-title, the air date, a check when it has been watched, a badge when it is
-kept on the device -- plus a bar saying how far into that episode the
-viewer got, which is the library item's own resume point and so appears
-on at most one card of a series. Every card is built at once, because
-directional focus only considers widgets that have been built and a lazy
-row hands the D-pad back halfway through the season; each still is
-decoded no larger than the card it is drawn in, which is what that costs
-instead. The row scrolls to the selected card, so resuming at episode
-nineteen does not start the remote at episode one, and an episode that
-has not aired is drawn saying so and takes no press and no focus. The
-**sources** are the last two rows rather than a pane down the right: a card
-per group -- a resolution rung or an addon, whichever the same
-`streamsSectioned` preference already says, never a second setting --
-carrying the line a collapsed section header carries on a phone, and under
-whichever card is chosen a row of that group's sources. The group row stays
-put with the chosen card marked, so another group is a sideways press away
-rather than a press back and a press down; the order chips still order
-inside one; a press past either end of a row stays in the row, since the
-nearest node to the right of the last card is not in the row at all but in
-the header three rows up; the last-used shortcut is a card of its own above
-them and the place the remote starts, and it appears the first time a title
-is played without moving the remote off the card the viewer chose from; and
-Back puts the open row away before it leaves the screen, a rung on the same
-ladder the player comes down -- while there is a row to put away, which is
-a group still carrying the open label rather than the label on its own.
-Which group is open is deliberately *not* the phone's
-`openStreamSections` or `openStreamAddons`: those are global sets kept
-across restarts, and this is one row at a time that Back closes -- the
-same word for two different things. What the
-addons did other than answer -- the ones that failed, the ones that had
-nothing, and nobody having anything at all -- is the last card of that row,
-counting on its own line so a viewer who never chooses it is still told,
-and naming them in the row it opens -- a card each, since a joined line
-clips at the fourth name and a remote has no press that unfolds one, and
-each card takes a press to that addon's own details. The
-**player** plays torrents through the
-embedded server and HTTP streams directly, with its own controls (seek
-bar with the buffered range, play/pause, seek buttons, volume,
-fullscreen, keyboard shortcuts, playback speed), embedded and addon
-subtitles styled from the profile settings, audio track selection, a
-stats OSD, an up-next countdown
-that hands off to the next episode, and a pre-playback progress overlay
-for torrents that shows the server's start-up phase (checking existing
-data, finding peers, buffering the start) with percentages and download
-speed instead of a bare spinner, and an open that fails while the torrent
-is still resolving, checking or buffering is retried a few times behind
-that card rather than failing outright. A stream that turns out to be an
-archive or a disc image rather than a film is handed to the server, which
-reads the film inside it as ranges of the container itself and plays it;
-one whose film is packed rather than merely wrapped says so in a sentence
-instead. **Settings → Developer** ships in
-release builds: entries that play or download a public Big Buck Bunny
-torrent to prove the torrent path without any addon, and **Diagnostics**,
-which shows the core's recent log (its own and the embedded server's) and
-copies it to the clipboard -- redacted, unless Verbose logging is on. **Library** lists every added title over the engine's
-`LibraryWithFilters` model (type and sort filters, cumulative paging,
-long-press to remove, mark watched, rewind or mute notifications), and
-the details header has a bookmark to add or remove a title, wearing on a
-television the same focus ring everything else there wears rather than
-Material's tint. **Downloads**
-keeps a stream on the device -- a torrent in the server's piece store, a
-web link or a linked Google Drive file in its proxy cache: the download
-button on a stream tile
-pins the file through the embedded server and becomes a delete button once
-the file is whole, so the tile that took a download is the tile that undoes
-it -- asking first, as the list does, and saying that the bytes go with
-the entry. A Drive download is filled with the account's grant, which
-`DriveAccount` hands to the Rust side when it changes and nowhere else,
-and once whole it opens off the disk -- no request to Drive, so it plays
-with no network. On a
-television that button cannot be focused (directional traversal skips a
-node inside the focused one's rect, and it is inside the stream tile), so
-the tile's long press -- hold select, or the remote's menu key -- does
-whatever the button would.
-Badges on the episode list and
-the details header say what is kept and how far along -- an episode's
-badge is the same delete button once its file is whole, while the header's
-counts several downloads and stays a count. The Downloads
-screen -- from the details app bar, the running player's menu, the
-"Downloaded" chip in the Library or Settings, so the list is one tap from
-whatever the downloads are of -- lists
-everything with its progress, plays a finished one, retries a stopped one,
-deletes one -- always with its bytes, since a pin dropped with the file
-left behind is a torrent nobody kept and nobody plays, which the server
-gives back at its next pass -- and says how much room it all takes.
-**Not where it goes**: torrent data has one root, shared by the streaming
-cache and the kept downloads, so there is no downloads folder to pick and
-nothing to move a download to; the root is named where the rest of its
-business is (Settings, "Server storage"). Opened from the
-player it offers no play of its own: a second player over the running one
-would load the same shared `player` field and start an engine beside it.
-On Android that root is the app's own external files directory, which the
-system leaves alone, rather than the cache it may reclaim mid-download.
-On Android a download goes on
-after the user leaves the app: a `dataSync` foreground service holds the
-process up with an ongoing notification -- how many titles, how far
-along, tappable to the Downloads screen, with a Cancel all on it -- for
-exactly as long as something is unfinished. A stream whose
-video is already kept from another release offers the same download
-button, and pressing it asks first, finished or not, because taking the
-new pin deletes what the old one had. A downloaded title is in the Library
-because it is downloaded, and a linked Drive file because it is linked,
-whether or not either was ever added: the grid merges them in after the
-library's own titles, under their type, and nothing is written to the
-Stremio library or synced. Offline, a meta request the addon cannot
-answer is answered from the meta the download kept, so the player records
-watch progress for a title that was downloaded and never added or played.
-**Addons**
-(from Settings) lists the installed and community addons and installs,
-updates, uninstalls or configures one by manifest URL, links out to
-[stremio-addons.net](https://stremio-addons.net) and pulls the account's
-addons down again on demand. An addon found on the web installs from
-inside the app: its site's Install button hands the platform a
-`stremio://` link, which Xtremio registers and opens as that addon's
-details screen (see [Installing an addon from the
-web](DEEP_LINKS.md)).
-**Settings** holds
-the Stremio account (sign in, create an account, sync, log out), the
-engine's own settings (player, subtitles, interface, streaming server)
-and the state of the embedded server. The design notes behind phase 3
-are in [docs/phase3-design.md](phase3-design.md).
+The app boots `stremio-core` and the embedded `stream-server` at start-up
+and streams only from that server. Browse, details and play; account,
+library, addons and settings; downloads, Google Drive, casting and the
+Android TV layout are all built. What is not is in the README's
+[What is next](../README.md#what-is-next) and in [WISHLIST.md](WISHLIST.md).
 
-**Android TV / Google TV** is supported as a first-class layout, not as a
-phone app on a big screen. At start-up `DeviceProfile.detect()` asks the
-`xtremio/device` platform channel what kind of device this is:
-`MainActivity` answers `isTv` (`UiModeManager.currentModeType ==
-UI_MODE_TYPE_TELEVISION`, or the `android.software.leanback` feature) and
-`hasTouch` (`FEATURE_TOUCHSCREEN`); every other platform answers locally
-without a channel call, and any error means "a phone". The answer goes
-down the tree as a `DeviceScope`, and that is the only thing the TV
-layout keys on — which is also how the widget tests put a screen on a
-television. When it says television: the shell keeps the rail at every
-width and gives each tab its own focus memory, tiles mark focus with a
-two-stroke ring (near-black outside, near-white inside, four logical
-pixels: one colour cannot read over unknown poster art in a room that is
-not dark), a 5 % zoom and a shadow, lift their own caption to full
-strength and scroll themselves into view — Settings → Interface → "Bold
-focus" is one switch that thickens that ring and dims everything the
-remote is not on, for a projector in a bright room — the
-D-pad walks rows and columns (a held centre key is a long press, the
-context-menu key opens the same menu a long press does), the player takes
-the remote's centre and media keys, is immersive-fullscreen the whole
-time it is up and asks the panel to present a film at the film's own
-frame rate — a 23.98 fps film on a 59.94 Hz output is shown on a 3:2
-cadence, which is the picture jumping — giving the rate back the moment
-it stops, posters and text grow (1.15x text, a roomier density,
-48 dp targets), every screen holds 5% of every edge clear of overscan
-except the video itself and the Details backdrop, and the controls a
-remote cannot work (the volume slider, the fullscreen toggle, scrollbar
-thumbs) are not drawn.
+## Board, Discover, Search
+
+- **Board**: a continue-watching row, then one row per catalog that
+  answered, and one line at the end for the catalogs that could not be
+  loaded -- expanding to the addon, what it said, and **Check addon** /
+  **Uninstall** -- so a dead addon is never mistaken for a title nobody has.
+- **Discover** browses any catalog through the engine's type, catalog and
+  genre filters.
+- **Search** asks every addon that supports it, groups the hits per addon,
+  and accounts for the addons that could not be searched the same way.
+
+## Details
+
+Facts and genres; for a series a season picker and episode list with
+watched state (picking an episode loads its streams); a bookmark to add or
+remove the title from the library; a **More like this** row of suggestions
+([Recommendations](ARCHITECTURE.md#recommendations)); and the sources every
+installed addon returned, plus any linked Google Drive file matched to this
+title or episode.
+
+**The sources list** has two layouts and a toggle in its header saying
+which is on and what tapping switches to:
+
+- **Sectioned** (the default): every addon's answers together, cut into one
+  collapsible section per resolution, highest first, with streams nothing
+  could be read from last in an "unknown" section rather than a guessed
+  rung.
+- **Grouped**: a collapsible section per addon, in profile order, each
+  addon's own ranking intact.
+
+Every section starts collapsed until the viewer opens one; a closed header
+still says how many streams it holds and the best swarm among them. Which
+sections and groups are open, the layout and the order are global and
+survive a restart (the preferences in
+[ARCHITECTURE.md](ARCHITECTURE.md#the-apps-own-preferences)); a remembered
+section this title lacks opens nothing else.
+
+Inside a section the order is **peers per megabyte** (every stream is the
+same film, so size is bitrate and peers are supply); chips offer largest
+first or most peers. A stream missing either number sits after the ranked
+ones in the addons' order; a swarm known to be empty is ranked last. Each
+row names its addon and is badged only with what could actually be read.
+**One release is one row**: sources that are the same torrent (info hash
+and file index) or the same URL collapse, keeping the best-ranked instance
+and saying "Also from ..."; the grouped layout keeps a copy per addon,
+marked the same way. The surviving row carries the union of every listing's
+trackers, which is what playback, downloads and the stats poll are given.
+An addon that answered with an error is named and can be checked or
+uninstalled on the spot. Coming back from the player lands on the right
+episode.
+
+**On a television** the screen is laid out for a remote:
+
+- the title's backdrop fills the panel under the overscan band, darkened by
+  a gradient scrim, with the logo, one line of year, runtime, genres and
+  rating, and two lines of description; no poster. A missing backdrop falls
+  back to the poster, and the logo's box holds its height whether the logo
+  arrives or not;
+- episodes are a **row of cards** under the season pills: still, number,
+  title, air date, watched check, download badge and a resume bar; an
+  unaired episode takes no focus, and the row scrolls to the selected card;
+- sources are the last two rows: a card per group (resolution or addon, per
+  the same layout preference), and under the chosen one a row of its
+  sources. The last-used source is a card above them and where the remote
+  starts. Back closes the open row before leaving. What the addons did
+  besides answer -- failed, had nothing -- is the last group card, naming
+  each addon in the row it opens.
+
+## Player
+
+Plays every stream through the embedded server -- torrents directly, and
+anything on another host through its caching `/proxy` -- with its own
+controls: seek bar with the buffered range, play/pause, seek buttons,
+volume, fullscreen, keyboard shortcuts, playback speed; embedded and addon
+subtitles styled from the profile settings, with timing adjusted by hand or
+measured and then remembered ([Subtitles](ARCHITECTURE.md#subtitles));
+audio track selection; a stats OSD
+([OPERATIONS.md](OPERATIONS.md#the-stats-osd)); an up-next countdown that
+hands over to the next episode; and a **buffer ahead** choice, including
+"Download the whole file".
+
+A torrent starts behind a card saying what the server is doing (fetching
+metadata, checking data, finding peers, the piece it is waiting for) instead
+of a spinner, and a stall mid-playback shows the same card; an open that
+fails while the torrent is still starting is retried behind it. A stream
+that turns out to be an archive or a disc image is played from inside the
+container, or refused in a sentence when the film is compressed. A cast
+button appears once a receiver answers ([CASTING.md](CASTING.md)).
+
+## Library
+
+The engine's library (every added title, type pills and sorts, cumulative
+paging; long press to remove, mark watched, rewind, or mute notifications),
+with a hint to sign in when anonymous and **Sync now** when signed in. On
+top of that, never written to the Stremio library or synced:
+
+- **downloaded titles** appear whether or not they were added, and so do
+  **linked Drive files** matched to a title, under their type;
+- **Downloaded** and **Remote** are filter chips that combine with the type
+  pills and the sort: Downloaded narrows to what is on this device; Remote
+  to what is linked from Drive, including files that matched nothing, with a
+  Reload button that asks Drive for the current names;
+- the app bar has the way to the Downloads screen and the button that links
+  remote files (Google Drive today).
+
+## Downloads
+
+The download button on a source pins it through the embedded server -- a
+torrent in the piece store, a web link or a Drive file in the proxy cache --
+and becomes a delete button once the file is whole; replacing a kept
+release with another asks first. On a television the tile's long press does
+what the button would. Badges on episodes and the details header say what
+is kept and how far along.
+
+The **Downloads** screen (from the details app bar, the player's menu, the
+library's app bar and Settings) lists everything with its progress, plays a
+finished one, retries a stopped one, deletes one (always with its bytes)
+and says how much room it all takes. Opened from the player it offers no
+play of its own. A download that is no longer on the device says **Not on
+this device** and offers to fetch it again. A finished download plays with
+no network, and offline the player still records watch progress. There is
+no downloads folder to choose: torrent data has one root, named in Settings
+→ Server storage. On Android a foreground service with a notification
+(progress, **Cancel all**) keeps downloads going after the app is left.
+
+## Google Drive
+
+Linking starts from the library's remote-files button. A television shows a
+QR code for a phone; a phone or desktop opens the page itself, and a phone
+with this app installed picks with Android's own picker, several files at
+once. The pairing is collected even if the viewer leaves the screen or the
+app is killed. Linked files are matched to titles by name, appear as
+sources on those titles and in the library, play through the embedded
+server (which renews the access itself), are tracked like any other play
+(resume point, watched, Continue Watching, the next episode's linked file),
+and download like any other source. When Google refuses the grant, every
+screen asks for a new pairing. See
+[ARCHITECTURE.md](ARCHITECTURE.md#google-drive).
+
+## Addons
+
+From Settings: the installed and community addons; install, update,
+uninstall or configure one by manifest URL; a link out to
+[stremio-addons.net](https://stremio-addons.net); and **Refresh addons from
+account**, which is also how a television gets an addon installed from a
+website on another device. An addon site's Install button opens the addon's
+details screen through a `stremio://` link ([DEEP_LINKS.md](DEEP_LINKS.md)).
+Each installed addon carries a verdict on how it has been answering
+([ADDONS.md](ADDONS.md)).
+
+## Settings
+
+- **Account**: sign in, create an account, sync, log out.
+- **Addons** and **Downloads**: the screens above.
+- **Player**, **Subtitles**, **Interface**: the engine's own settings
+  (seek steps, binge watching and the up-next countdown, pause on minimize,
+  hardware decoding, languages, subtitle size and colours), plus the app's
+  **Buffer ahead** and, on a television, **Bold focus**.
+- **Streaming server**: **Share while idle**, the embedded server's status
+  (there is no choice of server), **Server storage** (where torrent data
+  lives, what it costs, "Clean cache now") and peer discovery (DHT) health.
+- **About**: open source licences, including unrar-rs's.
+- **Developer**, in release builds: **Verbose logging**, **Diagnostics** (the
+  core's and the server's recent log, copied redacted unless verbose
+  logging is on) and entries that play or download a public Big Buck Bunny
+  torrent without any addon.
+
+A **status light** on the main screens is lit while the server moves bytes
+to or from peers with nothing playing, and offers a stop for what it shows.
+
+## Android TV and Google TV
+
+A layout of its own, chosen by `DeviceProfile.detect()` asking Android
+whether this is a television. The shell keeps the rail at every width with a
+focus memory per tab; tiles mark focus with a two-stroke ring, a 5 % zoom
+and a shadow ("Bold focus" thickens it and dims the rest); the D-pad walks
+rows and columns, a held centre key or the menu key is a long press; the
+player takes the remote's centre and media keys, stays immersive, and asks
+the panel for the film's own frame rate; text grows 1.15x with 48 dp
+targets; every screen but the video and the Details backdrop keeps 5 % of
+each edge clear of overscan; and controls a remote cannot work (the volume
+slider, the fullscreen toggle, scrollbar thumbs) are not drawn. Text is
+typed on a screen of its own
+([ANDROID.md](ANDROID.md#typing-with-a-remote)).

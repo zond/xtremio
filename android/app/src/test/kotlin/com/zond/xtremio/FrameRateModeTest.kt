@@ -9,8 +9,8 @@ import org.junit.Test
 /**
  * The one piece of the frame-rate matching with no Android in it, so the
  * one piece a JVM test can reach. The surface, the window and the display
- * itself need a device (ANDROID.md, "Telling the television what rate the
- * film is").
+ * itself need a device (docs/ANDROID.md, "Telling the television what rate
+ * the film is").
  *
  * The modes are the owner's, read off `dumpsys display` on a Chromecast
  * with Google TV driving an Acer 1080p projector, which is the panel the

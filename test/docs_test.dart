@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// The reference walls live in `docs/` and `ANDROID.md` now, and the README is
-/// a map to them. A wall nobody can find is worse than a wall, so these tests
+/// The reference walls live in `docs/` now, and the README is a map to
+/// them. A wall nobody can find is worse than a wall, so these tests
 /// hold the two things that make the split work: every link between the
 /// documents resolves, and the README stays short enough to be read on
 /// arrival.
@@ -18,7 +18,6 @@ void main() {
     final docs = <File>[
       File('README.md'),
       File('AGENTS.md'),
-      File('ANDROID.md'),
       ...Directory('docs')
           .listSync()
           .whereType<File>()
@@ -37,7 +36,7 @@ void main() {
         'docs/CASTING.md',
         'docs/ADDONS.md',
         'docs/DEEP_LINKS.md',
-        'ANDROID.md',
+        'docs/ANDROID.md',
       ]) {
         expect(File(named).existsSync(), isTrue, reason: '$named is missing');
       }

@@ -122,6 +122,7 @@ viewers with an AVR that takes it.
 
 ## Closed, and staying closed
 
-* **iOS.** No forks are carried for it. `README.md` has the two proven
-  changes and the CI job is red by design.
+* **iOS.** No forks are carried for it.
+  [OPERATIONS.md](OPERATIONS.md#building-for-ios) has the two proven
+  changes, and the CI job is red by design.
 * **Browser clients.** Closed by zond, 2026-09-19.
