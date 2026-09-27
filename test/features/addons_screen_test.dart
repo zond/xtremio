@@ -671,7 +671,9 @@ void main() {
 
     expect(find.byType(SnackBar), findsOneWidget);
     expect(
-      find.text('Could not open ${AddonDirectoryBar.directoryUrl}'),
+      find.text(
+        'Could not open ${Uri.parse(AddonDirectoryBar.directoryUrl).host}',
+      ),
       findsOneWidget,
     );
   });

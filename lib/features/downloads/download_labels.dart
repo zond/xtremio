@@ -92,6 +92,6 @@ String downloadFailureMessage(DownloadFailure failure) {
       available == null) {
     return message;
   }
-  return '$message (needs ${DownloadView.humanSize(required)}, '
-      '${DownloadView.humanSize(available)} free)';
+  return '$message (needs ${formatBytes(required)}, '
+      '${formatBytes(available)} free)';
 }

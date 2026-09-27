@@ -109,7 +109,9 @@ enum DownloadFailureKind {
   /// The torrent engine refused the pin itself.
   backend('backend'),
 
-  /// Nothing to ask: the embedded server is not running.
+  /// Every refusal the kinds above do not name: the embedded server is not
+  /// running, or a link or Drive source refused the pin (the URL would not
+  /// answer, Drive is not linked). [DownloadFailure.message] says which.
   unavailable('unavailable'),
 
   /// A kind this build does not know (a newer core).

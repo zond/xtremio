@@ -316,7 +316,13 @@ class DriveAccount extends ChangeNotifier {
   ///
   /// The list of files is untouched. Those files are still what a new
   /// pairing will reach, and the viewer is owed the list they built.
-  Future<void> notePairAgain() async {
+  ///
+  /// [ifToken] is the token the refused call was made with. A caller that
+  /// awaited the service passes it, and nothing happens when the account
+  /// holds another by then: a pairing landed meanwhile, and the refusal was
+  /// about the grant it replaced, not the one it would delete.
+  Future<void> notePairAgain({String? ifToken}) async {
+    if (ifToken != null && _refreshToken != ifToken) return;
     _refreshToken = null;
     _thisRunOnly = false;
     await _forget();

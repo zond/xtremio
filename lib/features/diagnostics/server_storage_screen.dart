@@ -201,13 +201,13 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
   String _cleanMessage(EvictionReport report) {
     if (report.freed > 0) {
       final files = report.deleted == 1 ? 'file' : 'files';
-      return 'Freed ${DownloadView.humanSize(report.freed)} '
+      return 'Freed ${formatBytes(report.freed)} '
           'from ${report.deleted} $files.';
     }
     if (report.stillOverLimit) {
       return 'Nothing more can be freed right now -- a download you kept '
           'or the title you played last is holding '
-          '${DownloadView.humanSize(report.protected)}.';
+          '${formatBytes(report.protected)}.';
     }
     return 'Nothing needed cleaning.';
   }
@@ -242,7 +242,7 @@ class _ServerStorageScreenState extends State<ServerStorageScreen> {
               title: 'Torrent cache',
               value: usage.label,
               detail: usage.protectedFiles > 0
-                  ? '${DownloadView.humanSize(usage.protectedBytes)} in '
+                  ? '${formatBytes(usage.protectedBytes)} in '
                         '${usage.protectedFiles} '
                         '${usage.protectedFiles == 1 ? 'file' : 'files'} '
                         'kept: a download, or the title played last'

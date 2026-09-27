@@ -394,7 +394,7 @@ class _StorageHeader extends StatelessWidget {
   /// `3 downloads · 4.2 GB on this device`.
   static String label(DownloadsRegistry registry) {
     final count = registry.length;
-    final used = DownloadView.humanSize(DownloadsScreen.storageUsed(registry));
+    final used = formatBytes(DownloadsScreen.storageUsed(registry));
     return '${count == 1 ? '1 download' : '$count downloads'} · '
         '$used on this device';
   }

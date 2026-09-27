@@ -39,24 +39,23 @@ use serde_json::{Map, Value};
 /// keys the engine decides to use.
 const FILE_NAME: &str = "xtremio_prefs.json";
 
-/// The preferences half of [`crate::state::AppState`]: the file's lock.
+/// The file's lock, one per process.
 ///
 /// A write is a read-modify-write of a shared file, and the FFI calls that
 /// do one run on FRB's worker pool, so two toggles landing together would
-/// otherwise be able to lose each other's key.
-#[derive(Default)]
-pub struct PrefsState {
-    file: Mutex<()>,
-}
+/// otherwise be able to lose each other's key. It is a process static, not
+/// a field of [`crate::state::AppState`], because the file is one per
+/// process too: `crate::core::shutdown` takes the state out and *then*
+/// flushes the addon-health table through [`set`], and a lock inside the
+/// state would leave that flush and a concurrent FFI write holding two
+/// different mutexes over the same file -- or, looked up afresh, would
+/// build a new state and undo the `take`.
+static FILE: Mutex<()> = Mutex::new(());
 
-impl PrefsState {
-    /// A poisoned lock only means a previous holder panicked; there is no
-    /// value behind this one to be left inconsistent.
-    fn file(&self) -> MutexGuard<'_, ()> {
-        self.file
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
+/// A poisoned lock only means a previous holder panicked; there is no
+/// value behind this one to be left inconsistent.
+fn file() -> MutexGuard<'static, ()> {
+    FILE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Where the file is, or `None` before `core_init` has pointed storage
@@ -75,15 +74,12 @@ fn path() -> Option<PathBuf> {
 /// be seen.
 ///
 /// Under the file's lock, like a write: a read of a file that will not
-/// parse moves it aside, and a rename landing between a locked [`set_in`]'s
+/// parse moves it aside, and a rename landing between a locked [`set`]'s
 /// read and its write -- or just after the write -- takes the key it has
-/// just stored with it. The lock of the state there is, if there is one: a
-/// read is an observer, and must not build a state a shutdown has just
-/// taken away (`crate::state::current`).
+/// just stored with it.
 pub fn get_all() -> anyhow::Result<Map<String, Value>> {
     let path = path().context("preferences: storage directory is not set")?;
-    let app = crate::state::current();
-    let _guard = app.as_ref().map(|app| app.prefs.file());
+    let _guard = file();
     read_object(&path)
 }
 
@@ -122,34 +118,16 @@ fn read_object(path: &std::path::Path) -> anyhow::Result<Map<String, Value>> {
 /// Stores `value` under `key`, or removes the key when it is `None`,
 /// leaving every other key exactly as it was.
 ///
-/// Serialized on the process state's file lock, which is what an FFI
-/// caller wants; a caller that is already holding a state writes into that
-/// one with [`set_in`].
-pub fn set(key: &str, value: Option<Value>) -> anyhow::Result<()> {
-    set_in(&crate::state::state(), key, value)
-}
-
-/// [`set`] into the file lock of a state the caller already has.
-///
-/// `crate::core::shutdown` takes the state out of the process on its first
-/// line and *then* flushes the addon-health table through here. Looking the
-/// state up at that point would build a fresh one and leave it in the
-/// process static -- undoing the `take` -- and would lock a mutex nobody
-/// else holds, so a concurrent FFI [`set`] that started before the `take`
-/// would be doing its own read-modify-write of the same file at the same
-/// time and one of the two keys would be lost. The state comes in as an
-/// argument for the same reason `crate::server::stop_in` takes one.
+/// Serialized on the process's file lock ([`FILE`]), and never looks up the
+/// process state: the flush in `crate::core::shutdown` calls this after the
+/// state has been taken out, and must not put one back.
 ///
 /// A file that cannot be read refuses the write: the read-modify-write has
 /// nothing to modify, and writing the one key anyway is how a transient
 /// read failure became a file holding nothing else.
-pub(crate) fn set_in(
-    app: &crate::state::AppState,
-    key: &str,
-    value: Option<Value>,
-) -> anyhow::Result<()> {
+pub fn set(key: &str, value: Option<Value>) -> anyhow::Result<()> {
     let path = path().context("preferences: storage directory is not set")?;
-    let _guard = app.prefs.file();
+    let _guard = file();
     let mut object = read_object(&path)?;
     match value {
         Some(value) => {
@@ -330,8 +308,7 @@ mod tests {
         with_storage_dir(|dir| {
             let file = dir.join(FILE_NAME);
             std::fs::write(&file, b"{ not json").expect("write");
-            let app = crate::state::state();
-            let held = app.prefs.file();
+            let held = super::file();
             let reader = std::thread::spawn(get_all);
             // Only how sharp the test is depends on this wait: a read that
             // has not got going yet has moved nothing either way.

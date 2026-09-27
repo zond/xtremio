@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 
@@ -11,6 +13,20 @@ import '../support/fake_prefs_client.dart';
 /// material: a file that still holds one after an upgrade is a credential
 /// lying on the device that nothing reads.
 void main() {
+  test('the version stamped on a kept answer is the one the server asks '
+      'by', () {
+    // The two are bumped by hand, in two languages; a bump of one alone
+    // keeps every device on the answers the old question gave.
+    final source = File('xtremio-xervice/functions/similar.js')
+        .readAsStringSync();
+    final declared = RegExp(
+      r'^const QUESTION_VERSION = (\d+);$',
+      multiLine: true,
+    ).allMatches(source).toList();
+    expect(declared, hasLength(1), reason: 'one declaration to read');
+    expect(int.parse(declared.single.group(1)!), similarQuestionVersion);
+  });
+
   group('the preferences', () {
     test('a fresh install remembers nothing and writes nothing', () async {
       final storage = FakePrefsClient();

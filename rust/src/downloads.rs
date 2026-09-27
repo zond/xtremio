@@ -58,10 +58,17 @@ use stream_server::{DownloadInfo, PinDownloadError};
 use crate::state::AppState;
 
 /// Schema version of `downloads.json`. A file that names a higher one is
-/// read anyway (unknown keys survive in [`Entry::extra`]) and keeps its
-/// version when written back, so a downgrade does not silently claim the
-/// newer file is this build's shape.
+/// read anyway (unknown keys survive, an entry's in [`Entry::extra`] and the
+/// file's own beside `items`) and keeps its version when written back, so a
+/// downgrade does not silently claim the newer file is this build's shape.
 pub const VERSION: u32 = 1;
+
+/// Top-level keys an earlier build wrote and this one retired on purpose,
+/// so they are dropped on read rather than carried with the keys a newer
+/// build may have added: the record of a downloads folder, from before
+/// there was one torrent-data root the server owns. Written back, it could
+/// only ever contradict that root.
+const RETIRED_KEYS: &[&str] = &["destinationSettled", "destinationChoice"];
 
 /// The registry file, under `crate::env::storage_dir()`.
 const FILE_NAME: &str = "downloads.json";
@@ -124,10 +131,11 @@ struct Cached {
 }
 
 /// What tells two versions of the file apart without reading it: its
-/// modification time and its length. The rename in `write_atomically` gives
-/// every write a new inode and a new time, so this is exact for the app's
-/// own writes and only coarse (a same-length edit within the timestamp
-/// granularity) for a stranger's.
+/// modification time and its length -- no inode. The app's own writes do
+/// not depend on it: each one replaces the cache with what it wrote and
+/// the stamp taken just after. What it is for is a stranger's edit, and
+/// there it is coarse: one that keeps the length and lands within the
+/// timestamp granularity of the last write is missed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct FileStamp {
     modified: Option<SystemTime>,
@@ -505,6 +513,11 @@ pub struct Registry {
     /// [`pins_in`], which still names them to the launch: left out of the
     /// set, their bytes are swept before the session opens.
     unreadable: BTreeMap<String, serde_json::Value>,
+    /// Top-level keys beside `version` and `items` that this build knows
+    /// nothing about, exactly as they were on disk, and written back by
+    /// [`Registry::serialize`] -- the file-level twin of [`Entry::extra`].
+    /// The keys it retired itself ([`RETIRED_KEYS`]) are not among them.
+    extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for Registry {
@@ -513,13 +526,14 @@ impl Default for Registry {
             version: VERSION,
             items: BTreeMap::new(),
             unreadable: BTreeMap::new(),
+            extra: serde_json::Map::new(),
         }
     }
 }
 
 impl Serialize for Registry {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::{Error, SerializeStruct};
+        use serde::ser::{Error, SerializeMap};
 
         let mut items = serde_json::Map::with_capacity(self.items.len() + self.unreadable.len());
         for (key, entry) in &self.items {
@@ -531,9 +545,12 @@ impl Serialize for Registry {
         for (key, raw) in &self.unreadable {
             items.entry(key.clone()).or_insert_with(|| raw.clone());
         }
-        let mut registry = serializer.serialize_struct("Registry", 2)?;
-        registry.serialize_field("version", &self.version)?;
-        registry.serialize_field("items", &items)?;
+        let mut registry = serializer.serialize_map(Some(2 + self.extra.len()))?;
+        registry.serialize_entry("version", &self.version)?;
+        registry.serialize_entry("items", &items)?;
+        for (key, value) in &self.extra {
+            registry.serialize_entry(key, value)?;
+        }
         registry.end()
     }
 }
@@ -542,8 +559,9 @@ impl Registry {
     /// Parses a registry file: forgiving about what is *in* it, strict about
     /// its shape.
     ///
-    /// A `version` above [`VERSION`] is kept, unknown keys survive in
-    /// [`Entry::extra`], and an entry this build cannot read is kept
+    /// A `version` above [`VERSION`] is kept, unknown keys survive (in
+    /// [`Entry::extra`], and at the top level in [`Registry::extra`]), and
+    /// an entry this build cannot read is kept
     /// verbatim (see [`Registry::unreadable`]). What is refused is a file
     /// that is not the shape this build writes: not JSON, not an object, no
     /// `items` object, a `version` that is not a number. Each of those
@@ -600,10 +618,17 @@ impl Registry {
                 }
             }
         }
+        let extra = file
+            .iter()
+            .filter(|(key, _)| !matches!(key.as_str(), "version" | "items"))
+            .filter(|(key, _)| !RETIRED_KEYS.contains(&key.as_str()))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
         Ok(Self {
             version,
             items: parsed,
             unreadable,
+            extra,
         })
     }
 }
@@ -1067,15 +1092,20 @@ pub enum PinFailure {
     MagnetAdd { message: String },
     /// The torrent engine refused the pin itself.
     Backend { message: String },
-    /// Nothing to ask: the embedded server is not running, or its runtime
-    /// went away mid-call.
+    /// Every refusal the kinds above do not name: the embedded server is
+    /// not running, or its runtime went away mid-call -- or a link or Drive
+    /// source refused the pin (the URL would not answer, Drive is not
+    /// linked). The message is what tells these apart; there is no kind
+    /// per source.
     Unavailable { message: String },
 }
 
 impl PinFailure {
-    /// Classifies what `crate::server::pin_download` returned. The concrete
-    /// [`PinDownloadError`] travels inside `anyhow`, so this downcasts;
-    /// anything else is one of our own (path-free) messages.
+    /// Classifies what `crate::server::pin_download` (or a link or Drive
+    /// pin) returned. The concrete [`PinDownloadError`] travels inside
+    /// `anyhow`, so this downcasts; anything else -- a server that is not
+    /// running, a source that refused -- is [`Self::Unavailable`] with its
+    /// (path-free) message.
     pub fn classify(error: &anyhow::Error) -> Self {
         let Some(pin_error) = error.downcast_ref::<PinDownloadError>() else {
             return Self::Unavailable {
@@ -2600,6 +2630,7 @@ pub fn list() -> anyhow::Result<Registry> {
     registry.items.retain(|_, entry| !entry.is_leaving());
     Ok(Registry {
         unreadable: BTreeMap::new(),
+        extra: serde_json::Map::new(),
         ..registry
     })
 }
@@ -3164,7 +3195,8 @@ mod tests {
         let newer = br#"{"version":9,"items":{
             "tt1:tt1":{"metaId":"tt1","videoId":"tt1","infoHash":"abc",
                        "state":"seeding","futureField":{"a":1}},
-            "broken":{"videoId":"x"}}}"#;
+            "broken":{"videoId":"x"}},
+            "futureTopLevel":{"b":[2]}}"#;
         let parsed = Registry::parse(newer).unwrap();
         assert_eq!(parsed.version, 9);
         assert_eq!(parsed.items.len(), 1, "one entry this build can read");
@@ -3181,6 +3213,11 @@ mod tests {
             round_tripped["items"]["tt1:tt1"]["futureField"],
             serde_json::json!({"a": 1}),
             "unknown keys are written back"
+        );
+        assert_eq!(
+            round_tripped["futureTopLevel"],
+            serde_json::json!({"b": [2]}),
+            "and so are unknown keys beside `items`: {round_tripped}"
         );
         // The entry this build cannot read is written back *as it was*: a
         // forgiving read plus a whole-file rewrite would otherwise erase a

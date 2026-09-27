@@ -173,7 +173,7 @@ void main() {
         expect(error.requiredBytes, 4000000000);
         expect(error.availableBytes, 1000000000);
         expect(error.marginBytes, 524288000);
-        expect(DownloadView.humanSize(error.requiredBytes!), '4.0 GB');
+        expect(formatBytes(error.requiredBytes!), '4.0 GB');
       },
     );
 

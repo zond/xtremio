@@ -228,6 +228,34 @@ fn core_lifecycle() -> anyhow::Result<()> {
     assert_eq!(server_base_url()?, None);
     core_shutdown()?; // no-op
 
+    // Two boots landing together -- a boot screen's retry over one still in
+    // flight -- come out as one: both succeed and answer the same server.
+    let tmp_race = tempfile::tempdir()?;
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let boots: Vec<_> = (0..2)
+        .map(|_| {
+            let barrier = std::sync::Arc::clone(&barrier);
+            let config = config(tmp_race.path());
+            std::thread::spawn(move || {
+                barrier.wait();
+                core_init(config)
+            })
+        })
+        .collect();
+    let urls = boots
+        .into_iter()
+        .map(|boot| {
+            boot.join()
+                .expect("a concurrent init")
+                .map(|result| result.server_base_url)
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    assert!(urls[0].is_some(), "{urls:?}");
+    assert_eq!(urls[0], urls[1], "two inits, two servers");
+    assert!(core_is_initialized()?);
+    assert_eq!(server_base_url()?, urls[0]);
+    core_shutdown()?;
+
     // A persisted remote server URL -- left by the "Remote server" choice
     // this app no longer offers -- is pointed back at the embedded server:
     // it is the only server the app streams from (`core::pin_to_embedded`).

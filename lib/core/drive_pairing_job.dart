@@ -79,13 +79,21 @@ class DrivePairingJob extends ChangeNotifier {
   /// `xtremio_core::app: drive: …`.
   ///
   /// **What is never in them.** No refresh token, no access token, no
-  /// server auth code -- not their values and not their lengths. A session
-  /// id *is* written: it is a uuid the service invented, useless without a
-  /// pairing waiting behind it, and it is the one thing that makes a log
-  /// line join up with a row in the service's records. Every pairing fault
-  /// in this app so far was diagnosed by matching those two, and doing it
-  /// without these lines took an hour each time.
+  /// server auth code -- not their values and not their lengths -- and no
+  /// whole session id. The id is a credential for as long as its pairing
+  /// waits: the collect that hands over the refresh token asks for nothing
+  /// else ([DrivePairingSession.toString]). Its first eight characters are
+  /// written ([logId]), because they are what makes a log line join up
+  /// with a row in the service's records -- every pairing fault in this app
+  /// so far was diagnosed by matching those two, and doing it without these
+  /// lines took an hour each time -- and eight characters of a uuid collect
+  /// nothing.
   static const String target = 'drive';
+
+  /// The part of [sessionId] a log line carries: its first eight
+  /// characters, never the whole (see [target]).
+  static String logId(String sessionId) =>
+      sessionId.length > 8 ? sessionId.substring(0, 8) : sessionId;
 
   /// Hands a native pick over and collects what it becomes.
   ///
@@ -100,12 +108,15 @@ class DrivePairingJob extends ChangeNotifier {
     required List<String> fileIds,
   }) async {
     if (running) {
-      DiagnosticsLog.info(target, 'pairing: already finishing $_sessionId');
+      DiagnosticsLog.info(
+        target,
+        'pairing: already finishing ${logId(_sessionId!)}',
+      );
       return;
     }
     DiagnosticsLog.info(
       target,
-      'pairing: handing over ${fileIds.length} files on $sessionId',
+      'pairing: handing over ${fileIds.length} files on ${logId(sessionId)}',
     );
     _start(sessionId);
     final handover = await service.handOverNativePick(
@@ -115,7 +126,7 @@ class DrivePairingJob extends ChangeNotifier {
     );
     DiagnosticsLog.info(
       target,
-      'pairing: handover $sessionId -> ${handover.name}',
+      'pairing: handover ${logId(sessionId)} -> ${handover.name}',
     );
     if (handover != DrivePairingHandover.taken) {
       return _end(switch (handover) {
@@ -141,13 +152,13 @@ class DrivePairingJob extends ChangeNotifier {
     if (tries >= maxTries) {
       DiagnosticsLog.info(
         target,
-        'pairing: giving up on $sessionId for this run after $tries tries',
+        'pairing: giving up on ${logId(sessionId)} for this run after $tries tries',
       );
       return;
     }
     DiagnosticsLog.info(
       target,
-      'pairing: collecting what was left behind on $sessionId',
+      'pairing: collecting what was left behind on ${logId(sessionId)}',
     );
     _tries[sessionId] = tries + 1;
     _start(sessionId);
@@ -163,7 +174,7 @@ class DrivePairingJob extends ChangeNotifier {
     final answer = await service.collect(sessionId);
     DiagnosticsLog.info(
       target,
-      'pairing: collect $sessionId -> ${answer.runtimeType}',
+      'pairing: collect ${logId(sessionId)} -> ${answer.runtimeType}',
     );
     switch (answer) {
       case DrivePairingCollected():
@@ -216,7 +227,7 @@ class DrivePairingJob extends ChangeNotifier {
   void _end(DrivePairingJobOutcome outcome, {bool forget = true}) {
     DiagnosticsLog.info(
       target,
-      'pairing: $_sessionId finished ${outcome.name}'
+      'pairing: ${logId(_sessionId ?? '')} finished ${outcome.name}'
       '${forget ? '' : ', still outstanding'}',
     );
     _sessionId = null;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
@@ -435,6 +437,56 @@ void main() {
     );
   });
 
+  test('writes land in the order they were made, whichever one the file '
+      'answers first', () async {
+    // What the pairing job does: write the session id down, then forget
+    // it. Each write is its own FFI call on a worker pool; unchained, the
+    // second could land first and leave the id on disk for good.
+    final client = _HeldPrefsClient();
+    final prefs = AppPrefs(client: client);
+    addTearDown(prefs.dispose);
+
+    final first = prefs.setDrivePendingSession('session-1');
+    final second = prefs.setDrivePendingSession(null);
+    final third = prefs.setDriveTokenDead(true);
+    await pumpEventQueue();
+    expect(client.started, [
+      AppPrefs.drivePendingSessionKey,
+    ], reason: 'the second waits for the first, even on another key');
+
+    client.held.single.complete();
+    await pumpEventQueue();
+    expect(client.started, [
+      AppPrefs.drivePendingSessionKey,
+      AppPrefs.drivePendingSessionKey,
+    ]);
+    client.held[1].complete();
+    await Future.wait([first, second]);
+    await pumpEventQueue();
+    client.held[2].complete();
+    await third;
+
+    expect(client.stored.containsKey(AppPrefs.drivePendingSessionKey), isFalse);
+    expect(client.stored[AppPrefs.driveTokenDeadKey], isTrue);
+  });
+
+  test('a write that fails does not stop the ones behind it', () async {
+    final client = _HeldPrefsClient();
+    final prefs = AppPrefs(client: client);
+    addTearDown(prefs.dispose);
+
+    final first = prefs.setDrivePendingSession('session-1');
+    final second = prefs.setDrivePendingSession(null);
+    await pumpEventQueue();
+    client.held.single.completeError(StateError('disk full'));
+    await first;
+    await pumpEventQueue();
+    client.held[1].complete();
+    await second;
+
+    expect(client.started, hasLength(2));
+  });
+
   testWidgets('maybeOf is null with no scope above', (tester) async {
     AppPrefs? found = AppPrefs.inMemory();
     await tester.pumpWidget(
@@ -447,4 +499,33 @@ void main() {
     );
     expect(found, isNull);
   });
+}
+
+/// A [PrefsClient] whose every write waits for the test to finish it, so a
+/// test decides which of two writes the file answers first.
+class _HeldPrefsClient implements PrefsClient {
+  /// What the writes that finished left behind.
+  final Map<String, Object?> stored = {};
+
+  /// The key of every write that has begun, in order.
+  final List<String> started = [];
+
+  /// One per begun write, completed by the test.
+  final List<Completer<void>> held = [];
+
+  @override
+  Future<Map<String, dynamic>> getAll() async => {};
+
+  @override
+  Future<void> set(String key, Object? value) async {
+    started.add(key);
+    final gate = Completer<void>();
+    held.add(gate);
+    await gate.future;
+    if (value == null) {
+      stored.remove(key);
+    } else {
+      stored[key] = value;
+    }
+  }
 }

@@ -717,7 +717,7 @@ void main() {
         expect(held.liveImages, 1);
         expect(held.reportLines, [
           'image cache: 40.0 kB of '
-              '${DownloadView.humanSize(imageCache.maximumSizeBytes)} '
+              '${formatBytes(imageCache.maximumSizeBytes)} '
               'ceiling · 1 images',
           'images in use: 1 held by a live widget, which no eviction frees '
               '· 0 decoding',

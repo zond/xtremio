@@ -51,12 +51,19 @@ class UrlLauncherLinkOpener implements ExternalLinkOpener {
 /// Opens [url] in the system browser through the [ExternalLinkScope] — never
 /// an in-app web view, which would hide the address bar; a SnackBar when
 /// nothing could open it.
+///
+/// The SnackBar names the host and nothing else: an addon's configure URL
+/// carries its debrid key in the path (`AGENTS.md`, "Never log auth
+/// material"), and a message on screen is one a screenshot or a bug report
+/// takes with it.
 Future<void> openInBrowser(BuildContext context, String url) async {
   final opener = ExternalLinkScope.of(context);
   final messenger = ScaffoldMessenger.maybeOf(context);
-  final opened = await opener.open(Uri.parse(url));
+  final uri = Uri.parse(url);
+  final opened = await opener.open(uri);
   if (!opened) {
-    messenger?.showSnackBar(SnackBar(content: Text('Could not open $url')));
+    final what = uri.host.isEmpty ? 'the link' : uri.host;
+    messenger?.showSnackBar(SnackBar(content: Text('Could not open $what')));
   }
 }
 

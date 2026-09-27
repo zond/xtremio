@@ -2,12 +2,14 @@
 //!
 //! Everything the crate keeps between FFI calls -- the stremio-core
 //! `Runtime` and its event sink, the embedded server's handle, the downloads
-//! registry's locks and its progress sink, the preferences file's lock, the
-//! addon-health counts and what the event pump has already seen -- lives
-//! in one [`AppState`],
-//! grouped by the concern that owns it, behind one process static. That is
-//! the whole point: "who owns this, and when does it go away" has a single
-//! answer instead of one per `static`.
+//! registry's locks and its progress sink, the addon-health counts and what
+//! the event pump has already seen -- lives in one [`AppState`], grouped by
+//! the concern that owns it, behind one process static. That is the whole
+//! point: "who owns this, and when does it go away" has a single answer
+//! instead of one per `static`. The preferences file's lock is the one
+//! exception, a static of its own in `crate::prefs`: it guards a file that
+//! outlives every instance, and the shutdown flush writes it after the
+//! state is gone.
 //!
 //! Lifetime: `crate::core::init` creates it -- or, before that, whichever
 //! call first needs it, because Dart subscribes to the event streams
@@ -36,8 +38,6 @@ pub struct AppState {
     pub server: crate::server::ServerState,
     /// The offline-downloads registry's locks, progress sink and ticker.
     pub downloads: crate::downloads::DownloadsState,
-    /// The preferences file's lock.
-    pub prefs: crate::prefs::PrefsState,
     /// How each installed addon has been answering, and when it was last
     /// written out.
     pub addon_health: crate::addon_health::AddonHealthState,

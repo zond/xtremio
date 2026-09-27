@@ -244,9 +244,11 @@ class AppPrefs extends ChangeNotifier {
   /// three times in one afternoon, because the only thing that asked was
   /// the screen the viewer had already walked away from.
   ///
-  /// A session id is not a credential -- it is a uuid the service made up,
-  /// useless without a pairing waiting behind it -- so it belongs here with
-  /// the preferences rather than in the secure store.
+  /// The id is a credential while its pairing waits -- the collect that
+  /// hands over the refresh token asks for nothing else -- but only for
+  /// about ten minutes and only once, and this file is private to the app,
+  /// so it is kept here with the preferences. It is never logged whole
+  /// (`DrivePairingJob.logId`).
   static const String drivePendingSessionKey = 'drivePendingSession';
 
   bool _streamsSectioned = true;
@@ -601,15 +603,27 @@ class AppPrefs extends ChangeNotifier {
   /// is waiting for them; null otherwise.
   Set<String>? _setWhileLoading;
 
-  Future<void> _write(String key, Object? value) async {
+  /// The last write asked for, which the next one waits on. One chain for
+  /// every key: each `prefsSet` is its own FFI call on a worker pool, so two
+  /// writes started together -- the pairing job's `set(id)` and then
+  /// `set(null)` -- could otherwise land in either order and leave the file
+  /// holding the older value. Never completes with an error ([_write]
+  /// catches its own).
+  Future<void> _writes = Future<void>.value();
+
+  Future<void> _write(String key, Object? value) {
     final client = this.client;
-    if (client == null) return;
+    if (client == null) return Future<void>.value();
+    // At the call, not when the write gets its turn: [load] asks which keys
+    // were set while it waited, and a queued write is one of them.
     _setWhileLoading?.add(key);
-    try {
-      await client.set(key, value);
-    } catch (error) {
-      if (kDebugMode) debugPrint('preference $key not stored: $error');
-    }
+    return _writes = _writes.then((_) async {
+      try {
+        await client.set(key, value);
+      } catch (error) {
+        if (kDebugMode) debugPrint('preference $key not stored: $error');
+      }
+    });
   }
 }
 

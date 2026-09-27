@@ -233,7 +233,7 @@ Future<DriveOpened> openLinkedDriveFile({
   );
   if (opened is DriveFileRefused &&
       opened.reason == DriveOpenFailure.pairAgain) {
-    await account.notePairAgain();
+    await account.notePairAgain(ifToken: token);
   }
   return opened;
 }

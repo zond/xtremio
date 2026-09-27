@@ -25,9 +25,10 @@
 /// This used to key on the addon's own bucket (`g`), which was believed to
 /// name one uploader's batch across a whole series and does not: it is
 /// re-assigned per answer, so the integer that meant the WEBRip family
-/// last episode means the DVDRip one this episode (`SubtitleInfo.group`
-/// carries the measurement). A speed looked up under it therefore usually
-/// missed, and now and then hit a family it was never measured on.
+/// last episode means the DVDRip one this episode (the doc of
+/// `SubtitleInfo.releaseGroupKey` carries the measurement). A speed looked
+/// up under it therefore usually missed, and now and then hit a family it
+/// was never measured on.
 ///
 /// Both are real numbers, because both are now *measured*: a viewer
 /// marking the picture right, or a match against a file they say is in

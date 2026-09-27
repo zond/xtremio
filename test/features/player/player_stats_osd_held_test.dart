@@ -118,14 +118,12 @@ void main() {
     expect(server.requests.single.queryParameters['buffer'], 'normal');
 
     expect(
-      row(
-        'cache    12.0s mpv · behind 1.2 GB (20 min) · ahead 340.0 MB (5 min)',
-      ),
+      row('cache    12.0s mpv · behind 1.2 GB (20 min) · ahead 340 MB (5 min)'),
       findsOneWidget,
     );
     expect(
       row(
-        'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live',
+        'sharing  820 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live',
       ),
       findsOneWidget,
     );
@@ -144,15 +142,13 @@ void main() {
     await tester.pump();
     expect(server.requests, hasLength(2));
     expect(
-      row(
-        'cache    12.0s mpv · behind 500.0 MB (8 min) · ahead 900.0 MB (15 min)',
-      ),
+      row('cache    12.0s mpv · behind 500 MB (8 min) · ahead 900 MB (15 min)'),
       findsOneWidget,
     );
     // The counters went unreadable -- the torrent paused, or is checking.
     // The committed set stands; the bytes moved go absent together rather
     // than reading as a session that has shared nothing.
-    expect(row('sharing  820.0 MB committed'), findsOneWidget);
+    expect(row('sharing  820 MB committed'), findsOneWidget);
 
     // Down again: the asking stops with the panel.
     await pressShiftI(tester);
@@ -183,12 +179,12 @@ void main() {
     // is whole before the media opens. It used to be bytes alone here,
     // because the watching was the bytes over mpv's `video-bitrate`.
     expect(
-      row('cache    behind 1.2 GB (20 min) · ahead 340.0 MB (5 min)'),
+      row('cache    behind 1.2 GB (20 min) · ahead 340 MB (5 min)'),
       findsOneWidget,
     );
     expect(
       row(
-        'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB'
+        'sharing  820 MB committed · ↑ 2.1 GB ↓ 4.8 GB'
         ' · 0.44 since it last went live',
       ),
       findsOneWidget,
@@ -201,9 +197,7 @@ void main() {
     expect(row(PlaybackStatsOverlay.collecting), findsNothing);
     expect(row('bitrate  8.0 Mbps'), findsOneWidget);
     expect(
-      row(
-        'cache    12.0s mpv · behind 1.2 GB (20 min) · ahead 340.0 MB (5 min)',
-      ),
+      row('cache    12.0s mpv · behind 1.2 GB (20 min) · ahead 340 MB (5 min)'),
       findsOneWidget,
     );
   });
@@ -220,7 +214,7 @@ void main() {
       await openPanel(tester, harness);
       expect(
         row(
-          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live',
+          'sharing  820 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live',
         ),
         findsOneWidget,
       );
@@ -242,7 +236,7 @@ void main() {
       await pumpEvents(tester);
       expect(
         row(
-          'sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live',
+          'sharing  820 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live',
         ),
         findsOneWidget,
       );

@@ -87,11 +87,11 @@ class DownloadsSummary {
   /// is to say when they are not.
   String get text {
     if (size > 0) {
-      return '${DownloadView.humanSize(downloaded)} of '
-          '${DownloadView.humanSize(size)} · $percent%';
+      return '${formatBytes(downloaded)} of '
+          '${formatBytes(size)} · $percent%';
     }
     return downloaded > 0
-        ? '${DownloadView.humanSize(downloaded)} so far'
+        ? '${formatBytes(downloaded)} so far'
         : 'Waiting to start';
   }
 

@@ -163,17 +163,35 @@ class PlaybackStatsOverlay extends StatelessWidget {
     if (s == null)
       collecting
     else ...[
-      'fps      ${_fps(s.outputFps)} out / ${_fps(s.containerFps)} container',
-      'dropped  ${s.droppedFrames ?? '-'} vo'
-          '${s.decoderDroppedFrames == null ? '' : ' / ${s.decoderDroppedFrames} decoder'}',
+      // Each row, and each half of one, only where mpv answered: a reading
+      // that does not exist takes its place away rather than drawing a
+      // dash (AGENTS, "The stats panel draws a reading or nothing at all").
+      if (_halves(' / ', [
+            if (s.outputFps case final out?) '${_fps(out)} out',
+            if (s.containerFps case final container?)
+              '${_fps(container)} container',
+          ])
+          case final fps?)
+        'fps      $fps',
+      if (_halves(' / ', [
+            if (s.droppedFrames case final vo?) '$vo vo',
+            if (s.decoderDroppedFrames case final decoder?) '$decoder decoder',
+          ])
+          case final dropped?)
+        'dropped  $dropped',
       // Directly under the drop counts, because it is the line that says
-      // whether they mean anything. Only where mpv answered: on a backend
-      // with no such property there is no rate to report.
-      if (s.displayFps != null) 'display  ${_display(s)}',
-      'hwdec    ${_hwdec(s)}',
-      'video    ${s.videoCodec ?? '-'}'
-          '${s.width != null && s.height != null ? ' ${s.width}x${s.height}' : ''}',
-      'bitrate  ${formatBitrate(s.videoBitrate)}',
+      // whether they mean anything. On a backend with no such property
+      // there is no rate to report.
+      if (s.displayFps case final hz?) 'display  ${_display(hz)}',
+      if (_hwdec(s) case final hwdec?) 'hwdec    $hwdec',
+      if (_halves(' ', [
+            ?s.videoCodec,
+            if ((s.width, s.height) case (final w?, final h?)) '${w}x$h',
+          ])
+          case final video?)
+        'video    $video',
+      if (s.videoBitrate case final bitrate?)
+        'bitrate  ${formatBitrate(bitrate)}',
     ],
     // Whichever halves of it were measured: mpv's buffer, the server's
     // window, or -- while mpv is still collecting under an open panel --
@@ -187,7 +205,13 @@ class PlaybackStatsOverlay extends StatelessWidget {
     // Only when mpv answered: on a backend that has no such properties
     // the rows would be three dashes claiming something was measured.
     if (s != null && (s.seekable != null || s.partiallySeekable != null))
-      'seekable ${_seekable(s)} · partially ${_flag(s.partiallySeekable)}',
+      if (_halves(' · ', [
+            ?_seekable(s),
+            if (s.partiallySeekable case final partially?)
+              'partially ${_flag(partially)}',
+          ])
+          case final seekable?)
+        'seekable $seekable',
     if (s?.seekableRanges case final ranges?) 'ranges   ${_ranges(ranges)}',
   ];
 
@@ -200,17 +224,15 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// point of showing it: a rate here that is not the one the display
   /// settled on is a set that went nowhere, and the drops below it belong
   /// to something else.
-  static String _display(PlaybackStats s) {
-    final hz = s.displayFps;
-    return hz == null ? '-' : '${hz.toStringAsFixed(3)} Hz';
-  }
+  static String _display(double hz) => '${hz.toStringAsFixed(3)} Hz';
 
-  /// A yes/no mpv answered, or a dash for one it did not.
-  static String _flag(bool? value) => switch (value) {
-    null => '-',
-    true => 'yes',
-    false => 'no',
-  };
+  /// A yes/no mpv answered.
+  static String _flag(bool value) => value ? 'yes' : 'no';
+
+  /// The halves of a row that were measured, joined by [separator], or
+  /// null -- no row -- when none was.
+  static String? _halves(String separator, List<String> halves) =>
+      halves.isEmpty ? null : halves.join(separator);
 
   /// Whether mpv will seek in the open media -- and whose answer that is.
   ///
@@ -221,8 +243,14 @@ class PlaybackStatsOverlay extends StatelessWidget {
   /// still reads is `partially`, which mpv sets alongside a forced
   /// `seekable`: a yes there under `forced` is the demuxer saying it could
   /// not seek and being overruled.
-  static String _seekable(PlaybackStats s) =>
-      s.seekableForced == true ? 'forced' : _flag(s.seekable);
+  ///
+  /// Null when mpv has not said and nothing forced it: the half is then
+  /// left off the row.
+  static String? _seekable(PlaybackStats s) {
+    if (s.seekableForced == true) return 'forced';
+    final seekable = s.seekable;
+    return seekable == null ? null : _flag(seekable);
+  }
 
   /// The demuxer's seekable ranges, in whole seconds of playback time.
   ///
@@ -342,8 +370,8 @@ class PlaybackStatsOverlay extends StatelessWidget {
 
   static String _fps(double? fps) => fps == null ? '-' : fps.toStringAsFixed(2);
 
-  static String _hwdec(PlaybackStats s) => switch (s.isSoftwareDecoding) {
-    null => '-',
+  static String? _hwdec(PlaybackStats s) => switch (s.isSoftwareDecoding) {
+    null => null,
     true => 'software (hwdec-current: ${s.hwdec})',
     false => s.hwdec!,
   };
@@ -378,16 +406,19 @@ class PlaybackStatsOverlay extends StatelessWidget {
   }
 
   /// mpv's half of the cache row: the seconds it has read ahead, and
-  /// whether it has run out and is waiting for more.
-  static String _mpvCache(PlaybackStats s) {
+  /// whether it has run out and is waiting for more. Null when it has said
+  /// neither; the seconds alone are left off when only the waiting is
+  /// known.
+  static String? _mpvCache(PlaybackStats s) {
     final duration = s.cacheDuration;
     final seconds = duration == null
-        ? '-'
+        ? null
         : '${(duration.inMilliseconds / 1000).toStringAsFixed(1)}s';
-    return s.pausedForCache == true
-        ? '$seconds mpv  buffering'
-              '${s.cacheBufferingState == null ? '' : ' ${s.cacheBufferingState}%'}'
-        : '$seconds mpv';
+    if (s.pausedForCache == true) {
+      return '${seconds == null ? '' : '$seconds '}mpv  buffering'
+          '${s.cacheBufferingState == null ? '' : ' ${s.cacheBufferingState}%'}';
+    }
+    return seconds == null ? null : '$seconds mpv';
   }
 
   /// Half the window: its bytes, and how much watching that is.
@@ -507,23 +538,8 @@ class PlaybackStatsOverlay extends StatelessWidget {
     return parts.isEmpty ? const [] : ['unver.   ${parts.join(' · ')}'];
   }
 
-  /// A byte count in human units: `340 MB`, `1.2 GB`. Decimal, on the same
-  /// ladder as [formatBitrate] and `TorrentProgressCard.formatSpeed`, so
-  /// the panel measures a stream one way -- the binary units elsewhere are
-  /// for piece lengths, which are powers of two and would read as
-  /// `16.8 MB` here.
-  static String formatBytes(int bytes) {
-    if (bytes >= 1000000000) {
-      return '${(bytes / 1000000000).toStringAsFixed(1)} GB';
-    }
-    if (bytes >= 1000000) return '${(bytes / 1000000).toStringAsFixed(1)} MB';
-    if (bytes >= 1000) return '${(bytes / 1000).round()} kB';
-    return '$bytes B';
-  }
-
   /// Bits per second in human units: `850 kbps`, `4.2 Mbps`.
-  static String formatBitrate(int? bitsPerSecond) {
-    if (bitsPerSecond == null) return '-';
+  static String formatBitrate(int bitsPerSecond) {
     if (bitsPerSecond >= 1000000) {
       return '${(bitsPerSecond / 1000000).toStringAsFixed(1)} Mbps';
     }

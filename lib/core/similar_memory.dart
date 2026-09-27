@@ -45,7 +45,8 @@ import 'package:flutter/foundation.dart';
 /// `QUESTION_VERSION` and names that version in every answer. **Bump this
 /// when that bumps**, or a device that already holds an answer keeps the
 /// old one for the life of the install while every new install gets the
-/// new one.
+/// new one. `test/core/similar_memory_test.dart` reads the server's
+/// constant and fails while the two disagree.
 const int similarQuestionVersion = 1;
 
 /// Which catalogue a suggestion is to be looked for in.

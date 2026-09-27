@@ -182,20 +182,20 @@ void main() {
     });
 
     test('sizes read as storage is sold, decimal and short', () {
-      expect(DownloadView.humanSize(0), '0 B');
-      expect(DownloadView.humanSize(999), '999 B');
-      expect(DownloadView.humanSize(1000), '1.0 kB');
-      expect(DownloadView.humanSize(1536), '1.5 kB');
-      expect(DownloadView.humanSize(150 * 1000), '150 kB');
-      expect(DownloadView.humanSize(1400 * 1000 * 1000), '1.4 GB');
-      expect(DownloadView.humanSize(2 * 1000 * 1000 * 1000 * 1000), '2.0 TB');
+      expect(formatBytes(0), '0 B');
+      expect(formatBytes(999), '999 B');
+      expect(formatBytes(1000), '1.0 kB');
+      expect(formatBytes(1536), '1.5 kB');
+      expect(formatBytes(150 * 1000), '150 kB');
+      expect(formatBytes(1400 * 1000 * 1000), '1.4 GB');
+      expect(formatBytes(2 * 1000 * 1000 * 1000 * 1000), '2.0 TB');
     });
 
     test('a size that rounds up to a whole unit is shown as that unit', () {
-      expect(DownloadView.humanSize(999999), '1.0 MB');
-      expect(DownloadView.humanSize(999999999), '1.0 GB');
+      expect(formatBytes(999999), '1.0 MB');
+      expect(formatBytes(999999999), '1.0 GB');
       expect(
-        DownloadView.humanSize(999499),
+        formatBytes(999499),
         '999 kB',
         reason: 'and one that rounds down stays where it is',
       );

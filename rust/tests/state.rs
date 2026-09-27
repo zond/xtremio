@@ -169,6 +169,20 @@ fn init_creates_the_state_shutdown_takes_it_and_the_next_init_starts_clean() -> 
         "the last answers never reached the file"
     );
 
+    // A preference written after the shutdown -- an FFI `prefs_set` that
+    // was already on its way, or the shutdown's own flush above -- lands in
+    // the file and leaves the process as the shutdown left it: the file's
+    // lock is the process's, not the state's, so writing it builds nothing.
+    xtremio_core::prefs::set("afterShutdown", Some(serde_json::Value::Bool(true)))?;
+    assert!(
+        state::current().is_none(),
+        "a preference write put a state back into the process"
+    );
+    let on_disk: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        storage_of(tmp.path(), "one").join("xtremio_prefs.json"),
+    )?)?;
+    assert_eq!(on_disk["afterShutdown"], serde_json::Value::Bool(true));
+
     // A shutdown does not stop the background work of the instance it
     // retires: the downloads ticker is somewhere inside a blocking refresh,
     // the boot's re-pin inside a magnet the tracker has not answered yet.

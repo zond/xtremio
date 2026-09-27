@@ -83,7 +83,7 @@
 //! observation can put its one record where the whole record was.
 //!
 //! Lock order, where both are taken: this table, then the preferences
-//! file's lock (inside [`crate::prefs::set_in`]). Never the other way.
+//! file's lock (inside [`crate::prefs::set`]). Never the other way.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -678,7 +678,7 @@ pub fn commit_in_at(app: &AppState, sweep: Sweep, now: DateTime<Utc>) -> bool {
     }
     app.addon_health.evidence.fetch_add(1, Ordering::Relaxed);
     counted.dirty = true;
-    flush_locked(app, &mut counted, false);
+    flush_locked(&mut counted, false);
     true
 }
 
@@ -699,7 +699,7 @@ pub fn prune_uninstalled_in(app: &AppState, installed: &BTreeSet<String>) {
     let mut counted = app.addon_health.counted();
     if counted.table.prune_uninstalled(installed, Utc::now()) {
         counted.dirty = true;
-        flush_locked(app, &mut counted, false);
+        flush_locked(&mut counted, false);
     }
 }
 
@@ -741,7 +741,7 @@ pub fn forget_in(app: &AppState, key: &str) -> bool {
         return false;
     }
     counted.dirty = true;
-    flush_locked(app, &mut counted, true);
+    flush_locked(&mut counted, true);
     true
 }
 
@@ -782,18 +782,17 @@ pub fn forget(key: &str) -> bool {
 /// state out of the process by the time it gets here.
 pub fn flush_in(app: &AppState) {
     let mut counted = app.addon_health.counted();
-    flush_locked(app, &mut counted, true);
+    flush_locked(&mut counted, true);
 }
 
 /// Stores the table under [`PREFS_KEY`] when it has been loaded, is dirty,
 /// and is either `force`d or [`FLUSH_INTERVAL`] old. Asked with the table's
 /// lock held, which is what makes reading `last_write` here honest.
 ///
-/// It writes into `app`'s preferences lock ([`crate::prefs::set_in`])
-/// rather than the process state's: the flush that matters most runs from
-/// `crate::core::shutdown`, after the state has been taken out of the
-/// process.
-fn flush_locked(app: &AppState, counted: &mut Counted, force: bool) {
+/// [`crate::prefs::set`] looks up no state, which matters here: the flush
+/// that matters most runs from `crate::core::shutdown`, after the state has
+/// been taken out of the process.
+fn flush_locked(counted: &mut Counted, force: bool) {
     // Not even `force` writes a table that was never read: it would be
     // this process's few observations in place of the whole record.
     if !counted.loaded || !counted.dirty {
@@ -808,7 +807,7 @@ fn flush_locked(app: &AppState, counted: &mut Counted, force: bool) {
     }
     let value = counted.table.to_value();
     counted.last_write = Some(Instant::now());
-    match crate::prefs::set_in(app, PREFS_KEY, Some(value)) {
+    match crate::prefs::set(PREFS_KEY, Some(value)) {
         // Still dirty on failure: the next flush tries again, and the
         // throttle above keeps a broken storage directory from being
         // written to on every answer.

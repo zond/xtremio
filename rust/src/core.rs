@@ -369,9 +369,26 @@ pub(crate) fn reapply_embedded_pin(app: &AppState) {
     }
 }
 
-/// Boots the engine. Idempotent: a second call returns the current outcome.
+/// Serializes [`init`] whole. Its idempotency is a check (is a runtime
+/// installed?) followed, much later, by the act (install one), and two
+/// calls landing together -- a boot screen's retry over a boot still in
+/// flight -- would both pass the check and each build a runtime, an event
+/// pump and a boot re-pin, the second overwriting the first's runtime while
+/// its pump went on emitting. A process static beside the state rather than
+/// a field of it: `init` is what adopts or creates the state.
+static INIT: Mutex<()> = Mutex::new(());
+
+/// A poisoned lock only means an earlier `init` panicked; there is no value
+/// behind it, and the check under it reads the state as it is.
+fn init_lock() -> MutexGuard<'static, ()> {
+    INIT.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Boots the engine. Idempotent: a second call returns the current outcome,
+/// and one made while the first is still booting waits for it ([`INIT`]).
 pub fn init(config: InitConfig) -> anyhow::Result<InitOutcome> {
     crate::logging::init();
+    let _init = init_lock();
     // The state may already exist: Dart subscribes to the event streams
     // before it calls `core_init`, and that is what created it.
     let app = crate::state::state();
@@ -693,6 +710,35 @@ mod tests {
         });
         retire(&AppState::default()).expect("retire");
         assert!(rx.try_recv().is_ok(), "the queued write ran first");
+    }
+
+    /// A second `init` waits for one in flight rather than running its
+    /// idempotency check beside it. The lock is held here the way a boot
+    /// holds it; the waiting call is handed a storage directory it cannot
+    /// create, so once let through it fails before touching the process.
+    #[test]
+    fn a_second_init_waits_for_the_first() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let blocker = tmp.path().join("a-file");
+        std::fs::write(&blocker, b"").expect("write");
+        let held = init_lock();
+        let storage_dir = blocker.join("core");
+        let waiting = std::thread::spawn(move || {
+            init(InitConfig {
+                storage_dir,
+                server: None,
+            })
+        });
+        // Only how sharp the test is depends on this wait: an `init` that
+        // has not got going yet has not returned either way.
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(
+            !waiting.is_finished(),
+            "an init ran while another held the boot"
+        );
+        drop(held);
+        let result = waiting.join().expect("the waiting init");
+        assert!(result.is_err(), "the storage directory cannot be created");
     }
 
     #[test]

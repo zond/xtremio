@@ -67,22 +67,6 @@ final class SubtitleInfo {
   /// none -- but it wins over anything derived when it is there.
   String? get label => _text('label');
 
-  /// Frames per second times 1000 (`23980`, `25000`): the rate of the
-  /// video the addon says this file was cut for, on about nine
-  /// OpenSubtitles entries in ten.
-  ///
-  /// **Nothing reads it, and a new reader is almost certainly a
-  /// mistake.** It ordered the subtitle list until the measurements came
-  /// in: ten English files for one film declaring six different rates
-  /// all end within 1 % of the same runtime, so the number says where an
-  /// upload came from and not how it is timed. What orders the list now
-  /// is the release an upload was cut for, and what re-times one is the
-  /// viewer -- see AGENTS, *Nothing re-times a subtitle but the viewer*.
-  /// It is kept because the addon keeps sending it and because measuring
-  /// a file's real drift is the honest way to use it, which nothing here
-  /// does yet.
-  int? get fpsMilli => _int('fpsMilli');
-
   /// The name of the file inside the addon's archive
   /// (`The.Godfather.1972.1080p.BluRay.x264-DFN.srt`).
   String? get subtitleFileName => _text('subtitleFileName');
@@ -107,44 +91,27 @@ final class SubtitleInfo {
   ///
   /// This is the only stable name an addon gives a subtitle across the
   /// episodes of a show -- an `id` and a `url` are per file, and `g` is
-  /// per answer ([group]) -- so it is what a remembered adjustment and a
-  /// remembered pick are keyed on. Six entries in ten carry no group at
-  /// all, and for those nothing about the release is remembered rather
-  /// than something narrower being guessed.
+  /// per answer -- so it is what a remembered adjustment and a remembered
+  /// pick are keyed on. Six entries in ten carry no group at all, and for
+  /// those nothing about the release is remembered rather than something
+  /// narrower being guessed.
+  ///
+  /// `g`, OpenSubtitles v3's small-integer bucket, is deliberately not
+  /// read: it used to be the key, on the belief that it named one
+  /// uploader's batch across a series, and it does not. Measured over 506
+  /// real answers for two shows, one Swedish batch
+  /// (`Gilmore.Girls.SxxExx.WEBRip.x264-FGT`) is `g=6` on S01E01, `5` on
+  /// S01E02, `4` on S01E03 and `1` on S03E05: the index is re-assigned per
+  /// answer, roughly in size order, so the same integer names a different
+  /// family next episode. Nor is `fpsMilli`, the frame rate the addon says
+  /// the file was cut for: ten English files for one film declaring six
+  /// rates all end within 1 % of the same runtime, so it says where an
+  /// upload came from and not how it is timed (AGENTS, *Nothing re-times a
+  /// subtitle but the viewer*).
   String? get releaseGroupKey => releaseGroup?.toLowerCase();
 
   /// The source that release came from (`BluRay`, `WEB-DL`).
   String? get releaseFormat => _text('releaseFormat');
-
-  /// The addon's own bucket for this upload (`g`): OpenSubtitles v3 sends
-  /// a small integer, and it is only ever the same one **within a single
-  /// answer**.
-  ///
-  /// **Nothing reads it, and a new reader is almost certainly a
-  /// mistake.** It used to be what an adjustment the viewer made was
-  /// remembered against, on the belief that the integer named one
-  /// uploader's batch across a whole series. It does not. Measured over
-  /// 506 real answers for two shows: one Swedish upload batch
-  /// (`Gilmore.Girls.SxxExx.WEBRip.x264-FGT`, consecutive addon ids) is
-  /// `g=6` on S01E01, `5` on S01E02, `4` on S01E03 and `1` on S03E05,
-  /// and Breaking Bad's BluRay family is `2`, `2`, then `1`. The index is
-  /// re-assigned per answer, roughly in size order, so the same small
-  /// integer names a different release family next episode -- and one
-  /// bucket even collects files whose `movieReleaseName` is another
-  /// episode's. Within one answer it really does cluster a family
-  /// together, which is why it looked stable when it was measured across
-  /// two episodes of one show.
-  ///
-  /// What names a family across episodes is [releaseGroupKey], and that
-  /// is what the memories key on now.
-  ///
-  /// Read as text whether the addon sent a number or a string, since it
-  /// is only ever compared with itself; anything else -- a list, an
-  /// object, a bool -- is no bucket.
-  String? get group {
-    final value = json['g'];
-    return value is int ? '$value' : _text('g');
-  }
 
   /// [key] as display text: null unless the addon sent a string with
   /// something in it, and guarded by [wellFormedText] because every one of
@@ -154,18 +121,6 @@ final class SubtitleInfo {
     if (value is! String) return null;
     final text = wellFormedText(value)!.trim();
     return text.isEmpty ? null : text;
-  }
-
-  /// [key] as a whole number, whether the addon sent one (`23980`) or the
-  /// same thing quoted (`"23980"`). Null for anything else, an infinity
-  /// and a NaN included.
-  int? _int(String key) {
-    final number = switch (json[key]) {
-      final num value => value,
-      final String value => num.tryParse(value.trim()),
-      _ => null,
-    };
-    return number == null || !number.isFinite ? null : number.toInt();
   }
 
   /// [url] with everything folded away that cannot change *which file*

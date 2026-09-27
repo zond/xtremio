@@ -449,15 +449,29 @@ final class DriveReloadRefused extends DriveReloaded {
 /// One write, at the end, from a listing that is complete by construction:
 /// the failed arm returns before [DriveAccount.noteReconciled] is in
 /// reach.
+///
+/// A pairing that lands while the listing is out changes the grant under
+/// it: the answer is about the old one, and reconciling it would drop the
+/// files the new pairing just linked (they are in no listing the old grant
+/// could make). So the listing is asked again, once, with the new token.
 Future<DriveReloaded> reloadLinkedDriveFiles({
   required DriveAccount account,
   required DriveFileLister lister,
+}) => _reload(account, lister, again: true);
+
+Future<DriveReloaded> _reload(
+  DriveAccount account,
+  DriveFileLister lister, {
+  required bool again,
 }) async {
   final token = account.refreshToken;
   if (token == null || token.isEmpty) {
     return const DriveReloadRefused(DriveListingFailure.notLinked);
   }
   final listing = await lister.listFiles(refreshToken: token);
+  if (again && account.refreshToken != token) {
+    return _reload(account, lister, again: false);
+  }
   switch (listing) {
     case DriveListingFailed(:final reason):
       // The same one side effect [openLinkedDriveFile] has, for the same
@@ -465,7 +479,7 @@ Future<DriveReloaded> reloadLinkedDriveFiles({
       // screen that reads the state should already know by the time this
       // returns.
       if (reason == DriveListingFailure.pairAgain) {
-        await account.notePairAgain();
+        await account.notePairAgain(ifToken: token);
       }
       return DriveReloadRefused(reason);
     case DriveFilesListed(:final filesById):

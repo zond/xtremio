@@ -187,7 +187,7 @@ bitrate above -- asked of the server every five seconds
 (`PlayerScreen.streamNumbersInterval`):
 
 ```
-cache    2.3s mpv · behind 340.0 MB (2 min) · ahead 512.0 MB (3 min)
+cache    2.3s mpv · behind 340 MB (2 min) · ahead 512 MB (3 min)
 ```
 
 The window is absent where nothing bounds the stream (a torrent the storage
@@ -198,7 +198,7 @@ mpv reports a bitrate.
 committed to the swarm and what it has moved.
 
 ```
-sharing  820.0 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live
+sharing  820 MB committed · ↑ 2.1 GB ↓ 4.8 GB · 0.44 since it last went live
 ```
 
 The counters start at zero each time the torrent goes live, so a pause and

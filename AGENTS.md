@@ -258,9 +258,12 @@ exist takes its row (or its half of one) away, never a dash. Tests:
   (`_servedHere`, which also gates the torrent stats poll, since a stats
   call creates the engine it asks about).
 - Nothing outlives its poll (`_stopStreamNumbers`); a late answer for
-  another video is dropped. One unit ladder (`formatBitrate`, `formatBytes`,
-  `formatAge`, `TorrentProgressCard.formatSpeed`): decimal, binary only for
-  piece lengths.
+  another video is dropped. One unit ladder (`formatBitrate`, `formatAge`,
+  `TorrentProgressCard.formatSpeed`, and for bytes the app's one byte
+  formatter, `formatBytes` in `lib/core/units.dart`, which every byte count
+  on every screen goes through): decimal, binary only for piece lengths.
+  Stream pills follow the addon's 1024-based size text (`StreamFacts`),
+  because they repeat what the addon wrote.
 
 ## The addon health record keys on a hash, never the URL
 

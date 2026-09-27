@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xtremio/core/core.dart';
 
@@ -44,6 +46,71 @@ Map<String, String> _stored(DriveAccount account) => {
 };
 
 void main() {
+  group('a pairing that lands while a listing is out', () {
+    test('is listed again with the new token, and the files it linked are '
+        'kept', () async {
+      final account = await _account([_file('drive-file-1', 'ep1.mkv')]);
+      final gate = Completer<void>();
+      final lister = FakeDriveFileLister(
+        answers: [
+          FakeDriveFileLister.listing({'drive-file-1': 'ep1.mkv'}),
+          FakeDriveFileLister.listing({
+            'drive-file-1': 'ep1.mkv',
+            'drive-file-2': 'ep2.mkv',
+          }),
+        ],
+      )..gate = gate;
+
+      final reloading = reloadLinkedDriveFiles(
+        account: account,
+        lister: lister,
+      );
+      await pumpEventQueue();
+      await account.link(
+        refreshToken: '$_token-new',
+        files: [_file('drive-file-2', 'ep2.mkv')],
+      );
+      gate.complete();
+      final outcome = await reloading;
+
+      expect(lister.asked, [_token, '$_token-new']);
+      expect((outcome as DriveReloadDone).removed, 0);
+      expect(_stored(account), {
+        'drive-file-1': 'ep1.mkv',
+        'drive-file-2': 'ep2.mkv',
+      });
+    });
+
+    test('a refusal of a grant replaced again during the second listing '
+        'deletes nothing', () async {
+      // Once is all it is asked again: a second pairing during the second
+      // listing leaves its refusal about a grant nobody holds any more.
+      final account = await _account([_file('drive-file-1', 'ep1.mkv')]);
+      final first = Completer<void>();
+      final second = Completer<void>();
+      final lister = FakeDriveFileLister(
+        answers: [const DriveListingFailed(DriveListingFailure.pairAgain)],
+      )..gate = first;
+
+      final reloading = reloadLinkedDriveFiles(
+        account: account,
+        lister: lister,
+      );
+      await pumpEventQueue();
+      await account.link(refreshToken: '$_token-2');
+      lister.gate = second;
+      first.complete();
+      await pumpEventQueue();
+      expect(lister.asked, [_token, '$_token-2']);
+      await account.link(refreshToken: '$_token-3');
+      second.complete();
+      await reloading;
+
+      expect(account.refreshToken, '$_token-3');
+      expect(account.state, isNot(DriveLinkState.pairAgain));
+    });
+  });
+
   group('reconciling a stored list against a complete listing', () {
     test('a renamed file takes the new name and loses its match, so the '
         'search runs again', () async {

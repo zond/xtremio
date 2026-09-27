@@ -91,10 +91,27 @@ void main() {
     ]);
     expect(PlaybackStatsOverlay.formatBitrate(850000), '850 kbps');
     expect(PlaybackStatsOverlay.formatBitrate(512), '512 bps');
-    expect(PlaybackStatsOverlay.formatBitrate(null), '-');
+    // A sample with nothing in it draws no mpv row at all -- not a row of
+    // dashes -- and a sample with half a row draws that half.
+    expect(PlaybackStatsOverlay.describe(const PlaybackStats()), isEmpty);
     expect(
-      PlaybackStatsOverlay.describe(const PlaybackStats()),
-      everyElement(contains('-')),
+      PlaybackStatsOverlay.describe(
+        const PlaybackStats(
+          containerFps: 25,
+          decoderDroppedFrames: 4,
+          width: 1920,
+          height: 1080,
+          pausedForCache: true,
+          seekable: true,
+        ),
+      ),
+      [
+        'fps      25.00 container',
+        'dropped  4 decoder',
+        'video    1920x1080',
+        'cache    mpv  buffering',
+        'seekable yes',
+      ],
     );
   });
 
@@ -221,7 +238,7 @@ void main() {
     expect(none.seekableRanges, isEmpty);
     expect(
       PlaybackStatsOverlay.describe(none),
-      containsAllInOrder(['seekable no · partially -', 'ranges   none']),
+      containsAllInOrder(['seekable no', 'ranges   none']),
     );
 
     for (final state in const [
@@ -495,7 +512,7 @@ void main() {
             ),
           ),
         ),
-        'cache    294.6s mpv · behind 1.3 GB (21 min) · ahead 356.5 MB (5 min)',
+        'cache    294.6s mpv · behind 1.3 GB (21 min) · ahead 357 MB (5 min)',
       );
     });
 
@@ -528,7 +545,7 @@ void main() {
             window: const CacheWindow(behindBytes: 4194304, aheadBytes: 65536),
           ),
         ),
-        'cache    294.6s mpv · behind 4.2 MB · ahead 66 kB',
+        'cache    294.6s mpv · behind 4.2 MB · ahead 65.5 kB',
       );
     });
 
@@ -562,7 +579,7 @@ void main() {
             window: const CacheWindow(behindBytes: 0, aheadBytes: 356515840),
           ),
         ),
-        'cache    294.6s mpv · behind 0 B · ahead 356.5 MB',
+        'cache    294.6s mpv · behind 0 B · ahead 357 MB',
       );
     });
 
@@ -678,7 +695,7 @@ void main() {
             ),
           ),
           [
-            'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 4.8 GB'
+            'sharing  860 MB committed · ↑ 2.1 GB ↓ 4.8 GB'
                 ' · 0.44 since it last went live',
           ],
         );
@@ -722,7 +739,7 @@ void main() {
           // Paused, checking, stopped for space, in error: a torrent that has
           // moved gigabytes and then paused has not moved nothing.
           expect(rows(const SharingNumbers(committedBytes: 859832320)), [
-            'sharing  859.8 MB committed',
+            'sharing  860 MB committed',
           ]);
         },
       );
@@ -766,7 +783,7 @@ void main() {
           ),
         );
         expect(seeding, [
-          'sharing  859.8 MB committed · ↑ 2.1 GB ↓ 0 B'
+          'sharing  860 MB committed · ↑ 2.1 GB ↓ 0 B'
               ' since it last went live',
         ]);
       });
@@ -774,11 +791,11 @@ void main() {
   );
 
   test('bytes are decimal, on the panel\'s own ladder', () {
-    expect(PlaybackStatsOverlay.formatBytes(0), '0 B');
-    expect(PlaybackStatsOverlay.formatBytes(999), '999 B');
-    expect(PlaybackStatsOverlay.formatBytes(340000), '340 kB');
-    expect(PlaybackStatsOverlay.formatBytes(356515840), '356.5 MB');
-    expect(PlaybackStatsOverlay.formatBytes(1288490188), '1.3 GB');
+    expect(formatBytes(0), '0 B');
+    expect(formatBytes(999), '999 B');
+    expect(formatBytes(340000), '340 kB');
+    expect(formatBytes(356515840), '357 MB');
+    expect(formatBytes(1288490188), '1.3 GB');
   });
 
   testWidgets('a proxied stream draws the window and no sharing row', (
@@ -849,7 +866,7 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('sharing  820.0 MB committed'), findsOneWidget);
+    expect(find.text('sharing  820 MB committed'), findsOneWidget);
     // And nothing about a swarm, which is what `isTorrent` decides.
     expect(find.textContaining('speed    '), findsNothing);
   });

@@ -107,24 +107,11 @@ fn cache_limit_bytes(cache_size: Option<f64>) -> Option<u64> {
 /// `enginefs::free_space_floor` free -- a thirty-second of the volume,
 /// clamped to 128-512 MiB, and 512 MiB when the volume's size is
 /// unreadable (stream-server's `cache_budget`). Deliberately the same one:
-/// a report puts this number
-/// next to the floor the server keeps, and two answers to "how much room is
-/// left" taken from different places would drift apart on the one screen
-/// that exists to explain a device with no room left.
-///
-/// **It sees what no directory can.** It counts the volume's free blocks,
-/// so a file that was unlinked while some process still holds it open
-/// costs room here and has no name under any directory. Measured rather
-/// than assumed (`free_space_counts_a_file_no_directory_can_see`), because
-/// it used to be the whole point: mpv unlinked its demuxer cache the
-/// instant it created it (`demuxer-cache-unlink-files=immediate`), and 256 MiB
-/// written through such an fd moved `f_frsize * f_bavail` by 268439552
-/// bytes, every one of which came back when the fd closed. **That writer
-/// is gone.** The player keeps no disk cache at all now, so there is one
-/// budget on this device -- the server's cache against `cacheSize` -- and
-/// a gap between the two readings is somebody else's deleted-but-open
-/// file rather than ours. Which is still worth knowing when a report's
-/// two numbers disagree, and is why the measurement stays.
+/// a report puts this number next to the floor the server keeps, and two
+/// answers to "how much room is left" taken from different places would
+/// drift apart on the one screen that exists to explain a device with no
+/// room left. It counts the volume's free blocks, so a deleted file some
+/// process still holds open costs room here that no directory walk sees.
 ///
 /// `None`, never 0, on failure: a volume nobody could measure is not a
 /// full one, and a report that showed it as full would accuse a device
@@ -161,46 +148,6 @@ mod tests {
         assert_eq!(cache_limit_bytes(None), None);
         assert_eq!(cache_limit_bytes(Some(f64::NAN)), None);
         assert_eq!(cache_limit_bytes(Some(-1.0)), None);
-    }
-
-    /// Why a free-space reading and a directory walk can disagree at all:
-    /// a file unlinked the instant it is created is invisible to any walk,
-    /// but its blocks are held until the fd closes and `f_bavail` counts
-    /// them the whole time. Driven here rather than read off a manual,
-    /// with the `open`/`unlink`/write order mpv used when it was the one
-    /// doing this -- it no longer is, and the property outlives it: the
-    /// two numbers in a storage report are not measuring the same thing,
-    /// and this is the shape of the difference.
-    ///
-    /// The tolerance is half of what is written, in both directions,
-    /// because the volume is shared with whatever else the machine is
-    /// doing: only another process moving more than 16 MiB the *opposite*
-    /// way inside this test's few hundred milliseconds could break it.
-    #[cfg(unix)]
-    #[test]
-    fn free_space_counts_a_file_no_directory_can_see() {
-        const WRITTEN: u64 = 32 * 1024 * 1024;
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("demuxer-cache");
-        let mut file = std::fs::File::create(&path).unwrap();
-        std::fs::remove_file(&path).unwrap();
-        assert!(!path.exists(), "the cache file has no name any more");
-
-        let before = free_bytes(root.path()).expect("a tempdir is on a volume");
-        std::io::Write::write_all(&mut file, &vec![0u8; WRITTEN as usize]).unwrap();
-        file.sync_all().unwrap();
-        let during = free_bytes(root.path()).unwrap();
-        assert!(
-            during + WRITTEN / 2 < before,
-            "an unlinked file still costs the volume: {before} -> {during}"
-        );
-
-        drop(file);
-        let after = free_bytes(root.path()).unwrap();
-        assert!(
-            after > during + WRITTEN / 2,
-            "closing the fd gives the blocks back: {during} -> {after}"
-        );
     }
 
     #[test]

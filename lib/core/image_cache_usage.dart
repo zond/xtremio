@@ -1,7 +1,7 @@
 import 'package:flutter/painting.dart';
 
 import 'image_disk_cache.dart';
-import 'state/download.dart';
+import 'units.dart';
 
 /// What the app is holding for pictures at one instant, and the ceilings
 /// it is held against: Flutter's decoded-image cache, the decoded images
@@ -120,8 +120,8 @@ class ImageCacheUsage {
   /// in this app is shown in -- so 32 MiB of ceiling reads as 33.6 MB,
   /// the same convention as the `cache:` and `disk:` lines above it.
   String get cachedLabel =>
-      '${DownloadView.humanSize(cachedBytes)} of '
-      '${DownloadView.humanSize(ceilingBytes)} ceiling';
+      '${formatBytes(cachedBytes)} of '
+      '${formatBytes(ceilingBytes)} ceiling';
 
   /// `4.2 MB of 67.1 MB on disk · 96 files`, or what a build with no
   /// store says instead.
@@ -133,8 +133,8 @@ class ImageCacheUsage {
     final bytes = diskBytes;
     final ceiling = diskCeilingBytes;
     if (bytes == null || ceiling == null) return 'none kept';
-    return '${DownloadView.humanSize(bytes)} of '
-        '${DownloadView.humanSize(ceiling)} on disk · $diskFiles files';
+    return '${formatBytes(bytes)} of '
+        '${formatBytes(ceiling)} on disk · $diskFiles files';
   }
 
   /// The three lines the diagnostics header carries, taken the instant the

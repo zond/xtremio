@@ -1,4 +1,4 @@
-import 'download.dart';
+import '../units.dart';
 
 /// One filesystem's room, as the server's own volume sees it.
 class StorageVolume {
@@ -24,11 +24,11 @@ class StorageVolume {
     final total = totalBytes;
     if (free == null && total == null) return 'unknown';
     if (free == null) {
-      return 'of ${DownloadView.humanSize(total!)}, free unknown';
+      return 'of ${formatBytes(total!)}, free unknown';
     }
-    if (total == null) return '${DownloadView.humanSize(free)} free';
-    return '${DownloadView.humanSize(free)} free of '
-        '${DownloadView.humanSize(total)}';
+    if (total == null) return '${formatBytes(free)} free';
+    return '${formatBytes(free)} free of '
+        '${formatBytes(total)}';
   }
 }
 
@@ -98,11 +98,11 @@ class ServerStorage {
   /// itself. The volume's own line is directly under this one, which is
   /// where the room actually is.
   String get cacheLabel {
-    final used = DownloadView.humanSize(cacheUsedBytes);
+    final used = formatBytes(cacheUsedBytes);
     final limit = cacheLimitBytes;
     return limit == null
         ? '$used, no cacheSize set'
-        : '$used of ${DownloadView.humanSize(limit)} limit';
+        : '$used of ${formatBytes(limit)} limit';
   }
 
   /// The lines the diagnostics header carries. Everything a person should
@@ -197,11 +197,11 @@ class CacheUsage {
 
   /// `17.0 GB of 10.0 GB limit`, or `17.0 GB, no limit set`.
   String get label {
-    final used = DownloadView.humanSize(totalBytes);
+    final used = formatBytes(totalBytes);
     final limit = limitBytes;
     return limit == null
         ? '$used, no limit set'
-        : '$used of ${DownloadView.humanSize(limit)} limit';
+        : '$used of ${formatBytes(limit)} limit';
   }
 }
 

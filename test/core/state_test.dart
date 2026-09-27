@@ -608,7 +608,6 @@ void main() {
         'releaseFormat': 'BluRay',
         'g': 6,
       });
-      expect(full.fpsMilli, 23980);
       expect(
         full.subtitleFileName,
         'The.Godfather.1972.720p.BluRay.x264-DFN.srt',
@@ -616,7 +615,6 @@ void main() {
       expect(full.movieReleaseName, 'The Godfather 1972 720p BluRay x264-DFN');
       expect(full.releaseGroup, 'DFN');
       expect(full.releaseFormat, 'BluRay');
-      expect(full.group, '6');
 
       // An addon that says nothing but the modelled keys reads as null
       // everywhere, not as an empty string and not as a throw.
@@ -624,30 +622,17 @@ void main() {
         'lang': 'eng',
         'url': 'https://subs/2.srt',
       });
-      expect(bare.fpsMilli, isNull);
       expect(bare.subtitleFileName, isNull);
       expect(bare.movieReleaseName, isNull);
       expect(bare.releaseGroup, isNull);
       expect(bare.releaseFormat, isNull);
       expect(bare.label, isNull);
-      expect(bare.group, isNull);
     });
 
     test('tolerates a property spelled as anything at all', () {
       SubtitleInfo with_(Map<String, dynamic> extra) => SubtitleInfo(
         <String, dynamic>{'lang': 'eng', 'url': 'https://subs/1.srt', ...extra},
       );
-      // A number the addon quoted is still a number; one it wrote as a
-      // decimal is read as whole.
-      expect(with_({'fpsMilli': '23980'}).fpsMilli, 23980);
-      expect(with_({'fpsMilli': ' 25000 '}).fpsMilli, 25000);
-      expect(with_({'fpsMilli': 23.976}).fpsMilli, 23);
-      // Nothing here is a number, and none of it throws.
-      expect(with_({'fpsMilli': 'unknown'}).fpsMilli, isNull);
-      expect(with_({'fpsMilli': true}).fpsMilli, isNull);
-      expect(with_({'fpsMilli': <String>[]}).fpsMilli, isNull);
-      expect(with_({'fpsMilli': double.nan}).fpsMilli, isNull);
-      expect(with_({'fpsMilli': double.infinity}).fpsMilli, isNull);
       // Text that is not text, and text with nothing in it, are both
       // "the addon did not say".
       expect(with_({'releaseGroup': 42}).releaseGroup, isNull);
@@ -659,15 +644,6 @@ void main() {
       expect(with_({'label': 'Espa\u{00f1}ol \uD83D'}).label, 'Espa\u{00f1}ol');
       expect(with_({'movieReleaseName': '\uDE00'}).movieReleaseName, isNull);
       expect(with_({'label': 'Done \u{1F44D}'}).label, 'Done \u{1F44D}');
-      // The group is compared with itself and never shown, so a number
-      // and the same number quoted are one bucket -- and nothing else is
-      // a bucket at all.
-      expect(with_({'g': 6}).group, '6');
-      expect(with_({'g': ' 6 '}).group, '6');
-      expect(with_({'g': 6.5}).group, isNull);
-      expect(with_({'g': true}).group, isNull);
-      expect(with_({'g': <String>[]}).group, isNull);
-      expect(with_({'g': '  '}).group, isNull);
     });
 
     test('collapses two addons offering the same file by URL or by id', () {

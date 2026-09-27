@@ -335,11 +335,17 @@ app.get('/oauth/callback', answered(async (req, res) => {
     return res.status(502).send(`google refused the code: ${token.status}`);
   }
   const granted = await token.json();
+  // A grant without a refresh token pairs nothing the television can keep:
+  // it would work until the access token died within the hour. The session
+  // stays pending, so the viewer can sign in again from the same link.
+  if (!granted.refresh_token) {
+    return res.redirect(`/pick?s=${state}&error=no_refresh_token`);
+  }
   // The refresh token is what the television will keep; the access token
   // is what the phone needs a moment from now to draw the Picker.
   await ref.update({
     status: 'signed-in',
-    refreshToken: granted.refresh_token ?? null,
+    refreshToken: granted.refresh_token,
     accessToken: granted.access_token,
     accessExpiresAt: new Date(Date.now() + granted.expires_in * 1000),
   });
@@ -387,6 +393,11 @@ app.post('/session/:id/files', answered(async (req, res) => {
   if (!session.exists) return res.status(404).json({error: 'no session'});
   if (session.data().status !== 'signed-in') {
     return res.status(409).json({error: 'sign in first'});
+  }
+  // The television's pickup answers 410 from expiry on, so files linked
+  // past it would reach nobody.
+  if (session.data().expiresAt.toDate() < new Date()) {
+    return res.status(410).json({error: 'expired'});
   }
   // Measured here too, so that which path a pairing took is invisible
   // afterwards: the Picker sends a name and nothing else, and a file linked

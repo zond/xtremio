@@ -40,7 +40,8 @@ The FFI surface, by file under `rust/src/api/`:
 
 | File | Functions |
 |---|---|
-| `core.rs` | `core_init`, `core_dispatch`, `core_get_state`, `core_events`, `core_shutdown`, `core_is_initialized`, `core_schema_version` |
+| `hello.rs` | `init_app` (FRB's start-up hook), `bridge_version`, `core_schema_version` |
+| `core.rs` | `core_init`, `core_dispatch`, `core_get_state`, `core_events`, `core_shutdown`, `core_is_initialized` |
 | `server.rs` | `server_start`/`stop`/`base_url`; `server_settings`, `server_update_settings`; `server_torrent_stats`; `server_note_duration`, `server_note_player_opened`, `server_note_player_stalled`; `server_storage_report`, `server_cache_usage`, `server_clean_cache_now`; `server_background_traffic`; `server_stream_numbers`; `server_dht_status`; `server_drive_open`, `server_drive_grant`; `server_close_proxy_streams`; `server_set_lan_media`, `server_lan_media_running`, `server_lan_media_requests_served`, `server_lan_media_base_url` |
 | `downloads.rs` | `downloads_add`, `downloads_remove`, `downloads_list`, `downloads_open`, `downloads_events`, `downloads_start_fresh` |
 | `prefs.rs` | `prefs_get_all`, `prefs_set` |

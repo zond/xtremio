@@ -1,3 +1,4 @@
+import '../units.dart';
 import 'stream.dart';
 
 /// Views over one offline download and over the registry they live in:
@@ -156,31 +157,10 @@ final class DownloadView {
   }
 
   /// `32.8 kB`, `1.4 GB`: the file's length for a row.
-  String get sizeLabel => humanSize(size);
+  String get sizeLabel => formatBytes(size);
 
   /// The same for what is on disk of it.
-  String get downloadedLabel => humanSize(downloaded);
-
-  /// [bytes] in the decimal units storage is sold and shown in (the same
-  /// ones the player's overlay counts MB/s in), one decimal below 100 of a
-  /// unit and none above it.
-  static String humanSize(int bytes) {
-    if (bytes < 1000) return '$bytes B';
-    const units = ['kB', 'MB', 'GB', 'TB', 'PB'];
-    var value = bytes / 1000;
-    var unit = 0;
-    while (value >= 1000 && unit < units.length - 1) {
-      value /= 1000;
-      unit++;
-    }
-    // 999_999 B is 999.999 kB, which rounds to `1000 kB`: a unit that does
-    // not exist. Promote it once more so it reads `1.0 MB`.
-    if (value.round() >= 1000 && unit < units.length - 1) {
-      value /= 1000;
-      unit++;
-    }
-    return '${value.toStringAsFixed(value >= 100 ? 0 : 1)} ${units[unit]}';
-  }
+  String get downloadedLabel => formatBytes(downloaded);
 
   DateTime? _date(String key) {
     final value = json[key];

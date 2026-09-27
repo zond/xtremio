@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -116,6 +117,33 @@ void main() {
       // And the list survives, because those files are what a new token
       // will reach.
       expect(account.files.entries, hasLength(1));
+    });
+
+    test('a refusal of a grant a new pairing replaced meanwhile deletes '
+        'nothing', () async {
+      final account = await _account();
+      final answer = Completer<void>();
+      final opener = FakeDriveFileOpener(
+        answers: const [DriveFileRefused(DriveOpenFailure.pairAgain)],
+      )..pending = answer.future;
+
+      final opening = openLinkedDriveFile(
+        account: account,
+        file: account.files.entries.single,
+        opener: opener,
+      );
+      await pumpEventQueue();
+      // A pairing lands while the server is still being asked.
+      await account.link(refreshToken: '$_token-new');
+      answer.complete();
+      await opening;
+
+      expect(
+        account.refreshToken,
+        '$_token-new',
+        reason: 'the refusal was about the old grant',
+      );
+      expect(account.state, isNot(DriveLinkState.pairAgain));
     });
 
     test('nothing is asked with no credential to ask with', () async {

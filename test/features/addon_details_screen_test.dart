@@ -234,9 +234,11 @@ void main() {
       opener.opened.single.toString(),
       'https://v3-cinemeta.strem.io/configure',
     );
-    // The opener refused: the user is told.
+    // The opener refused: the user is told, by host alone -- a configure
+    // URL carries a debrid key in its path.
     expect(find.byType(SnackBar), findsOneWidget);
-    expect(find.textContaining('Could not open'), findsOneWidget);
+    expect(find.text('Could not open v3-cinemeta.strem.io'), findsOneWidget);
+    expect(find.textContaining('/configure'), findsNothing);
   });
 
   testWidgets('a launcher that throws still ends in the "Could not open"', (
@@ -261,10 +263,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byType(SnackBar), findsOneWidget);
-    expect(
-      find.textContaining('Could not open https://v3-cinemeta.strem.io'),
-      findsOneWidget,
-    );
+    expect(find.text('Could not open v3-cinemeta.strem.io'), findsOneWidget);
   });
 
   testWidgets('a failed manifest fetch shows the message and retries', (
